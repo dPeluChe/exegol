@@ -113,7 +113,7 @@ function extractTokenUsage(entry: Record<string, unknown>, since: number): Parse
   if (usage && typeof usage.input_tokens === "number") {
     const model = (entry.model as string) ?? "unknown";
     const inputTokens = usage.input_tokens as number;
-    const outputTokens = (usage.output_tokens as number) ?? 0;
+    const outputTokens = typeof usage.output_tokens === "number" ? usage.output_tokens : 0;
     const toolCallCount = countToolCalls(entry);
     return {
       provider: "anthropic",
@@ -133,7 +133,7 @@ function extractTokenUsage(entry: Record<string, unknown>, since: number): Parse
       provider: "anthropic",
       model,
       inputTokens: entry.inputTokens as number,
-      outputTokens: (entry.outputTokens as number) ?? 0,
+      outputTokens: typeof entry.outputTokens === "number" ? entry.outputTokens : 0,
       estimatedCostUsd: entry.costUSD as number,
       toolCallCount: countToolCalls(entry),
       timestamp: ts,
@@ -155,7 +155,7 @@ function getTimestamp(entry: Record<string, unknown>): number {
 
 function countToolCalls(entry: Record<string, unknown>): number {
   // Check for tool_use in content array
-  const content = entry.content as unknown[];
+  const content = entry.content;
   if (Array.isArray(content)) {
     return content.filter(
       (c) =>
