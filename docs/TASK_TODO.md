@@ -167,41 +167,41 @@ Detect listening ports per project and display in sidebar.
 > UI/UX polish. Touches settings components and global styles only.
 > No overlap with agent, terminal, or workspace logic.
 
-### T06 — Open in IDE
+### T06 — Open in IDE ✅
 **Complexity**: Low
 Button to open project/worktree in configured IDE.
-**Files**: `ipc/procedures/projects.ts` (openInIde mutation), `renderer/.../ProjectsSection.tsx`, shell command mapping
+**Files**: `main/ide/opener.ts`, `ipc/procedures/projects.ts` (openInIde mutation), `renderer/.../ProjectsSection.tsx`, `hooks/use-trpc.ts`
 **Acceptance**:
-- [ ] Button per project in sidebar → opens in IDE
-- [ ] Uses settings.defaultIde (code, cursor, zed, idea, webstorm)
-- [ ] Custom IDE path for 'custom' type
+- [x] Button per project in sidebar → opens in IDE
+- [x] Uses settings.defaultIde (code, cursor, zed, idea, webstorm)
+- [x] Custom IDE path for 'custom' type
 
-### T12 — Theme System (Light/Dark/System)
+### T12 — Theme System (Light/Dark/System) ✅
 **Complexity**: Medium
 Apply theme selection from Settings. Currently dark is hardcoded.
-**Files**: `styles/globals.css` (light theme vars), `App.tsx` (theme class), `stores/app.ts`, `TerminalPanel.tsx` (terminal colors)
+**Files**: `styles/globals.css` (light theme vars), `App.tsx` (useTheme), `hooks/use-theme.ts`, `TerminalPanel.tsx` (terminal colors)
 **Acceptance**:
-- [ ] Light theme CSS variables
-- [ ] System theme auto-detection
-- [ ] Theme applies immediately (no reload)
-- [ ] Terminal colors match theme
+- [x] Light theme CSS variables
+- [x] System theme auto-detection
+- [x] Theme applies immediately (no reload)
+- [x] Terminal colors match theme
 
-### T13 — Recent Sessions (DB-backed)
+### T13 — Recent Sessions (DB-backed) ✅
 **Complexity**: Low
 Populate sidebar "Recent Sessions" with past agent sessions from DB.
 **Files**: `renderer/.../RecentSessions.tsx`, `main/db/queries.ts`, `hooks/use-trpc.ts`, `ipc/procedures/agents.ts`
 **Acceptance**:
-- [ ] Show last 10 completed/stopped agents across all projects
-- [ ] Click → navigate to project + show agent details
+- [x] Show last 10 completed/stopped agents across all projects
+- [x] Click → navigate to project + show agent details
 
-### T15 — API Key Management
+### T15 — API Key Management ✅
 **Complexity**: Medium
-Store API keys in OS keychain instead of plaintext.
-**Files**: New dep (`keytar` or `@electron/safeStorage`), `ipc/procedures/settings.ts`, new Settings tab or section
+Store API keys in OS keychain via Electron safeStorage.
+**Files**: `main/security/keystore.ts`, `ipc/procedures/apikeys.ts`, `renderer/.../ApiKeysSettings.tsx`, `main/agents/manager.ts`, `hooks/use-trpc.ts`
 **Acceptance**:
-- [ ] Securely store/retrieve API keys
-- [ ] UI: input fields with show/hide toggle
-- [ ] Keys injected into agent env on spawn
+- [x] Securely store/retrieve API keys (safeStorage encryption)
+- [x] UI: password input fields with save/delete per provider
+- [x] Keys injected into agent env on spawn
 
 ---
 
