@@ -1,45 +1,58 @@
 import { useState } from 'react'
-import { Separator } from '@exegol/ui'
+import { Plus } from 'lucide-react'
+import { Button, ScrollArea, Separator } from '@exegol/ui'
 import { useAppStore } from '../../stores/app'
-import { useAppVersion } from '../../hooks/use-trpc'
 import { SpawnAgentDialog } from '../agents/SpawnAgentDialog'
-import { ProjectSelector } from './ProjectSelector'
-import { AgentList } from './AgentList'
-import { NavSection } from './NavSection'
+import { SidebarHeader } from './SidebarHeader'
+import { ProjectsSection } from './ProjectsSection'
+import { RecentSessions } from './RecentSessions'
+import { SidebarFooter } from './SidebarFooter'
 
 export function Sidebar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId)
-  const setActiveProject = useAppStore((s) => s.setActiveProject)
-  const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
-  const { data: appVersion } = useAppVersion()
 
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
 
   return (
-    <div
-      className="flex h-full flex-col bg-bg-secondary"
-    >
-      <ProjectSelector
-        activeProjectId={activeProjectId}
-        onSelectProject={setActiveProject}
-      />
+    <div className="flex h-full flex-col bg-bg-secondary">
+      {/* Header: App name + settings gear */}
+      <SidebarHeader />
+
+      {/* New Agent CTA */}
+      <div className="px-3 py-2">
+        <Button
+          onClick={() => setSpawnDialogOpen(true)}
+          disabled={!activeProjectId}
+          size="sm"
+          className="w-full gap-2 bg-accent text-xs text-white hover:bg-accent/90"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New Agent
+        </Button>
+      </div>
 
       <Separator className="bg-border" />
 
-      <AgentList
-        projectId={activeProjectId}
-        onSpawnClick={() => setSpawnDialogOpen(true)}
-      />
+      {/* Scrollable middle area */}
+      <ScrollArea className="flex-1">
+        {/* Projects section */}
+        <ProjectsSection
+          onAddProject={() => setActiveView('projects')}
+        />
+
+        <Separator className="bg-border" />
+
+        {/* Recent sessions */}
+        <RecentSessions />
+      </ScrollArea>
 
       <Separator className="bg-border" />
 
-      <NavSection
-        activeView={activeView}
-        onNavigate={setActiveView}
-        appVersion={appVersion}
-      />
+      {/* Bottom bar */}
+      <SidebarFooter />
 
+      {/* Spawn dialog */}
       {activeProjectId && (
         <SpawnAgentDialog
           open={spawnDialogOpen}
