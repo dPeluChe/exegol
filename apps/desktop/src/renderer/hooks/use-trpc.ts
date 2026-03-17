@@ -3,6 +3,9 @@ import type {
   AgentCreate,
   Project,
   ProjectCreate,
+  Prompt,
+  PromptCreate,
+  PromptUpdate,
   RecentSession,
   ScheduledResult,
   ScheduledTask,
@@ -227,6 +230,17 @@ export function useSetApiKey() {
   });
 }
 
+export function useDeleteApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { provider: string }) =>
+      trpcMutate<{ success: boolean }>("apiKeys.delete", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+    },
+  });
+}
+
 // ─── Scheduler ──────────────────────────────────────────────────────────────
 
 export function useScheduledTasks(projectId?: string | null) {
@@ -253,17 +267,6 @@ export function useCreateScheduledTask() {
     mutationFn: (data: ScheduledTaskCreate) => trpcMutate<ScheduledTask>("scheduler.create", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scheduler"] });
-    },
-  });
-}
-
-export function useDeleteApiKey() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { provider: string }) =>
-      trpcMutate<{ success: boolean }>("apiKeys.delete", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
     },
   });
 }
@@ -326,6 +329,101 @@ export function useProjectPorts(projectPath: string | null) {
     queryFn: () => trpcInvoke<PortInfo[]>("resources.ports", { projectPath }),
     enabled: !!projectPath,
     refetchInterval: 15_000,
+  });
+}
+
+// ─── Files ──────────────────────────────────────────────────────────────────
+
+export function useFileContent(path: string | null) {
+  return useQuery({
+    queryKey: ["file", path],
+    queryFn: () => trpcInvoke<{ content: string; language: string }>("files.readFile", { path }),
+    enabled: !!path,
+  });
+}
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  modified: number;
+}
+
+export function useDirectoryListing(path: string | null) {
+  return useQuery({
+    queryKey: ["directory", path],
+    queryFn: () => trpcInvoke<DirectoryEntry[]>("files.listDirectory", { path }),
+    enabled: !!path,
+  });
+}
+
+export function usePickFile() {
+  return useMutation({
+    mutationFn: (params: { projectPath: string }) =>
+      trpcMutate<string | null>("files.pickFile", params),
+  });
+}
+
+export function useWriteFile() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (params: { path: string; content: string }) =>
+      trpcMutate<{ success: boolean }>("files.writeFile", params),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["file", variables.path] });
+    },
+  });
+}
+
+// ─── Prompts ────────────────────────────────────────────────────────────────
+
+export function usePrompts(projectId: string | null) {
+  return useQuery({
+    queryKey: ["prompts", projectId],
+    queryFn: () => trpcInvoke<Prompt[]>("prompts.list", { projectId }),
+    enabled: !!projectId,
+  });
+}
+
+export function useCreatePrompt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: PromptCreate) => trpcMutate<Prompt>("prompts.create", data),
+    onSuccess: (prompt) => {
+      queryClient.invalidateQueries({ queryKey: ["prompts", prompt.projectId] });
+    },
+  });
+}
+
+export function useUpdatePrompt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: PromptUpdate & { id: string }) =>
+      trpcMutate<{ success: boolean }>("prompts.update", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+    },
+  });
+}
+
+export function useDeletePrompt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => trpcMutate<{ success: boolean }>("prompts.delete", { id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+    },
+  });
+}
+
+export function useTogglePinPrompt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => trpcMutate<{ success: boolean }>("prompts.togglePin", { id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+    },
   });
 }
 

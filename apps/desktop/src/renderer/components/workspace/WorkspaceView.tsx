@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { AgentsSection } from "./sections/AgentsSection";
 import { DiffSection } from "./sections/DiffSection";
+import { PromptsSection } from "./sections/PromptsSection";
 import { ResourcesSection } from "./sections/ResourcesSection";
 import { SchedulerSection } from "./sections/SchedulerSection";
 import { TasksSection } from "./sections/TasksSection";
@@ -29,6 +30,7 @@ export function WorkspaceView() {
       <div className="flex-1 overflow-hidden">
         {activeSection === "agents" && <AgentsSection />}
         {activeSection === "tasks" && <TasksSection />}
+        {activeSection === "prompts" && <PromptsSection />}
         {activeSection === "diff" && <DiffSection />}
         {activeSection === "scheduler" && <SchedulerSection />}
         {activeSection === "tokens" && <TokensSection />}

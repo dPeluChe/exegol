@@ -169,6 +169,21 @@ const migrations: Migration[] = [
       ALTER TABLE agents_new RENAME TO agents;
     `,
   },
+  {
+    id: "011_prompts",
+    sql: `CREATE TABLE IF NOT EXISTS prompts (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'custom'
+        CHECK (category IN ('task', 'review', 'debug', 'custom')),
+      pinned INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    )`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

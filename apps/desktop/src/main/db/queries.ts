@@ -4,6 +4,9 @@ import type {
   AgentStatus,
   Project,
   ProjectCreate,
+  Prompt,
+  PromptCreate,
+  PromptUpdate,
   ScheduledResult,
   ScheduledTask,
   ScheduledTaskCreate,
@@ -15,8 +18,21 @@ import type Database from "libsql";
 import { nanoid } from "nanoid";
 
 // ---------------------------------------------------------------------------
-// Row mappers (snake_case DB rows -> camelCase types)
+// Row mappers (snake_case DB rows → camelCase types)
 // ---------------------------------------------------------------------------
+
+function mapPromptRow(row: Record<string, unknown>): Prompt {
+  return {
+    id: row.id as string,
+    projectId: row.project_id as string,
+    title: row.title as string,
+    content: row.content as string,
+    category: row.category as Prompt["category"],
+    pinned: Boolean(row.pinned),
+    createdAt: row.created_at as number,
+    updatedAt: row.updated_at as number,
+  };
+}
 
 function mapProjectRow(row: Record<string, unknown>): Project {
   return {
@@ -514,4 +530,47 @@ export function listScheduledResults(
     .prepare("SELECT * FROM scheduled_results WHERE task_id = ? ORDER BY created_at DESC LIMIT ?")
     .all(taskId, limit);
   return (rows as Record<string, unknown>[]).map(mapScheduledResultRow);
+}
+
+// ---------------------------------------------------------------------------
+// Prompts
+// ---------------------------------------------------------------------------
+
+export function listPrompts(db: Database.Database, projectId: string): Prompt[] {
+  const rows = db
+    .prepare("SELECT * FROM prompts WHERE project_id = ? ORDER BY pinned DESC, updated_at DESC")
+    .all(projectId);
+  return (rows as Record<string, unknown>[]).map(mapPromptRow);
+}
+
+export function createPrompt(db: Database.Database, data: PromptCreate): Prompt {
+  const id = nanoid();
+  const now = Math.floor(Date.now() / 1000);
+
+  db.prepare(
+    `INSERT INTO prompts (id, project_id, title, content, category, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, data.projectId, data.title, data.content, data.category, now, now);
+
+  const row = db.prepare("SELECT * FROM prompts WHERE id = ?").get(id);
+  return mapPromptRow(row as Record<string, unknown>);
+}
+
+export function updatePrompt(db: Database.Database, id: string, data: PromptUpdate): void {
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare(
+    `UPDATE prompts SET title = COALESCE(?, title), content = COALESCE(?, content),
+     category = COALESCE(?, category), updated_at = ? WHERE id = ?`,
+  ).run(data.title ?? null, data.content ?? null, data.category ?? null, now, id);
+}
+
+export function deletePrompt(db: Database.Database, id: string): void {
+  db.prepare("DELETE FROM prompts WHERE id = ?").run(id);
+}
+
+export function togglePinPrompt(db: Database.Database, id: string): void {
+  db.prepare("UPDATE prompts SET pinned = 1 - pinned, updated_at = ? WHERE id = ?").run(
+    Math.floor(Date.now() / 1000),
+    id,
+  );
 }

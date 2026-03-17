@@ -29,9 +29,10 @@ const STATUS_DOT_COLORS: Record<AgentStatus, string> = {
 
 interface TerminalTabsProps {
   onSpawnClick: () => void;
+  extraActions?: React.ReactNode;
 }
 
-export function TerminalTabs({ onSpawnClick }: TerminalTabsProps) {
+export function TerminalTabs({ onSpawnClick, extraActions }: TerminalTabsProps) {
   const agents = Object.values(useAgentStore((s) => s.agents));
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
@@ -109,6 +110,9 @@ export function TerminalTabs({ onSpawnClick }: TerminalTabsProps) {
       >
         <Plus className="h-3.5 w-3.5" />
       </button>
+
+      {/* Extra action buttons (e.g., file explorer toggle) */}
+      {extraActions && <div className="ml-auto flex items-center gap-1 pr-1">{extraActions}</div>}
     </div>
   );
 }
