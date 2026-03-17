@@ -24,9 +24,13 @@ Electron + React + Rust desktop app for orchestrating AI coding agents (Claude C
 - API key management: encrypted storage via OS keychain (safeStorage), injected as env vars on agent spawn
 - Scheduler engine: cron-based task scheduling via croner, spawns agents on cadence, polls completion, records results
 - Port detection: runtime ports via lsof (filtered by project CWD) + config file parsing (package.json, .env, vite/next config)
+- Task viewer: load markdown files with checkbox tasks, interactive toggle with write-back, progress bar, auto-detect TODO.md
+- Prompts & templates: save reusable prompts per project, category filters (task/review/debug/custom), pin, copy to clipboard, inject into spawn dialog
+- File explorer: lazy-loaded tree view in agent panel, file type indicators, read-only preview, toggleable secondary panel
+- Workspace tabs: Agents, Tasks, Prompts, Diff Viewer, Scheduler, Token Usage, Resources
 
 ### What's Placeholder / Not Yet Functional
-- Workspace sections: Tasks, Diff Viewer, Token Usage, Resources — UI shells exist but are placeholder
+- Workspace sections: Diff Viewer, Token Usage, Resources — UI shells exist but are placeholder
 - Worktree management: DB schema exists, Rust git2 scaffold exists, but not wired into agent spawn flow
 - Token usage tracking: DB table exists, tRPC router exists, but no actual log parsing yet
 - MCP Host, Skills, Plan FSM, Hook Engine, Memory system, Repo Maps — not started
@@ -48,12 +52,12 @@ exegol/
 │   │   │   │   └── status-parser.ts # Parses agent stdout for live status
 │   │   │   ├── db/
 │   │   │   │   ├── client.ts       # libSQL database init + WAL mode
-│   │   │   │   ├── migrations.ts   # 10 migrations (projects → agents_add_stopped_status)
+│   │   │   │   ├── migrations.ts   # 11 migrations (projects → prompts)
 │   │   │   │   └── queries.ts      # SQL query helpers
 │   │   │   ├── ide/
 │   │   │   │   └── opener.ts       # IDE launcher (vscode, cursor, zed, intellij, webstorm, custom)
 │   │   │   ├── ipc/
-│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources, apiKeys, scheduler)
+│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources, apiKeys, scheduler, files, prompts)
 │   │   │   │   ├── trpc.ts         # tRPC init (router, publicProcedure)
 │   │   │   │   ├── trpc-ipc.ts     # createCaller proxy traversal over IPC
 │   │   │   │   ├── context.ts      # tRPC context (db instance)
@@ -64,7 +68,9 @@ exegol/
 │   │   │   │       ├── apikeys.ts
 │   │   │   │       ├── token-usage.ts
 │   │   │   │       ├── resources.ts
-│   │   │   │       └── scheduler.ts  # Scheduler CRUD + runNow
+│   │   │   │       ├── scheduler.ts  # Scheduler CRUD + runNow
+│   │   │   │       ├── files.ts        # File I/O: readFile, writeFile, pickFile, listDirectory (path-guarded)
+│   │   │   │       └── prompts.ts      # Prompt CRUD: list, create, update, delete, togglePin
 │   │   │   ├── security/
 │   │   │   │   └── keystore.ts     # API key encryption via safeStorage (OS keychain)
 │   │   │   ├── scheduler/
@@ -88,13 +94,14 @@ exegol/
 │   │   │   │   ├── agents.ts       # Zustand: agent state, focused agent, sync from DB
 │   │   │   │   └── terminals.ts    # Zustand: terminal instances
 │   │   │   ├── lib/
-│   │   │   │   └── trpc-client.ts  # trpcInvoke/trpcMutate via window.api.trpc
+│   │   │   │   ├── trpc-client.ts  # trpcInvoke/trpcMutate via window.api.trpc
+│   │   │   │   └── markdown-tasks.ts  # parseMarkdownTasks, toggleTask for checkbox .md files
 │   │   │   └── components/
 │   │   │       ├── ErrorBoundary.tsx
 │   │   │       ├── layout/
 │   │   │       │   ├── Sidebar.tsx         # Collapsible sidebar with sections
 │   │   │       │   ├── SidebarHeader.tsx
-│   │   │       │   ├── SidebarFooter.tsx   # Schedulers + Resources overviews + version
+│   │   │       │   ├── SidebarFooter.tsx   # Schedulers + Pinned Prompts + Resources overviews + version
 │   │   │       │   ├── SidebarSection.tsx  # Reusable collapsible section component
 │   │   │       │   ├── ProjectsSection.tsx # Project list in sidebar
 │   │   │       │   ├── RecentSessions.tsx
@@ -117,14 +124,16 @@ exegol/
 │   │   │       │   └── ApiKeysSettings.tsx    # Per-provider API key management UI
 │   │   │       ├── workspace/
 │   │   │       │   ├── WorkspaceView.tsx      # Section switcher
-│   │   │       │   ├── WorkspaceTabs.tsx      # Agents|Tasks|Diff|Scheduler|Tokens|Resources
+│   │   │       │   ├── WorkspaceTabs.tsx      # Agents|Tasks|Prompts|Diff|Scheduler|Tokens|Resources
+│   │   │       │   ├── FileExplorer.tsx       # Lazy-loaded tree view with file preview
 │   │   │       │   └── sections/
-│   │   │       │       ├── AgentsSection.tsx
-│   │   │       │       ├── TasksSection.tsx      # Placeholder
-│   │   │       │       ├── DiffSection.tsx       # Placeholder
-│   │   │       │       ├── SchedulerSection.tsx  # Task list, create/edit dialogs, execution history
-│   │   │       │       ├── TokensSection.tsx     # Placeholder
-│   │   │       │       └── ResourcesSection.tsx  # Placeholder
+│   │   │       │       ├── AgentsSection.tsx      # Terminal + toggleable FileExplorer panel
+│   │   │       │       ├── TasksSection.tsx       # Markdown task viewer with checkboxes
+│   │   │       │       ├── PromptsSection.tsx     # Prompt cards, CRUD, category filters
+│   │   │       │       ├── DiffSection.tsx        # Placeholder
+│   │   │       │       ├── SchedulerSection.tsx   # Task list, create/edit dialogs, execution history
+│   │   │       │       ├── TokensSection.tsx      # Placeholder
+│   │   │       │       └── ResourcesSection.tsx   # Placeholder
 │   │   │       ├── terminal/
 │   │   │       │   ├── TerminalPanel.tsx
 │   │   │       │   └── TerminalTabs.tsx
@@ -142,7 +151,7 @@ exegol/
 │   ├── shared/                     # @exegol/shared
 │   │   └── src/
 │   │       ├── index.ts
-│   │       ├── types/              # agent, project, settings, scheduler, token-usage, worktree
+│   │       ├── types/              # agent, project, prompt, settings, scheduler, token-usage, worktree
 │   │       └── schemas/            # Zod: agent, project, settings
 │   ├── ui/                         # @exegol/ui (Radix primitives)
 │   │   └── src/
@@ -190,12 +199,12 @@ cargo check                         # Type-check (run inside packages/core-rust)
 - **API key storage**: `safeStorage` from Electron encrypts keys using the OS keychain. Stored in the `settings` table with `apikey_<provider>` keys. Falls back to plaintext if encryption is unavailable.
 - **Zustand with persist**: `useAppStore` persists `activeProjectId`, `activeView`, `sidebarCollapsed` to localStorage under key `exegol-app-state`.
 - **Background metrics collector**: Starts on app launch, collects CPU/RAM/disk every 10s. CPU is delta-based (no blocking sleep). RAM uses `vm_stat` on macOS for accurate available memory (not `os.freemem()`). Renderer reads cached metrics synchronously via tRPC.
-- **Database migrations**: 10 sequential migrations in `migrations.ts`, tracked in `_migrations` table. Migration 010 adds `stopped` to agent status enum by recreating the table.
+- **Database migrations**: 11 sequential migrations in `migrations.ts`, tracked in `_migrations` table. Migration 010 adds `stopped` to agent status enum by recreating the table. Migration 011 adds `prompts` table.
 - **Scheduler engine**: `SchedulerEngine` singleton manages cron jobs via croner. On fire: creates agent, spawns via AgentManager, polls status every 5s (10-min timeout). Concurrent execution guard prevents duplicate spawns. Lifecycle: starts after metrics collector, stops on will-quit.
 - **Port detection**: `getProjectPorts()` combines runtime detection (lsof + CWD filtering per PID) with config parsing (package.json scripts, .env, vite/next config). Runtime ports are filtered to those whose process CWD starts with the project path.
 
 ## Database Tables
 
-projects, agents, worktrees, sessions, scheduled_tasks, scheduled_results, token_usage, port_registry, host_metrics, settings
+projects, agents, worktrees, sessions, scheduled_tasks, scheduled_results, token_usage, port_registry, host_metrics, settings, prompts
 
 Agent status values: `idle | spawning | running | waiting_input | paused | completed | failed | stopped`
