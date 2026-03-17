@@ -1,8 +1,23 @@
 import type { Project } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
-import { ChevronDown, ChevronRight, Code2, FolderOpen, GitBranch, Globe, RotateCw } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Code2,
+  FolderOpen,
+  GitBranch,
+  Globe,
+  RotateCw,
+} from "lucide-react";
 import { useEffect, useState } from "react";
-import { type PortInfo, useOpenInIde, useProjectPorts, useProjects, useSettings, useSpawnAgent } from "../../hooks/use-trpc";
+import {
+  type PortInfo,
+  useOpenInIde,
+  useProjectPorts,
+  useProjects,
+  useSettings,
+  useSpawnAgent,
+} from "../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useTerminalStore } from "../../stores/terminals";
