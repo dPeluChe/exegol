@@ -1,4 +1,6 @@
 import { execSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { Agent, AgentCliConfig, AgentCreate } from "@exegol/shared";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { BrowserWindow } from "electron";
@@ -14,6 +16,7 @@ import {
   stopAgent,
   updateAgentStatus,
 } from "../db/queries";
+import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { getApiKey } from "../security/keystore";
 import { AgentStatusParser } from "./status-parser";
 
@@ -26,8 +29,17 @@ try {
   console.warn("[AgentManager] @exegol/core-rust native module not available — worktrees disabled");
 }
 
+// ─── Scrollback constants ────────────────────────────────────────────────
+
+const MAX_SCROLLBACK_BYTES = 1024 * 1024; // 1MB per agent
+const SCROLLBACK_FLUSH_INTERVAL_MS = 30_000; // 30s periodic flush
+
 // ─── Shell PATH resolution ────────────────────────────────────────────────
 
+/**
+ * Get the full user shell PATH. Electron doesn't inherit the full PATH
+ * from the user's shell on macOS/Linux.
+ */
 function getShellPath(): string {
   try {
     const shell = process.env.SHELL || "/bin/zsh";
@@ -83,6 +95,9 @@ export class AgentManager {
   private processes: Map<string, IPty> = new Map();
   private statusParsers: Map<string, AgentStatusParser> = new Map();
   private worktrees: Map<string, WorktreeRecord> = new Map();
+  private scrollbackBuffers: Map<string, string[]> = new Map();
+  private scrollbackSizes: Map<string, number> = new Map();
+  private scrollbackTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
 
   /**
    * Spawn an agent process with the configured CLI tool.
@@ -198,12 +213,28 @@ export class AgentManager {
     const parser = new AgentStatusParser(agent.id, agent.cliType);
     this.statusParsers.set(agent.id, parser);
 
+    // Initialize scrollback buffer + periodic flush timer
+    this.scrollbackBuffers.set(agent.id, []);
+    this.scrollbackSizes.set(agent.id, 0);
+    const flushTimer = setInterval(() => {
+      this.flushScrollback(agent.id, true);
+    }, SCROLLBACK_FLUSH_INTERVAL_MS);
+    this.scrollbackTimers.set(agent.id, flushTimer);
+
     // Listen to stdout for status updates and forward to renderer
     proc.onData((data: string) => {
       // Forward terminal data to all renderer windows
       const windows = BrowserWindow.getAllWindows();
       for (const win of windows) {
         win.webContents.send("terminal:data", agent.id, data);
+      }
+
+      // Capture scrollback
+      const currentSize = this.scrollbackSizes.get(agent.id) ?? 0;
+      if (currentSize < MAX_SCROLLBACK_BYTES) {
+        const buffer = this.scrollbackBuffers.get(agent.id);
+        buffer?.push(data);
+        this.scrollbackSizes.set(agent.id, currentSize + data.length);
       }
 
       // Parse for status updates
@@ -219,6 +250,16 @@ export class AgentManager {
 
     // Handle process exit
     proc.onExit(({ exitCode }) => {
+      // Stop periodic flush timer
+      const timer = this.scrollbackTimers.get(agent.id);
+      if (timer) {
+        clearInterval(timer);
+        this.scrollbackTimers.delete(agent.id);
+      }
+
+      // Final flush scrollback to disk
+      this.flushScrollback(agent.id, false);
+
       this.processes.delete(agent.id);
       this.statusParsers.delete(agent.id);
 
@@ -302,6 +343,28 @@ export class AgentManager {
     const proc = this.processes.get(agentId);
     if (proc) {
       proc.resize(cols, rows);
+    }
+  }
+
+  /**
+   * Flush in-memory scrollback buffer to disk for an agent.
+   * @param keepBuffer - if true, keeps buffer in memory (periodic flush); if false, cleans up (final flush)
+   */
+  private flushScrollback(agentId: string, keepBuffer: boolean): void {
+    const buffer = this.scrollbackBuffers.get(agentId);
+    if (!buffer || buffer.length === 0) return;
+
+    try {
+      const filePath = getScrollbackPath(agentId);
+      mkdirSync(dirname(filePath), { recursive: true });
+      writeFileSync(filePath, buffer.join(""), "utf-8");
+    } catch (err) {
+      console.error(`[AgentManager] Failed to write scrollback for ${agentId}:`, err);
+    }
+
+    if (!keepBuffer) {
+      this.scrollbackBuffers.delete(agentId);
+      this.scrollbackSizes.delete(agentId);
     }
   }
 

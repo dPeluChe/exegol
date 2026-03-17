@@ -427,6 +427,27 @@ export function useTogglePinPrompt() {
   });
 }
 
+// ─── Diff ────────────────────────────────────────────────────────────────────
+
+export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
+  const procedure = mode === "staged" ? "diff.stagedDiff" : "diff.projectDiff";
+  return useQuery({
+    queryKey: ["diff", projectId, mode],
+    queryFn: () => trpcInvoke<string>(procedure, { projectId }),
+    enabled: !!projectId,
+  });
+}
+
+// ─── Scrollback ──────────────────────────────────────────────────────────────
+
+export function useScrollback(agentId: string | null) {
+  return useQuery({
+    queryKey: ["scrollback", agentId],
+    queryFn: () => trpcInvoke<string | null>("scrollback.get", { agentId }),
+    enabled: !!agentId,
+  });
+}
+
 // ─── App Info ────────────────────────────────────────────────────────────────
 
 export function useAppVersion() {

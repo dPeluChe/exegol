@@ -5,7 +5,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useAgentStore } from "../../../stores/agents";
 import { SpawnAgentDialog } from "../../agents/SpawnAgentDialog";
-import { TerminalPanel } from "../../terminal/TerminalPanel";
+import { TerminalSplitView } from "../../terminal/TerminalSplitView";
 import { TerminalTabs } from "../../terminal/TerminalTabs";
 import { FileExplorer } from "../FileExplorer";
 
@@ -51,7 +51,7 @@ export function AgentsSection() {
             {/* Main terminal panel - always visible */}
             <Panel id="terminal" order={1} defaultSize={showFiles ? 60 : 100}>
               {focusedAgentId ? (
-                <TerminalPanel key={focusedAgentId} agentId={focusedAgentId} />
+                <TerminalSplitView key={focusedAgentId} agentId={focusedAgentId} />
               ) : (
                 <div className="flex h-full items-center justify-center">
                   <p className="text-sm text-text-muted">
