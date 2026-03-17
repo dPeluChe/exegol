@@ -1,27 +1,27 @@
 import { useState } from 'react'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Rocket, Cpu } from 'lucide-react'
 import { Button } from '@exegol/ui'
-import { useAppStore } from '../../stores/app'
 import { useAgentStore } from '../../stores/agents'
+import { useProjectContext } from '../../contexts/ProjectContext'
 import { TerminalPanel } from '../terminal/TerminalPanel'
 import { TerminalTabs } from '../terminal/TerminalTabs'
 import { SpawnAgentDialog } from '../agents/SpawnAgentDialog'
 
 export function WorkspaceView() {
-  const activeProjectId = useAppStore((s) => s.activeProjectId)
-  const agents = Object.values(useAgentStore((s) => s.agents))
+  const { projectId, agents } = useProjectContext()
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId)
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
+  const [secondaryPanel, setSecondaryPanel] = useState<React.ReactNode | null>(null)
 
   const hasAgents = agents.length > 0
 
-  if (!activeProjectId) {
+  if (!projectId) {
     return (
       <div
-        className="flex h-full items-center justify-center"
-        style={{ background: 'var(--bg-primary)' }}
+        className="flex h-full items-center justify-center bg-bg-primary"
       >
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-sm text-text-muted">
           Select a project to get started
         </p>
       </div>
@@ -29,47 +29,60 @@ export function WorkspaceView() {
   }
 
   return (
-    <div className="flex h-full flex-col" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex h-full flex-col bg-bg-primary">
       {hasAgents ? (
         <>
           {/* Tab bar */}
           <TerminalTabs onSpawnClick={() => setSpawnDialogOpen(true)} />
 
-          {/* Terminal area */}
-          <div className="flex-1 overflow-hidden">
-            {focusedAgentId ? (
-              <TerminalPanel key={focusedAgentId} agentId={focusedAgentId} />
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-                  Select an agent tab to view its terminal
-                </p>
-              </div>
+          {/* Resizable panel layout */}
+          <PanelGroup direction="horizontal" autoSaveId="workspace-panels">
+            {/* Main terminal panel - always visible */}
+            <Panel id="terminal" order={1} defaultSize={secondaryPanel ? 60 : 100}>
+              {focusedAgentId ? (
+                <TerminalPanel key={focusedAgentId} agentId={focusedAgentId} />
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-sm text-text-muted">
+                    Select an agent tab to view its terminal
+                  </p>
+                </div>
+              )}
+            </Panel>
+
+            {/* Secondary panel - for diff viewer, browser preview, etc. (Phase 2) */}
+            {secondaryPanel && (
+              <>
+                <PanelResizeHandle
+                  className="w-px hover:w-0.5 transition-all bg-border"
+                />
+                <Panel id="secondary" order={2} defaultSize={40} minSize={20}>
+                  {secondaryPanel}
+                </Panel>
+              </>
             )}
-          </div>
+          </PanelGroup>
         </>
       ) : (
         /* Empty state */
         <div className="flex h-full flex-col items-center justify-center gap-6">
           <div
-            className="flex h-20 w-20 items-center justify-center rounded-2xl"
-            style={{ background: 'var(--bg-secondary)' }}
+            className="flex h-20 w-20 items-center justify-center rounded-2xl bg-bg-secondary"
           >
-            <Cpu className="h-10 w-10" style={{ color: 'var(--text-muted)' }} />
+            <Cpu className="h-10 w-10 text-text-muted" />
           </div>
           <div className="text-center">
-            <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <h2 className="text-base font-semibold text-text-primary">
               No agents running
             </h2>
-            <p className="mt-1 max-w-sm text-xs" style={{ color: 'var(--text-muted)' }}>
+            <p className="mt-1 max-w-sm text-xs text-text-muted">
               Launch your first agent to start working. Each agent runs in its own
               terminal with an isolated git worktree.
             </p>
           </div>
           <Button
             onClick={() => setSpawnDialogOpen(true)}
-            className="gap-2 text-white"
-            style={{ background: 'var(--accent)' }}
+            className="gap-2 bg-accent text-white"
           >
             <Rocket className="h-4 w-4" />
             Launch Your First Agent
@@ -81,7 +94,7 @@ export function WorkspaceView() {
       <SpawnAgentDialog
         open={spawnDialogOpen}
         onOpenChange={setSpawnDialogOpen}
-        projectId={activeProjectId}
+        projectId={projectId}
       />
     </div>
   )

@@ -79,23 +79,17 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6 shadow-2xl"
-          style={{
-            background: 'var(--bg-secondary)',
-            borderColor: 'var(--border)',
-          }}
+          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-bg-secondary p-6 shadow-2xl"
         >
           <div className="mb-4 flex items-center justify-between">
             <Dialog.Title
-              className="text-base font-semibold"
-              style={{ color: 'var(--text-primary)' }}
+              className="text-base font-semibold text-text-primary"
             >
               Add Project
             </Dialog.Title>
             <Dialog.Close asChild>
               <button
-                className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
-                style={{ color: 'var(--text-muted)' }}
+                className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -106,8 +100,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
             {/* Folder Path */}
             <div className="space-y-1.5">
               <label
-                className="text-xs font-medium"
-                style={{ color: 'var(--text-secondary)' }}
+                className="text-xs font-medium text-text-secondary"
               >
                 Project Folder
               </label>
@@ -127,7 +120,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
                   <FolderSearch className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-[10px] text-text-muted">
                 Must be a git repository
               </p>
             </div>
@@ -135,8 +128,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
             {/* Project Name */}
             <div className="space-y-1.5">
               <label
-                className="text-xs font-medium"
-                style={{ color: 'var(--text-secondary)' }}
+                className="text-xs font-medium text-text-secondary"
               >
                 Project Name
               </label>
@@ -151,8 +143,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
             {/* Default Branch */}
             <div className="space-y-1.5">
               <label
-                className="text-xs font-medium"
-                style={{ color: 'var(--text-secondary)' }}
+                className="text-xs font-medium text-text-secondary"
               >
                 Default Branch
               </label>
@@ -166,7 +157,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
 
             {/* Error */}
             {createProject.isError && (
-              <p className="text-xs" style={{ color: 'var(--error)' }}>
+              <p className="text-xs text-error">
                 Failed to add project:{' '}
                 {createProject.error instanceof Error
                   ? createProject.error.message
@@ -187,8 +178,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
               <Button
                 type="submit"
                 disabled={!folderPath.trim() || !projectName.trim() || createProject.isPending}
-                className="text-white"
-                style={{ background: 'var(--accent)' }}
+                className="bg-accent text-white"
               >
                 {createProject.isPending ? 'Adding...' : 'Add Project'}
               </Button>

@@ -78,23 +78,17 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6 shadow-2xl"
-          style={{
-            background: 'var(--bg-secondary)',
-            borderColor: 'var(--border)',
-          }}
+          className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-bg-secondary p-6 shadow-2xl"
         >
           <div className="mb-4 flex items-center justify-between">
             <Dialog.Title
-              className="text-base font-semibold"
-              style={{ color: 'var(--text-primary)' }}
+              className="text-base font-semibold text-text-primary"
             >
               Launch Agent
             </Dialog.Title>
             <Dialog.Close asChild>
               <button
-                className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
-                style={{ color: 'var(--text-muted)' }}
+                className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -105,20 +99,14 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
             {/* CLI Type */}
             <div className="space-y-1.5">
               <label
-                className="text-xs font-medium"
-                style={{ color: 'var(--text-secondary)' }}
+                className="text-xs font-medium text-text-secondary"
               >
                 Agent CLI
               </label>
               <select
                 value={cliType}
                 onChange={(e) => setCliType(e.target.value as AgentCliType)}
-                className="flex h-9 w-full rounded-md border px-3 py-1 text-sm transition-colors focus:outline-none focus:ring-1"
-                style={{
-                  background: 'var(--bg-tertiary)',
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-primary)',
-                }}
+                className="flex h-9 w-full rounded-md border border-border bg-bg-tertiary px-3 py-1 text-sm text-text-primary transition-colors focus:outline-none focus:ring-1"
               >
                 {AGENT_CLI_TYPES.map((type) => (
                   <option key={type} value={type}>
@@ -131,8 +119,7 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
             {/* Task Description */}
             <div className="space-y-1.5">
               <label
-                className="text-xs font-medium"
-                style={{ color: 'var(--text-secondary)' }}
+                className="text-xs font-medium text-text-secondary"
               >
                 Task Description
               </label>
@@ -141,11 +128,8 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
                 onChange={(e) => setTaskDescription(e.target.value)}
                 placeholder="Describe what the agent should do..."
                 rows={3}
-                className="flex w-full rounded-md border px-3 py-2 text-sm transition-colors placeholder:text-zinc-600 focus:outline-none focus:ring-1"
+                className="flex w-full rounded-md border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary transition-colors placeholder:text-zinc-600 focus:outline-none focus:ring-1"
                 style={{
-                  background: 'var(--bg-tertiary)',
-                  borderColor: 'var(--border)',
-                  color: 'var(--text-primary)',
                   resize: 'vertical',
                 }}
               />
@@ -158,13 +142,11 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
                 id="use-worktree"
                 checked={useWorktree}
                 onChange={(e) => setUseWorktree(e.target.checked)}
-                className="h-4 w-4 rounded border accent-[var(--accent)]"
-                style={{ borderColor: 'var(--border)' }}
+                className="h-4 w-4 rounded border border-border accent-[var(--accent)]"
               />
               <label
                 htmlFor="use-worktree"
-                className="text-xs"
-                style={{ color: 'var(--text-secondary)' }}
+                className="text-xs text-text-secondary"
               >
                 Use git worktree (isolated branch)
               </label>
@@ -174,11 +156,10 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
             {useWorktree && (
               <div className="space-y-1.5">
                 <label
-                  className="text-xs font-medium"
-                  style={{ color: 'var(--text-secondary)' }}
+                  className="text-xs font-medium text-text-secondary"
                 >
                   Branch Name
-                  <span className="ml-1 font-normal" style={{ color: 'var(--text-muted)' }}>
+                  <span className="ml-1 font-normal text-text-muted">
                     (optional, auto-generated if empty)
                   </span>
                 </label>
@@ -193,7 +174,7 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
 
             {/* Error */}
             {spawnAgent.isError && (
-              <p className="text-xs" style={{ color: 'var(--error)' }}>
+              <p className="text-xs text-error">
                 Failed to spawn agent:{' '}
                 {spawnAgent.error instanceof Error
                   ? spawnAgent.error.message
@@ -207,10 +188,9 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
                 type="submit"
                 disabled={!taskDescription.trim() || spawnAgent.isPending}
                 className={cn(
-                  'gap-2 text-white',
+                  'gap-2 bg-accent text-white',
                   spawnAgent.isPending && 'opacity-60',
                 )}
-                style={{ background: 'var(--accent)' }}
               >
                 <Rocket className="h-4 w-4" />
                 {spawnAgent.isPending ? 'Launching...' : 'Launch Agent'}

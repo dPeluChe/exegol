@@ -100,8 +100,7 @@ export function AgentCard({ agent }: AgentCardProps) {
 
         <div className="min-w-0 flex-1">
           <p
-            className="truncate text-xs font-medium"
-            style={{ color: 'var(--text-primary)' }}
+            className="truncate text-xs font-medium text-text-primary"
           >
             {agent.taskDescription}
           </p>
@@ -129,8 +128,7 @@ export function AgentCard({ agent }: AgentCardProps) {
       {/* Current step */}
       {agent.currentStep && (
         <p
-          className="truncate pl-[18px] text-[10px]"
-          style={{ color: 'var(--text-muted)' }}
+          className="truncate pl-[18px] text-[10px] text-text-muted"
         >
           {agent.currentStep}
         </p>
@@ -140,8 +138,7 @@ export function AgentCard({ agent }: AgentCardProps) {
       <div className="flex items-center gap-2 pl-[18px]">
         {agent.branchName && (
           <span
-            className="flex items-center gap-0.5 text-[10px]"
-            style={{ color: 'var(--text-muted)' }}
+            className="flex items-center gap-0.5 text-[10px] text-text-muted"
           >
             <GitBranch className="h-2.5 w-2.5" />
             <span className="max-w-[80px] truncate">{agent.branchName}</span>
@@ -149,8 +146,7 @@ export function AgentCard({ agent }: AgentCardProps) {
         )}
         {totalTokens > 0 && (
           <span
-            className="flex items-center gap-0.5 text-[10px]"
-            style={{ color: 'var(--text-muted)' }}
+            className="flex items-center gap-0.5 text-[10px] text-text-muted"
           >
             <Coins className="h-2.5 w-2.5" />
             {costStr}

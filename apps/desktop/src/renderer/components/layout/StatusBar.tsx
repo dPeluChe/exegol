@@ -28,18 +28,13 @@ export function StatusBar() {
 
   return (
     <div
-      className="flex h-6 shrink-0 items-center justify-between border-t px-3 text-[11px]"
-      style={{
-        background: 'var(--bg-secondary)',
-        borderColor: 'var(--border)',
-        color: 'var(--text-muted)',
-      }}
+      className="flex h-6 shrink-0 items-center justify-between border-t border-border bg-bg-secondary px-3 text-[11px] text-text-muted"
     >
       {/* Left: project + branch */}
       <div className="flex items-center gap-3">
         {project ? (
           <>
-            <span style={{ color: 'var(--text-secondary)' }}>{project.name}</span>
+            <span className="text-text-secondary">{project.name}</span>
             <span className="flex items-center gap-1">
               <GitBranch className="h-3 w-3" />
               {project.defaultBranch}

@@ -45,11 +45,7 @@ export function TerminalTabs({ onSpawnClick }: TerminalTabsProps) {
 
   return (
     <div
-      className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b px-1"
-      style={{
-        background: 'var(--bg-secondary)',
-        borderColor: 'var(--border)',
-      }}
+      className="flex h-9 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-border bg-bg-secondary px-1"
     >
       {agents.map((agent) => {
         const isFocused = focusedAgentId === agent.id
@@ -63,9 +59,8 @@ export function TerminalTabs({ onSpawnClick }: TerminalTabsProps) {
             className={cn(
               'group flex h-7 max-w-[200px] items-center gap-1.5 rounded px-2 text-[11px] transition-colors',
               'hover:bg-white/5',
-              isFocused && 'bg-white/10',
+              isFocused ? 'bg-white/10 text-text-primary' : 'text-text-secondary',
             )}
-            style={{ color: isFocused ? 'var(--text-primary)' : 'var(--text-secondary)' }}
           >
             {/* Status dot */}
             <span
@@ -80,7 +75,7 @@ export function TerminalTabs({ onSpawnClick }: TerminalTabsProps) {
             <span className="truncate">
               <span className="font-medium">{CLI_SHORT_LABELS[agent.cliType]}</span>
               {' '}
-              <span style={{ color: 'var(--text-muted)' }}>
+              <span className="text-text-muted">
                 {agent.taskDescription.length > 30
                   ? `${agent.taskDescription.slice(0, 30)}...`
                   : agent.taskDescription}
@@ -105,8 +100,7 @@ export function TerminalTabs({ onSpawnClick }: TerminalTabsProps) {
       {/* New agent button */}
       <button
         onClick={onSpawnClick}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded transition-colors hover:bg-white/5"
-        style={{ color: 'var(--text-muted)' }}
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5"
         title="Launch new agent"
       >
         <Plus className="h-3.5 w-3.5" />

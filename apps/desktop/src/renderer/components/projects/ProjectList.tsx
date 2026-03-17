@@ -28,34 +28,29 @@ function ProjectCard({ project }: { project: Project }) {
     <button
       onClick={() => setActiveProject(project.id)}
       className={cn(
-        'flex flex-col gap-3 rounded-lg border p-4 text-left transition-all',
+        'flex flex-col gap-3 rounded-lg border border-border bg-bg-secondary p-4 text-left transition-all',
         'hover:border-[var(--accent)]/50 hover:bg-white/[0.02]',
       )}
-      style={{
-        background: 'var(--bg-secondary)',
-        borderColor: 'var(--border)',
-      }}
     >
       {/* Header */}
       <div className="flex items-start gap-3">
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-          style={{ background: 'var(--bg-tertiary)' }}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary"
         >
-          <FolderOpen className="h-5 w-5" style={{ color: 'var(--accent)' }} />
+          <FolderOpen className="h-5 w-5 text-accent" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+          <h3 className="truncate text-sm font-semibold text-text-primary">
             {project.name}
           </h3>
-          <p className="truncate text-xs" style={{ color: 'var(--text-muted)' }}>
+          <p className="truncate text-xs text-text-muted">
             {project.path}
           </p>
         </div>
       </div>
 
       {/* Meta */}
-      <div className="flex flex-wrap items-center gap-3 text-[11px]" style={{ color: 'var(--text-muted)' }}>
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-text-muted">
         <span className="flex items-center gap-1">
           <GitBranch className="h-3 w-3" />
           {project.defaultBranch}
@@ -80,21 +75,20 @@ export function ProjectList() {
   const [addDialogOpen, setAddDialogOpen] = useState(false)
 
   return (
-    <div className="flex h-full flex-col" style={{ background: 'var(--bg-primary)' }}>
+    <div className="flex h-full flex-col bg-bg-primary">
       {/* Header */}
-      <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex items-center justify-between border-b border-border px-6 py-4">
         <div>
-          <h1 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+          <h1 className="text-lg font-semibold text-text-primary">
             Projects
           </h1>
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          <p className="text-xs text-text-muted">
             Select a project to start working with agents
           </p>
         </div>
         <Button
           onClick={() => setAddDialogOpen(true)}
-          className="gap-2 text-white"
-          style={{ background: 'var(--accent)' }}
+          className="gap-2 bg-accent text-white"
         >
           <Plus className="h-4 w-4" />
           Add Project
@@ -105,7 +99,7 @@ export function ProjectList() {
       <div className="flex-1 overflow-auto p-6">
         {isLoading && (
           <div className="flex h-40 items-center justify-center">
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            <p className="text-sm text-text-muted">
               Loading projects...
             </p>
           </div>
@@ -113,7 +107,7 @@ export function ProjectList() {
 
         {isError && (
           <div className="flex h-40 items-center justify-center">
-            <p className="text-sm" style={{ color: 'var(--error)' }}>
+            <p className="text-sm text-error">
               Failed to load projects
             </p>
           </div>
@@ -122,23 +116,21 @@ export function ProjectList() {
         {projects && projects.length === 0 && (
           <div className="flex h-60 flex-col items-center justify-center gap-4">
             <div
-              className="flex h-16 w-16 items-center justify-center rounded-2xl"
-              style={{ background: 'var(--bg-secondary)' }}
+              className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-secondary"
             >
-              <FolderOpen className="h-8 w-8" style={{ color: 'var(--text-muted)' }} />
+              <FolderOpen className="h-8 w-8 text-text-muted" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+              <p className="text-sm font-medium text-text-primary">
                 No projects yet
               </p>
-              <p className="mt-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+              <p className="mt-1 text-xs text-text-muted">
                 Add a git repository to start orchestrating agents
               </p>
             </div>
             <Button
               onClick={() => setAddDialogOpen(true)}
-              className="gap-2 text-white"
-              style={{ background: 'var(--accent)' }}
+              className="gap-2 bg-accent text-white"
             >
               <Plus className="h-4 w-4" />
               Add Your First Project

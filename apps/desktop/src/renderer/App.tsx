@@ -8,6 +8,7 @@ import { Sidebar } from './components/layout/Sidebar'
 import { WorkspaceView } from './components/workspace/WorkspaceView'
 import { ProjectList } from './components/projects/ProjectList'
 import { SettingsPanel } from './components/settings/SettingsPanel'
+import { ProjectProvider } from './contexts/ProjectContext'
 
 function MainContent() {
   const activeView = useAppStore((s) => s.activeView)
@@ -16,7 +17,11 @@ function MainContent() {
     case 'projects':
       return <ProjectList />
     case 'workspace':
-      return <WorkspaceView />
+      return (
+        <ProjectProvider>
+          <WorkspaceView />
+        </ProjectProvider>
+      )
     case 'settings':
       return <SettingsPanel />
     default:
@@ -44,7 +49,7 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex h-screen w-screen flex-col" style={{ background: 'var(--bg-primary)' }}>
+      <div className="flex h-screen w-screen flex-col bg-bg-primary">
         <TitleBar />
 
         <div className="flex-1 overflow-hidden">
@@ -62,8 +67,7 @@ export default function App() {
                     <Sidebar />
                   </Panel>
                   <PanelResizeHandle
-                    className="w-px hover:w-0.5 transition-all"
-                    style={{ background: 'var(--border)' }}
+                    className="w-px bg-border hover:w-0.5 transition-all"
                   />
                 </>
               )}
