@@ -8,10 +8,14 @@
 
 ## What I'd improve with more time
 - T03: Log parser currently scans ALL `~/.claude/projects/` directories. Should filter by matching the Exegol project path hash to the Claude Code project directory name for per-project accuracy.
-- T03: Scan mutation uses `scan:<projectId>` as agentId for imported records — these don't link cleanly to real agent rows. Would benefit from a dedicated `source` column in token_usage table.
-- T03: No deduplication on repeated scans — running scan twice imports entries twice. Should fingerprint entries (model + timestamp + tokens) to avoid duplicates.
+- T03: Scan mutation uses `scan:<projectId>` as agentId for imported records — these don't link cleanly to real agent rows. Would benefit from a dedicated `source` column in token_usage table. (Queries updated to include scan entries via OR clause.)
 - T01: Branch deletion after worktree removal isn't implemented — `removeWorktree` prunes the worktree but the branch ref remains in the repo. Would need `repo.find_branch().delete()` in Rust.
-- T14: `ps` metrics show the shell process PID, not the actual CLI tool child process. The agent's PID from node-pty is the shell wrapper — the real `claude`/`codex` binary is a child of that. Would need to walk the process tree (`pgrep -P <pid>`) for accurate per-agent metrics.
+
+## Issues found and fixed during review
+- T03: Scanned entries were invisible in UI — project queries JOINed through agents table, missing `scan:*` entries. Fixed by adding OR clause to `getProjectTokenUsageSummary` and `getProjectTokenUsage`.
+- T03: No dedup on repeated scans. Fixed by checking existence (model + inputTokens + outputTokens match) before insert.
+- T14: `ps` was measuring shell wrapper PID (near-zero usage), not the real CLI child process. Fixed by using `pgrep -P` to find children per parent, then aggregating parent + children metrics.
+- T03: Unsafe type casts (`as number`) on potentially undefined values. Replaced with proper `typeof` checks.
 
 ## Edge cases not handled
 - T01: If branch name already exists in the repo, `create_worktree` will fail and spawn falls back to project root (graceful degradation, logged)

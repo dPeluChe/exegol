@@ -157,6 +157,7 @@ export function TokensSection() {
         {scanMutation.isSuccess && (
           <p className="text-xs text-text-muted">
             Imported {scanMutation.data.imported} entries from local CLI logs.
+            {scanMutation.data.skipped > 0 && ` (${scanMutation.data.skipped} duplicates skipped)`}
           </p>
         )}
       </div>

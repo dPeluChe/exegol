@@ -39,11 +39,30 @@ export const tokenUsageRouter = router({
     .mutation(({ ctx, input }) => {
       const since = Math.floor(Date.now() / 1000) - 30 * 86400; // Last 30 days
       const entries = scanAllLogs(since);
+      const agentId = input?.projectId ? `scan:${input.projectId}` : "external";
+
+      // Dedup: check existing entries to avoid re-importing on repeated scans
+      const existingCheck = ctx.db.prepare(
+        `SELECT COUNT(*) as cnt FROM token_usage
+         WHERE agent_id = ? AND model = ? AND input_tokens = ? AND output_tokens = ?`,
+      );
 
       let imported = 0;
+      let skipped = 0;
       for (const entry of entries) {
+        const existing = existingCheck.get(
+          agentId,
+          entry.model,
+          entry.inputTokens,
+          entry.outputTokens,
+        ) as { cnt: number };
+        if (existing.cnt > 0) {
+          skipped++;
+          continue;
+        }
+
         recordTokenUsage(ctx.db, {
-          agentId: input?.projectId ? `scan:${input.projectId}` : "external",
+          agentId,
           provider: entry.provider,
           model: entry.model,
           inputTokens: entry.inputTokens,
@@ -54,7 +73,7 @@ export const tokenUsageRouter = router({
         imported++;
       }
 
-      return { imported, total: entries.length };
+      return { imported, skipped, total: entries.length };
     }),
 
   /** Get raw token usage records for a project (last N days) */

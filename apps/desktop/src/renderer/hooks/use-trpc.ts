@@ -160,7 +160,7 @@ export function useTokenScan() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { projectId: string }) =>
-      trpcMutate<{ imported: number; total: number }>("tokenUsage.scan", input),
+      trpcMutate<{ imported: number; skipped: number; total: number }>("tokenUsage.scan", input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tokenUsage"] });
     },
