@@ -1,22 +1,33 @@
 import type { Settings } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, Keyboard, Monitor, RotateCcw, Save, Settings2, Terminal } from "lucide-react";
+import {
+  ArrowLeft,
+  Key,
+  Keyboard,
+  Monitor,
+  RotateCcw,
+  Save,
+  Settings2,
+  Terminal,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
+import { ApiKeysSettings } from "./ApiKeysSettings";
 import { CliSettings } from "./CliSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TerminalSettings } from "./TerminalSettings";
 
-type SettingsTab = "general" | "clis" | "terminal" | "shortcuts";
+type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys";
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: Settings2 },
   { id: "clis", label: "Agent CLIs", icon: Terminal },
   { id: "terminal", label: "Terminal", icon: Monitor },
   { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
+  { id: "apikeys", label: "API Keys", icon: Key },
 ];
 
 export function SettingsPanel() {
@@ -79,6 +90,7 @@ export function SettingsPanel() {
         <div className="flex items-center gap-2">
           {dirty && (
             <Button
+              type="button"
               variant="ghost"
               size="sm"
               onClick={handleReset}
@@ -89,11 +101,11 @@ export function SettingsPanel() {
             </Button>
           )}
           <Button
+            type="button"
             size="sm"
             onClick={handleSave}
             disabled={!dirty || updateSettings.isPending}
-            className="gap-1 text-white"
-            style={{ background: dirty ? "var(--accent)" : undefined }}
+            className={cn("gap-1 text-white", dirty && "bg-accent")}
           >
             <Save className="h-3.5 w-3.5" />
             {updateSettings.isPending ? "Saving..." : "Save"}
@@ -134,6 +146,7 @@ export function SettingsPanel() {
           )}
           {activeTab === "terminal" && <TerminalSettings settings={form} onChange={updateField} />}
           {activeTab === "shortcuts" && <KeyboardShortcuts />}
+          {activeTab === "apikeys" && <ApiKeysSettings />}
 
           {/* Save error */}
           {updateSettings.isError && (

@@ -2,10 +2,22 @@ import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getAgentManager } from "../../agents/manager";
-import { createAgent, getAgent, listAgents, updateAgentStatus } from "../../db/queries";
+import {
+  createAgent,
+  getAgent,
+  listAgents,
+  listRecentSessions,
+  updateAgentStatus,
+} from "../../db/queries";
 import { publicProcedure, router } from "../trpc";
 
 export const agentRouter = router({
+  recentSessions: publicProcedure
+    .input(z.object({ limit: z.number().int().positive().optional() }).optional())
+    .query(({ ctx, input }) => {
+      return listRecentSessions(ctx.db, input?.limit ?? 10);
+    }),
+
   list: publicProcedure.input(z.object({ projectId: z.string() })).query(({ ctx, input }) => {
     return listAgents(ctx.db, input.projectId);
   }),

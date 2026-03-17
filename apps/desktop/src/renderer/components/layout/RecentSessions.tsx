@@ -1,25 +1,61 @@
-/**
- * Recent agent sessions across all projects.
- * Content for the collapsible sidebar section.
- * Will be populated from SQLite in Phase 2.
- */
+import { cn } from "@exegol/ui";
+import { useRecentSessions } from "../../hooks/use-trpc";
+import { useAppStore } from "../../stores/app";
+
+const STATUS_COLORS: Record<string, string> = {
+  completed: "bg-green-500",
+  failed: "bg-red-500",
+  stopped: "bg-zinc-500",
+};
+
+function formatRelativeTime(timestamp: number | null): string {
+  if (!timestamp) return "";
+  const diff = Math.floor(Date.now() / 1000) - timestamp;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 export function RecentSessions() {
-  // TODO: Replace with real DB query for past agent sessions
-  // const { data: sessions } = useRecentSessions()
+  const { data: sessions, isLoading } = useRecentSessions(10);
+  const setActiveProject = useAppStore((s) => s.setActiveProject);
+
+  if (isLoading) {
+    return (
+      <div>
+        <p className="text-[10px] italic text-text-muted">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!sessions || sessions.length === 0) {
+    return (
+      <div>
+        <p className="text-[10px] italic text-text-muted">No past sessions</p>
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <p className="text-[10px] italic text-text-muted">Past agent sessions will appear here</p>
-      {/* Future: list of recent sessions like:
-        <div className="space-y-0.5">
-          {sessions.map(s => (
-            <button key={s.id} className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/5">
-              <span className="flex-1 truncate">{s.taskDescription}</span>
-              <span className="shrink-0 text-[9px]">{formatRelativeTime(s.endedAt)}</span>
-            </button>
-          ))}
-        </div>
-      */}
+    <div className="space-y-0.5">
+      {sessions.map((session) => (
+        <button
+          type="button"
+          key={session.id}
+          onClick={() => setActiveProject(session.projectId)}
+          className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[10px] text-text-muted hover:bg-white/5 hover:text-text-secondary"
+        >
+          <span
+            className={cn(
+              "h-1.5 w-1.5 shrink-0 rounded-full",
+              STATUS_COLORS[session.status] ?? "bg-zinc-500",
+            )}
+          />
+          <span className="flex-1 truncate">{session.taskDescription}</span>
+          <span className="shrink-0 text-[9px]">{formatRelativeTime(session.stoppedAt)}</span>
+        </button>
+      ))}
     </div>
   );
 }

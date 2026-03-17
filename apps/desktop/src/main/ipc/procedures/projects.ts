@@ -14,6 +14,7 @@ import {
   listProjects,
   updateProjectLastOpened,
 } from "../../db/queries";
+import { openInIde } from "../../ide/opener";
 import { publicProcedure, router } from "../trpc";
 
 async function isGitRepo(path: string): Promise<boolean> {
@@ -91,6 +92,27 @@ export const projectRouter = router({
     deleteProject(ctx.db, input.id);
     return { success: true };
   }),
+
+  openInIde: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        ide: z.string().optional(),
+        customPath: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Project ${input.projectId} not found`,
+        });
+      }
+      const ide = input.ide ?? project.defaultIde ?? "vscode";
+      await openInIde(project.path, ide, input.customPath);
+      return { success: true };
+    }),
 
   open: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     const project = getProject(ctx.db, input.id);

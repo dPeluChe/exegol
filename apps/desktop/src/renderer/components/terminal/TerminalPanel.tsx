@@ -23,6 +23,10 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
 
   const fontSize = settings?.terminalFontSize ?? 14;
   const fontFamily = settings?.terminalFontFamily ?? "JetBrains Mono, Menlo, Monaco, monospace";
+  const theme = settings?.theme ?? "dark";
+  const isLight =
+    theme === "light" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
 
   const handleResize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
@@ -43,31 +47,58 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
     const container = containerRef.current;
     if (!container) return;
 
+    const darkTermTheme = {
+      background: "#0a0a0b",
+      foreground: "#e4e4e7",
+      cursor: "#e4e4e7",
+      cursorAccent: "#0a0a0b",
+      selectionBackground: "#6366f133",
+      selectionForeground: "#e4e4e7",
+      black: "#0a0a0b",
+      red: "#ef4444",
+      green: "#22c55e",
+      yellow: "#eab308",
+      blue: "#3b82f6",
+      magenta: "#a855f7",
+      cyan: "#06b6d4",
+      white: "#e4e4e7",
+      brightBlack: "#71717a",
+      brightRed: "#f87171",
+      brightGreen: "#4ade80",
+      brightYellow: "#facc15",
+      brightBlue: "#60a5fa",
+      brightMagenta: "#c084fc",
+      brightCyan: "#22d3ee",
+      brightWhite: "#fafafa",
+    };
+
+    const lightTermTheme = {
+      background: "#ffffff",
+      foreground: "#18181b",
+      cursor: "#18181b",
+      cursorAccent: "#ffffff",
+      selectionBackground: "#6366f133",
+      selectionForeground: "#18181b",
+      black: "#18181b",
+      red: "#dc2626",
+      green: "#16a34a",
+      yellow: "#ca8a04",
+      blue: "#2563eb",
+      magenta: "#9333ea",
+      cyan: "#0891b2",
+      white: "#f4f4f5",
+      brightBlack: "#71717a",
+      brightRed: "#ef4444",
+      brightGreen: "#22c55e",
+      brightYellow: "#eab308",
+      brightBlue: "#3b82f6",
+      brightMagenta: "#a855f7",
+      brightCyan: "#06b6d4",
+      brightWhite: "#fafafa",
+    };
+
     const terminal = new Terminal({
-      theme: {
-        background: "#0a0a0b",
-        foreground: "#e4e4e7",
-        cursor: "#e4e4e7",
-        cursorAccent: "#0a0a0b",
-        selectionBackground: "#6366f133",
-        selectionForeground: "#e4e4e7",
-        black: "#0a0a0b",
-        red: "#ef4444",
-        green: "#22c55e",
-        yellow: "#eab308",
-        blue: "#3b82f6",
-        magenta: "#a855f7",
-        cyan: "#06b6d4",
-        white: "#e4e4e7",
-        brightBlack: "#71717a",
-        brightRed: "#f87171",
-        brightGreen: "#4ade80",
-        brightYellow: "#facc15",
-        brightBlue: "#60a5fa",
-        brightMagenta: "#c084fc",
-        brightCyan: "#22d3ee",
-        brightWhite: "#fafafa",
-      },
+      theme: isLight ? lightTermTheme : darkTermTheme,
       fontSize,
       fontFamily,
       cursorBlink: true,
@@ -152,7 +183,7 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
-  }, [agentId, setTerminalReady, setTerminalSize, onReady, fontFamily, fontSize]);
+  }, [agentId, setTerminalReady, setTerminalSize, onReady, fontFamily, fontSize, isLight]);
 
   // Update terminal options when settings change (without re-creating)
   useEffect(() => {
@@ -170,11 +201,5 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
     return () => window.removeEventListener("resize", handleWindowResize);
   }, [handleResize]);
 
-  return (
-    <div
-      ref={containerRef}
-      className="terminal-container h-full w-full"
-      style={{ background: "#0a0a0b" }}
-    />
-  );
+  return <div ref={containerRef} className="terminal-container h-full w-full bg-bg-primary" />;
 }
