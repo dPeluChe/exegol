@@ -22,13 +22,13 @@ Electron + React + Rust desktop app for orchestrating AI coding agents (Claude C
 - Theme system: light/dark/system with CSS variables, system preference listener, theme-aware xterm.js terminal
 - Recent sessions: sidebar shows last 10 completed/stopped agent sessions from DB, click to navigate
 - API key management: encrypted storage via OS keychain (safeStorage), injected as env vars on agent spawn
+- Scheduler engine: cron-based task scheduling via croner, spawns agents on cadence, polls completion, records results
+- Port detection: runtime ports via lsof (filtered by project CWD) + config file parsing (package.json, .env, vite/next config)
 
 ### What's Placeholder / Not Yet Functional
-- Workspace sections: Tasks, Diff Viewer, Scheduler, Token Usage, Resources — UI shells exist but are placeholder
+- Workspace sections: Tasks, Diff Viewer, Token Usage, Resources — UI shells exist but are placeholder
 - Worktree management: DB schema exists, Rust git2 scaffold exists, but not wired into agent spawn flow
-- Scheduler: DB tables exist (scheduled_tasks, scheduled_results), UI section is placeholder
 - Token usage tracking: DB table exists, tRPC router exists, but no actual log parsing yet
-- Port detection: DB table exists, no runtime detection
 - MCP Host, Skills, Plan FSM, Hook Engine, Memory system, Repo Maps — not started
 
 ## Tech Stack
@@ -53,7 +53,7 @@ exegol/
 │   │   │   ├── ide/
 │   │   │   │   └── opener.ts       # IDE launcher (vscode, cursor, zed, intellij, webstorm, custom)
 │   │   │   ├── ipc/
-│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources, apiKeys)
+│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources, apiKeys, scheduler)
 │   │   │   │   ├── trpc.ts         # tRPC init (router, publicProcedure)
 │   │   │   │   ├── trpc-ipc.ts     # createCaller proxy traversal over IPC
 │   │   │   │   ├── context.ts      # tRPC context (db instance)
@@ -63,11 +63,15 @@ exegol/
 │   │   │   │       ├── settings.ts
 │   │   │   │       ├── apikeys.ts
 │   │   │   │       ├── token-usage.ts
-│   │   │   │       └── resources.ts
+│   │   │   │       ├── resources.ts
+│   │   │   │       └── scheduler.ts  # Scheduler CRUD + runNow
 │   │   │   ├── security/
 │   │   │   │   └── keystore.ts     # API key encryption via safeStorage (OS keychain)
+│   │   │   ├── scheduler/
+│   │   │   │   └── engine.ts       # SchedulerEngine: cron jobs via croner, agent spawning
 │   │   │   ├── system/
-│   │   │   │   └── resources.ts    # Background metrics collector (CPU, RAM via vm_stat, disk)
+│   │   │   │   ├── resources.ts    # Background metrics collector (CPU, RAM via vm_stat, disk)
+│   │   │   │   └── ports.ts        # Port detection (lsof + config parsing)
 │   │   │   └── terminal/
 │   │   │       └── pty-manager.ts  # PTY instance tracking
 │   │   ├── renderer/               # React UI
@@ -118,7 +122,7 @@ exegol/
 │   │   │       │       ├── AgentsSection.tsx
 │   │   │       │       ├── TasksSection.tsx      # Placeholder
 │   │   │       │       ├── DiffSection.tsx       # Placeholder
-│   │   │       │       ├── SchedulerSection.tsx  # Placeholder
+│   │   │       │       ├── SchedulerSection.tsx  # Task list, create/edit dialogs, execution history
 │   │   │       │       ├── TokensSection.tsx     # Placeholder
 │   │   │       │       └── ResourcesSection.tsx  # Placeholder
 │   │   │       ├── terminal/
@@ -187,6 +191,8 @@ cargo check                         # Type-check (run inside packages/core-rust)
 - **Zustand with persist**: `useAppStore` persists `activeProjectId`, `activeView`, `sidebarCollapsed` to localStorage under key `exegol-app-state`.
 - **Background metrics collector**: Starts on app launch, collects CPU/RAM/disk every 10s. CPU is delta-based (no blocking sleep). RAM uses `vm_stat` on macOS for accurate available memory (not `os.freemem()`). Renderer reads cached metrics synchronously via tRPC.
 - **Database migrations**: 10 sequential migrations in `migrations.ts`, tracked in `_migrations` table. Migration 010 adds `stopped` to agent status enum by recreating the table.
+- **Scheduler engine**: `SchedulerEngine` singleton manages cron jobs via croner. On fire: creates agent, spawns via AgentManager, polls status every 5s (10-min timeout). Concurrent execution guard prevents duplicate spawns. Lifecycle: starts after metrics collector, stops on will-quit.
+- **Port detection**: `getProjectPorts()` combines runtime detection (lsof + CWD filtering per PID) with config parsing (package.json scripts, .env, vite/next config). Runtime ports are filtered to those whose process CWD starts with the project path.
 
 ## Database Tables
 
