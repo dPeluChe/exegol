@@ -1,7 +1,7 @@
-import { useEffect } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { TooltipProvider } from '@exegol/ui'
 import { useAppStore } from './stores/app'
+import { useHotkeys } from './hooks/use-hotkeys'
 import { TitleBar } from './components/layout/TitleBar'
 import { StatusBar } from './components/layout/StatusBar'
 import { Sidebar } from './components/layout/Sidebar'
@@ -33,17 +33,7 @@ export default function App() {
   const activeView = useAppStore((s) => s.activeView)
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed)
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle sidebar with Cmd/Ctrl + B
-      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
-        e.preventDefault()
-        useAppStore.getState().toggleSidebar()
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  useHotkeys()
 
   const showSidebar = activeView === 'workspace'
 

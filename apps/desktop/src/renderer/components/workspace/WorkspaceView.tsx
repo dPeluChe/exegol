@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useProjectContext } from '../../contexts/ProjectContext'
 import { WorkspaceTabs, type WorkspaceSection } from './WorkspaceTabs'
 import { AgentsSection } from './sections/AgentsSection'
@@ -11,6 +11,15 @@ import { ResourcesSection } from './sections/ResourcesSection'
 export function WorkspaceView() {
   const { projectId } = useProjectContext()
   const [activeSection, setActiveSection] = useState<WorkspaceSection>('agents')
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent).detail?.section as WorkspaceSection
+      if (section) setActiveSection(section)
+    }
+    window.addEventListener('exegol:switch-section', handler)
+    return () => window.removeEventListener('exegol:switch-section', handler)
+  }, [])
 
   if (!projectId) {
     return (

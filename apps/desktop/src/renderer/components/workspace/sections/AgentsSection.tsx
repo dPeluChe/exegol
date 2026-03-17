@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Rocket, Cpu } from 'lucide-react'
 import { Button } from '@exegol/ui'
@@ -13,6 +13,12 @@ export function AgentsSection() {
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId)
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
   const [secondaryPanel, setSecondaryPanel] = useState<React.ReactNode | null>(null)
+
+  useEffect(() => {
+    const handler = () => setSpawnDialogOpen(true)
+    window.addEventListener('exegol:spawn-agent', handler)
+    return () => window.removeEventListener('exegol:spawn-agent', handler)
+  }, [])
 
   const hasAgents = agents.length > 0
 
