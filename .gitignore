@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+.next/
+.turbo/
+
+# Rust
+target/
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Misc
+*.tsbuildinfo

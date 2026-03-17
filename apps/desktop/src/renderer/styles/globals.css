@@ -1,0 +1,55 @@
+@import "tailwindcss";
+@import "@xterm/xterm/css/xterm.css";
+
+:root {
+  --bg-primary: #0a0a0b;
+  --bg-secondary: #141416;
+  --bg-tertiary: #1c1c1f;
+  --border: #2a2a2e;
+  --text-primary: #e4e4e7;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --info: #3b82f6;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* Electron drag region */
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* Terminal container needs full height */
+.terminal-container .xterm { height: 100%; }
+
+/* Pulse animation for agent status */
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-status-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
+}

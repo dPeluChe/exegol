@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "jsx": "react-jsx",
+    "outDir": "./out/tsconfig.web.tsbuildinfo",
+    "paths": {
+      "@renderer/*": ["./src/renderer/*"],
+      "@exegol/shared": ["../../packages/shared/src"],
+      "@exegol/shared/*": ["../../packages/shared/src/*"],
+      "@exegol/ui": ["../../packages/ui/src"],
+      "@exegol/ui/*": ["../../packages/ui/src/*"]
+    }
+  },
+  "include": [
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx",
+    "../../packages/shared/src/**/*.ts",
+    "../../packages/ui/src/**/*.ts",
+    "../../packages/ui/src/**/*.tsx"
+  ]
+}

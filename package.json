@@ -1,0 +1,22 @@
+{
+  "name": "exegol",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "bun@1.2.0",
+  "engines": {
+    "node": ">=20"
+  }
+}
