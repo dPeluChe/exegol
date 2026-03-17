@@ -42,6 +42,11 @@ body {
   user-select: none;
 }
 
+#root {
+  width: 100%;
+  height: 100%;
+}
+
 /* Electron drag region */
 .titlebar-drag {
   -webkit-app-region: drag;

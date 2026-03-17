@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export type ActiveView = 'projects' | 'workspace' | 'settings'
 
@@ -20,20 +21,32 @@ interface AppStore {
   setCommandPaletteOpen: (open: boolean) => void
 }
 
-export const useAppStore = create<AppStore>((set) => ({
-  activeView: 'projects',
-  setActiveView: (view) => set({ activeView: view }),
+export const useAppStore = create<AppStore>()(
+  persist(
+    (set) => ({
+      activeView: 'projects',
+      setActiveView: (view) => set({ activeView: view }),
 
-  activeProjectId: null,
-  setActiveProject: (id) =>
-    set({
-      activeProjectId: id,
-      activeView: id ? 'workspace' : 'projects',
+      activeProjectId: null,
+      setActiveProject: (id) =>
+        set({
+          activeProjectId: id,
+          activeView: id ? 'workspace' : 'projects',
+        }),
+
+      sidebarCollapsed: false,
+      toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+      commandPaletteOpen: false,
+      setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
     }),
-
-  sidebarCollapsed: false,
-  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
-
-  commandPaletteOpen: false,
-  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
-}))
+    {
+      name: 'exegol-app-state',
+      partialize: (state) => ({
+        activeProjectId: state.activeProjectId,
+        activeView: state.activeView,
+        sidebarCollapsed: state.sidebarCollapsed,
+      }),
+    }
+  )
+)
