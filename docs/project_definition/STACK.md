@@ -6,18 +6,18 @@ Every technology choice is justified with data from ecosystem research. See [RES
 
 | Layer | Technology | Version | Justification |
 |-------|-----------|---------|---------------|
-| **Desktop shell** | Electron | latest | Codex App (market leader) uses Electron 40. Chromium guarantees identical rendering across platforms. Tauri rejected due to WebView inconsistency between macOS/Windows/Linux — critical for complex UIs with terminals + diff viewers |
-| **Frontend** | React 18 | 18.x | Industry standard. Used by Codex, Superset. Rich component ecosystem |
-| **Styling** | TailwindCSS | 4.x | Used by Superset. Utility-first, fast iteration, consistent design |
-| **Build** | Vite | latest | Used by Superset, T3 Code. Fast HMR, ESM-native |
-| **Runtime** | Bun | 1.x+ | Used by Superset, T3 Code. 3x faster than Node for startup and package resolution |
-| **Monorepo** | Turborepo | latest | Validated by Superset (96 releases) and T3 Code |
-| **Linting/Format** | Biome | latest | Replaces ESLint + Prettier. Used by Superset. Single tool, faster |
-| **Type safety** | TypeScript | 5.x | Universal in this ecosystem |
-| **IPC** | tRPC | latest | Type-safe bridge between Electron main/renderer. Validated by Superset |
-| **State (frontend)** | Zustand | latest | Lightweight, React-focused. Lower overhead than Redux |
-| **UI primitives** | Radix UI | latest | Used by Codex App. Accessible, unstyled, composable |
-| **Schemas** | Zod | 3.x | Runtime validation. Used by Codex (Immer + Zod), Mastra, MCP SDK |
+| **Desktop shell** | Electron | 41.x | Codex App uses Electron 40. Chromium guarantees identical rendering across platforms. Tauri rejected due to WebView inconsistency between macOS/Windows/Linux |
+| **Frontend** | React 18 | 18.3.x | Industry standard. Used by Codex, Superset. Rich component ecosystem |
+| **Styling** | TailwindCSS | 4.x | Used by Superset. Utility-first, fast iteration, consistent design. Via @tailwindcss/vite plugin |
+| **Build** | electron-vite | 5.x | Electron-specific Vite wrapper. Handles main/renderer/preload builds |
+| **Runtime** | Bun | 1.2.0 | Used by Superset, T3 Code. 3x faster than Node for startup and package resolution |
+| **Monorepo** | Turborepo | 2.4.x | Validated by Superset (96 releases) and T3 Code |
+| **Linting/Format** | Biome | 2.4.7 | Replaces ESLint + Prettier. Used by Superset. Single tool, faster |
+| **Type safety** | TypeScript | 5.7.x | Universal in this ecosystem |
+| **IPC** | tRPC | 11.x | Type-safe bridge between Electron main/renderer via createCaller proxy traversal |
+| **State (frontend)** | Zustand | 5.x | Lightweight, React-focused. With persist middleware for session state |
+| **UI primitives** | Radix UI | 1.x | Used by Codex App. Accessible, unstyled, composable. Currently using Dialog |
+| **Schemas** | Zod | 3.23.x | Runtime validation. Used by Codex (Immer + Zod), Mastra, MCP SDK |
 
 ## Native Layer (Rust via napi-rs)
 
@@ -38,20 +38,24 @@ Every technology choice is justified with data from ecosystem research. See [RES
 
 | Technology | Purpose |
 |-----------|---------|
-| `libsql` npm package | Primary state database (sessions, agents, worktrees, history, vectors). API compatible with better-sqlite3 but adds native vector embeddings, encryption at rest, and BEGIN CONCURRENT for multi-writer |
-| `node-pty` | Pseudo-terminal for spawning CLI agents. Same as Codex |
-| `tRPC server` | Type-safe API for renderer process |
+| `libsql` npm v0.5.x | Primary state database (sessions, agents, worktrees, history). API compatible with better-sqlite3 but adds native vector embeddings, encryption at rest, and BEGIN CONCURRENT for multi-writer |
+| `node-pty` v1.x | Pseudo-terminal for spawning CLI agents. Requires `npx @electron/rebuild` against Electron version |
+| `croner` v9.x | Cron expression parser for scheduled tasks (dependency installed, scheduler engine not yet implemented) |
+| `nanoid` v5.x | Compact unique ID generation for all database entities |
+| `tRPC server` v11.x | Type-safe API for renderer process. Uses createCaller (not HTTP) over IPC |
 
 ## Renderer (React)
 
 | Technology | Purpose |
 |-----------|---------|
-| `xterm.js` + WebGL addon | Terminal emulation. Standard in VS Code. WebGL critical for performance (Superset reported issues without it) |
-| `xterm-addon-fit` | Auto-resize terminal to container |
-| `xterm-addon-web-links` | Clickable URLs in terminal output |
-| ProseMirror or Monaco | Diff viewer / code display. Codex uses ProseMirror. Monaco lighter for diff-only |
-| `react-resizable-panels` | Split pane layout for terminal multiplexing |
-| D3 or Cytoscape | Agent DAG visualization (Phase 3). Codex uses both |
+| `@xterm/xterm` v6.x + `@xterm/addon-webgl` v0.19.x | Terminal emulation. Standard in VS Code. WebGL critical for performance (Superset reported issues without it) |
+| `@xterm/addon-fit` v0.11.x | Auto-resize terminal to container |
+| `@xterm/addon-web-links` v0.12.x | Clickable URLs in terminal output |
+| `react-resizable-panels` v2.x | Split pane layout: sidebar + main content. Used for sidebar resize |
+| `@tanstack/react-query` v5.x | Data fetching layer used by tRPC client hooks |
+| `lucide-react` v0.460.x | Icon library used throughout the UI |
+| ProseMirror or Monaco | Diff viewer — not yet implemented. Codex uses ProseMirror |
+| D3 or Cytoscape | Agent DAG visualization (Phase 3, not yet implemented) |
 
 ## Database: libSQL (SQLite fork by Turso)
 
@@ -68,7 +72,11 @@ Every technology choice is justified with data from ecosystem research. See [RES
 
 ### Schema
 
+10 migrations implemented (`apps/desktop/src/main/db/migrations.ts`). Tables created via sequential migration IDs (001-010).
+
 ```sql
+-- ─── Implemented tables (migrations 001-010) ───
+
 -- Core entities
 projects (
   id, name, path, git_remote, default_branch, default_ide,
@@ -80,7 +88,8 @@ agents (
   current_step,          -- what the agent is currently working on (live status)
   pid, started_at, stopped_at
 )
--- agent.status: idle | spawning | running | waiting_input | paused | completed | failed
+-- agent.status: idle | spawning | running | waiting_input | paused | completed | failed | stopped
+-- (migration 010 adds 'stopped' status for agents killed when app exits)
 -- agent.current_step: free text updated by parsing agent output (e.g. "Writing auth middleware...")
 
 worktrees (
@@ -134,6 +143,13 @@ host_metrics (
   id, agent_id, cpu_percent, memory_bytes, disk_bytes, recorded_at
 )
 
+settings (
+  key TEXT PRIMARY KEY, value TEXT NOT NULL
+)
+-- Key-value store for persisted settings (serialized as JSON)
+
+-- ─── Tables below are PLANNED (not yet created as migrations) ───
+
 -- Vector tables (leverage libSQL native embeddings)
 code_embeddings (
   id, project_id, file_path, symbol_name, symbol_type,
@@ -181,7 +197,7 @@ WHERE m.project_id = ?;
 | **Swift/AppKit** | macOS only. Cmux proves the quality but limits market to 1 platform |
 | **Mastra** | Adds framework dependency for orchestration we can build simpler. Superset's fork maintenance proves the burden |
 | **Drizzle + Neon** | Overengineering for local desktop app. libSQL + rusqlite covers relational + vector needs locally |
-| **better-sqlite3** | Replaced by `libsql` npm package (same API but adds vectors, encryption, multi-writer). Codex uses better-sqlite3 but we gain vector features with libSQL |
+| **better-sqlite3** | Replaced by `libsql` npm package v0.5.x (same API but adds vectors, encryption, multi-writer). Codex uses better-sqlite3 but we gain vector features with libSQL |
 | **Pinecone / Qdrant / pgvector** | Separate vector DB adds infra complexity. libSQL native vectors keep everything in one .db file |
 | **LangChain/LangGraph** | Python ecosystem. We're TypeScript + Rust |
 | **AgentFS/FUSE** | Alpha (v0.4.1), no production users, single-writer SQLite limitation. Git worktrees + SQLite snapshots cover 95% of use cases |

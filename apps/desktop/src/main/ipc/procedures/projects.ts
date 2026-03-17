@@ -1,102 +1,110 @@
-import { z } from 'zod'
-import { TRPCError } from '@trpc/server'
-import { existsSync, statSync } from 'fs'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
+import { execFile } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
+import { promisify } from "node:util";
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
 
-const execFileAsync = promisify(execFile)
+const execFileAsync = promisify(execFile);
+
+import { projectCreateSchema } from "@exegol/shared";
 import {
-  listProjects,
-  getProject,
   createProject,
   deleteProject,
+  getProject,
+  listProjects,
   updateProjectLastOpened,
-} from '../../db/queries'
-import { projectCreateSchema } from '@exegol/shared'
-import { router, publicProcedure } from '../trpc'
+} from "../../db/queries";
+import { publicProcedure, router } from "../trpc";
 
 async function isGitRepo(path: string): Promise<boolean> {
   try {
-    await execFileAsync('git', ['rev-parse', '--is-inside-work-tree'], {
+    await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], {
       cwd: path,
-    })
-    return true
+    });
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 async function getGitRemote(path: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync('git', ['config', '--get', 'remote.origin.url'], {
+    const { stdout } = await execFileAsync("git", ["config", "--get", "remote.origin.url"], {
       cwd: path,
-    })
-    const remote = stdout.trim()
-    return remote || null
+    });
+    const remote = stdout.trim();
+    return remote || null;
   } catch {
-    return null
+    return null;
   }
 }
 
 export const projectRouter = router({
   list: publicProcedure.query(({ ctx }) => {
-    return listProjects(ctx.db)
+    return listProjects(ctx.db);
   }),
 
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    const project = getProject(ctx.db, input.id)
+    const project = getProject(ctx.db, input.id);
     if (!project) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: `Project ${input.id} not found` })
+      throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.id} not found` });
     }
-    return project
+    return project;
   }),
 
   create: publicProcedure.input(projectCreateSchema).mutation(async ({ ctx, input }) => {
     if (!existsSync(input.path)) {
       throw new TRPCError({
-        code: 'BAD_REQUEST',
+        code: "BAD_REQUEST",
         message: `Path does not exist: ${input.path}`,
-      })
+      });
     }
 
-    const stats = statSync(input.path)
+    const stats = statSync(input.path);
     if (!stats.isDirectory()) {
       throw new TRPCError({
-        code: 'BAD_REQUEST',
+        code: "BAD_REQUEST",
         message: `Path is not a directory: ${input.path}`,
-      })
+      });
     }
 
     if (!(await isGitRepo(input.path))) {
       throw new TRPCError({
-        code: 'BAD_REQUEST',
+        code: "BAD_REQUEST",
         message: `Path is not a git repository: ${input.path}`,
-      })
+      });
     }
 
-    const gitRemote = input.gitRemote ?? (await getGitRemote(input.path))
+    const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));
 
     return createProject(ctx.db, {
       ...input,
       gitRemote,
-    })
+    });
   }),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    const project = getProject(ctx.db, input.id)
+    const project = getProject(ctx.db, input.id);
     if (!project) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: `Project ${input.id} not found` })
+      throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.id} not found` });
     }
-    deleteProject(ctx.db, input.id)
-    return { success: true }
+    deleteProject(ctx.db, input.id);
+    return { success: true };
   }),
 
   open: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    const project = getProject(ctx.db, input.id)
+    const project = getProject(ctx.db, input.id);
     if (!project) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: `Project ${input.id} not found` })
+      throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.id} not found` });
     }
-    updateProjectLastOpened(ctx.db, input.id)
-    return getProject(ctx.db, input.id)!
+    updateProjectLastOpened(ctx.db, input.id);
+    const updated = getProject(ctx.db, input.id);
+    if (!updated) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: `Project ${input.id} not found after update`,
+      });
+    }
+    return updated;
   }),
-})
+});

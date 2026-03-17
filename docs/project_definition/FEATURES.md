@@ -1,127 +1,145 @@
 # Feature Roadmap
 
+> **Status key**: DONE = implemented and working, PARTIAL = UI exists but functionality incomplete, STUB = placeholder UI only, PLANNED = not started
+
 ## Phase 1 — MVP Core (Weeks 1-6)
 
 **Goal**: Execute 1+ CLI agents with terminal multiplexing, worktree isolation, and diff review.
 
-### P1.1 Project Manager
-- Open local git repositories
-- Detect git status, current branch, remote
-- Project list with recent activity
-- Settings per project (CLI agent path, default model, env vars)
+### P1.1 Project Manager — DONE
+- [x] Open local directories (folder picker via Electron dialog)
+- [x] Project list with last-opened sorting
+- [x] Add/remove projects, persist to libSQL
+- [x] Settings per project: default IDE, default branch
+- [ ] Detect git status, current branch, remote (Rust git2 scaffold exists, not wired)
 
-### P1.2 Terminal Multiplexor
-- xterm.js with WebGL addon (mandatory for performance — Superset reported issues without it)
-- Split panes (vertical/horizontal) with resizable dividers
-- Independent terminal sessions per pane
-- Copy/paste, scrollback buffer, search within pane
-- Theme support (inherit from user terminal config)
+### P1.2 Terminal Multiplexor — PARTIAL
+- [x] xterm.js v6 with WebGL addon
+- [x] Terminal tabs per agent (TerminalTabs component)
+- [x] Terminal panel with fit addon (auto-resize)
+- [x] Web links addon (clickable URLs)
+- [ ] Split panes (vertical/horizontal) — not implemented, single terminal per agent
+- [ ] Copy/paste, scrollback buffer persistence, search within pane — not implemented
+- [ ] Theme support from user terminal config — font size/family configurable in settings
 
-### P1.3 Agent Runner
-- Spawn any CLI agent as subprocess via node-pty
-- Supported out of box: Claude Code, Codex CLI, Gemini CLI, Aider, OpenCode, Goose, Amp, Kiro
-- Capture stdout/stderr, pipe to xterm.js
-- Graceful stop (SIGTERM → SIGKILL fallback)
-- Agent status tracking: idle, running, waiting_input, completed, failed
+### P1.3 Agent Runner — DONE
+- [x] Spawn any CLI agent as subprocess via node-pty through user's login shell
+- [x] Supported out of box: Claude Code, Codex CLI, Gemini CLI, Aider (configured in DEFAULT_SETTINGS)
+- [x] Custom CLI agents can be added via Settings > Agent CLIs
+- [x] Capture stdout, pipe to xterm.js in renderer via IPC
+- [x] Graceful stop (SIGTERM → 5s wait → SIGKILL fallback)
+- [x] Agent status tracking: idle, spawning, running, waiting_input, paused, completed, failed, stopped
+- [x] PATH resolution via login shell ($SHELL -ilc) for nvm/homebrew compatibility
+- [x] Live status parsing: AgentStatusParser extracts current step from stdout
+- [x] Stale agent cleanup on app startup (marks running/spawning as stopped)
 
-### P1.4 Git Worktree Automation
-- Create worktree per agent on spawn (via Rust git2)
-- Auto-generate branch name from task description
-- Shared .git directory (no full clones)
-- Auto-cleanup: remove worktree + branch if no changes on agent stop
-- Keep worktree if changes exist, show notification
+### P1.4 Git Worktree Automation — PLANNED
+- [ ] Rust git2 scaffold exists in packages/core-rust/ (compiles clean)
+- [ ] Not yet wired into agent spawn flow — agents run in project root directory
+- [ ] DB tables exist (worktrees table with auto_cleanup, disk_usage_bytes)
+- [ ] Planned: create worktree per agent, auto-cleanup, branch naming
 
-### P1.5 Diff Viewer
-- Unified and split (side-by-side) views
-- Per-file and per-turn diff navigation
-- Syntax highlighting (Shiki)
-- Accept/reject individual hunks
-- Direct commit from diff viewer
+### P1.5 Diff Viewer — STUB
+- [ ] WorkspaceTabs includes "Diff Viewer" tab
+- [ ] DiffSection component exists as placeholder
+- [ ] No diff rendering, syntax highlighting, or hunk management implemented
 
-### P1.6 Internal Scheduler
-- Schedule agent tasks within a project using natural language prompts
-- Cron-like cadence: on-demand, daily, on-push, on-PR, custom interval
-- Each scheduled task = prompt + project + optional skill + optional worktree config
-- Execution: spawns agent in dedicated worktree at scheduled time
-- Results go to inbox panel for human review
-- Persistent: survives app restart (stored in SQLite)
-- UI: scheduler panel per project with list of scheduled tasks, next run, last result
-- Examples:
-  - "Every morning: review open PRs for security issues"
-  - "On push to main: run tests and report failures"
-  - "Daily: scan for deprecated dependencies"
-  - "Every 2 hours: check CI pipeline status"
+### P1.6 Internal Scheduler — STUB
+- [x] DB tables: scheduled_tasks, scheduled_results (with cron_expression, skill_name, cli_agent, etc.)
+- [x] croner v9 dependency installed
+- [x] WorkspaceTabs includes "Scheduler" tab
+- [x] SchedulerSection placeholder component
+- [x] SchedulersOverview in sidebar footer (placeholder)
+- [ ] No scheduler execution engine implemented
+- [ ] No cron job running
 
-### P1.7 Agent Sidebar + Live Status
-- Vertical tab sidebar (inspired by Cmux)
-- Per agent card showing:
-  - Name, CLI type icon (Claude/Codex/Gemini/Aider)
-  - Git branch name
-  - Status indicator: idle | spawning | running | waiting_input | paused | completed | failed
-  - **Live "working on" text**: what the agent is currently doing (parsed from stdout)
-    - Examples: "Writing auth middleware...", "Running tests...", "Reading src/api/routes.ts..."
-    - Parsed via pattern matching on agent output (tool calls, file operations, test runs)
-  - Token usage mini-bar (from P1.10)
-  - Active port (from P1.9)
-  - Runtime duration
-- Click to focus agent terminal
-- Unread badge for agents needing attention
-- Per-project view: see all agents across a project with their live status at a glance
+### P1.7 Agent Sidebar + Live Status — DONE
+- [x] Collapsible sidebar with SidebarSection component (chevron toggle, count badge, action slot)
+- [x] Projects section with count badge, click to select
+- [x] Recent Sessions section (collapsible)
+- [x] New Agent button (disabled if no project selected)
+- [x] SpawnAgentDialog: select CLI type + enter task description
+- [x] AgentCard showing: CLI type, status, task description
+- [x] Agent status parsing from stdout (currentStep live text)
+- [x] Click to focus agent terminal
+- [x] StatusDot component for status indication
+- [x] SidebarFooter with Schedulers + Resources overviews + version number
+- [ ] Token usage mini-bar — not wired
+- [ ] Active port display — not implemented
+- [ ] Unread badge for agents needing attention — not implemented
 
-### P1.8 Open in IDE
-- One-click open any worktree in user's preferred IDE
-- Auto-detect installed IDEs: VS Code, Cursor, Zed, JetBrains (IntelliJ, WebStorm, etc.)
-- Configurable default IDE per project
-- Opens at worktree root with correct working directory
+### P1.8 Open in IDE — PLANNED
+- [x] Settings: default IDE selection (vscode, cursor, zed, intellij, webstorm, custom)
+- [x] Custom IDE path setting
+- [ ] Actual "open in IDE" button/action not implemented
 
-### P1.9 Port Detection
-- Parse project configs to detect configured ports: vite.config, next.config, package.json scripts, .env
-- Monitor active listening ports per worktree (via `lsof` / `ss`)
-- Display in agent sidebar: port number + status (listening/idle)
-- Click port → open in browser or embedded preview
-- Conflict detection: warn when two worktrees try to use same port
+### P1.9 Port Detection — PLANNED
+- [x] DB table: port_registry (port, source, status, worktree_id)
+- [ ] No runtime port detection or UI display
 
-### P1.10 Token Usage Monitor (built-in, no external app)
-- Read local JSONL logs from CLI agents:
-  - Claude Code: `~/.claude/projects/**/` JSONL files
-  - Codex CLI: local session logs
-  - Gemini CLI: CLI RPC / log files
-  - Aider: session cost logs
-- Parse and aggregate: input tokens, output tokens, cost estimate
-- Real-time display per agent in sidebar (mini progress bar)
-- 30-day rolling history stored in SQLite
-- No external app needed (replaces CodexBar, ccusage, tokscale)
-- Inspired by: [steipete/CodexBar](https://github.com/steipete/CodexBar), [ryoppippi/ccusage](https://github.com/ryoppippi/ccusage), [mag123c/toktrack](https://github.com/mag123c/toktrack)
+### P1.10 Token Usage Monitor — STUB
+- [x] DB table: token_usage (agent_id, provider, model, input_tokens, output_tokens, estimated_cost_usd)
+- [x] tRPC tokenUsage router exists
+- [x] WorkspaceTabs includes "Token Usage" tab
+- [x] TokensSection placeholder component
+- [ ] No actual log parsing from CLI agents
+- [ ] No real-time tracking
 
-### P1.11 Task Viewer from Markdown
-- Load any .md file containing checkbox tasks (`- [ ]` / `- [x]`)
-- Render as visual task list with progress indicators
-- Toggle checkboxes from UI → updates the .md file on disk
-- Support nested tasks (indented checkboxes)
-- Works with: plan.md, TODO.md, any user markdown file
-- Drag to reorder tasks (updates file)
-- Filter: show all / pending / completed
+### P1.11 Task Viewer from Markdown — STUB
+- [x] WorkspaceTabs includes "Tasks" tab
+- [x] TasksSection placeholder component
+- [ ] No markdown parsing or checkbox rendering
 
-### P1.12 Host Resource Monitor
-- Per-project resource usage: CPU %, RAM, disk space used by worktrees
-- Per-agent process metrics: PID, CPU, memory, runtime duration
-- Total disk usage per project (all worktrees combined)
-- Warning when disk usage exceeds threshold (worktree accumulation)
-- Display in project overview panel
+### P1.12 Host Resource Monitor — PARTIAL
+- [x] Background metrics collector: CPU (delta-based), RAM (vm_stat on macOS), disk (df)
+- [x] Collects every 10s, cached for synchronous reads
+- [x] tRPC resources router: getSystem (cached), getProject (async du + git worktree list)
+- [x] ResourcesOverview in sidebar footer
+- [x] WorkspaceTabs includes "Resources" tab
+- [x] ResourcesSection placeholder component in workspace
+- [ ] Per-agent process metrics (PID, CPU, memory) — not implemented
+- [ ] Warning thresholds — not implemented
 
-### P1.13 SQLite State
-- better-sqlite3 in main process
-- Tables: projects, agents, worktrees, sessions, token_usage, port_registry
-- WAL mode for concurrent reads
-- Automatic schema migrations
+### P1.13 SQLite State — DONE
+- [x] libSQL (not better-sqlite3) in main process
+- [x] 10 tables: projects, agents, worktrees, sessions, scheduled_tasks, scheduled_results, token_usage, port_registry, host_metrics, settings
+- [x] 10 sequential migrations with tracking table (_migrations)
+- [x] WAL mode
+- [x] Migration 010: adds 'stopped' status to agents (table recreation)
 
-### P1.14 Settings
-- API key management (stored in OS keychain, not plaintext)
-- CLI agent paths configuration
-- Default IDE selection
-- Theme selection (dark/light + custom)
-- Keyboard shortcuts customization
-- Global hotkey to bring app to front
+### P1.14 Settings — DONE
+- [x] SettingsPanel with 4 tabs: General, Agent CLIs, Terminal, Shortcuts
+- [x] General: default IDE, theme (dark/light/system), global hotkey
+- [x] Agent CLIs: configure command + args + env for each CLI type
+- [x] Terminal: font size, font family
+- [x] Keyboard Shortcuts: categorized display (Navigation, Agents, Terminal)
+- [x] Settings persisted to DB (settings table, key-value store)
+- [x] Save/Reset buttons with dirty state tracking
+- [x] Global hotkey: Cmd+Shift+E to bring app to front
+- [ ] API key management (OS keychain) — not implemented
+- [ ] Theme actually applied — dark theme hardcoded
+
+### P1.15 Keyboard Shortcuts — DONE (added post-initial-plan)
+- [x] Cmd+B: Toggle sidebar
+- [x] Cmd+,: Open Settings
+- [x] Cmd+Shift+P: Go to Projects
+- [x] Cmd+N: New Agent (open spawn dialog)
+- [x] Cmd+.: Stop focused agent
+- [x] Cmd+]/[: Next/previous agent tab
+- [x] Cmd+1-9: Switch to agent by index
+
+### P1.16 Session Persistence — DONE (added post-initial-plan)
+- [x] Zustand persist middleware saves app state to localStorage
+- [x] Persisted: activeProjectId, activeView, sidebarCollapsed
+- [x] Survives app restart
+
+### Future Features Discussed (Not Yet in Roadmap)
+- **Prompts/Templates**: Pre-defined task templates per project
+- **Skills management**: Browse/configure skill files
+- **Terminal layouts**: Split views, multiple terminals per tab
+- **File explorer panel**: Browse project files from sidebar
+- **Re-launch stopped agents**: Resume agents that were stopped on app exit
+- **Terminal scrollback persistence**: Save/restore terminal output across sessions
 
 ---
 

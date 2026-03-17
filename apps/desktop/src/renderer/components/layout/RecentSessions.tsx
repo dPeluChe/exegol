@@ -9,9 +9,7 @@ export function RecentSessions() {
 
   return (
     <div>
-      <p className="text-[10px] italic text-text-muted">
-        Past agent sessions will appear here
-      </p>
+      <p className="text-[10px] italic text-text-muted">Past agent sessions will appear here</p>
       {/* Future: list of recent sessions like:
         <div className="space-y-0.5">
           {sessions.map(s => (
@@ -23,5 +21,5 @@ export function RecentSessions() {
         </div>
       */}
     </div>
-  )
+  );
 }

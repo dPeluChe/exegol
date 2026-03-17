@@ -1,9 +1,9 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { ErrorBoundary } from './components/ErrorBoundary'
-import App from './App'
-import './styles/globals.css'
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import "./styles/globals.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,10 +13,10 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
-})
+});
 
-const rootEl = document.getElementById('root')
-if (!rootEl) throw new Error('Root element not found')
+const rootEl = document.getElementById("root");
+if (!rootEl) throw new Error("Root element not found");
 
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
@@ -26,4 +26,4 @@ ReactDOM.createRoot(rootEl).render(
       </QueryClientProvider>
     </ErrorBoundary>
   </React.StrictMode>,
-)
+);

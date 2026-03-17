@@ -27,13 +27,13 @@ All data verified from primary sources (GitHub, official docs, reverse engineeri
 
 | | Codex App | Superset | Cmux | T3 Code | Exegol |
 |---|---|---|---|---|---|
-| **Shell** | Electron 40 | Electron | Swift/AppKit | Web (Bun) | Electron |
-| **Frontend** | React 18 + ProseMirror | React + TailwindCSS | Native (AppKit) | TypeScript + Vite | React 18 + TailwindCSS |
-| **Backend** | Rust (tokio, tree-sitter, rmcp) | TypeScript (tRPC, Drizzle) | Swift + libghostty | TypeScript | Rust (napi-rs) |
-| **Terminal** | node-pty | xterm.js | libghostty (GPU) | N/A | xterm.js + WebGL |
-| **DB** | better-sqlite3 + sqlx-sqlite | Drizzle + Neon | N/A | N/A | better-sqlite3 + rusqlite |
-| **Build** | Custom | Turborepo + Vite + Biome | Xcode | Turborepo + Vite | Turborepo + Vite + Biome |
-| **Runtime** | Node.js | Bun | Native | Bun | Bun |
+| **Shell** | Electron 40 | Electron | Swift/AppKit | Web (Bun) | Electron 41 |
+| **Frontend** | React 18 + ProseMirror | React + TailwindCSS | Native (AppKit) | TypeScript + Vite | React 18 + TailwindCSS 4 |
+| **Backend** | Rust (tokio, tree-sitter, rmcp) | TypeScript (tRPC, Drizzle) | Swift + libghostty | TypeScript | Rust (napi-rs, scaffold) |
+| **Terminal** | node-pty | xterm.js | libghostty (GPU) | N/A | node-pty + xterm.js 6 + WebGL |
+| **DB** | better-sqlite3 + sqlx-sqlite | Drizzle + Neon | N/A | N/A | libSQL (SQLite fork) |
+| **Build** | Custom | Turborepo + Vite + Biome | Xcode | Turborepo + Vite | Turborepo + electron-vite 5 + Biome 2.4.7 |
+| **Runtime** | Node.js | Bun | Native | Bun | Bun 1.2.0 |
 
 ## Pricing Landscape
 

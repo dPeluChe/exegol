@@ -1,5 +1,5 @@
-import { Coins } from 'lucide-react'
-import { EmptyState } from '../../common/EmptyState'
+import { Coins } from "lucide-react";
+import { EmptyState } from "../../common/EmptyState";
 
 export function TokensSection() {
   return (
@@ -11,8 +11,8 @@ export function TokensSection() {
         icon={<Coins className="h-8 w-8 text-text-muted" />}
         title="Token Usage"
         description="Monitor token consumption and costs across agents. Track 30-day rolling history."
-        action={{ label: 'Coming in Phase 2', onClick: () => {} }}
+        action={{ label: "Coming in Phase 2", onClick: () => {} }}
       />
     </div>
-  )
+  );
 }

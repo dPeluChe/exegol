@@ -1,5 +1,3 @@
-import { Clock, Plus } from 'lucide-react'
-
 /**
  * Global overview of all scheduled tasks across all projects.
  * Shows in the sidebar as a collapsible section.
@@ -11,9 +9,7 @@ export function SchedulersOverview() {
 
   return (
     <div>
-      <p className="text-[10px] italic text-text-muted">
-        No scheduled tasks yet
-      </p>
+      <p className="text-[10px] italic text-text-muted">No scheduled tasks yet</p>
       {/* Future: list of scheduled tasks like:
         <div className="space-y-0.5">
           {tasks.map(task => (
@@ -26,5 +22,5 @@ export function SchedulersOverview() {
         </div>
       */}
     </div>
-  )
+  );
 }

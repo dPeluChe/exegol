@@ -1,13 +1,13 @@
-import type Database from 'libsql'
+import type Database from "libsql";
 
 type Migration = {
-  id: string
-  sql: string
-}
+  id: string;
+  sql: string;
+};
 
 const migrations: Migration[] = [
   {
-    id: '001_projects',
+    id: "001_projects",
     sql: `CREATE TABLE IF NOT EXISTS projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -20,7 +20,7 @@ const migrations: Migration[] = [
     )`,
   },
   {
-    id: '002_agents',
+    id: "002_agents",
     sql: `CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -37,7 +37,7 @@ const migrations: Migration[] = [
     )`,
   },
   {
-    id: '003_worktrees',
+    id: "003_worktrees",
     sql: `CREATE TABLE IF NOT EXISTS worktrees (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -52,7 +52,7 @@ const migrations: Migration[] = [
     )`,
   },
   {
-    id: '004_sessions',
+    id: "004_sessions",
     sql: `CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -63,7 +63,7 @@ const migrations: Migration[] = [
     )`,
   },
   {
-    id: '005_scheduled_tasks',
+    id: "005_scheduled_tasks",
     sql: `CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
@@ -91,7 +91,7 @@ const migrations: Migration[] = [
     )`,
   },
   {
-    id: '006_token_usage',
+    id: "006_token_usage",
     sql: `CREATE TABLE IF NOT EXISTS token_usage (
       id TEXT PRIMARY KEY,
       agent_id TEXT NOT NULL,
@@ -109,7 +109,7 @@ const migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_token_usage_recorded ON token_usage(recorded_at)`,
   },
   {
-    id: '007_port_registry',
+    id: "007_port_registry",
     sql: `CREATE TABLE IF NOT EXISTS port_registry (
       id TEXT PRIMARY KEY,
       worktree_id TEXT NOT NULL,
@@ -125,7 +125,7 @@ const migrations: Migration[] = [
     CREATE UNIQUE INDEX IF NOT EXISTS idx_port_registry_port ON port_registry(port, worktree_id)`,
   },
   {
-    id: '008_host_metrics',
+    id: "008_host_metrics",
     sql: `CREATE TABLE IF NOT EXISTS host_metrics (
       id TEXT PRIMARY KEY,
       agent_id TEXT NOT NULL,
@@ -140,33 +140,56 @@ const migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_host_metrics_recorded ON host_metrics(recorded_at)`,
   },
   {
-    id: '009_settings',
+    id: "009_settings",
     sql: `CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     )`,
   },
-]
+  {
+    id: "010_agents_add_stopped_status",
+    sql: `
+      -- SQLite doesn't support ALTER CHECK constraint, so we recreate the table
+      CREATE TABLE IF NOT EXISTS agents_new (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        worktree_id TEXT,
+        cli_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'idle'
+          CHECK (status IN ('idle', 'spawning', 'running', 'waiting_input', 'paused', 'completed', 'failed', 'stopped')),
+        task_description TEXT NOT NULL,
+        current_step TEXT,
+        pid INTEGER,
+        started_at INTEGER,
+        stopped_at INTEGER,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+      INSERT OR IGNORE INTO agents_new SELECT * FROM agents;
+      DROP TABLE agents;
+      ALTER TABLE agents_new RENAME TO agents;
+    `,
+  },
+];
 
 export function runMigrations(db: Database.Database): void {
   // Create migration tracking table
   db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
     id TEXT PRIMARY KEY,
     applied_at INTEGER NOT NULL DEFAULT (unixepoch())
-  )`)
+  )`);
 
-  const appliedStmt = db.prepare('SELECT id FROM _migrations WHERE id = ?')
-  const insertStmt = db.prepare('INSERT INTO _migrations (id) VALUES (?)')
+  const appliedStmt = db.prepare("SELECT id FROM _migrations WHERE id = ?");
+  const insertStmt = db.prepare("INSERT INTO _migrations (id) VALUES (?)");
 
   const runInTransaction = db.transaction(() => {
     for (const migration of migrations) {
-      const existing = appliedStmt.get(migration.id) as { id: string } | undefined
-      if (existing) continue
+      const existing = appliedStmt.get(migration.id) as { id: string } | undefined;
+      if (existing) continue;
 
-      db.exec(migration.sql)
-      insertStmt.run(migration.id)
+      db.exec(migration.sql);
+      insertStmt.run(migration.id);
     }
-  })
+  });
 
-  runInTransaction()
+  runInTransaction();
 }

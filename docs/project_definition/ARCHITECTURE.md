@@ -3,114 +3,144 @@
 ## High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Electron Main Process                     │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
-│  │  Agent    │  │ Worktree │  │   Hook   │  │   Skill   │  │
-│  │ Manager   │  │ Manager  │  │  Engine  │  │  Loader   │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └─────┬─────┘  │
-│       │              │             │               │        │
-│  ┌────┴──────────────┴─────────────┴───────────────┴────┐   │
-│  │                    tRPC Router                        │   │
-│  └────┬──────────────────────────────────────────┬──────┘   │
-│       │                                          │          │
-│  ┌────┴─────┐  ┌──────────┐  ┌──────────┐  ┌───┴───────┐  │
-│  │  SQLite  │  │ node-pty │  │  Memory  │  │   Plan    │  │
-│  │ (libsql) │  │ (agents) │  │  System  │  │   FSM     │  │
-│  └──────────┘  └──────────┘  └──────────┘  └───────────┘  │
-│       │                                                     │
-│  ┌────┴──────────┐  ┌──────────────────────────────────┐   │
-│  │  Scheduler    │  │        Rust Native (napi-rs)      │   │
-│  │  (cron tasks) │  │                                    │   │
-│  └───────────────┘  │  ┌──────────┐ ┌───────────┐      │   │
-│                      │  │ MCP Host │ │ Tree-sitter│      │   │
-│                      │  │  (rmcp)  │ │ Repo Maps │      │   │
-│                      │  └──────────┘ └───────────┘      │   │
-│                      │  ┌────────┐ ┌────────┐           │   │
-│                      │  │  git2  │ │ast-grep│           │   │
-│                      │  │Worktree│ │AST Edit│           │   │
-│                      │  └────────┘ └────────┘           │   │
-│                      │  ┌──────────┐ ┌────────┐         │   │
-│                      │  │ rusqlite │ │ libsql │         │   │
-│                      │  │ (heavy)  │ │(vector)│         │   │
-│                      │  └──────────┘ └────────┘         │   │
-│                      │  ┌──────────┐                     │   │
-│                      │  │  tokio   │                     │   │
-│                      │  └──────────┘                     │   │
-│                      └───────────────────────────────────┘   │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ IPC (tRPC)
-┌──────────────────────┴──────────────────────────────────────┐
-│                   Electron Renderer                          │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │                    React 18 + Zustand                 │   │
-│  │                                                       │   │
-│  │  ┌─────────────┐  ┌──────────┐  ┌────────────────┐  │   │
-│  │  │  Terminal    │  │   Diff   │  │  Agent Sidebar  │  │   │
-│  │  │  Panels     │  │  Viewer  │  │ (live status)   │  │   │
-│  │  │  (xterm.js) │  │          │  │                  │  │   │
-│  │  └─────────────┘  └──────────┘  └────────────────┘  │   │
-│  │  ┌─────────────┐  ┌──────────┐  ┌────────────────┐  │   │
-│  │  │  Plan View  │  │  MCP     │  │  DAG Visualizer │  │   │
-│  │  │  (FSM)      │  │  Config  │  │  (D3/Cytoscape) │  │   │
-│  │  └─────────────┘  └──────────┘  └────────────────┘  │   │
-│  └──────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                     Electron Main Process                         │
+│                                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
+│  │ AgentManager  │  │  Resources   │  │  Global Hotkey       │   │
+│  │ (node-pty     │  │  Collector   │  │  (Cmd+Shift+E)       │   │
+│  │  + status     │  │  (10s bg)    │  │                      │   │
+│  │  parser)      │  │  CPU/RAM/Disk│  │                      │   │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────────────┘   │
+│         │                  │                                      │
+│  ┌──────┴──────────────────┴──────────────────────────────────┐  │
+│  │        tRPC Router (createCaller proxy traversal)           │  │
+│  │  projects | agents | settings | tokenUsage | resources      │  │
+│  └──────┬──────────────────────────────────────────────┬──────┘  │
+│         │                                              │         │
+│  ┌──────┴──────┐  ┌──────────┐  ┌──────────────────┐  │         │
+│  │   libSQL    │  │ node-pty │  │  IPC handlers     │  │         │
+│  │  (10 tables │  │ (agents) │  │  terminal:write   │  │         │
+│  │  10 migr.)  │  │          │  │  terminal:resize  │  │         │
+│  └─────────────┘  └──────────┘  │  dialog, window   │  │         │
+│                                  └──────────────────┘  │         │
+│                                                         │         │
+│  ┌──────────────────────────────────────────────────────┘         │
+│  │         Rust Native (napi-rs) — scaffold only                  │
+│  │  ┌────────┐                                                    │
+│  │  │  git2  │  (worktree ops — not yet wired to agent spawn)     │
+│  │  └────────┘                                                    │
+│  └────────────────────────────────────────────────────────────┘   │
+│                                                                    │
+│  PLANNED (not yet implemented):                                    │
+│  Hook Engine, Skill Loader, Plan FSM, MCP Host, Memory System,    │
+│  Scheduler Engine (croner), Worktree Manager, Repo Map Generator   │
+└──────────────────────┬─────────────────────────────────────────────┘
+                       │ IPC (tRPC via createCaller, raw ipcMain)
+┌──────────────────────┴─────────────────────────────────────────────┐
+│                    Electron Renderer                                │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐ │
+│  │                React 18 + Zustand (persist) + TailwindCSS 4   │ │
+│  │                                                                │ │
+│  │  ┌──────────────┐  ┌───────────────────┐  ┌───────────────┐  │ │
+│  │  │  TitleBar     │  │ Sidebar            │  │ StatusBar     │  │ │
+│  │  │  (hidden      │  │  SidebarSection    │  │               │  │ │
+│  │  │   titlebar)   │  │  ProjectsSection   │  │               │  │ │
+│  │  └──────────────┘  │  RecentSessions    │  └───────────────┘  │ │
+│  │                     │  SidebarFooter:    │                     │ │
+│  │                     │   Schedulers       │                     │ │
+│  │                     │   Resources        │                     │ │
+│  │                     └───────────────────┘                     │ │
+│  │                                                                │ │
+│  │  ┌────────────────────────────────────────────────────────┐   │ │
+│  │  │  WorkspaceView (tab-switched sections)                  │   │ │
+│  │  │  ┌─────────┐ ┌──────┐ ┌──────┐ ┌─────────┐ ┌───────┐ │   │ │
+│  │  │  │ Agents  │ │Tasks │ │ Diff │ │Scheduler│ │Tokens │ │   │ │
+│  │  │  │(active) │ │(stub)│ │(stub)│ │ (stub)  │ │(stub) │ │   │ │
+│  │  │  └─────────┘ └──────┘ └──────┘ └─────────┘ └───────┘ │   │ │
+│  │  │  ┌───────────┐                                         │   │ │
+│  │  │  │ Resources │                                         │   │ │
+│  │  │  │  (stub)   │                                         │   │ │
+│  │  │  └───────────┘                                         │   │ │
+│  │  └────────────────────────────────────────────────────────┘   │ │
+│  │                                                                │ │
+│  │  ┌────────────────┐  ┌─────────────────┐  ┌──────────────┐   │ │
+│  │  │ TerminalPanel  │  │ SpawnAgentDialog │  │ SettingsPanel│   │ │
+│  │  │ (xterm.js+WebGL│  │ (Radix Dialog)   │  │ 4 tabs:      │   │ │
+│  │  │  TerminalTabs) │  │                  │  │ General,CLIs │   │ │
+│  │  └────────────────┘  └─────────────────┘  │ Terminal,Keys │   │ │
+│  │                                            └──────────────┘   │ │
+│  │  Stores: useAppStore (persist), useAgentStore, useTerminalStore│ │
+│  │  Context: ProjectProvider (syncs DB agents → Zustand)          │ │
+│  │  Hooks: useHotkeys, use-trpc                                  │ │
+│  └───────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Module Architecture
 
-### Agent Manager
+### Agent Manager (Implemented)
 
-Responsible for the full lifecycle of CLI agent processes.
+Responsible for the full lifecycle of CLI agent processes. Located at `apps/desktop/src/main/agents/manager.ts`.
 
 ```
-AgentManager
-├── spawn(config: AgentConfig) → AgentInstance
-│   ├── Create git worktree (via Rust git2)
-│   ├── Spawn CLI process (via node-pty)
-│   ├── Attach xterm.js terminal in renderer
-│   ├── Register stdout parser for live status
-│   ├── Initialize token counter
-│   └── Register in scheduler if recurring task
-├── stop(agentId) → void
-│   ├── Send SIGTERM to process
-│   ├── Run post-execution hooks
-│   └── Evaluate worktree auto-cleanup
-├── getStatus(agentId) → AgentStatus
-└── listAll() → AgentInstance[]
+AgentManager (singleton via getAgentManager())
+├── spawn(db, agent, config) → void
+│   ├── Resolve CLI config from DEFAULT_SETTINGS (cliType → command + args)
+│   ├── Look up project path from DB
+│   ├── Build command string with shell-escaped task description
+│   ├── Spawn through user's login shell: pty.spawn($SHELL, ["-ilc", fullCommand])
+│   │   └── Resolves PATH via getShellPath() (runs $SHELL -ilc 'echo $PATH' once)
+│   ├── Update DB: set PID, status → "running"
+│   ├── Create AgentStatusParser for live step extraction
+│   ├── proc.onData → forward to all renderer windows via terminal:data IPC
+│   │   └── Also parse for status updates (currentStep, status changes)
+│   └── proc.onExit → cleanup: remove from map, set final status (completed/failed)
+├── stop(db, agentId) → void
+│   ├── Send SIGTERM via proc.kill()
+│   ├── Wait up to 5s for exit, then SIGKILL
+│   └── DB updated by onExit handler
+├── getProcess(agentId) → IPty | undefined
+├── listRunning() → string[]
+├── write(agentId, data) → void       # Terminal input forwarding
+└── resize(agentId, cols, rows) → void # Terminal resize
 ```
 
-**Supported CLI agents** (any terminal-based agent):
+**Supported CLI agents** (configured in DEFAULT_SETTINGS.agentClis):
 - Claude Code (`claude`)
 - OpenAI Codex CLI (`codex`)
 - Gemini CLI (`gemini`)
 - Aider (`aider`)
-- OpenCode, Goose, Amp, Kiro, etc.
+- Any custom CLI can be added via Settings > Agent CLIs
 
-### Worktree Manager
+**Key implementation detail**: Agents are spawned through the user's login shell (`$SHELL -ilc "command"`) because Electron does not inherit the full PATH on macOS/Linux. This ensures nvm, homebrew, and other shell-configured tools are available.
 
-Abstracts git worktree operations via Rust `git2` bindings.
+### Background Metrics Collector (Implemented)
+
+Located at `apps/desktop/src/main/system/resources.ts`. Runs in the main process, non-blocking.
 
 ```
-WorktreeManager
-├── create(repo, branchName) → WorktreePath
-│   ├── git worktree add --detach
-│   ├── git checkout -b <branch>
-│   ├── Record in SQLite (worktree_id, path, branch, agent_id)
-│   └── Run workspace preset (install deps, env setup)
-├── cleanup(worktreeId) → void
-│   ├── Check for uncommitted changes
-│   ├── If no changes: remove worktree + delete branch (auto-cleanup)
-│   ├── If changes exist: keep worktree, notify user
-│   └── Update SQLite status
-├── list(projectId) → Worktree[]
-└── diff(worktreeId) → DiffResult
+MetricsCollector
+├── startMetricsCollector() → void     # Called on app.whenReady()
+│   ├── First collection immediately
+│   └── setInterval every 10s
+├── collectMetrics() → void (async, non-blocking)
+│   ├── CPU: delta-based from os.cpus() (no sleep/delay)
+│   ├── Memory: vm_stat on macOS (free + inactive + purgeable + speculative)
+│   │   └── Fallback to os.freemem() on Linux/Windows
+│   ├── Disk: df -k / (async execFile)
+│   └── Cache result in module-level variable
+├── getSystemMetrics() → SystemMetrics  # Synchronous, returns cached
+├── getProjectMetrics(path, id, name)   # Async: du -sk + git worktree list
+└── stopMetricsCollector() → void       # Called on will-quit
 ```
 
-**Design decision**: Follow Codex pattern — worktrees share `.git` directory, saving disk space vs full clones. Auto-cleanup (from Claude Code's `--worktree` behavior) prevents worktree accumulation.
+### Worktree Manager (Scaffold Only)
+
+Rust `git2` bindings exist in `packages/core-rust/` but are **not yet wired** into the agent spawn flow. Agents currently run in the project's root directory, not in isolated worktrees.
+
+**Planned design**: Follow Codex pattern -- worktrees share `.git` directory, saving disk space vs full clones. Auto-cleanup (from Claude Code's `--worktree` behavior) prevents worktree accumulation.
 
 ### Agent Status Parser
 
@@ -142,41 +172,26 @@ AgentStatusParser
 └── getStatus(agentId) → { status, currentStep, updatedAt }
 ```
 
-### Internal Scheduler
+### Internal Scheduler (DB Schema Only)
 
-Cron-like task scheduler for recurring agent tasks per project.
+DB tables `scheduled_tasks` and `scheduled_results` exist. The `croner` package is listed as a dependency. No scheduler execution engine is implemented yet. UI shows a placeholder section.
 
+**Planned design**:
 ```
 Scheduler
 ├── create(task: ScheduledTask) → taskId
 │   ├── Parse cron expression or interval
 │   ├── Store in SQLite scheduled_tasks table
-│   └── Register in internal timer
+│   └── Register in internal timer (croner)
 ├── run(taskId) → void
 │   ├── Spawn agent via AgentManager (dedicated worktree)
-│   ├── Inject task.prompt as agent input
-│   ├── Attach optional skill
 │   ├── On completion: store result in scheduled_results
 │   └── Send to inbox panel for human review
-├── pause(taskId) / resume(taskId) → void
-├── delete(taskId) → void
-├── list(projectId) → ScheduledTask[]
-└── config per task:
-    ├── prompt: string           -- natural language task description
-    ├── cronExpression: string   -- "0 9 * * *" (daily at 9am)
-    ├── skillName?: string       -- optional skill to attach
-    ├── cliAgent: string         -- which CLI to use
-    ├── maxTokenBudget?: number  -- budget limit per run
-    └── enabled: boolean
+├── pause/resume/delete/list
+└── config per task: prompt, cronExpression, skillName, cliAgent, maxTokenBudget, enabled
 ```
 
-**Examples**:
-- `"Every morning: review open PRs for security issues"` → cron `0 9 * * *`
-- `"On push to main: run tests and report failures"` → git hook trigger
-- `"Every 2 hours: check CI pipeline status"` → cron `0 */2 * * *`
-- `"Daily: scan for deprecated dependencies"` → cron `0 8 * * 1-5`
-
-### Hook Engine
+### Hook Engine (Not Yet Implemented)
 
 Deterministic control points around probabilistic AI behavior. Modeled after Claude Code's hook system.
 
@@ -385,7 +400,99 @@ TokenBudget
     └── warningThreshold: 0.8 (80% of limit)
 ```
 
-## Data Flow: Agent Execution
+### Keyboard Shortcuts (Implemented)
+
+Located at `apps/desktop/src/renderer/hooks/use-hotkeys.ts`. Registered as a React hook in `App.tsx`.
+
+```
+useHotkeys()
+├── Cmd+B        → Toggle sidebar
+├── Cmd+,        → Open Settings
+├── Cmd+Shift+P  → Go to Projects (clear active project)
+├── Cmd+N        → New Agent (dispatch exegol:spawn-agent event)
+├── Cmd+.        → Stop focused agent (dispatch exegol:stop-agent event)
+├── Cmd+]        → Next agent tab
+├── Cmd+[        → Previous agent tab
+└── Cmd+1-9      → Switch to agent by index
+```
+
+### ProjectContext (Implemented)
+
+Located at `apps/desktop/src/renderer/contexts/ProjectContext.tsx`. Wraps the WorkspaceView.
+
+```
+ProjectProvider
+├── Reads activeProjectId from useAppStore
+├── Fetches project + agents from DB via tRPC
+├── Syncs DB agents into useAgentStore (Zustand)
+├── Provides: project, projectId, isLoading, agents[], runningAgentCount
+└── Used by WorkspaceView and child components
+```
+
+### SidebarSection (Implemented)
+
+Reusable collapsible section component at `apps/desktop/src/renderer/components/layout/SidebarSection.tsx`.
+Used for: Projects, Recent Sessions, Schedulers, Resources.
+
+### tRPC Router (Implemented)
+
+Located at `apps/desktop/src/main/ipc/router.ts`. Five sub-routers:
+
+```
+appRouter
+├── projects   → list, get, create, update, delete
+├── agents     → list (by project), get, create (spawn), stop, delete
+├── settings   → get, update (persisted to settings table as JSON)
+├── tokenUsage → list (by agent)
+└── resources  → getSystem (cached metrics), getProject (async disk/worktree)
+```
+
+**IPC Bridge**: `trpc-ipc.ts` registers `ipcMain.handle('trpc', ...)` which uses `appRouter.createCaller(ctx)` and navigates the proxy via dot-separated path segments. The renderer calls via `window.api.trpc.invoke(path, input)`.
+
+## Data Flow: Agent Execution (Current Implementation)
+
+```
+User clicks "New Agent" (or Cmd+N)
+       │
+       ▼
+SpawnAgentDialog opens
+  User selects CLI type + enters task description
+       │
+       ▼
+tRPC agents.create mutation
+       │
+       ├── Insert agent row in DB (status: spawning)
+       ├── AgentManager.spawn(db, agent, config)
+       │   ├── Resolve CLI config (cliType → command + args)
+       │   ├── Look up project path from DB
+       │   ├── pty.spawn($SHELL, ["-ilc", "claude 'task description'"])
+       │   │   └── cwd = project path (worktrees not yet wired)
+       │   ├── Update DB: PID, status → running
+       │   └── Register onData + onExit handlers
+       │
+       ▼
+Agent runs in PTY
+       │
+       ├── proc.onData fires
+       │   ├── Forward to all renderer windows (terminal:data IPC)
+       │   └── AgentStatusParser extracts current step / status changes
+       │       └── Update DB (status, currentStep)
+       │
+       └── proc.onExit fires
+              ├── Remove from processes map
+              ├── exitCode 0 → status: completed
+              └── exitCode != 0 → status: failed
+
+User clicks "Stop" (or Cmd+.)
+       │
+       ├── AgentManager.stop(db, agentId)
+       │   ├── proc.kill() (SIGTERM)
+       │   ├── Wait up to 5s
+       │   └── SIGKILL if still running
+       └── onExit handler cleans up
+```
+
+### Planned Data Flow (Future — with worktrees, hooks, budget)
 
 ```
 User creates task
@@ -394,91 +501,107 @@ User creates task
 WorktreeManager.create()  ──→  git worktree add
        │
        ▼
-AgentManager.spawn()
-       │
-       ├── node-pty spawns CLI process in worktree
-       ├── xterm.js attaches to PTY output
-       ├── OSC interceptor monitors escape sequences
-       └── TokenBudget starts tracking
-       │
-       ▼
-Agent runs autonomously
+AgentManager.spawn() in worktree
        │
        ├── PreToolUse hook fires ──→ HookEngine evaluates
-       │   ├── allow → tool executes
-       │   ├── deny → tool blocked, agent informed
-       │   └── ask → user prompted
-       │
-       ├── Token usage recorded per step
-       │   └── Budget exceeded? → circuit breaker
-       │
-       ├── OSC 9/99/777 detected?
-       │   └── Update sidebar badge + desktop notification
+       ├── Token usage recorded → Budget exceeded? → circuit breaker
+       ├── OSC 9/99/777 detected? → sidebar badge + desktop notification
        │
        └── Agent completes / user stops
-              │
-              ▼
-       PostToolUse hooks fire
-       WorktreeManager.cleanup()
-       │
-       ├── Changes? → Keep worktree, show diff viewer
-       └── No changes? → Auto-remove worktree + branch
+              ├── Changes? → Keep worktree, show diff viewer
+              └── No changes? → Auto-remove worktree + branch
 ```
 
-## Monorepo Structure
+## Monorepo Structure (Current)
 
 ```
 exegol/
 ├── apps/
-│   └── desktop/              # Electron app
+│   └── desktop/                        # Electron 41 app
 │       ├── src/
-│       │   ├── main/         # Main process (Bun/Node)
-│       │   │   ├── ipc/      # tRPC router definitions
-│       │   │   ├── agents/   # AgentManager
-│       │   │   ├── worktrees/ # WorktreeManager
-│       │   │   ├── hooks/    # HookEngine
-│       │   │   ├── mcp/      # MCPHost (JS wrapper around Rust)
-│       │   │   ├── skills/   # SkillLoader + Progressive Disclosure
-│       │   │   ├── memory/   # Layered memory system
-│       │   │   ├── plans/    # PlanFSM
-│       │   │   └── db/       # better-sqlite3 state
-│       │   ├── renderer/     # React UI
-│       │   │   ├── components/
-│       │   │   │   ├── terminal/
-│       │   │   │   ├── diff-viewer/
-│       │   │   │   ├── agent-panel/
-│       │   │   │   ├── plan-view/
-│       │   │   │   ├── mcp-config/
-│       │   │   │   ├── dag-view/
-│       │   │   │   └── workspace/
-│       │   │   ├── hooks/    # React hooks
-│       │   │   └── stores/   # Zustand stores
+│       │   ├── main/                   # Main process (Node/Bun)
+│       │   │   ├── index.ts            # App entry, window, IPC, lifecycle
+│       │   │   ├── agents/
+│       │   │   │   ├── manager.ts      # AgentManager (spawn/stop via node-pty)
+│       │   │   │   └── status-parser.ts # Parse agent stdout for live status
+│       │   │   ├── db/
+│       │   │   │   ├── client.ts       # libSQL init + WAL mode
+│       │   │   │   ├── migrations.ts   # 10 migrations
+│       │   │   │   └── queries.ts      # SQL helpers
+│       │   │   ├── ipc/
+│       │   │   │   ├── router.ts       # tRPC appRouter (5 sub-routers)
+│       │   │   │   ├── trpc.ts         # tRPC init
+│       │   │   │   ├── trpc-ipc.ts     # createCaller proxy traversal
+│       │   │   │   ├── context.ts      # tRPC context (db)
+│       │   │   │   └── procedures/     # agents, projects, settings, token-usage, resources
+│       │   │   ├── system/
+│       │   │   │   └── resources.ts    # Background metrics collector
+│       │   │   └── terminal/
+│       │   │       └── pty-manager.ts  # PTY instance tracking
+│       │   ├── renderer/               # React 18 UI
+│       │   │   ├── App.tsx             # Root layout: TitleBar + Sidebar + Content + StatusBar
+│       │   │   ├── main.tsx            # React entry
+│       │   │   ├── contexts/
+│       │   │   │   └── ProjectContext.tsx  # Project + agents provider
+│       │   │   ├── hooks/
+│       │   │   │   ├── use-hotkeys.ts  # Global keyboard shortcuts
+│       │   │   │   └── use-trpc.ts     # tRPC query/mutation hooks
+│       │   │   ├── stores/
+│       │   │   │   ├── app.ts          # activeView, activeProjectId, sidebar (persisted)
+│       │   │   │   ├── agents.ts       # Agent state, focused agent, DB sync
+│       │   │   │   └── terminals.ts    # Terminal instances
+│       │   │   ├── lib/
+│       │   │   │   └── trpc-client.ts  # trpcInvoke/trpcMutate via IPC
+│       │   │   └── components/
+│       │   │       ├── ErrorBoundary.tsx
+│       │   │       ├── layout/         # Sidebar, SidebarSection, SidebarHeader/Footer,
+│       │   │       │                   # ProjectsSection, RecentSessions, ResourcesOverview,
+│       │   │       │                   # SchedulersOverview, StatusBar, TitleBar
+│       │   │       ├── agents/         # AgentCard, SpawnAgentDialog
+│       │   │       ├── projects/       # ProjectList, AddProjectDialog
+│       │   │       ├── settings/       # SettingsPanel (4 tabs), GeneralSettings,
+│       │   │       │                   # CliSettings, TerminalSettings, KeyboardShortcuts
+│       │   │       ├── workspace/      # WorkspaceView, WorkspaceTabs,
+│       │   │       │   └── sections/   # AgentsSection, TasksSection, DiffSection,
+│       │   │       │                   # SchedulerSection, TokensSection, ResourcesSection
+│       │   │       ├── terminal/       # TerminalPanel, TerminalTabs
+│       │   │       └── common/         # EmptyState, KeyValue, LoadingSpinner,
+│       │   │                           # StatusDot, ConfirmDialog
 │       │   └── preload/
+│       │       └── index.ts            # contextBridge APIs
 │       └── electron-builder.yml
 ├── packages/
-│   ├── core-rust/            # Rust native (napi-rs)
-│   │   ├── src/
-│   │   │   ├── treesitter/   # Repo map + PageRank
-│   │   │   ├── mcp_host/     # rmcp MCP Host
-│   │   │   ├── git/          # git2 worktree ops
-│   │   │   ├── ast_edit/     # ast-grep edits
-│   │   │   └── fs_watch/     # notify crate
-│   │   └── Cargo.toml
-│   ├── shared/               # TypeScript types + schemas
+│   ├── shared/                         # @exegol/shared
 │   │   └── src/
-│   │       ├── types/
-│   │       ├── schemas/      # Zod
-│   │       └── constants/
-│   └── ui/                   # Shared React components
-│       └── src/
-│           ├── primitives/   # Radix UI
-│           └── theme/        # TailwindCSS config
-├── skills/                   # Built-in SKILL.md files
-│   ├── batch/
-│   ├── review-pr/
-│   ├── debug/
-│   └── plan/
+│   │       ├── types/                  # agent, project, settings, scheduler,
+│   │       │                           # token-usage, worktree
+│   │       └── schemas/                # Zod: agent, project, settings
+│   ├── ui/                             # @exegol/ui (Radix primitives)
+│   │   └── src/
+│   │       ├── lib/utils.ts            # cn() utility
+│   │       └── primitives/             # Button, Badge, Input, ScrollArea,
+│   │                                   # Separator, Tooltip
+│   └── core-rust/                      # Rust native (napi-rs) — scaffold
+│       ├── Cargo.toml                  # git2 0.19, napi 3, serde
+│       └── src/                        # Git worktree ops (not yet wired)
+├── docs/
+│   ├── project_definition/             # Architecture, features, stack, competitors
+│   └── tasks_completed/                # Work log by month
 ├── turbo.json
-├── biome.json
-└── package.json              # Bun workspace root
+├── biome.json                          # Biome 2.4.7
+└── package.json                        # Bun 1.2.0 workspace root
+```
+
+### Planned directories (not yet created)
+```
+apps/desktop/src/main/
+├── worktrees/   # WorktreeManager (Rust git2 integration)
+├── hooks/       # HookEngine
+├── mcp/         # MCPHost (JS wrapper around Rust rmcp)
+├── skills/      # SkillLoader + Progressive Disclosure
+├── memory/      # Layered memory system
+├── plans/       # PlanFSM
+└── scheduler/   # Cron task execution engine
+
+skills/          # Built-in SKILL.md files (batch, review-pr, debug, plan)
 ```

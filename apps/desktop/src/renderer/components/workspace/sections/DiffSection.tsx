@@ -1,5 +1,5 @@
-import { GitCompare } from 'lucide-react'
-import { EmptyState } from '../../common/EmptyState'
+import { GitCompare } from "lucide-react";
+import { EmptyState } from "../../common/EmptyState";
 
 export function DiffSection() {
   return (
@@ -11,8 +11,8 @@ export function DiffSection() {
         icon={<GitCompare className="h-8 w-8 text-text-muted" />}
         title="Diff Viewer"
         description="Review changes made by agents with unified and side-by-side diffs."
-        action={{ label: 'Coming in Phase 2', onClick: () => {} }}
+        action={{ label: "Coming in Phase 2", onClick: () => {} }}
       />
     </div>
-  )
+  );
 }

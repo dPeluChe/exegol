@@ -1,28 +1,28 @@
-import { useState, useEffect } from 'react'
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
-import { Rocket, Cpu } from 'lucide-react'
-import { Button } from '@exegol/ui'
-import { useAgentStore } from '../../../stores/agents'
-import { useProjectContext } from '../../../contexts/ProjectContext'
-import { TerminalPanel } from '../../terminal/TerminalPanel'
-import { TerminalTabs } from '../../terminal/TerminalTabs'
-import { SpawnAgentDialog } from '../../agents/SpawnAgentDialog'
+import { Button } from "@exegol/ui";
+import { Cpu, Rocket } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { useProjectContext } from "../../../contexts/ProjectContext";
+import { useAgentStore } from "../../../stores/agents";
+import { SpawnAgentDialog } from "../../agents/SpawnAgentDialog";
+import { TerminalPanel } from "../../terminal/TerminalPanel";
+import { TerminalTabs } from "../../terminal/TerminalTabs";
 
 export function AgentsSection() {
-  const { projectId, agents } = useProjectContext()
-  const focusedAgentId = useAgentStore((s) => s.focusedAgentId)
-  const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
-  const [secondaryPanel, setSecondaryPanel] = useState<React.ReactNode | null>(null)
+  const { projectId, agents } = useProjectContext();
+  const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
+  const [spawnDialogOpen, setSpawnDialogOpen] = useState(false);
+  const [secondaryPanel, _setSecondaryPanel] = useState<React.ReactNode | null>(null);
 
   useEffect(() => {
-    const handler = () => setSpawnDialogOpen(true)
-    window.addEventListener('exegol:spawn-agent', handler)
-    return () => window.removeEventListener('exegol:spawn-agent', handler)
-  }, [])
+    const handler = () => setSpawnDialogOpen(true);
+    window.addEventListener("exegol:spawn-agent", handler);
+    return () => window.removeEventListener("exegol:spawn-agent", handler);
+  }, []);
 
-  const hasAgents = agents.length > 0
+  const hasAgents = agents.length > 0;
 
-  if (!projectId) return null
+  if (!projectId) return null;
 
   return (
     <div className="flex h-full flex-col">
@@ -49,9 +49,7 @@ export function AgentsSection() {
             {/* Secondary panel - for diff viewer, browser preview, etc. (Phase 2) */}
             {secondaryPanel && (
               <>
-                <PanelResizeHandle
-                  className="w-px hover:w-0.5 transition-all bg-border"
-                />
+                <PanelResizeHandle className="w-px hover:w-0.5 transition-all bg-border" />
                 <Panel id="secondary" order={2} defaultSize={40} minSize={20}>
                   {secondaryPanel}
                 </Panel>
@@ -66,18 +64,13 @@ export function AgentsSection() {
             <Cpu className="h-10 w-10 text-text-muted" />
           </div>
           <div className="text-center">
-            <h2 className="text-base font-semibold text-text-primary">
-              No agents running
-            </h2>
+            <h2 className="text-base font-semibold text-text-primary">No agents running</h2>
             <p className="mt-1 max-w-sm text-xs text-text-muted">
-              Launch your first agent to start working. Each agent runs in its own
-              terminal with an isolated git worktree.
+              Launch your first agent to start working. Each agent runs in its own terminal with an
+              isolated git worktree.
             </p>
           </div>
-          <Button
-            onClick={() => setSpawnDialogOpen(true)}
-            className="gap-2 bg-accent text-white"
-          >
+          <Button onClick={() => setSpawnDialogOpen(true)} className="gap-2 bg-accent text-white">
             <Rocket className="h-4 w-4" />
             Launch Your First Agent
           </Button>
@@ -91,5 +84,5 @@ export function AgentsSection() {
         projectId={projectId}
       />
     </div>
-  )
+  );
 }

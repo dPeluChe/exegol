@@ -1,16 +1,16 @@
-import * as Dialog from '@radix-ui/react-dialog'
-import { X } from 'lucide-react'
-import { Button, cn } from '@exegol/ui'
+import { Button, cn } from "@exegol/ui";
+import * as Dialog from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 
 interface ConfirmDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  description: string
-  confirmLabel?: string
-  cancelLabel?: string
-  variant?: 'default' | 'destructive'
-  onConfirm: () => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  variant?: "default" | "destructive";
+  onConfirm: () => void;
 }
 
 export function ConfirmDialog({
@@ -18,15 +18,15 @@ export function ConfirmDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
-  variant = 'default',
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  variant = "default",
   onConfirm,
 }: ConfirmDialogProps) {
   const handleConfirm = () => {
-    onConfirm()
-    onOpenChange(false)
-  }
+    onConfirm();
+    onOpenChange(false);
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -35,21 +35,22 @@ export function ConfirmDialog({
         <Dialog.Content
           className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6 shadow-2xl"
           style={{
-            background: 'var(--bg-secondary)',
-            borderColor: 'var(--border)',
+            background: "var(--bg-secondary)",
+            borderColor: "var(--border)",
           }}
         >
           <div className="mb-2 flex items-center justify-between">
             <Dialog.Title
               className="text-base font-semibold"
-              style={{ color: 'var(--text-primary)' }}
+              style={{ color: "var(--text-primary)" }}
             >
               {title}
             </Dialog.Title>
             <Dialog.Close asChild>
               <button
+                type="button"
                 className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
-                style={{ color: 'var(--text-muted)' }}
+                style={{ color: "var(--text-muted)" }}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -58,7 +59,7 @@ export function ConfirmDialog({
 
           <Dialog.Description
             className="mb-6 text-sm leading-relaxed"
-            style={{ color: 'var(--text-secondary)' }}
+            style={{ color: "var(--text-secondary)" }}
           >
             {description}
           </Dialog.Description>
@@ -69,17 +70,17 @@ export function ConfirmDialog({
               onClick={() => onOpenChange(false)}
               className="border"
               style={{
-                borderColor: 'var(--border)',
-                color: 'var(--text-secondary)',
+                borderColor: "var(--border)",
+                color: "var(--text-secondary)",
               }}
             >
               {cancelLabel}
             </Button>
             <Button
               onClick={handleConfirm}
-              className={cn('text-white', variant === 'destructive' && 'hover:opacity-90')}
+              className={cn("text-white", variant === "destructive" && "hover:opacity-90")}
               style={{
-                background: variant === 'destructive' ? 'var(--error)' : 'var(--accent)',
+                background: variant === "destructive" ? "var(--error)" : "var(--accent)",
               }}
             >
               {confirmLabel}
@@ -88,5 +89,5 @@ export function ConfirmDialog({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  )
+  );
 }

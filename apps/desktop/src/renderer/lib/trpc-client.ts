@@ -9,12 +9,9 @@
  * @example trpcInvoke<Project[]>('projects.list')
  * @example trpcInvoke<Project>('projects.get', { id: '123' })
  */
-export async function trpcInvoke<T = unknown>(
-  path: string,
-  input?: unknown,
-): Promise<T> {
-  const result = await window.api.trpc.invoke(path, input === undefined ? undefined : input)
-  return result as T
+export async function trpcInvoke<T = unknown>(path: string, input?: unknown): Promise<T> {
+  const result = await window.api.trpc.invoke(path, input === undefined ? undefined : input);
+  return result as T;
 }
 
 /**
@@ -22,10 +19,7 @@ export async function trpcInvoke<T = unknown>(
  * Same as trpcInvoke but semantically distinct for clarity.
  * @example trpcMutate<Project>('projects.create', { name: 'my-project', path: '/...' })
  */
-export async function trpcMutate<T = unknown>(
-  path: string,
-  input?: unknown,
-): Promise<T> {
-  const result = await window.api.trpc.invoke(path, input === undefined ? undefined : input)
-  return result as T
+export async function trpcMutate<T = unknown>(path: string, input?: unknown): Promise<T> {
+  const result = await window.api.trpc.invoke(path, input === undefined ? undefined : input);
+  return result as T;
 }

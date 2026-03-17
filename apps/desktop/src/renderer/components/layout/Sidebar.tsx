@@ -1,30 +1,22 @@
-import { useState } from 'react'
-import {
-  Plus,
-  FolderOpen,
-  History,
-  Clock,
-  Activity,
-} from 'lucide-react'
-import { Button, ScrollArea, Separator } from '@exegol/ui'
-import { useAppStore } from '../../stores/app'
-import { useProjects } from '../../hooks/use-trpc'
-import { SpawnAgentDialog } from '../agents/SpawnAgentDialog'
-import { SidebarHeader } from './SidebarHeader'
-import { SidebarSection } from './SidebarSection'
-import { ProjectsSection } from './ProjectsSection'
-import { RecentSessions } from './RecentSessions'
-import { SchedulersOverview } from './SchedulersOverview'
-import { ResourcesOverview } from './ResourcesOverview'
-import { SidebarFooter } from './SidebarFooter'
+import { Button, ScrollArea, Separator } from "@exegol/ui";
+import { FolderOpen, History, Plus } from "lucide-react";
+import { useState } from "react";
+import { useProjects } from "../../hooks/use-trpc";
+import { useAppStore } from "../../stores/app";
+import { SpawnAgentDialog } from "../agents/SpawnAgentDialog";
+import { ProjectsSection } from "./ProjectsSection";
+import { RecentSessions } from "./RecentSessions";
+import { SidebarFooter } from "./SidebarFooter";
+import { SidebarHeader } from "./SidebarHeader";
+import { SidebarSection } from "./SidebarSection";
 
 export function Sidebar() {
-  const activeProjectId = useAppStore((s) => s.activeProjectId)
-  const { data: projects } = useProjects()
+  const activeProjectId = useAppStore((s) => s.activeProjectId);
+  const { data: projects } = useProjects();
 
-  const [spawnDialogOpen, setSpawnDialogOpen] = useState(false)
+  const [spawnDialogOpen, setSpawnDialogOpen] = useState(false);
 
-  const projectCount = projects?.length ?? 0
+  const projectCount = projects?.length ?? 0;
 
   return (
     <div className="flex h-full flex-col bg-bg-secondary">
@@ -45,9 +37,8 @@ export function Sidebar() {
 
       <Separator className="bg-border" />
 
-      {/* Scrollable sections */}
+      {/* Scrollable middle — Projects + Sessions (main content, can grow) */}
       <ScrollArea className="flex-1">
-        {/* Projects */}
         <SidebarSection
           title="Projects"
           icon={FolderOpen}
@@ -55,6 +46,7 @@ export function Sidebar() {
           count={projectCount}
           action={
             <button
+              type="button"
               onClick={() => useAppStore.getState().setActiveProject(null)}
               className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
               title="Add project"
@@ -68,40 +60,14 @@ export function Sidebar() {
 
         <Separator className="mx-3 bg-border" />
 
-        {/* Recent Sessions */}
-        <SidebarSection
-          title="Recent Sessions"
-          icon={History}
-          defaultOpen={false}
-        >
+        <SidebarSection title="Recent Sessions" icon={History} defaultOpen={false}>
           <RecentSessions />
-        </SidebarSection>
-
-        <Separator className="mx-3 bg-border" />
-
-        {/* Schedulers - global overview */}
-        <SidebarSection
-          title="Schedulers"
-          icon={Clock}
-          defaultOpen={false}
-        >
-          <SchedulersOverview />
-        </SidebarSection>
-
-        <Separator className="mx-3 bg-border" />
-
-        {/* Resources - global overview */}
-        <SidebarSection
-          title="Resources"
-          icon={Activity}
-          defaultOpen={false}
-        >
-          <ResourcesOverview />
         </SidebarSection>
       </ScrollArea>
 
       <Separator className="bg-border" />
 
+      {/* Footer — Schedulers, Resources (compact), All Projects + version */}
       <SidebarFooter />
 
       {/* Spawn dialog */}
@@ -113,5 +79,5 @@ export function Sidebar() {
         />
       )}
     </div>
-  )
+  );
 }

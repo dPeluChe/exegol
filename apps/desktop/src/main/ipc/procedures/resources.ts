@@ -1,11 +1,11 @@
-import { z } from 'zod'
-import { router, publicProcedure } from '../trpc'
-import { getSystemMetrics, getProjectMetrics } from '../../system/resources'
+import { z } from "zod";
+import { getProjectMetrics, getSystemMetrics } from "../../system/resources";
+import { publicProcedure, router } from "../trpc";
 
 export const resourcesRouter = router({
   system: publicProcedure.query(() => {
     // Returns cached metrics — no async, no blocking. Collector runs in background.
-    return getSystemMetrics()
+    return getSystemMetrics();
   }),
 
   project: publicProcedure
@@ -14,9 +14,9 @@ export const resourcesRouter = router({
         projectId: z.string(),
         projectPath: z.string(),
         projectName: z.string(),
-      })
+      }),
     )
     .query(async ({ input }) => {
-      return getProjectMetrics(input.projectPath, input.projectId, input.projectName)
+      return getProjectMetrics(input.projectPath, input.projectId, input.projectName);
     }),
-})
+});

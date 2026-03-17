@@ -1,5 +1,5 @@
-import { Clock } from 'lucide-react'
-import { EmptyState } from '../../common/EmptyState'
+import { Clock } from "lucide-react";
+import { EmptyState } from "../../common/EmptyState";
 
 export function SchedulerSection() {
   return (
@@ -11,8 +11,8 @@ export function SchedulerSection() {
         icon={<Clock className="h-8 w-8 text-text-muted" />}
         title="Scheduler"
         description="Schedule recurring agent tasks with natural language prompts. Configure cron-like cadence."
-        action={{ label: 'Coming in Phase 2', onClick: () => {} }}
+        action={{ label: "Coming in Phase 2", onClick: () => {} }}
       />
     </div>
-  )
+  );
 }

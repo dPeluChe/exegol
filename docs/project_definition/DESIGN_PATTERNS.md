@@ -2,6 +2,8 @@
 
 Architectural patterns extracted from ecosystem research. Each pattern includes: the source platform, what problem it solves, how it works, and how Exegol adapts it.
 
+> **Implementation status**: Patterns 2 (worktree isolation — partial), 5 (status parsing — implemented differently via AgentStatusParser), and 9 (token budget — DB schema only) have been started. All others are planned for Phase 2+.
+
 ---
 
 ## 1. Progressive Disclosure for Context Management
@@ -252,6 +254,8 @@ Visibility:
 **What**: Using Mastra/LangGraph as the core orchestration engine.
 **Why it fails**: Superset's Mastra fork proves the maintenance burden. Framework updates break your product.
 **Instead**: Build lightweight orchestration directly. Processes + worktrees + SQLite state is simpler and under your control.
+
+> **Exegol implementation note**: The current codebase demonstrates this — AgentManager uses node-pty + libSQL directly, with no framework dependency. tRPC over IPC (createCaller proxy traversal) avoids HTTP overhead.
 
 ### 4. Full-Clone Isolation
 **What**: Cloning the entire repo for each agent.

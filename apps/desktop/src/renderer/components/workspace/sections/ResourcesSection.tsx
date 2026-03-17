@@ -1,44 +1,30 @@
-import { cn } from '@exegol/ui'
-import { Cpu, MemoryStick, HardDrive, Clock, FolderGit2, GitBranch } from 'lucide-react'
-import { useSystemMetrics, useProjectMetrics } from '../../../hooks/use-trpc'
-import { useProjectContext } from '../../../contexts/ProjectContext'
+import { cn } from "@exegol/ui";
+import { FolderGit2, GitBranch, HardDrive } from "lucide-react";
+import { useProjectContext } from "../../../contexts/ProjectContext";
+import { useProjectMetrics } from "../../../hooks/use-trpc";
+import { useAgentStore } from "../../../stores/agents";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400)
-  const h = Math.floor((seconds % 86400) / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (d > 0) return `${d}d ${h}h`
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
-}
+// ─── Components ─────────────────────────────────────────────────────────────
 
-function barColor(pct: number): string {
-  if (pct < 60) return 'bg-green-500'
-  if (pct < 85) return 'bg-yellow-500'
-  return 'bg-red-500'
-}
-
-// ─── Metric Card ────────────────────────────────────────────────────────────
-
-function MetricCard({
+function StatCard({
   label,
   value,
-  percentage,
+  detail,
   icon: Icon,
 }: {
-  label: string
-  value: string
-  percentage: number
-  icon: React.ComponentType<{ className?: string }>
+  label: string;
+  value: string;
+  detail?: string;
+  icon: React.ComponentType<{ className?: string }>;
 }) {
   return (
     <div className="rounded-lg border border-border bg-bg-secondary p-4">
@@ -47,136 +33,163 @@ function MetricCard({
         <span className="text-xs font-medium">{label}</span>
       </div>
       <p className="mt-1 text-xl font-bold text-text-primary">{value}</p>
-      <div className="mt-2 h-1.5 w-full rounded-full bg-bg-tertiary">
-        <div
-          className={cn('h-full rounded-full transition-all', barColor(percentage))}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
-      <p className="mt-1 text-[10px] text-text-muted">{percentage.toFixed(1)}% used</p>
+      {detail && <p className="mt-0.5 text-[10px] text-text-muted">{detail}</p>}
     </div>
-  )
-}
-
-function InfoCard({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string
-  value: string
-  icon: React.ComponentType<{ className?: string }>
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-bg-secondary p-4">
-      <div className="flex items-center gap-2 text-text-muted">
-        <Icon className="h-4 w-4" />
-        <span className="text-xs font-medium">{label}</span>
-      </div>
-      <p className="mt-1 text-xl font-bold text-text-primary">{value}</p>
-    </div>
-  )
+  );
 }
 
 // ─── Main Section ───────────────────────────────────────────────────────────
 
 export function ResourcesSection() {
-  const { data: system } = useSystemMetrics()
-  const { project } = useProjectContext()
-  const { data: projectMetrics } = useProjectMetrics(
+  const { project, agents } = useProjectContext();
+  const _allAgents = useAgentStore((s) => s.agents);
+
+  const { data: projectMetrics, isLoading } = useProjectMetrics(
     project?.id ?? null,
     project?.path ?? null,
-    project?.name ?? null
-  )
+    project?.name ?? null,
+  );
 
-  if (!system) {
+  const projectAgents = agents;
+  const runningAgents = projectAgents.filter(
+    (a) => a.status === "running" || a.status === "spawning",
+  );
+
+  if (!project) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-text-muted">Collecting system metrics...</p>
+        <p className="text-sm text-text-muted">Select a project to view resources</p>
       </div>
-    )
+    );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* System Overview */}
-      <div>
-        <h3 className="mb-3 text-sm font-semibold text-text-primary">System Overview</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard
-            icon={Cpu}
-            label={`CPU (${system.cpu.cores} cores)`}
-            value={`${system.cpu.usage.toFixed(1)}%`}
-            percentage={system.cpu.usage}
-          />
-          <MetricCard
-            icon={MemoryStick}
-            label="Memory"
-            value={`${formatBytes(system.memory.used)} / ${formatBytes(system.memory.total)}`}
-            percentage={system.memory.usagePercent}
-          />
-          <MetricCard
+    <div className="h-full overflow-auto p-6">
+      <div className="space-y-6">
+        {/* Project header */}
+        <div>
+          <h3 className="text-sm font-semibold text-text-primary">{project.name}</h3>
+          <p className="mt-0.5 text-xs text-text-muted">{project.path}</p>
+        </div>
+
+        {/* Project stats grid */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard
             icon={HardDrive}
-            label="Disk"
-            value={`${formatBytes(system.disk.used)} / ${formatBytes(system.disk.total)}`}
-            percentage={system.disk.usagePercent}
+            label="Disk Usage"
+            value={isLoading ? "Calculating..." : formatBytes(projectMetrics?.diskUsage ?? 0)}
+            detail="Total project directory size"
           />
-          <InfoCard
-            icon={Clock}
-            label="System Uptime"
-            value={formatUptime(system.uptime)}
+          <StatCard
+            icon={GitBranch}
+            label="Worktrees"
+            value={isLoading ? "..." : String(projectMetrics?.worktreeCount ?? 1)}
+            detail="Active git worktrees"
+          />
+          <StatCard
+            icon={FolderGit2}
+            label="Branch"
+            value={project.defaultBranch}
+            detail={project.gitRemote ?? "No remote"}
           />
         </div>
-      </div>
 
-      {/* Project Detail */}
-      {project && (
+        {/* Running agents */}
         <div>
-          <h3 className="mb-3 text-sm font-semibold text-text-primary">
-            Project: {project.name}
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <InfoCard
-              icon={FolderGit2}
-              label="Project Disk Usage"
-              value={projectMetrics ? formatBytes(projectMetrics.diskUsage) : 'Calculating...'}
-            />
-            <InfoCard
-              icon={GitBranch}
-              label="Worktrees"
-              value={projectMetrics ? String(projectMetrics.worktreeCount) : '...'}
-            />
-          </div>
-          {projectMetrics && projectMetrics.agentProcesses.length > 0 && (
-            <div className="mt-4">
-              <h4 className="mb-2 text-xs font-semibold text-text-muted">Agent Processes</h4>
-              <div className="overflow-hidden rounded-lg border border-border">
-                <table className="w-full text-xs">
-                  <thead className="bg-bg-secondary text-text-muted">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium">PID</th>
-                      <th className="px-3 py-2 text-right font-medium">CPU</th>
-                      <th className="px-3 py-2 text-right font-medium">Memory</th>
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Active Agents ({runningAgents.length})
+          </h4>
+
+          {runningAgents.length > 0 ? (
+            <div className="overflow-hidden rounded-lg border border-border">
+              <table className="w-full text-xs">
+                <thead className="bg-bg-tertiary text-text-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Agent</th>
+                    <th className="px-3 py-2 text-left font-medium">Task</th>
+                    <th className="px-3 py-2 text-left font-medium">Status</th>
+                    <th className="px-3 py-2 text-left font-medium">Current Step</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {runningAgents.map((agent) => (
+                    <tr key={agent.id} className="bg-bg-secondary text-text-secondary">
+                      <td className="px-3 py-2">
+                        <span className="font-medium text-text-primary">{agent.cliType}</span>
+                      </td>
+                      <td className="max-w-[200px] truncate px-3 py-2">{agent.taskDescription}</td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            agent.status === "running" && "bg-green-500/10 text-green-400",
+                            agent.status === "spawning" && "bg-blue-500/10 text-blue-400",
+                            agent.status === "waiting_input" && "bg-yellow-500/10 text-yellow-400",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-1.5 w-1.5 rounded-full",
+                              agent.status === "running" && "bg-green-500",
+                              agent.status === "spawning" && "bg-blue-500",
+                              agent.status === "waiting_input" && "bg-yellow-500",
+                            )}
+                          />
+                          {agent.status}
+                        </span>
+                      </td>
+                      <td className="max-w-[250px] truncate px-3 py-2 text-text-muted">
+                        {agent.currentStep ?? "—"}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {projectMetrics.agentProcesses.map((proc) => (
-                      <tr key={proc.pid} className="text-text-secondary">
-                        <td className="px-3 py-1.5">{proc.pid}</td>
-                        <td className="px-3 py-1.5 text-right">{proc.cpu.toFixed(1)}%</td>
-                        <td className="px-3 py-1.5 text-right">{formatBytes(proc.memory)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-bg-secondary p-4 text-center">
+              <p className="text-xs text-text-muted">No agents currently running in this project</p>
             </div>
           )}
         </div>
-      )}
 
-      {/* CPU Model */}
-      <p className="text-[10px] text-text-muted">{system.cpu.model}</p>
+        {/* All project agents (including completed/failed) */}
+        {projectAgents.length > runningAgents.length && (
+          <div>
+            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              All Agents ({projectAgents.length})
+            </h4>
+            <div className="space-y-1">
+              {projectAgents.map((agent) => (
+                <div
+                  key={agent.id}
+                  className="flex items-center justify-between rounded-md border border-border bg-bg-secondary px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        agent.status === "running" && "bg-green-500",
+                        agent.status === "completed" && "bg-green-500/50",
+                        agent.status === "failed" && "bg-red-500",
+                        agent.status === "idle" && "bg-zinc-500",
+                        agent.status === "paused" && "bg-zinc-500",
+                        agent.status === "waiting_input" && "bg-yellow-500",
+                        agent.status === "spawning" && "bg-blue-500",
+                      )}
+                    />
+                    <span className="text-xs font-medium text-text-primary">{agent.cliType}</span>
+                    <span className="max-w-[300px] truncate text-xs text-text-muted">
+                      {agent.taskDescription}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-text-muted">{agent.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-  )
+  );
 }

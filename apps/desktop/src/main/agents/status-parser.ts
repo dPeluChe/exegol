@@ -1,23 +1,21 @@
-import type { AgentCliType, AgentStatus } from '@exegol/shared'
+import type { AgentCliType, AgentStatus } from "@exegol/shared";
 
 type StatusUpdate = {
-  status?: AgentStatus
-  currentStep?: string
-}
+  status?: AgentStatus;
+  currentStep?: string;
+};
 
 /**
  * Parses agent CLI stdout to extract status information.
  * Each CLI tool has different output patterns that indicate what the agent is doing.
  */
 export class AgentStatusParser {
-  private static readonly MAX_BUFFER = 10240
-  private agentId: string
-  private cliType: AgentCliType
-  private buffer: string = ''
+  private static readonly MAX_BUFFER = 10240;
+  private cliType: AgentCliType;
+  private buffer: string = "";
 
-  constructor(agentId: string, cliType: AgentCliType) {
-    this.agentId = agentId
-    this.cliType = cliType
+  constructor(_agentId: string, cliType: AgentCliType) {
+    this.cliType = cliType;
   }
 
   /**
@@ -26,45 +24,45 @@ export class AgentStatusParser {
    */
   parse(data: string): StatusUpdate | null {
     // Accumulate partial lines
-    this.buffer += data
+    this.buffer += data;
 
     // Prevent unbounded buffer growth
     if (this.buffer.length > AgentStatusParser.MAX_BUFFER) {
-      this.buffer = this.buffer.slice(-AgentStatusParser.MAX_BUFFER)
+      this.buffer = this.buffer.slice(-AgentStatusParser.MAX_BUFFER);
     }
 
     // Process complete lines
-    const lines = this.buffer.split('\n')
+    const lines = this.buffer.split("\n");
     // Keep the last incomplete line in the buffer
-    this.buffer = lines.pop() ?? ''
+    this.buffer = lines.pop() ?? "";
 
-    let lastUpdate: StatusUpdate | null = null
+    let lastUpdate: StatusUpdate | null = null;
 
     for (const line of lines) {
-      const cleaned = stripAnsi(line).trim()
-      if (!cleaned) continue
+      const cleaned = stripAnsi(line).trim();
+      if (!cleaned) continue;
 
-      const update = this.parseLine(cleaned)
+      const update = this.parseLine(cleaned);
       if (update) {
-        lastUpdate = update
+        lastUpdate = update;
       }
     }
 
-    return lastUpdate
+    return lastUpdate;
   }
 
   private parseLine(line: string): StatusUpdate | null {
     switch (this.cliType) {
-      case 'claude-code':
-        return this.parseClaudeCode(line)
-      case 'codex':
-        return this.parseCodex(line)
-      case 'aider':
-        return this.parseAider(line)
-      case 'gemini':
-        return this.parseGemini(line)
+      case "claude-code":
+        return this.parseClaudeCode(line);
+      case "codex":
+        return this.parseCodex(line);
+      case "aider":
+        return this.parseAider(line);
+      case "gemini":
+        return this.parseGemini(line);
       default:
-        return this.parseGeneric(line)
+        return this.parseGeneric(line);
     }
   }
 
@@ -77,34 +75,34 @@ export class AgentStatusParser {
   private parseClaudeCode(line: string): StatusUpdate | null {
     // Tool call detection
     const toolMatch = line.match(
-      /\b(Read|Edit|Write|Bash|Agent|Glob|Grep|WebFetch|WebSearch|TodoWrite)\s*\(/i
-    )
+      /\b(Read|Edit|Write|Bash|Agent|Glob|Grep|WebFetch|WebSearch|TodoWrite)\s*\(/i,
+    );
     if (toolMatch) {
-      return { currentStep: `Tool: ${toolMatch[1]}` }
+      return { currentStep: `Tool: ${toolMatch[1]}` };
     }
 
     // File operations
-    const fileEditMatch = line.match(/(?:Editing|Writing|Reading)\s+(.+)/i)
+    const fileEditMatch = line.match(/(?:Editing|Writing|Reading)\s+(.+)/i);
     if (fileEditMatch) {
-      return { currentStep: fileEditMatch[0] }
+      return { currentStep: fileEditMatch[0] };
     }
 
     // Waiting for input
     if (/waiting for input|do you want to|y\/n|\(yes\/no\)/i.test(line)) {
-      return { status: 'waiting_input', currentStep: 'Waiting for user input' }
+      return { status: "waiting_input", currentStep: "Waiting for user input" };
     }
 
     // Error detection
     if (/^error:|internal error|fatal:/i.test(line)) {
-      return { status: 'failed', currentStep: line.slice(0, 120) }
+      return { status: "failed", currentStep: line.slice(0, 120) };
     }
 
     // Thinking / processing
     if (/thinking|analyzing|processing/i.test(line)) {
-      return { currentStep: 'Thinking...' }
+      return { currentStep: "Thinking..." };
     }
 
-    return null
+    return null;
   }
 
   /**
@@ -114,33 +112,33 @@ export class AgentStatusParser {
    */
   private parseCodex(line: string): StatusUpdate | null {
     // Tool call patterns
-    const toolMatch = line.match(/(?:calling|running|executing)\s+(\w+)/i)
+    const toolMatch = line.match(/(?:calling|running|executing)\s+(\w+)/i);
     if (toolMatch) {
-      return { currentStep: `Tool: ${toolMatch[1]}` }
+      return { currentStep: `Tool: ${toolMatch[1]}` };
     }
 
     // File operations
-    const fileMatch = line.match(/(?:reading|writing|editing|creating)\s+(.+)/i)
+    const fileMatch = line.match(/(?:reading|writing|editing|creating)\s+(.+)/i);
     if (fileMatch) {
-      return { currentStep: fileMatch[0] }
+      return { currentStep: fileMatch[0] };
     }
 
     // Thinking
     if (/thinking|reasoning/i.test(line)) {
-      return { currentStep: 'Thinking...' }
+      return { currentStep: "Thinking..." };
     }
 
     // Waiting for input
     if (/\?\s*$|confirm|y\/n/i.test(line)) {
-      return { status: 'waiting_input', currentStep: 'Waiting for user input' }
+      return { status: "waiting_input", currentStep: "Waiting for user input" };
     }
 
     // Errors
     if (/^error|failed|exception/i.test(line)) {
-      return { status: 'failed', currentStep: line.slice(0, 120) }
+      return { status: "failed", currentStep: line.slice(0, 120) };
     }
 
-    return null
+    return null;
   }
 
   /**
@@ -151,56 +149,56 @@ export class AgentStatusParser {
    */
   private parseAider(line: string): StatusUpdate | null {
     if (/editing\s+/i.test(line)) {
-      return { currentStep: line.slice(0, 120) }
+      return { currentStep: line.slice(0, 120) };
     }
 
     if (/applied edit to\s+(.+)/i.test(line)) {
-      const match = line.match(/applied edit to\s+(.+)/i)
-      return { currentStep: `Applied edit: ${match?.[1] ?? ''}` }
+      const match = line.match(/applied edit to\s+(.+)/i);
+      return { currentStep: `Applied edit: ${match?.[1] ?? ""}` };
     }
 
     if (/git diff/i.test(line)) {
-      return { currentStep: 'Reviewing changes...' }
+      return { currentStep: "Reviewing changes..." };
     }
 
     if (/searching/i.test(line)) {
-      return { currentStep: 'Searching codebase...' }
+      return { currentStep: "Searching codebase..." };
     }
 
     // Waiting for input (aider prompt)
     if (/^>\s*$|^\s*\?\s*$/i.test(line)) {
-      return { status: 'waiting_input', currentStep: 'Waiting for user input' }
+      return { status: "waiting_input", currentStep: "Waiting for user input" };
     }
 
     if (/^error|traceback|exception/i.test(line)) {
-      return { status: 'failed', currentStep: line.slice(0, 120) }
+      return { status: "failed", currentStep: line.slice(0, 120) };
     }
 
-    return null
+    return null;
   }
 
   /**
    * Google Gemini CLI patterns.
    */
   private parseGemini(line: string): StatusUpdate | null {
-    const toolMatch = line.match(/(?:using|calling|executing)\s+(\w+)/i)
+    const toolMatch = line.match(/(?:using|calling|executing)\s+(\w+)/i);
     if (toolMatch) {
-      return { currentStep: `Tool: ${toolMatch[1]}` }
+      return { currentStep: `Tool: ${toolMatch[1]}` };
     }
 
     if (/thinking|generating/i.test(line)) {
-      return { currentStep: 'Thinking...' }
+      return { currentStep: "Thinking..." };
     }
 
     if (/\?\s*$|confirm|y\/n/i.test(line)) {
-      return { status: 'waiting_input', currentStep: 'Waiting for user input' }
+      return { status: "waiting_input", currentStep: "Waiting for user input" };
     }
 
     if (/^error|failed/i.test(line)) {
-      return { status: 'failed', currentStep: line.slice(0, 120) }
+      return { status: "failed", currentStep: line.slice(0, 120) };
     }
 
-    return null
+    return null;
   }
 
   /**
@@ -209,25 +207,25 @@ export class AgentStatusParser {
   private parseGeneric(line: string): StatusUpdate | null {
     // Error patterns
     if (/^error|^FAIL|^fatal|exception|traceback/i.test(line)) {
-      return { status: 'failed', currentStep: line.slice(0, 120) }
+      return { status: "failed", currentStep: line.slice(0, 120) };
     }
 
     // Waiting for input patterns
     if (/\?\s*$|\(y\/n\)|confirm|press enter/i.test(line)) {
-      return { status: 'waiting_input', currentStep: 'Waiting for user input' }
+      return { status: "waiting_input", currentStep: "Waiting for user input" };
     }
 
     // Test runner detection
     if (/tests?\s+(?:passed|failed|running)/i.test(line)) {
-      return { currentStep: line.slice(0, 120) }
+      return { currentStep: line.slice(0, 120) };
     }
 
     // File operation patterns
     if (/(?:reading|writing|editing|creating|deleting)\s+/i.test(line)) {
-      return { currentStep: line.slice(0, 120) }
+      return { currentStep: line.slice(0, 120) };
     }
 
-    return null
+    return null;
   }
 }
 
@@ -235,6 +233,6 @@ export class AgentStatusParser {
  * Strip ANSI escape codes from terminal output.
  */
 function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence stripping
+  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
 }

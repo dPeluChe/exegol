@@ -1,24 +1,18 @@
-import { Input } from '@exegol/ui'
-import type { Settings } from '@exegol/shared'
+import type { Settings } from "@exegol/shared";
+import { Input } from "@exegol/ui";
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-xs font-medium text-text-secondary">
-      {children}
-    </label>
-  )
+  return <div className="block text-xs font-medium text-text-secondary">{children}</div>;
 }
 
 export interface TerminalSettingsProps {
-  settings: Pick<Settings, 'terminalFontSize' | 'terminalFontFamily'>
-  onChange: (updates: Partial<Settings>) => void
+  settings: Pick<Settings, "terminalFontSize" | "terminalFontFamily">;
+  onChange: (updates: Partial<Settings>) => void;
 }
 
 export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) {
   return (
-    <div
-      className="space-y-4 rounded-lg border border-border bg-bg-secondary p-4"
-    >
+    <div className="space-y-4 rounded-lg border border-border bg-bg-secondary p-4">
       <div className="space-y-1.5">
         <FieldLabel>Font Size</FieldLabel>
         <Input
@@ -40,5 +34,5 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
         />
       </div>
     </div>
-  )
+  );
 }

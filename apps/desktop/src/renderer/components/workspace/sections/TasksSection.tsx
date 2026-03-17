@@ -1,5 +1,5 @@
-import { CheckSquare } from 'lucide-react'
-import { EmptyState } from '../../common/EmptyState'
+import { CheckSquare } from "lucide-react";
+import { EmptyState } from "../../common/EmptyState";
 
 export function TasksSection() {
   return (
@@ -11,8 +11,8 @@ export function TasksSection() {
         icon={<CheckSquare className="h-8 w-8 text-text-muted" />}
         title="Task Viewer"
         description="Load and manage tasks from markdown files. Track progress with checkboxes."
-        action={{ label: 'Coming in Phase 2', onClick: () => {} }}
+        action={{ label: "Coming in Phase 2", onClick: () => {} }}
       />
     </div>
-  )
+  );
 }
