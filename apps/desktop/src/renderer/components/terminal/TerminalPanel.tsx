@@ -1,205 +1,79 @@
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
-import { Terminal } from "@xterm/xterm";
-import { useCallback, useEffect, useRef } from "react";
-import { useSettings } from "../../hooks/use-trpc";
-import { useTerminalStore } from "../../stores/terminals";
+import { Button } from "@exegol/ui";
+import { AlertCircle, RotateCcw } from "lucide-react";
+import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
+import { TerminalInstance } from "./TerminalInstance";
 
 interface TerminalPanelProps {
   agentId: string;
   onReady?: () => void;
 }
 
+const STOPPED_STATUSES = new Set(["completed", "failed", "stopped"]);
+
 export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
+  const { data: agent } = useAgent(agentId);
+  const isStopped = agent ? STOPPED_STATUSES.has(agent.status) : false;
+  const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
+    isStopped ? agentId : null,
+  );
+  const spawnAgent = useSpawnAgent();
 
-  const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
-  const setTerminalSize = useTerminalStore((s) => s.setTerminalSize);
-  const { data: settings } = useSettings();
+  // If agent is stopped and has scrollback, show read-only terminal
+  if (isStopped && scrollbackContent) {
+    return (
+      <div className="relative flex h-full flex-col">
+        {/* Read-only banner */}
+        <div className="flex shrink-0 items-center gap-2 bg-yellow-500/10 px-3 py-1.5 text-[11px]">
+          <AlertCircle className="h-3.5 w-3.5 text-yellow-400" />
+          <span className="text-yellow-200/80">Session ended — read-only</span>
+          {agent && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-6 gap-1 px-2 text-[11px]"
+              onClick={() =>
+                spawnAgent.mutate({
+                  projectId: agent.projectId,
+                  cliType: agent.cliType,
+                  taskDescription: agent.taskDescription,
+                })
+              }
+            >
+              <RotateCcw className="h-3 w-3" />
+              Re-launch
+            </Button>
+          )}
+        </div>
+        <div className="flex-1">
+          <TerminalInstance
+            key={`scrollback-${agentId}`}
+            agentId={agentId}
+            readOnly
+            initialContent={scrollbackContent}
+          />
+        </div>
+      </div>
+    );
+  }
 
-  const fontSize = settings?.terminalFontSize ?? 14;
-  const fontFamily = settings?.terminalFontFamily ?? "JetBrains Mono, Menlo, Monaco, monospace";
-  const theme = settings?.theme ?? "dark";
-  const isLight =
-    theme === "light" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
-
-  const handleResize = useCallback(() => {
-    const fitAddon = fitAddonRef.current;
-    const terminal = terminalRef.current;
-    if (!fitAddon || !terminal) return;
-
-    try {
-      fitAddon.fit();
-      const { cols, rows } = terminal;
-      setTerminalSize(agentId, cols, rows);
-      window.api.terminal.resize(agentId, cols, rows);
-    } catch {
-      // Fit can fail if container isn't visible
+  // If stopped with no scrollback yet (loading or no data)
+  if (isStopped && !scrollbackContent) {
+    if (scrollbackLoading) {
+      return (
+        <div className="flex h-full items-center justify-center">
+          <span className="text-sm text-text-muted">Loading session history...</span>
+        </div>
+      );
     }
-  }, [agentId, setTerminalSize]);
+    // No scrollback available
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2">
+        <AlertCircle className="h-6 w-6 text-text-muted" />
+        <span className="text-sm text-text-muted">Session ended — no history available</span>
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const darkTermTheme = {
-      background: "#0a0a0b",
-      foreground: "#e4e4e7",
-      cursor: "#e4e4e7",
-      cursorAccent: "#0a0a0b",
-      selectionBackground: "#6366f133",
-      selectionForeground: "#e4e4e7",
-      black: "#0a0a0b",
-      red: "#ef4444",
-      green: "#22c55e",
-      yellow: "#eab308",
-      blue: "#3b82f6",
-      magenta: "#a855f7",
-      cyan: "#06b6d4",
-      white: "#e4e4e7",
-      brightBlack: "#71717a",
-      brightRed: "#f87171",
-      brightGreen: "#4ade80",
-      brightYellow: "#facc15",
-      brightBlue: "#60a5fa",
-      brightMagenta: "#c084fc",
-      brightCyan: "#22d3ee",
-      brightWhite: "#fafafa",
-    };
-
-    const lightTermTheme = {
-      background: "#ffffff",
-      foreground: "#18181b",
-      cursor: "#18181b",
-      cursorAccent: "#ffffff",
-      selectionBackground: "#6366f133",
-      selectionForeground: "#18181b",
-      black: "#18181b",
-      red: "#dc2626",
-      green: "#16a34a",
-      yellow: "#ca8a04",
-      blue: "#2563eb",
-      magenta: "#9333ea",
-      cyan: "#0891b2",
-      white: "#f4f4f5",
-      brightBlack: "#71717a",
-      brightRed: "#ef4444",
-      brightGreen: "#22c55e",
-      brightYellow: "#eab308",
-      brightBlue: "#3b82f6",
-      brightMagenta: "#a855f7",
-      brightCyan: "#06b6d4",
-      brightWhite: "#fafafa",
-    };
-
-    const terminal = new Terminal({
-      theme: isLight ? lightTermTheme : darkTermTheme,
-      fontSize,
-      fontFamily,
-      cursorBlink: true,
-      cursorStyle: "bar",
-      scrollback: 10_000,
-      allowProposedApi: true,
-      convertEol: true,
-    });
-
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-
-    const webLinksAddon = new WebLinksAddon();
-    terminal.loadAddon(webLinksAddon);
-
-    terminal.open(container);
-
-    // Try loading WebGL addon for better performance
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-      });
-      terminal.loadAddon(webglAddon);
-    } catch {
-      // WebGL not supported, fallback to canvas renderer
-    }
-
-    // Fit after a small delay to ensure container is measured
-    requestAnimationFrame(() => {
-      try {
-        fitAddon.fit();
-        const { cols, rows } = terminal;
-        setTerminalSize(agentId, cols, rows);
-        window.api.terminal.resize(agentId, cols, rows);
-      } catch {
-        // Ignore initial fit failures
-      }
-    });
-
-    // Connect terminal input -> main process
-    const inputDisposable = terminal.onData((data) => {
-      window.api.terminal.write(agentId, data);
-    });
-
-    // Connect main process output -> terminal
-    const unsubData = window.api.terminal.onData(agentId, (data) => {
-      terminal.write(data);
-    });
-
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    setTerminalReady(agentId);
-    onReady?.();
-
-    // Resize observer
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        try {
-          fitAddon.fit();
-          const { cols, rows } = terminal;
-          setTerminalSize(agentId, cols, rows);
-          window.api.terminal.resize(agentId, cols, rows);
-        } catch {
-          // Ignore resize errors
-        }
-      });
-    });
-    resizeObserver.observe(container);
-
-    cleanupRef.current = () => {
-      inputDisposable.dispose();
-      unsubData();
-      resizeObserver.disconnect();
-      terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
-    };
-
-    return () => {
-      cleanupRef.current?.();
-      cleanupRef.current = null;
-    };
-  }, [agentId, setTerminalReady, setTerminalSize, onReady, fontFamily, fontSize, isLight]);
-
-  // Update terminal options when settings change (without re-creating)
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.options.fontSize = fontSize;
-      terminalRef.current.options.fontFamily = fontFamily;
-      fitAddonRef.current?.fit();
-    }
-  }, [fontSize, fontFamily]);
-
-  // Handle external resize triggers
-  useEffect(() => {
-    const handleWindowResize = () => handleResize();
-    window.addEventListener("resize", handleWindowResize);
-    return () => window.removeEventListener("resize", handleWindowResize);
-  }, [handleResize]);
-
-  return <div ref={containerRef} className="terminal-container h-full w-full bg-bg-primary" />;
+  // Live terminal
+  return <TerminalInstance key={agentId} agentId={agentId} onReady={onReady} />;
 }

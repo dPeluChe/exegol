@@ -3,12 +3,8 @@ import { type AgentState, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 
 export function useHotkeys() {
-  const setActiveView = useAppStore((s) => s.setActiveView);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
-  const _activeProjectId = useAppStore((s) => s.activeProjectId);
-  const agents = Object.values(useAgentStore((s) => s.agents));
-  const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
-  const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
+  const setActiveView = useAppStore((s) => s.setActiveView);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -37,6 +33,24 @@ export function useHotkeys() {
         return;
       }
 
+      // Cmd+Shift+D: Split vertical
+      if (e.shiftKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent("exegol:split-pane", { detail: { direction: "vertical" } }),
+        );
+        return;
+      }
+
+      // Cmd+D: Split horizontal
+      if (e.key === "d") {
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent("exegol:split-pane", { detail: { direction: "horizontal" } }),
+        );
+        return;
+      }
+
       // Cmd+N: New Agent (open spawn dialog)
       if (e.key === "n") {
         e.preventDefault();
@@ -47,6 +61,7 @@ export function useHotkeys() {
       // Cmd+.: Stop focused agent
       if (e.key === ".") {
         e.preventDefault();
+        const { focusedAgentId } = useAgentStore.getState();
         if (focusedAgentId) {
           window.dispatchEvent(
             new CustomEvent("exegol:stop-agent", {
@@ -57,17 +72,21 @@ export function useHotkeys() {
         return;
       }
 
+      // Read agents snapshot only when needed (avoids stale-closure + re-render issues)
+      const agentSnapshot = Object.values(useAgentStore.getState().agents);
+      const { focusedAgentId, setFocusedAgent } = useAgentStore.getState();
+
       // Cmd+]: Next tab (next agent)
       if (e.key === "]") {
         e.preventDefault();
-        navigateAgentTab("next", agents, focusedAgentId, setFocusedAgent);
+        navigateAgentTab("next", agentSnapshot, focusedAgentId, setFocusedAgent);
         return;
       }
 
       // Cmd+[: Previous tab (previous agent)
       if (e.key === "[") {
         e.preventDefault();
-        navigateAgentTab("prev", agents, focusedAgentId, setFocusedAgent);
+        navigateAgentTab("prev", agentSnapshot, focusedAgentId, setFocusedAgent);
         return;
       }
 
@@ -75,9 +94,8 @@ export function useHotkeys() {
       if (e.key >= "1" && e.key <= "9") {
         e.preventDefault();
         const index = parseInt(e.key, 10) - 1;
-        if (index < agents.length) {
-          setFocusedAgent(agents[index]?.id ?? null);
-          // Also switch to workspace view if not already there
+        if (index < agentSnapshot.length) {
+          setFocusedAgent(agentSnapshot[index]?.id ?? null);
           if (useAppStore.getState().activeView !== "workspace") {
             setActiveView("workspace");
           }
@@ -88,7 +106,7 @@ export function useHotkeys() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [toggleSidebar, setActiveView, agents, focusedAgentId, setFocusedAgent]);
+  }, [toggleSidebar, setActiveView]);
 }
 
 function navigateAgentTab(

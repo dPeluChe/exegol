@@ -9,11 +9,14 @@ Electron + React + Rust desktop app for orchestrating AI coding agents (Claude C
 - Project management: add/remove/list projects, persist to libSQL
 - Agent spawning: spawn CLI agents (Claude Code, Codex, Aider, Gemini) via node-pty through user's login shell
 - Terminal emulation: xterm.js with WebGL addon, real-time PTY streaming
+- Terminal split panes: tmux-like splits (Cmd+D horizontal, Cmd+Shift+D vertical) with per-pane agent assignment
+- Terminal scrollback persistence: stopped agents show read-only history with re-launch button, 30s periodic flush to disk
+- Diff viewer: real git diff viewer with unstaged/staged toggle, unified/split views, auto-refresh, collapsible per-file sections
 - Agent status parsing: real-time extraction of current step from agent stdout
 - Settings: full settings panel with 5 tabs (General, Agent CLIs, Terminal, Shortcuts, API Keys), persisted to DB
 - Sidebar: collapsible sections (Projects, Recent Sessions), footer with Schedulers/Resources overviews
 - Workspace tabs: Agents, Tasks, Diff Viewer, Scheduler, Token Usage, Resources sections
-- Keyboard shortcuts: Cmd+B sidebar toggle, Cmd+, settings, Cmd+N new agent, Cmd+. stop agent, Cmd+1-9 agent switch, Cmd+[/] tab navigation
+- Keyboard shortcuts: Cmd+B sidebar toggle, Cmd+, settings, Cmd+N new agent, Cmd+. stop agent, Cmd+D split, Cmd+1-9 agent switch, Cmd+[/] tab navigation
 - Session persistence: app state (active view, active project, sidebar collapsed) survives restart via Zustand persist
 - Resources monitoring: background collector every 10s with CPU (delta-based), RAM (vm_stat on macOS), disk (df)
 - Global hotkey: Cmd+Shift+E to bring app to front
@@ -30,7 +33,7 @@ Electron + React + Rust desktop app for orchestrating AI coding agents (Claude C
 - Workspace tabs: Agents, Tasks, Prompts, Diff Viewer, Scheduler, Token Usage, Resources
 
 ### What's Placeholder / Not Yet Functional
-- Workspace sections: Diff Viewer, Token Usage, Resources — UI shells exist but are placeholder
+- Workspace sections: Token Usage, Resources — UI shells exist but are placeholder
 - Worktree management: DB schema exists, Rust git2 scaffold exists, but not wired into agent spawn flow
 - Token usage tracking: DB table exists, tRPC router exists, but no actual log parsing yet
 - MCP Host, Skills, Plan FSM, Hook Engine, Memory system, Repo Maps — not started
@@ -57,7 +60,7 @@ exegol/
 │   │   │   ├── ide/
 │   │   │   │   └── opener.ts       # IDE launcher (vscode, cursor, zed, intellij, webstorm, custom)
 │   │   │   ├── ipc/
-│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources, apiKeys, scheduler, files, prompts)
+│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources, apiKeys, scheduler, files, prompts, diff, scrollback)
 │   │   │   │   ├── trpc.ts         # tRPC init (router, publicProcedure)
 │   │   │   │   ├── trpc-ipc.ts     # createCaller proxy traversal over IPC
 │   │   │   │   ├── context.ts      # tRPC context (db instance)
@@ -70,7 +73,9 @@ exegol/
 │   │   │   │       ├── resources.ts
 │   │   │   │       ├── scheduler.ts  # Scheduler CRUD + runNow
 │   │   │   │       ├── files.ts        # File I/O: readFile, writeFile, pickFile, listDirectory (path-guarded)
-│   │   │   │       └── prompts.ts      # Prompt CRUD: list, create, update, delete, togglePin
+│   │   │   │       ├── prompts.ts      # Prompt CRUD: list, create, update, delete, togglePin
+│   │   │   │       ├── diff.ts         # Git diff queries (projectDiff, stagedDiff)
+│   │   │   │       └── scrollback.ts   # Scrollback file read for stopped agents
 │   │   │   ├── security/
 │   │   │   │   └── keystore.ts     # API key encryption via safeStorage (OS keychain)
 │   │   │   ├── scheduler/
@@ -92,7 +97,7 @@ exegol/
 │   │   │   ├── stores/
 │   │   │   │   ├── app.ts          # Zustand: activeView, activeProjectId, sidebarCollapsed (persisted)
 │   │   │   │   ├── agents.ts       # Zustand: agent state, focused agent, sync from DB
-│   │   │   │   └── terminals.ts    # Zustand: terminal instances
+│   │   │   │   └── terminals.ts    # Zustand: terminal instances + pane split layout tree
 │   │   │   ├── lib/
 │   │   │   │   ├── trpc-client.ts  # trpcInvoke/trpcMutate via window.api.trpc
 │   │   │   │   └── markdown-tasks.ts  # parseMarkdownTasks, toggleTask for checkbox .md files
@@ -130,12 +135,19 @@ exegol/
 │   │   │       │       ├── AgentsSection.tsx      # Terminal + toggleable FileExplorer panel
 │   │   │       │       ├── TasksSection.tsx       # Markdown task viewer with checkboxes
 │   │   │       │       ├── PromptsSection.tsx     # Prompt cards, CRUD, category filters
-│   │   │       │       ├── DiffSection.tsx        # Placeholder
+│   │   │       │       ├── DiffSection.tsx        # Git diff viewer (unified/split views)
+│   │   │       │       ├── diff/
+│   │   │       │       │   ├── diff-parser.ts   # Unified diff format parser
+│   │   │       │       │   ├── DiffFileView.tsx  # Collapsible per-file diff section
+│   │   │       │       │   └── DiffHunkView.tsx  # Hunk renderer (unified + split views)
 │   │   │       │       ├── SchedulerSection.tsx   # Task list, create/edit dialogs, execution history
 │   │   │       │       ├── TokensSection.tsx      # Placeholder
 │   │   │       │       └── ResourcesSection.tsx   # Placeholder
 │   │   │       ├── terminal/
-│   │   │       │   ├── TerminalPanel.tsx
+│   │   │       │   ├── TerminalPanel.tsx       # Live terminal or read-only scrollback replay
+│   │   │       │   ├── TerminalInstance.tsx    # Reusable xterm.js component (readOnly, initialContent)
+│   │   │       │   ├── TerminalSplitView.tsx   # Tree-based split pane layout (react-resizable-panels)
+│   │   │       │   ├── PaneAgentSelector.tsx   # Agent picker for unassigned split panes
 │   │   │       │   └── TerminalTabs.tsx
 │   │   │       └── common/
 │   │   │           ├── index.ts
@@ -202,6 +214,9 @@ cargo check                         # Type-check (run inside packages/core-rust)
 - **Database migrations**: 11 sequential migrations in `migrations.ts`, tracked in `_migrations` table. Migration 010 adds `stopped` to agent status enum by recreating the table. Migration 011 adds `prompts` table.
 - **Scheduler engine**: `SchedulerEngine` singleton manages cron jobs via croner. On fire: creates agent, spawns via AgentManager, polls status every 5s (10-min timeout). Concurrent execution guard prevents duplicate spawns. Lifecycle: starts after metrics collector, stops on will-quit.
 - **Port detection**: `getProjectPorts()` combines runtime detection (lsof + CWD filtering per PID) with config parsing (package.json scripts, .env, vite/next config). Runtime ports are filtered to those whose process CWD starts with the project path.
+- **Scrollback persistence**: AgentManager captures PTY output per-agent (1MB cap). Periodic flush every 30s + final flush on process exit. Files stored at `{userData}/scrollback/{agentId}.log`. Renderer shows read-only xterm replay for stopped agents.
+- **Terminal split panes**: Tree-based `PaneNode` layout (terminal leaf | split with children). New panes start unassigned (`agentId: null`) with agent picker UI. Uses `react-resizable-panels` for resize. Store actions: `splitPane`, `closePane`, `setPaneAgent`.
+- **Diff viewer**: tRPC `diff.projectDiff` / `diff.stagedDiff` run `git diff` via `execFileAsync`. Parser in `diff-parser.ts` handles unified format. UI supports unified and side-by-side views with auto-refresh.
 
 ## Database Tables
 
