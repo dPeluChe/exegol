@@ -4,6 +4,7 @@ import { is } from '@electron-toolkit/utils'
 import { initializeDatabase, closeDatabase } from './db/client'
 import { registerTrpcIpcHandler } from './ipc/trpc-ipc'
 import { getAgentManager } from './agents/manager'
+import { startMetricsCollector, stopMetricsCollector } from './system/resources'
 import { DEFAULT_SETTINGS } from '@exegol/shared'
 
 let mainWindow: BrowserWindow | null = null
@@ -108,6 +109,7 @@ app.whenReady().then(async () => {
   registerTrpcIpcHandler()
   registerIpcHandlers()
   registerGlobalHotkey()
+  startMetricsCollector() // Background: collects CPU/RAM/disk every 10s
   createWindow()
 
   app.on('activate', () => {
@@ -139,5 +141,6 @@ app.on('will-quit', () => {
     }
   }
 
+  stopMetricsCollector()
   closeDatabase()
 })

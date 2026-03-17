@@ -3,7 +3,8 @@ import { router, publicProcedure } from '../trpc'
 import { getSystemMetrics, getProjectMetrics } from '../../system/resources'
 
 export const resourcesRouter = router({
-  system: publicProcedure.query(async () => {
+  system: publicProcedure.query(() => {
+    // Returns cached metrics — no async, no blocking. Collector runs in background.
     return getSystemMetrics()
   }),
 

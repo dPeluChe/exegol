@@ -131,7 +131,7 @@ export function useSystemMetrics() {
   return useQuery({
     queryKey: ['resources', 'system'],
     queryFn: () => trpcInvoke<SystemMetrics>('resources.system'),
-    refetchInterval: 3_000,
+    refetchInterval: 10_000, // Matches background collector interval
   })
 }
 
@@ -144,7 +144,7 @@ export function useProjectMetrics(
     queryKey: ['resources', 'project', projectId],
     queryFn: () =>
       trpcInvoke<ProjectMetrics>('resources.project', { projectId, projectPath, projectName }),
-    refetchInterval: 5_000,
+    refetchInterval: 15_000, // Project metrics are heavier (du, git worktree)
     enabled: !!projectId && !!projectPath,
   })
 }

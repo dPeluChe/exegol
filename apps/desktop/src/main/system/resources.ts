@@ -4,107 +4,92 @@ import { promisify } from 'util'
 
 const execFileAsync = promisify(execFile)
 
+// ─── Types ──────────────────────────────────────────────────────────────────────
+
 export interface SystemMetrics {
   cpu: {
-    usage: number // 0-100 percentage
+    usage: number
     cores: number
     model: string
   }
   memory: {
-    total: number // bytes
-    used: number // bytes
-    free: number // bytes
-    usagePercent: number // 0-100
+    total: number
+    used: number
+    free: number
+    usagePercent: number
   }
   disk: {
-    total: number // bytes
-    used: number // bytes
-    free: number // bytes
-    usagePercent: number // 0-100
+    total: number
+    used: number
+    free: number
+    usagePercent: number
   }
-  uptime: number // seconds
+  uptime: number
 }
 
 export interface ProjectMetrics {
   projectId: string
   projectName: string
   projectPath: string
-  diskUsage: number // bytes used by project directory
+  diskUsage: number
   worktreeCount: number
   agentProcesses: {
     pid: number
-    cpu: number // percentage
-    memory: number // bytes (RSS)
+    cpu: number
+    memory: number
   }[]
 }
 
-/**
- * Compute CPU usage by comparing idle/total deltas across a short sample window.
- */
-async function getCpuUsage(): Promise<number> {
-  const snapshot = () => {
-    const cpus = os.cpus()
-    let idleTotal = 0
-    let total = 0
-    for (const cpu of cpus) {
-      const { user, nice, sys, idle, irq } = cpu.times
-      idleTotal += idle
-      total += user + nice + sys + idle + irq
-    }
-    return { idle: idleTotal, total }
-  }
+// ─── Background Metrics Collector ───────────────────────────────────────────────
 
-  const a = snapshot()
-  await new Promise((r) => setTimeout(r, 200))
-  const b = snapshot()
+const COLLECT_INTERVAL = 10_000 // 10 seconds
 
-  const idleDelta = b.idle - a.idle
-  const totalDelta = b.total - a.total
-  if (totalDelta === 0) return 0
-  return Math.round(((1 - idleDelta / totalDelta) * 100 + Number.EPSILON) * 10) / 10
-}
+let cachedMetrics: SystemMetrics | null = null
+let collectorTimer: ReturnType<typeof setInterval> | null = null
+let prevCpuSnapshot: { idle: number; total: number } | null = null
 
-/**
- * Parse `df -k /` output to get disk usage for the root volume.
- */
-async function getDiskMetrics(): Promise<{
-  total: number
-  used: number
-  free: number
-  usagePercent: number
-}> {
-  try {
-    const { stdout } = await execFileAsync('df', ['-k', '/'], { timeout: 5_000 })
-    const lines = stdout.trim().split('\n')
-    // Second line contains the data
-    const line = lines[1]
-    if (!line) return { total: 0, used: 0, free: 0, usagePercent: 0 }
-    const parts = line.split(/\s+/)
-    // df -k columns: Filesystem 1K-blocks Used Available Capacity ...
-    const totalKB = parseInt(parts[1] ?? '0', 10)
-    const usedKB = parseInt(parts[2] ?? '0', 10)
-    const freeKB = parseInt(parts[3] ?? '0', 10)
-    const total = totalKB * 1024
-    const used = usedKB * 1024
-    const free = freeKB * 1024
-    const usagePercent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0
-    return { total, used, free, usagePercent }
-  } catch {
-    return { total: 0, used: 0, free: 0, usagePercent: 0 }
-  }
-}
-
-export async function getSystemMetrics(): Promise<SystemMetrics> {
-  const [cpuUsage, disk] = await Promise.all([getCpuUsage(), getDiskMetrics()])
-
+function cpuSnapshot() {
   const cpus = os.cpus()
+  let idle = 0
+  let total = 0
+  for (const cpu of cpus) {
+    const { user, nice, sys, idle: idleTime, irq } = cpu.times
+    idle += idleTime
+    total += user + nice + sys + idleTime + irq
+  }
+  return { idle, total }
+}
+
+/**
+ * Collect system metrics without blocking.
+ * CPU is calculated from delta since last collection (no sleep/delay).
+ */
+async function collectMetrics(): Promise<void> {
+  const currentCpu = cpuSnapshot()
+
+  // CPU: delta-based, no blocking wait
+  let cpuUsage = 0
+  if (prevCpuSnapshot) {
+    const idleDelta = currentCpu.idle - prevCpuSnapshot.idle
+    const totalDelta = currentCpu.total - prevCpuSnapshot.total
+    if (totalDelta > 0) {
+      cpuUsage = Math.round((1 - idleDelta / totalDelta) * 1000) / 10
+    }
+  }
+  prevCpuSnapshot = currentCpu
+
+  // Memory
   const totalMem = os.totalmem()
   const freeMem = os.freemem()
   const usedMem = totalMem - freeMem
 
-  return {
+  // Disk (async, non-blocking)
+  const disk = await getDiskMetrics()
+
+  const cpus = os.cpus()
+  cachedMetrics = {
     cpu: {
-      usage: cpuUsage,
+      usage: Math.max(0, Math.min(100, cpuUsage)),
       cores: cpus.length,
       model: cpus[0]?.model ?? 'Unknown',
     },
@@ -120,9 +105,75 @@ export async function getSystemMetrics(): Promise<SystemMetrics> {
 }
 
 /**
- * Get the disk usage of a directory via `du -sk`.
- * Returns 0 on failure or timeout.
+ * Start the background metrics collector.
+ * Collects every 10 seconds in a non-blocking way.
  */
+export function startMetricsCollector(): void {
+  if (collectorTimer) return
+
+  // First collection immediately
+  collectMetrics().catch(() => {})
+
+  // Then every COLLECT_INTERVAL
+  collectorTimer = setInterval(() => {
+    collectMetrics().catch(() => {})
+  }, COLLECT_INTERVAL)
+}
+
+/**
+ * Stop the background metrics collector.
+ */
+export function stopMetricsCollector(): void {
+  if (collectorTimer) {
+    clearInterval(collectorTimer)
+    collectorTimer = null
+  }
+}
+
+/**
+ * Get the latest cached system metrics.
+ * Returns immediately — no blocking, no async.
+ */
+export function getSystemMetrics(): SystemMetrics {
+  if (cachedMetrics) return cachedMetrics
+
+  // Return initial snapshot if collector hasn't run yet
+  const cpus = os.cpus()
+  const totalMem = os.totalmem()
+  const freeMem = os.freemem()
+  return {
+    cpu: { usage: 0, cores: cpus.length, model: cpus[0]?.model ?? 'Unknown' },
+    memory: {
+      total: totalMem,
+      used: totalMem - freeMem,
+      free: freeMem,
+      usagePercent: Math.round(((totalMem - freeMem) / totalMem) * 1000) / 10,
+    },
+    disk: { total: 0, used: 0, free: 0, usagePercent: 0 },
+    uptime: os.uptime(),
+  }
+}
+
+// ─── Disk Metrics ───────────────────────────────────────────────────────────────
+
+async function getDiskMetrics() {
+  try {
+    const { stdout } = await execFileAsync('df', ['-k', '/'], { timeout: 5_000 })
+    const line = stdout.trim().split('\n')[1]
+    if (!line) return { total: 0, used: 0, free: 0, usagePercent: 0 }
+    const parts = line.split(/\s+/)
+    const total = parseInt(parts[1] ?? '0', 10) * 1024
+    const used = parseInt(parts[2] ?? '0', 10) * 1024
+    const free = parseInt(parts[3] ?? '0', 10) * 1024
+    const usagePercent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0
+    return { total, used, free, usagePercent }
+  } catch {
+    return { total: 0, used: 0, free: 0, usagePercent: 0 }
+  }
+}
+
+// ─── Project Metrics ────────────────────────────────────────────────────────────
+
 async function getDirectorySize(dirPath: string): Promise<number> {
   try {
     const { stdout } = await execFileAsync('du', ['-sk', dirPath], { timeout: 10_000 })
@@ -133,20 +184,15 @@ async function getDirectorySize(dirPath: string): Promise<number> {
   }
 }
 
-/**
- * Count git worktrees for a repo path.
- */
 async function getWorktreeCount(dirPath: string): Promise<number> {
   try {
     const { stdout } = await execFileAsync('git', ['worktree', 'list', '--porcelain'], {
       cwd: dirPath,
       timeout: 5_000,
     })
-    // Each worktree block starts with "worktree "
-    const lines = stdout.split('\n').filter((l) => l.startsWith('worktree '))
-    return lines.length
+    return stdout.split('\n').filter((l) => l.startsWith('worktree ')).length
   } catch {
-    return 1 // assume at least the main worktree
+    return 1
   }
 }
 
