@@ -98,6 +98,7 @@ export class AgentManager {
   private scrollbackBuffers: Map<string, string[]> = new Map();
   private scrollbackSizes: Map<string, number> = new Map();
   private scrollbackTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
+  private completionCallbacks: Map<string, (exitCode: number) => void> = new Map();
 
   /**
    * Spawn an agent process with the configured CLI tool.
@@ -271,6 +272,13 @@ export class AgentManager {
 
       // ── Worktree cleanup on exit ──────────────────────────────────────
       this.cleanupWorktree(db, agent.id);
+
+      // ── Fire completion callback if registered ─────────────────────────
+      const completionCb = this.completionCallbacks.get(agent.id);
+      if (completionCb) {
+        this.completionCallbacks.delete(agent.id);
+        completionCb(exitCode);
+      }
     });
   }
 
@@ -344,6 +352,13 @@ export class AgentManager {
     if (proc) {
       proc.resize(cols, rows);
     }
+  }
+
+  /**
+   * Register a one-shot callback that fires when an agent process exits.
+   */
+  onAgentComplete(agentId: string, callback: (exitCode: number) => void): void {
+    this.completionCallbacks.set(agentId, callback);
   }
 
   /**

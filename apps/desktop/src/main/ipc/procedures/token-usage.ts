@@ -1,9 +1,9 @@
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
   getProjectTokenUsage,
   getProjectTokenUsageSummary,
   getTokenUsageSummary,
-  recordTokenUsage,
 } from "../../db/queries";
 import { scanAllLogs } from "../../tokens/log-parser";
 import { publicProcedure, router } from "../trpc";
@@ -44,7 +44,13 @@ export const tokenUsageRouter = router({
       // Dedup: check existing entries to avoid re-importing on repeated scans
       const existingCheck = ctx.db.prepare(
         `SELECT COUNT(*) as cnt FROM token_usage
-         WHERE agent_id = ? AND model = ? AND input_tokens = ? AND output_tokens = ?`,
+         WHERE agent_id = ? AND model = ? AND input_tokens = ? AND output_tokens = ? AND source = 'log_scan'`,
+      );
+
+      // Insert with source='log_scan' to distinguish scanned records from agent records
+      const insertStmt = ctx.db.prepare(
+        `INSERT INTO token_usage (id, agent_id, provider, model, input_tokens, output_tokens, estimated_cost_usd, tool_call_count, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'log_scan')`,
       );
 
       let imported = 0;
@@ -61,15 +67,16 @@ export const tokenUsageRouter = router({
           continue;
         }
 
-        recordTokenUsage(ctx.db, {
+        insertStmt.run(
+          nanoid(),
           agentId,
-          provider: entry.provider,
-          model: entry.model,
-          inputTokens: entry.inputTokens,
-          outputTokens: entry.outputTokens,
-          estimatedCostUsd: entry.estimatedCostUsd,
-          toolCallCount: entry.toolCallCount,
-        });
+          entry.provider,
+          entry.model,
+          entry.inputTokens,
+          entry.outputTokens,
+          entry.estimatedCostUsd,
+          entry.toolCallCount,
+        );
         imported++;
       }
 

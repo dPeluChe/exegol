@@ -55,8 +55,16 @@ exegol/
 │   │   │   │   └── status-parser.ts # Parses agent stdout for live status
 │   │   │   ├── db/
 │   │   │   │   ├── client.ts       # libSQL database init + WAL mode
-│   │   │   │   ├── migrations.ts   # 11 migrations (projects → prompts)
-│   │   │   │   └── queries.ts      # SQL query helpers
+│   │   │   │   ├── migrations.ts   # 12 migrations (projects → token_usage source)
+│   │   │   │   ├── queries.ts      # Barrel re-export of domain query modules
+│   │   │   │   └── queries/
+│   │   │   │       ├── helpers.ts       # Shared row mappers + nanoid
+│   │   │   │       ├── projects.ts      # Project CRUD queries
+│   │   │   │       ├── agents.ts        # Agent CRUD + status queries
+│   │   │   │       ├── worktrees.ts     # Worktree queries
+│   │   │   │       ├── token-usage.ts   # Token usage queries
+│   │   │   │       ├── scheduler.ts     # Scheduled task + result queries
+│   │   │   │       └── prompts.ts       # Prompt CRUD queries
 │   │   │   ├── ide/
 │   │   │   │   └── opener.ts       # IDE launcher (vscode, cursor, zed, intellij, webstorm, custom)
 │   │   │   ├── ipc/
@@ -211,8 +219,8 @@ cargo check                         # Type-check (run inside packages/core-rust)
 - **API key storage**: `safeStorage` from Electron encrypts keys using the OS keychain. Stored in the `settings` table with `apikey_<provider>` keys. Falls back to plaintext if encryption is unavailable.
 - **Zustand with persist**: `useAppStore` persists `activeProjectId`, `activeView`, `sidebarCollapsed` to localStorage under key `exegol-app-state`.
 - **Background metrics collector**: Starts on app launch, collects CPU/RAM/disk every 10s. CPU is delta-based (no blocking sleep). RAM uses `vm_stat` on macOS for accurate available memory (not `os.freemem()`). Renderer reads cached metrics synchronously via tRPC.
-- **Database migrations**: 11 sequential migrations in `migrations.ts`, tracked in `_migrations` table. Migration 010 adds `stopped` to agent status enum by recreating the table. Migration 011 adds `prompts` table.
-- **Scheduler engine**: `SchedulerEngine` singleton manages cron jobs via croner. On fire: creates agent, spawns via AgentManager, polls status every 5s (10-min timeout). Concurrent execution guard prevents duplicate spawns. Lifecycle: starts after metrics collector, stops on will-quit.
+- **Database migrations**: 12 sequential migrations in `migrations.ts`, tracked in `_migrations` table. Migration 010 adds `stopped` to agent status enum by recreating the table. Migration 011 adds `prompts` table. Migration 012 adds `source` column to `token_usage` table (`agent` | `log_scan`).
+- **Scheduler engine**: `SchedulerEngine` singleton manages cron jobs via croner. On fire: creates agent, spawns via AgentManager, uses event-based `onAgentComplete` callback (10-min timeout). Concurrent execution guard prevents duplicate spawns. Lifecycle: starts after metrics collector, stops on will-quit.
 - **Port detection**: `getProjectPorts()` combines runtime detection (lsof + CWD filtering per PID) with config parsing (package.json scripts, .env, vite/next config). Runtime ports are filtered to those whose process CWD starts with the project path.
 - **Scrollback persistence**: AgentManager captures PTY output per-agent (1MB cap). Periodic flush every 30s + final flush on process exit. Files stored at `{userData}/scrollback/{agentId}.log`. Renderer shows read-only xterm replay for stopped agents.
 - **Terminal split panes**: Tree-based `PaneNode` layout (terminal leaf | split with children). New panes start unassigned (`agentId: null`) with agent picker UI. Uses `react-resizable-panels` for resize. Store actions: `splitPane`, `closePane`, `setPaneAgent`.

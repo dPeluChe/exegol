@@ -1,16 +1,18 @@
 import { Button, ScrollArea } from "@exegol/ui";
 import { CheckSquare, FolderOpen } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useFileContent, usePickFile, useWriteFile } from "../../../hooks/use-trpc";
 import { parseMarkdownTasks, type TaskItem, toggleTask } from "../../../lib/markdown-tasks";
+import { trpcInvoke } from "../../../lib/trpc-client";
 import { EmptyState } from "../../common/EmptyState";
 
 export function TasksSection() {
   const { project } = useProjectContext();
   const [filePath, setFilePath] = useState<string | null>(null);
-  const [autoDetectFailed, setAutoDetectFailed] = useState(false);
-  const { data: fileData, error: fileError, refetch } = useFileContent(filePath);
+  const [autoDetectDone, setAutoDetectDone] = useState(false);
+  const probeRan = useRef(false);
+  const { data: fileData, refetch } = useFileContent(filePath);
   const pickFile = usePickFile();
   const writeFile = useWriteFile();
 
@@ -19,19 +21,30 @@ export function TasksSection() {
   const totalCount = tasks.length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // Try to auto-detect a task file in the project root
+  // Probe for common task files on mount
   useEffect(() => {
-    if (!project || filePath || autoDetectFailed) return;
-    setFilePath(`${project.path}/TODO.md`);
-  }, [project, filePath, autoDetectFailed]);
+    if (!project || filePath || autoDetectDone || probeRan.current) return;
+    probeRan.current = true;
 
-  // If auto-detected file doesn't exist, reset to clean empty state
-  useEffect(() => {
-    if (fileError && filePath && !autoDetectFailed) {
-      setFilePath(null);
-      setAutoDetectFailed(true);
-    }
-  }, [fileError, filePath, autoDetectFailed]);
+    const candidates = ["TODO.md", "todo.md", "TASKS.md", "tasks.md", "plan.md", "PLAN.md"];
+
+    (async () => {
+      for (const name of candidates) {
+        const fullPath = `${project.path}/${name}`;
+        try {
+          await trpcInvoke<{ content: string; language: string }>("files.readFile", {
+            path: fullPath,
+          });
+          setFilePath(fullPath);
+          setAutoDetectDone(true);
+          return;
+        } catch {
+          // File doesn't exist, try next candidate
+        }
+      }
+      setAutoDetectDone(true);
+    })();
+  }, [project, filePath, autoDetectDone]);
 
   const handlePickFile = useCallback(async () => {
     if (!project) return;

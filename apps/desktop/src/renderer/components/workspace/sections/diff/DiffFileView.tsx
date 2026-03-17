@@ -4,6 +4,39 @@ import { useState } from "react";
 import { DiffHunkView } from "./DiffHunkView";
 import type { DiffFile } from "./diff-parser";
 
+const BINARY_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".ico",
+  ".webp",
+  ".bmp",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".eot",
+  ".otf",
+  ".pdf",
+  ".zip",
+  ".tar",
+  ".gz",
+  ".bz2",
+  ".7z",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".node",
+  ".db",
+]);
+
+function isBinaryFile(filePath: string): boolean {
+  const dot = filePath.lastIndexOf(".");
+  if (dot === -1) return false;
+  return BINARY_EXTENSIONS.has(filePath.slice(dot).toLowerCase());
+}
+
 interface DiffFileViewProps {
   file: DiffFile;
   viewMode: "unified" | "split";
@@ -57,13 +90,16 @@ export function DiffFileView({ file, viewMode }: DiffFileViewProps) {
       </button>
 
       {/* Hunks */}
-      {!collapsed && (
-        <div className="overflow-x-auto">
-          {file.hunks.map((hunk) => (
-            <DiffHunkView key={hunk.header} hunk={hunk} viewMode={viewMode} />
-          ))}
-        </div>
-      )}
+      {!collapsed &&
+        (isBinaryFile(file.newPath) ? (
+          <div className="px-4 py-3 text-xs italic text-text-muted">Binary file changed</div>
+        ) : (
+          <div className="overflow-x-auto">
+            {file.hunks.map((hunk) => (
+              <DiffHunkView key={hunk.header} hunk={hunk} viewMode={viewMode} />
+            ))}
+          </div>
+        ))}
     </div>
   );
 }

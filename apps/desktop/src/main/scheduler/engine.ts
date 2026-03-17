@@ -166,52 +166,42 @@ export class SchedulerEngine {
   }
 
   private waitForCompletion(agentId: string, taskId: string): Promise<void> {
-    const POLL_INTERVAL = 5_000;
     const MAX_WAIT = 10 * 60_000; // 10 minutes
-    const maxAttempts = Math.ceil(MAX_WAIT / POLL_INTERVAL);
+    const manager = getAgentManager();
 
     return new Promise((resolve) => {
-      let attempts = 0;
-      const poll = setInterval(() => {
-        attempts++;
+      const timeout = setTimeout(() => {
+        if (this.db) {
+          recordScheduledResult(this.db, {
+            taskId,
+            agentId,
+            status: "timeout",
+            summary: "Agent did not complete within 10 minutes",
+          });
+          updateScheduledTask(this.db, taskId, { lastResultStatus: "timeout" });
+        }
+        resolve();
+      }, MAX_WAIT);
 
-        if (!this.db || attempts > maxAttempts) {
-          clearInterval(poll);
-          if (this.db && attempts > maxAttempts) {
-            recordScheduledResult(this.db, {
-              taskId,
-              agentId,
-              status: "timeout",
-              summary: "Agent did not complete within 10 minutes",
-            });
-            updateScheduledTask(this.db, taskId, { lastResultStatus: "timeout" });
-          }
+      manager.onAgentComplete(agentId, (exitCode) => {
+        clearTimeout(timeout);
+
+        if (!this.db) {
           resolve();
           return;
         }
 
         const agent = getAgent(this.db, agentId);
-        if (!agent) {
-          clearInterval(poll);
-          resolve();
-          return;
-        }
-
-        const terminalStatuses = ["completed", "failed", "stopped"];
-        if (terminalStatuses.includes(agent.status)) {
-          clearInterval(poll);
-
-          const resultStatus = agent.status === "completed" ? "success" : "failure";
-          recordScheduledResult(this.db, {
-            taskId,
-            agentId,
-            status: resultStatus,
-            summary: agent.currentStep ?? `Agent ${agent.status}`,
-          });
-          updateScheduledTask(this.db, taskId, { lastResultStatus: resultStatus });
-          resolve();
-        }
-      }, POLL_INTERVAL);
+        const resultStatus = exitCode === 0 ? "success" : "failure";
+        recordScheduledResult(this.db, {
+          taskId,
+          agentId,
+          status: resultStatus,
+          summary: agent?.currentStep ?? `Agent ${exitCode === 0 ? "completed" : "failed"}`,
+        });
+        updateScheduledTask(this.db, taskId, { lastResultStatus: resultStatus });
+        resolve();
+      });
     });
   }
 }

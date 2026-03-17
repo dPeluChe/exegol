@@ -184,6 +184,11 @@ const migrations: Migration[] = [
       FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
     )`,
   },
+  {
+    id: "012_token_usage_source",
+    sql: `ALTER TABLE token_usage ADD COLUMN source TEXT NOT NULL DEFAULT 'agent'
+      CHECK (source IN ('agent', 'log_scan'))`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

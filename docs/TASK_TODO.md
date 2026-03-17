@@ -16,44 +16,44 @@
 > Everything related to how agents spawn, run, get tracked, and report data.
 > Touches: `main/agents/`, `main/tokens/`, `main/db/queries.ts`, sidebar agent display.
 
-### T01 — Wire Git Worktrees into Agent Spawn
+### T01 — Wire Git Worktrees into Agent Spawn ✅
 **Complexity**: Medium
 When "Use worktree" is checked, create an isolated git worktree before spawning the agent. Auto-cleanup on stop if no changes.
 **Files**: `main/agents/manager.ts`, `packages/core-rust/` (napi build wiring), `main/db/queries.ts`, `ipc/procedures/agents.ts`, `renderer/components/agents/SpawnAgentDialog.tsx`
 **Acceptance**:
-- [ ] Agent spawns in isolated worktree (cwd = worktree path)
-- [ ] Branch name auto-generated from task description if empty
-- [ ] Worktree auto-cleaned if no changes on stop
-- [ ] Worktree kept + user notified if changes exist
-- [ ] DB: agents.worktree_id linked, worktrees table populated
+- [x] Agent spawns in isolated worktree (cwd = worktree path)
+- [x] Branch name auto-generated from task description if empty
+- [x] Worktree auto-cleaned if no changes on stop
+- [x] Worktree kept + user notified if changes exist
+- [x] DB: agents.worktree_id linked, worktrees table populated
 
-### T03 — Token Usage Monitor (JSONL Parser)
+### T03 — Token Usage Monitor (JSONL Parser) ✅
 **Complexity**: Medium
 Parse local JSONL logs from CLI agents to show real token usage and costs. Display in workspace Token Usage tab and sidebar per-agent.
 **Files**: New `main/tokens/log-parser.ts`, `ipc/procedures/token-usage.ts`, `main/db/queries.ts`, `renderer/.../TokensSection.tsx`, `renderer/.../ProjectsSection.tsx`
 **Acceptance**:
-- [ ] Parse Claude Code JSONL logs (`~/.claude/projects/**/`)
+- [x] Parse Claude Code JSONL logs (`~/.claude/projects/**/`)
 - [ ] Parse at least one other (Codex or Aider)
-- [ ] Store in token_usage table
-- [ ] TokensSection: per-agent breakdown, per-model costs, 30-day chart
+- [x] Store in token_usage table (with `source` column: agent vs log_scan)
+- [x] TokensSection: per-agent breakdown, per-model costs, 30-day chart
 - [ ] Sidebar: token cost in AgentMiniCard
 
-### T11 — Re-launch Stopped Agents
+### T11 — Re-launch Stopped Agents ✅
 **Complexity**: Low
 Button on stopped/completed agents to re-launch with same task description.
 **Files**: `renderer/.../ProjectsSection.tsx`, `renderer/.../ResourcesSection.tsx`, `hooks/use-trpc.ts`
 **Acceptance**:
-- [ ] "Re-launch" button on inactive agents
-- [ ] Creates new agent with same task + CLI type
-- [ ] Focuses new agent terminal
+- [x] "Re-launch" button on inactive agents
+- [x] Creates new agent with same task + CLI type
+- [x] Focuses new agent terminal
 
-### T14 — Per-Agent Process Metrics
+### T14 — Per-Agent Process Metrics ✅
 **Complexity**: Low
 Show CPU/memory per running agent process in Resources tab.
 **Files**: `main/system/resources.ts`, `renderer/.../ResourcesSection.tsx`
 **Acceptance**:
-- [ ] Query `ps -o pcpu,rss -p <pid>` for running agents
-- [ ] Show in Resources agent table
+- [x] Query `ps -o pcpu,rss -p <pid>` for running agents
+- [x] Show in Resources agent table
 
 ---
 
@@ -62,35 +62,36 @@ Show CPU/memory per running agent process in Resources tab.
 > Everything related to terminal rendering, splitting, diffs, and scrollback.
 > Touches: `renderer/components/terminal/`, `renderer/components/workspace/sections/DiffSection.tsx`, terminal stores.
 
-### T02 — Diff Viewer
+### T02 — Diff Viewer ✅
 **Complexity**: High
 Real diff viewer with syntax highlighting. Show git diffs for project or worktree.
 **Files**: `renderer/.../DiffSection.tsx` (rewrite), new diff rendering component, `main/ipc/procedures/` (diff queries), `packages/core-rust/src/git/mod.rs` (get_worktree_diff exists)
 **Acceptance**:
-- [ ] Unified diff view
-- [ ] Split (side-by-side) view toggle
+- [x] Unified diff view
+- [x] Split (side-by-side) view toggle
 - [ ] Syntax highlighting (Shiki)
-- [ ] Per-file navigation
-- [ ] Refresh on file changes
+- [x] Per-file navigation
+- [x] Refresh on file changes
+- [x] Binary file detection (shows "Binary file changed" for .png, .jpg, .db, .node, etc.)
 
-### T08 — Terminal Split Panes
+### T08 — Terminal Split Panes ✅
 **Complexity**: High
 Split terminal views within a single agent tab (horizontal/vertical), like tmux.
 **Files**: `renderer/.../TerminalPanel.tsx` (refactor), new `TerminalSplitView.tsx`, `stores/terminals.ts`
 **Acceptance**:
-- [ ] Split current terminal horizontally (Cmd+D) or vertically (Cmd+Shift+D)
-- [ ] Independent terminals per pane
-- [ ] Resize panes by dragging
-- [ ] Close individual panes
+- [x] Split current terminal horizontally (Cmd+D) or vertically (Cmd+Shift+D)
+- [x] Independent terminals per pane
+- [x] Resize panes by dragging
+- [x] Close individual panes
 
-### T16 — Terminal Scrollback Persistence
+### T16 — Terminal Scrollback Persistence ✅
 **Complexity**: Medium
 Save terminal output to disk for review after agent completes or app restarts.
 **Files**: `main/agents/manager.ts` (capture scrollback), new scrollback storage, `renderer/.../TerminalPanel.tsx` (load for stopped agents)
 **Acceptance**:
-- [ ] Terminal output saved to file per agent session
-- [ ] Stopped agents show read-only terminal with historical output
-- [ ] File stored in app userData directory
+- [x] Terminal output saved to file per agent session
+- [x] Stopped agents show read-only terminal with historical output
+- [x] File stored in app userData directory
 
 ---
 
@@ -99,37 +100,38 @@ Save terminal output to disk for review after agent completes or app restarts.
 > New workspace sections with their own DB tables, CRUD, and UI.
 > Touches: `renderer/components/workspace/sections/`, `WorkspaceTabs.tsx`, `WorkspaceView.tsx`, new DB migrations and procedures.
 
-### T04 — Task Viewer from Markdown
+### T04 — Task Viewer from Markdown ✅
 **Complexity**: Medium
 Load .md files with checkbox tasks, render as interactive task list.
 **Files**: `renderer/.../TasksSection.tsx` (rewrite), new `lib/markdown-tasks.ts`, new `ipc/procedures/files.ts`
 **Acceptance**:
-- [ ] Load .md file (file picker or project root TODO.md/plan.md)
-- [ ] Render checkboxes with nesting
-- [ ] Toggle checkbox → writes back to .md file
-- [ ] Progress indicator (X of Y complete)
+- [x] Load .md file (file picker or project root TODO.md/plan.md)
+- [x] Render checkboxes with nesting
+- [x] Toggle checkbox → writes back to .md file
+- [x] Progress indicator (X of Y complete)
 - [ ] Filter: all / pending / completed
+- [x] Auto-probes TODO.md, todo.md, TASKS.md, tasks.md, plan.md, PLAN.md on mount
 
-### T09 — Prompts & Templates
+### T09 — Prompts & Templates ✅
 **Complexity**: Medium
 Save reusable prompts/templates per project. Quick-copy or inject into agent spawn.
 **Files**: New sidebar section, new workspace tab, new DB migration (prompts table), new `ipc/procedures/prompts.ts`, `WorkspaceTabs.tsx`, `WorkspaceView.tsx`
 **Acceptance**:
-- [ ] CRUD prompt templates per project
-- [ ] Categories: task, review, debug, custom
-- [ ] One-click copy to clipboard
-- [ ] Pre-fill SpawnAgentDialog with selected prompt
-- [ ] Sidebar section with recent/pinned prompts
+- [x] CRUD prompt templates per project
+- [x] Categories: task, review, debug, custom
+- [x] One-click copy to clipboard
+- [x] Pre-fill SpawnAgentDialog with selected prompt
+- [x] Sidebar section with recent/pinned prompts
 
-### T10 — File Explorer Panel
+### T10 — File Explorer Panel ✅
 **Complexity**: High
 Browse project files from within Exegol. Tree view in secondary panel.
 **Files**: New `renderer/.../FileExplorer.tsx`, new `ipc/procedures/files.ts` (readdir, stat), `renderer/.../AgentsSection.tsx` (secondary panel)
 **Acceptance**:
-- [ ] Tree view of project directory
-- [ ] Expand/collapse folders, file icons by extension
-- [ ] Click file → show content in secondary panel (read-only)
-- [ ] Respects .gitignore
+- [x] Tree view of project directory
+- [x] Expand/collapse folders, file icons by extension
+- [x] Click file → show content in secondary panel (read-only)
+- [x] Respects .gitignore
 
 ---
 
@@ -138,26 +140,27 @@ Browse project files from within Exegol. Tree view in secondary panel.
 > Background services in main process. No renderer UI overlap with other clusters.
 > Touches: `main/scheduler/`, `main/system/`, `main/ipc/procedures/`, sidebar overviews.
 
-### T05 — Internal Scheduler Engine
+### T05 — Internal Scheduler Engine ✅
 **Complexity**: Medium
 Cron-based scheduler that runs agent tasks on a cadence. Uses croner (already installed).
 **Files**: New `main/scheduler/engine.ts`, new `ipc/procedures/scheduler.ts`, `renderer/.../SchedulerSection.tsx` (rewrite), `renderer/.../SchedulersOverview.tsx`, `main/db/queries.ts`
 **Acceptance**:
-- [ ] Create scheduled task: prompt + cron + CLI agent
-- [ ] Scheduler runs tasks at intervals (croner)
-- [ ] Results in scheduled_results table
-- [ ] SchedulerSection UI: task list, create form, result viewer
-- [ ] SchedulersOverview: active/upcoming tasks
+- [x] Create scheduled task: prompt + cron + CLI agent
+- [x] Scheduler runs tasks at intervals (croner)
+- [x] Results in scheduled_results table
+- [x] SchedulerSection UI: task list, create form, result viewer
+- [x] SchedulersOverview: active/upcoming tasks
+- [x] Event-based completion via onAgentComplete callbacks (replaced 5s polling)
 
-### T07 — Port Detection
+### T07 — Port Detection ✅
 **Complexity**: Medium
 Detect listening ports per project and display in sidebar.
 **Files**: New `main/system/ports.ts`, `ipc/procedures/resources.ts`, `renderer/.../ProjectsSection.tsx`, `main/db/queries.ts`
 **Acceptance**:
-- [ ] Detect ports via `lsof -iTCP -sTCP:LISTEN`
-- [ ] Parse config files (vite.config, next.config, package.json) for expected ports
-- [ ] Show port + status in sidebar per project
-- [ ] Click port → open in browser
+- [x] Detect ports via `lsof -iTCP -sTCP:LISTEN`
+- [x] Parse config files (vite.config, next.config, package.json) for expected ports
+- [x] Show port + status in sidebar per project
+- [x] Click port → open in browser
 - [ ] Conflict warning for duplicate ports
 
 ---
@@ -185,6 +188,7 @@ Apply theme selection from Settings. Currently dark is hardcoded.
 - [x] System theme auto-detection
 - [x] Theme applies immediately (no reload)
 - [x] Terminal colors match theme
+- [x] Smooth CSS transitions for bg/color/border (xterm excluded to prevent flicker)
 
 ### T13 — Recent Sessions (DB-backed) ✅
 **Complexity**: Low
@@ -219,3 +223,18 @@ Store API keys in OS keychain via Electron safeStorage.
 
 **Quick wins** (< 2 hours): T06, T11, T13, T14
 **Heavy lifts** (> 1 day): T02, T08, T10
+
+---
+
+## Post-Merge Improvements (completed)
+
+Cross-cutting quality improvements applied after all cluster branches merged to main:
+
+- [x] **queries.ts refactor**: Split 576 LOC monolith into 7 domain files under `db/queries/` with barrel re-export
+- [x] **Migration 012**: Added `source` column to `token_usage` table (agent vs log_scan distinction)
+- [x] **Scheduler event-based**: Replaced 5s polling with `onAgentComplete` callbacks in SchedulerEngine
+- [x] **IDE PATH validation**: `opener.ts` runs `which` to validate binary exists before launching
+- [x] **Binary file detection**: DiffFileView shows "Binary file changed" for non-text extensions
+- [x] **Task auto-probe**: TasksSection probes TODO.md, todo.md, TASKS.md, tasks.md, plan.md, PLAN.md on mount
+- [x] **Theme transitions**: Smooth CSS transitions for bg/color/border (xterm excluded to prevent flicker)
+- [x] **Biome lint**: 115 files, 0 errors, 0 warnings

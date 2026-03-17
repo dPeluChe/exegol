@@ -22,9 +22,21 @@ export async function openInIde(path: string, ide: string, customPath?: string):
   }
   const commands = IDE_COMMANDS[ide];
   if (!commands) throw new Error(`Unknown IDE: ${ide}`);
-  // Spawn through shell for PATH resolution, with proper escaping
+
+  const command = commands[0];
   const shell = process.env.SHELL || "/bin/zsh";
-  await execFileAsync(shell, ["-ilc", `${commands[0]} ${shellEscape(path)}`], {
+
+  // Validate the binary exists on PATH before launching
+  try {
+    await execFileAsync(shell, ["-ilc", `which ${command}`], { timeout: 5000 });
+  } catch {
+    throw new Error(
+      `IDE '${ide}' (command: ${command}) not found on PATH. Install it or set a custom IDE path in Settings.`,
+    );
+  }
+
+  // Spawn through shell for PATH resolution, with proper escaping
+  await execFileAsync(shell, ["-ilc", `${command} ${shellEscape(path)}`], {
     timeout: 10_000,
   });
 }

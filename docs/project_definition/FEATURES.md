@@ -39,19 +39,23 @@
 - [ ] DB tables exist (worktrees table with auto_cleanup, disk_usage_bytes)
 - [ ] Planned: create worktree per agent, auto-cleanup, branch naming
 
-### P1.5 Diff Viewer — STUB
-- [ ] WorkspaceTabs includes "Diff Viewer" tab
-- [ ] DiffSection component exists as placeholder
-- [ ] No diff rendering, syntax highlighting, or hunk management implemented
+### P1.5 Diff Viewer — DONE
+- [x] WorkspaceTabs includes "Diff Viewer" tab
+- [x] DiffSection with unstaged/staged toggle, unified/split view modes, auto-refresh
+- [x] diff-parser.ts: manual unified diff parser (files, hunks, lines with line numbers)
+- [x] DiffFileView: collapsible per-file section with +/- counts, file status icons
+- [x] DiffHunkView: colored diff lines (unified and split views)
+- [x] Binary file detection: shows "Binary file changed" for .png, .jpg, .db, .node, etc.
+- [ ] Syntax highlighting (Shiki) — not yet implemented
 
-### P1.6 Internal Scheduler — STUB
+### P1.6 Internal Scheduler — DONE
 - [x] DB tables: scheduled_tasks, scheduled_results (with cron_expression, skill_name, cli_agent, etc.)
 - [x] croner v9 dependency installed
 - [x] WorkspaceTabs includes "Scheduler" tab
-- [x] SchedulerSection placeholder component
-- [x] SchedulersOverview in sidebar footer (placeholder)
-- [ ] No scheduler execution engine implemented
-- [ ] No cron job running
+- [x] SchedulerEngine: cron jobs via croner, event-based completion via `onAgentComplete` callbacks (not polling)
+- [x] SchedulerSection: task list with toggle/run/edit/delete, create/edit dialogs, execution history
+- [x] SchedulersOverview in sidebar footer: real data (active count, next run, last result)
+- [x] Concurrent execution guard, 10-minute timeout, runNow for immediate execution
 
 ### P1.7 Agent Sidebar + Live Status — DONE
 - [x] Collapsible sidebar with SidebarSection component (chevron toggle, count badge, action slot)
@@ -68,27 +72,31 @@
 - [ ] Active port display — not implemented
 - [ ] Unread badge for agents needing attention — not implemented
 
-### P1.8 Open in IDE — PLANNED
+### P1.8 Open in IDE — DONE
 - [x] Settings: default IDE selection (vscode, cursor, zed, intellij, webstorm, custom)
 - [x] Custom IDE path setting
-- [ ] Actual "open in IDE" button/action not implemented
+- [x] "Open in IDE" button in sidebar project view (Code2 icon)
+- [x] IDE launcher via shell PATH resolution in `main/ide/opener.ts`
+- [x] Validates IDE binary exists on PATH before launching (clear error message if not found)
 
 ### P1.9 Port Detection — PLANNED
 - [x] DB table: port_registry (port, source, status, worktree_id)
 - [ ] No runtime port detection or UI display
 
-### P1.10 Token Usage Monitor — STUB
-- [x] DB table: token_usage (agent_id, provider, model, input_tokens, output_tokens, estimated_cost_usd)
-- [x] tRPC tokenUsage router exists
+### P1.10 Token Usage Monitor — DONE
+- [x] DB table: token_usage with `source` column (`agent` | `log_scan`) for distinguishing scan imports from agent records (migration 012)
+- [x] tRPC tokenUsage router with scan mutation (JSONL parser) and history query
 - [x] WorkspaceTabs includes "Token Usage" tab
-- [x] TokensSection placeholder component
-- [ ] No actual log parsing from CLI agents
-- [ ] No real-time tracking
+- [x] TokensSection: summary cards (cost, input/output tokens, tool calls), model cost breakdown with CSS bars
+- [x] Claude Code JSONL log parser (`main/tokens/log-parser.ts`)
+- [ ] Parsers for other CLIs (Codex, Aider) — not yet implemented
 
-### P1.11 Task Viewer from Markdown — STUB
+### P1.11 Task Viewer from Markdown — DONE
 - [x] WorkspaceTabs includes "Tasks" tab
-- [x] TasksSection placeholder component
-- [ ] No markdown parsing or checkbox rendering
+- [x] TasksSection: file picker, progress bar, interactive checkbox list with write-back
+- [x] markdown-tasks.ts parser for `- [ ]`/`- [x]` tasks with depth and line tracking
+- [x] Auto-probes project root on mount for: TODO.md, todo.md, TASKS.md, tasks.md, plan.md, PLAN.md
+- [x] File I/O procedures: readFile, writeFile, pickFile, listDirectory (path-guarded)
 
 ### P1.12 Host Resource Monitor — PARTIAL
 - [x] Background metrics collector: CPU (delta-based), RAM (vm_stat on macOS), disk (df)
@@ -102,22 +110,25 @@
 
 ### P1.13 SQLite State — DONE
 - [x] libSQL (not better-sqlite3) in main process
-- [x] 10 tables: projects, agents, worktrees, sessions, scheduled_tasks, scheduled_results, token_usage, port_registry, host_metrics, settings
-- [x] 10 sequential migrations with tracking table (_migrations)
+- [x] 11 tables: projects, agents, worktrees, sessions, scheduled_tasks, scheduled_results, token_usage, port_registry, host_metrics, settings, prompts
+- [x] 12 sequential migrations with tracking table (_migrations)
 - [x] WAL mode
 - [x] Migration 010: adds 'stopped' status to agents (table recreation)
+- [x] Migration 011: adds prompts table
+- [x] Migration 012: adds `source` column to token_usage (`agent` | `log_scan`)
 
 ### P1.14 Settings — DONE
-- [x] SettingsPanel with 4 tabs: General, Agent CLIs, Terminal, Shortcuts
+- [x] SettingsPanel with 5 tabs: General, Agent CLIs, Terminal, Shortcuts, API Keys
 - [x] General: default IDE, theme (dark/light/system), global hotkey
 - [x] Agent CLIs: configure command + args + env for each CLI type
 - [x] Terminal: font size, font family
 - [x] Keyboard Shortcuts: categorized display (Navigation, Agents, Terminal)
+- [x] API Keys: per-provider management with safeStorage encryption (OS keychain)
 - [x] Settings persisted to DB (settings table, key-value store)
 - [x] Save/Reset buttons with dirty state tracking
 - [x] Global hotkey: Cmd+Shift+E to bring app to front
-- [ ] API key management (OS keychain) — not implemented
-- [ ] Theme actually applied — dark theme hardcoded
+- [x] Theme system: light/dark/system with CSS variables, smooth transitions for bg/color/border (xterm excluded)
+- [x] Theme applies immediately (no reload), terminal colors match theme
 
 ### P1.15 Keyboard Shortcuts — DONE (added post-initial-plan)
 - [x] Cmd+B: Toggle sidebar

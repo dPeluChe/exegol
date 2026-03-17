@@ -72,7 +72,7 @@ Every technology choice is justified with data from ecosystem research. See [RES
 
 ### Schema
 
-10 migrations implemented (`apps/desktop/src/main/db/migrations.ts`). Tables created via sequential migration IDs (001-010).
+12 migrations implemented (`apps/desktop/src/main/db/migrations.ts`). Tables created via sequential migration IDs (001-012). Queries split into domain files under `db/queries/` (helpers, projects, agents, worktrees, token-usage, scheduler, prompts) with barrel re-export from `queries.ts`.
 
 ```sql
 -- ─── Implemented tables (migrations 001-010) ───
@@ -130,7 +130,8 @@ plans (
 -- Observability
 token_usage (
   id, agent_id, provider, model, input_tokens, output_tokens,
-  estimated_cost_usd, tool_call_count, recorded_at
+  estimated_cost_usd, tool_call_count, recorded_at,
+  source              -- 'agent' | 'log_scan' (migration 012, distinguishes live agent records from JSONL scan imports)
 )
 
 port_registry (

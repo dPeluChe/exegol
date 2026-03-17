@@ -1,0 +1,35 @@
+import type { Project, ProjectCreate } from "@exegol/shared";
+import type Database from "libsql";
+import { mapProjectRow, nanoid } from "./helpers";
+
+export function listProjects(db: Database.Database): Project[] {
+  const rows = db.prepare("SELECT * FROM projects ORDER BY last_opened_at DESC").all();
+  return (rows as Record<string, unknown>[]).map(mapProjectRow);
+}
+
+export function getProject(db: Database.Database, id: string): Project | null {
+  const row = db.prepare("SELECT * FROM projects WHERE id = ?").get(id);
+  return row ? mapProjectRow(row as Record<string, unknown>) : null;
+}
+
+export function createProject(db: Database.Database, data: ProjectCreate): Project {
+  const id = nanoid();
+  const now = Math.floor(Date.now() / 1000);
+
+  db.prepare(
+    `INSERT INTO projects (id, name, path, git_remote, default_branch, default_ide, created_at, last_opened_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, data.name, data.path, data.gitRemote, data.defaultBranch, data.defaultIde, now, now);
+
+  // biome-ignore lint/style/noNonNullAssertion: row was just inserted
+  return getProject(db, id)!;
+}
+
+export function updateProjectLastOpened(db: Database.Database, id: string): void {
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare("UPDATE projects SET last_opened_at = ? WHERE id = ?").run(now, id);
+}
+
+export function deleteProject(db: Database.Database, id: string): void {
+  db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+}

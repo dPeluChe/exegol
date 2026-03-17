@@ -20,8 +20,8 @@
 │         │                                              │         │
 │  ┌──────┴──────┐  ┌──────────┐  ┌──────────────────┐  │         │
 │  │   libSQL    │  │ node-pty │  │  IPC handlers     │  │         │
-│  │  (10 tables │  │ (agents) │  │  terminal:write   │  │         │
-│  │  10 migr.)  │  │          │  │  terminal:resize  │  │         │
+│  │  (11 tables │  │ (agents) │  │  terminal:write   │  │         │
+│  │  12 migr.)  │  │          │  │  terminal:resize  │  │         │
 │  └─────────────┘  └──────────┘  │  dialog, window   │  │         │
 │                                  └──────────────────┘  │         │
 │                                                         │         │
@@ -97,10 +97,12 @@ AgentManager (singleton via getAgentManager())
 │   ├── proc.onData → forward to all renderer windows via terminal:data IPC
 │   │   └── Also parse for status updates (currentStep, status changes)
 │   └── proc.onExit → cleanup: remove from map, set final status (completed/failed)
+│       └── Fire completionCallbacks (used by scheduler for event-based completion)
 ├── stop(db, agentId) → void
 │   ├── Send SIGTERM via proc.kill()
 │   ├── Wait up to 5s for exit, then SIGKILL
 │   └── DB updated by onExit handler
+├── onAgentComplete(agentId, callback) → void  # Register one-shot completion callback
 ├── getProcess(agentId) → IPty | undefined
 ├── listRunning() → string[]
 ├── write(agentId, data) → void       # Terminal input forwarding
@@ -172,24 +174,29 @@ AgentStatusParser
 └── getStatus(agentId) → { status, currentStep, updatedAt }
 ```
 
-### Internal Scheduler (DB Schema Only)
+### Internal Scheduler (Implemented)
 
-DB tables `scheduled_tasks` and `scheduled_results` exist. The `croner` package is listed as a dependency. No scheduler execution engine is implemented yet. UI shows a placeholder section.
+`SchedulerEngine` singleton manages cron jobs via croner. Located at `apps/desktop/src/main/scheduler/engine.ts`.
 
-**Planned design**:
 ```
-Scheduler
-├── create(task: ScheduledTask) → taskId
-│   ├── Parse cron expression or interval
-│   ├── Store in SQLite scheduled_tasks table
-│   └── Register in internal timer (croner)
-├── run(taskId) → void
-│   ├── Spawn agent via AgentManager (dedicated worktree)
-│   ├── On completion: store result in scheduled_results
-│   └── Send to inbox panel for human review
-├── pause/resume/delete/list
-└── config per task: prompt, cronExpression, skillName, cliAgent, maxTokenBudget, enabled
+SchedulerEngine (singleton via getSchedulerEngine())
+├── start(db) → void                  # Load enabled tasks from DB, register cron jobs
+├── stop() → void                     # Cancel all cron jobs
+├── addTask(task) → void              # Register cron job via croner
+├── removeTask(taskId) → void         # Cancel cron job
+├── pauseTask(taskId) → void          # Unregister cron job, keep in DB
+├── resumeTask(taskId) → void         # Re-register cron job
+├── runNow(taskId) → void             # Immediate execution (bypasses cron schedule)
+└── onCronFire(task) → void (internal)
+    ├── Concurrent execution guard (runningTasks Set prevents duplicates)
+    ├── Create agent via DB insert
+    ├── Spawn via AgentManager
+    ├── Await completion via event-based onAgentComplete callback (10-min timeout)
+    ├── Record result in scheduled_results
+    └── Update last_run_at, next_run_at, last_result_status
 ```
+
+**Key design**: The scheduler uses event-based completion via `AgentManager.onAgentComplete()` callbacks instead of polling. This eliminates the overhead of periodic status checks and reacts immediately when an agent process exits.
 
 ### Hook Engine (Not Yet Implemented)
 
@@ -526,8 +533,16 @@ exegol/
 │       │   │   │   └── status-parser.ts # Parse agent stdout for live status
 │       │   │   ├── db/
 │       │   │   │   ├── client.ts       # libSQL init + WAL mode
-│       │   │   │   ├── migrations.ts   # 10 migrations
-│       │   │   │   └── queries.ts      # SQL helpers
+│       │   │   │   ├── migrations.ts   # 12 migrations (001-012)
+│       │   │   │   ├── queries.ts      # Barrel re-export of domain query modules
+│       │   │   │   └── queries/        # Domain-split query files
+│       │   │   │       ├── helpers.ts       # Row mappers + nanoid
+│       │   │   │       ├── projects.ts
+│       │   │   │       ├── agents.ts
+│       │   │   │       ├── worktrees.ts
+│       │   │   │       ├── token-usage.ts
+│       │   │   │       ├── scheduler.ts
+│       │   │   │       └── prompts.ts
 │       │   │   ├── ipc/
 │       │   │   │   ├── router.ts       # tRPC appRouter (5 sub-routers)
 │       │   │   │   ├── trpc.ts         # tRPC init
@@ -600,8 +615,7 @@ apps/desktop/src/main/
 ├── mcp/         # MCPHost (JS wrapper around Rust rmcp)
 ├── skills/      # SkillLoader + Progressive Disclosure
 ├── memory/      # Layered memory system
-├── plans/       # PlanFSM
-└── scheduler/   # Cron task execution engine
+└── plans/       # PlanFSM
 
 skills/          # Built-in SKILL.md files (batch, review-pr, debug, plan)
 ```
