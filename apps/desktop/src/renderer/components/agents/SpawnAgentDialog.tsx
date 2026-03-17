@@ -2,7 +2,7 @@ import { AGENT_CLI_TYPES, type AgentCliType } from "@exegol/shared";
 import { Button, cn, Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Rocket, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSpawnAgent } from "../../hooks/use-trpc";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -30,6 +30,20 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
   const [taskDescription, setTaskDescription] = useState("");
   const [useWorktree, setUseWorktree] = useState(true);
   const [branchName, setBranchName] = useState("");
+
+  // Listen for prompt injection from Prompts tab
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if (!(e instanceof CustomEvent)) return;
+      const detail: unknown = e.detail;
+      if (detail && typeof detail === "object" && "content" in detail) {
+        const { content } = detail as { content: string };
+        if (typeof content === "string") setTaskDescription(content);
+      }
+    };
+    window.addEventListener("exegol:spawn-agent-with-prompt", handler);
+    return () => window.removeEventListener("exegol:spawn-agent-with-prompt", handler);
+  }, []);
 
   const spawnAgent = useSpawnAgent();
   const addAgent = useAgentStore((s) => s.addAgent);

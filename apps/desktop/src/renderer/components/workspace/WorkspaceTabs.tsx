@@ -5,15 +5,24 @@ import {
   Clock,
   Coins,
   Cpu,
+  FileText,
   GitCompare,
   type LucideIcon,
 } from "lucide-react";
 
-export type WorkspaceSection = "agents" | "tasks" | "diff" | "scheduler" | "tokens" | "resources";
+export type WorkspaceSection =
+  | "agents"
+  | "tasks"
+  | "prompts"
+  | "diff"
+  | "scheduler"
+  | "tokens"
+  | "resources";
 
 const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "agents", label: "Agents", icon: Cpu },
   { id: "tasks", label: "Tasks", icon: CheckSquare },
+  { id: "prompts", label: "Prompts", icon: FileText },
   { id: "diff", label: "Diff Viewer", icon: GitCompare },
   { id: "scheduler", label: "Scheduler", icon: Clock },
   { id: "tokens", label: "Token Usage", icon: Coins },

@@ -1,18 +1,20 @@
 import { Button } from "@exegol/ui";
-import { Cpu, Rocket } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Cpu, FolderTree, Rocket } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useAgentStore } from "../../../stores/agents";
 import { SpawnAgentDialog } from "../../agents/SpawnAgentDialog";
 import { TerminalPanel } from "../../terminal/TerminalPanel";
 import { TerminalTabs } from "../../terminal/TerminalTabs";
+import { FileExplorer } from "../FileExplorer";
 
 export function AgentsSection() {
-  const { projectId, agents } = useProjectContext();
+  const { project, projectId, agents } = useProjectContext();
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
   const [spawnDialogOpen, setSpawnDialogOpen] = useState(false);
-  const [secondaryPanel, _setSecondaryPanel] = useState<React.ReactNode | null>(null);
+  const [showFiles, setShowFiles] = useState(false);
+  const toggleFiles = useCallback(() => setShowFiles((prev) => !prev), []);
 
   useEffect(() => {
     const handler = () => setSpawnDialogOpen(true);
@@ -29,12 +31,25 @@ export function AgentsSection() {
       {hasAgents ? (
         <>
           {/* Tab bar */}
-          <TerminalTabs onSpawnClick={() => setSpawnDialogOpen(true)} />
+          <TerminalTabs
+            onSpawnClick={() => setSpawnDialogOpen(true)}
+            extraActions={
+              <button
+                type="button"
+                onClick={toggleFiles}
+                className={`flex h-7 items-center gap-1 rounded px-2 text-[11px] transition-colors ${showFiles ? "bg-white/10 text-text-primary" : "text-text-muted hover:bg-white/5"}`}
+                title="Toggle file explorer"
+              >
+                <FolderTree className="h-3 w-3" />
+                Files
+              </button>
+            }
+          />
 
           {/* Resizable panel layout */}
           <PanelGroup direction="horizontal" autoSaveId="workspace-panels">
             {/* Main terminal panel - always visible */}
-            <Panel id="terminal" order={1} defaultSize={secondaryPanel ? 60 : 100}>
+            <Panel id="terminal" order={1} defaultSize={showFiles ? 60 : 100}>
               {focusedAgentId ? (
                 <TerminalPanel key={focusedAgentId} agentId={focusedAgentId} />
               ) : (
@@ -46,12 +61,12 @@ export function AgentsSection() {
               )}
             </Panel>
 
-            {/* Secondary panel - for diff viewer, browser preview, etc. (Phase 2) */}
-            {secondaryPanel && (
+            {/* File explorer panel */}
+            {showFiles && project && (
               <>
                 <PanelResizeHandle className="w-px hover:w-0.5 transition-all bg-border" />
-                <Panel id="secondary" order={2} defaultSize={40} minSize={20}>
-                  {secondaryPanel}
+                <Panel id="file-explorer" order={2} defaultSize={40} minSize={20}>
+                  <FileExplorer rootPath={project.path} />
                 </Panel>
               </>
             )}
