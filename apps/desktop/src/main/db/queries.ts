@@ -341,18 +341,19 @@ export function getProjectTokenUsageSummary(
   since: number,
 ): TokenUsageSummary {
   const now = Math.floor(Date.now() / 1000);
+  // Include both agent-linked entries and scan-imported entries
   const row = db
     .prepare(
       `SELECT
-        COALESCE(SUM(t.input_tokens), 0) AS total_input_tokens,
-        COALESCE(SUM(t.output_tokens), 0) AS total_output_tokens,
-        COALESCE(SUM(t.estimated_cost_usd), 0.0) AS total_cost_usd,
-        COALESCE(SUM(t.tool_call_count), 0) AS total_tool_calls
-      FROM token_usage t
-      JOIN agents a ON a.id = t.agent_id
-      WHERE a.project_id = ? AND t.recorded_at >= ?`,
+        COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0.0) AS total_cost_usd,
+        COALESCE(SUM(tool_call_count), 0) AS total_tool_calls
+      FROM token_usage
+      WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR agent_id = ?)
+        AND recorded_at >= ?`,
     )
-    .get(projectId, since) as Record<string, unknown>;
+    .get(projectId, `scan:${projectId}`, since) as Record<string, unknown>;
 
   return {
     totalInputTokens: (row.total_input_tokens as number) ?? 0,
@@ -370,14 +371,15 @@ export function getProjectTokenUsage(
   days: number,
 ): TokenUsage[] {
   const since = Math.floor(Date.now() / 1000) - days * 86400;
+  // Include both agent-linked entries and scan-imported entries
   const rows = db
     .prepare(
-      `SELECT t.* FROM token_usage t
-       JOIN agents a ON a.id = t.agent_id
-       WHERE a.project_id = ? AND t.recorded_at >= ?
-       ORDER BY t.recorded_at DESC`,
+      `SELECT * FROM token_usage
+       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR agent_id = ?)
+         AND recorded_at >= ?
+       ORDER BY recorded_at DESC`,
     )
-    .all(projectId, since);
+    .all(projectId, `scan:${projectId}`, since);
   return (rows as Record<string, unknown>[]).map(mapTokenUsageRow);
 }
 

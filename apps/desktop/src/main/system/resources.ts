@@ -246,14 +246,101 @@ async function getWorktreeCount(dirPath: string): Promise<number> {
   }
 }
 
+/**
+ * Find direct child PIDs for a single parent PID.
+ * node-pty spawns `$SHELL -ilc "claude ..."` — the stored PID is the shell,
+ * not the real CLI tool.
+ */
+async function getChildPids(parentPid: number): Promise<number[]> {
+  try {
+    const { stdout } = await execFileAsync("pgrep", ["-P", String(parentPid)], {
+      timeout: 2_000,
+    });
+    return stdout
+      .trim()
+      .split("\n")
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => n > 0);
+  } catch {
+    // pgrep exits non-zero if no children found
+    return [];
+  }
+}
+
+async function getAgentProcessMetrics(
+  pids: number[],
+): Promise<{ pid: number; cpu: number; memory: number }[]> {
+  if (pids.length === 0) return [];
+
+  try {
+    // For each agent shell PID, find its child processes (the real CLI tool)
+    const pidToChildren = new Map<number, number[]>();
+    const allPids = new Set(pids);
+
+    await Promise.all(
+      pids.map(async (parentPid) => {
+        const children = await getChildPids(parentPid);
+        pidToChildren.set(parentPid, children);
+        for (const c of children) allPids.add(c);
+      }),
+    );
+
+    // Get metrics for all PIDs in one ps call
+    const pidList = Array.from(allPids).join(",");
+    const { stdout } = await execFileAsync("ps", ["-o", "pid=,pcpu=,rss=", "-p", pidList], {
+      timeout: 3_000,
+    });
+
+    const metricsMap = new Map<number, { cpu: number; memory: number }>();
+    for (const line of stdout.trim().split("\n")) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 3) continue;
+      const pid = parseInt(parts[0] ?? "0", 10);
+      const cpu = parseFloat(parts[1] ?? "0");
+      const rss = parseInt(parts[2] ?? "0", 10) * 1024; // RSS in KB → bytes
+      if (pid > 0) {
+        metricsMap.set(pid, { cpu, memory: rss });
+      }
+    }
+
+    // Aggregate: for each agent PID, sum shell + its specific children
+    const results: { pid: number; cpu: number; memory: number }[] = [];
+    for (const parentPid of pids) {
+      let totalCpu = 0;
+      let totalMem = 0;
+
+      const self = metricsMap.get(parentPid);
+      if (self) {
+        totalCpu += self.cpu;
+        totalMem += self.memory;
+      }
+
+      for (const childPid of pidToChildren.get(parentPid) ?? []) {
+        const child = metricsMap.get(childPid);
+        if (child) {
+          totalCpu += child.cpu;
+          totalMem += child.memory;
+        }
+      }
+
+      results.push({ pid: parentPid, cpu: totalCpu, memory: totalMem });
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 export async function getProjectMetrics(
   projectPath: string,
   projectId: string,
   projectName: string,
+  agentPids: number[] = [],
 ): Promise<ProjectMetrics> {
-  const [diskUsage, worktreeCount] = await Promise.all([
+  const [diskUsage, worktreeCount, agentProcesses] = await Promise.all([
     getDirectorySize(projectPath),
     getWorktreeCount(projectPath),
+    getAgentProcessMetrics(agentPids),
   ]);
 
   return {
@@ -262,6 +349,6 @@ export async function getProjectMetrics(
     projectPath,
     diskUsage,
     worktreeCount,
-    agentProcesses: [],
+    agentProcesses,
   };
 }

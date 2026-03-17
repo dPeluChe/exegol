@@ -41,6 +41,7 @@ export type AgentCreate = {
   cliType: AgentCliType;
   taskDescription: string;
   useWorktree?: boolean;
+  branchName?: string;
 };
 
 export type RecentSession = {

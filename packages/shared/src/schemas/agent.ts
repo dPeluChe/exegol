@@ -22,6 +22,7 @@ export const agentCreateSchema = z.object({
   cliType: agentCliTypeSchema,
   taskDescription: z.string().min(1, "Task description is required"),
   useWorktree: z.boolean().optional(),
+  branchName: z.string().optional(),
 });
 
 export type AgentSchema = z.infer<typeof agentSchema>;
