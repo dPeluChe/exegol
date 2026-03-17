@@ -15,6 +15,15 @@ export type ScheduledTask = {
   enabled: boolean;
 };
 
+export type ScheduledTaskCreate = {
+  projectId: string;
+  prompt: string;
+  cronExpression: string;
+  cliAgent: string;
+  skillName?: string;
+  maxTokenBudget?: number;
+};
+
 export type ScheduledResult = {
   id: string;
   taskId: string;

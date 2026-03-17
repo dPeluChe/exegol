@@ -1,8 +1,8 @@
 import type { Project } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
-import { ChevronDown, ChevronRight, Code2, FolderOpen, GitBranch } from "lucide-react";
+import { ChevronDown, ChevronRight, Code2, FolderOpen, GitBranch, Globe } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useOpenInIde, useProjects, useSettings } from "../../hooks/use-trpc";
+import { type PortInfo, useOpenInIde, useProjectPorts, useProjects, useSettings } from "../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 
@@ -45,6 +45,53 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
       />
       <span className="flex-1 truncate">{agent.taskDescription}</span>
     </button>
+  );
+}
+
+// ─── Port Badges ─────────────────────────────────────────────────────────────
+
+function PortBadges({ projectPath }: { projectPath: string }) {
+  const { data: ports } = useProjectPorts(projectPath);
+
+  if (!ports || ports.length === 0) return null;
+
+  // Deduplicate by port number, prefer runtime over config
+  const uniquePorts = new Map<number, PortInfo>();
+  for (const p of ports) {
+    const existing = uniquePorts.get(p.port);
+    if (!existing || (p.source === "runtime" && existing.source === "config")) {
+      uniquePorts.set(p.port, p);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 py-0.5">
+      <Globe className="h-2.5 w-2.5 text-text-muted" />
+      {Array.from(uniquePorts.values()).map((p) => (
+        <button
+          key={p.port}
+          type="button"
+          onClick={() => window.open(`http://localhost:${p.port}`, "_blank")}
+          className={cn(
+            "inline-flex items-center gap-0.5 rounded px-1 py-px text-[9px] transition-colors hover:bg-white/10",
+            p.source === "runtime" ? "text-green-400" : "text-text-muted",
+          )}
+          title={
+            p.source === "runtime"
+              ? `PID ${(p as { pid: number }).pid} (${(p as { process: string }).process})`
+              : `From ${(p as { file: string }).file}`
+          }
+        >
+          <span
+            className={cn(
+              "h-1 w-1 rounded-full",
+              p.source === "runtime" ? "bg-green-500" : "bg-zinc-500",
+            )}
+          />
+          {p.port}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -126,6 +173,9 @@ function ProjectItem({
             </div>
             <OpenInIdeButton projectId={project.id} />
           </div>
+
+          {/* Detected ports */}
+          <PortBadges projectPath={project.path} />
 
           {/* Agents: all active + last 3 inactive */}
           {agents.length > 0 ? (
