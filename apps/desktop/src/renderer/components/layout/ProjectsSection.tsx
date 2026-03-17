@@ -185,39 +185,24 @@ export function ProjectsSection({ onAddProject }: ProjectsSectionProps) {
   const agentList = Object.values(agents)
 
   return (
-    <div className="px-3 py-2">
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Projects
-        </span>
-        <button
-          onClick={onAddProject}
-          className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
-          title="Add project"
-        >
-          <Plus className="h-3 w-3" />
-        </button>
-      </div>
-
-      <div className="space-y-0.5">
-        {projects && projects.length > 0 ? (
-          projects.map((project) => (
-            <ProjectItem
-              key={project.id}
-              project={project}
-              isSelected={project.id === activeProjectId}
-              isExpanded={expandedIds.has(project.id)}
-              onSelect={() => setActiveProject(project.id)}
-              onToggle={() => toggleProject(project.id)}
-              agents={agentList.filter((a) => a.projectId === project.id)}
-            />
-          ))
-        ) : (
-          <p className="py-2 text-center text-xs text-text-muted">
-            No projects yet
-          </p>
-        )}
-      </div>
+    <div className="space-y-0.5">
+      {projects && projects.length > 0 ? (
+        projects.map((project) => (
+          <ProjectItem
+            key={project.id}
+            project={project}
+            isSelected={project.id === activeProjectId}
+            isExpanded={expandedIds.has(project.id)}
+            onSelect={() => setActiveProject(project.id)}
+            onToggle={() => toggleProject(project.id)}
+            agents={agentList.filter((a) => a.projectId === project.id)}
+          />
+        ))
+      ) : (
+        <p className="py-2 text-center text-xs text-text-muted">
+          No projects yet
+        </p>
+      )}
     </div>
   )
 }
