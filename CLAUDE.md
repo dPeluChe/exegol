@@ -5,12 +5,12 @@ Electron + React + Rust desktop app for orchestrating AI coding agents (Claude C
 ## Current State (March 2026)
 
 ### What Works
-- App launches, UI renders with dark theme and hidden titlebar (macOS traffic lights)
+- App launches, UI renders with dark/light/system theme and hidden titlebar (macOS traffic lights)
 - Project management: add/remove/list projects, persist to libSQL
 - Agent spawning: spawn CLI agents (Claude Code, Codex, Aider, Gemini) via node-pty through user's login shell
 - Terminal emulation: xterm.js with WebGL addon, real-time PTY streaming
 - Agent status parsing: real-time extraction of current step from agent stdout
-- Settings: full settings panel with 4 tabs (General, Agent CLIs, Terminal, Shortcuts), persisted to DB
+- Settings: full settings panel with 5 tabs (General, Agent CLIs, Terminal, Shortcuts, API Keys), persisted to DB
 - Sidebar: collapsible sections (Projects, Recent Sessions), footer with Schedulers/Resources overviews
 - Workspace tabs: Agents, Tasks, Diff Viewer, Scheduler, Token Usage, Resources sections
 - Keyboard shortcuts: Cmd+B sidebar toggle, Cmd+, settings, Cmd+N new agent, Cmd+. stop agent, Cmd+1-9 agent switch, Cmd+[/] tab navigation
@@ -18,6 +18,10 @@ Electron + React + Rust desktop app for orchestrating AI coding agents (Claude C
 - Resources monitoring: background collector every 10s with CPU (delta-based), RAM (vm_stat on macOS), disk (df)
 - Global hotkey: Cmd+Shift+E to bring app to front
 - Stale agent cleanup on startup (marks running/spawning agents as stopped)
+- Open in IDE: button in sidebar project view to launch project in configured IDE (VS Code, Cursor, Zed, etc.)
+- Theme system: light/dark/system with CSS variables, system preference listener, theme-aware xterm.js terminal
+- Recent sessions: sidebar shows last 10 completed/stopped agent sessions from DB, click to navigate
+- API key management: encrypted storage via OS keychain (safeStorage), injected as env vars on agent spawn
 
 ### What's Placeholder / Not Yet Functional
 - Workspace sections: Tasks, Diff Viewer, Scheduler, Token Usage, Resources — UI shells exist but are placeholder
@@ -46,8 +50,10 @@ exegol/
 │   │   │   │   ├── client.ts       # libSQL database init + WAL mode
 │   │   │   │   ├── migrations.ts   # 10 migrations (projects → agents_add_stopped_status)
 │   │   │   │   └── queries.ts      # SQL query helpers
+│   │   │   ├── ide/
+│   │   │   │   └── opener.ts       # IDE launcher (vscode, cursor, zed, intellij, webstorm, custom)
 │   │   │   ├── ipc/
-│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources)
+│   │   │   │   ├── router.ts       # tRPC appRouter (projects, agents, settings, tokenUsage, resources, apiKeys)
 │   │   │   │   ├── trpc.ts         # tRPC init (router, publicProcedure)
 │   │   │   │   ├── trpc-ipc.ts     # createCaller proxy traversal over IPC
 │   │   │   │   ├── context.ts      # tRPC context (db instance)
@@ -55,8 +61,11 @@ exegol/
 │   │   │   │       ├── projects.ts
 │   │   │   │       ├── agents.ts
 │   │   │   │       ├── settings.ts
+│   │   │   │       ├── apikeys.ts
 │   │   │   │       ├── token-usage.ts
 │   │   │   │       └── resources.ts
+│   │   │   ├── security/
+│   │   │   │   └── keystore.ts     # API key encryption via safeStorage (OS keychain)
 │   │   │   ├── system/
 │   │   │   │   └── resources.ts    # Background metrics collector (CPU, RAM via vm_stat, disk)
 │   │   │   └── terminal/
@@ -68,6 +77,7 @@ exegol/
 │   │   │   │   └── ProjectContext.tsx  # Project + agents provider, syncs DB → Zustand
 │   │   │   ├── hooks/
 │   │   │   │   ├── use-hotkeys.ts  # Global keyboard shortcuts
+│   │   │   │   ├── use-theme.ts    # Theme hook: sets data-theme on <html>, system preference listener
 │   │   │   │   └── use-trpc.ts     # tRPC query/mutation hooks via IPC
 │   │   │   ├── stores/
 │   │   │   │   ├── app.ts          # Zustand: activeView, activeProjectId, sidebarCollapsed (persisted)
@@ -95,11 +105,12 @@ exegol/
 │   │   │       │   ├── ProjectList.tsx
 │   │   │       │   └── AddProjectDialog.tsx
 │   │   │       ├── settings/
-│   │   │       │   ├── SettingsPanel.tsx      # Tabbed settings: General, CLIs, Terminal, Shortcuts
+│   │   │       │   ├── SettingsPanel.tsx      # Tabbed settings: General, CLIs, Terminal, Shortcuts, API Keys
 │   │   │       │   ├── GeneralSettings.tsx
 │   │   │       │   ├── CliSettings.tsx
 │   │   │       │   ├── TerminalSettings.tsx
-│   │   │       │   └── KeyboardShortcuts.tsx
+│   │   │       │   ├── KeyboardShortcuts.tsx
+│   │   │       │   └── ApiKeysSettings.tsx    # Per-provider API key management UI
 │   │   │       ├── workspace/
 │   │   │       │   ├── WorkspaceView.tsx      # Section switcher
 │   │   │       │   ├── WorkspaceTabs.tsx      # Agents|Tasks|Diff|Scheduler|Tokens|Resources
@@ -139,7 +150,8 @@ exegol/
 │       └── src/                    # Git worktree ops scaffold
 ├── docs/
 │   ├── project_definition/         # Architecture, features, stack, competitors
-│   └── tasks_completed/            # Work log by month
+│   ├── tasks_completed/            # Work log by month
+│   └── review_notes/              # PR review notes per cluster
 ├── turbo.json
 ├── biome.json                      # Biome 2.4.7 config
 └── package.json                    # Bun workspace root
@@ -169,7 +181,9 @@ cargo check                         # Type-check (run inside packages/core-rust)
 
 - **tRPC over IPC**: tRPC routers in main process, invoked via `createCaller` proxy traversal. Renderer calls `window.api.trpc.invoke(path, input)` which maps to `ipcMain.handle('trpc', ...)`. The handler splits the dot-separated path and walks the caller proxy (note: `hasOwnProperty` does not work on tRPC Proxies).
 - **libSQL (not better-sqlite3)**: Uses `libsql` npm package v0.5.x. Same synchronous API as better-sqlite3 but adds native vector embeddings, encryption at rest, and multi-writer support. Database stored in `~/.exegol/data/exegol.db`.
-- **Agent spawn flow**: AgentManager spawns the user's login shell (`$SHELL -ilc "claude ..."`) via node-pty so PATH, nvm, etc. are resolved. `getShellPath()` resolves the full PATH once at startup by running the shell. Output streams to renderer via `ipcMain.send('terminal:data', agentId, data)`.
+- **Agent spawn flow**: AgentManager spawns the user's login shell (`$SHELL -ilc "claude ..."`) via node-pty so PATH, nvm, etc. are resolved. `getShellPath()` resolves the full PATH once at startup by running the shell. Output streams to renderer via `ipcMain.send('terminal:data', agentId, data)`. API keys from the keystore are injected as environment variables (ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY).
+- **Theme system**: `useTheme()` hook reads `settings.theme` and sets `data-theme` attribute on `<html>`. CSS variables in `globals.css` change per `[data-theme="dark"]` / `[data-theme="light"]`. System theme tracks `prefers-color-scheme` media query.
+- **API key storage**: `safeStorage` from Electron encrypts keys using the OS keychain. Stored in the `settings` table with `apikey_<provider>` keys. Falls back to plaintext if encryption is unavailable.
 - **Zustand with persist**: `useAppStore` persists `activeProjectId`, `activeView`, `sidebarCollapsed` to localStorage under key `exegol-app-state`.
 - **Background metrics collector**: Starts on app launch, collects CPU/RAM/disk every 10s. CPU is delta-based (no blocking sleep). RAM uses `vm_stat` on macOS for accurate available memory (not `os.freemem()`). Renderer reads cached metrics synchronously via tRPC.
 - **Database migrations**: 10 sequential migrations in `migrations.ts`, tracked in `_migrations` table. Migration 010 adds `stopped` to agent status enum by recreating the table.

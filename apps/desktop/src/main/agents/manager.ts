@@ -6,6 +6,7 @@ import type Database from "libsql";
 import type { IPty } from "node-pty";
 import * as pty from "node-pty";
 import { getAgent, setAgentPid, stopAgent, updateAgentStatus } from "../db/queries";
+import { getApiKey } from "../security/keystore";
 import { AgentStatusParser } from "./status-parser";
 
 /**
@@ -75,6 +76,20 @@ export class AgentManager {
     }
     const fullCommand = cmdParts.join(" ");
 
+    // Inject API keys from keystore as environment variables
+    const apiKeyEnv: Record<string, string> = {};
+    const keyMappings = [
+      { provider: "anthropic", envVar: "ANTHROPIC_API_KEY" },
+      { provider: "openai", envVar: "OPENAI_API_KEY" },
+      { provider: "google", envVar: "GOOGLE_API_KEY" },
+    ];
+    for (const { provider, envVar } of keyMappings) {
+      const key = getApiKey(db, provider);
+      if (key) {
+        apiKeyEnv[envVar] = key;
+      }
+    }
+
     // Spawn through the user's login shell so PATH, nvm, etc. are resolved
     const userShell = process.env.SHELL || "/bin/zsh";
     console.log("[AgentManager] Spawning:", {
@@ -90,6 +105,7 @@ export class AgentManager {
       cwd,
       env: {
         ...process.env,
+        ...apiKeyEnv,
         ...cliConfig.env,
         TERM: "xterm-256color",
       } as Record<string, string>,

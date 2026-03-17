@@ -171,6 +171,45 @@ export function setAgentPid(db: Database.Database, agentId: string, pid: number)
   db.prepare("UPDATE agents SET pid = ? WHERE id = ?").run(pid, agentId);
 }
 
+// ---------------------------------------------------------------------------
+// Recent Sessions
+// ---------------------------------------------------------------------------
+
+export interface RecentSessionRow {
+  id: string;
+  taskDescription: string;
+  cliType: string;
+  status: string;
+  startedAt: number | null;
+  stoppedAt: number | null;
+  projectName: string;
+  projectId: string;
+}
+
+export function listRecentSessions(db: Database.Database, limit = 10): RecentSessionRow[] {
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.task_description, a.cli_type, a.status, a.started_at, a.stopped_at,
+              p.name as project_name, p.id as project_id
+       FROM agents a
+       JOIN projects p ON a.project_id = p.id
+       WHERE a.status IN ('completed', 'failed', 'stopped')
+       ORDER BY a.stopped_at DESC
+       LIMIT ?`,
+    )
+    .all(limit) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    id: r.id as string,
+    taskDescription: r.task_description as string,
+    cliType: r.cli_type as string,
+    status: r.status as string,
+    startedAt: (r.started_at as number) ?? null,
+    stoppedAt: (r.stopped_at as number) ?? null,
+    projectName: r.project_name as string,
+    projectId: r.project_id as string,
+  }));
+}
+
 /** Mark any agents still in active status as 'stopped' — their processes died with the app */
 export function cleanupStaleAgents(db: Database.Database): void {
   db.prepare(

@@ -1,8 +1,8 @@
 import type { Project } from "@exegol/shared";
-import { cn } from "@exegol/ui";
-import { ChevronDown, ChevronRight, FolderOpen, GitBranch } from "lucide-react";
+import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
+import { ChevronDown, ChevronRight, Code2, FolderOpen, GitBranch } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useProjects } from "../../hooks/use-trpc";
+import { useOpenInIde, useProjects, useSettings } from "../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 
@@ -82,17 +82,24 @@ function ProjectItem({
           isSelected ? "bg-white/10 text-text-primary" : "text-text-secondary hover:bg-white/5",
         )}
       >
-        {/* Expand/collapse chevron */}
-        <button
-          type="button"
+        {/* Expand/collapse chevron — span to avoid nested button */}
+        <span
+          role="none"
           onClick={(e) => {
             e.stopPropagation();
             onToggle();
           }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.stopPropagation();
+              e.preventDefault();
+              onToggle();
+            }
+          }}
           className="shrink-0"
         >
           {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </button>
+        </span>
 
         {/* Folder icon */}
         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text-muted" />
@@ -108,13 +115,16 @@ function ProjectItem({
         )}
       </button>
 
-      {/* Expanded content: branch info + agents */}
+      {/* Expanded content: branch info + open in IDE + agents */}
       {isExpanded && (
         <div className="ml-5 border-l border-border/50 pl-2">
-          {/* Git info line */}
-          <div className="flex items-center gap-1.5 py-1 text-[10px] text-text-muted">
-            <GitBranch className="h-2.5 w-2.5" />
-            <span>{project.defaultBranch}</span>
+          {/* Git info + Open in IDE */}
+          <div className="flex items-center justify-between py-1">
+            <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
+              <GitBranch className="h-2.5 w-2.5" />
+              <span>{project.defaultBranch}</span>
+            </div>
+            <OpenInIdeButton projectId={project.id} />
           </div>
 
           {/* Agents: all active + last 3 inactive */}
@@ -145,6 +155,38 @@ function ProjectItem({
         </div>
       )}
     </div>
+  );
+}
+
+// ─── Open in IDE Button ──────────────────────────────────────────────────────
+
+function OpenInIdeButton({ projectId }: { projectId: string }) {
+  const { data: settings } = useSettings();
+  const openInIde = useOpenInIde();
+  const ideName = settings?.defaultIde ?? "vscode";
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openInIde.mutate({
+              projectId,
+              ide: settings?.defaultIde,
+              customPath: settings?.customIdePath ?? undefined,
+            });
+          }}
+          className="rounded p-0.5 text-text-muted hover:bg-white/5 hover:text-text-secondary"
+        >
+          <Code2 className="h-3 w-3" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right">
+        <p>Open in {ideName}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

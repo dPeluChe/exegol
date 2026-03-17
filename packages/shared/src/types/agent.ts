@@ -42,3 +42,14 @@ export type AgentCreate = {
   taskDescription: string;
   useWorktree?: boolean;
 };
+
+export type RecentSession = {
+  id: string;
+  taskDescription: string;
+  cliType: string;
+  status: AgentStatus;
+  startedAt: number | null;
+  stoppedAt: number | null;
+  projectName: string;
+  projectId: string;
+};

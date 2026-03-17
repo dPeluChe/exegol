@@ -1,4 +1,5 @@
 import { agentRouter } from "./procedures/agents";
+import { apiKeysRouter } from "./procedures/apikeys";
 import { projectRouter } from "./procedures/projects";
 import { resourcesRouter } from "./procedures/resources";
 import { settingsRouter } from "./procedures/settings";
@@ -11,6 +12,7 @@ export const appRouter = router({
   settings: settingsRouter,
   tokenUsage: tokenUsageRouter,
   resources: resourcesRouter,
+  apiKeys: apiKeysRouter,
 });
 
 export type AppRouter = typeof appRouter;

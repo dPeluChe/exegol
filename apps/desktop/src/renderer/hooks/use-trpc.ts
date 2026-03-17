@@ -3,6 +3,7 @@ import type {
   AgentCreate,
   Project,
   ProjectCreate,
+  RecentSession,
   Settings,
   TokenUsageSummary,
 } from "@exegol/shared";
@@ -86,6 +87,25 @@ export function useStopAgent() {
   });
 }
 
+// ─── Recent Sessions ─────────────────────────────────────────────────────────
+
+export function useRecentSessions(limit = 10) {
+  return useQuery({
+    queryKey: ["recentSessions", limit],
+    queryFn: () => trpcInvoke<RecentSession[]>("agents.recentSessions", { limit }),
+    refetchInterval: 30_000,
+  });
+}
+
+// ─── Open in IDE ─────────────────────────────────────────────────────────────
+
+export function useOpenInIde() {
+  return useMutation({
+    mutationFn: (data: { projectId: string; ide?: string; customPath?: string }) =>
+      trpcMutate<{ success: boolean }>("projects.openInIde", data),
+  });
+}
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 export function useSettings() {
@@ -153,6 +173,37 @@ export function useProjectMetrics(
       trpcInvoke<ProjectMetrics>("resources.project", { projectId, projectPath, projectName }),
     refetchInterval: 15_000, // Project metrics are heavier (du, git worktree)
     enabled: !!projectId && !!projectPath,
+  });
+}
+
+// ─── API Keys ───────────────────────────────────────────────────────────────
+
+export function useApiKeys() {
+  return useQuery({
+    queryKey: ["apiKeys"],
+    queryFn: () => trpcInvoke<Array<{ provider: string; hasKey: boolean }>>("apiKeys.list"),
+  });
+}
+
+export function useSetApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { provider: string; key: string }) =>
+      trpcMutate<{ success: boolean }>("apiKeys.set", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+    },
+  });
+}
+
+export function useDeleteApiKey() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { provider: string }) =>
+      trpcMutate<{ success: boolean }>("apiKeys.delete", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+    },
   });
 }
 

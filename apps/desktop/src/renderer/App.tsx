@@ -8,6 +8,7 @@ import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useHotkeys } from "./hooks/use-hotkeys";
+import { useTheme } from "./hooks/use-theme";
 import { useAppStore } from "./stores/app";
 
 function MainContent() {
@@ -34,6 +35,7 @@ export default function App() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
 
   useHotkeys();
+  useTheme();
 
   const showSidebar = activeView === "workspace";
 
