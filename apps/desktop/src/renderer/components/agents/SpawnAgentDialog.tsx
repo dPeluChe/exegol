@@ -46,6 +46,7 @@ export function SpawnAgentDialog({ open, onOpenChange, projectId }: SpawnAgentDi
         cliType,
         taskDescription: taskDescription.trim(),
         useWorktree,
+        branchName: useWorktree && branchName.trim() ? branchName.trim() : undefined,
       });
 
       addAgent({

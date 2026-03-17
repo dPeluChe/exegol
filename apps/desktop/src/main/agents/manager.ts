@@ -5,14 +5,29 @@ import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import type { IPty } from "node-pty";
 import * as pty from "node-pty";
-import { getAgent, setAgentPid, stopAgent, updateAgentStatus } from "../db/queries";
+import {
+  createWorktree as dbCreateWorktree,
+  removeWorktree as dbRemoveWorktree,
+  getAgent,
+  setAgentPid,
+  setAgentWorktree,
+  stopAgent,
+  updateAgentStatus,
+} from "../db/queries";
 import { getApiKey } from "../security/keystore";
 import { AgentStatusParser } from "./status-parser";
 
-/**
- * Get the full user shell PATH. Electron doesn't inherit the full PATH
- * from the user's shell on macOS/Linux.
- */
+// ─── Rust native module (git2 worktree ops) ──────────────────────────────
+
+let coreRust: typeof import("@exegol/core-rust") | null = null;
+try {
+  coreRust = require("@exegol/core-rust");
+} catch {
+  console.warn("[AgentManager] @exegol/core-rust native module not available — worktrees disabled");
+}
+
+// ─── Shell PATH resolution ────────────────────────────────────────────────
+
 function getShellPath(): string {
   try {
     const shell = process.env.SHELL || "/bin/zsh";
@@ -34,6 +49,20 @@ function _getFullPath(): string {
   return resolvedPath;
 }
 
+// ─── Worktree helpers ─────────────────────────────────────────────────────
+
+function slugifyBranchName(description: string): string {
+  return `exegol/${description
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .slice(0, 50)
+    .replace(/-$/, "")}`;
+}
+
+// ─── AgentManager Singleton ───────────────────────────────────────────────
+
 let instance: AgentManager | null = null;
 
 export function getAgentManager(): AgentManager {
@@ -43,14 +72,22 @@ export function getAgentManager(): AgentManager {
   return instance;
 }
 
+interface WorktreeRecord {
+  dbId: string;
+  worktreeName: string;
+  worktreePath: string;
+  repoPath: string;
+}
+
 export class AgentManager {
   private processes: Map<string, IPty> = new Map();
   private statusParsers: Map<string, AgentStatusParser> = new Map();
+  private worktrees: Map<string, WorktreeRecord> = new Map();
 
   /**
    * Spawn an agent process with the configured CLI tool.
    */
-  async spawn(db: Database.Database, agent: Agent, _config: AgentCreate): Promise<void> {
+  async spawn(db: Database.Database, agent: Agent, config: AgentCreate): Promise<void> {
     const cliConfig = this.resolveCliConfig(agent.cliType);
     if (!cliConfig) {
       throw new Error(`No CLI configuration found for agent type: ${agent.cliType}`);
@@ -65,7 +102,47 @@ export class AgentManager {
       throw new Error(`Project ${agent.projectId} not found`);
     }
 
-    const cwd = project.path;
+    let cwd = project.path;
+
+    // ── Worktree creation ──────────────────────────────────────────────
+    if (config.useWorktree && coreRust) {
+      const branchName = config.branchName?.trim() || slugifyBranchName(agent.taskDescription);
+      // Use branch name without prefix as worktree directory name
+      const worktreeName = branchName.replace(/\//g, "-");
+
+      try {
+        const wtInfo = coreRust.createWorktree(project.path, worktreeName, branchName);
+        cwd = wtInfo.path;
+
+        // Record in DB
+        const dbWt = dbCreateWorktree(db, {
+          projectId: agent.projectId,
+          agentId: agent.id,
+          path: wtInfo.path,
+          branchName,
+          autoCleanup: true,
+        });
+        setAgentWorktree(db, agent.id, dbWt.id);
+
+        this.worktrees.set(agent.id, {
+          dbId: dbWt.id,
+          worktreeName,
+          worktreePath: wtInfo.path,
+          repoPath: project.path,
+        });
+
+        console.log("[AgentManager] Created worktree:", {
+          branch: branchName,
+          path: wtInfo.path,
+        });
+      } catch (err) {
+        console.error(
+          "[AgentManager] Failed to create worktree, falling back to project root:",
+          err,
+        );
+        // Continue without worktree — don't fail the spawn
+      }
+    }
 
     // Build the full command string to run through the user's shell
     const cmdParts = [cliConfig.command, ...cliConfig.args];
@@ -150,6 +227,9 @@ export class AgentManager {
         const finalStatus = exitCode === 0 ? "completed" : "failed";
         stopAgent(db, agent.id, finalStatus);
       }
+
+      // ── Worktree cleanup on exit ──────────────────────────────────────
+      this.cleanupWorktree(db, agent.id);
     });
   }
 
@@ -232,5 +312,31 @@ export class AgentManager {
     // TODO: Read from DB settings once settings are persisted
     const config = DEFAULT_SETTINGS.agentClis.find((c) => c.cliType === cliType);
     return config ?? null;
+  }
+
+  /**
+   * Clean up a worktree after an agent exits.
+   * If no changes, remove worktree + branch. If changes exist, keep it.
+   */
+  private cleanupWorktree(db: Database.Database, agentId: string): void {
+    const wt = this.worktrees.get(agentId);
+    if (!wt || !coreRust) return;
+
+    try {
+      const hasChanges = coreRust.worktreeHasChanges(wt.worktreePath);
+      if (hasChanges) {
+        console.log(
+          `[AgentManager] Worktree '${wt.worktreeName}' has changes — keeping at ${wt.worktreePath}`,
+        );
+      } else {
+        coreRust.removeWorktree(wt.repoPath, wt.worktreeName, false);
+        dbRemoveWorktree(db, wt.dbId);
+        console.log(`[AgentManager] Cleaned up empty worktree '${wt.worktreeName}'`);
+      }
+    } catch (err) {
+      console.error(`[AgentManager] Failed to clean up worktree '${wt.worktreeName}':`, err);
+    }
+
+    this.worktrees.delete(agentId);
   }
 }

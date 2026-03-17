@@ -8,6 +8,7 @@ import type {
   ScheduledTask,
   ScheduledTaskCreate,
   Settings,
+  TokenUsage,
   TokenUsageSummary,
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -130,12 +131,39 @@ export function useUpdateSettings() {
 
 // ─── Token Usage ─────────────────────────────────────────────────────────────
 
-export function useTokenUsageSummary(agentId?: string) {
+export function useTokenUsageSummary(agentId?: string, projectId?: string) {
   return useQuery({
-    queryKey: ["tokenUsage", agentId ?? "all"],
-    queryFn: () =>
-      trpcInvoke<TokenUsageSummary>("tokenUsage.summary", agentId ? { agentId } : undefined),
+    queryKey: ["tokenUsage", agentId ?? projectId ?? "all"],
+    queryFn: () => {
+      const input: { agentId?: string; projectId?: string } = {};
+      if (agentId) input.agentId = agentId;
+      else if (projectId) input.projectId = projectId;
+      return trpcInvoke<TokenUsageSummary>(
+        "tokenUsage.summary",
+        Object.keys(input).length > 0 ? input : undefined,
+      );
+    },
     refetchInterval: 5_000,
+  });
+}
+
+export function useTokenHistory(projectId: string | null) {
+  return useQuery({
+    queryKey: ["tokenUsage", "history", projectId],
+    queryFn: () => trpcInvoke<TokenUsage[]>("tokenUsage.history", { projectId, days: 30 }),
+    enabled: !!projectId,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useTokenScan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { projectId: string }) =>
+      trpcMutate<{ imported: number; total: number }>("tokenUsage.scan", input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tokenUsage"] });
+    },
   });
 }
 

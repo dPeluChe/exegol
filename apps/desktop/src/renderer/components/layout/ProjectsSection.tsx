@@ -1,10 +1,11 @@
 import type { Project } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
-import { ChevronDown, ChevronRight, Code2, FolderOpen, GitBranch, Globe } from "lucide-react";
+import { ChevronDown, ChevronRight, Code2, FolderOpen, GitBranch, Globe, RotateCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { type PortInfo, useOpenInIde, useProjectPorts, useProjects, useSettings } from "../../hooks/use-trpc";
+import { type PortInfo, useOpenInIde, useProjectPorts, useProjects, useSettings, useSpawnAgent } from "../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
+import { useTerminalStore } from "../../stores/terminals";
 
 // ─── Agent Mini Card ──────────────────────────────────────────────────────────
 
@@ -21,30 +22,75 @@ const STATUS_COLORS: Record<string, string> = {
 
 function AgentMiniCard({ agent }: { agent: AgentState }) {
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
+  const addAgent = useAgentStore((s) => s.addAgent);
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
+  const createTerminal = useTerminalStore((s) => s.createTerminal);
+  const spawnAgent = useSpawnAgent();
   const isFocused = focusedAgentId === agent.id;
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
+  const isInactive = ["completed", "failed", "stopped"].includes(agent.status);
+
+  const handleRelaunch = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const newAgent = await spawnAgent.mutateAsync({
+        projectId: agent.projectId,
+        cliType: agent.cliType,
+        taskDescription: agent.taskDescription,
+      });
+      addAgent({
+        id: newAgent.id,
+        projectId: newAgent.projectId,
+        cliType: newAgent.cliType,
+        status: newAgent.status,
+        currentStep: newAgent.currentStep,
+        taskDescription: newAgent.taskDescription,
+        branchName: null,
+        tokenUsage: { input: 0, output: 0, cost: 0 },
+        startedAt: newAgent.startedAt,
+      });
+      createTerminal(newAgent.id);
+      setFocusedAgent(newAgent.id);
+    } catch (err) {
+      console.error("[AgentMiniCard] Failed to relaunch agent:", err);
+    }
+  };
 
   return (
-    <button
-      type="button"
-      onClick={() => setFocusedAgent(agent.id)}
+    <div
       className={cn(
-        "flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[10px] transition-colors",
+        "flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-[10px] transition-colors",
         isFocused
           ? "bg-white/10 text-text-primary"
           : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
       )}
     >
-      <span
-        className={cn(
-          "h-1.5 w-1.5 shrink-0 rounded-full",
-          STATUS_COLORS[agent.status] ?? "bg-zinc-500",
-          isActive && "animate-status-pulse",
-        )}
-      />
-      <span className="flex-1 truncate">{agent.taskDescription}</span>
-    </button>
+      <button
+        type="button"
+        onClick={() => setFocusedAgent(agent.id)}
+        className="flex flex-1 items-center gap-1.5 text-left"
+      >
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            STATUS_COLORS[agent.status] ?? "bg-zinc-500",
+            isActive && "animate-status-pulse",
+          )}
+        />
+        <span className="flex-1 truncate">{agent.taskDescription}</span>
+      </button>
+      {isInactive && (
+        <button
+          type="button"
+          onClick={handleRelaunch}
+          disabled={spawnAgent.isPending}
+          className="shrink-0 rounded p-0.5 text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+          title="Re-launch agent"
+        >
+          <RotateCw className={cn("h-2.5 w-2.5", spawnAgent.isPending && "animate-spin")} />
+        </button>
+      )}
+    </div>
   );
 }
 

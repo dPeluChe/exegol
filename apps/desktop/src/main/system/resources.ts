@@ -246,14 +246,44 @@ async function getWorktreeCount(dirPath: string): Promise<number> {
   }
 }
 
+async function getAgentProcessMetrics(
+  pids: number[],
+): Promise<{ pid: number; cpu: number; memory: number }[]> {
+  if (pids.length === 0) return [];
+
+  try {
+    const pidList = pids.join(",");
+    const { stdout } = await execFileAsync("ps", ["-o", "pid=,pcpu=,rss=", "-p", pidList], {
+      timeout: 3_000,
+    });
+
+    const results: { pid: number; cpu: number; memory: number }[] = [];
+    for (const line of stdout.trim().split("\n")) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 3) continue;
+      const pid = parseInt(parts[0] ?? "0", 10);
+      const cpu = parseFloat(parts[1] ?? "0");
+      const rss = parseInt(parts[2] ?? "0", 10) * 1024; // RSS is in KB, convert to bytes
+      if (pid > 0) {
+        results.push({ pid, cpu, memory: rss });
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 export async function getProjectMetrics(
   projectPath: string,
   projectId: string,
   projectName: string,
+  agentPids: number[] = [],
 ): Promise<ProjectMetrics> {
-  const [diskUsage, worktreeCount] = await Promise.all([
+  const [diskUsage, worktreeCount, agentProcesses] = await Promise.all([
     getDirectorySize(projectPath),
     getWorktreeCount(projectPath),
+    getAgentProcessMetrics(agentPids),
   ]);
 
   return {
@@ -262,6 +292,6 @@ export async function getProjectMetrics(
     projectPath,
     diskUsage,
     worktreeCount,
-    agentProcesses: [],
+    agentProcesses,
   };
 }

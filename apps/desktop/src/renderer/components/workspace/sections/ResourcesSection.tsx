@@ -1,7 +1,8 @@
 import { cn } from "@exegol/ui";
 import { FolderGit2, GitBranch, HardDrive } from "lucide-react";
+import { useMemo } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { useProjectMetrics } from "../../../hooks/use-trpc";
+import { useAgents, useProjectMetrics } from "../../../hooks/use-trpc";
 import { useAgentStore } from "../../../stores/agents";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -50,10 +51,27 @@ export function ResourcesSection() {
     project?.name ?? null,
   );
 
+  // Fetch DB agents to get PIDs for process metrics lookup
+  const { data: dbAgents } = useAgents(project?.id ?? null);
+
   const projectAgents = agents;
   const runningAgents = projectAgents.filter(
     (a) => a.status === "running" || a.status === "spawning",
   );
+
+  // Map agent IDs to their process metrics via PID
+  const agentProcessMap = useMemo(() => {
+    const map = new Map<string, { cpu: number; memory: number }>();
+    if (!dbAgents || !projectMetrics?.agentProcesses) return map;
+    for (const dbAgent of dbAgents) {
+      if (!dbAgent.pid) continue;
+      const proc = projectMetrics.agentProcesses.find((p) => p.pid === dbAgent.pid);
+      if (proc) {
+        map.set(dbAgent.id, { cpu: proc.cpu, memory: proc.memory });
+      }
+    }
+    return map;
+  }, [dbAgents, projectMetrics?.agentProcesses]);
 
   if (!project) {
     return (
@@ -108,41 +126,55 @@ export function ResourcesSection() {
                     <th className="px-3 py-2 text-left font-medium">Agent</th>
                     <th className="px-3 py-2 text-left font-medium">Task</th>
                     <th className="px-3 py-2 text-left font-medium">Status</th>
+                    <th className="px-3 py-2 text-right font-medium">CPU</th>
+                    <th className="px-3 py-2 text-right font-medium">Memory</th>
                     <th className="px-3 py-2 text-left font-medium">Current Step</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {runningAgents.map((agent) => (
-                    <tr key={agent.id} className="bg-bg-secondary text-text-secondary">
-                      <td className="px-3 py-2">
-                        <span className="font-medium text-text-primary">{agent.cliType}</span>
-                      </td>
-                      <td className="max-w-[200px] truncate px-3 py-2">{agent.taskDescription}</td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                            agent.status === "running" && "bg-green-500/10 text-green-400",
-                            agent.status === "spawning" && "bg-blue-500/10 text-blue-400",
-                            agent.status === "waiting_input" && "bg-yellow-500/10 text-yellow-400",
-                          )}
-                        >
+                  {runningAgents.map((agent) => {
+                    const proc = agentProcessMap.get(agent.id);
+                    return (
+                      <tr key={agent.id} className="bg-bg-secondary text-text-secondary">
+                        <td className="px-3 py-2">
+                          <span className="font-medium text-text-primary">{agent.cliType}</span>
+                        </td>
+                        <td className="max-w-[200px] truncate px-3 py-2">
+                          {agent.taskDescription}
+                        </td>
+                        <td className="px-3 py-2">
                           <span
                             className={cn(
-                              "h-1.5 w-1.5 rounded-full",
-                              agent.status === "running" && "bg-green-500",
-                              agent.status === "spawning" && "bg-blue-500",
-                              agent.status === "waiting_input" && "bg-yellow-500",
+                              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                              agent.status === "running" && "bg-green-500/10 text-green-400",
+                              agent.status === "spawning" && "bg-blue-500/10 text-blue-400",
+                              agent.status === "waiting_input" &&
+                                "bg-yellow-500/10 text-yellow-400",
                             )}
-                          />
-                          {agent.status}
-                        </span>
-                      </td>
-                      <td className="max-w-[250px] truncate px-3 py-2 text-text-muted">
-                        {agent.currentStep ?? "—"}
-                      </td>
-                    </tr>
-                  ))}
+                          >
+                            <span
+                              className={cn(
+                                "h-1.5 w-1.5 rounded-full",
+                                agent.status === "running" && "bg-green-500",
+                                agent.status === "spawning" && "bg-blue-500",
+                                agent.status === "waiting_input" && "bg-yellow-500",
+                              )}
+                            />
+                            {agent.status}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {proc ? `${proc.cpu.toFixed(1)}%` : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {proc ? formatBytes(proc.memory) : "—"}
+                        </td>
+                        <td className="max-w-[250px] truncate px-3 py-2 text-text-muted">
+                          {agent.currentStep ?? "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
