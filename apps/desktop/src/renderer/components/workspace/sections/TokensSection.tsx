@@ -124,8 +124,8 @@ function TrendChart({
 
 // ─── Model Breakdown Table ───────────────────────────────────────────────
 
-function ModelBreakdownTable({ projectId }: { projectId: string }) {
-  const { data: models } = useModelBreakdown(projectId);
+function ModelBreakdownTable({ projectId, days }: { projectId: string; days: number }) {
+  const { data: models } = useModelBreakdown(projectId, days);
   const maxCost = models?.[0]?.totalCost ?? 1;
 
   if (!models || models.length === 0) {
@@ -178,8 +178,8 @@ function ModelBreakdownTable({ projectId }: { projectId: string }) {
 
 // ─── Agent Cost Table ────────────────────────────────────────────────────
 
-function AgentCostTable({ projectId }: { projectId: string }) {
-  const { data: agents } = useAgentCosts(projectId);
+function AgentCostTable({ projectId, days }: { projectId: string; days: number }) {
+  const { data: agents } = useAgentCosts(projectId, days);
 
   if (!agents || agents.length === 0) {
     return <p className="text-xs text-text-muted">No agent cost data yet</p>;
@@ -222,7 +222,7 @@ function AgentCostTable({ projectId }: { projectId: string }) {
 export function TokensSection() {
   const { project } = useProjectContext();
   const { data: summary } = useTokenUsageSummary(undefined, project?.id ?? undefined);
-  const { data: trendData } = useDailyTrend(project?.id ?? null);
+  const { data: trendData } = useDailyTrend(project?.id ?? null, days);
   const scanMutation = useTokenScan();
   const [days, setDays] = useState(30);
 
@@ -324,7 +324,7 @@ export function TokensSection() {
             Cost by Model
           </h4>
           <div className="rounded-lg border border-border bg-bg-secondary p-4">
-            <ModelBreakdownTable projectId={project.id} />
+            <ModelBreakdownTable projectId={project.id} days={days} />
           </div>
         </div>
 
@@ -333,7 +333,7 @@ export function TokensSection() {
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Cost by Agent
           </h4>
-          <AgentCostTable projectId={project.id} />
+          <AgentCostTable projectId={project.id} days={days} />
         </div>
 
         {/* Scan result */}
