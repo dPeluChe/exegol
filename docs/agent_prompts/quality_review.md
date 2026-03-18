@@ -1,58 +1,58 @@
 # Quality Review — Post-Implementation
 
-> Usar cuando el agente reporta que terminó la implementación.
-> Objetivo: asegurar que el código cumple las buenas prácticas del proyecto antes de validación técnica.
+> Use when the agent reports that implementation is complete.
+> Goal: ensure code meets project best practices before technical validation.
 
 ---
 
-Ya terminaste la implementación. Ahora necesito que hagas una revisión exhaustiva de calidad antes de proceder al PR.
+You have finished the implementation. Now perform a thorough quality review before proceeding to the PR.
 
-## Checklist de Revisión
+## Review Checklist
 
-### 1. LOC por archivo (MAX 400-500)
-- Revisa TODOS los archivos que creaste o modificaste
-- Si alguno supera 400 LOC, divídelo en módulos más pequeños
-- Componentes UI: extraer sub-componentes si un archivo tiene más de 2 secciones lógicas
-- Lógica de negocio: separar queries, helpers, types en archivos propios
+### 1. Lines of Code per file (MAX 400-500)
+- Review ALL files you created or modified
+- If any file exceeds 400 LOC, split it into smaller modules
+- UI components: extract sub-components if a file has more than 2 logical sections
+- Business logic: separate queries, helpers, types into their own files
 
-### 2. Reutilización de componentes existentes
-Revisa que estés usando los componentes de `@exegol/ui` y `components/common/` que ya existen:
-- `EmptyState` — para estados vacíos (no crear divs ad-hoc)
-- `LoadingSpinner` — para loading states
-- `StatusDot` — para indicadores de estado
-- `KeyValue` — para pares label/value
-- `ConfirmDialog` — para confirmaciones destructivas
-- `SidebarSection` — para secciones colapsables
-- `Button, Badge, Input, ScrollArea, Separator, Tooltip` — de `@exegol/ui`
-- `cn()` — de `@exegol/ui/lib/utils` para className merging
+### 2. Reuse existing components
+Verify you are using the components from `@exegol/ui` and `components/common/` that already exist:
+- `EmptyState` — for empty states (do not create ad-hoc divs)
+- `LoadingSpinner` — for loading states
+- `StatusDot` — for status indicators
+- `KeyValue` — for label/value pairs
+- `ConfirmDialog` — for destructive action confirmations
+- `SidebarSection` — for collapsible sections
+- `Button, Badge, Input, ScrollArea, Separator, Tooltip` — from `@exegol/ui`
+- `cn()` — from `@exegol/ui/lib/utils` for className merging
 
-No reimplementes lo que ya existe. Busca en `components/common/index.ts` y `packages/ui/src/`.
+Do not reimplement what already exists. Check `components/common/index.ts` and `packages/ui/src/`.
 
-### 3. Evaluación de useEffect
-Para CADA useEffect que hayas escrito, evalúa con estas reglas del React team:
-1. **¿Se puede derivar el estado?** Si el effect solo hace setState desde otro state/prop → reemplazar con cálculo inline o useMemo
-2. **¿Es un fetch?** → Debería usar el patrón de tRPC hooks (use-trpc.ts), NO useEffect + fetch
-3. **¿Es respuesta a acción del usuario?** → Mover a event handler, no effect
-4. **¿Es sync con sistema externo (DOM, xterm, IPC)?** → OK usar useMountEffect de `hooks/use-mount-effect.ts`
-5. **¿Usa key reset pattern?** → Preferir `key` prop sobre dependency arrays complejos
+### 3. useEffect audit
+For EVERY useEffect you wrote, evaluate against these rules from the React team:
+1. **Can the state be derived?** If the effect only does setState from other state/props → replace with inline computation or useMemo
+2. **Is it a fetch?** → Should use the tRPC hooks pattern (use-trpc.ts), NOT useEffect + fetch
+3. **Is it a response to user action?** → Move to event handler, not effect
+4. **Is it syncing with an external system (DOM, xterm, IPC)?** → OK to use useMountEffect from `hooks/use-mount-effect.ts`
+5. **Key reset pattern?** → Prefer `key` prop over complex dependency arrays
 
-Si encuentras algún useEffect innecesario, elimínalo y usa el patrón correcto.
+If you find any unnecessary useEffect, remove it and use the correct pattern.
 
-### 4. Patrones del proyecto
-- **tRPC**: usar `trpcInvoke`/`trpcMutate` de `lib/trpc-client.ts`, no llamadas IPC directas
-- **Zustand**: usar selectores granulares (no destructurar todo el store). Ejemplo: `useAgentStore(s => s.focusedAgentId)` no `const { focusedAgentId, agents, ... } = useAgentStore()`
-- **Types**: compartir tipos via `@exegol/shared`, no redefinir en renderer
-- **DB queries**: en archivos separados bajo `main/db/queries/`, no inline en procedures
-- **IPC procedures**: en archivos propios bajo `main/ipc/procedures/`
-- **Error handling**: try/catch en procedures, errores descriptivos, no silenciar excepciones
-- **Naming**: camelCase para TS, snake_case para DB columns, PascalCase para components
+### 4. Project patterns
+- **tRPC**: use `trpcInvoke`/`trpcMutate` from `lib/trpc-client.ts`, not direct IPC calls
+- **Zustand**: use granular selectors (do not destructure the entire store). Example: `useAgentStore(s => s.focusedAgentId)` not `const { focusedAgentId, agents, ... } = useAgentStore()`
+- **Types**: share types via `@exegol/shared`, do not redefine in renderer
+- **DB queries**: in separate files under `main/db/queries/`, not inline in procedures
+- **IPC procedures**: in their own files under `main/ipc/procedures/`
+- **Error handling**: try/catch in procedures, descriptive errors, do not silently swallow exceptions
+- **Naming**: camelCase for TS, snake_case for DB columns, PascalCase for components
 
-### 5. Documentación
-- Verifica que cada tarea completada tenga su `docs/applied/T{XX}_{name}.md`
-- Cada doc debe incluir:
+### 5. Documentation
+- Verify each completed task has its `docs/applied/T{XX}_{name}.md`
+- Each doc must include:
   - **Inspiration Source**: repo, files studied, pattern applied
   - **What Changed**: list of files created/modified
   - **Architecture Decisions**: why this approach, trade-offs considered
   - **How to Test**: manual testing steps
 
-Haz las correcciones necesarias y dime qué cambiaste.
+Apply all necessary corrections and report what you changed.

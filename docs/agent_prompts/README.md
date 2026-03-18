@@ -1,19 +1,19 @@
 # Agent Prompts
 
-Prompts reutilizables para el ciclo de trabajo con agentes paralelos.
-Se usan en orden secuencial por cada agente al completar su cluster de tareas.
+Reusable prompts for the parallel agent workflow lifecycle.
+Used sequentially by each agent upon completing their task cluster.
 
-## Ciclo de vida
+## Lifecycle
 
 ```
-1. ASSIGNMENT   → Prompt de asignación (uno por agente, en TASK_TODO_V2.md)
-2. REVIEW       → quality_review.md (al terminar implementación)
-3. PRE-PR       → pre_pr_validation.md (antes de crear PR)
+1. ASSIGNMENT   → Per-agent prompt (defined in TASK_TODO_V2.md)
+2. REVIEW       → quality_review.md (after implementation is done)
+3. PRE-PR       → pre_pr_validation.md (before creating the PR)
 ```
 
-## Archivos
+## Files
 
-| Prompt | Cuándo usar | Qué evalúa |
-|--------|-------------|-------------|
-| `quality_review.md` | Cuando el agente dice "ya terminé" | LOC limits, reutilización, useEffect rules, patrones del proyecto, docs |
-| `pre_pr_validation.md` | Después de correcciones de review | Lint 0/0, TypeScript build, Rust check, imports, archivos limpios |
+| Prompt | When to use | What it evaluates |
+|--------|-------------|-------------------|
+| `quality_review.md` | When the agent reports "done" | LOC limits, component reuse, useEffect rules, project patterns, docs |
+| `pre_pr_validation.md` | After review corrections are applied | Lint 0/0, TypeScript build, Rust check, imports, clean files |
