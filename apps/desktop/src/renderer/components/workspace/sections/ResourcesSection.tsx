@@ -1,14 +1,16 @@
+import type { MetricsSnapshot } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Cpu, FolderGit2, GitBranch, HardDrive, MemoryStick, Server } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
+import { useMountEffect } from "../../../hooks/use-mount-effect";
 import {
-  type MetricsSnapshot,
   useAgents,
   useMetricsHistory,
   useProjectMetrics,
   useSystemMetrics,
 } from "../../../hooks/use-trpc";
+import { EmptyState, StatusDot } from "../../common";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -201,19 +203,10 @@ function AgentProcessTable({
                 </td>
                 <td className="max-w-[200px] truncate px-3 py-2">{agent.taskDescription}</td>
                 <td className="px-3 py-2">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                      agent.status === "running" && "bg-green-500/10 text-green-400",
-                      agent.status === "spawning" && "bg-blue-500/10 text-blue-400",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        agent.status === "running" && "bg-green-500",
-                        agent.status === "spawning" && "bg-blue-500",
-                      )}
+                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-text-secondary">
+                    <StatusDot
+                      status={agent.status as import("@exegol/shared").AgentStatus}
+                      size="sm"
                     />
                     {agent.status}
                   </span>
@@ -254,7 +247,8 @@ export function ResourcesSection() {
   const [liveMetrics, setLiveMetrics] = useState<SystemMetricsEvent | null>(null);
   const historyRef = useRef<MetricsSnapshot[]>([]);
 
-  useEffect(() => {
+  // External system sync: IPC push events for live metrics (Rule 4)
+  useMountEffect(() => {
     const cleanup = window.api.onMetrics((m) => {
       setLiveMetrics(m);
       // Append to local history for sparklines between tRPC refreshes
@@ -269,7 +263,7 @@ export function ResourcesSection() {
       ];
     });
     return cleanup;
-  }, []);
+  });
 
   // Merge: prefer pushed live metrics, fall back to tRPC query
   const metrics = liveMetrics ?? systemMetrics;
@@ -296,9 +290,12 @@ export function ResourcesSection() {
 
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-text-muted">Select a project to view resources</p>
-      </div>
+      <EmptyState
+        icon={<Cpu className="h-8 w-8 text-text-muted" />}
+        title="No project selected"
+        description="Select a project to view resources"
+        className="h-full"
+      />
     );
   }
 

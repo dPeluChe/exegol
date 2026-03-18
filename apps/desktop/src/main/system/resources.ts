@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import * as os from "node:os";
 import { promisify } from "node:util";
+import type { MetricsSnapshot } from "@exegol/shared";
 import { BrowserWindow } from "electron";
 
 const execFileAsync = promisify(execFile);
@@ -52,13 +53,6 @@ let prevCpuSnapshot: { idle: number; total: number } | null = null;
 // ─── Metrics history (last 30 data points for sparkline charts) ───────────
 
 const MAX_HISTORY_POINTS = 30;
-
-export interface MetricsSnapshot {
-  cpu: number;
-  memoryPercent: number;
-  diskPercent: number;
-  timestamp: number;
-}
 
 const metricsHistory: MetricsSnapshot[] = [];
 

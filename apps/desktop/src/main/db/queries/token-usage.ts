@@ -1,4 +1,10 @@
-import type { TokenUsage, TokenUsageSummary } from "@exegol/shared";
+import type {
+  AgentCostRow,
+  DailyTrendRow,
+  ModelBreakdownRow,
+  TokenUsage,
+  TokenUsageSummary,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { mapTokenUsageRow, nanoid } from "./helpers";
 
@@ -100,15 +106,6 @@ export function getProjectTokenUsage(
 
 // ─── T19: Per-model breakdown ─────────────────────────────────────────────
 
-export interface ModelBreakdownRow {
-  model: string;
-  provider: string;
-  inputTokens: number;
-  outputTokens: number;
-  totalCost: number;
-  requestCount: number;
-}
-
 export function getModelBreakdown(
   db: Database.Database,
   projectId: string,
@@ -142,15 +139,6 @@ export function getModelBreakdown(
 
 // ─── T19: Per-agent cost table ────────────────────────────────────────────
 
-export interface AgentCostRow {
-  agentId: string;
-  cliType: string;
-  taskDescription: string;
-  totalTokens: number;
-  totalCost: number;
-  sessionCount: number;
-}
-
 export function getAgentCosts(
   db: Database.Database,
   projectId: string,
@@ -183,13 +171,6 @@ export function getAgentCosts(
 }
 
 // ─── T19: Daily trend data ────────────────────────────────────────────────
-
-export interface DailyTrendRow {
-  date: string;
-  totalCost: number;
-  totalTokens: number;
-  requestCount: number;
-}
 
 export function getDailyTrend(
   db: Database.Database,

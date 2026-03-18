@@ -1,25 +1,6 @@
+import type { Activity, ActivityType } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "./helpers";
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-export type ActivityType =
-  | "agent_spawned"
-  | "agent_stopped"
-  | "agent_completed"
-  | "agent_failed"
-  | "scheduler_fired"
-  | "port_detected";
-
-export interface Activity {
-  id: string;
-  type: ActivityType;
-  entityType: string;
-  entityId: string | null;
-  projectId: string | null;
-  description: string;
-  createdAt: number;
-}
 
 // ─── Row mapper ─────────────────────────────────────────────────────────────
 

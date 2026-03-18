@@ -1,8 +1,10 @@
+import type { Activity } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { AlertTriangle, CheckCircle, Clock, Globe, Play, Square, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, Globe, Play, Rss, Square, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { type Activity, useActivities } from "../../../hooks/use-trpc";
+import { useActivities } from "../../../hooks/use-trpc";
+import { EmptyState, LoadingSpinner } from "../../common";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -101,9 +103,12 @@ export function ActivitySection() {
 
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-text-muted">Select a project to view activity</p>
-      </div>
+      <EmptyState
+        icon={<Rss className="h-8 w-8 text-text-muted" />}
+        title="No project selected"
+        description="Select a project to view activity"
+        className="h-full"
+      />
     );
   }
 
@@ -134,13 +139,13 @@ export function ActivitySection() {
       {/* Timeline */}
       <div className="flex-1 overflow-auto">
         {isLoading ? (
-          <div className="flex h-32 items-center justify-center">
-            <p className="text-xs text-text-muted">Loading...</p>
-          </div>
+          <LoadingSpinner size="sm" label="Loading activity..." className="h-32" />
         ) : grouped.length === 0 ? (
-          <div className="flex h-32 items-center justify-center">
-            <p className="text-xs text-text-muted">No activity yet</p>
-          </div>
+          <EmptyState
+            icon={<Rss className="h-8 w-8 text-text-muted" />}
+            title="No activity yet"
+            description="Agent events will appear here as they happen"
+          />
         ) : (
           <div className="divide-y divide-border">
             {grouped.map((group) => (

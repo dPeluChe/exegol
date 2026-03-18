@@ -1,6 +1,11 @@
 import type {
+  Activity,
   Agent,
+  AgentCostRow,
   AgentCreate,
+  DailyTrendRow,
+  MetricsSnapshot,
+  ModelBreakdownRow,
   Project,
   ProjectCreate,
   Prompt,
@@ -171,14 +176,6 @@ export function useTokenScan() {
 }
 
 // T19: Per-model breakdown
-export interface ModelBreakdownRow {
-  model: string;
-  provider: string;
-  inputTokens: number;
-  outputTokens: number;
-  totalCost: number;
-  requestCount: number;
-}
 
 export function useModelBreakdown(projectId: string | null, days = 30) {
   return useQuery({
@@ -191,14 +188,6 @@ export function useModelBreakdown(projectId: string | null, days = 30) {
 }
 
 // T19: Per-agent costs
-export interface AgentCostRow {
-  agentId: string;
-  cliType: string;
-  taskDescription: string;
-  totalTokens: number;
-  totalCost: number;
-  sessionCount: number;
-}
 
 export function useAgentCosts(projectId: string | null, days = 30) {
   return useQuery({
@@ -210,12 +199,6 @@ export function useAgentCosts(projectId: string | null, days = 30) {
 }
 
 // T19: Daily trend
-export interface DailyTrendRow {
-  date: string;
-  totalCost: number;
-  totalTokens: number;
-  requestCount: number;
-}
 
 export function useDailyTrend(projectId: string | null, days = 30) {
   return useQuery({
@@ -250,13 +233,6 @@ export function useSystemMetrics() {
     queryFn: () => trpcInvoke<SystemMetrics>("resources.system"),
     refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
   });
-}
-
-export interface MetricsSnapshot {
-  cpu: number;
-  memoryPercent: number;
-  diskPercent: number;
-  timestamp: number;
 }
 
 export function useMetricsHistory() {
@@ -499,16 +475,6 @@ export function useTogglePinPrompt() {
 }
 
 // ─── Activities (T20) ────────────────────────────────────────────────────────
-
-export interface Activity {
-  id: string;
-  type: string;
-  entityType: string;
-  entityId: string | null;
-  projectId: string | null;
-  description: string;
-  createdAt: number;
-}
 
 export function useActivities(projectId: string | null, type?: string) {
   return useQuery({

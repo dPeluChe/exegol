@@ -1,16 +1,16 @@
-import type { TokenUsageSummary } from "@exegol/shared";
+import type { DailyTrendRow, TokenUsageSummary } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
-import { RefreshCw } from "lucide-react";
+import { Coins, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
-  type DailyTrendRow,
   useAgentCosts,
   useDailyTrend,
   useModelBreakdown,
   useTokenScan,
   useTokenUsageSummary,
 } from "../../../hooks/use-trpc";
+import { EmptyState } from "../../common";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -228,9 +228,12 @@ export function TokensSection() {
 
   if (!project) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-text-muted">Select a project to view token usage</p>
-      </div>
+      <EmptyState
+        icon={<Coins className="h-8 w-8 text-text-muted" />}
+        title="No project selected"
+        description="Select a project to view token usage"
+        className="h-full"
+      />
     );
   }
 
