@@ -4,6 +4,7 @@ export * from "./dashboard";
 export * from "./project";
 export * from "./prompt";
 export * from "./scheduler";
+export * from "./search";
 export * from "./settings";
 export * from "./token-usage";
 export * from "./worktree";

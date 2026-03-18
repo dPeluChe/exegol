@@ -1,8 +1,10 @@
-import { Button } from "@exegol/ui";
+import type { SearchResult } from "@exegol/shared";
+import { Button, cn, Input, ScrollArea } from "@exegol/ui";
 import { FileText, MessageSquare, RefreshCw, Search, Terminal, Timer } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { type SearchResult, useRebuildSearchIndex, useSearch } from "../../../hooks/use-trpc";
+import { useRebuildSearchIndex, useSearch } from "../../../hooks/use-trpc";
+import { EmptyState, LoadingSpinner } from "../../common";
 
 /** Render FTS5 snippet with <mark> tags as safe React elements. */
 function renderSnippet(html: string): ReactNode[] {
@@ -57,7 +59,7 @@ function SearchResultCard({ result }: { result: SearchResult }) {
   return (
     <div className="rounded-lg border border-border bg-bg-secondary p-3 transition-colors hover:border-accent/30">
       <div className="mb-1.5 flex items-center gap-2">
-        <Icon className={`h-3.5 w-3.5 shrink-0 ${config.color}`} />
+        <Icon className={cn("h-3.5 w-3.5 shrink-0", config.color)} />
         <span className="text-[10px] font-medium text-text-muted">{config.label}</span>
         <span className="ml-auto text-[9px] text-text-muted">score: {result.score.toFixed(2)}</span>
       </div>
@@ -94,12 +96,12 @@ export function SearchSection() {
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
-          <input
+          <Input
             type="text"
             value={query}
             onChange={(e) => handleQueryChange(e.target.value)}
             placeholder='Search agents, prompts, tasks... (use "quotes" for exact phrases)'
-            className="w-full rounded-lg border border-border bg-bg-primary py-2 pl-8 pr-3 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
+            className="pl-8 text-xs"
           />
         </div>
         <Button
@@ -110,51 +112,45 @@ export function SearchSection() {
           disabled={rebuildIndex.isPending}
           title="Rebuild search index from current DB state"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${rebuildIndex.isPending ? "animate-spin" : ""}`} />
+          <RefreshCw className={cn("h-3.5 w-3.5", rebuildIndex.isPending && "animate-spin")} />
           Rebuild Index
         </Button>
       </div>
 
       {/* Results */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {!debouncedQuery && (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
-            <Search className="h-10 w-10 text-text-muted/30" />
-            <p className="text-xs text-text-muted">
-              Search across agent transcripts, prompts, and task descriptions.
-            </p>
-            <p className="text-[10px] text-text-muted/60">
-              Tip: Use &quot;quotes&quot; for exact phrases
-            </p>
-          </div>
-        )}
+      <ScrollArea className="flex-1">
+        <div className="p-4">
+          {!debouncedQuery && (
+            <EmptyState
+              icon={<Search className="h-10 w-10 text-text-muted/30" />}
+              title="Search your project"
+              description='Search across agent transcripts, prompts, and task descriptions. Use "quotes" for exact phrases.'
+              className="h-full"
+            />
+          )}
 
-        {debouncedQuery && isLoading && (
-          <div className="flex items-center justify-center py-8">
-            <span className="text-xs text-text-muted">Searching...</span>
-          </div>
-        )}
+          {debouncedQuery && isLoading && <LoadingSpinner label="Searching..." className="py-8" />}
 
-        {debouncedQuery && !isLoading && results && results.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-2 py-8">
-            <Search className="h-6 w-6 text-text-muted/40" />
-            <p className="text-xs text-text-muted">
-              No results found for &quot;{debouncedQuery}&quot;
-            </p>
-          </div>
-        )}
+          {debouncedQuery && !isLoading && results && results.length === 0 && (
+            <EmptyState
+              icon={<Search className="h-6 w-6 text-text-muted/40" />}
+              title="No results"
+              description={`No results found for "${debouncedQuery}"`}
+            />
+          )}
 
-        {results && results.length > 0 && (
-          <div className="space-y-2">
-            <p className="mb-3 text-[10px] font-medium text-text-muted">
-              {results.length} result{results.length === 1 ? "" : "s"}
-            </p>
-            {results.map((result) => (
-              <SearchResultCard key={result.entityId} result={result} />
-            ))}
-          </div>
-        )}
-      </div>
+          {results && results.length > 0 && (
+            <div className="space-y-2">
+              <p className="mb-3 text-[10px] font-medium text-text-muted">
+                {results.length} result{results.length === 1 ? "" : "s"}
+              </p>
+              {results.map((result) => (
+                <SearchResultCard key={result.entityId} result={result} />
+              ))}
+            </div>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }

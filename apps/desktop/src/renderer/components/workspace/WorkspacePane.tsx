@@ -11,13 +11,14 @@ import {
   Rows,
   X,
 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { type Pane, useWorkspaceStore } from "../../stores/workspace";
+import { EmptyState, LoadingSpinner } from "../common";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { FileExplorer } from "../workspace/FileExplorer";
 
@@ -286,17 +287,16 @@ function EmptyPane({ paneId }: { paneId: string }) {
 function InvalidPane({ reason, paneId }: { reason: string; paneId: string }) {
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3">
-      <AlertTriangle className="h-8 w-8 text-yellow-400/60" />
-      <p className="max-w-xs text-center text-xs text-text-muted">{reason}</p>
-      <button
-        type="button"
-        onClick={() => updatePane(paneId, { type: "empty", invalidReason: undefined })}
-        className="rounded border border-border px-3 py-1.5 text-[11px] text-text-secondary hover:bg-white/[0.03]"
-      >
-        Reset pane
-      </button>
-    </div>
+    <EmptyState
+      icon={<AlertTriangle className="h-8 w-8 text-yellow-400/60" />}
+      title="Recovery failed"
+      description={reason}
+      action={{
+        label: "Reset pane",
+        onClick: () => updatePane(paneId, { type: "empty", invalidReason: undefined }),
+      }}
+      className="h-full"
+    />
   );
 }
 
@@ -306,19 +306,18 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
   const { data: agent, isError } = useAgent(agentId);
   const invalidatePane = useWorkspaceStore((s) => s.invalidatePane);
 
-  // Agent fetch failed — likely deleted
-  if (isError) {
-    invalidatePane(paneId, `Agent "${agentId}" no longer exists.`);
-    return null;
-  }
+  // Agent fetch failed — move side-effect out of render body
+  useEffect(() => {
+    if (isError) {
+      invalidatePane(paneId, `Agent "${agentId}" no longer exists.`);
+    }
+  }, [isError, paneId, agentId, invalidatePane]);
+
+  if (isError) return null;
 
   // Agent found or still loading
   if (agent === undefined) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <span className="text-xs text-text-muted">Loading agent...</span>
-      </div>
-    );
+    return <LoadingSpinner label="Loading agent..." className="h-full" />;
   }
 
   return <TerminalPanel agentId={agentId} />;

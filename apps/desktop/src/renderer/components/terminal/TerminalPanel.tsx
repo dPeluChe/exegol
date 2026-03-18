@@ -3,6 +3,7 @@ import { AlertCircle, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
+import { EmptyState, LoadingSpinner } from "../common";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
 interface TerminalPanelProps {
@@ -80,18 +81,15 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
   // If stopped with no scrollback yet (loading or no data)
   if (isStopped && !scrollbackContent) {
     if (scrollbackLoading) {
-      return (
-        <div className="flex h-full items-center justify-center">
-          <span className="text-sm text-text-muted">Loading session history...</span>
-        </div>
-      );
+      return <LoadingSpinner label="Loading session history..." className="h-full" />;
     }
-    // No scrollback available
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2">
-        <AlertCircle className="h-6 w-6 text-text-muted" />
-        <span className="text-sm text-text-muted">Session ended — no history available</span>
-      </div>
+      <EmptyState
+        icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
+        title="Session ended"
+        description="No history available"
+        className="h-full"
+      />
     );
   }
 

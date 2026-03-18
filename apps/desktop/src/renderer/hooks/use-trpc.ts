@@ -15,6 +15,7 @@ import type {
   ScheduledResult,
   ScheduledTask,
   ScheduledTaskCreate,
+  SearchResult,
   Settings,
   TokenUsage,
   TokenUsageSummary,
@@ -503,15 +504,7 @@ export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
 
 // ─── Search ─────────────────────────────────────────────────────────────
 
-export interface SearchResult {
-  title: string;
-  snippet: string;
-  entityType: "scrollback" | "prompt" | "task_description" | "scheduler_result";
-  entityId: string;
-  projectId: string;
-  agentId: string | null;
-  score: number;
-}
+export type { SearchResult };
 
 export function useSearch(query: string, projectId?: string | null) {
   return useQuery({
