@@ -50,7 +50,7 @@ export const queueRouter = router({
     .input(
       z.object({
         id: z.string(),
-        status: z.string(),
+        status: z.enum(["queued", "running", "blocked", "completed", "failed", "cancelled"]),
         agentId: z.string().optional(),
       }),
     )

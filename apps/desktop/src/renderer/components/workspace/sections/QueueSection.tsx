@@ -1,4 +1,4 @@
-import type { QueueTask, QueueTaskStatus } from "@exegol/shared";
+import type { AgentProvider, QueueTask, QueueTaskStatus } from "@exegol/shared";
 import { Badge, Button, cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ListOrdered, Plus, Trash2, X } from "lucide-react";
@@ -8,6 +8,14 @@ import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { EmptyState } from "../../common/EmptyState";
 
 // ─── Hooks ───────────────────────────────────────────────────────────────────
+
+function useProviders() {
+  return useQuery({
+    queryKey: ["providers"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listProviders"),
+    staleTime: 60_000,
+  });
+}
 
 function useQueueTasks(projectId?: string) {
   return useQuery({
@@ -68,8 +76,9 @@ const STATUS_COLORS: Record<QueueTaskStatus, string> = {
 
 function AddTaskDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const addToQueue = useAddToQueue();
+  const { data: providers } = useProviders();
   const [prompt, setPrompt] = useState("");
-  const [cliType, setCliType] = useState("claude-code");
+  const [cliType, setCliType] = useState(providers?.[0]?.id ?? "claude-code");
   const [priority, setPriority] = useState("0");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -119,11 +128,9 @@ function AddTaskDialog({ projectId, onClose }: { projectId: string; onClose: () 
               onChange={(e) => setCliType(e.target.value)}
               className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary focus:border-accent focus:outline-none"
             >
-              <option value="claude-code">Claude Code</option>
-              <option value="codex">Codex</option>
-              <option value="gemini">Gemini</option>
-              <option value="aider">Aider</option>
-              <option value="goose">Goose</option>
+              {(providers ?? []).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
             </select>
           </div>
           <div>

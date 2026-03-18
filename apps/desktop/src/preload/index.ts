@@ -31,10 +31,9 @@ contextBridge.exposeInMainWorld("api", {
       callback(agentId, handoffId);
     };
     ipcRenderer.on("agent:handoff-ready", handler);
-  },
-  offAgentHandoff: (_callback: (agentId: string, handoffId: string) => void) => {
-    // Remove all listeners for this channel (simpler than tracking exact handler)
-    ipcRenderer.removeAllListeners("agent:handoff-ready");
+    return () => {
+      ipcRenderer.removeListener("agent:handoff-ready", handler);
+    };
   },
   dialog: {
     // biome-ignore lint/suspicious/noExplicitAny: Electron dialog options are dynamic

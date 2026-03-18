@@ -190,7 +190,7 @@ const migrations: Migration[] = [
       CHECK (source IN ('agent', 'log_scan'))`,
   },
   {
-    id: "013_handoffs",
+    id: "015_handoffs",
     sql: `CREATE TABLE IF NOT EXISTS handoffs (
       id TEXT PRIMARY KEY,
       agent_id TEXT NOT NULL,
@@ -206,7 +206,7 @@ const migrations: Migration[] = [
     )`,
   },
   {
-    id: "014_messages",
+    id: "016_messages",
     sql: `CREATE TABLE IF NOT EXISTS messages (
       id TEXT PRIMARY KEY,
       from_agent_id TEXT,
@@ -224,11 +224,11 @@ const migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_messages_from_agent ON messages(from_agent_id)`,
   },
   {
-    id: "015_scheduled_tasks_depends_on",
+    id: "017_scheduled_tasks_depends_on",
     sql: `ALTER TABLE scheduled_tasks ADD COLUMN depends_on TEXT`,
   },
   {
-    id: "016_task_queue",
+    id: "018_task_queue",
     sql: `CREATE TABLE IF NOT EXISTS task_queue (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,

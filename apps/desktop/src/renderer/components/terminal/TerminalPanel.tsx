@@ -53,9 +53,9 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
           .catch(() => {});
       }
     };
-    window.api?.onAgentHandoff?.(handler);
+    const cleanup = window.api?.onAgentHandoff?.(handler);
     return () => {
-      window.api?.offAgentHandoff?.(handler);
+      cleanup?.();
     };
   }, [agentId, isStopped]);
 

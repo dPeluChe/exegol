@@ -22,7 +22,6 @@ interface Window {
       maximize: () => void;
       close: () => void;
     };
-    onAgentHandoff?: (callback: (agentId: string, handoffId: string) => void) => void;
-    offAgentHandoff?: (callback: (agentId: string, handoffId: string) => void) => void;
+    onAgentHandoff?: (callback: (agentId: string, handoffId: string) => void) => (() => void);
   };
 }
