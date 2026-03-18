@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { AgentsSection } from "./sections/AgentsSection";
 import { DiffSection } from "./sections/DiffSection";
 import { PromptsSection } from "./sections/PromptsSection";
@@ -12,6 +13,16 @@ import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
 export function WorkspaceView() {
   const { projectId } = useProjectContext();
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
+
+  // Listen for section switch events from sidebar (Rule 4: mount effect for event listener)
+  useMountEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent).detail?.section as WorkspaceSection;
+      if (section) setActiveSection(section);
+    };
+    window.addEventListener("exegol:switch-section", handler);
+    return () => window.removeEventListener("exegol:switch-section", handler);
+  });
 
   if (!projectId) {
     return (

@@ -11,7 +11,7 @@ import {
   Settings2,
   Terminal,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 import { ApiKeysSettings } from "./ApiKeysSettings";
@@ -38,14 +38,14 @@ export function SettingsPanel() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
-  const [form, setForm] = useState<Settings | null>(null);
+  // Derive initial form state from settings (Rule 1: derive, don't sync)
+  const [form, setForm] = useState<Settings | null>(() => settings ?? null);
   const [dirty, setDirty] = useState(false);
 
-  useEffect(() => {
-    if (settings && !form) {
-      setForm(settings);
-    }
-  }, [settings, form]);
+  // If settings loaded after initial render (async), initialize form from it
+  if (settings && !form) {
+    setForm(settings);
+  }
 
   if (isLoading || !form) {
     return (

@@ -17,6 +17,7 @@ import {
   updateAgentStatus,
 } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
+import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
 import { AgentStatusParser } from "./status-parser";
 
@@ -26,13 +27,18 @@ let coreRust: typeof import("@exegol/core-rust") | null = null;
 try {
   coreRust = require("@exegol/core-rust");
 } catch {
-  console.warn("[AgentManager] @exegol/core-rust native module not available — worktrees disabled");
+  logger.warn("[AgentManager] @exegol/core-rust native module not available — worktrees disabled");
 }
 
 // ─── Scrollback constants ────────────────────────────────────────────────
 
 const MAX_SCROLLBACK_BYTES = 1024 * 1024; // 1MB per agent
 const SCROLLBACK_FLUSH_INTERVAL_MS = 30_000; // 30s periodic flush
+const SHELL_PATH_TIMEOUT_MS = 5_000;
+const DEFAULT_PTY_COLS = 120;
+const DEFAULT_PTY_ROWS = 30;
+const STOP_POLL_INTERVAL_MS = 100;
+const STOP_TIMEOUT_MS = 5_000;
 
 // ─── Shell PATH resolution ────────────────────────────────────────────────
 
@@ -45,7 +51,7 @@ function getShellPath(): string {
     const shell = process.env.SHELL || "/bin/zsh";
     const result = execSync(`${shell} -ilc 'echo $PATH'`, {
       encoding: "utf-8",
-      timeout: 5000,
+      timeout: SHELL_PATH_TIMEOUT_MS,
     }).trim();
     return result || process.env.PATH || "";
   } catch {
@@ -161,12 +167,12 @@ export class AgentManager {
           repoPath: project.path,
         });
 
-        console.log("[AgentManager] Created worktree:", {
+        logger.info("[AgentManager] Created worktree:", {
           branch: branchName,
           path: wtInfo.path,
         });
       } catch (err) {
-        console.error(
+        logger.error(
           "[AgentManager] Failed to create worktree, falling back to project root:",
           err,
         );
@@ -202,7 +208,7 @@ export class AgentManager {
 
     // Spawn through the user's login shell so PATH, nvm, etc. are resolved
     const userShell = process.env.SHELL || "/bin/zsh";
-    console.log("[AgentManager] Spawning:", {
+    logger.info("[AgentManager] Spawning:", {
       userShell,
       fullCommand,
       cwd,
@@ -210,8 +216,8 @@ export class AgentManager {
     });
     const proc = pty.spawn(userShell, ["-ilc", fullCommand], {
       name: "xterm-256color",
-      cols: 120,
-      rows: 30,
+      cols: DEFAULT_PTY_COLS,
+      rows: DEFAULT_PTY_ROWS,
       cwd,
       env: {
         ...process.env,
@@ -318,7 +324,7 @@ export class AgentManager {
             clearTimeout(timeout);
             resolve();
           }
-        }, 100);
+        }, STOP_POLL_INTERVAL_MS);
 
         const timeout = setTimeout(() => {
           clearInterval(checkInterval);
@@ -329,7 +335,7 @@ export class AgentManager {
             // Process already exited
           }
           resolve();
-        }, 5000);
+        }, STOP_TIMEOUT_MS);
       });
     } else {
       // No process found but ensure DB is updated
@@ -391,7 +397,7 @@ export class AgentManager {
       mkdirSync(dirname(filePath), { recursive: true });
       writeFileSync(filePath, buffer.join(""), "utf-8");
     } catch (err) {
-      console.error(`[AgentManager] Failed to write scrollback for ${agentId}:`, err);
+      logger.error(`[AgentManager] Failed to write scrollback for ${agentId}:`, err);
     }
 
     if (!keepBuffer) {
@@ -420,16 +426,16 @@ export class AgentManager {
     try {
       const hasChanges = coreRust.worktreeHasChanges(wt.worktreePath);
       if (hasChanges) {
-        console.log(
+        logger.info(
           `[AgentManager] Worktree '${wt.worktreeName}' has changes — keeping at ${wt.worktreePath}`,
         );
       } else {
         coreRust.removeWorktree(wt.repoPath, wt.worktreeName, false);
         dbRemoveWorktree(db, wt.dbId);
-        console.log(`[AgentManager] Cleaned up empty worktree '${wt.worktreeName}'`);
+        logger.info(`[AgentManager] Cleaned up empty worktree '${wt.worktreeName}'`);
       }
     } catch (err) {
-      console.error(`[AgentManager] Failed to clean up worktree '${wt.worktreeName}':`, err);
+      logger.error(`[AgentManager] Failed to clean up worktree '${wt.worktreeName}':`, err);
     }
 
     this.worktrees.delete(agentId);

@@ -7,6 +7,7 @@ export function useHotkeys() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const setActiveView = useAppStore((s) => s.setActiveView);
 
+  // Rule 4: external system sync — global keyboard event listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey; // Cmd on Mac, Ctrl on Win/Linux

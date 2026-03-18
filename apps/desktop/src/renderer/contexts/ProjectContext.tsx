@@ -23,14 +23,17 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const syncFromDb = useAgentStore((s) => s.syncFromDb);
   const allAgents = Object.values(useAgentStore((s) => s.agents));
 
-  // If the persisted project no longer exists in DB, reset to project list
+  // Guard: if the persisted project no longer exists in DB, reset to project list.
+  // Kept as effect because it reacts to an async query result, not a user action.
   useEffect(() => {
     if (activeProjectId && !isLoading && !project) {
       useAppStore.getState().setActiveProject(null);
     }
   }, [activeProjectId, isLoading, project]);
 
-  // Sync DB agents into Zustand store when they load
+  // Sync DB agents into Zustand store when they load.
+  // Ideally this would use TanStack Query's onSuccess, but v5 removed that callback.
+  // Kept as effect for cross-store synchronization (TanStack Query -> Zustand).
   useEffect(() => {
     if (dbAgents && activeProjectId) {
       syncFromDb(activeProjectId, dbAgents);

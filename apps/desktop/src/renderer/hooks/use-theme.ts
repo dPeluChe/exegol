@@ -5,6 +5,7 @@ export function useTheme() {
   const settings = useSettings();
   const theme = settings.data?.theme ?? "dark";
 
+  // Rule 4: external system sync — sets data-theme attribute on <html> element
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "system") {

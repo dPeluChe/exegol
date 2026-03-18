@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -130,23 +130,79 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
   const [dayOfMonth, setDayOfMonth] = useState(detected.dayOfMonth);
   const [customCron, setCustomCron] = useState(frequency === "custom" ? value : "");
 
+  // Build a cron expression from explicit parameters (avoids stale closure over state)
+  const buildCronFrom = useCallback(
+    (
+      f: Frequency,
+      iv: number,
+      min: number,
+      hr: number,
+      dow: number,
+      dom: number,
+      custom: string,
+    ): string => {
+      switch (f) {
+        case "every-minutes":
+          return `*/${iv} * * * *`;
+        case "hourly":
+          return `${min} * * * *`;
+        case "daily":
+          return `${min} ${hr} * * *`;
+        case "weekly":
+          return `${min} ${hr} * * ${dow}`;
+        case "monthly":
+          return `${min} ${hr} ${dom} * *`;
+        case "custom":
+          return custom;
+      }
+    },
+    [],
+  );
+
   // Build the cron expression from the current state
-  const buildCron = useCallback((): string => {
-    switch (frequency) {
-      case "every-minutes":
-        return `*/${interval} * * * *`;
-      case "hourly":
-        return `${minute} * * * *`;
-      case "daily":
-        return `${minute} ${hour} * * *`;
-      case "weekly":
-        return `${minute} ${hour} * * ${dayOfWeek}`;
-      case "monthly":
-        return `${minute} ${hour} ${dayOfMonth} * *`;
-      case "custom":
-        return customCron;
-    }
-  }, [frequency, interval, minute, hour, dayOfWeek, dayOfMonth, customCron]);
+  const buildCron = useCallback(
+    (): string =>
+      buildCronFrom(frequency, interval, minute, hour, dayOfWeek, dayOfMonth, customCron),
+    [buildCronFrom, frequency, interval, minute, hour, dayOfWeek, dayOfMonth, customCron],
+  );
+
+  // Emit onChange directly from event handlers (Rule 3: event handlers, not effects)
+  const emitChange = useCallback(
+    (overrides: {
+      frequency?: Frequency;
+      interval?: number;
+      minute?: number;
+      hour?: number;
+      dayOfWeek?: number;
+      dayOfMonth?: number;
+      customCron?: string;
+    }) => {
+      const cron = buildCronFrom(
+        overrides.frequency ?? frequency,
+        overrides.interval ?? interval,
+        overrides.minute ?? minute,
+        overrides.hour ?? hour,
+        overrides.dayOfWeek ?? dayOfWeek,
+        overrides.dayOfMonth ?? dayOfMonth,
+        overrides.customCron ?? customCron,
+      );
+      if (cron && cron !== value) {
+        onChange(cron);
+      }
+    },
+    [
+      buildCronFrom,
+      frequency,
+      interval,
+      minute,
+      hour,
+      dayOfWeek,
+      dayOfMonth,
+      customCron,
+      value,
+      onChange,
+    ],
+  );
 
   // Build human-readable preview
   const preview = useMemo((): string => {
@@ -168,20 +224,13 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
     }
   }, [frequency, interval, minute, hour, dayOfWeek, dayOfMonth, customCron]);
 
-  // Emit changes whenever the built expression changes
-  useEffect(() => {
-    const cron = buildCron();
-    if (cron && cron !== value) {
-      onChange(cron);
-    }
-  }, [buildCron, onChange, value]);
-
   // When frequency changes away from custom, reset custom; when switching to custom, seed it
   const handleFrequencyChange = (newFreq: Frequency) => {
     if (newFreq === "custom") {
       setCustomCron(buildCron());
     }
     setFrequency(newFreq);
+    emitChange({ frequency: newFreq, customCron: newFreq === "custom" ? buildCron() : customCron });
   };
 
   return (
@@ -211,7 +260,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>Every</span>
             <select
               value={interval}
-              onChange={(e) => setInterval(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setInterval(v);
+                emitChange({ interval: v });
+              }}
               className={selectClass}
             >
               {MINUTE_INTERVALS.map((v) => (
@@ -229,7 +282,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>At minute</span>
             <select
               value={minute}
-              onChange={(e) => setMinute(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setMinute(v);
+                emitChange({ minute: v });
+              }}
               className={selectClass}
             >
               {MINUTES.map((v) => (
@@ -246,7 +303,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>At</span>
             <select
               value={hour}
-              onChange={(e) => setHour(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setHour(v);
+                emitChange({ hour: v });
+              }}
               className={selectClass}
             >
               {HOURS.map((v) => (
@@ -258,7 +319,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>:</span>
             <select
               value={minute}
-              onChange={(e) => setMinute(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setMinute(v);
+                emitChange({ minute: v });
+              }}
               className={selectClass}
             >
               {MINUTES.map((v) => (
@@ -275,7 +340,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>On</span>
             <select
               value={dayOfWeek}
-              onChange={(e) => setDayOfWeek(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setDayOfWeek(v);
+                emitChange({ dayOfWeek: v });
+              }}
               className={selectClass}
             >
               {DAYS_OF_WEEK.map((d) => (
@@ -287,7 +356,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>at</span>
             <select
               value={hour}
-              onChange={(e) => setHour(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setHour(v);
+                emitChange({ hour: v });
+              }}
               className={selectClass}
             >
               {HOURS.map((v) => (
@@ -299,7 +372,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>:</span>
             <select
               value={minute}
-              onChange={(e) => setMinute(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setMinute(v);
+                emitChange({ minute: v });
+              }}
               className={selectClass}
             >
               {MINUTES.map((v) => (
@@ -316,7 +393,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>On day</span>
             <select
               value={dayOfMonth}
-              onChange={(e) => setDayOfMonth(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setDayOfMonth(v);
+                emitChange({ dayOfMonth: v });
+              }}
               className={selectClass}
             >
               {MONTH_DAYS.map((v) => (
@@ -328,7 +409,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>at</span>
             <select
               value={hour}
-              onChange={(e) => setHour(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setHour(v);
+                emitChange({ hour: v });
+              }}
               className={selectClass}
             >
               {HOURS.map((v) => (
@@ -340,7 +425,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
             <span>:</span>
             <select
               value={minute}
-              onChange={(e) => setMinute(Number.parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const v = Number.parseInt(e.target.value, 10);
+                setMinute(v);
+                emitChange({ minute: v });
+              }}
               className={selectClass}
             >
               {MINUTES.map((v) => (
@@ -356,7 +445,11 @@ export function CronBuilder({ value, onChange }: CronBuilderProps) {
           <div>
             <input
               value={customCron}
-              onChange={(e) => setCustomCron(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setCustomCron(v);
+                emitChange({ customCron: v });
+              }}
               placeholder="* * * * *"
               className={inputClass}
             />

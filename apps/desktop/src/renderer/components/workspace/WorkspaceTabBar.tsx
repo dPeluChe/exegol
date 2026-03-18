@@ -104,6 +104,7 @@ export function WorkspaceTabBar() {
                   "opacity-0 transition-opacity group-hover:opacity-100",
                   "hover:bg-white/10",
                 )}
+                title="Close tab"
               >
                 <X className="h-2.5 w-2.5" />
               </button>

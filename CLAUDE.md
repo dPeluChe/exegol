@@ -246,3 +246,12 @@ cargo check                         # Type-check (run inside packages/core-rust)
 projects, agents, worktrees, sessions, scheduled_tasks, scheduled_results, token_usage, port_registry, host_metrics, settings, prompts
 
 Agent status values: `idle | spawning | running | waiting_input | paused | completed | failed | stopped`
+
+## React Coding Standards
+
+### useEffect Rules (from React team)
+1. **Derive state, don't sync** — If effect just sets state from other state, compute inline
+2. **Use TanStack Query** — Never fetch in useEffect
+3. **Event handlers first** — User actions belong in handlers, not effects
+4. **useMountEffect** — For external system sync (DOM, third-party, browser APIs)
+5. **Key reset** — Use `key` prop to reset components, not effect dependency arrays

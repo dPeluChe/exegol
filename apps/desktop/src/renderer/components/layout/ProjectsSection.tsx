@@ -10,7 +10,7 @@ import {
   RotateCw,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type PortInfo,
   useOpenInIde,
@@ -355,6 +355,7 @@ function OpenInIdeButton({ projectId }: { projectId: string }) {
             });
           }}
           className="rounded p-0.5 text-text-muted hover:bg-white/5 hover:text-text-secondary"
+          title={`Open in ${ideName}`}
         >
           <Code2 className="h-3 w-3" />
         </button>
@@ -380,17 +381,12 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  // Auto-expand the active project
-  useEffect(() => {
-    if (activeProjectId) {
-      setExpandedIds((prev) => {
-        if (prev.has(activeProjectId)) return prev;
-        const next = new Set(prev);
-        next.add(activeProjectId);
-        return next;
-      });
-    }
-  }, [activeProjectId]);
+  // Derive effective expanded IDs: always include the active project (Rule 1: derive, don't sync)
+  const effectiveExpandedIds = useMemo(() => {
+    const ids = new Set(expandedIds);
+    if (activeProjectId) ids.add(activeProjectId);
+    return ids;
+  }, [expandedIds, activeProjectId]);
 
   const toggleProject = (id: string) => {
     setExpandedIds((prev) => {
@@ -414,7 +410,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
             key={project.id}
             project={project}
             isSelected={project.id === activeProjectId}
-            isExpanded={expandedIds.has(project.id)}
+            isExpanded={effectiveExpandedIds.has(project.id)}
             onSelect={() => setActiveProject(project.id)}
             onToggle={() => toggleProject(project.id)}
             agents={agentList.filter((a) => a.projectId === project.id)}

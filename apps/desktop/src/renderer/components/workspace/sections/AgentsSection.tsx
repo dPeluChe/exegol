@@ -1,6 +1,6 @@
 import { Cpu } from "lucide-react";
-import { useEffect } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
+import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { WorkspaceLayout } from "../WorkspaceLayout";
 import { WorkspaceTabBar } from "../WorkspaceTabBar";
@@ -32,10 +32,10 @@ export function AgentsSection() {
   const { projectId } = useProjectContext();
   const ensureDefaultTab = useWorkspaceStore((s) => s.ensureDefaultTab);
 
-  // Ensure at least one tab exists on mount
-  useEffect(() => {
+  // Ensure at least one tab exists on mount (Rule 4: mount effect for setup)
+  useMountEffect(() => {
     ensureDefaultTab();
-  }, [ensureDefaultTab]);
+  });
 
   if (!projectId) return null;
 

@@ -9,6 +9,7 @@ import {
   recordScheduledResult,
   updateScheduledTask,
 } from "../db/queries";
+import { logger } from "../lib/logger";
 
 let instance: SchedulerEngine | null = null;
 
@@ -18,6 +19,9 @@ export function getSchedulerEngine(): SchedulerEngine {
   }
   return instance;
 }
+
+const MAX_WAIT_MS = 10 * 60_000; // 10 minutes
+const LOG_PROMPT_TRUNCATE_LENGTH = 60;
 
 export class SchedulerEngine {
   private jobs: Map<string, Cron> = new Map();
@@ -33,7 +37,7 @@ export class SchedulerEngine {
         this.scheduleJob(task.id, task.cronExpression);
       }
     }
-    console.log(`[Scheduler] Started with ${this.jobs.size} active jobs`);
+    logger.info(`[Scheduler] Started with ${this.jobs.size} active jobs`);
   }
 
   /** Stop all cron jobs */
@@ -43,7 +47,7 @@ export class SchedulerEngine {
       this.jobs.delete(id);
     }
     this.db = null;
-    console.log("[Scheduler] Stopped all jobs");
+    logger.info("[Scheduler] Stopped all jobs");
   }
 
   /** Create and register a new Cron job for a task */
@@ -87,7 +91,7 @@ export class SchedulerEngine {
 
     const job = new Cron(cronExpression, { timezone: "local" }, () => {
       this.executeTask(taskId).catch((err) => {
-        console.error(`[Scheduler] Error executing task ${taskId}:`, err);
+        logger.error(`[Scheduler] Error executing task ${taskId}:`, err);
       });
     });
 
@@ -109,7 +113,7 @@ export class SchedulerEngine {
 
     // Prevent concurrent executions of the same task
     if (this.runningTasks.has(taskId)) {
-      console.log(`[Scheduler] Task ${taskId} already running, skipping`);
+      logger.info(`[Scheduler] Task ${taskId} already running, skipping`);
       return;
     }
 
@@ -117,7 +121,9 @@ export class SchedulerEngine {
     if (!task || !task.enabled) return;
 
     this.runningTasks.add(taskId);
-    console.log(`[Scheduler] Executing task ${taskId}: "${task.prompt.slice(0, 60)}..."`);
+    logger.info(
+      `[Scheduler] Executing task ${taskId}: "${task.prompt.slice(0, LOG_PROMPT_TRUNCATE_LENGTH)}..."`,
+    );
 
     // Create an agent to run this task
     const agent = createAgent(this.db, {
@@ -166,7 +172,6 @@ export class SchedulerEngine {
   }
 
   private waitForCompletion(agentId: string, taskId: string): Promise<void> {
-    const MAX_WAIT = 10 * 60_000; // 10 minutes
     const manager = getAgentManager();
 
     return new Promise((resolve) => {
@@ -181,7 +186,7 @@ export class SchedulerEngine {
           updateScheduledTask(this.db, taskId, { lastResultStatus: "timeout" });
         }
         resolve();
-      }, MAX_WAIT);
+      }, MAX_WAIT_MS);
 
       manager.onAgentComplete(agentId, (exitCode) => {
         clearTimeout(timeout);

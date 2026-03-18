@@ -1,7 +1,8 @@
 import { Button, ScrollArea } from "@exegol/ui";
 import { CheckSquare, FolderOpen } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
+import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useFileContent, usePickFile, useWriteFile } from "../../../hooks/use-trpc";
 import { parseMarkdownTasks, type TaskItem, toggleTask } from "../../../lib/markdown-tasks";
 import { trpcInvoke } from "../../../lib/trpc-client";
@@ -21,8 +22,8 @@ export function TasksSection() {
   const totalCount = tasks.length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  // Probe for common task files on mount
-  useEffect(() => {
+  // Probe for common task files on mount (Rule 4: mount effect for one-time setup)
+  useMountEffect(() => {
     if (!project || filePath || autoDetectDone || probeRan.current) return;
     probeRan.current = true;
 
@@ -42,7 +43,7 @@ export function TasksSection() {
       }
       setAutoDetectDone(true);
     })();
-  }, [project, filePath, autoDetectDone]);
+  });
 
   const handlePickFile = useCallback(async () => {
     if (!project) return;

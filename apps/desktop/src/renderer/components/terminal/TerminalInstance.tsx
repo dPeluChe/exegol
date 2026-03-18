@@ -101,6 +101,7 @@ export function TerminalInstance({
     }
   }, [agentId, setTerminalSize, readOnly]);
 
+  // Rule 4: external system sync — xterm.js setup/teardown, PTY wiring, resize observer
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -210,7 +211,7 @@ export function TerminalInstance({
     isLight,
   ]);
 
-  // Update terminal options when settings change
+  // Rule 4: external system sync — update xterm.js options when settings change
   useEffect(() => {
     if (terminalRef.current) {
       terminalRef.current.options.fontSize = fontSize;
@@ -219,6 +220,7 @@ export function TerminalInstance({
     }
   }, [fontSize, fontFamily]);
 
+  // Rule 4: external system sync — window resize listener for terminal fit
   useEffect(() => {
     const handleWindowResize = () => handleResize();
     window.addEventListener("resize", handleWindowResize);

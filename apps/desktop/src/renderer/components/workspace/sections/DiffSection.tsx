@@ -1,6 +1,6 @@
 import { Button, cn } from "@exegol/ui";
 import { Columns, GitCompare, Loader2, RefreshCw, Rows } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useDiff } from "../../../hooks/use-trpc";
 import { EmptyState } from "../../common/EmptyState";
@@ -15,16 +15,14 @@ export function DiffSection() {
   const [diffMode, setDiffMode] = useState<DiffMode>("unstaged");
   const [viewMode, setViewMode] = useState<ViewMode>("unified");
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [parsedFiles, setParsedFiles] = useState<DiffFile[]>([]);
 
   const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode);
 
-  // Parse diff when raw data changes
-  useEffect(() => {
-    if (rawDiff !== undefined) {
-      setParsedFiles(parseUnifiedDiff(rawDiff ?? ""));
-    }
-  }, [rawDiff]);
+  // Derive parsed files from raw diff (Rule 1: derive, don't sync)
+  const parsedFiles = useMemo<DiffFile[]>(
+    () => (rawDiff !== undefined ? parseUnifiedDiff(rawDiff ?? "") : []),
+    [rawDiff],
+  );
 
   // Auto-refresh interval
   useEffect(() => {
