@@ -1,6 +1,6 @@
 # Exegol — Task Board V2 (Agent-Ready)
 
-> 18 tasks across 5 agent clusters. Each agent works in isolation (worktree).
+> 19 tasks across 5 agent clusters. Each agent works in isolation (worktree).
 > Each task includes **which repo to study** and **which files to read** before implementing.
 >
 > **GHQ root**: `/Users/peluche/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn`
@@ -37,6 +37,7 @@
 | **Zed** | `github.com/zed-industries/zed` | Agent-as-pane, MCP extension, tool permissions, terminal links |
 | **IronClaw** | `github.com/nearai/ironclaw` | Rust WASM sandbox, pgvector search |
 | **TinyClaw** | `github.com/warengonzaga/tinyclaw` | 4-layer compaction, episodic memory, plugin system |
+| **gstack** | `github.com/garrytan/gstack` | Skill personas with cognitive patterns, task queue/parallelism, 3-tier test pyramid, completeness principle, single source of truth registry |
 
 ---
 
@@ -247,6 +248,27 @@
 - [ ] Handoff visible in agent detail view
 - [ ] Document: `docs/applied/T27_context_handoff.md`
 
+### T34 — Agent Task Queue (Parallel Execution)
+**Complexity**: High
+**Study before implementing**:
+- gstack: `ARCHITECTURE.md` → Conductor pattern for 10+ parallel Claude Code sessions
+- gstack: `CLAUDE.md` → workflow philosophy: "completeness is cheap with AI", parallel execution
+- gstack: `browse/src/config.ts` → state file pattern for tracking multiple concurrent processes
+- Stoneforge: dispatch daemon → 7-phase polling loop with concurrency guards
+- DeerFlow: `backend/src/subagents/executor.py` → concurrency limits (max 3 subagents per turn)
+
+**What to implement**: Task queue per project. Queue tasks, execute sequentially or in parallel (max N), with priority. Inspired by gstack's philosophy of running 10+ agents simultaneously — Exegol should manage that orchestration layer.
+**Files**: New `main/agents/queue.ts`, `main/agents/manager.ts` (integrate queue), new DB migration (task_queue table), `renderer/.../SchedulerSection.tsx` (queue panel) or new `renderer/.../QueueSection.tsx`
+**Acceptance**:
+- [ ] Task queue table: (id, project_id, prompt, cli_type, priority, status, depends_on, created_at, started_at, completed_at)
+- [ ] Queue statuses: queued, running, blocked, completed, failed, cancelled
+- [ ] Execution modes: sequential (one at a time), parallel (max N configurable), priority-based (higher priority bumps)
+- [ ] Concurrency limit per project: default 3, configurable in settings
+- [ ] Cost estimate before execution (based on historical avg tokens per CLI type)
+- [ ] UI: queue panel showing all tasks with status, drag to reorder priority, cancel button
+- [ ] Integration: "Add to queue" option alongside "Spawn now" in agent launcher
+- [ ] Document: `docs/applied/T34_task_queue.md`
+
 ---
 
 ## Agent 4 — Git Ops (Rust) & Quality
@@ -292,17 +314,23 @@
 ### T33 — Quality Scoring for Agent Output
 **Complexity**: Medium
 **Study before implementing**:
+- gstack: `test/helpers/eval-store.ts` → result persistence, auto-compare, json diffs
+- gstack: `test/helpers/llm-judge.ts` → Sonnet scoring for quality evals (clarity, completeness)
+- gstack: `test/skill-validation.test.ts` → 3-tier pyramid: free static → E2E → LLM-as-judge
+- gstack: `ARCHITECTURE.md` → non-fatal observability, machine-readable diagnostics
 - ClawWork: `src/api/` → quality scoring logic (GPT-evaluated)
 - ClawWork: `src/components/dashboard/` → performance metrics display
 - Mission Control: `src/components/panels/` → quality review gates pattern
 
-**What to implement**: Score agent outcomes. Track performance over time.
+**What to implement**: Score agent outcomes using gstack's 3-tier approach. Track performance over time.
 **Files**: New `main/agents/scoring.ts`, `main/agents/manager.ts`, new DB migration (score columns), `renderer/.../TokensSection.tsx` or new panel
 **Acceptance**:
-- [ ] Score dimensions: files_changed, compiles, tests_pass, task_completed (all bool)
-- [ ] Auto-detect: parse stdout for compile errors, test results, completion signals
+- [ ] Tier 1 (free, auto): files_changed, compiles, tests_pass, task_completed (parse stdout)
+- [ ] Tier 2 (structured): exit_reason, turns_used, tokens_spent, files_modified_count
+- [ ] Tier 3 (future): LLM-as-judge quality eval (optional, gated behind API key)
 - [ ] Store score per agent session in DB
 - [ ] Performance dashboard: success rate by CLI type, by project, over time
+- [ ] Non-fatal: scoring never blocks agent completion (best-effort, try/catch)
 - [ ] Feed scores into future memory system (T32)
 - [ ] Document: `docs/applied/T33_quality_scoring.md`
 
@@ -332,25 +360,31 @@
 - [ ] Dynamic instructions: build context string from available tools for agent prompt
 - [ ] Document: `docs/applied/T30_mcp_host.md`
 
-### T31 — Skills System (Markdown-Based, with Sharing)
+### T31 — Skills System (Markdown-Based, with Sharing & Personas)
 **Complexity**: Medium
 **Study before implementing**:
+- gstack: `plan-eng-review/SKILL.md.tmpl` → skill as expert persona with cognitive patterns (Larson, Brooks, Beck)
+- gstack: `qa/SKILL.md.tmpl` → structured test→fix→verify loop with named methodologies
+- gstack: `plan-ceo-review/SKILL.md.tmpl` → CEO perspective with 8 expansion modes (Bezos, Grove, Munger)
+- gstack: `scripts/gen-skill-docs.ts` → template→SKILL.md generation, single source of truth
 - Pi: `packages/coding-agent/src/core/resource-loader.ts` → skill discovery (SKILL.md, dual-tier: project + user global)
 - Pi: `packages/coding-agent/src/core/skills.ts` → skill loading, name validation, collision handling
 - DeerFlow: `backend/src/skills/` → public/custom dirs, enabled/disabled toggle, SKILL.md with YAML frontmatter
 - Nanobot: `nanobot/skills/` → requirement checking (requires.bins, requires.env), always-load flag
 - Mission Control: look for skill install/registry → federated registry pattern, security scanning
 
-**What to implement**: Reusable workflow definitions. Dual-tier (project + global). Shared across projects via global dir.
+**What to implement**: Reusable workflow definitions as expert personas. Dual-tier (project + global). Shared across projects via global dir. Each skill can define a role (architect, qa, debugger, reviewer) with cognitive patterns that activate deep LLM knowledge.
 **Files**: New `main/skills/loader.ts`, new `main/skills/discovery.ts`, `main/agents/manager.ts`, new settings, new `renderer/.../SkillsSection.tsx`
 **Acceptance**:
-- [ ] Format: markdown with YAML frontmatter (name, description, category, requires)
+- [ ] Format: markdown with YAML frontmatter (name, description, category, role, requires, allowed-tools)
 - [ ] Discovery: project-local (`.exegol/skills/`) + global (`~/.exegol/skills/`)
 - [ ] Sharing: global skills available to ALL projects; project skills override global by name
 - [ ] Enable/disable toggle per project (stored in DB)
 - [ ] Requirement checking: skip skills with unmet CLIs or env vars
+- [ ] Role/persona support: skills can define expert roles with named cognitive frameworks
 - [ ] Spawn dialog: select skills to inject into agent context
-- [ ] Skills browser: list, preview, toggle, requirement status
+- [ ] Skills browser: list, preview, toggle, requirement status, role badge
+- [ ] Ship with 5 default global skills: architect, qa, debugger, reviewer, documenter (inspired by gstack personas)
 - [ ] New workspace tab: "Skills"
 - [ ] Document: `docs/applied/T31_skills_system.md`
 
@@ -382,9 +416,9 @@
 |-------|-------|----------------|------------|-------------|
 | **1 — Dashboards** | T17, T18, T19, T20 | Mission Control, Uptime Kuma, ClawWork | T17 | T20 |
 | **2 — Terminal & Search** | T21, T22, T23 | Tabby, QMD, memU | T21 | T23 |
-| **3 — Orchestration** | T24, T25, T26, T27 | Nanobot, Overstory, Stoneforge, DeerFlow, TunaCode | T24 | T25, T26 |
-| **4 — Git & Quality** | T28, T29, T33 | GitButler, ClawWork, Mission Control, Pi | T33 | T29 |
-| **5 — MCP/Skills/Memory** | T30, T31, T32 | QMD, Zed, Pi, DeerFlow, Nanobot, memU, TinyClaw | T31 | T30, T32 |
+| **3 — Orchestration** | T24, T25, T26, T27, T34 | Nanobot, Overstory, Stoneforge, DeerFlow, TunaCode, gstack | T24 | T25, T26, T34 |
+| **4 — Git & Quality** | T28, T29, T33 | GitButler, ClawWork, Mission Control, Pi, gstack | T33 | T29 |
+| **5 — MCP/Skills/Memory** | T30, T31, T32 | QMD, Zed, Pi, DeerFlow, Nanobot, memU, TinyClaw, gstack | T31 | T30, T32 |
 
 **All 5 agents run in parallel. Zero file conflicts between clusters.**
 
@@ -412,10 +446,11 @@
 
 ### Phase 4 — Advanced Features
 13. **T26** — Dependency scheduler (Agent 3)
-14. **T30** — MCP host (Agent 5)
-15. **T32** — Agent memory (Agent 5)
-16. **T23** — Full-text search (Agent 2)
-17. **T29** — Oplog/undo (Agent 4)
+14. **T34** — Agent task queue (Agent 3)
+15. **T30** — MCP host (Agent 5)
+16. **T32** — Agent memory (Agent 5)
+17. **T23** — Full-text search (Agent 2)
+18. **T29** — Oplog/undo (Agent 4)
 
 ---
 
