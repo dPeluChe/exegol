@@ -1,3 +1,4 @@
+export * from "./queries/activities";
 export * from "./queries/agents";
 export * from "./queries/projects";
 export * from "./queries/prompts";

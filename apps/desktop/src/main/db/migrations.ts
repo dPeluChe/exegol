@@ -189,6 +189,23 @@ const migrations: Migration[] = [
     sql: `ALTER TABLE token_usage ADD COLUMN source TEXT NOT NULL DEFAULT 'agent'
       CHECK (source IN ('agent', 'log_scan'))`,
   },
+  {
+    id: "013_activities",
+    sql: `CREATE TABLE IF NOT EXISTS activities (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      project_id TEXT,
+      description TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_activities_project ON activities(project_id);
+    CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type)`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

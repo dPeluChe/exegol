@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import * as os from "node:os";
 import { promisify } from "node:util";
+import type { MetricsSnapshot } from "@exegol/shared";
+import { BrowserWindow } from "electron";
 
 const execFileAsync = promisify(execFile);
 
@@ -47,6 +49,24 @@ const COLLECT_INTERVAL = 10_000; // 10 seconds
 let cachedMetrics: SystemMetrics | null = null;
 let collectorTimer: ReturnType<typeof setInterval> | null = null;
 let prevCpuSnapshot: { idle: number; total: number } | null = null;
+
+// ─── Metrics history (last 30 data points for sparkline charts) ───────────
+
+const MAX_HISTORY_POINTS = 30;
+
+const metricsHistory: MetricsSnapshot[] = [];
+
+/** Get the last N metrics snapshots for sparkline charts */
+export function getMetricsHistory(): MetricsSnapshot[] {
+  return metricsHistory;
+}
+
+/** Broadcast metrics to all renderer windows */
+function broadcastMetrics(metrics: SystemMetrics): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send("metrics:update", metrics);
+  }
+}
 
 function cpuSnapshot() {
   const cpus = os.cpus();
@@ -97,6 +117,20 @@ async function collectMetrics(): Promise<void> {
     disk,
     uptime: os.uptime(),
   };
+
+  // Track history for sparkline charts
+  metricsHistory.push({
+    cpu: cachedMetrics.cpu.usage,
+    memoryPercent: cachedMetrics.memory.usagePercent,
+    diskPercent: cachedMetrics.disk.usagePercent,
+    timestamp: Date.now(),
+  });
+  if (metricsHistory.length > MAX_HISTORY_POINTS) {
+    metricsHistory.shift();
+  }
+
+  // Push to renderer
+  broadcastMetrics(cachedMetrics);
 }
 
 /**

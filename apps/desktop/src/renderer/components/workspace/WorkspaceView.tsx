@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
+import { ActivitySection } from "./sections/ActivitySection";
 import { AgentsSection } from "./sections/AgentsSection";
 import { DiffSection } from "./sections/DiffSection";
 import { PromptsSection } from "./sections/PromptsSection";
@@ -46,6 +47,7 @@ export function WorkspaceView() {
         {activeSection === "scheduler" && <SchedulerSection />}
         {activeSection === "tokens" && <TokensSection />}
         {activeSection === "resources" && <ResourcesSection />}
+        {activeSection === "activity" && <ActivitySection />}
       </div>
     </div>
   );

@@ -2,13 +2,18 @@ import { z } from "zod";
 import { getAgentManager } from "../../agents/manager";
 import { listAgents } from "../../db/queries";
 import { getProjectPorts } from "../../system/ports";
-import { getProjectMetrics, getSystemMetrics } from "../../system/resources";
+import { getMetricsHistory, getProjectMetrics, getSystemMetrics } from "../../system/resources";
 import { publicProcedure, router } from "../trpc";
 
 export const resourcesRouter = router({
   system: publicProcedure.query(() => {
     // Returns cached metrics — no async, no blocking. Collector runs in background.
     return getSystemMetrics();
+  }),
+
+  /** Last 30 metrics snapshots for sparkline charts */
+  history: publicProcedure.query(() => {
+    return getMetricsHistory();
   }),
 
   project: publicProcedure

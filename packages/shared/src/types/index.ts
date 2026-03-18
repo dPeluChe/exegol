@@ -1,4 +1,6 @@
+export * from "./activity";
 export * from "./agent";
+export * from "./dashboard";
 export * from "./project";
 export * from "./prompt";
 export * from "./scheduler";
