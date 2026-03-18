@@ -223,8 +223,6 @@ export function indexPrompt(
 
 /** Rebuild the entire search index from current DB state (single transaction). */
 export function rebuildIndex(db: Database.Database): { indexed: number } {
-  db.prepare("DELETE FROM search_index").run();
-
   const entries: IndexEntry[] = [];
 
   // Collect prompts
@@ -281,5 +279,10 @@ export function rebuildIndex(db: Database.Database): { indexed: number } {
     }
   }
 
-  return { indexed: indexEntries(db, entries) };
+  const rebuild = db.transaction(() => {
+    db.prepare("DELETE FROM search_index").run();
+    return indexEntries(db, entries);
+  });
+
+  return { indexed: rebuild() };
 }
