@@ -2,13 +2,13 @@ import type { HandoffSummary } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ArrowRight, RotateCcw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
-import { LoadingSpinner } from "../common/LoadingSpinner";
-import { TerminalInstance } from "./TerminalInstance";
+import { EmptyState, LoadingSpinner } from "../common";
+import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
 interface TerminalPanelProps {
   agentId: string;
@@ -39,6 +39,8 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
+  const terminalRef = useRef<TerminalInstanceHandle>(null);
+  const didSerializeRef = useRef(false);
 
   // Resolved handoff: from query (stopped agents) or live IPC (running agents)
   const resolvedHandoff = isStopped ? (handoff ?? null) : liveHandoff;
@@ -58,6 +60,23 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
       cleanup?.();
     };
   }, [agentId, isStopped]);
+
+  // When agent transitions to stopped, serialize terminal state and persist it
+  const persistSerializedState = useCallback(() => {
+    if (didSerializeRef.current) return;
+    const serialized = terminalRef.current?.serialize();
+    if (!serialized) return;
+    didSerializeRef.current = true;
+    trpcMutate("scrollback.saveSerialized", { agentId, content: serialized }).catch(() => {
+      // Non-fatal: raw scrollback still available as fallback
+    });
+  }, [agentId]);
+
+  useEffect(() => {
+    if (isStopped) {
+      persistSerializedState();
+    }
+  }, [isStopped, persistSerializedState]);
 
   const handleContinueWithHandoff = useCallback(async () => {
     if (!agent || handoffLoading) return;
@@ -155,10 +174,12 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
       return <LoadingSpinner label="Loading session history..." className="h-full" />;
     }
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2">
-        <AlertCircle className="h-6 w-6 text-text-muted" />
-        <span className="text-sm text-text-muted">Session ended — no history available</span>
-      </div>
+      <EmptyState
+        icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
+        title="Session ended"
+        description="No history available"
+        className="h-full"
+      />
     );
   }
 
@@ -182,7 +203,7 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
         </div>
       )}
       <div className="flex-1">
-        <TerminalInstance key={agentId} agentId={agentId} onReady={onReady} />
+        <TerminalInstance ref={terminalRef} key={agentId} agentId={agentId} onReady={onReady} />
       </div>
     </div>
   );

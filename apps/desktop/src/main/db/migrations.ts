@@ -190,6 +190,38 @@ const migrations: Migration[] = [
       CHECK (source IN ('agent', 'log_scan'))`,
   },
   {
+    id: "013_activities",
+    sql: `CREATE TABLE IF NOT EXISTS activities (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      project_id TEXT,
+      description TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_activities_project ON activities(project_id);
+    CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type)`,
+  },
+  {
+    id: "014_search_fts5",
+    sql: `
+      CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
+        title,
+        body,
+        entity_type UNINDEXED,
+        entity_id UNINDEXED,
+        project_id UNINDEXED,
+        agent_id UNINDEXED,
+        indexed_at UNINDEXED,
+        tokenize='porter unicode61'
+      );
+    `,
+  },
+  {
     id: "015_handoffs",
     sql: `CREATE TABLE IF NOT EXISTS handoffs (
       id TEXT PRIMARY KEY,

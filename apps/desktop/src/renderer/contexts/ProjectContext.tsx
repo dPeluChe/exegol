@@ -1,7 +1,13 @@
 import type { Project } from "@exegol/shared";
 import { createContext, useContext, useEffect, useMemo } from "react";
+import { useMountEffect } from "../hooks/use-mount-effect";
 import { useAgents, useProject } from "../hooks/use-trpc";
-import { type AgentState, useAgentStore } from "../stores/agents";
+import {
+  type AgentState,
+  startAgentStatusPush,
+  stopAgentStatusPush,
+  useAgentStore,
+} from "../stores/agents";
 import { useAppStore } from "../stores/app";
 
 export interface ProjectContextValue {
@@ -30,6 +36,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       useAppStore.getState().setActiveProject(null);
     }
   }, [activeProjectId, isLoading, project]);
+
+  // T17: Subscribe to push events for agent status updates (Rule 4: external system sync)
+  useMountEffect(() => {
+    startAgentStatusPush();
+    return () => stopAgentStatusPush();
+  });
 
   // Sync DB agents into Zustand store when they load.
   // Ideally this would use TanStack Query's onSuccess, but v5 removed that callback.

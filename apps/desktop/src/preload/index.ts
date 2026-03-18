@@ -35,6 +35,21 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.removeListener("agent:handoff-ready", handler);
     };
   },
+  // Push event subscriptions (T17: push-first status updates)
+  onAgentStatus: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on("agent:status-changed", handler);
+    return () => {
+      ipcRenderer.removeListener("agent:status-changed", handler);
+    };
+  },
+  onMetrics: (callback: (metrics: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on("metrics:update", handler);
+    return () => {
+      ipcRenderer.removeListener("metrics:update", handler);
+    };
+  },
   dialog: {
     // biome-ignore lint/suspicious/noExplicitAny: Electron dialog options are dynamic
     showOpenDialog: (options: any) => ipcRenderer.invoke("dialog:showOpenDialog", options),

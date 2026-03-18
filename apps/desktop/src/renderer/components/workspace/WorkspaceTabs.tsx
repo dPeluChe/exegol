@@ -10,6 +10,8 @@ import {
   ListOrdered,
   type LucideIcon,
   MessageSquare,
+  Rss,
+  Search,
 } from "lucide-react";
 
 export type WorkspaceSection =
@@ -18,10 +20,12 @@ export type WorkspaceSection =
   | "prompts"
   | "diff"
   | "scheduler"
+  | "search"
   | "tokens"
   | "resources"
   | "messages"
-  | "queue";
+  | "queue"
+  | "activity";
 
 const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "agents", label: "Agents", icon: Cpu },
@@ -31,8 +35,10 @@ const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "scheduler", label: "Scheduler", icon: Clock },
   { id: "messages", label: "Messages", icon: MessageSquare },
   { id: "queue", label: "Queue", icon: ListOrdered },
+  { id: "search", label: "Search", icon: Search },
   { id: "tokens", label: "Token Usage", icon: Coins },
   { id: "resources", label: "Resources", icon: Activity },
+  { id: "activity", label: "Activity", icon: Rss },
 ];
 
 interface WorkspaceTabsProps {

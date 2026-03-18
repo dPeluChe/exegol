@@ -1,3 +1,19 @@
+interface AgentStatusEvent {
+  agentId: string;
+  projectId: string;
+  status: string;
+  currentStep: string | null;
+  cliType: string;
+  timestamp: number;
+}
+
+interface SystemMetricsEvent {
+  cpu: { usage: number; cores: number; model: string };
+  memory: { total: number; used: number; free: number; usagePercent: number };
+  disk: { total: number; used: number; free: number; usagePercent: number };
+  uptime: number;
+}
+
 interface Window {
   api: {
     trpc: {
@@ -22,6 +38,8 @@ interface Window {
       maximize: () => void;
       close: () => void;
     };
-    onAgentHandoff?: (callback: (agentId: string, handoffId: string) => void) => (() => void);
+    onAgentHandoff?: (callback: (agentId: string, handoffId: string) => void) => () => void;
+    onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
+    onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
   };
 }

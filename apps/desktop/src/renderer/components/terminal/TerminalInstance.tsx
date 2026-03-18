@@ -1,10 +1,23 @@
 import { FitAddon } from "@xterm/addon-fit";
+import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal } from "@xterm/xterm";
-import { useCallback, useEffect, useRef } from "react";
+import {
+  type ForwardedRef,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+} from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { useTerminalStore } from "../../stores/terminals";
+
+export interface TerminalInstanceHandle {
+  /** Serialize the terminal buffer state (ANSI escape sequences + cursor/attribute state). */
+  serialize: () => string | null;
+}
 
 interface TerminalInstanceProps {
   agentId: string;
@@ -63,15 +76,28 @@ const LIGHT_TERMINAL_THEME = {
   brightWhite: "#fafafa",
 };
 
-export function TerminalInstance({
-  agentId,
-  readOnly = false,
-  initialContent,
-  onReady,
-}: TerminalInstanceProps) {
+export const TerminalInstance = forwardRef(function TerminalInstance(
+  { agentId, readOnly = false, initialContent, onReady }: TerminalInstanceProps,
+  ref: ForwardedRef<TerminalInstanceHandle>,
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const serializeAddonRef = useRef<SerializeAddon | null>(null);
+
+  // Expose serialize method to parent via ref
+  useImperativeHandle(ref, () => ({
+    serialize: () => {
+      const addon = serializeAddonRef.current;
+      const terminal = terminalRef.current;
+      if (!addon || !terminal) return null;
+      try {
+        return addon.serialize({ excludeAltBuffer: true, excludeModes: true });
+      } catch {
+        return null;
+      }
+    },
+  }));
 
   const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
   const setTerminalSize = useTerminalStore((s) => s.setTerminalSize);
@@ -123,6 +149,10 @@ export function TerminalInstance({
 
     const webLinksAddon = new WebLinksAddon();
     terminal.loadAddon(webLinksAddon);
+
+    const serializeAddon = new SerializeAddon();
+    terminal.loadAddon(serializeAddon);
+    serializeAddonRef.current = serializeAddon;
 
     terminal.open(container);
 
@@ -198,6 +228,7 @@ export function TerminalInstance({
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
+      serializeAddonRef.current = null;
     };
   }, [
     agentId,
@@ -228,4 +259,4 @@ export function TerminalInstance({
   }, [handleResize]);
 
   return <div ref={containerRef} className="terminal-container h-full w-full bg-bg-primary" />;
-}
+});

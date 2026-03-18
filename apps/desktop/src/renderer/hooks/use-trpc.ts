@@ -1,6 +1,11 @@
 import type {
+  Activity,
   Agent,
+  AgentCostRow,
   AgentCreate,
+  DailyTrendRow,
+  MetricsSnapshot,
+  ModelBreakdownRow,
   Project,
   ProjectCreate,
   Prompt,
@@ -10,6 +15,7 @@ import type {
   ScheduledResult,
   ScheduledTask,
   ScheduledTaskCreate,
+  SearchResult,
   Settings,
   TokenUsage,
   TokenUsageSummary,
@@ -61,7 +67,7 @@ export function useAgents(projectId: string | null) {
     queryKey: ["agents", projectId],
     queryFn: () => trpcInvoke<Agent[]>("agents.list", { projectId }),
     enabled: !!projectId,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
   });
 }
 
@@ -70,7 +76,7 @@ export function useAgent(id: string | null) {
     queryKey: ["agent", id],
     queryFn: () => trpcInvoke<Agent>("agents.get", { id }),
     enabled: !!id,
-    refetchInterval: 2_000,
+    refetchInterval: 10_000, // Reduced: push events (T17) handle real-time updates
   });
 }
 
@@ -170,6 +176,40 @@ export function useTokenScan() {
   });
 }
 
+// T19: Per-model breakdown
+
+export function useModelBreakdown(projectId: string | null, days = 30) {
+  return useQuery({
+    queryKey: ["tokenUsage", "modelBreakdown", projectId, days],
+    queryFn: () =>
+      trpcInvoke<ModelBreakdownRow[]>("tokenUsage.modelBreakdown", { projectId, days }),
+    enabled: !!projectId,
+    refetchInterval: 30_000,
+  });
+}
+
+// T19: Per-agent costs
+
+export function useAgentCosts(projectId: string | null, days = 30) {
+  return useQuery({
+    queryKey: ["tokenUsage", "agentCosts", projectId, days],
+    queryFn: () => trpcInvoke<AgentCostRow[]>("tokenUsage.agentCosts", { projectId, days }),
+    enabled: !!projectId,
+    refetchInterval: 30_000,
+  });
+}
+
+// T19: Daily trend
+
+export function useDailyTrend(projectId: string | null, days = 30) {
+  return useQuery({
+    queryKey: ["tokenUsage", "dailyTrend", projectId, days],
+    queryFn: () => trpcInvoke<DailyTrendRow[]>("tokenUsage.dailyTrend", { projectId, days }),
+    enabled: !!projectId,
+    refetchInterval: 30_000,
+  });
+}
+
 // ─── Resources ──────────────────────────────────────────────────────────────
 
 export interface SystemMetrics {
@@ -192,7 +232,15 @@ export function useSystemMetrics() {
   return useQuery({
     queryKey: ["resources", "system"],
     queryFn: () => trpcInvoke<SystemMetrics>("resources.system"),
-    refetchInterval: 10_000, // Matches background collector interval
+    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
+  });
+}
+
+export function useMetricsHistory() {
+  return useQuery({
+    queryKey: ["resources", "history"],
+    queryFn: () => trpcInvoke<MetricsSnapshot[]>("resources.history"),
+    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
   });
 }
 
@@ -427,6 +475,22 @@ export function useTogglePinPrompt() {
   });
 }
 
+// ─── Activities (T20) ────────────────────────────────────────────────────────
+
+export function useActivities(projectId: string | null, type?: string) {
+  return useQuery({
+    queryKey: ["activities", projectId, type],
+    queryFn: () =>
+      trpcInvoke<Activity[]>("activities.list", {
+        projectId: projectId ?? undefined,
+        type,
+        limit: 100,
+      }),
+    enabled: !!projectId,
+    refetchInterval: 15_000,
+  });
+}
+
 // ─── Diff ────────────────────────────────────────────────────────────────────
 
 export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
@@ -435,6 +499,43 @@ export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
     queryKey: ["diff", projectId, mode],
     queryFn: () => trpcInvoke<string>(procedure, { projectId }),
     enabled: !!projectId,
+  });
+}
+
+// ─── Search ─────────────────────────────────────────────────────────────
+
+export type { SearchResult };
+
+export function useSearch(query: string, projectId?: string | null) {
+  return useQuery({
+    queryKey: ["search", query, projectId],
+    queryFn: () =>
+      trpcInvoke<SearchResult[]>("search.query", {
+        query,
+        projectId: projectId ?? undefined,
+      }),
+    enabled: query.length > 0,
+  });
+}
+
+export function useIndexAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { agentId: string; projectId: string; taskDescription: string }) =>
+      trpcMutate<{ indexed: number }>("search.indexAgent", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["search"] });
+    },
+  });
+}
+
+export function useRebuildSearchIndex() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => trpcMutate<{ indexed: number }>("search.rebuild"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["search"] });
+    },
   });
 }
 
