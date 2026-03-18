@@ -1,7 +1,9 @@
 import { Button } from "@exegol/ui";
 import { AlertCircle, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
-import { TerminalInstance } from "./TerminalInstance";
+import { trpcMutate } from "../../lib/trpc-client";
+import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
 interface TerminalPanelProps {
   agentId: string;
@@ -17,6 +19,25 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
     isStopped ? agentId : null,
   );
   const spawnAgent = useSpawnAgent();
+  const terminalRef = useRef<TerminalInstanceHandle>(null);
+  const didSerializeRef = useRef(false);
+
+  // When agent transitions to stopped, serialize terminal state and persist it
+  const persistSerializedState = useCallback(() => {
+    if (didSerializeRef.current) return;
+    const serialized = terminalRef.current?.serialize();
+    if (!serialized) return;
+    didSerializeRef.current = true;
+    trpcMutate("scrollback.saveSerialized", { agentId, content: serialized }).catch(() => {
+      // Non-fatal: raw scrollback still available as fallback
+    });
+  }, [agentId]);
+
+  useEffect(() => {
+    if (isStopped) {
+      persistSerializedState();
+    }
+  }, [isStopped, persistSerializedState]);
 
   // If agent is stopped and has scrollback, show read-only terminal
   if (isStopped && scrollbackContent) {
@@ -75,5 +96,5 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
   }
 
   // Live terminal
-  return <TerminalInstance key={agentId} agentId={agentId} onReady={onReady} />;
+  return <TerminalInstance ref={terminalRef} key={agentId} agentId={agentId} onReady={onReady} />;
 }
