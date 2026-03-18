@@ -1,15 +1,15 @@
+import type { MemoryEntry } from "@exegol/shared";
 import { Badge, Button, cn, ScrollArea } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Brain, Plus, Search, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
-  type MemoryEntry,
   useCreateMemory,
   useDeleteMemory,
   useMemories,
   useSearchMemories,
-} from "../../../hooks/use-trpc";
+} from "../../../hooks/use-trpc-memory";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { EmptyState } from "../../common/EmptyState";
 

@@ -4,40 +4,13 @@
  * and TinyClaw's temporal decay + FTS5 search.
  */
 
+import type { MemoryCategory, MemoryCreate, MemoryEntry } from "@exegol/shared";
+import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "../db/queries/helpers";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-export const MEMORY_CATEGORIES = [
-  "preference",
-  "pattern",
-  "error",
-  "solution",
-  "dependency",
-  "convention",
-] as const;
-export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
-
-export type MemoryEntry = {
-  id: string;
-  projectId: string;
-  category: MemoryCategory;
-  content: string;
-  sourceAgentId: string | null;
-  relevanceScore: number;
-  accessCount: number;
-  createdAt: number;
-  lastAccessedAt: number;
-};
-
-export type MemoryCreate = {
-  projectId: string;
-  category: MemoryCategory;
-  content: string;
-  sourceAgentId?: string;
-  relevanceScore?: number;
-};
+export type { MemoryCategory, MemoryCreate, MemoryEntry };
+export { MEMORY_CATEGORIES };
 
 // ─── Row mapper ──────────────────────────────────────────────────────────────
 

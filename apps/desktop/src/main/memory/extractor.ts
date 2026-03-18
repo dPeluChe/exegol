@@ -9,9 +9,10 @@
  * - User preferences expressed
  */
 
+import type { MemoryCategory } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
-import { createMemory, type MemoryCategory } from "./store";
+import { createMemory } from "./store";
 
 // ─── Extraction patterns ─────────────────────────────────────────────────────
 

@@ -1,4 +1,6 @@
 export * from "./agent";
+export * from "./mcp";
+export * from "./memory";
 export * from "./project";
 export * from "./prompt";
 export * from "./scheduler";

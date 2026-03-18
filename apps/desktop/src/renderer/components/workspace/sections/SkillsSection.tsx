@@ -1,4 +1,4 @@
-import type { SkillCategory } from "@exegol/shared";
+import type { SkillCategory, SkillWithState } from "@exegol/shared";
 import { SKILL_CATEGORIES } from "@exegol/shared";
 import { Badge, cn, ScrollArea } from "@exegol/ui";
 import {
@@ -12,7 +12,8 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { useProject, useSkills, useToggleSkill } from "../../../hooks/use-trpc";
+import { useProject } from "../../../hooks/use-trpc";
+import { useSkills, useToggleSkill } from "../../../hooks/use-trpc-skills";
 import { EmptyState } from "../../common/EmptyState";
 
 // ─── Category styling ────────────────────────────────────────────────────────
@@ -33,20 +34,6 @@ const CATEGORY_LABELS: Record<SkillCategory, string> = {
   reviewer: "Reviewer",
   documenter: "Documenter",
   custom: "Custom",
-};
-
-type SkillItem = {
-  name: string;
-  description: string;
-  category: string;
-  role: string | null;
-  requires: { bins: string[]; env: string[] };
-  allowedTools: string[];
-  content: string;
-  filePath: string;
-  scope: "global" | "project";
-  available: boolean;
-  enabled: boolean;
 };
 
 // ─── Main component ──────────────────────────────────────────────────────────
@@ -156,7 +143,7 @@ function SkillCard({
   expanded,
   onToggleExpand,
 }: {
-  skill: SkillItem;
+  skill: SkillWithState;
   projectId: string | null;
   expanded: boolean;
   onToggleExpand: () => void;
