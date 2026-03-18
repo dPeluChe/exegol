@@ -169,8 +169,8 @@ export function indexScrollback(
   taskDescription: string,
   content: string,
 ): number {
-  // Skip if already indexed
-  if (isIndexed(db, `scrollback:${agentId}`)) return 0;
+  // Skip if already indexed (check both single-entry and first-chunk IDs)
+  if (isIndexed(db, `scrollback:${agentId}`) || isIndexed(db, `scrollback:${agentId}:0`)) return 0;
 
   // Chunk content into ~4KB segments for reasonable snippet extraction
   const CHUNK_SIZE = 4096;
@@ -221,36 +221,34 @@ export function indexPrompt(
   });
 }
 
-/** Rebuild the entire search index from current DB state. */
+/** Rebuild the entire search index from current DB state (single transaction). */
 export function rebuildIndex(db: Database.Database): { indexed: number } {
-  // Clear existing index
   db.prepare("DELETE FROM search_index").run();
 
-  let indexed = 0;
+  const entries: IndexEntry[] = [];
 
-  // Index prompts
+  // Collect prompts
   const prompts = db.prepare("SELECT id, project_id, title, content FROM prompts").all() as Array<
     Record<string, unknown>
   >;
   for (const p of prompts) {
-    indexEntry(db, {
+    entries.push({
       title: p.title as string,
       body: p.content as string,
       entityType: "prompt",
       entityId: `prompt:${p.id}`,
       projectId: p.project_id as string,
     });
-    indexed++;
   }
 
-  // Index agent task descriptions
+  // Collect agent task descriptions
   const agents = db.prepare("SELECT id, project_id, task_description FROM agents").all() as Array<
     Record<string, unknown>
   >;
   for (const a of agents) {
     const desc = a.task_description as string;
     if (desc) {
-      indexEntry(db, {
+      entries.push({
         title: desc,
         body: desc,
         entityType: "task_description",
@@ -258,11 +256,10 @@ export function rebuildIndex(db: Database.Database): { indexed: number } {
         projectId: a.project_id as string,
         agentId: a.id as string,
       });
-      indexed++;
     }
   }
 
-  // Index scheduler results
+  // Collect scheduler results
   const results = db
     .prepare(
       `SELECT sr.id, sr.summary, st.project_id, sr.agent_id
@@ -273,7 +270,7 @@ export function rebuildIndex(db: Database.Database): { indexed: number } {
   for (const r of results) {
     const summary = r.summary as string;
     if (summary) {
-      indexEntry(db, {
+      entries.push({
         title: `Scheduler result ${r.id}`,
         body: summary,
         entityType: "scheduler_result",
@@ -281,9 +278,8 @@ export function rebuildIndex(db: Database.Database): { indexed: number } {
         projectId: r.project_id as string,
         agentId: (r.agent_id as string) || undefined,
       });
-      indexed++;
     }
   }
 
-  return { indexed };
+  return { indexed: indexEntries(db, entries) };
 }
