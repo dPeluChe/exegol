@@ -41,10 +41,14 @@ Electron + React + Rust desktop app for orchestrating AI coding agents (Claude C
 - Agent delete via right-click context menu
 
 ### What's Placeholder / Not Yet Functional
-- Workspace sections: Token Usage, Resources — UI shells exist but are placeholder
-- Worktree management: DB schema exists, Rust git2 scaffold exists, but not wired into agent spawn flow
-- Token usage tracking: DB table exists, tRPC router exists, but no actual log parsing yet
+- Workspace sections: Token Usage, Resources — UI shells exist but are placeholder (data pipelines work, UI needs rewrite)
 - MCP Host, Skills, Plan FSM, Hook Engine, Memory system, Repo Maps — not started
+
+### Recently Completed (V1 tasks done)
+- Worktree management: fully wired into agent spawn flow (create, cleanup, branch auto-name)
+- Token usage tracking: parses Claude Code JSONL logs from `~/.claude/projects/`, stores in DB with source column
+- Per-agent process metrics: CPU/RAM per running agent via `ps`
+- Agent re-launch: stopped agents can be re-spawned with same config
 
 ## Tech Stack
 
@@ -61,6 +65,10 @@ exegol/
 │   │   │   ├── agents/
 │   │   │   │   ├── manager.ts      # AgentManager: spawn/stop/write/resize via node-pty
 │   │   │   │   └── status-parser.ts # Parses agent stdout for live status
+│   │   │   ├── lib/
+│   │   │   │   └── logger.ts       # Structured logger utility
+│   │   │   ├── tokens/
+│   │   │   │   └── log-parser.ts   # Claude Code JSONL log parser for token usage
 │   │   │   ├── db/
 │   │   │   │   ├── client.ts       # libSQL database init + WAL mode
 │   │   │   │   ├── migrations.ts   # 12 migrations (projects → token_usage source)
@@ -107,9 +115,10 @@ exegol/
 │   │   │   ├── contexts/
 │   │   │   │   └── ProjectContext.tsx  # Project + agents provider, syncs DB → Zustand
 │   │   │   ├── hooks/
-│   │   │   │   ├── use-hotkeys.ts  # Global keyboard shortcuts
-│   │   │   │   ├── use-theme.ts    # Theme hook: sets data-theme on <html>, system preference listener
-│   │   │   │   └── use-trpc.ts     # tRPC query/mutation hooks via IPC
+│   │   │   │   ├── use-hotkeys.ts      # Global keyboard shortcuts
+│   │   │   │   ├── use-mount-effect.ts # useMountEffect for external system sync
+│   │   │   │   ├── use-theme.ts        # Theme hook: sets data-theme on <html>, system preference listener
+│   │   │   │   └── use-trpc.ts         # tRPC query/mutation hooks via IPC
 │   │   │   ├── stores/
 │   │   │   │   ├── app.ts          # Zustand: activeView, activeProjectId, sidebarCollapsed (persisted)
 │   │   │   │   ├── agents.ts       # Zustand: agent state, focused agent, sync from DB
@@ -194,7 +203,10 @@ exegol/
 ├── docs/
 │   ├── project_definition/         # Architecture, features, stack, competitors
 │   ├── tasks_completed/            # Work log by month
-│   └── review_notes/              # PR review notes per cluster
+│   ├── review_notes/              # PR review notes per cluster
+│   ├── applied/                    # Per-task documentation of applied patterns from studied repos
+│   ├── TASK_TODO.md               # V1 task board (all 16 tasks completed)
+│   └── TASK_TODO_V2.md            # V2 task board (18 tasks, 5 agent clusters, repo inspirations)
 ├── turbo.json
 ├── biome.json                      # Biome 2.4.7 config
 └── package.json                    # Bun workspace root
@@ -239,6 +251,9 @@ cargo check                         # Type-check (run inside packages/core-rust)
 - **Scrollback persistence**: AgentManager captures PTY output per-agent (1MB cap). Periodic flush every 30s + final flush on process exit. Files stored at `{userData}/scrollback/{agentId}.log`. Renderer shows read-only xterm replay for stopped agents.
 - **Diff viewer**: tRPC `diff.projectDiff` / `diff.stagedDiff` run `git diff` via `execFileAsync`. Parser in `diff-parser.ts` handles unified format. UI supports unified and side-by-side views with auto-refresh.
 - **Settings auto-save**: Settings panel auto-saves on every change (no manual Save button needed). IDE opener reads from user settings DB (not just project default).
+- **Worktree management**: On spawn with "Use worktree" checked, AgentManager calls Rust git2 (napi-rs) to create isolated worktree. Branch auto-named from task description. Auto-cleanup on stop if no changes; kept + user notified if changes exist. DB links `agents.worktree_id` → `worktrees` table.
+- **Token log parser**: `log-parser.ts` scans `~/.claude/projects/` for Claude Code JSONL session logs. Extracts model, input/output/cache tokens per conversation turn. Stores in `token_usage` table with `source: 'log_scan'`. Triggered via tRPC procedure.
+- **Logger**: Structured logger in `main/lib/logger.ts` with level-based output.
 - **Dead code removed**: SpawnAgentDialog, AgentCard, TerminalTabs, TerminalSplitView, PaneAgentSelector removed. Shiki dependency removed (replaced by Monaco).
 
 ## Database Tables
