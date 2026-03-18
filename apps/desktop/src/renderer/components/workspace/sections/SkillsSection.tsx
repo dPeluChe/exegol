@@ -200,17 +200,18 @@ function SkillCard({
               {CATEGORY_LABELS[category] ?? skill.category}
             </Badge>
 
-            {skill.scope === "project" ? (
-              <FolderOpen className="h-3 w-3 shrink-0 text-amber-400" title="Project skill" />
-            ) : (
-              <Globe className="h-3 w-3 shrink-0 text-text-muted" title="Global skill" />
-            )}
+            <span title={skill.scope === "project" ? "Project skill" : "Global skill"}>
+              {skill.scope === "project" ? (
+                <FolderOpen className="h-3 w-3 shrink-0 text-amber-400" />
+              ) : (
+                <Globe className="h-3 w-3 shrink-0 text-text-muted" />
+              )}
+            </span>
 
             {!skill.available && (
-              <AlertTriangle
-                className="h-3 w-3 shrink-0 text-amber-400"
-                title="Missing requirements"
-              />
+              <span title="Missing requirements">
+                <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
+              </span>
             )}
           </div>
 

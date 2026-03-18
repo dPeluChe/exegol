@@ -123,7 +123,7 @@ class StdioTransport {
         continue;
       }
 
-      const contentLength = Number.parseInt(lengthMatch[1], 10);
+      const contentLength = Number.parseInt(lengthMatch[1] ?? "0", 10);
       const contentStart = headerEnd + 4;
       if (this.buffer.length < contentStart + contentLength) break;
 

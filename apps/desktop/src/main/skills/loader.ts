@@ -16,14 +16,15 @@ function parseFrontmatter(content: string): ParsedSkillFile {
   if (!match) return { meta: {}, body: content };
 
   const meta: Record<string, string> = {};
-  for (const line of match[1].split("\n")) {
+  const yamlBlock = match[1] ?? "";
+  for (const line of yamlBlock.split("\n")) {
     const idx = line.indexOf(":");
     if (idx > 0) {
       meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
     }
   }
 
-  return { meta, body: match[2] };
+  return { meta, body: match[2] ?? "" };
 }
 
 function parseCommaSeparated(value: string | undefined): string[] {
