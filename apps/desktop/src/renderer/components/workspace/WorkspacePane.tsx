@@ -1,12 +1,24 @@
 import type { AgentCliType } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { Code2, Columns, Cpu, FolderTree, Globe, RefreshCw, Rows, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import {
+  AlertTriangle,
+  Code2,
+  Columns,
+  Cpu,
+  FolderTree,
+  Globe,
+  RefreshCw,
+  Rows,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useAgent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { type Pane, useWorkspaceStore } from "../../stores/workspace";
+import { EmptyState, LoadingSpinner } from "../common";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { FileExplorer } from "../workspace/FileExplorer";
 
@@ -270,6 +282,47 @@ function EmptyPane({ paneId }: { paneId: string }) {
   );
 }
 
+// ─── Invalid / Recovery-Failed Pane ──────────────────────────────────────
+
+function InvalidPane({ reason, paneId }: { reason: string; paneId: string }) {
+  const updatePane = useWorkspaceStore((s) => s.updatePane);
+  return (
+    <EmptyState
+      icon={<AlertTriangle className="h-8 w-8 text-yellow-400/60" />}
+      title="Recovery failed"
+      description={reason}
+      action={{
+        label: "Reset pane",
+        onClick: () => updatePane(paneId, { type: "empty", invalidReason: undefined }),
+      }}
+      className="h-full"
+    />
+  );
+}
+
+// ─── Recoverable Terminal Pane (validates agent exists) ──────────────────
+
+function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId: string }) {
+  const { data: agent, isError } = useAgent(agentId);
+  const invalidatePane = useWorkspaceStore((s) => s.invalidatePane);
+
+  // Agent fetch failed — move side-effect out of render body
+  useEffect(() => {
+    if (isError) {
+      invalidatePane(paneId, `Agent "${agentId}" no longer exists.`);
+    }
+  }, [isError, paneId, agentId, invalidatePane]);
+
+  if (isError) return null;
+
+  // Agent found or still loading
+  if (agent === undefined) {
+    return <LoadingSpinner label="Loading agent..." className="h-full" />;
+  }
+
+  return <TerminalPanel agentId={agentId} />;
+}
+
 // ─── Files Pane ─────────────────────────────────────────────────────────
 
 function FilesPaneContent() {
@@ -316,11 +369,18 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
     >
       <PaneToolbar tabId={tabId} paneId={paneId} paneType={pane.type} />
       <div className="flex-1 overflow-hidden">
-        {pane.type === "terminal" && pane.agentId && <TerminalPanel agentId={pane.agentId} />}
-        {pane.type === "browser" && <BrowserPane pane={pane} paneId={paneId} />}
-        {pane.type === "files" && <FilesPaneContent />}
-        {pane.type === "empty" && <EmptyPane paneId={paneId} />}
-        {pane.type === "terminal" && !pane.agentId && <EmptyPane paneId={paneId} />}
+        {pane.invalidReason && <InvalidPane reason={pane.invalidReason} paneId={paneId} />}
+        {!pane.invalidReason && pane.type === "terminal" && pane.agentId && (
+          <RecoverableTerminalPane agentId={pane.agentId} paneId={paneId} />
+        )}
+        {!pane.invalidReason && pane.type === "browser" && (
+          <BrowserPane pane={pane} paneId={paneId} />
+        )}
+        {!pane.invalidReason && pane.type === "files" && <FilesPaneContent />}
+        {!pane.invalidReason && pane.type === "empty" && <EmptyPane paneId={paneId} />}
+        {!pane.invalidReason && pane.type === "terminal" && !pane.agentId && (
+          <EmptyPane paneId={paneId} />
+        )}
       </div>
     </div>
   );

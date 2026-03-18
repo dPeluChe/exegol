@@ -206,6 +206,21 @@ const migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type)`,
   },
+  {
+    id: "014_search_fts5",
+    sql: `
+      CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
+        title,
+        body,
+        entity_type UNINDEXED,
+        entity_id UNINDEXED,
+        project_id UNINDEXED,
+        agent_id UNINDEXED,
+        indexed_at UNINDEXED,
+        tokenize='porter unicode61'
+      );
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

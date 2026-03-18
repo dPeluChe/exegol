@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { app } from "electron";
 import { z } from "zod";
@@ -28,8 +28,32 @@ function getScrollbackPath(agentId: string): string {
   return filePath;
 }
 
+function getSerializedPath(agentId: string): string {
+  if (!safeAgentIdPattern.test(agentId)) {
+    throw new Error(`Invalid agentId: ${agentId}`);
+  }
+  const dir = getScrollbackDir();
+  const filePath = resolve(dir, `${agentId}.serialized`);
+  if (!filePath.startsWith(dir)) {
+    throw new Error(`Path traversal detected for agentId: ${agentId}`);
+  }
+  return filePath;
+}
+
 export const scrollbackRouter = router({
+  /** Get scrollback content. Prefers serialized state (colors/formatting intact), falls back to raw log. */
   get: publicProcedure.input(z.object({ agentId: z.string() })).query(({ input }) => {
+    // Try serialized state first (higher fidelity: preserves cursor pos, attributes)
+    const serializedPath = getSerializedPath(input.agentId);
+    if (existsSync(serializedPath)) {
+      try {
+        return readFileSync(serializedPath, "utf-8");
+      } catch {
+        // Fall through to raw scrollback
+      }
+    }
+
+    // Fall back to raw scrollback log
     const filePath = getScrollbackPath(input.agentId);
     if (!existsSync(filePath)) {
       return null;
@@ -38,8 +62,20 @@ export const scrollbackRouter = router({
   }),
 
   exists: publicProcedure.input(z.object({ agentId: z.string() })).query(({ input }) => {
-    return existsSync(getScrollbackPath(input.agentId));
+    return (
+      existsSync(getSerializedPath(input.agentId)) || existsSync(getScrollbackPath(input.agentId))
+    );
   }),
+
+  /** Save serialized terminal state (called from renderer when agent stops). */
+  saveSerialized: publicProcedure
+    .input(z.object({ agentId: z.string(), content: z.string() }))
+    .mutation(({ input }) => {
+      const filePath = getSerializedPath(input.agentId);
+      mkdirSync(getScrollbackDir(), { recursive: true });
+      writeFileSync(filePath, input.content, "utf-8");
+      return { success: true };
+    }),
 });
 
 export { getScrollbackDir, getScrollbackPath };

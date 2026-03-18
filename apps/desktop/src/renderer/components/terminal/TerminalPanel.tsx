@@ -1,7 +1,10 @@
 import { Button } from "@exegol/ui";
 import { AlertCircle, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
-import { TerminalInstance } from "./TerminalInstance";
+import { trpcMutate } from "../../lib/trpc-client";
+import { EmptyState, LoadingSpinner } from "../common";
+import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
 interface TerminalPanelProps {
   agentId: string;
@@ -17,6 +20,25 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
     isStopped ? agentId : null,
   );
   const spawnAgent = useSpawnAgent();
+  const terminalRef = useRef<TerminalInstanceHandle>(null);
+  const didSerializeRef = useRef(false);
+
+  // When agent transitions to stopped, serialize terminal state and persist it
+  const persistSerializedState = useCallback(() => {
+    if (didSerializeRef.current) return;
+    const serialized = terminalRef.current?.serialize();
+    if (!serialized) return;
+    didSerializeRef.current = true;
+    trpcMutate("scrollback.saveSerialized", { agentId, content: serialized }).catch(() => {
+      // Non-fatal: raw scrollback still available as fallback
+    });
+  }, [agentId]);
+
+  useEffect(() => {
+    if (isStopped) {
+      persistSerializedState();
+    }
+  }, [isStopped, persistSerializedState]);
 
   // If agent is stopped and has scrollback, show read-only terminal
   if (isStopped && scrollbackContent) {
@@ -59,21 +81,18 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
   // If stopped with no scrollback yet (loading or no data)
   if (isStopped && !scrollbackContent) {
     if (scrollbackLoading) {
-      return (
-        <div className="flex h-full items-center justify-center">
-          <span className="text-sm text-text-muted">Loading session history...</span>
-        </div>
-      );
+      return <LoadingSpinner label="Loading session history..." className="h-full" />;
     }
-    // No scrollback available
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2">
-        <AlertCircle className="h-6 w-6 text-text-muted" />
-        <span className="text-sm text-text-muted">Session ended — no history available</span>
-      </div>
+      <EmptyState
+        icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
+        title="Session ended"
+        description="No history available"
+        className="h-full"
+      />
     );
   }
 
   // Live terminal
-  return <TerminalInstance key={agentId} agentId={agentId} onReady={onReady} />;
+  return <TerminalInstance ref={terminalRef} key={agentId} agentId={agentId} onReady={onReady} />;
 }

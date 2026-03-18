@@ -7,6 +7,7 @@ import { DiffSection } from "./sections/DiffSection";
 import { PromptsSection } from "./sections/PromptsSection";
 import { ResourcesSection } from "./sections/ResourcesSection";
 import { SchedulerSection } from "./sections/SchedulerSection";
+import { SearchSection } from "./sections/SearchSection";
 import { TasksSection } from "./sections/TasksSection";
 import { TokensSection } from "./sections/TokensSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
@@ -45,6 +46,7 @@ export function WorkspaceView() {
         {activeSection === "prompts" && <PromptsSection />}
         {activeSection === "diff" && <DiffSection />}
         {activeSection === "scheduler" && <SchedulerSection />}
+        {activeSection === "search" && <SearchSection />}
         {activeSection === "tokens" && <TokensSection />}
         {activeSection === "resources" && <ResourcesSection />}
         {activeSection === "activity" && <ActivitySection />}
