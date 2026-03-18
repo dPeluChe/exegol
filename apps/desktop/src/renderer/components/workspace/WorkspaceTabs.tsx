@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import {
   Activity,
+  Award,
   Brain,
   CheckSquare,
   Clock,
@@ -8,6 +9,7 @@ import {
   Cpu,
   FileText,
   GitCompare,
+  History,
   ListOrdered,
   type LucideIcon,
   MessageSquare,
@@ -21,7 +23,9 @@ export type WorkspaceSection =
   | "tasks"
   | "prompts"
   | "diff"
+  | "oplog"
   | "scheduler"
+  | "scoring"
   | "skills"
   | "memory"
   | "search"
@@ -36,7 +40,9 @@ const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "tasks", label: "Tasks", icon: CheckSquare },
   { id: "prompts", label: "Prompts", icon: FileText },
   { id: "diff", label: "Diff Viewer", icon: GitCompare },
+  { id: "oplog", label: "Oplog", icon: History },
   { id: "scheduler", label: "Scheduler", icon: Clock },
+  { id: "scoring", label: "Scoring", icon: Award },
   { id: "skills", label: "Skills", icon: Wand2 },
   { id: "memory", label: "Memory", icon: Brain },
   { id: "messages", label: "Messages", icon: MessageSquare },

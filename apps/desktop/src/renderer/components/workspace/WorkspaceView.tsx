@@ -6,10 +6,12 @@ import { AgentsSection } from "./sections/AgentsSection";
 import { DiffSection } from "./sections/DiffSection";
 import { MemorySection } from "./sections/MemorySection";
 import { MessagesSection } from "./sections/MessagesSection";
+import { OplogSection } from "./sections/OplogSection";
 import { PromptsSection } from "./sections/PromptsSection";
 import { QueueSection } from "./sections/QueueSection";
 import { ResourcesSection } from "./sections/ResourcesSection";
 import { SchedulerSection } from "./sections/SchedulerSection";
+import { ScoringSection } from "./sections/ScoringSection";
 import { SearchSection } from "./sections/SearchSection";
 import { SkillsSection } from "./sections/SkillsSection";
 import { TasksSection } from "./sections/TasksSection";
@@ -49,7 +51,9 @@ export function WorkspaceView() {
         {activeSection === "tasks" && <TasksSection />}
         {activeSection === "prompts" && <PromptsSection />}
         {activeSection === "diff" && <DiffSection />}
+        {activeSection === "oplog" && <OplogSection />}
         {activeSection === "scheduler" && <SchedulerSection />}
+        {activeSection === "scoring" && <ScoringSection />}
         {activeSection === "skills" && <SkillsSection />}
         {activeSection === "memory" && <MemorySection />}
         {activeSection === "messages" && <MessagesSection />}

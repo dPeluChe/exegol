@@ -6,6 +6,7 @@ export * from "./memory";
 export * from "./project";
 export * from "./prompt";
 export * from "./scheduler";
+export * from "./scoring";
 export * from "./search";
 export * from "./settings";
 export * from "./skill";

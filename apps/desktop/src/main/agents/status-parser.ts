@@ -239,7 +239,7 @@ export class AgentStatusParser {
 /**
  * Strip ANSI escape codes from terminal output.
  */
-function stripAnsi(str: string): string {
+export function stripAnsi(str: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence stripping
   return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
 }
