@@ -348,11 +348,14 @@ function OpenInIdeButton({ projectId }: { projectId: string }) {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            openInIde.mutate({
-              projectId,
-              ide: settings?.defaultIde,
-              customPath: settings?.customIdePath ?? undefined,
-            });
+            openInIde.mutate(
+              {
+                projectId,
+                ide: settings?.defaultIde,
+                customPath: settings?.customIdePath ?? undefined,
+              },
+              { onError: (err) => console.error("[IDE] Open failed:", err) },
+            );
           }}
           className="rounded p-0.5 text-text-muted hover:bg-white/5 hover:text-text-secondary"
           title={`Open in ${ideName}`}

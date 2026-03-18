@@ -30,12 +30,16 @@ function ProviderRow({
           setValue("");
           setEditing(false);
         },
+        onError: (err) => console.error("[ApiKeys] Save failed:", err),
       },
     );
   };
 
   const handleDelete = () => {
-    deleteKey.mutate({ provider: provider.id });
+    deleteKey.mutate(
+      { provider: provider.id },
+      { onError: (err) => console.error("[ApiKeys] Delete failed:", err) },
+    );
   };
 
   return (

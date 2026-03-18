@@ -59,8 +59,10 @@ export function SettingsPanel() {
     setForm((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, ...updates };
-      // Auto-save on every change
-      updateSettings.mutate(updated);
+      // Auto-save on every change (fire-and-forget, errors shown in UI via mutation state)
+      updateSettings.mutate(updated, {
+        onError: (err) => console.error("[Settings] Auto-save failed:", err),
+      });
       return updated;
     });
     setDirty(true);

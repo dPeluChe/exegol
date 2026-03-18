@@ -21,7 +21,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const { data: project, isLoading } = useProject(activeProjectId);
   const { data: dbAgents } = useAgents(activeProjectId);
   const syncFromDb = useAgentStore((s) => s.syncFromDb);
-  const allAgents = Object.values(useAgentStore((s) => s.agents));
+  const agentsRecord = useAgentStore((s) => s.agents);
 
   // Guard: if the persisted project no longer exists in DB, reset to project list.
   // Kept as effect because it reacts to an async query result, not a user action.
@@ -41,7 +41,9 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   }, [dbAgents, activeProjectId, syncFromDb]);
 
   const value = useMemo<ProjectContextValue>(() => {
-    const agents = activeProjectId ? allAgents.filter((a) => a.projectId === activeProjectId) : [];
+    const agents = activeProjectId
+      ? Object.values(agentsRecord).filter((a) => a.projectId === activeProjectId)
+      : [];
     const runningAgentCount = agents.filter((a) => a.status === "running").length;
 
     return {
@@ -51,7 +53,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       agents,
       runningAgentCount,
     };
-  }, [activeProjectId, project, isLoading, allAgents]);
+  }, [activeProjectId, project, isLoading, agentsRecord]);
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }

@@ -21,8 +21,10 @@ function formatRelativeTime(timestampSeconds: number): string {
 
 function ProjectCard({ project }: { project: Project }) {
   const setActiveProject = useAppStore((s) => s.setActiveProject);
-  const agents = Object.values(useAgentStore((s) => s.agents));
-  const projectAgentCount = agents.filter((a) => a.projectId === project.id).length;
+  // Select only the count for this project to avoid re-renders from unrelated agent changes
+  const projectAgentCount = useAgentStore(
+    (s) => Object.values(s.agents).filter((a) => a.projectId === project.id).length,
+  );
 
   return (
     <button
