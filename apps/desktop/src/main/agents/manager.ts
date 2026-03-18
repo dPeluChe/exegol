@@ -1,8 +1,7 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Agent, AgentCliConfig, AgentCreate } from "@exegol/shared";
-import { DEFAULT_SETTINGS } from "@exegol/shared";
+import type { Agent, AgentCreate } from "@exegol/shared";
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import type { IPty } from "node-pty";
@@ -19,6 +18,8 @@ import {
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
+import { createHandoff, generateHandoffFromScrollback } from "./handoff";
+import { getProviderRegistry } from "./registry";
 import { AgentStatusParser } from "./status-parser";
 
 // ─── Rust native module (git2 worktree ops) ──────────────────────────────
@@ -67,20 +68,6 @@ function _getFullPath(): string {
   return resolvedPath;
 }
 
-// CLI names used as labels for quick-launch (don't pass as task args)
-const CLI_NAMES = new Set([
-  "claude code",
-  "claude",
-  "codex",
-  "gemini",
-  "aider",
-  "opencode",
-  "goose",
-  "amp",
-  "kiro",
-  "custom",
-]);
-
 // ─── Worktree helpers ─────────────────────────────────────────────────────
 
 function slugifyBranchName(description: string): string {
@@ -119,12 +106,14 @@ export class AgentManager {
   private scrollbackSizes: Map<string, number> = new Map();
   private scrollbackTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
   private completionCallbacks: Map<string, (exitCode: number) => void> = new Map();
+  private tokenLimitDetected: Set<string> = new Set();
 
   /**
    * Spawn an agent process with the configured CLI tool.
    */
   async spawn(db: Database.Database, agent: Agent, config: AgentCreate): Promise<void> {
-    const cliConfig = this.resolveCliConfig(agent.cliType);
+    const registry = getProviderRegistry();
+    const cliConfig = registry.resolveCliConfig(agent.cliType);
     if (!cliConfig) {
       throw new Error(`No CLI configuration found for agent type: ${agent.cliType}`);
     }
@@ -184,7 +173,7 @@ export class AgentManager {
     const cmdParts = [cliConfig.command, ...cliConfig.args];
     // Only pass task description as argument if it looks like an actual task
     // (not just the CLI name used as a label for quick-launch)
-    const isQuickLaunch = CLI_NAMES.has(agent.taskDescription.toLowerCase());
+    const isQuickLaunch = registry.isQuickLaunchLabel(agent.taskDescription);
     if (agent.taskDescription && !isQuickLaunch) {
       // Shell-escape the task description
       const escaped = agent.taskDescription.replace(/'/g, "'\\''");
@@ -269,6 +258,25 @@ export class AgentManager {
         } else if (statusUpdate.currentStep) {
           updateAgentStatus(db, agent.id, "running", statusUpdate.currentStep);
         }
+
+        // Detect token limit warning — generate handoff and notify renderer
+        if (statusUpdate.tokenLimitWarning && !this.tokenLimitDetected.has(agent.id)) {
+          this.tokenLimitDetected.add(agent.id);
+          try {
+            const scrollback = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+            const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
+            const handoff = createHandoff(db, { agentId: agent.id, ...summary });
+            // Notify renderer of handoff availability
+            for (const win of BrowserWindow.getAllWindows()) {
+              win.webContents.send("agent:handoff-ready", agent.id, handoff.id);
+            }
+            logger.info(
+              `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
+            );
+          } catch (err) {
+            logger.error(`[AgentManager] Failed to create handoff for ${agent.id}:`, err);
+          }
+        }
       }
     });
 
@@ -286,6 +294,7 @@ export class AgentManager {
 
       this.processes.delete(agent.id);
       this.statusParsers.delete(agent.id);
+      this.tokenLimitDetected.delete(agent.id);
 
       const currentAgent = getAgent(db, agent.id);
       if (currentAgent && currentAgent.status !== "completed" && currentAgent.status !== "failed") {
@@ -404,15 +413,6 @@ export class AgentManager {
       this.scrollbackBuffers.delete(agentId);
       this.scrollbackSizes.delete(agentId);
     }
-  }
-
-  /**
-   * Resolve CLI config for a given agent type from settings.
-   */
-  private resolveCliConfig(cliType: string): AgentCliConfig | null {
-    // TODO: Read from DB settings once settings are persisted
-    const config = DEFAULT_SETTINGS.agentClis.find((c) => c.cliType === cliType);
-    return config ?? null;
   }
 
   /**

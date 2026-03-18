@@ -1,32 +1,23 @@
-import type { AgentCliType } from "@exegol/shared";
+import type { AgentCliType, AgentProvider, QueueTask } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { Plus } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ListOrdered, Plus, Zap } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { trpcMutate } from "../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useTerminalStore } from "../../stores/terminals";
 
-// ─── CLI Agent Definitions ──────────────────────────────────────────────────
+// ─── Provider hook ───────────────────────────────────────────────────────────
 
-interface CliAgent {
-  type: AgentCliType;
-  name: string;
-  short: string;
-  color: string;
+function useProviders() {
+  return useQuery({
+    queryKey: ["providers"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listProviders"),
+    staleTime: 60_000,
+  });
 }
-
-const CLI_AGENTS: CliAgent[] = [
-  { type: "claude-code", name: "Claude Code", short: "C", color: "#D97706" },
-  { type: "codex", name: "Codex", short: "Co", color: "#10B981" },
-  { type: "gemini", name: "Gemini", short: "G", color: "#3B82F6" },
-  { type: "aider", name: "Aider", short: "A", color: "#8B5CF6" },
-  { type: "opencode", name: "OpenCode", short: "OC", color: "#EC4899" },
-  { type: "goose", name: "Goose", short: "Go", color: "#F97316" },
-  { type: "amp", name: "Amp", short: "Am", color: "#06B6D4" },
-  { type: "kiro", name: "Kiro", short: "K", color: "#84CC16" },
-];
 
 // ─── Agent Launcher ─────────────────────────────────────────────────────────
 
@@ -34,23 +25,48 @@ interface AgentLauncherProps {
   projectId: string;
 }
 
+function useAddToQueue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { projectId: string; prompt: string; cliType: string }) =>
+      trpcMutate<QueueTask>("queue.add", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["queue"] });
+    },
+  });
+}
+
 export function AgentLauncher({ projectId }: AgentLauncherProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [launching, setLaunching] = useState<string | null>(null);
+  const [mode, setMode] = useState<"spawn" | "queue">("spawn");
   const btnRef = useRef<HTMLButtonElement>(null);
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
+  const { data: providers } = useProviders();
+  const addToQueue = useAddToQueue();
 
   const handleLaunch = useCallback(
-    async (cli: CliAgent) => {
-      setLaunching(cli.type);
+    async (provider: AgentProvider) => {
+      setLaunching(provider.id);
       try {
+        if (mode === "queue") {
+          // Add to queue instead of spawning
+          await addToQueue.mutateAsync({
+            projectId,
+            prompt: provider.name,
+            cliType: provider.id,
+          });
+          setMenuOpen(false);
+          return;
+        }
+
         // biome-ignore lint/suspicious/noExplicitAny: tRPC proxy returns dynamic shape
         const agent = await trpcMutate<any>("agents.spawn", {
           projectId,
-          cliType: cli.type,
-          taskDescription: cli.name,
+          cliType: provider.id as AgentCliType,
+          taskDescription: provider.name,
         });
         addAgent({
           id: agent.id,
@@ -75,7 +91,7 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
         setMenuOpen(false);
       }
     },
-    [projectId, addAgent, createTerminal, setFocusedAgent],
+    [projectId, addAgent, createTerminal, setFocusedAgent, mode, addToQueue],
   );
 
   // Calculate menu position from button ref
@@ -83,6 +99,8 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
   const menuStyle = rect
     ? { top: rect.bottom + 4, left: rect.left, position: "fixed" as const }
     : { top: 0, left: 0, position: "fixed" as const, display: "none" as const };
+
+  const displayProviders = providers ?? [];
 
   return (
     <>
@@ -115,30 +133,47 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
               className="z-[101] w-44 rounded-lg border border-border bg-bg-secondary p-1 shadow-2xl"
               style={menuStyle}
             >
-              <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-text-muted">
-                Launch Agent
-              </div>
-              {CLI_AGENTS.map((cli) => (
+              <div className="flex items-center justify-between px-2 py-1">
+                <span className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+                  {mode === "spawn" ? "Launch Agent" : "Add to Queue"}
+                </span>
                 <button
-                  key={cli.type}
                   type="button"
-                  disabled={launching === cli.type}
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleLaunch(cli);
+                    setMode(mode === "spawn" ? "queue" : "spawn");
+                  }}
+                  className="rounded p-0.5 text-text-muted hover:text-accent"
+                  title={mode === "spawn" ? "Switch to queue mode" : "Switch to launch mode"}
+                >
+                  {mode === "spawn" ? (
+                    <ListOrdered className="h-3 w-3" />
+                  ) : (
+                    <Zap className="h-3 w-3" />
+                  )}
+                </button>
+              </div>
+              {displayProviders.map((provider) => (
+                <button
+                  key={provider.id}
+                  type="button"
+                  disabled={launching === provider.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLaunch(provider);
                   }}
                   className={cn(
                     "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/5",
-                    launching === cli.type && "opacity-50",
+                    launching === provider.id && "opacity-50",
                   )}
                 >
                   <span
                     className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold text-white"
-                    style={{ background: cli.color }}
+                    style={{ background: provider.color }}
                   >
-                    {cli.short}
+                    {provider.icon}
                   </span>
-                  <span className="font-medium text-text-primary">{cli.name}</span>
+                  <span className="font-medium text-text-primary">{provider.name}</span>
                 </button>
               ))}
             </div>
