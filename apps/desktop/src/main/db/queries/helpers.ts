@@ -82,6 +82,7 @@ export function mapScheduledTaskRow(row: Record<string, unknown>): ScheduledTask
     nextRunAt: (row.next_run_at as number) ?? null,
     lastResultStatus: (row.last_result_status as string) ?? null,
     enabled: Boolean(row.enabled),
+    dependsOn: (row.depends_on as string) ?? null,
   };
 }
 

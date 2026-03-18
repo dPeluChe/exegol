@@ -13,6 +13,13 @@ import {
 import { getSchedulerEngine } from "../../scheduler/engine";
 import { publicProcedure, router } from "../trpc";
 
+function parseDependsOnInput(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export const schedulerRouter = router({
   list: publicProcedure
     .input(z.object({ projectId: z.string().optional() }).optional())
@@ -37,6 +44,7 @@ export const schedulerRouter = router({
         cliAgent: z.string(),
         skillName: z.string().optional(),
         maxTokenBudget: z.number().int().positive().optional(),
+        dependsOn: z.string().optional(),
       }),
     )
     .mutation(({ ctx, input }) => {
@@ -56,6 +64,20 @@ export const schedulerRouter = router({
       const nextRunAt = nextRun ? Math.floor(nextRun.getTime() / 1000) : null;
       job.stop();
 
+      // Verify all dependency IDs exist
+      if (input.dependsOn) {
+        const depIds = parseDependsOnInput(input.dependsOn);
+        for (const depId of depIds) {
+          const dep = getScheduledTask(ctx.db, depId);
+          if (!dep) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Dependency task "${depId}" not found`,
+            });
+          }
+        }
+      }
+
       const task = createScheduledTask(ctx.db, input, nextRunAt);
 
       // Register with scheduler engine
@@ -74,6 +96,7 @@ export const schedulerRouter = router({
         cliAgent: z.string().optional(),
         skillName: z.string().nullable().optional(),
         maxTokenBudget: z.number().int().positive().nullable().optional(),
+        dependsOn: z.string().nullable().optional(),
       }),
     )
     .mutation(({ ctx, input }) => {
@@ -81,6 +104,18 @@ export const schedulerRouter = router({
       const existing = getScheduledTask(ctx.db, id);
       if (!existing) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Scheduled task not found" });
+      }
+
+      // Cycle detection for dependency updates
+      if (data.dependsOn) {
+        const depIds = parseDependsOnInput(data.dependsOn);
+        const engine = getSchedulerEngine();
+        if (engine.detectCycle(ctx.db, id, depIds)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Adding this dependency would create a circular dependency",
+          });
+        }
       }
 
       if (data.cronExpression) {
