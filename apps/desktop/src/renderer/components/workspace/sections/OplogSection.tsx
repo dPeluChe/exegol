@@ -1,3 +1,4 @@
+import type { OplogEntry } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import {
   FileEdit,
@@ -11,8 +12,8 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { type OplogEntry, useProjectOplog, useUndoOplog } from "../../../hooks/use-trpc";
-import { EmptyState } from "../../common/EmptyState";
+import { useProjectOplog, useUndoOplog } from "../../../hooks/use-trpc";
+import { ConfirmDialog, EmptyState, LoadingSpinner } from "../../common";
 
 // ─── Operation icon mapping ─────────────────────────────────────────────────
 
@@ -57,7 +58,6 @@ function OplogTimelineEntry({
 
   return (
     <div className="flex items-start gap-3 group">
-      {/* Timeline dot & line */}
       <div className="flex flex-col items-center">
         <div
           className={cn(
@@ -70,7 +70,6 @@ function OplogTimelineEntry({
         <div className="w-px flex-1 bg-border" />
       </div>
 
-      {/* Content */}
       <div className="flex-1 pb-4">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-text-primary">
@@ -82,7 +81,6 @@ function OplogTimelineEntry({
 
         <p className="mt-0.5 text-[11px] text-text-muted">{entry.description}</p>
 
-        {/* Ref info */}
         {(entry.refBefore || entry.refAfter) && (
           <div className="mt-1 flex items-center gap-2 text-[10px] font-mono text-text-muted">
             {entry.refBefore && (
@@ -99,7 +97,6 @@ function OplogTimelineEntry({
           </div>
         )}
 
-        {/* Undo button */}
         {canUndo && (
           <Button
             variant="ghost"
@@ -138,13 +135,18 @@ export function OplogSection() {
   const { data: entries, isLoading } = useProjectOplog(projectId);
   const undoMutation = useUndoOplog();
   const [filter, setFilter] = useState<string>("all");
+  const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
 
-  const handleUndo = useCallback(
-    (oplogId: string) => {
-      undoMutation.mutate(oplogId);
-    },
-    [undoMutation],
-  );
+  const handleUndo = useCallback((oplogId: string) => {
+    setConfirmUndoId(oplogId);
+  }, []);
+
+  const executeUndo = useCallback(() => {
+    if (confirmUndoId) {
+      undoMutation.mutate(confirmUndoId);
+      setConfirmUndoId(null);
+    }
+  }, [confirmUndoId, undoMutation]);
 
   const filteredEntries = useMemo(
     () =>
@@ -167,7 +169,7 @@ export function OplogSection() {
   if (isLoading && !entries) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
+        <LoadingSpinner label="Loading oplog..." />
       </div>
     );
   }
@@ -181,7 +183,6 @@ export function OplogSection() {
 
         <div className="flex-1" />
 
-        {/* Filter buttons */}
         <div className="flex rounded bg-bg-primary">
           {OPERATION_FILTERS.map(({ key, label }) => (
             <button
@@ -228,6 +229,19 @@ export function OplogSection() {
           </div>
         )}
       </div>
+
+      {/* Undo confirmation dialog */}
+      <ConfirmDialog
+        open={confirmUndoId !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmUndoId(null);
+        }}
+        title="Undo Operation"
+        description="This will create a new revert commit restoring the repository to its previous state. This action cannot be undone."
+        confirmLabel="Revert"
+        variant="destructive"
+        onConfirm={executeUndo}
+      />
     </div>
   );
 }

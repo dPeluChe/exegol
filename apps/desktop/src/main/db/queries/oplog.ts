@@ -1,25 +1,10 @@
+import type { OplogEntry, OplogOperation } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "./helpers";
 
+export type { OplogEntry, OplogOperation };
+
 // ─── Types ──────────────────────────────────────────────────────────────────
-
-export type OplogOperation =
-  | "commit"
-  | "branch_create"
-  | "worktree_create"
-  | "file_write"
-  | "revert";
-
-export interface OplogEntry {
-  id: string;
-  agentId: string;
-  projectId: string;
-  operation: OplogOperation;
-  refBefore: string | null;
-  refAfter: string | null;
-  description: string;
-  createdAt: number;
-}
 
 export interface OplogEntryCreate {
   agentId: string;

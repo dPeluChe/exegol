@@ -9,28 +9,10 @@
  * Non-fatal: scoring never blocks agent completion (best-effort, try/catch).
  */
 
+import type { ExitReason } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
-
-// ─── Score Types ────────────────────────────────────────────────────────────
-
-export interface AgentScore {
-  agentId: string;
-  /** Tier 1: auto-detected from stdout */
-  filesChanged: number;
-  compiles: boolean | null; // null = unknown
-  testsPassed: boolean | null;
-  taskCompleted: boolean;
-  /** Tier 2: structured metrics */
-  exitCode: number;
-  exitReason: "success" | "failure" | "stopped" | "timeout" | "unknown";
-  turnsUsed: number;
-  tokensSpent: number;
-  filesModifiedCount: number;
-  /** Composite score 0.0–1.0 */
-  overallScore: number;
-  scoredAt: number;
-}
+import { stripAnsi } from "./status-parser";
 
 // ─── Stdout Parsing (Tier 1) ────────────────────────────────────────────────
 
@@ -65,12 +47,10 @@ export function parseTier1FromScrollback(scrollback: string): Tier1Result {
     const line = stripAnsi(raw);
 
     // ── File modifications ────────────────────────────────────────────
-    // Claude Code: "Edit(path)", "Write(path)"
     const editMatch = line.match(/\b(?:Edit|Write)\s*\(\s*([^)]+)\)/i);
     if (editMatch?.[1]) {
       modifiedFiles.add(editMatch[1].trim());
     }
-    // Aider: "Applied edit to path"
     const aiderEdit = line.match(/applied edit to\s+(.+)/i);
     if (aiderEdit?.[1]) {
       modifiedFiles.add(aiderEdit[1].trim());
@@ -93,13 +73,11 @@ export function parseTier1FromScrollback(scrollback: string): Tier1Result {
     }
 
     // ── Task completion signals ───────────────────────────────────────
-    // Claude Code: specific completion messages
     if (/\btask completed\b|successfully completed|done!/i.test(line)) {
       result.taskCompleted = true;
     }
 
     // ── Turn counting (tool call blocks) ──────────────────────────────
-    // Claude Code tool calls indicate a "turn"
     if (/\b(?:Read|Edit|Write|Bash|Agent|Glob|Grep)\s*\(/i.test(line)) {
       turnCount++;
     }
@@ -114,7 +92,7 @@ export function parseTier1FromScrollback(scrollback: string): Tier1Result {
 
 // ─── Tier 2: Structured Metrics ─────────────────────────────────────────────
 
-function resolveExitReason(exitCode: number, agentStatus: string): AgentScore["exitReason"] {
+function resolveExitReason(exitCode: number, agentStatus: string): ExitReason {
   if (agentStatus === "completed" && exitCode === 0) return "success";
   if (agentStatus === "stopped") return "stopped";
   if (agentStatus === "failed") return "failure";
@@ -149,12 +127,12 @@ function calculateOverallScore(tier1: Tier1Result, exitCode: number, exitReason:
   if (tier1.testsPassed === false) correctness -= 0.3;
   score += Math.max(0, Math.min(1, correctness)) * 0.3;
 
-  // Efficiency (20%) — having changes is better than no changes for a task
+  // Efficiency (20%)
   const hasWork = tier1.filesChanged > 0 ? 0.7 : 0;
   const reasonableTurns = tier1.turnsUsed > 0 && tier1.turnsUsed < 500 ? 0.3 : 0;
   score += (hasWork + reasonableTurns) * 0.2;
 
-  // Quality (10%) — clean exit
+  // Quality (10%)
   const quality = exitCode === 0 ? 1.0 : exitCode === 1 ? 0.3 : 0;
   score += quality * 0.1;
 
@@ -174,7 +152,6 @@ export function scoreAgent(
   scrollback: string,
 ): void {
   try {
-    // Get token usage for this agent
     const tokenRow = db
       .prepare(
         "SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as total FROM token_usage WHERE agent_id = ?",
@@ -220,121 +197,4 @@ export function scoreAgent(
     // Non-fatal: scoring never blocks agent completion
     logger.error("[Scoring] Failed to score agent (non-fatal):", err);
   }
-}
-
-// ─── Query Helpers ──────────────────────────────────────────────────────────
-
-export interface AgentScoreRow {
-  agentId: string;
-  filesChanged: number;
-  compiles: boolean | null;
-  testsPassed: boolean | null;
-  taskCompleted: boolean;
-  exitCode: number;
-  exitReason: string;
-  turnsUsed: number;
-  tokensSpent: number;
-  filesModifiedCount: number;
-  overallScore: number;
-  scoredAt: number;
-}
-
-export function mapScoreRow(row: Record<string, unknown>): AgentScoreRow {
-  return {
-    agentId: row.agent_id as string,
-    filesChanged: row.files_changed as number,
-    compiles: row.compiles === null ? null : Boolean(row.compiles),
-    testsPassed: row.tests_passed === null ? null : Boolean(row.tests_passed),
-    taskCompleted: Boolean(row.task_completed),
-    exitCode: row.exit_code as number,
-    exitReason: row.exit_reason as string,
-    turnsUsed: row.turns_used as number,
-    tokensSpent: row.tokens_spent as number,
-    filesModifiedCount: row.files_modified_count as number,
-    overallScore: row.overall_score as number,
-    scoredAt: row.scored_at as number,
-  };
-}
-
-export function getAgentScore(db: Database.Database, agentId: string): AgentScoreRow | null {
-  const row = db.prepare("SELECT * FROM agent_scores WHERE agent_id = ?").get(agentId);
-  return row ? mapScoreRow(row as Record<string, unknown>) : null;
-}
-
-export function listProjectScores(db: Database.Database, projectId: string): AgentScoreRow[] {
-  const rows = db
-    .prepare(
-      `SELECT s.* FROM agent_scores s
-       JOIN agents a ON s.agent_id = a.id
-       WHERE a.project_id = ?
-       ORDER BY s.scored_at DESC`,
-    )
-    .all(projectId) as Record<string, unknown>[];
-  return rows.map(mapScoreRow);
-}
-
-export interface ScoringStats {
-  totalScored: number;
-  avgScore: number;
-  successRate: number;
-  avgTurns: number;
-  avgTokens: number;
-  byCliType: Array<{
-    cliType: string;
-    count: number;
-    avgScore: number;
-    successRate: number;
-  }>;
-}
-
-export function getProjectScoringStats(db: Database.Database, projectId: string): ScoringStats {
-  const overallRow = db
-    .prepare(
-      `SELECT
-         COUNT(*) as total,
-         AVG(s.overall_score) as avg_score,
-         AVG(CASE WHEN s.exit_reason = 'success' THEN 1.0 ELSE 0.0 END) as success_rate,
-         AVG(s.turns_used) as avg_turns,
-         AVG(s.tokens_spent) as avg_tokens
-       FROM agent_scores s
-       JOIN agents a ON s.agent_id = a.id
-       WHERE a.project_id = ?`,
-    )
-    .get(projectId) as Record<string, unknown>;
-
-  const byCliRows = db
-    .prepare(
-      `SELECT
-         a.cli_type,
-         COUNT(*) as count,
-         AVG(s.overall_score) as avg_score,
-         AVG(CASE WHEN s.exit_reason = 'success' THEN 1.0 ELSE 0.0 END) as success_rate
-       FROM agent_scores s
-       JOIN agents a ON s.agent_id = a.id
-       WHERE a.project_id = ?
-       GROUP BY a.cli_type
-       ORDER BY count DESC`,
-    )
-    .all(projectId) as Record<string, unknown>[];
-
-  return {
-    totalScored: (overallRow.total as number) ?? 0,
-    avgScore: Math.round(((overallRow.avg_score as number) ?? 0) * 100) / 100,
-    successRate: Math.round(((overallRow.success_rate as number) ?? 0) * 100) / 100,
-    avgTurns: Math.round((overallRow.avg_turns as number) ?? 0),
-    avgTokens: Math.round((overallRow.avg_tokens as number) ?? 0),
-    byCliType: byCliRows.map((r) => ({
-      cliType: r.cli_type as string,
-      count: r.count as number,
-      avgScore: Math.round(((r.avg_score as number) ?? 0) * 100) / 100,
-      successRate: Math.round(((r.success_rate as number) ?? 0) * 100) / 100,
-    })),
-  };
-}
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function stripAnsi(str: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence stripping
-  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
 }

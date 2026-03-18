@@ -1,9 +1,10 @@
+import type { AgentScoreRow } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { Award, CheckCircle, FileEdit, Loader2, XCircle, Zap } from "lucide-react";
+import { Award, CheckCircle, FileEdit, XCircle, Zap } from "lucide-react";
 import { useMemo } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { type AgentScoreRow, useProjectScores, useScoringStats } from "../../../hooks/use-trpc";
-import { EmptyState } from "../../common/EmptyState";
+import { useProjectScores, useScoringStats } from "../../../hooks/use-trpc";
+import { EmptyState, LoadingSpinner } from "../../common";
 
 // ─── Score Badge ────────────────────────────────────────────────────────────
 
@@ -176,7 +177,7 @@ export function ScoringSection() {
   if (isLoading && !stats && !scores) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-text-muted" />
+        <LoadingSpinner label="Loading scores..." />
       </div>
     );
   }

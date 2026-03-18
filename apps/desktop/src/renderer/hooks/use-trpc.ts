@@ -1,15 +1,19 @@
 import type {
   Agent,
   AgentCreate,
+  AgentScoreRow,
+  OplogEntry,
   Project,
   ProjectCreate,
   Prompt,
   PromptCreate,
   PromptUpdate,
   RecentSession,
+  RustFileDiff,
   ScheduledResult,
   ScheduledTask,
   ScheduledTaskCreate,
+  ScoringStats,
   Settings,
   TokenUsage,
   TokenUsageSummary,
@@ -429,35 +433,6 @@ export function useTogglePinPrompt() {
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
-export interface AgentScoreRow {
-  agentId: string;
-  filesChanged: number;
-  compiles: boolean | null;
-  testsPassed: boolean | null;
-  taskCompleted: boolean;
-  exitCode: number;
-  exitReason: string;
-  turnsUsed: number;
-  tokensSpent: number;
-  filesModifiedCount: number;
-  overallScore: number;
-  scoredAt: number;
-}
-
-export interface ScoringStats {
-  totalScored: number;
-  avgScore: number;
-  successRate: number;
-  avgTurns: number;
-  avgTokens: number;
-  byCliType: Array<{
-    cliType: string;
-    count: number;
-    avgScore: number;
-    successRate: number;
-  }>;
-}
-
 export function useAgentScore(agentId: string | null) {
   return useQuery({
     queryKey: ["scoring", "agent", agentId],
@@ -495,27 +470,6 @@ export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
   });
 }
 
-/** Structured diff from Rust git2 — returns FileDiff[] with hunks/lines */
-export interface RustFileDiff {
-  path: string;
-  oldPath: string | null;
-  status: string;
-  binary: boolean;
-  hunks: Array<{
-    oldStart: number;
-    oldLines: number;
-    newStart: number;
-    newLines: number;
-    header: string;
-    lines: Array<{
-      content: string;
-      lineType: string;
-      oldLineno: number | null;
-      newLineno: number | null;
-    }>;
-  }>;
-}
-
 export function useStructuredDiff(projectId: string | null, staged: boolean) {
   return useQuery({
     queryKey: ["diff", "structured", projectId, staged],
@@ -525,17 +479,6 @@ export function useStructuredDiff(projectId: string | null, staged: boolean) {
 }
 
 // ─── Oplog ──────────────────────────────────────────────────────────────────
-
-export interface OplogEntry {
-  id: string;
-  agentId: string;
-  projectId: string;
-  operation: string;
-  refBefore: string | null;
-  refAfter: string | null;
-  description: string;
-  createdAt: number;
-}
 
 export function useProjectOplog(projectId: string | null, limit = 100) {
   return useQuery({
