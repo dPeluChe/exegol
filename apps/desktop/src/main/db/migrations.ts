@@ -189,6 +189,38 @@ const migrations: Migration[] = [
     sql: `ALTER TABLE token_usage ADD COLUMN source TEXT NOT NULL DEFAULT 'agent'
       CHECK (source IN ('agent', 'log_scan'))`,
   },
+  {
+    id: "013_skills_state",
+    sql: `CREATE TABLE IF NOT EXISTS skills_state (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      skill_name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE(project_id, skill_name)
+    )`,
+  },
+  {
+    id: "014_memories",
+    sql: `CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      category TEXT NOT NULL
+        CHECK (category IN ('preference', 'pattern', 'error', 'solution', 'dependency', 'convention')),
+      content TEXT NOT NULL,
+      source_agent_id TEXT,
+      relevance_score REAL NOT NULL DEFAULT 0.5,
+      access_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      last_accessed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id);
+    CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(project_id, category);
+    CREATE INDEX IF NOT EXISTS idx_memories_relevance ON memories(project_id, relevance_score DESC)`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

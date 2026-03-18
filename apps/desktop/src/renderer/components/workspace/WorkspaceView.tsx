@@ -3,9 +3,11 @@ import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { AgentsSection } from "./sections/AgentsSection";
 import { DiffSection } from "./sections/DiffSection";
+import { MemorySection } from "./sections/MemorySection";
 import { PromptsSection } from "./sections/PromptsSection";
 import { ResourcesSection } from "./sections/ResourcesSection";
 import { SchedulerSection } from "./sections/SchedulerSection";
+import { SkillsSection } from "./sections/SkillsSection";
 import { TasksSection } from "./sections/TasksSection";
 import { TokensSection } from "./sections/TokensSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
@@ -44,6 +46,8 @@ export function WorkspaceView() {
         {activeSection === "prompts" && <PromptsSection />}
         {activeSection === "diff" && <DiffSection />}
         {activeSection === "scheduler" && <SchedulerSection />}
+        {activeSection === "skills" && <SkillsSection />}
+        {activeSection === "memory" && <MemorySection />}
         {activeSection === "tokens" && <TokensSection />}
         {activeSection === "resources" && <ResourcesSection />}
       </div>
