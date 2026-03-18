@@ -368,8 +368,8 @@ export class AgentManager {
             projectId: agent.projectId,
             description: `${agent.cliType} agent ${finalStatus}: ${agent.taskDescription.slice(0, 80)}`,
           });
-        } catch {
-          /* non-fatal */
+        } catch (err) {
+          logger.warn("[AgentManager] Failed to log activity:", err);
         }
       }
 
@@ -433,8 +433,8 @@ export class AgentManager {
             description: `${stoppedAgent.cliType} agent stopped manually`,
           });
         }
-      } catch {
-        /* non-fatal */
+      } catch (err) {
+        logger.warn("[AgentManager] Failed to log activity:", err);
       }
     }
   }
