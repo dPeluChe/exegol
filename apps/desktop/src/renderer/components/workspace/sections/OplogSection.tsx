@@ -184,15 +184,15 @@ export function OplogSection() {
         <div className="flex-1" />
 
         <div className="flex rounded bg-bg-primary">
-          {OPERATION_FILTERS.map(({ key, label }) => (
+          {OPERATION_FILTERS.map(({ key, label }, idx) => (
             <button
               key={key}
               type="button"
               onClick={() => setFilter(key)}
               className={cn(
                 "px-2 py-1 text-[10px] font-medium transition-colors",
-                key === OPERATION_FILTERS[0].key && "rounded-l",
-                key === OPERATION_FILTERS[OPERATION_FILTERS.length - 1].key && "rounded-r",
+                idx === 0 && "rounded-l",
+                idx === OPERATION_FILTERS.length - 1 && "rounded-r",
                 filter === key ? "bg-accent text-white" : "text-text-muted hover:text-text-primary",
               )}
             >
