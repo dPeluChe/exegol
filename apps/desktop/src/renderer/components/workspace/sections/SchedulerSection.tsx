@@ -50,88 +50,44 @@ const STATUS_COLORS: Record<string, string> = {
   budget_exceeded: "bg-orange-500/20 text-orange-400",
 };
 
-// ─── Shared form fields ─────────────────────────────────────────────────────
+// ─── Task Dialog (Create & Edit, unified) ───────────────────────────────────
 
-function TaskFormFields({
-  prompt,
-  setPrompt,
-  cronExpression,
-  setCronExpression,
-  cliAgent,
-  setCliAgent,
-  maxTokenBudget,
-  setMaxTokenBudget,
+function TaskDialog({
+  title,
+  submitLabel,
+  isPending,
+  initial,
+  onSubmit,
+  onClose,
 }: {
-  prompt: string;
-  setPrompt: (v: string) => void;
-  cronExpression: string;
-  setCronExpression: (v: string) => void;
-  cliAgent: string;
-  setCliAgent: (v: string) => void;
-  maxTokenBudget: string;
-  setMaxTokenBudget: (v: string) => void;
+  title: string;
+  submitLabel: string;
+  isPending: boolean;
+  initial: {
+    prompt: string;
+    cronExpression: string;
+    cliAgent: string;
+    maxTokenBudget: string;
+    dependsOn: string;
+  };
+  onSubmit: (data: {
+    prompt: string;
+    cronExpression: string;
+    cliAgent: string;
+    maxTokenBudget: string;
+    dependsOn: string;
+  }) => void;
+  onClose: () => void;
 }) {
-  return (
-    <div className="space-y-3">
-      <div>
-        <div className="mb-1 text-xs text-text-muted">Prompt</div>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="What should the agent do?"
-          className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          rows={3}
-          required
-        />
-      </div>
-      <CronBuilder value={cronExpression} onChange={setCronExpression} />
-      <div>
-        <div className="mb-1 text-xs text-text-muted">Agent CLI</div>
-        <select
-          value={cliAgent}
-          onChange={(e) => setCliAgent(e.target.value)}
-          className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary focus:border-accent focus:outline-none"
-        >
-          {AGENT_CLI_TYPES.map((cli) => (
-            <option key={cli} value={cli}>
-              {cli}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <div className="mb-1 text-xs text-text-muted">Max Token Budget (optional)</div>
-        <input
-          value={maxTokenBudget}
-          onChange={(e) => setMaxTokenBudget(e.target.value)}
-          placeholder="e.g. 100000"
-          type="number"
-          className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-        />
-      </div>
-    </div>
-  );
-}
+  const [prompt, setPrompt] = useState(initial.prompt);
+  const [cronExpression, setCronExpression] = useState(initial.cronExpression);
+  const [cliAgent, setCliAgent] = useState(initial.cliAgent);
+  const [maxTokenBudget, setMaxTokenBudget] = useState(initial.maxTokenBudget);
+  const [dependsOn, setDependsOn] = useState(initial.dependsOn);
 
-// ─── New Task Dialog ────────────────────────────────────────────────────────
-
-function NewTaskDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
-  const createTask = useCreateScheduledTask();
-  const [prompt, setPrompt] = useState("");
-  const [cronExpression, setCronExpression] = useState("0 9 * * *");
-  const [cliAgent, setCliAgent] = useState("claude-code");
-  const [maxTokenBudget, setMaxTokenBudget] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    await createTask.mutateAsync({
-      projectId,
-      prompt,
-      cronExpression,
-      cliAgent,
-      maxTokenBudget: maxTokenBudget ? Number.parseInt(maxTokenBudget, 10) : undefined,
-    });
-    onClose();
+    onSubmit({ prompt, cronExpression, cliAgent, maxTokenBudget, dependsOn });
   };
 
   return (
@@ -141,7 +97,7 @@ function NewTaskDialog({ projectId, onClose }: { projectId: string; onClose: () 
         className="w-full max-w-md rounded-xl border border-border bg-bg-primary p-6 shadow-2xl"
       >
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-primary">New Scheduled Task</h3>
+          <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
           <button
             type="button"
             onClick={onClose}
@@ -151,16 +107,55 @@ function NewTaskDialog({ projectId, onClose }: { projectId: string; onClose: () 
           </button>
         </div>
 
-        <TaskFormFields
-          prompt={prompt}
-          setPrompt={setPrompt}
-          cronExpression={cronExpression}
-          setCronExpression={setCronExpression}
-          cliAgent={cliAgent}
-          setCliAgent={setCliAgent}
-          maxTokenBudget={maxTokenBudget}
-          setMaxTokenBudget={setMaxTokenBudget}
-        />
+        <div className="space-y-3">
+          <div>
+            <div className="mb-1 text-xs text-text-muted">Prompt</div>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="What should the agent do?"
+              className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+              rows={3}
+              required
+            />
+          </div>
+          <CronBuilder value={cronExpression} onChange={setCronExpression} />
+          <div>
+            <div className="mb-1 text-xs text-text-muted">Agent CLI</div>
+            <select
+              value={cliAgent}
+              onChange={(e) => setCliAgent(e.target.value)}
+              className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary focus:border-accent focus:outline-none"
+            >
+              {AGENT_CLI_TYPES.map((cli) => (
+                <option key={cli} value={cli}>
+                  {cli}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="mb-1 text-xs text-text-muted">Max Token Budget (optional)</div>
+            <input
+              value={maxTokenBudget}
+              onChange={(e) => setMaxTokenBudget(e.target.value)}
+              placeholder="e.g. 100000"
+              type="number"
+              className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+          </div>
+          <div>
+            <div className="mb-1 text-xs text-text-muted">
+              Depends On (task IDs, comma-separated)
+            </div>
+            <input
+              value={dependsOn}
+              onChange={(e) => setDependsOn(e.target.value)}
+              placeholder="e.g. abc123, def456"
+              className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+            />
+          </div>
+        </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <Button type="button" onClick={onClose} className="text-xs text-text-muted">
@@ -168,80 +163,10 @@ function NewTaskDialog({ projectId, onClose }: { projectId: string; onClose: () 
           </Button>
           <Button
             type="submit"
-            disabled={!prompt || !cronExpression || createTask.isPending}
+            disabled={!prompt || !cronExpression || isPending}
             className="gap-1 bg-accent text-xs text-white"
           >
-            <Plus className="h-3 w-3" />
-            {createTask.isPending ? "Creating..." : "Create Task"}
-          </Button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-// ─── Edit Task Dialog ───────────────────────────────────────────────────────
-
-function EditTaskDialog({ task, onClose }: { task: ScheduledTask; onClose: () => void }) {
-  const updateTask = useUpdateScheduledTask();
-  const [prompt, setPrompt] = useState(task.prompt);
-  const [cronExpression, setCronExpression] = useState(task.cronExpression);
-  const [cliAgent, setCliAgent] = useState(task.cliAgent);
-  const [maxTokenBudget, setMaxTokenBudget] = useState(
-    task.maxTokenBudget ? String(task.maxTokenBudget) : "",
-  );
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await updateTask.mutateAsync({
-      id: task.id,
-      prompt,
-      cronExpression,
-      cliAgent,
-      maxTokenBudget: maxTokenBudget ? Number.parseInt(maxTokenBudget, 10) : undefined,
-    });
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md rounded-xl border border-border bg-bg-primary p-6 shadow-2xl"
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-text-primary">Edit Scheduled Task</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-text-muted hover:text-text-primary"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <TaskFormFields
-          prompt={prompt}
-          setPrompt={setPrompt}
-          cronExpression={cronExpression}
-          setCronExpression={setCronExpression}
-          cliAgent={cliAgent}
-          setCliAgent={setCliAgent}
-          maxTokenBudget={maxTokenBudget}
-          setMaxTokenBudget={setMaxTokenBudget}
-        />
-
-        <div className="mt-5 flex justify-end gap-2">
-          <Button type="button" onClick={onClose} className="text-xs text-text-muted">
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            disabled={!prompt || !cronExpression || updateTask.isPending}
-            className="gap-1 bg-accent text-xs text-white"
-          >
-            <Pencil className="h-3 w-3" />
-            {updateTask.isPending ? "Saving..." : "Save Changes"}
+            {isPending ? "Saving..." : submitLabel}
           </Button>
         </div>
       </form>
@@ -309,7 +234,6 @@ function TaskRow({
 
   return (
     <div className="group flex items-center gap-3 rounded-lg border border-border bg-bg-secondary px-3 py-2.5">
-      {/* Toggle */}
       <button
         type="button"
         onClick={() => toggleTask.mutate({ id: task.id, enabled: !task.enabled })}
@@ -324,7 +248,6 @@ function TaskRow({
         {task.enabled ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
       </button>
 
-      {/* Info — clickable to see detail */}
       <button type="button" onClick={onSelect} className="min-w-0 flex-1 text-left">
         <p className="truncate text-xs font-medium text-text-primary">{task.prompt}</p>
         <div className="mt-0.5 flex items-center gap-2 text-[10px] text-text-muted">
@@ -337,17 +260,21 @@ function TaskRow({
               <span>Next: {formatTime(task.nextRunAt)}</span>
             </>
           )}
+          {task.dependsOn && (
+            <>
+              <span>&middot;</span>
+              <span className="text-yellow-400">Depends on: {task.dependsOn}</span>
+            </>
+          )}
         </div>
       </button>
 
-      {/* Last result badge */}
       {task.lastResultStatus && (
         <Badge className={cn("shrink-0 text-[10px]", STATUS_COLORS[task.lastResultStatus] ?? "")}>
           {task.lastResultStatus}
         </Badge>
       )}
 
-      {/* Actions */}
       <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
         <button
           type="button"
@@ -383,6 +310,8 @@ function TaskRow({
 export function SchedulerSection() {
   const { projectId } = useProjectContext();
   const { data: tasks } = useScheduledTasks(projectId);
+  const createTask = useCreateScheduledTask();
+  const updateTask = useUpdateScheduledTask();
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -395,7 +324,6 @@ export function SchedulerSection() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Top bar */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <h2 className="text-sm font-semibold text-text-primary">Scheduler</h2>
         <Button
@@ -409,7 +337,6 @@ export function SchedulerSection() {
         </Button>
       </div>
 
-      {/* Task list */}
       <div className="flex-1 overflow-auto p-4">
         {tasks && tasks.length > 0 ? (
           <div className="space-y-2">
@@ -434,13 +361,63 @@ export function SchedulerSection() {
         )}
       </div>
 
-      {/* New task dialog */}
       {showNewDialog && projectId && (
-        <NewTaskDialog projectId={projectId} onClose={() => setShowNewDialog(false)} />
+        <TaskDialog
+          title="New Scheduled Task"
+          submitLabel="Create Task"
+          isPending={createTask.isPending}
+          initial={{
+            prompt: "",
+            cronExpression: "0 9 * * *",
+            cliAgent: "claude-code",
+            maxTokenBudget: "",
+            dependsOn: "",
+          }}
+          onSubmit={async (data) => {
+            await createTask.mutateAsync({
+              projectId,
+              prompt: data.prompt,
+              cronExpression: data.cronExpression,
+              cliAgent: data.cliAgent,
+              maxTokenBudget: data.maxTokenBudget
+                ? Number.parseInt(data.maxTokenBudget, 10)
+                : undefined,
+              dependsOn: data.dependsOn || undefined,
+            });
+            setShowNewDialog(false);
+          }}
+          onClose={() => setShowNewDialog(false)}
+        />
       )}
 
-      {/* Edit task dialog */}
-      {editingTask && <EditTaskDialog task={editingTask} onClose={() => setEditingTask(null)} />}
+      {editingTask && (
+        <TaskDialog
+          title="Edit Scheduled Task"
+          submitLabel="Save Changes"
+          isPending={updateTask.isPending}
+          initial={{
+            prompt: editingTask.prompt,
+            cronExpression: editingTask.cronExpression,
+            cliAgent: editingTask.cliAgent,
+            maxTokenBudget: editingTask.maxTokenBudget ? String(editingTask.maxTokenBudget) : "",
+            dependsOn: editingTask.dependsOn ?? "",
+          }}
+          onSubmit={async (data) => {
+            await updateTask.mutateAsync({
+              id: editingTask.id,
+              prompt: data.prompt,
+              cronExpression: data.cronExpression,
+              cliAgent: data.cliAgent,
+              maxTokenBudget: data.maxTokenBudget
+                ? Number.parseInt(data.maxTokenBudget, 10)
+                : undefined,
+              dependsOn: data.dependsOn || undefined,
+            });
+            setEditingTask(null);
+          }}
+          onClose={() => setEditingTask(null)}
+        />
+      )}
     </div>
   );
 }

@@ -1,8 +1,10 @@
 import type { AgentCliType, AgentStatus } from "@exegol/shared";
+import { detectTokenLimitWarning } from "./handoff";
 
 type StatusUpdate = {
   status?: AgentStatus;
   currentStep?: string;
+  tokenLimitWarning?: boolean;
 };
 
 /**
@@ -45,6 +47,11 @@ export class AgentStatusParser {
       const update = this.parseLine(cleaned);
       if (update) {
         lastUpdate = update;
+      }
+
+      // Check for token limit warnings across all CLI types
+      if (detectTokenLimitWarning(cleaned)) {
+        lastUpdate = { ...lastUpdate, tokenLimitWarning: true };
       }
     }
 

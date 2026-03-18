@@ -3,6 +3,8 @@ import { is } from "@electron-toolkit/utils";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell } from "electron";
 import { getAgentManager } from "./agents/manager";
+import { getQueueExecutor } from "./agents/queue";
+import { getProviderRegistry } from "./agents/registry";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { cleanupStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
@@ -111,11 +113,13 @@ app.whenReady().then(async () => {
   await initializeDatabase();
   // Mark any agents still in "running"/"spawning" status as "stopped" — their processes died with the app
   cleanupStaleAgents(getDb());
+  getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerGlobalHotkey();
   startMetricsCollector(); // Background: collects CPU/RAM/disk every 10s
   getSchedulerEngine().start(getDb()); // Load scheduled tasks and start cron jobs
+  getQueueExecutor().start(getDb()); // Start task queue executor
   createWindow();
 
   app.on("activate", () => {
@@ -148,6 +152,7 @@ app.on("will-quit", () => {
   }
 
   getSchedulerEngine().stop();
+  getQueueExecutor().stop();
   stopMetricsCollector();
   closeDatabase();
 });

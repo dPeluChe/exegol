@@ -3,8 +3,10 @@ import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { diffRouter } from "./procedures/diff";
 import { filesRouter } from "./procedures/files";
+import { messagesRouter } from "./procedures/messages";
 import { projectRouter } from "./procedures/projects";
 import { promptsRouter } from "./procedures/prompts";
+import { queueRouter } from "./procedures/queue";
 import { resourcesRouter } from "./procedures/resources";
 import { schedulerRouter } from "./procedures/scheduler";
 import { scrollbackRouter } from "./procedures/scrollback";
@@ -25,6 +27,8 @@ export const appRouter = router({
   prompts: promptsRouter,
   diff: diffRouter,
   scrollback: scrollbackRouter,
+  messages: messagesRouter,
+  queue: queueRouter,
   activities: activitiesRouter,
   search: searchRouter,
 });

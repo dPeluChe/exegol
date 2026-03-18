@@ -221,6 +221,66 @@ const migrations: Migration[] = [
       );
     `,
   },
+  {
+    id: "015_handoffs",
+    sql: `CREATE TABLE IF NOT EXISTS handoffs (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      successor_agent_id TEXT,
+      goal TEXT NOT NULL,
+      progress TEXT NOT NULL DEFAULT '',
+      files_modified TEXT NOT NULL DEFAULT '',
+      next_steps TEXT NOT NULL DEFAULT '',
+      critical_context TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY (successor_agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    id: "016_messages",
+    sql: `CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      from_agent_id TEXT,
+      to_agent_id TEXT,
+      type TEXT NOT NULL DEFAULT 'text'
+        CHECK (type IN ('text', 'handoff', 'status', 'request', 'result')),
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      read_at INTEGER,
+      FOREIGN KEY (from_agent_id) REFERENCES agents(id) ON DELETE SET NULL,
+      FOREIGN KEY (to_agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_to_agent ON messages(to_agent_id, read_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_from_agent ON messages(from_agent_id)`,
+  },
+  {
+    id: "017_scheduled_tasks_depends_on",
+    sql: `ALTER TABLE scheduled_tasks ADD COLUMN depends_on TEXT`,
+  },
+  {
+    id: "018_task_queue",
+    sql: `CREATE TABLE IF NOT EXISTS task_queue (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      cli_type TEXT NOT NULL DEFAULT 'claude-code',
+      priority INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued', 'running', 'blocked', 'completed', 'failed', 'cancelled')),
+      depends_on TEXT,
+      agent_id TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      started_at INTEGER,
+      completed_at INTEGER,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_queue_project ON task_queue(project_id, status);
+    CREATE INDEX IF NOT EXISTS idx_task_queue_status ON task_queue(status)`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

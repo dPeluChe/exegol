@@ -44,6 +44,85 @@ export type AgentCreate = {
   branchName?: string;
 };
 
+// ─── Provider Registry ──────────────────────────────────────────────────────
+
+export type AgentProviderCapabilities = {
+  supportsWorktree: boolean;
+  supportsResume: boolean;
+  supportsRPC: boolean;
+  supportsVision: boolean;
+};
+
+export type AgentProvider = {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  argsTemplate: string;
+  icon: string;
+  color: string;
+  capabilities: AgentProviderCapabilities;
+  isBuiltin: boolean;
+};
+
+// ─── Messages ───────────────────────────────────────────────────────────────
+
+export const AGENT_MESSAGE_TYPES = ["text", "handoff", "status", "request", "result"] as const;
+export type AgentMessageType = (typeof AGENT_MESSAGE_TYPES)[number];
+
+export type AgentMessage = {
+  id: string;
+  fromAgentId: string | null;
+  toAgentId: string | null;
+  type: AgentMessageType;
+  content: string;
+  createdAt: number;
+  readAt: number | null;
+};
+
+// ─── Handoff ────────────────────────────────────────────────────────────────
+
+export type HandoffSummary = {
+  id: string;
+  agentId: string;
+  successorAgentId: string | null;
+  goal: string;
+  progress: string;
+  filesModified: string;
+  nextSteps: string;
+  criticalContext: string;
+  createdAt: number;
+};
+
+// ─── Task Queue ─────────────────────────────────────────────────────────────
+
+export const QUEUE_TASK_STATUSES = [
+  "queued",
+  "running",
+  "blocked",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+export type QueueTaskStatus = (typeof QUEUE_TASK_STATUSES)[number];
+
+export type QueueTask = {
+  id: string;
+  projectId: string;
+  prompt: string;
+  cliType: string;
+  priority: number;
+  status: QueueTaskStatus;
+  dependsOn: string | null;
+  agentId: string | null;
+  createdAt: number;
+  startedAt: number | null;
+  completedAt: number | null;
+};
+
+// ─── Sessions ───────────────────────────────────────────────────────────────
+
 export type RecentSession = {
   id: string;
   taskDescription: string;

@@ -4,7 +4,9 @@ import { useMountEffect } from "../../hooks/use-mount-effect";
 import { ActivitySection } from "./sections/ActivitySection";
 import { AgentsSection } from "./sections/AgentsSection";
 import { DiffSection } from "./sections/DiffSection";
+import { MessagesSection } from "./sections/MessagesSection";
 import { PromptsSection } from "./sections/PromptsSection";
+import { QueueSection } from "./sections/QueueSection";
 import { ResourcesSection } from "./sections/ResourcesSection";
 import { SchedulerSection } from "./sections/SchedulerSection";
 import { SearchSection } from "./sections/SearchSection";
@@ -46,6 +48,8 @@ export function WorkspaceView() {
         {activeSection === "prompts" && <PromptsSection />}
         {activeSection === "diff" && <DiffSection />}
         {activeSection === "scheduler" && <SchedulerSection />}
+        {activeSection === "messages" && <MessagesSection />}
+        {activeSection === "queue" && <QueueSection />}
         {activeSection === "search" && <SearchSection />}
         {activeSection === "tokens" && <TokensSection />}
         {activeSection === "resources" && <ResourcesSection />}

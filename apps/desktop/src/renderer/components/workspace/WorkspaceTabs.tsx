@@ -7,7 +7,9 @@ import {
   Cpu,
   FileText,
   GitCompare,
+  ListOrdered,
   type LucideIcon,
+  MessageSquare,
   Rss,
   Search,
 } from "lucide-react";
@@ -21,6 +23,8 @@ export type WorkspaceSection =
   | "search"
   | "tokens"
   | "resources"
+  | "messages"
+  | "queue"
   | "activity";
 
 const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
@@ -29,6 +33,8 @@ const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "prompts", label: "Prompts", icon: FileText },
   { id: "diff", label: "Diff Viewer", icon: GitCompare },
   { id: "scheduler", label: "Scheduler", icon: Clock },
+  { id: "messages", label: "Messages", icon: MessageSquare },
+  { id: "queue", label: "Queue", icon: ListOrdered },
   { id: "search", label: "Search", icon: Search },
   { id: "tokens", label: "Token Usage", icon: Coins },
   { id: "resources", label: "Resources", icon: Activity },

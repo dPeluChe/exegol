@@ -38,6 +38,7 @@ interface Window {
       maximize: () => void;
       close: () => void;
     };
+    onAgentHandoff?: (callback: (agentId: string, handoffId: string) => void) => () => void;
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
   };

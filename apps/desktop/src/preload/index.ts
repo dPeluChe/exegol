@@ -22,6 +22,19 @@ contextBridge.exposeInMainWorld("api", {
     getVersion: () => ipcRenderer.invoke("app:version"),
     getPlatform: () => process.platform,
   },
+  onAgentHandoff: (callback: (agentId: string, handoffId: string) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      agentId: string,
+      handoffId: string,
+    ): void => {
+      callback(agentId, handoffId);
+    };
+    ipcRenderer.on("agent:handoff-ready", handler);
+    return () => {
+      ipcRenderer.removeListener("agent:handoff-ready", handler);
+    };
+  },
   // Push event subscriptions (T17: push-first status updates)
   onAgentStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
