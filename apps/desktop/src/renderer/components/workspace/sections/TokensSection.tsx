@@ -221,10 +221,10 @@ function AgentCostTable({ projectId, days }: { projectId: string; days: number }
 
 export function TokensSection() {
   const { project } = useProjectContext();
+  const [days, setDays] = useState(30);
   const { data: summary } = useTokenUsageSummary(undefined, project?.id ?? undefined);
   const { data: trendData } = useDailyTrend(project?.id ?? null, days);
   const scanMutation = useTokenScan();
-  const [days, setDays] = useState(30);
 
   if (!project) {
     return (

@@ -54,3 +54,68 @@ export interface WorktreeInfo {
   /** Whether this is the bare/main worktree. */
   isBare: boolean
 }
+
+// ─── Diff types (T28) ──────────────────────────────────────────────────────
+
+/** A single line in a diff hunk. */
+export interface DiffLine {
+  /** Line content (without leading +/-/ prefix). */
+  content: string
+  /** Line type: "addition", "deletion", or "context". */
+  lineType: string
+  /** Line number in the old file (null for additions). */
+  oldLineno?: number
+  /** Line number in the new file (null for deletions). */
+  newLineno?: number
+}
+
+/** A contiguous section of changes within a file. */
+export interface DiffHunk {
+  /** Starting line number in the old file. */
+  oldStart: number
+  /** Number of lines in the old file. */
+  oldLines: number
+  /** Starting line number in the new file. */
+  newStart: number
+  /** Number of lines in the new file. */
+  newLines: number
+  /** Optional hunk header text (e.g. function name). */
+  header: string
+  /** Lines in this hunk. */
+  lines: Array<DiffLine>
+}
+
+/** A file that has changes. */
+export interface FileDiff {
+  /** File path (new path for renames/additions, old path for deletions). */
+  path: string
+  /** Old file path (for renames). */
+  oldPath?: string
+  /** File status: "added", "modified", "deleted", "renamed". */
+  status: string
+  /** Whether this is a binary file. */
+  binary: boolean
+  /** Diff hunks for this file. */
+  hunks: Array<DiffHunk>
+}
+
+/** Get structured diff of changes (staged or unstaged). */
+export declare function getDiff(repoPath: string, staged: boolean): Array<FileDiff>
+
+// ─── Oplog types (T29) ─────────────────────────────────────────────────────
+
+/** A snapshot of the repo state at a point in time. */
+export interface RepoSnapshot {
+  /** HEAD commit SHA. */
+  headSha: string
+  /** Current branch name. */
+  branch: string
+  /** Timestamp (unix seconds). */
+  timestamp: number
+}
+
+/** Get the current repo snapshot (HEAD sha + branch + timestamp). */
+export declare function getRepoSnapshot(repoPath: string): RepoSnapshot
+
+/** Revert to a specific commit by creating a new commit that restores its tree. */
+export declare function revertToSnapshot(repoPath: string, targetSha: string): string

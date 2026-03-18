@@ -1,8 +1,7 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Agent, AgentCliConfig, AgentCreate, AgentStatus } from "@exegol/shared";
-import { DEFAULT_SETTINGS } from "@exegol/shared";
+import type { Agent, AgentCreate, AgentStatus } from "@exegol/shared";
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import type { IPty } from "node-pty";
@@ -24,10 +23,10 @@ import { getMcpHost } from "../mcp/host";
 import { extractAndStoreMemories } from "../memory/extractor";
 import { buildMemoryContext, getMemoriesForInjection } from "../memory/store";
 import { getApiKey } from "../security/keystore";
-import { scoreAgent } from "./scoring";
 import { discoverSkills } from "../skills/discovery";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import { getProviderRegistry } from "./registry";
+import { scoreAgent } from "./scoring";
 import { AgentStatusParser } from "./status-parser";
 
 // ─── Push event types ────────────────────────────────────────────────────
