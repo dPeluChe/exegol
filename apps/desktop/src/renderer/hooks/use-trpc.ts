@@ -501,6 +501,51 @@ export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
   });
 }
 
+// ─── Search ─────────────────────────────────────────────────────────────
+
+export interface SearchResult {
+  title: string;
+  snippet: string;
+  entityType: "scrollback" | "prompt" | "task_description" | "scheduler_result";
+  entityId: string;
+  projectId: string;
+  agentId: string | null;
+  score: number;
+}
+
+export function useSearch(query: string, projectId?: string | null) {
+  return useQuery({
+    queryKey: ["search", query, projectId],
+    queryFn: () =>
+      trpcInvoke<SearchResult[]>("search.query", {
+        query,
+        projectId: projectId ?? undefined,
+      }),
+    enabled: query.length > 0,
+  });
+}
+
+export function useIndexAgent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { agentId: string; projectId: string; taskDescription: string }) =>
+      trpcMutate<{ indexed: number }>("search.indexAgent", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["search"] });
+    },
+  });
+}
+
+export function useRebuildSearchIndex() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => trpcMutate<{ indexed: number }>("search.rebuild"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["search"] });
+    },
+  });
+}
+
 // ─── Scrollback ──────────────────────────────────────────────────────────────
 
 export function useScrollback(agentId: string | null) {

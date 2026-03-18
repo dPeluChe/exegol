@@ -8,6 +8,7 @@ import { promptsRouter } from "./procedures/prompts";
 import { resourcesRouter } from "./procedures/resources";
 import { schedulerRouter } from "./procedures/scheduler";
 import { scrollbackRouter } from "./procedures/scrollback";
+import { searchRouter } from "./procedures/search";
 import { settingsRouter } from "./procedures/settings";
 import { tokenUsageRouter } from "./procedures/token-usage";
 import { router } from "./trpc";
@@ -25,6 +26,7 @@ export const appRouter = router({
   diff: diffRouter,
   scrollback: scrollbackRouter,
   activities: activitiesRouter,
+  search: searchRouter,
 });
 
 export type AppRouter = typeof appRouter;
