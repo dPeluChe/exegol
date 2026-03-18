@@ -22,6 +22,20 @@ contextBridge.exposeInMainWorld("api", {
     getVersion: () => ipcRenderer.invoke("app:version"),
     getPlatform: () => process.platform,
   },
+  onAgentHandoff: (callback: (agentId: string, handoffId: string) => void) => {
+    const handler = (
+      _event: Electron.IpcRendererEvent,
+      agentId: string,
+      handoffId: string,
+    ): void => {
+      callback(agentId, handoffId);
+    };
+    ipcRenderer.on("agent:handoff-ready", handler);
+  },
+  offAgentHandoff: (_callback: (agentId: string, handoffId: string) => void) => {
+    // Remove all listeners for this channel (simpler than tracking exact handler)
+    ipcRenderer.removeAllListeners("agent:handoff-ready");
+  },
   dialog: {
     // biome-ignore lint/suspicious/noExplicitAny: Electron dialog options are dynamic
     showOpenDialog: (options: any) => ipcRenderer.invoke("dialog:showOpenDialog", options),
