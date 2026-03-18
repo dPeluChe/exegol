@@ -22,22 +22,27 @@ export function getSchedulerEngine(): SchedulerEngine {
 
 const MAX_WAIT_MS = 10 * 60_000; // 10 minutes
 const LOG_PROMPT_TRUNCATE_LENGTH = 60;
+const DEFAULT_MAX_CONCURRENT = 3;
 
 export class SchedulerEngine {
   private jobs: Map<string, Cron> = new Map();
   private runningTasks: Set<string> = new Set();
   private db: Database.Database | null = null;
+  private maxConcurrent: number = DEFAULT_MAX_CONCURRENT;
 
   /** Load all enabled tasks from DB and create Cron jobs */
   start(db: Database.Database): void {
     this.db = db;
+    this.loadMaxConcurrent(db);
     const tasks = listScheduledTasks(db);
     for (const task of tasks) {
       if (task.enabled) {
         this.scheduleJob(task.id, task.cronExpression);
       }
     }
-    logger.info(`[Scheduler] Started with ${this.jobs.size} active jobs`);
+    logger.info(
+      `[Scheduler] Started with ${this.jobs.size} active jobs (max concurrent: ${this.maxConcurrent})`,
+    );
   }
 
   /** Stop all cron jobs */
@@ -85,6 +90,24 @@ export class SchedulerEngine {
     await this.executeTask(taskId);
   }
 
+  /** Update the max concurrent limit */
+  setMaxConcurrent(value: number): void {
+    this.maxConcurrent = Math.max(1, value);
+  }
+
+  private loadMaxConcurrent(db: Database.Database): void {
+    try {
+      const row = db
+        .prepare("SELECT value FROM settings WHERE key = ?")
+        .get("scheduler_max_concurrent") as { value: string } | undefined;
+      if (row) {
+        this.maxConcurrent = Math.max(1, Number.parseInt(row.value, 10));
+      }
+    } catch {
+      // Use default
+    }
+  }
+
   private scheduleJob(taskId: string, cronExpression: string): void {
     // Stop existing job if any
     this.removeTask(taskId);
@@ -119,6 +142,24 @@ export class SchedulerEngine {
 
     const task = getScheduledTask(this.db, taskId);
     if (!task || !task.enabled) return;
+
+    // ── Concurrency limit check ─────────────────────────────────────────
+    if (this.runningTasks.size >= this.maxConcurrent) {
+      logger.info(
+        `[Scheduler] Concurrency limit reached (${this.runningTasks.size}/${this.maxConcurrent}), deferring task ${taskId}`,
+      );
+      return;
+    }
+
+    // ── Dependency check ────────────────────────────────────────────────
+    if (task.dependsOn) {
+      const dependencyIds = this.parseDependsOn(task.dependsOn);
+      const blocked = this.checkDependencies(dependencyIds);
+      if (blocked.length > 0) {
+        logger.info(`[Scheduler] Task ${taskId} blocked by dependencies: ${blocked.join(", ")}`);
+        return;
+      }
+    }
 
     this.runningTasks.add(taskId);
     logger.info(
@@ -169,6 +210,64 @@ export class SchedulerEngine {
         });
       }
     }
+  }
+
+  /**
+   * Parse the depends_on field (comma-separated task IDs or JSON array).
+   */
+  private parseDependsOn(dependsOn: string): string[] {
+    try {
+      const parsed = JSON.parse(dependsOn);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Not JSON — treat as comma-separated
+    }
+    return dependsOn
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  /**
+   * Check if all dependency tasks have completed successfully.
+   * Returns the list of IDs that are still blocking.
+   */
+  private checkDependencies(dependencyIds: string[]): string[] {
+    if (!this.db) return dependencyIds;
+
+    const blocking: string[] = [];
+    for (const depId of dependencyIds) {
+      const depTask = getScheduledTask(this.db, depId);
+      if (!depTask) continue; // Missing dep = not blocking
+
+      // A dependency blocks if it hasn't run successfully yet
+      if (depTask.lastResultStatus !== "success") {
+        blocking.push(depId);
+      }
+    }
+    return blocking;
+  }
+
+  /**
+   * Detect circular dependencies using DFS.
+   * Returns true if adding dependsOn to taskId would create a cycle.
+   */
+  detectCycle(db: Database.Database, taskId: string, dependsOnIds: string[]): boolean {
+    const visited = new Set<string>();
+
+    const dfs = (currentId: string): boolean => {
+      if (currentId === taskId) return true; // Cycle found
+      if (visited.has(currentId)) return false;
+      visited.add(currentId);
+
+      const task = getScheduledTask(db, currentId);
+      if (!task?.dependsOn) return false;
+
+      const deps = this.parseDependsOn(task.dependsOn);
+      return deps.some(dfs);
+    };
+
+    return dependsOnIds.some(dfs);
   }
 
   private waitForCompletion(agentId: string, taskId: string): Promise<void> {

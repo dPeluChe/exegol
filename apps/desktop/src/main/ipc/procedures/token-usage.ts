@@ -1,6 +1,9 @@
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
+  getAgentCosts,
+  getDailyTrend,
+  getModelBreakdown,
   getProjectTokenUsage,
   getProjectTokenUsageSummary,
   getTokenUsageSummary,
@@ -88,5 +91,26 @@ export const tokenUsageRouter = router({
     .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
     .query(({ ctx, input }) => {
       return getProjectTokenUsage(ctx.db, input.projectId, input.days);
+    }),
+
+  /** T19: Per-model breakdown */
+  modelBreakdown: publicProcedure
+    .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
+    .query(({ ctx, input }) => {
+      return getModelBreakdown(ctx.db, input.projectId, input.days);
+    }),
+
+  /** T19: Per-agent cost table */
+  agentCosts: publicProcedure
+    .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
+    .query(({ ctx, input }) => {
+      return getAgentCosts(ctx.db, input.projectId, input.days);
+    }),
+
+  /** T19: Daily cost trend */
+  dailyTrend: publicProcedure
+    .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
+    .query(({ ctx, input }) => {
+      return getDailyTrend(ctx.db, input.projectId, input.days);
     }),
 });

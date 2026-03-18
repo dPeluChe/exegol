@@ -38,6 +38,11 @@ function parseCommaSeparated(value: string | undefined): string[] {
 // ─── Requirement checking ────────────────────────────────────────────────────
 
 function isBinAvailable(bin: string): boolean {
+  // Validate bin name to prevent command injection
+  if (!/^[a-zA-Z0-9._-]+$/.test(bin)) {
+    logger.warn(`[Skills] Rejected suspicious binary name: ${bin}`);
+    return false;
+  }
   try {
     execSync(`command -v ${bin}`, { stdio: "ignore", timeout: 3_000 });
     return true;

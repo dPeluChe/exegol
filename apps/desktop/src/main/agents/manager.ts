@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Agent, AgentCliConfig, AgentCreate } from "@exegol/shared";
+import type { Agent, AgentCliConfig, AgentCreate, AgentStatus } from "@exegol/shared";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
@@ -11,6 +11,7 @@ import {
   createWorktree as dbCreateWorktree,
   removeWorktree as dbRemoveWorktree,
   getAgent,
+  insertActivity,
   setAgentPid,
   setAgentWorktree,
   stopAgent,
@@ -23,7 +24,27 @@ import { extractAndStoreMemories } from "../memory/extractor";
 import { buildMemoryContext, getMemoriesForInjection } from "../memory/store";
 import { getApiKey } from "../security/keystore";
 import { discoverSkills } from "../skills/discovery";
+import { createHandoff, generateHandoffFromScrollback } from "./handoff";
+import { getProviderRegistry } from "./registry";
 import { AgentStatusParser } from "./status-parser";
+
+// ─── Push event types ────────────────────────────────────────────────────
+
+export interface AgentStatusEvent {
+  agentId: string;
+  projectId: string;
+  status: AgentStatus;
+  currentStep: string | null;
+  cliType: string;
+  timestamp: number;
+}
+
+/** Broadcast an agent status event to all renderer windows */
+function broadcastAgentStatus(event: AgentStatusEvent): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send("agent:status-changed", event);
+  }
+}
 
 // ─── Rust native module (git2 worktree ops) ──────────────────────────────
 
@@ -71,20 +92,6 @@ function _getFullPath(): string {
   return resolvedPath;
 }
 
-// CLI names used as labels for quick-launch (don't pass as task args)
-const CLI_NAMES = new Set([
-  "claude code",
-  "claude",
-  "codex",
-  "gemini",
-  "aider",
-  "opencode",
-  "goose",
-  "amp",
-  "kiro",
-  "custom",
-]);
-
 // ─── Worktree helpers ─────────────────────────────────────────────────────
 
 function slugifyBranchName(description: string): string {
@@ -123,12 +130,14 @@ export class AgentManager {
   private scrollbackSizes: Map<string, number> = new Map();
   private scrollbackTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
   private completionCallbacks: Map<string, (exitCode: number) => void> = new Map();
+  private tokenLimitDetected: Set<string> = new Set();
 
   /**
    * Spawn an agent process with the configured CLI tool.
    */
   async spawn(db: Database.Database, agent: Agent, config: AgentCreate): Promise<void> {
-    const cliConfig = this.resolveCliConfig(agent.cliType);
+    const registry = getProviderRegistry();
+    const cliConfig = registry.resolveCliConfig(agent.cliType);
     if (!cliConfig) {
       throw new Error(`No CLI configuration found for agent type: ${agent.cliType}`);
     }
@@ -214,7 +223,7 @@ export class AgentManager {
     const cmdParts = [cliConfig.command, ...cliConfig.args];
     // Only pass task description as argument if it looks like an actual task
     // (not just the CLI name used as a label for quick-launch)
-    const isQuickLaunch = CLI_NAMES.has(agent.taskDescription.toLowerCase());
+    const isQuickLaunch = registry.isQuickLaunchLabel(agent.taskDescription);
     if (agent.taskDescription && !isQuickLaunch) {
       // Prepend memory + MCP + skill context to the task description
       const contextPrefix = [memoryContext, mcpContext, skillContext].filter(Boolean).join("\n");
@@ -275,6 +284,29 @@ export class AgentManager {
     setAgentPid(db, agent.id, proc.pid);
     updateAgentStatus(db, agent.id, "running");
 
+    // Push status event to renderer
+    broadcastAgentStatus({
+      agentId: agent.id,
+      projectId: agent.projectId,
+      status: "running",
+      currentStep: null,
+      cliType: agent.cliType,
+      timestamp: Date.now(),
+    });
+
+    // T20: Log activity
+    try {
+      insertActivity(db, {
+        type: "agent_spawned",
+        entityType: "agent",
+        entityId: agent.id,
+        projectId: agent.projectId,
+        description: `${agent.cliType} agent spawned: ${agent.taskDescription.slice(0, 80)}`,
+      });
+    } catch (err) {
+      logger.warn("[AgentManager] Failed to log activity:", err);
+    }
+
     // Create status parser
     const parser = new AgentStatusParser(agent.id, agent.cliType);
     this.statusParsers.set(agent.id, parser);
@@ -308,8 +340,43 @@ export class AgentManager {
       if (statusUpdate) {
         if (statusUpdate.status) {
           updateAgentStatus(db, agent.id, statusUpdate.status, statusUpdate.currentStep);
+          broadcastAgentStatus({
+            agentId: agent.id,
+            projectId: agent.projectId,
+            status: statusUpdate.status as AgentStatus,
+            currentStep: statusUpdate.currentStep ?? null,
+            cliType: agent.cliType,
+            timestamp: Date.now(),
+          });
         } else if (statusUpdate.currentStep) {
           updateAgentStatus(db, agent.id, "running", statusUpdate.currentStep);
+          broadcastAgentStatus({
+            agentId: agent.id,
+            projectId: agent.projectId,
+            status: "running",
+            currentStep: statusUpdate.currentStep,
+            cliType: agent.cliType,
+            timestamp: Date.now(),
+          });
+        }
+
+        // Detect token limit warning — generate handoff and notify renderer
+        if (statusUpdate.tokenLimitWarning && !this.tokenLimitDetected.has(agent.id)) {
+          this.tokenLimitDetected.add(agent.id);
+          try {
+            const scrollback = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+            const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
+            const handoff = createHandoff(db, { agentId: agent.id, ...summary });
+            // Notify renderer of handoff availability
+            for (const win of BrowserWindow.getAllWindows()) {
+              win.webContents.send("agent:handoff-ready", agent.id, handoff.id);
+            }
+            logger.info(
+              `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
+            );
+          } catch (err) {
+            logger.error(`[AgentManager] Failed to create handoff for ${agent.id}:`, err);
+          }
         }
       }
     });
@@ -334,11 +401,34 @@ export class AgentManager {
 
       this.processes.delete(agent.id);
       this.statusParsers.delete(agent.id);
+      this.tokenLimitDetected.delete(agent.id);
 
       const currentAgent = getAgent(db, agent.id);
       if (currentAgent && currentAgent.status !== "completed" && currentAgent.status !== "failed") {
         const finalStatus = exitCode === 0 ? "completed" : "failed";
         stopAgent(db, agent.id, finalStatus);
+        broadcastAgentStatus({
+          agentId: agent.id,
+          projectId: agent.projectId,
+          status: finalStatus,
+          currentStep: null,
+          cliType: agent.cliType,
+          timestamp: Date.now(),
+        });
+
+        // T20: Log activity
+        const actType = finalStatus === "completed" ? "agent_completed" : "agent_failed";
+        try {
+          insertActivity(db, {
+            type: actType as "agent_completed" | "agent_failed",
+            entityType: "agent",
+            entityId: agent.id,
+            projectId: agent.projectId,
+            description: `${agent.cliType} agent ${finalStatus}: ${agent.taskDescription.slice(0, 80)}`,
+          });
+        } catch (err) {
+          logger.warn("[AgentManager] Failed to log activity:", err);
+        }
       }
 
       // ── Worktree cleanup on exit ──────────────────────────────────────
@@ -388,6 +478,22 @@ export class AgentManager {
     } else {
       // No process found but ensure DB is updated
       stopAgent(db, agentId, "completed");
+
+      // T20: Log activity for manual stop
+      try {
+        const stoppedAgent = getAgent(db, agentId);
+        if (stoppedAgent) {
+          insertActivity(db, {
+            type: "agent_stopped",
+            entityType: "agent",
+            entityId: agentId,
+            projectId: stoppedAgent.projectId,
+            description: `${stoppedAgent.cliType} agent stopped manually`,
+          });
+        }
+      } catch (err) {
+        logger.warn("[AgentManager] Failed to log activity:", err);
+      }
     }
   }
 
@@ -452,15 +558,6 @@ export class AgentManager {
       this.scrollbackBuffers.delete(agentId);
       this.scrollbackSizes.delete(agentId);
     }
-  }
-
-  /**
-   * Resolve CLI config for a given agent type from settings.
-   */
-  private resolveCliConfig(cliType: string): AgentCliConfig | null {
-    // TODO: Read from DB settings once settings are persisted
-    const config = DEFAULT_SETTINGS.agentClis.find((c) => c.cliType === cliType);
-    return config ?? null;
   }
 
   /**
