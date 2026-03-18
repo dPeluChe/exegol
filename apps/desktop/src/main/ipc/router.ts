@@ -1,3 +1,4 @@
+import { activitiesRouter } from "./procedures/activities";
 import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { diffRouter } from "./procedures/diff";
@@ -23,6 +24,7 @@ export const appRouter = router({
   prompts: promptsRouter,
   diff: diffRouter,
   scrollback: scrollbackRouter,
+  activities: activitiesRouter,
 });
 
 export type AppRouter = typeof appRouter;

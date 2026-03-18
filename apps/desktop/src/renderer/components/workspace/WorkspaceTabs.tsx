@@ -8,6 +8,7 @@ import {
   FileText,
   GitCompare,
   type LucideIcon,
+  Rss,
 } from "lucide-react";
 
 export type WorkspaceSection =
@@ -17,7 +18,8 @@ export type WorkspaceSection =
   | "diff"
   | "scheduler"
   | "tokens"
-  | "resources";
+  | "resources"
+  | "activity";
 
 const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "agents", label: "Agents", icon: Cpu },
@@ -27,6 +29,7 @@ const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "scheduler", label: "Scheduler", icon: Clock },
   { id: "tokens", label: "Token Usage", icon: Coins },
   { id: "resources", label: "Resources", icon: Activity },
+  { id: "activity", label: "Activity", icon: Rss },
 ];
 
 interface WorkspaceTabsProps {

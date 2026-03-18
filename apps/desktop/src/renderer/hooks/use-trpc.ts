@@ -61,7 +61,7 @@ export function useAgents(projectId: string | null) {
     queryKey: ["agents", projectId],
     queryFn: () => trpcInvoke<Agent[]>("agents.list", { projectId }),
     enabled: !!projectId,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
   });
 }
 
@@ -70,7 +70,7 @@ export function useAgent(id: string | null) {
     queryKey: ["agent", id],
     queryFn: () => trpcInvoke<Agent>("agents.get", { id }),
     enabled: !!id,
-    refetchInterval: 2_000,
+    refetchInterval: 10_000, // Reduced: push events (T17) handle real-time updates
   });
 }
 
@@ -170,6 +170,62 @@ export function useTokenScan() {
   });
 }
 
+// T19: Per-model breakdown
+export interface ModelBreakdownRow {
+  model: string;
+  provider: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalCost: number;
+  requestCount: number;
+}
+
+export function useModelBreakdown(projectId: string | null, days = 30) {
+  return useQuery({
+    queryKey: ["tokenUsage", "modelBreakdown", projectId, days],
+    queryFn: () =>
+      trpcInvoke<ModelBreakdownRow[]>("tokenUsage.modelBreakdown", { projectId, days }),
+    enabled: !!projectId,
+    refetchInterval: 30_000,
+  });
+}
+
+// T19: Per-agent costs
+export interface AgentCostRow {
+  agentId: string;
+  cliType: string;
+  taskDescription: string;
+  totalTokens: number;
+  totalCost: number;
+  sessionCount: number;
+}
+
+export function useAgentCosts(projectId: string | null, days = 30) {
+  return useQuery({
+    queryKey: ["tokenUsage", "agentCosts", projectId, days],
+    queryFn: () => trpcInvoke<AgentCostRow[]>("tokenUsage.agentCosts", { projectId, days }),
+    enabled: !!projectId,
+    refetchInterval: 30_000,
+  });
+}
+
+// T19: Daily trend
+export interface DailyTrendRow {
+  date: string;
+  totalCost: number;
+  totalTokens: number;
+  requestCount: number;
+}
+
+export function useDailyTrend(projectId: string | null, days = 30) {
+  return useQuery({
+    queryKey: ["tokenUsage", "dailyTrend", projectId, days],
+    queryFn: () => trpcInvoke<DailyTrendRow[]>("tokenUsage.dailyTrend", { projectId, days }),
+    enabled: !!projectId,
+    refetchInterval: 30_000,
+  });
+}
+
 // ─── Resources ──────────────────────────────────────────────────────────────
 
 export interface SystemMetrics {
@@ -192,7 +248,22 @@ export function useSystemMetrics() {
   return useQuery({
     queryKey: ["resources", "system"],
     queryFn: () => trpcInvoke<SystemMetrics>("resources.system"),
-    refetchInterval: 10_000, // Matches background collector interval
+    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
+  });
+}
+
+export interface MetricsSnapshot {
+  cpu: number;
+  memoryPercent: number;
+  diskPercent: number;
+  timestamp: number;
+}
+
+export function useMetricsHistory() {
+  return useQuery({
+    queryKey: ["resources", "history"],
+    queryFn: () => trpcInvoke<MetricsSnapshot[]>("resources.history"),
+    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
   });
 }
 
@@ -424,6 +495,32 @@ export function useTogglePinPrompt() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
+  });
+}
+
+// ─── Activities (T20) ────────────────────────────────────────────────────────
+
+export interface Activity {
+  id: string;
+  type: string;
+  entityType: string;
+  entityId: string | null;
+  projectId: string | null;
+  description: string;
+  createdAt: number;
+}
+
+export function useActivities(projectId: string | null, type?: string) {
+  return useQuery({
+    queryKey: ["activities", projectId, type],
+    queryFn: () =>
+      trpcInvoke<Activity[]>("activities.list", {
+        projectId: projectId ?? undefined,
+        type,
+        limit: 100,
+      }),
+    enabled: !!projectId,
+    refetchInterval: 15_000,
   });
 }
 
