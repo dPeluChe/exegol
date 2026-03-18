@@ -23,6 +23,7 @@ export const agentCreateSchema = z.object({
   taskDescription: z.string().min(1, "Task description is required"),
   useWorktree: z.boolean().optional(),
   branchName: z.string().optional(),
+  skillNames: z.array(z.string()).optional(),
 });
 
 export type AgentSchema = z.infer<typeof agentSchema>;

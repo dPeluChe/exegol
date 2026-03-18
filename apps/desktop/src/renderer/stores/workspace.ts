@@ -12,6 +12,24 @@ export interface Pane {
   agentId?: string;
   url?: string;
   filePath?: string;
+  /** Set when recovery validation fails (agent deleted, file missing, etc.) */
+  invalidReason?: string;
+}
+
+/**
+ * Recovery token — portable snapshot of a pane's state for reconstruction.
+ * Inspired by Tabby's getRecoveryToken() pattern.
+ */
+export interface RecoveryToken {
+  type: PaneType;
+  agentId?: string;
+  filePath?: string;
+  url?: string;
+  metadata?: {
+    tabLabel?: string;
+    cliType?: string;
+    taskDescription?: string;
+  };
 }
 
 export type LayoutNode =
@@ -64,6 +82,12 @@ interface WorkspaceStore {
 
   /** Ensure at least one tab exists (call on mount) */
   ensureDefaultTab: () => void;
+
+  /** Extract recovery token for a pane (for persistence/sharing). */
+  getRecoveryToken: (paneId: string) => RecoveryToken | null;
+
+  /** Mark a pane as invalid (agent deleted, file missing, etc.) → converts to empty with error. */
+  invalidatePane: (paneId: string, reason: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -320,6 +344,29 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           get().addTab("Workspace");
         }
       },
+
+      getRecoveryToken: (paneId) => {
+        const pane = get().panes[paneId];
+        if (!pane) return null;
+        return {
+          type: pane.type,
+          agentId: pane.agentId,
+          filePath: pane.filePath,
+          url: pane.url,
+        };
+      },
+
+      invalidatePane: (paneId, reason) =>
+        set((s) => {
+          const existing = s.panes[paneId];
+          if (!existing) return s;
+          return {
+            panes: {
+              ...s.panes,
+              [paneId]: { ...existing, type: "empty", agentId: undefined, invalidReason: reason },
+            },
+          };
+        }),
     }),
     {
       name: "exegol-workspace",
@@ -328,6 +375,16 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         activeTabId: state.activeTabId,
         panes: state.panes,
       }),
+      // On rehydrate: clear invalidReason flags so panes get re-validated
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const cleaned: Record<string, Pane> = {};
+        for (const [id, pane] of Object.entries(state.panes)) {
+          const { invalidReason: _, ...rest } = pane;
+          cleaned[id] = rest;
+        }
+        state.panes = cleaned;
+      },
     },
   ),
 );

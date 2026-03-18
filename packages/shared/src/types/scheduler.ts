@@ -13,6 +13,7 @@ export type ScheduledTask = {
   nextRunAt: number | null;
   lastResultStatus: string | null;
   enabled: boolean;
+  dependsOn: string | null;
 };
 
 export type ScheduledTaskCreate = {
@@ -22,6 +23,7 @@ export type ScheduledTaskCreate = {
   cliAgent: string;
   skillName?: string;
   maxTokenBudget?: number;
+  dependsOn?: string;
 };
 
 export type ScheduledResult = {

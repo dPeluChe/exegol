@@ -25,8 +25,8 @@ export function createScheduledTask(
 ): ScheduledTask {
   const id = nanoid();
   db.prepare(
-    `INSERT INTO scheduled_tasks (id, project_id, prompt, cron_expression, skill_name, cli_agent, max_token_budget, next_run_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO scheduled_tasks (id, project_id, prompt, cron_expression, skill_name, cli_agent, max_token_budget, next_run_at, depends_on)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     data.projectId,
@@ -36,6 +36,7 @@ export function createScheduledTask(
     data.cliAgent,
     data.maxTokenBudget ?? null,
     nextRunAt,
+    data.dependsOn ?? null,
   );
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getScheduledTask(db, id)!;
@@ -54,6 +55,7 @@ export function updateScheduledTask(
     nextRunAt: number;
     lastResultStatus: string;
     enabled: boolean;
+    dependsOn: string | null;
   }>,
 ): void {
   const sets: string[] = [];
@@ -94,6 +96,10 @@ export function updateScheduledTask(
   if (data.enabled !== undefined) {
     sets.push("enabled = ?");
     values.push(data.enabled ? 1 : 0);
+  }
+  if (data.dependsOn !== undefined) {
+    sets.push("depends_on = ?");
+    values.push(data.dependsOn);
   }
 
   if (sets.length === 0) return;

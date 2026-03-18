@@ -2,6 +2,7 @@ import { cn } from "@exegol/ui";
 import {
   Activity,
   Award,
+  Brain,
   CheckSquare,
   Clock,
   Coins,
@@ -9,7 +10,12 @@ import {
   FileText,
   GitCompare,
   History,
+  ListOrdered,
   type LucideIcon,
+  MessageSquare,
+  Rss,
+  Search,
+  Wand2,
 } from "lucide-react";
 
 export type WorkspaceSection =
@@ -20,8 +26,14 @@ export type WorkspaceSection =
   | "oplog"
   | "scheduler"
   | "scoring"
+  | "skills"
+  | "memory"
+  | "search"
   | "tokens"
-  | "resources";
+  | "resources"
+  | "messages"
+  | "queue"
+  | "activity";
 
 const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "agents", label: "Agents", icon: Cpu },
@@ -31,8 +43,14 @@ const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "oplog", label: "Oplog", icon: History },
   { id: "scheduler", label: "Scheduler", icon: Clock },
   { id: "scoring", label: "Scoring", icon: Award },
+  { id: "skills", label: "Skills", icon: Wand2 },
+  { id: "memory", label: "Memory", icon: Brain },
+  { id: "messages", label: "Messages", icon: MessageSquare },
+  { id: "queue", label: "Queue", icon: ListOrdered },
+  { id: "search", label: "Search", icon: Search },
   { id: "tokens", label: "Token Usage", icon: Coins },
   { id: "resources", label: "Resources", icon: Activity },
+  { id: "activity", label: "Activity", icon: Rss },
 ];
 
 interface WorkspaceTabsProps {

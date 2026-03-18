@@ -190,7 +190,131 @@ const migrations: Migration[] = [
       CHECK (source IN ('agent', 'log_scan'))`,
   },
   {
-    id: "013_agent_scores",
+    id: "013_activities",
+    sql: `CREATE TABLE IF NOT EXISTS activities (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT,
+      project_id TEXT,
+      description TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_activities_project ON activities(project_id);
+    CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_activities_type ON activities(type)`,
+  },
+  {
+    id: "014_search_fts5",
+    sql: `
+      CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
+        title,
+        body,
+        entity_type UNINDEXED,
+        entity_id UNINDEXED,
+        project_id UNINDEXED,
+        agent_id UNINDEXED,
+        indexed_at UNINDEXED,
+        tokenize='porter unicode61'
+      );
+    `,
+  },
+  {
+    id: "015_handoffs",
+    sql: `CREATE TABLE IF NOT EXISTS handoffs (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      successor_agent_id TEXT,
+      goal TEXT NOT NULL,
+      progress TEXT NOT NULL DEFAULT '',
+      files_modified TEXT NOT NULL DEFAULT '',
+      next_steps TEXT NOT NULL DEFAULT '',
+      critical_context TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY (successor_agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    )`,
+  },
+  {
+    id: "016_messages",
+    sql: `CREATE TABLE IF NOT EXISTS messages (
+      id TEXT PRIMARY KEY,
+      from_agent_id TEXT,
+      to_agent_id TEXT,
+      type TEXT NOT NULL DEFAULT 'text'
+        CHECK (type IN ('text', 'handoff', 'status', 'request', 'result')),
+      content TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      read_at INTEGER,
+      FOREIGN KEY (from_agent_id) REFERENCES agents(id) ON DELETE SET NULL,
+      FOREIGN KEY (to_agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_messages_to_agent ON messages(to_agent_id, read_at);
+    CREATE INDEX IF NOT EXISTS idx_messages_from_agent ON messages(from_agent_id)`,
+  },
+  {
+    id: "017_scheduled_tasks_depends_on",
+    sql: `ALTER TABLE scheduled_tasks ADD COLUMN depends_on TEXT`,
+  },
+  {
+    id: "018_task_queue",
+    sql: `CREATE TABLE IF NOT EXISTS task_queue (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      prompt TEXT NOT NULL,
+      cli_type TEXT NOT NULL DEFAULT 'claude-code',
+      priority INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued', 'running', 'blocked', 'completed', 'failed', 'cancelled')),
+      depends_on TEXT,
+      agent_id TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      started_at INTEGER,
+      completed_at INTEGER,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_task_queue_project ON task_queue(project_id, status);
+    CREATE INDEX IF NOT EXISTS idx_task_queue_status ON task_queue(status)`,
+  },
+  {
+    id: "019_skills_state",
+    sql: `CREATE TABLE IF NOT EXISTS skills_state (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      skill_name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      UNIQUE(project_id, skill_name)
+    )`,
+  },
+  {
+    id: "020_memories",
+    sql: `CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      category TEXT NOT NULL
+        CHECK (category IN ('preference', 'pattern', 'error', 'solution', 'dependency', 'convention')),
+      content TEXT NOT NULL,
+      source_agent_id TEXT,
+      relevance_score REAL NOT NULL DEFAULT 0.5,
+      access_count INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      last_accessed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+      FOREIGN KEY (source_agent_id) REFERENCES agents(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project_id);
+    CREATE INDEX IF NOT EXISTS idx_memories_category ON memories(project_id, category);
+    CREATE INDEX IF NOT EXISTS idx_memories_relevance ON memories(project_id, relevance_score DESC)`,
+  },
+  {
+    id: "021_agent_scores",
     sql: `CREATE TABLE IF NOT EXISTS agent_scores (
       agent_id TEXT PRIMARY KEY,
       files_changed INTEGER NOT NULL DEFAULT 0,
@@ -212,7 +336,7 @@ const migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_agent_scores_scored_at ON agent_scores(scored_at)`,
   },
   {
-    id: "014_oplog",
+    id: "022_oplog",
     sql: `CREATE TABLE IF NOT EXISTS oplog (
       id TEXT PRIMARY KEY,
       agent_id TEXT NOT NULL,

@@ -1,6 +1,31 @@
 import type { Agent, AgentCliType, AgentStatus } from "@exegol/shared";
 import { create } from "zustand";
 
+// ─── Push event subscription (T17) ──────────────────────────────────────
+
+let pushCleanup: (() => void) | null = null;
+
+/** Start listening for agent status push events from main process */
+export function startAgentStatusPush(): void {
+  if (pushCleanup) return; // Already subscribed
+  pushCleanup = window.api.onAgentStatus((event) => {
+    const store = useAgentStore.getState();
+    const existing = store.agents[event.agentId];
+    if (existing) {
+      store.updateAgent(event.agentId, {
+        status: event.status as AgentStatus,
+        currentStep: event.currentStep,
+      });
+    }
+  });
+}
+
+/** Stop listening for push events */
+export function stopAgentStatusPush(): void {
+  pushCleanup?.();
+  pushCleanup = null;
+}
+
 export interface AgentState {
   id: string;
   projectId: string;
