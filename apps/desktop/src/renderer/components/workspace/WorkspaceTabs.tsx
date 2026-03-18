@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import {
   Activity,
+  Brain,
   CheckSquare,
   Clock,
   Coins,
@@ -12,6 +13,7 @@ import {
   MessageSquare,
   Rss,
   Search,
+  Wand2,
 } from "lucide-react";
 
 export type WorkspaceSection =
@@ -20,6 +22,8 @@ export type WorkspaceSection =
   | "prompts"
   | "diff"
   | "scheduler"
+  | "skills"
+  | "memory"
   | "search"
   | "tokens"
   | "resources"
@@ -33,6 +37,8 @@ const SECTIONS: { id: WorkspaceSection; label: string; icon: LucideIcon }[] = [
   { id: "prompts", label: "Prompts", icon: FileText },
   { id: "diff", label: "Diff Viewer", icon: GitCompare },
   { id: "scheduler", label: "Scheduler", icon: Clock },
+  { id: "skills", label: "Skills", icon: Wand2 },
+  { id: "memory", label: "Memory", icon: Brain },
   { id: "messages", label: "Messages", icon: MessageSquare },
   { id: "queue", label: "Queue", icon: ListOrdered },
   { id: "search", label: "Search", icon: Search },

@@ -19,7 +19,11 @@ import {
 } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
+import { getMcpHost } from "../mcp/host";
+import { extractAndStoreMemories } from "../memory/extractor";
+import { buildMemoryContext, getMemoriesForInjection } from "../memory/store";
 import { getApiKey } from "../security/keystore";
+import { discoverSkills } from "../skills/discovery";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import { getProviderRegistry } from "./registry";
 import { AgentStatusParser } from "./status-parser";
@@ -189,15 +193,53 @@ export class AgentManager {
       }
     }
 
+    // ── Memory context injection ─────────────────────────────────────────
+    const relevantMemories = getMemoriesForInjection(db, agent.projectId);
+    const memoryContext = buildMemoryContext(relevantMemories);
+
+    // ── MCP tool context injection ──────────────────────────────────────
+    const mcpContext = getMcpHost().buildToolContext();
+
+    // ── Skill context injection ───────────────────────────────────────────
+    let skillContext = "";
+    if (config.skillNames && config.skillNames.length > 0) {
+      const allSkills = discoverSkills(cwd);
+      const selectedSkills = allSkills.filter(
+        (s) => config.skillNames?.includes(s.name) && s.available,
+      );
+      if (selectedSkills.length > 0) {
+        const sections = selectedSkills.map(
+          (s) => `## ${s.name}${s.role ? ` — ${s.role}` : ""}\n\n${s.content}`,
+        );
+        skillContext = `# Active Skills\n\n${sections.join("\n\n---\n\n")}\n\n---\n\n`;
+        logger.info(
+          "[AgentManager] Injecting skills:",
+          selectedSkills.map((s) => s.name),
+        );
+      }
+    }
+
     // Build the full command string to run through the user's shell
     const cmdParts = [cliConfig.command, ...cliConfig.args];
     // Only pass task description as argument if it looks like an actual task
     // (not just the CLI name used as a label for quick-launch)
     const isQuickLaunch = registry.isQuickLaunchLabel(agent.taskDescription);
     if (agent.taskDescription && !isQuickLaunch) {
-      // Shell-escape the task description
-      const escaped = agent.taskDescription.replace(/'/g, "'\\''");
+      // Prepend memory + MCP + skill context to the task description
+      const contextPrefix = [memoryContext, mcpContext, skillContext].filter(Boolean).join("\n");
+      const fullPrompt = contextPrefix
+        ? `${contextPrefix}# Task\n\n${agent.taskDescription}`
+        : agent.taskDescription;
+      // Shell-escape the full prompt
+      const escaped = fullPrompt.replace(/'/g, "'\\''");
       cmdParts.push(`'${escaped}'`);
+    } else {
+      // Quick-launch with context: inject memory/MCP/skill context if available
+      const contextPrefix = [memoryContext, mcpContext, skillContext].filter(Boolean).join("\n");
+      if (contextPrefix) {
+        const escaped = contextPrefix.replace(/'/g, "'\\''");
+        cmdParts.push(`'${escaped}'`);
+      }
     }
     const fullCommand = cmdParts.join(" ");
 
@@ -346,6 +388,12 @@ export class AgentManager {
       if (timer) {
         clearInterval(timer);
         this.scrollbackTimers.delete(agent.id);
+      }
+
+      // ── Memory extraction on completion (before flush clears buffer) ──
+      const scrollbackForMemory = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+      if (scrollbackForMemory.length > 0) {
+        extractAndStoreMemories(db, agent.id, agent.projectId, scrollbackForMemory);
       }
 
       // Final flush scrollback to disk

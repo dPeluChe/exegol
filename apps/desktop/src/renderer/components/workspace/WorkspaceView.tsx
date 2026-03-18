@@ -4,12 +4,14 @@ import { useMountEffect } from "../../hooks/use-mount-effect";
 import { ActivitySection } from "./sections/ActivitySection";
 import { AgentsSection } from "./sections/AgentsSection";
 import { DiffSection } from "./sections/DiffSection";
+import { MemorySection } from "./sections/MemorySection";
 import { MessagesSection } from "./sections/MessagesSection";
 import { PromptsSection } from "./sections/PromptsSection";
 import { QueueSection } from "./sections/QueueSection";
 import { ResourcesSection } from "./sections/ResourcesSection";
 import { SchedulerSection } from "./sections/SchedulerSection";
 import { SearchSection } from "./sections/SearchSection";
+import { SkillsSection } from "./sections/SkillsSection";
 import { TasksSection } from "./sections/TasksSection";
 import { TokensSection } from "./sections/TokensSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
@@ -48,6 +50,8 @@ export function WorkspaceView() {
         {activeSection === "prompts" && <PromptsSection />}
         {activeSection === "diff" && <DiffSection />}
         {activeSection === "scheduler" && <SchedulerSection />}
+        {activeSection === "skills" && <SkillsSection />}
+        {activeSection === "memory" && <MemorySection />}
         {activeSection === "messages" && <MessagesSection />}
         {activeSection === "queue" && <QueueSection />}
         {activeSection === "search" && <SearchSection />}

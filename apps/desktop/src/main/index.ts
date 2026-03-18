@@ -8,7 +8,9 @@ import { getProviderRegistry } from "./agents/registry";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { cleanupStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
+import { getMcpHost } from "./mcp/host";
 import { getSchedulerEngine } from "./scheduler/engine";
+import { ensureDefaultSkills } from "./skills/discovery";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 
 let mainWindow: BrowserWindow | null = null;
@@ -117,6 +119,7 @@ app.whenReady().then(async () => {
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerGlobalHotkey();
+  ensureDefaultSkills(); // Install default skills to ~/.exegol/skills/ if missing
   startMetricsCollector(); // Background: collects CPU/RAM/disk every 10s
   getSchedulerEngine().start(getDb()); // Load scheduled tasks and start cron jobs
   getQueueExecutor().start(getDb()); // Start task queue executor
@@ -151,6 +154,7 @@ app.on("will-quit", () => {
     }
   }
 
+  getMcpHost().disconnectAll();
   getSchedulerEngine().stop();
   getQueueExecutor().stop();
   stopMetricsCollector();

@@ -42,6 +42,7 @@ export type AgentCreate = {
   taskDescription: string;
   useWorktree?: boolean;
   branchName?: string;
+  skillNames?: string[];
 };
 
 // ─── Provider Registry ──────────────────────────────────────────────────────
