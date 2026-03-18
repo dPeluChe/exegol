@@ -8,6 +8,7 @@ import type Database from "libsql";
 import type { IPty } from "node-pty";
 import * as pty from "node-pty";
 import {
+  createOplogEntry,
   createWorktree as dbCreateWorktree,
   removeWorktree as dbRemoveWorktree,
   getAgent,
@@ -19,6 +20,7 @@ import {
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
+import { scoreAgent } from "./scoring";
 import { AgentStatusParser } from "./status-parser";
 
 // ─── Rust native module (git2 worktree ops) ──────────────────────────────
@@ -119,6 +121,9 @@ export class AgentManager {
   private scrollbackSizes: Map<string, number> = new Map();
   private scrollbackTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
   private completionCallbacks: Map<string, (exitCode: number) => void> = new Map();
+  /** Track initial HEAD SHA per agent for oplog commit detection */
+  private initialSnapshots: Map<string, { headSha: string; cwd: string; projectId: string }> =
+    new Map();
 
   /**
    * Spawn an agent process with the configured CLI tool.
@@ -167,6 +172,21 @@ export class AgentManager {
           repoPath: project.path,
         });
 
+        // Record in oplog
+        try {
+          const snapshot = coreRust.getRepoSnapshot(project.path);
+          createOplogEntry(db, {
+            agentId: agent.id,
+            projectId: agent.projectId,
+            operation: "worktree_create",
+            refBefore: snapshot.headSha,
+            refAfter: snapshot.headSha,
+            description: `Created worktree '${worktreeName}' on branch '${branchName}'`,
+          });
+        } catch {
+          // Non-fatal oplog recording
+        }
+
         logger.info("[AgentManager] Created worktree:", {
           branch: branchName,
           path: wtInfo.path,
@@ -203,6 +223,20 @@ export class AgentManager {
       const key = getApiKey(db, provider);
       if (key) {
         apiKeyEnv[envVar] = key;
+      }
+    }
+
+    // Capture initial HEAD snapshot for oplog
+    if (coreRust) {
+      try {
+        const snapshot = coreRust.getRepoSnapshot(cwd);
+        this.initialSnapshots.set(agent.id, {
+          headSha: snapshot.headSha,
+          cwd,
+          projectId: agent.projectId,
+        });
+      } catch {
+        // Non-fatal
       }
     }
 
@@ -291,6 +325,38 @@ export class AgentManager {
       if (currentAgent && currentAgent.status !== "completed" && currentAgent.status !== "failed") {
         const finalStatus = exitCode === 0 ? "completed" : "failed";
         stopAgent(db, agent.id, finalStatus);
+      }
+
+      // ── Quality scoring (non-fatal) ──────────────────────────────────
+      const scrollbackForScoring = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+      const currentAgentForScoring = getAgent(db, agent.id);
+      scoreAgent(
+        db,
+        agent.id,
+        exitCode,
+        currentAgentForScoring?.status ?? "unknown",
+        scrollbackForScoring,
+      );
+
+      // ── Oplog: detect commits made by the agent ─────────────────────
+      const initSnapshot = this.initialSnapshots.get(agent.id);
+      if (initSnapshot && coreRust) {
+        try {
+          const afterSnapshot = coreRust.getRepoSnapshot(initSnapshot.cwd);
+          if (afterSnapshot.headSha !== initSnapshot.headSha) {
+            createOplogEntry(db, {
+              agentId: agent.id,
+              projectId: initSnapshot.projectId,
+              operation: "commit",
+              refBefore: initSnapshot.headSha,
+              refAfter: afterSnapshot.headSha,
+              description: `Agent made commits (${initSnapshot.headSha.slice(0, 8)} → ${afterSnapshot.headSha.slice(0, 8)})`,
+            });
+          }
+        } catch {
+          // Non-fatal oplog recording
+        }
+        this.initialSnapshots.delete(agent.id);
       }
 
       // ── Worktree cleanup on exit ──────────────────────────────────────

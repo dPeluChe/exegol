@@ -189,6 +189,48 @@ const migrations: Migration[] = [
     sql: `ALTER TABLE token_usage ADD COLUMN source TEXT NOT NULL DEFAULT 'agent'
       CHECK (source IN ('agent', 'log_scan'))`,
   },
+  {
+    id: "013_agent_scores",
+    sql: `CREATE TABLE IF NOT EXISTS agent_scores (
+      agent_id TEXT PRIMARY KEY,
+      files_changed INTEGER NOT NULL DEFAULT 0,
+      compiles INTEGER, -- null = unknown, 0 = false, 1 = true
+      tests_passed INTEGER, -- null = unknown, 0 = false, 1 = true
+      task_completed INTEGER NOT NULL DEFAULT 0,
+      exit_code INTEGER NOT NULL DEFAULT 0,
+      exit_reason TEXT NOT NULL DEFAULT 'unknown'
+        CHECK (exit_reason IN ('success', 'failure', 'stopped', 'timeout', 'unknown')),
+      turns_used INTEGER NOT NULL DEFAULT 0,
+      tokens_spent INTEGER NOT NULL DEFAULT 0,
+      files_modified_count INTEGER NOT NULL DEFAULT 0,
+      overall_score REAL NOT NULL DEFAULT 0.0,
+      scored_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_scores_score ON agent_scores(overall_score);
+    CREATE INDEX IF NOT EXISTS idx_agent_scores_scored_at ON agent_scores(scored_at)`,
+  },
+  {
+    id: "014_oplog",
+    sql: `CREATE TABLE IF NOT EXISTS oplog (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      operation TEXT NOT NULL
+        CHECK (operation IN ('commit', 'branch_create', 'worktree_create', 'file_write', 'revert')),
+      ref_before TEXT, -- SHA or branch ref before the operation
+      ref_after TEXT,  -- SHA or branch ref after the operation
+      description TEXT NOT NULL DEFAULT '',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_oplog_agent ON oplog(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_oplog_project ON oplog(project_id);
+    CREATE INDEX IF NOT EXISTS idx_oplog_created ON oplog(created_at DESC)`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

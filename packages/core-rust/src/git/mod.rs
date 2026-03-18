@@ -1,5 +1,9 @@
+mod diff;
+mod oplog;
 mod types;
 
+pub use diff::*;
+pub use oplog::*;
 pub use types::*;
 
 use git2::{DiffOptions, Repository, StatusOptions};
@@ -292,7 +296,6 @@ pub fn get_worktree_diff(worktree_path: String) -> Result<String, Error> {
     .include_untracked(true)
     .recurse_untracked_dirs(true);
 
-  // Diff: HEAD to workdir (captures both staged and unstaged changes)
   let head_tree = repo
     .head()
     .ok()
