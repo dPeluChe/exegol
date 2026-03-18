@@ -61,6 +61,20 @@ function _getFullPath(): string {
   return resolvedPath;
 }
 
+// CLI names used as labels for quick-launch (don't pass as task args)
+const CLI_NAMES = new Set([
+  "claude code",
+  "claude",
+  "codex",
+  "gemini",
+  "aider",
+  "opencode",
+  "goose",
+  "amp",
+  "kiro",
+  "custom",
+]);
+
 // ─── Worktree helpers ─────────────────────────────────────────────────────
 
 function slugifyBranchName(description: string): string {
@@ -162,7 +176,10 @@ export class AgentManager {
 
     // Build the full command string to run through the user's shell
     const cmdParts = [cliConfig.command, ...cliConfig.args];
-    if (agent.taskDescription) {
+    // Only pass task description as argument if it looks like an actual task
+    // (not just the CLI name used as a label for quick-launch)
+    const isQuickLaunch = CLI_NAMES.has(agent.taskDescription.toLowerCase());
+    if (agent.taskDescription && !isQuickLaunch) {
       // Shell-escape the task description
       const escaped = agent.taskDescription.replace(/'/g, "'\\''");
       cmdParts.push(`'${escaped}'`);

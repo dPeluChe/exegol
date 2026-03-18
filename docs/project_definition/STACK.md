@@ -15,7 +15,7 @@ Every technology choice is justified with data from ecosystem research. See [RES
 | **Linting/Format** | Biome | 2.4.7 | Replaces ESLint + Prettier. Used by Superset. Single tool, faster |
 | **Type safety** | TypeScript | 5.7.x | Universal in this ecosystem |
 | **IPC** | tRPC | 11.x | Type-safe bridge between Electron main/renderer via createCaller proxy traversal |
-| **State (frontend)** | Zustand | 5.x | Lightweight, React-focused. With persist middleware for session state |
+| **State (frontend)** | Zustand | 5.x | Lightweight, React-focused. Persist middleware for session state (useAppStore) and workspace layout (useWorkspaceStore) |
 | **UI primitives** | Radix UI | 1.x | Used by Codex App. Accessible, unstyled, composable. Currently using Dialog |
 | **Schemas** | Zod | 3.23.x | Runtime validation. Used by Codex (Immer + Zod), Mastra, MCP SDK |
 
@@ -51,10 +51,11 @@ Every technology choice is justified with data from ecosystem research. See [RES
 | `@xterm/xterm` v6.x + `@xterm/addon-webgl` v0.19.x | Terminal emulation. Standard in VS Code. WebGL critical for performance (Superset reported issues without it) |
 | `@xterm/addon-fit` v0.11.x | Auto-resize terminal to container |
 | `@xterm/addon-web-links` v0.12.x | Clickable URLs in terminal output |
-| `react-resizable-panels` v2.x | Split pane layout: sidebar + main content. Used for sidebar resize |
+| `@monaco-editor/react` v4.x + `monaco-editor` | Read-only code viewer with VS Code-quality syntax highlighting (50+ languages). Local loading via `loader.config({ monaco })` — no CDN |
+| `react-markdown` v9.x | Markdown preview for .md files in CodeViewer (toggle Code/Preview) |
+| `react-resizable-panels` v2.x | Split pane layout: sidebar + workspace panes. Used for workspace splits |
 | `@tanstack/react-query` v5.x | Data fetching layer used by tRPC client hooks |
 | `lucide-react` v0.460.x | Icon library used throughout the UI |
-| ProseMirror or Monaco | Diff viewer — not yet implemented. Codex uses ProseMirror |
 | D3 or Cytoscape | Agent DAG visualization (Phase 3, not yet implemented) |
 
 ## Database: libSQL (SQLite fork by Turso)

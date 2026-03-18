@@ -8,8 +8,9 @@ import {
   GitBranch,
   Globe,
   RotateCw,
+  Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type PortInfo,
   useOpenInIde,
@@ -18,9 +19,11 @@ import {
   useSettings,
   useSpawnAgent,
 } from "../../hooks/use-trpc";
+import { trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useTerminalStore } from "../../stores/terminals";
+import { AgentLauncher } from "../agents/AgentLauncher";
 
 // ─── Agent Mini Card ──────────────────────────────────────────────────────────
 
@@ -38,12 +41,51 @@ const STATUS_COLORS: Record<string, string> = {
 function AgentMiniCard({ agent }: { agent: AgentState }) {
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
   const addAgent = useAgentStore((s) => s.addAgent);
+  const removeAgent = useAgentStore((s) => s.removeAgent);
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const spawnAgent = useSpawnAgent();
   const isFocused = focusedAgentId === agent.id;
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
   const isInactive = ["completed", "failed", "stopped"].includes(agent.status);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isInactive) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setContextMenu({ x: e.clientX, y: e.clientY });
+    },
+    [isInactive],
+  );
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  // Close context menu on click outside
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [contextMenu, closeContextMenu]);
+
+  const handleRemove = useCallback(async () => {
+    closeContextMenu();
+    try {
+      await trpcMutate("agents.delete", { id: agent.id });
+      removeAgent(agent.id);
+    } catch (err) {
+      console.error("[AgentMiniCard] Failed to delete agent:", err);
+    }
+  }, [agent.id, removeAgent, closeContextMenu]);
 
   const handleRelaunch = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -73,12 +115,14 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
 
   return (
     <div
+      role="none"
       className={cn(
-        "flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-[10px] transition-colors",
+        "relative flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-[10px] transition-colors",
         isFocused
           ? "bg-white/10 text-text-primary"
           : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
       )}
+      onContextMenu={handleContextMenu}
     >
       <button
         type="button"
@@ -104,6 +148,24 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
         >
           <RotateCw className={cn("h-2.5 w-2.5", spawnAgent.isPending && "animate-spin")} />
         </button>
+      )}
+
+      {/* Context menu for inactive agents */}
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[140px] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            type="button"
+            onClick={handleRemove}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-red-400 transition-colors hover:bg-white/10"
+          >
+            <Trash2 className="h-3 w-3" />
+            Remove from history
+          </button>
+        </div>
       )}
     </div>
   );
@@ -226,13 +288,16 @@ function ProjectItem({
       {/* Expanded content: branch info + open in IDE + agents */}
       {isExpanded && (
         <div className="ml-5 border-l border-border/50 pl-2">
-          {/* Git info + Open in IDE */}
+          {/* Git info + actions (IDE + Launch Agent) */}
           <div className="flex items-center justify-between py-1">
             <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
               <GitBranch className="h-2.5 w-2.5" />
               <span>{project.defaultBranch}</span>
             </div>
-            <OpenInIdeButton projectId={project.id} />
+            <div className="flex items-center gap-0.5">
+              <AgentLauncher projectId={project.id} />
+              <OpenInIdeButton projectId={project.id} />
+            </div>
           </div>
 
           {/* Detected ports */}

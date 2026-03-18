@@ -31,15 +31,13 @@ export function TasksSection() {
     (async () => {
       for (const name of candidates) {
         const fullPath = `${project.path}/${name}`;
-        try {
-          await trpcInvoke<{ content: string; language: string }>("files.readFile", {
-            path: fullPath,
-          });
+        const result = await trpcInvoke<{ exists: boolean }>("files.exists", {
+          path: fullPath,
+        });
+        if (result.exists) {
           setFilePath(fullPath);
           setAutoDetectDone(true);
           return;
-        } catch {
-          // File doesn't exist, try next candidate
         }
       }
       setAutoDetectDone(true);

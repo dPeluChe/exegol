@@ -69,6 +69,11 @@ export const agentRouter = router({
     return stopped;
   }),
 
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    ctx.db.prepare("DELETE FROM agents WHERE id = ?").run(input.id);
+    return { success: true };
+  }),
+
   getStatus: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);
     if (!agent) {

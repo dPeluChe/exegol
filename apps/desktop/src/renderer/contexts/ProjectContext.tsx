@@ -23,6 +23,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const syncFromDb = useAgentStore((s) => s.syncFromDb);
   const allAgents = Object.values(useAgentStore((s) => s.agents));
 
+  // If the persisted project no longer exists in DB, reset to project list
+  useEffect(() => {
+    if (activeProjectId && !isLoading && !project) {
+      useAppStore.getState().setActiveProject(null);
+    }
+  }, [activeProjectId, isLoading, project]);
+
   // Sync DB agents into Zustand store when they load
   useEffect(() => {
     if (dbAgents && activeProjectId) {

@@ -66,6 +66,11 @@ export interface DirectoryEntry {
 }
 
 export const filesRouter = router({
+  exists: publicProcedure.input(z.object({ path: z.string() })).query(({ ctx, input }) => {
+    assertPathInsideProject(input.path, ctx);
+    return { exists: existsSync(input.path) };
+  }),
+
   readFile: publicProcedure.input(z.object({ path: z.string() })).query(({ ctx, input }) => {
     assertPathInsideProject(input.path, ctx);
     if (!existsSync(input.path)) {

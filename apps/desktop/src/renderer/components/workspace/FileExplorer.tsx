@@ -1,7 +1,10 @@
-import { cn, ScrollArea } from "@exegol/ui";
+import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from "lucide-react";
 import { useState } from "react";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
+import { CodeViewer } from "./CodeViewer";
+
+// ─── Extension Labels ────────────────────────────────────────────────────────
 
 const EXT_LABELS: Record<string, { text: string; color: string }> = {
   ".ts": { text: "TS", color: "text-blue-400" },
@@ -11,14 +14,20 @@ const EXT_LABELS: Record<string, { text: string; color: string }> = {
   ".rs": { text: "RS", color: "text-orange-400" },
   ".py": { text: "PY", color: "text-green-400" },
   ".go": { text: "GO", color: "text-cyan-400" },
-  ".md": { text: "MD", color: "text-zinc-400" },
-  ".json": { text: "JN", color: "text-emerald-400" },
-  ".toml": { text: "TL", color: "text-zinc-500" },
-  ".yaml": { text: "YM", color: "text-pink-400" },
-  ".yml": { text: "YM", color: "text-pink-400" },
-  ".css": { text: "CS", color: "text-purple-400" },
+  ".md": { text: "MD", color: "text-gray-400" },
+  ".json": { text: "JN", color: "text-lime-400" },
+  ".css": { text: "CS", color: "text-pink-400" },
   ".html": { text: "HT", color: "text-red-400" },
+  ".toml": { text: "TL", color: "text-zinc-400" },
+  ".yaml": { text: "YM", color: "text-amber-400" },
+  ".yml": { text: "YM", color: "text-amber-400" },
 };
+
+function getExtLabel(name: string) {
+  const dot = name.lastIndexOf(".");
+  if (dot === -1) return null;
+  return EXT_LABELS[name.slice(dot)] ?? null;
+}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes}B`;
@@ -26,11 +35,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
-function getExtLabel(name: string): { text: string; color: string } | null {
-  const dot = name.lastIndexOf(".");
-  if (dot === -1) return null;
-  return EXT_LABELS[name.slice(dot)] ?? null;
-}
+// ─── FileExplorer ──────────────────────────────────────────────────────────
 
 interface FileExplorerProps {
   rootPath: string;
@@ -41,42 +46,49 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
   const { data: fileData } = useFileContent(selectedFile);
 
   return (
-    <div className="flex h-full flex-col bg-bg-primary">
-      {/* Tree view */}
-      <div className="flex-1 overflow-hidden">
-        <div className="flex h-full flex-col">
-          <div className="flex h-8 shrink-0 items-center border-b border-border bg-bg-secondary px-3">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-              Files
-            </span>
+    <div className="flex h-full bg-bg-primary">
+      {/* Tree view — left side, scrollable both ways */}
+      <div
+        className={cn(
+          "flex shrink-0 flex-col border-r border-border",
+          selectedFile ? "w-[200px]" : "flex-1",
+        )}
+      >
+        <div className="flex h-7 shrink-0 items-center border-b border-border bg-bg-secondary px-3">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+            Files
+          </span>
+        </div>
+        <div className="flex-1 overflow-auto">
+          <div className="min-w-max py-1">
+            <DirectoryNode
+              path={rootPath}
+              depth={0}
+              onSelectFile={setSelectedFile}
+              selectedFile={selectedFile}
+            />
           </div>
-
-          <ScrollArea className="flex-1">
-            <div className="py-1">
-              <DirectoryNode path={rootPath} depth={0} onSelectFile={setSelectedFile} />
-            </div>
-          </ScrollArea>
         </div>
       </div>
 
-      {/* File preview */}
+      {/* File preview — right side */}
       {selectedFile && fileData && (
-        <div className="flex max-h-[40%] flex-col border-t border-border">
-          <div className="flex h-7 shrink-0 items-center justify-between bg-bg-secondary px-3">
-            <span className="truncate text-[10px] text-text-muted">{selectedFile}</span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3">
+            <span className="truncate text-[10px] text-text-secondary">
+              {selectedFile.split("/").pop()}
+            </span>
             <button
               type="button"
               onClick={() => setSelectedFile(null)}
-              className="text-[10px] text-text-muted hover:text-text-primary"
+              className="shrink-0 text-[10px] text-text-muted hover:text-text-primary"
             >
               Close
             </button>
           </div>
-          <ScrollArea className="flex-1">
-            <pre className="p-3 text-[11px] leading-relaxed text-text-secondary">
-              <code>{fileData.content.slice(0, 5000)}</code>
-            </pre>
-          </ScrollArea>
+          <div className="flex-1 overflow-auto">
+            <CodeViewer content={fileData.content} fileName={selectedFile} />
+          </div>
         </div>
       )}
     </div>
@@ -89,10 +101,12 @@ function DirectoryNode({
   path,
   depth,
   onSelectFile,
+  selectedFile,
 }: {
   path: string;
   depth: number;
   onSelectFile: (path: string) => void;
+  selectedFile: string | null;
 }) {
   const [expanded, setExpanded] = useState(depth === 0);
   const { data: entries } = useDirectoryListing(expanded ? path : null);
@@ -128,9 +142,16 @@ function DirectoryNode({
               path={entry.path}
               depth={depth + 1}
               onSelectFile={onSelectFile}
+              selectedFile={selectedFile}
             />
           ) : (
-            <FileNode key={entry.path} entry={entry} depth={depth + 1} onSelect={onSelectFile} />
+            <FileNode
+              key={entry.path}
+              entry={entry}
+              depth={depth + 1}
+              onSelect={onSelectFile}
+              isSelected={selectedFile === entry.path}
+            />
           ),
         )}
     </>
@@ -143,10 +164,12 @@ function FileNode({
   entry,
   depth,
   onSelect,
+  isSelected,
 }: {
   entry: DirectoryEntry;
   depth: number;
   onSelect: (path: string) => void;
+  isSelected: boolean;
 }) {
   const extLabel = getExtLabel(entry.name);
 
@@ -154,7 +177,12 @@ function FileNode({
     <button
       type="button"
       onClick={() => onSelect(entry.path)}
-      className="flex w-full items-center gap-1 px-2 py-0.5 text-[11px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-secondary"
+      className={cn(
+        "flex w-full items-center gap-1 px-2 py-0.5 text-[11px] transition-colors",
+        isSelected
+          ? "bg-accent/10 text-text-primary"
+          : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
+      )}
       style={{ paddingLeft: `${depth * 12 + 8}px` }}
     >
       {extLabel ? (

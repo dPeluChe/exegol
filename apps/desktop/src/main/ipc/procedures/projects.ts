@@ -109,7 +109,22 @@ export const projectRouter = router({
           message: `Project ${input.projectId} not found`,
         });
       }
-      const ide = input.ide ?? project.defaultIde ?? "vscode";
+      // Read user's IDE preference from settings, fallback to project default
+      let ide = input.ide;
+      if (!ide) {
+        const settingsRow = ctx.db
+          .prepare("SELECT value FROM settings WHERE key = 'app_settings'")
+          .get() as { value: string } | undefined;
+        if (settingsRow) {
+          try {
+            const settings = JSON.parse(settingsRow.value);
+            ide = settings.defaultIde;
+          } catch {
+            /* use fallback */
+          }
+        }
+      }
+      ide = ide ?? project.defaultIde ?? "vscode";
       await openInIde(project.path, ide, input.customPath);
       return { success: true };
     }),

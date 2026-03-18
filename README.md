@@ -75,10 +75,11 @@ cargo check
 | Layer | Technology |
 |-------|-----------|
 | Desktop | Electron 41 |
-| Frontend | React 18, TailwindCSS 4, Zustand 5 |
+| Frontend | React 18, TailwindCSS 4, Zustand 5, Monaco Editor |
 | IPC | tRPC 11 (over Electron IPC, not HTTP) |
 | Database | libSQL (SQLite fork by Turso) — vectors, encryption, multi-writer |
 | Terminal | xterm.js 6 + WebGL, node-pty |
+| Code Viewer | Monaco Editor (local, no CDN), react-markdown |
 | Native | Rust via napi-rs (git2 for worktrees) |
 | Build | electron-vite 5, Turborepo, Bun, Biome 2.4 |
 
@@ -105,22 +106,24 @@ exegol/
 ## Features
 
 ### Working Now
-- **Project Manager** — Add git repos, switch between projects
-- **Agent Spawning** — Launch any CLI agent with a task description
-- **Terminal** — xterm.js with WebGL rendering, per-agent tabs
+- **Workspace System** — Multi-pane tabbed workspace with split support (Cmd+D/Shift+D), tab rename, pane focus
+- **Pane Types** — Terminal (agent), browser (Electron webview with URL bar), files (FileExplorer), empty (agent selector grid)
+- **Agent Launcher** — Quick-launch bar with colored CLI icons, agents spawn without task description
+- **Monaco Editor** — VS Code-quality syntax highlighting for 50+ languages in file viewer, markdown preview toggle
+- **Project Manager** — Add git repos, switch between projects, open in IDE
+- **Terminal** — xterm.js with WebGL rendering, scrollback persistence (30s periodic flush)
 - **Live Status** — Real-time parsing of agent output ("Writing auth middleware...")
-- **Sidebar** — Collapsible sections: Projects (with nested agents), Recent Sessions, Schedulers, Resources
-- **Settings** — 4 tabs: General, Agent CLIs, Terminal, Keyboard Shortcuts
+- **Diff Viewer** — Real git diff with unstaged/staged toggle, unified/split views, auto-refresh
+- **Scheduler** — Cron-based task scheduling via croner, visual CronBuilder component
+- **Task Viewer** — Markdown checkbox tasks with interactive toggle and write-back
+- **Prompts** — Reusable prompt templates per project with category filters, pin, copy
+- **File Explorer** — Tree + preview side-by-side, accent highlight, Monaco code viewer
+- **Settings** — 5 tabs (General, CLIs, Terminal, Shortcuts, API Keys), auto-save on every change
+- **Token Usage** — Claude Code JSONL log parser, cost breakdown by model
+- **Sidebar** — Collapsible sections: Projects, Recent Sessions, Schedulers, Resources, Agent Launcher
+- **Theme System** — Light/dark/system with CSS variables, smooth transitions
 - **Resource Monitor** — CPU, RAM, Disk with background collector (10s interval)
-- **Keyboard Shortcuts** — Cmd+B sidebar, Cmd+N new agent, Cmd+1-9 switch agents, [full list in Settings]
-- **Session Persistence** — Active project and view survive app restarts
-
-### In Development (5 parallel clusters)
-- **Cluster A** — Git worktrees, token usage monitor, agent re-launch, process metrics
-- **Cluster B** — Diff viewer, terminal split panes, scrollback persistence
-- **Cluster C** — Task viewer (markdown), prompts/templates, file explorer
-- **Cluster D** — Scheduler engine (cron), port detection
-- **Cluster E** — Theme system, open in IDE, API key management, recent sessions
+- **Session Persistence** — App state and workspace layout survive restarts (Zustand persist)
 
 ### Planned (Phase 2+)
 - MCP Host (10,850+ server ecosystem)
@@ -142,6 +145,10 @@ exegol/
 | `Cmd+Shift+P` | All Projects |
 | `Cmd+N` | New Agent |
 | `Cmd+.` | Stop focused agent |
+| `Cmd+T` | New workspace tab |
+| `Cmd+W` | Close focused pane |
+| `Cmd+D` | Split pane horizontal |
+| `Cmd+Shift+D` | Split pane vertical |
 | `Cmd+[` / `Cmd+]` | Previous / Next agent |
 | `Cmd+1-9` | Focus agent by index |
 | `Cmd+Shift+E` | Bring Exegol to front (global) |

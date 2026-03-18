@@ -13,6 +13,7 @@ import {
   useToggleScheduledTask,
   useUpdateScheduledTask,
 } from "../../../hooks/use-trpc";
+import { CronBuilder } from "../../common/CronBuilder";
 import { EmptyState } from "../../common/EmptyState";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -83,20 +84,7 @@ function TaskFormFields({
           required
         />
       </div>
-      <div>
-        <div className="mb-1 text-xs text-text-muted">Cron Expression</div>
-        <input
-          value={cronExpression}
-          onChange={(e) => setCronExpression(e.target.value)}
-          placeholder="0 9 * * *"
-          className="w-full rounded-md border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
-          required
-        />
-        <p className="mt-1 text-[10px] text-text-muted">
-          Examples: "0 9 * * *" (daily 9am), "*/15 * * * *" (every 15min), "0 9 * * 1-5" (weekdays
-          9am)
-        </p>
-      </div>
+      <CronBuilder value={cronExpression} onChange={setCronExpression} />
       <div>
         <div className="mb-1 text-xs text-text-muted">Agent CLI</div>
         <select

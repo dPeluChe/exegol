@@ -56,7 +56,13 @@ export function SettingsPanel() {
   }
 
   const updateField = (updates: Partial<Settings>) => {
-    setForm((prev) => (prev ? { ...prev, ...updates } : prev));
+    setForm((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, ...updates };
+      // Auto-save on every change
+      updateSettings.mutate(updated);
+      return updated;
+    });
     setDirty(true);
   };
 

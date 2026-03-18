@@ -16,10 +16,8 @@ export function TitleBar() {
         isMac && "pl-20",
       )}
     >
-      {/* Left: App name */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold tracking-wide text-accent">Exegol</span>
-      </div>
+      {/* Left: spacer for macOS traffic lights */}
+      <div className="flex items-center gap-2" />
 
       {/* Center: Active project */}
       <div className="absolute left-1/2 -translate-x-1/2">

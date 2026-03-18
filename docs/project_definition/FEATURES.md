@@ -13,14 +13,18 @@
 - [x] Settings per project: default IDE, default branch
 - [ ] Detect git status, current branch, remote (Rust git2 scaffold exists, not wired)
 
-### P1.2 Terminal Multiplexor — PARTIAL
+### P1.2 Terminal & Workspace — DONE
 - [x] xterm.js v6 with WebGL addon
-- [x] Terminal tabs per agent (TerminalTabs component)
 - [x] Terminal panel with fit addon (auto-resize)
 - [x] Web links addon (clickable URLs)
-- [ ] Split panes (vertical/horizontal) — not implemented, single terminal per agent
-- [ ] Copy/paste, scrollback buffer persistence, search within pane — not implemented
-- [ ] Theme support from user terminal config — font size/family configurable in settings
+- [x] Multi-pane tabbed workspace (WorkspaceTabBar + WorkspacePane + WorkspaceLayout)
+- [x] Pane types: terminal (agent), browser (Electron webview), files (FileExplorer), empty (agent selector grid)
+- [x] Tab rename via double-click, Cmd+T new tab, Cmd+W close pane, Cmd+D/Shift+D split
+- [x] Pane focus with accent border
+- [x] Workspace store persisted to localStorage (tabs, panes, layout tree)
+- [x] Agent quick-launch bar: colored CLI icons in sidebar, agents spawn without task description
+- [x] Scrollback buffer persistence (30s periodic flush + final flush on exit)
+- [x] Theme support from user terminal config — font size/family configurable in settings
 
 ### P1.3 Agent Runner — DONE
 - [x] Spawn any CLI agent as subprocess via node-pty through user's login shell
@@ -46,7 +50,6 @@
 - [x] DiffFileView: collapsible per-file section with +/- counts, file status icons
 - [x] DiffHunkView: colored diff lines (unified and split views)
 - [x] Binary file detection: shows "Binary file changed" for .png, .jpg, .db, .node, etc.
-- [ ] Syntax highlighting (Shiki) — not yet implemented
 
 ### P1.6 Internal Scheduler — DONE
 - [x] DB tables: scheduled_tasks, scheduled_results (with cron_expression, skill_name, cli_agent, etc.)
@@ -61,11 +64,12 @@
 - [x] Collapsible sidebar with SidebarSection component (chevron toggle, count badge, action slot)
 - [x] Projects section with count badge, click to select
 - [x] Recent Sessions section (collapsible)
-- [x] New Agent button (disabled if no project selected)
-- [x] SpawnAgentDialog: select CLI type + enter task description
-- [x] AgentCard showing: CLI type, status, task description
+- [x] AgentLauncher: quick-launch bar with colored CLI icons (portal dropdown, gray default, color on hover)
+- [x] Agents spawn without task description (just CLI name, open empty terminal)
+- [x] Empty workspace pane shows agent grid + browser + files options
 - [x] Agent status parsing from stdout (currentStep live text)
 - [x] Click to focus agent terminal
+- [x] Agent delete via right-click context menu
 - [x] StatusDot component for status indication
 - [x] SidebarFooter with Schedulers + Resources overviews + version number
 - [ ] Token usage mini-bar — not wired
@@ -125,7 +129,8 @@
 - [x] Keyboard Shortcuts: categorized display (Navigation, Agents, Terminal)
 - [x] API Keys: per-provider management with safeStorage encryption (OS keychain)
 - [x] Settings persisted to DB (settings table, key-value store)
-- [x] Save/Reset buttons with dirty state tracking
+- [x] Auto-save on every change (no manual Save button needed)
+- [x] IDE opener reads from user settings DB (not just project default)
 - [x] Global hotkey: Cmd+Shift+E to bring app to front
 - [x] Theme system: light/dark/system with CSS variables, smooth transitions for bg/color/border (xterm excluded)
 - [x] Theme applies immediately (no reload), terminal colors match theme
@@ -134,23 +139,39 @@
 - [x] Cmd+B: Toggle sidebar
 - [x] Cmd+,: Open Settings
 - [x] Cmd+Shift+P: Go to Projects
-- [x] Cmd+N: New Agent (open spawn dialog)
+- [x] Cmd+N: New Agent
 - [x] Cmd+.: Stop focused agent
+- [x] Cmd+T: New workspace tab
+- [x] Cmd+W: Close focused pane
+- [x] Cmd+D: Split pane horizontal
+- [x] Cmd+Shift+D: Split pane vertical
 - [x] Cmd+]/[: Next/previous agent tab
 - [x] Cmd+1-9: Switch to agent by index
 
 ### P1.16 Session Persistence — DONE (added post-initial-plan)
 - [x] Zustand persist middleware saves app state to localStorage
 - [x] Persisted: activeProjectId, activeView, sidebarCollapsed
+- [x] Workspace store persisted: tabs, panes, layout tree
 - [x] Survives app restart
 
+### P1.17 Monaco Editor — DONE (added post-initial-plan)
+- [x] Replaced custom tokenizer + Shiki with Monaco Editor (@monaco-editor/react + monaco-editor)
+- [x] Read-only code viewer with VS Code-quality syntax highlighting (50+ languages)
+- [x] `loader.config({ monaco })` for local loading (no CDN dependency)
+- [x] CodeViewer component wraps Monaco with markdown preview toggle (react-markdown)
+
+### P1.18 Browser Pane — DONE (added post-initial-plan)
+- [x] Electron webview with URL bar
+- [x] webviewTag enabled in BrowserWindow config
+- [x] Focus capture overlay for unfocused browser panes
+- [x] CSP updated for webview support
+
+### P1.19 CronBuilder — DONE (added post-initial-plan)
+- [x] Visual cron expression builder component for scheduler
+
 ### Future Features Discussed (Not Yet in Roadmap)
-- **Prompts/Templates**: Pre-defined task templates per project
 - **Skills management**: Browse/configure skill files
-- **Terminal layouts**: Split views, multiple terminals per tab
-- **File explorer panel**: Browse project files from sidebar
-- **Re-launch stopped agents**: Resume agents that were stopped on app exit
-- **Terminal scrollback persistence**: Save/restore terminal output across sessions
+- **Cross-pane search**: Search text across all terminal panes
 
 ---
 
@@ -272,12 +293,13 @@
 - Benefits: fewer tool calls, fewer tokens, deterministic edits, no formatting breakage
 - Fallback: traditional text diff for unsupported languages
 
-### P3.5 Browser Preview
-- Embedded WebView for frontend preview
-- Agents can: capture DOM snapshots, evaluate JS, inspect console errors
-- Auto-refresh on file changes in worktree
-- Split view: terminal | code diff | browser preview
-- Port management: auto-assign unique ports per worktree dev server
+### P3.5 Browser Preview — PARTIAL
+- [x] Embedded Electron webview as workspace pane type with URL bar
+- [x] webviewTag enabled in BrowserWindow, CSP updated for webview support
+- [x] Focus capture overlay for unfocused browser panes
+- [ ] Agents can: capture DOM snapshots, evaluate JS, inspect console errors
+- [ ] Auto-refresh on file changes in worktree
+- [ ] Port management: auto-assign unique ports per worktree dev server
 
 ### P3.6 Automations (Background Agents)
 - Schedule agents to run tasks on cadence (daily, on-push, on-PR)

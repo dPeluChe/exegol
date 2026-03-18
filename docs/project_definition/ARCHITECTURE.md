@@ -34,7 +34,7 @@
 │                                                                    │
 │  PLANNED (not yet implemented):                                    │
 │  Hook Engine, Skill Loader, Plan FSM, MCP Host, Memory System,    │
-│  Scheduler Engine (croner), Worktree Manager, Repo Map Generator   │
+│  Worktree Manager, Repo Map Generator                              │
 └──────────────────────┬─────────────────────────────────────────────┘
                        │ IPC (tRPC via createCaller, raw ipcMain)
 ┌──────────────────────┴─────────────────────────────────────────────┐
@@ -48,32 +48,35 @@
 │  │  │  (hidden      │  │  SidebarSection    │  │               │  │ │
 │  │  │   titlebar)   │  │  ProjectsSection   │  │               │  │ │
 │  │  └──────────────┘  │  RecentSessions    │  └───────────────┘  │ │
+│  │                     │  AgentLauncher     │                     │ │
 │  │                     │  SidebarFooter:    │                     │ │
 │  │                     │   Schedulers       │                     │ │
 │  │                     │   Resources        │                     │ │
 │  │                     └───────────────────┘                     │ │
 │  │                                                                │ │
 │  │  ┌────────────────────────────────────────────────────────┐   │ │
-│  │  │  WorkspaceView (tab-switched sections)                  │   │ │
-│  │  │  ┌─────────┐ ┌──────┐ ┌──────┐ ┌─────────┐ ┌───────┐ │   │ │
-│  │  │  │ Agents  │ │Tasks │ │ Diff │ │Scheduler│ │Tokens │ │   │ │
-│  │  │  │(active) │ │(stub)│ │(stub)│ │ (stub)  │ │(stub) │ │   │ │
-│  │  │  └─────────┘ └──────┘ └──────┘ └─────────┘ └───────┘ │   │ │
-│  │  │  ┌───────────┐                                         │   │ │
-│  │  │  │ Resources │                                         │   │ │
-│  │  │  │  (stub)   │                                         │   │ │
-│  │  │  └───────────┘                                         │   │ │
+│  │  │  WorkspaceView + WorkspaceTabBar (multi-tab workspace)   │   │ │
+│  │  │  ┌──────────────────────────────────────────────────┐   │   │ │
+│  │  │  │  WorkspaceLayout (recursive split pane tree)      │   │   │ │
+│  │  │  │  ┌────────────┐ ┌──────────┐ ┌───────────────┐  │   │   │ │
+│  │  │  │  │ Terminal   │ │ Browser  │ │ FileExplorer  │  │   │   │ │
+│  │  │  │  │ (xterm.js) │ │ (webview)│ │ (Monaco view) │  │   │   │ │
+│  │  │  │  └────────────┘ └──────────┘ └───────────────┘  │   │   │ │
+│  │  │  └──────────────────────────────────────────────────┘   │   │ │
+│  │  │  Sections: Tasks | Prompts | Diff | Scheduler | Tokens │   │ │
 │  │  └────────────────────────────────────────────────────────┘   │ │
 │  │                                                                │ │
 │  │  ┌────────────────┐  ┌─────────────────┐  ┌──────────────┐   │ │
-│  │  │ TerminalPanel  │  │ SpawnAgentDialog │  │ SettingsPanel│   │ │
-│  │  │ (xterm.js+WebGL│  │ (Radix Dialog)   │  │ 4 tabs:      │   │ │
-│  │  │  TerminalTabs) │  │                  │  │ General,CLIs │   │ │
-│  │  └────────────────┘  └─────────────────┘  │ Terminal,Keys │   │ │
+│  │  │ TerminalPanel  │  │ AgentLauncher    │  │ SettingsPanel│   │ │
+│  │  │ (xterm.js+WebGL│  │ (portal dropdown │  │ 5 tabs:      │   │ │
+│  │  │  CodeViewer/   │  │  colored icons)  │  │ General,CLIs │   │ │
+│  │  │  Monaco)       │  │                  │  │ Terminal,     │   │ │
+│  │  └────────────────┘  └─────────────────┘  │ Shortcuts,Keys│   │ │
 │  │                                            └──────────────┘   │ │
-│  │  Stores: useAppStore (persist), useAgentStore, useTerminalStore│ │
+│  │  Stores: useAppStore, useAgentStore, useTerminalStore,         │ │
+│  │          useWorkspaceStore (all persisted via Zustand)          │ │
 │  │  Context: ProjectProvider (syncs DB agents → Zustand)          │ │
-│  │  Hooks: useHotkeys, use-trpc                                  │ │
+│  │  Hooks: useHotkeys, use-trpc, use-theme                       │ │
 │  └───────────────────────────────────────────────────────────────┘ │
 └────────────────────────────────────────────────────────────────────┘
 ```
@@ -418,6 +421,10 @@ useHotkeys()
 ├── Cmd+Shift+P  → Go to Projects (clear active project)
 ├── Cmd+N        → New Agent (dispatch exegol:spawn-agent event)
 ├── Cmd+.        → Stop focused agent (dispatch exegol:stop-agent event)
+├── Cmd+T        → New workspace tab
+├── Cmd+W        → Close focused pane
+├── Cmd+D        → Split pane horizontal
+├── Cmd+Shift+D  → Split pane vertical
 ├── Cmd+]        → Next agent tab
 ├── Cmd+[        → Previous agent tab
 └── Cmd+1-9      → Switch to agent by index
@@ -443,15 +450,21 @@ Used for: Projects, Recent Sessions, Schedulers, Resources.
 
 ### tRPC Router (Implemented)
 
-Located at `apps/desktop/src/main/ipc/router.ts`. Five sub-routers:
+Located at `apps/desktop/src/main/ipc/router.ts`. Eleven sub-routers:
 
 ```
 appRouter
 ├── projects   → list, get, create, update, delete
-├── agents     → list (by project), get, create (spawn), stop, delete
+├── agents     → list (by project), get, create (spawn), stop, delete, recentSessions
 ├── settings   → get, update (persisted to settings table as JSON)
-├── tokenUsage → list (by agent)
-└── resources  → getSystem (cached metrics), getProject (async disk/worktree)
+├── apiKeys    → list, set, delete, test (encrypted via safeStorage)
+├── tokenUsage → list (by agent), scan (JSONL import), history
+├── resources  → getSystem (cached metrics), getProject (async disk/worktree/ports)
+├── scheduler  → list, get, create, update, delete, toggle, results, runNow
+├── files      → readFile, writeFile, pickFile, listDirectory (path-guarded)
+├── prompts    → list, create, update, delete, togglePin
+├── diff       → projectDiff, stagedDiff
+└── scrollback → get, exists
 ```
 
 **IPC Bridge**: `trpc-ipc.ts` registers `ipcMain.handle('trpc', ...)` which uses `appRouter.createCaller(ctx)` and navigates the proxy via dot-separated path segments. The renderer calls via `window.api.trpc.invoke(path, input)`.
@@ -459,11 +472,10 @@ appRouter
 ## Data Flow: Agent Execution (Current Implementation)
 
 ```
-User clicks "New Agent" (or Cmd+N)
+User clicks agent icon in AgentLauncher (or selects from empty pane grid)
        │
        ▼
-SpawnAgentDialog opens
-  User selects CLI type + enters task description
+Agent spawned directly (CLI name only, no task description dialog)
        │
        ▼
 tRPC agents.create mutation
@@ -544,11 +556,12 @@ exegol/
 │       │   │   │       ├── scheduler.ts
 │       │   │   │       └── prompts.ts
 │       │   │   ├── ipc/
-│       │   │   │   ├── router.ts       # tRPC appRouter (5 sub-routers)
+│       │   │   │   ├── router.ts       # tRPC appRouter (11 sub-routers)
 │       │   │   │   ├── trpc.ts         # tRPC init
 │       │   │   │   ├── trpc-ipc.ts     # createCaller proxy traversal
 │       │   │   │   ├── context.ts      # tRPC context (db)
-│       │   │   │   └── procedures/     # agents, projects, settings, token-usage, resources
+│       │   │   │   └── procedures/     # agents, projects, settings, apikeys, token-usage,
+│       │   │   │                       # resources, scheduler, files, prompts, diff, scrollback
 │       │   │   ├── system/
 │       │   │   │   └── resources.ts    # Background metrics collector
 │       │   │   └── terminal/
@@ -560,28 +573,35 @@ exegol/
 │       │   │   │   └── ProjectContext.tsx  # Project + agents provider
 │       │   │   ├── hooks/
 │       │   │   │   ├── use-hotkeys.ts  # Global keyboard shortcuts
+│       │   │   │   ├── use-theme.ts    # Theme hook: data-theme on <html>, system pref
 │       │   │   │   └── use-trpc.ts     # tRPC query/mutation hooks
 │       │   │   ├── stores/
 │       │   │   │   ├── app.ts          # activeView, activeProjectId, sidebar (persisted)
 │       │   │   │   ├── agents.ts       # Agent state, focused agent, DB sync
-│       │   │   │   └── terminals.ts    # Terminal instances
+│       │   │   │   ├── terminals.ts    # Terminal instances
+│       │   │   │   └── workspace.ts    # Workspace tabs, panes, layout tree (persisted)
 │       │   │   ├── lib/
-│       │   │   │   └── trpc-client.ts  # trpcInvoke/trpcMutate via IPC
+│       │   │   │   ├── trpc-client.ts  # trpcInvoke/trpcMutate via IPC
+│       │   │   │   └── markdown-tasks.ts  # parseMarkdownTasks, toggleTask
 │       │   │   └── components/
 │       │   │       ├── ErrorBoundary.tsx
 │       │   │       ├── layout/         # Sidebar, SidebarSection, SidebarHeader/Footer,
 │       │   │       │                   # ProjectsSection, RecentSessions, ResourcesOverview,
 │       │   │       │                   # SchedulersOverview, StatusBar, TitleBar
-│       │   │       ├── agents/         # AgentCard, SpawnAgentDialog
+│       │   │       ├── agents/         # AgentLauncher (quick-launch bar, portal dropdown)
 │       │   │       ├── projects/       # ProjectList, AddProjectDialog
-│       │   │       ├── settings/       # SettingsPanel (4 tabs), GeneralSettings,
-│       │   │       │                   # CliSettings, TerminalSettings, KeyboardShortcuts
-│       │   │       ├── workspace/      # WorkspaceView, WorkspaceTabs,
+│       │   │       ├── settings/       # SettingsPanel (5 tabs), GeneralSettings,
+│       │   │       │                   # CliSettings, TerminalSettings, KeyboardShortcuts,
+│       │   │       │                   # ApiKeysSettings
+│       │   │       ├── workspace/      # WorkspaceView, WorkspaceTabBar, WorkspacePane,
+│       │   │       │                   # WorkspaceLayout, CodeViewer, FileExplorer,
+│       │   │       │                   # WorkspaceTabs
 │       │   │       │   └── sections/   # AgentsSection, TasksSection, DiffSection,
-│       │   │       │                   # SchedulerSection, TokensSection, ResourcesSection
-│       │   │       ├── terminal/       # TerminalPanel, TerminalTabs
+│       │   │       │                   # SchedulerSection, TokensSection, ResourcesSection,
+│       │   │       │                   # PromptsSection
+│       │   │       ├── terminal/       # TerminalPanel, TerminalInstance
 │       │   │       └── common/         # EmptyState, KeyValue, LoadingSpinner,
-│       │   │                           # StatusDot, ConfirmDialog
+│       │   │                           # StatusDot, ConfirmDialog, CronBuilder
 │       │   └── preload/
 │       │       └── index.ts            # contextBridge APIs
 │       └── electron-builder.yml

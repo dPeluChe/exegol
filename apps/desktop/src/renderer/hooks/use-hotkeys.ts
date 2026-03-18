@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { type AgentState, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
+import { useWorkspaceStore } from "../stores/workspace";
 
 export function useHotkeys() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -16,6 +17,20 @@ export function useHotkeys() {
       if (e.key === "b") {
         e.preventDefault();
         toggleSidebar();
+        return;
+      }
+
+      // Cmd+T: New workspace tab
+      if (e.key === "t") {
+        e.preventDefault();
+        useWorkspaceStore.getState().addTab();
+        return;
+      }
+
+      // Cmd+W: Close focused pane (or tab if last pane)
+      if (e.key === "w") {
+        e.preventDefault();
+        useWorkspaceStore.getState().closeFocusedPane();
         return;
       }
 
