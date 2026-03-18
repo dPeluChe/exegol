@@ -1,31 +1,27 @@
 import type {
-  Activity,
   Agent,
-  AgentCostRow,
   AgentCreate,
-  AgentScoreRow,
-  DailyTrendRow,
-  MetricsSnapshot,
-  ModelBreakdownRow,
-  OplogEntry,
   Project,
   ProjectCreate,
   Prompt,
   PromptCreate,
   PromptUpdate,
   RecentSession,
-  RustFileDiff,
-  ScheduledResult,
-  ScheduledTask,
-  ScheduledTaskCreate,
-  ScoringStats,
-  SearchResult,
   Settings,
-  TokenUsage,
-  TokenUsageSummary,
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
+
+// ─── Domain re-exports (barrel) ─────────────────────────────────────────────
+
+export * from "./use-trpc-mcp";
+export * from "./use-trpc-memory";
+export * from "./use-trpc-resources";
+export * from "./use-trpc-scheduler";
+export * from "./use-trpc-scoring";
+export * from "./use-trpc-search";
+export * from "./use-trpc-skills";
+export * from "./use-trpc-tokens";
 
 // ─── Projects ────────────────────────────────────────────────────────────────
 
@@ -142,126 +138,6 @@ export function useUpdateSettings() {
   });
 }
 
-// ─── Token Usage ─────────────────────────────────────────────────────────────
-
-export function useTokenUsageSummary(agentId?: string, projectId?: string) {
-  return useQuery({
-    queryKey: ["tokenUsage", agentId ?? projectId ?? "all"],
-    queryFn: () => {
-      const input: { agentId?: string; projectId?: string } = {};
-      if (agentId) input.agentId = agentId;
-      else if (projectId) input.projectId = projectId;
-      return trpcInvoke<TokenUsageSummary>(
-        "tokenUsage.summary",
-        Object.keys(input).length > 0 ? input : undefined,
-      );
-    },
-    refetchInterval: 5_000,
-  });
-}
-
-export function useTokenHistory(projectId: string | null) {
-  return useQuery({
-    queryKey: ["tokenUsage", "history", projectId],
-    queryFn: () => trpcInvoke<TokenUsage[]>("tokenUsage.history", { projectId, days: 30 }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
-  });
-}
-
-export function useTokenScan() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: { projectId: string }) =>
-      trpcMutate<{ imported: number; skipped: number; total: number }>("tokenUsage.scan", input),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tokenUsage"] });
-    },
-  });
-}
-
-// T19: Per-model breakdown
-
-export function useModelBreakdown(projectId: string | null, days = 30) {
-  return useQuery({
-    queryKey: ["tokenUsage", "modelBreakdown", projectId, days],
-    queryFn: () =>
-      trpcInvoke<ModelBreakdownRow[]>("tokenUsage.modelBreakdown", { projectId, days }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
-  });
-}
-
-// T19: Per-agent costs
-
-export function useAgentCosts(projectId: string | null, days = 30) {
-  return useQuery({
-    queryKey: ["tokenUsage", "agentCosts", projectId, days],
-    queryFn: () => trpcInvoke<AgentCostRow[]>("tokenUsage.agentCosts", { projectId, days }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
-  });
-}
-
-// T19: Daily trend
-
-export function useDailyTrend(projectId: string | null, days = 30) {
-  return useQuery({
-    queryKey: ["tokenUsage", "dailyTrend", projectId, days],
-    queryFn: () => trpcInvoke<DailyTrendRow[]>("tokenUsage.dailyTrend", { projectId, days }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
-  });
-}
-
-// ─── Resources ──────────────────────────────────────────────────────────────
-
-export interface SystemMetrics {
-  cpu: { usage: number; cores: number; model: string };
-  memory: { total: number; used: number; free: number; usagePercent: number };
-  disk: { total: number; used: number; free: number; usagePercent: number };
-  uptime: number;
-}
-
-export interface ProjectMetrics {
-  projectId: string;
-  projectName: string;
-  projectPath: string;
-  diskUsage: number;
-  worktreeCount: number;
-  agentProcesses: { pid: number; cpu: number; memory: number }[];
-}
-
-export function useSystemMetrics() {
-  return useQuery({
-    queryKey: ["resources", "system"],
-    queryFn: () => trpcInvoke<SystemMetrics>("resources.system"),
-    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
-  });
-}
-
-export function useMetricsHistory() {
-  return useQuery({
-    queryKey: ["resources", "history"],
-    queryFn: () => trpcInvoke<MetricsSnapshot[]>("resources.history"),
-    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
-  });
-}
-
-export function useProjectMetrics(
-  projectId: string | null,
-  projectPath: string | null,
-  projectName: string | null,
-) {
-  return useQuery({
-    queryKey: ["resources", "project", projectId],
-    queryFn: () =>
-      trpcInvoke<ProjectMetrics>("resources.project", { projectId, projectPath, projectName }),
-    refetchInterval: 15_000, // Project metrics are heavier (du, git worktree)
-    enabled: !!projectId && !!projectPath,
-  });
-}
-
 // ─── API Keys ───────────────────────────────────────────────────────────────
 
 export function useApiKeys() {
@@ -290,97 +166,6 @@ export function useDeleteApiKey() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
     },
-  });
-}
-
-// ─── Scheduler ──────────────────────────────────────────────────────────────
-
-export function useScheduledTasks(projectId?: string | null) {
-  return useQuery({
-    queryKey: ["scheduler", "tasks", projectId ?? "all"],
-    queryFn: () =>
-      trpcInvoke<ScheduledTask[]>("scheduler.list", projectId ? { projectId } : undefined),
-    refetchInterval: 10_000,
-  });
-}
-
-export function useScheduledResults(taskId: string | null) {
-  return useQuery({
-    queryKey: ["scheduler", "results", taskId],
-    queryFn: () => trpcInvoke<ScheduledResult[]>("scheduler.results", { taskId }),
-    enabled: !!taskId,
-    refetchInterval: 10_000,
-  });
-}
-
-export function useCreateScheduledTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: ScheduledTaskCreate) => trpcMutate<ScheduledTask>("scheduler.create", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scheduler"] });
-    },
-  });
-}
-
-export function useUpdateScheduledTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { id: string } & Partial<ScheduledTaskCreate>) =>
-      trpcMutate<ScheduledTask>("scheduler.update", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scheduler"] });
-    },
-  });
-}
-
-export function useDeleteScheduledTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => trpcMutate<void>("scheduler.delete", { id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scheduler"] });
-    },
-  });
-}
-
-export function useToggleScheduledTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { id: string; enabled: boolean }) =>
-      trpcMutate<ScheduledTask>("scheduler.toggle", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scheduler"] });
-    },
-  });
-}
-
-export function useRunScheduledTaskNow() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => trpcMutate<{ triggered: boolean }>("scheduler.runNow", { id }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["scheduler"] });
-    },
-  });
-}
-
-// ─── Ports ──────────────────────────────────────────────────────────────────
-
-export interface PortInfo {
-  port: number;
-  source: "runtime" | "config";
-  pid?: number;
-  process?: string;
-  file?: string;
-}
-
-export function useProjectPorts(projectPath: string | null) {
-  return useQuery({
-    queryKey: ["resources", "ports", projectPath],
-    queryFn: () => trpcInvoke<PortInfo[]>("resources.ports", { projectPath }),
-    enabled: !!projectPath,
-    refetchInterval: 15_000,
   });
 }
 
@@ -475,136 +260,6 @@ export function useTogglePinPrompt() {
     mutationFn: (id: string) => trpcMutate<{ success: boolean }>("prompts.togglePin", { id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["prompts"] });
-    },
-  });
-}
-
-// ─── Scoring ────────────────────────────────────────────────────────────────
-
-export function useAgentScore(agentId: string | null) {
-  return useQuery({
-    queryKey: ["scoring", "agent", agentId],
-    queryFn: () => trpcInvoke<AgentScoreRow | null>("scoring.getScore", { agentId }),
-    enabled: !!agentId,
-  });
-}
-
-export function useProjectScores(projectId: string | null) {
-  return useQuery({
-    queryKey: ["scoring", "project", projectId],
-    queryFn: () => trpcInvoke<AgentScoreRow[]>("scoring.listScores", { projectId }),
-    enabled: !!projectId,
-    refetchInterval: 15_000,
-  });
-}
-
-export function useScoringStats(projectId: string | null) {
-  return useQuery({
-    queryKey: ["scoring", "stats", projectId],
-    queryFn: () => trpcInvoke<ScoringStats>("scoring.stats", { projectId }),
-    enabled: !!projectId,
-    refetchInterval: 15_000,
-  });
-}
-
-// ─── Activities (T20) ────────────────────────────────────────────────────────
-
-export function useActivities(projectId: string | null, type?: string) {
-  return useQuery({
-    queryKey: ["activities", projectId, type],
-    queryFn: () =>
-      trpcInvoke<Activity[]>("activities.list", {
-        projectId: projectId ?? undefined,
-        type,
-        limit: 100,
-      }),
-    enabled: !!projectId,
-    refetchInterval: 15_000,
-  });
-}
-
-// ─── Diff ────────────────────────────────────────────────────────────────────
-
-export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
-  const procedure = mode === "staged" ? "diff.stagedDiff" : "diff.projectDiff";
-  return useQuery({
-    queryKey: ["diff", projectId, mode],
-    queryFn: () => trpcInvoke<string>(procedure, { projectId }),
-    enabled: !!projectId,
-  });
-}
-
-export function useStructuredDiff(projectId: string | null, staged: boolean) {
-  return useQuery({
-    queryKey: ["diff", "structured", projectId, staged],
-    queryFn: () => trpcInvoke<RustFileDiff[]>("diff.structuredDiff", { projectId, staged }),
-    enabled: !!projectId,
-  });
-}
-
-// ─── Oplog ──────────────────────────────────────────────────────────────────
-
-export function useProjectOplog(projectId: string | null, limit = 100) {
-  return useQuery({
-    queryKey: ["oplog", "project", projectId, limit],
-    queryFn: () => trpcInvoke<OplogEntry[]>("oplog.listProject", { projectId, limit }),
-    enabled: !!projectId,
-    refetchInterval: 10_000,
-  });
-}
-
-export function useAgentOplog(agentId: string | null) {
-  return useQuery({
-    queryKey: ["oplog", "agent", agentId],
-    queryFn: () => trpcInvoke<OplogEntry[]>("oplog.listAgent", { agentId }),
-    enabled: !!agentId,
-  });
-}
-
-export function useUndoOplog() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (oplogId: string) => trpcMutate<OplogEntry>("oplog.undo", { oplogId }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["oplog"] });
-      queryClient.invalidateQueries({ queryKey: ["diff"] });
-    },
-  });
-}
-
-// ─── Search ─────────────────────────────────────────────────────────────
-
-export type { SearchResult };
-
-export function useSearch(query: string, projectId?: string | null) {
-  return useQuery({
-    queryKey: ["search", query, projectId],
-    queryFn: () =>
-      trpcInvoke<SearchResult[]>("search.query", {
-        query,
-        projectId: projectId ?? undefined,
-      }),
-    enabled: query.length > 0,
-  });
-}
-
-export function useIndexAgent() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (data: { agentId: string; projectId: string; taskDescription: string }) =>
-      trpcMutate<{ indexed: number }>("search.indexAgent", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["search"] });
-    },
-  });
-}
-
-export function useRebuildSearchIndex() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => trpcMutate<{ indexed: number }>("search.rebuild"),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["search"] });
     },
   });
 }
