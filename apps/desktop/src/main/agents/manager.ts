@@ -315,6 +315,9 @@ export class AgentManager {
         this.scrollbackTimers.delete(agent.id);
       }
 
+      // Capture scrollback for scoring BEFORE flush deletes the buffer
+      const scrollbackForScoring = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+
       // Final flush scrollback to disk
       this.flushScrollback(agent.id, false);
 
@@ -328,7 +331,6 @@ export class AgentManager {
       }
 
       // ── Quality scoring (non-fatal) ──────────────────────────────────
-      const scrollbackForScoring = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
       const currentAgentForScoring = getAgent(db, agent.id);
       scoreAgent(
         db,

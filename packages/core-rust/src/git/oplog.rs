@@ -62,7 +62,8 @@ pub fn revert_to_snapshot(repo_path: String, target_sha: String) -> Result<Strin
     .map_err(|e| Error::from_reason(format!("Failed to create signature: {}", e)))?;
 
   // Create a new commit with the target tree on top of current HEAD
-  let message = format!("Revert to {}", &target_sha[..8.min(target_sha.len())]);
+  let short_sha: String = target_sha.chars().take(8).collect();
+  let message = format!("Revert to {}", short_sha);
   let new_oid = repo
     .commit(
       Some("HEAD"),
