@@ -38,6 +38,8 @@ function PaneToolbar({
 }) {
   const splitPane = useWorkspaceStore((s) => s.splitPane);
   const removePane = useWorkspaceStore((s) => s.removePane);
+  const panes = useWorkspaceStore((s) => s.panes);
+  const removeAgent = useAgentStore((s) => s.removeAgent);
   const { projectId } = useProjectContext();
 
   const showIdeButton = paneType === "terminal" || paneType === "files";
@@ -48,6 +50,18 @@ function PaneToolbar({
       console.error("[PaneToolbar] Open in IDE failed:", err);
     });
   }, [projectId]);
+
+  const handleClosePane = useCallback(() => {
+    const pane = panes[paneId];
+    // Stop the agent when closing a terminal pane
+    if (pane?.type === "terminal" && pane.agentId) {
+      trpcMutate("agents.stop", { id: pane.agentId }).catch(() => {
+        // Agent may already be stopped — ignore
+      });
+      removeAgent(pane.agentId);
+    }
+    removePane(tabId, paneId);
+  }, [tabId, paneId, panes, removePane, removeAgent]);
 
   return (
     <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded bg-bg-secondary/80 opacity-0 transition-opacity group-hover/pane:opacity-100">
@@ -79,7 +93,7 @@ function PaneToolbar({
       </button>
       <button
         type="button"
-        onClick={() => removePane(tabId, paneId)}
+        onClick={handleClosePane}
         className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-red-400/80 hover:text-white"
         title="Close pane"
       >
