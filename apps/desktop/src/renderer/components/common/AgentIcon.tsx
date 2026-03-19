@@ -1,57 +1,73 @@
 import { cn } from "@exegol/ui";
 import { useThemeValue } from "../../hooks/use-theme";
 
-// ─── SVG URL resolution (Vite-compatible for Electron) ──────────────────────
+// ─── Load all SVG icons via Vite glob (static analysis at build time) ───────
 
-function iconUrl(name: string): string {
-  return new URL(`../../assets/icons/${name}`, import.meta.url).href;
+const svgModules = import.meta.glob("../../assets/icons/*.svg", {
+  eager: true,
+  query: "?url",
+  import: "default",
+}) as Record<string, string>;
+
+/** Resolve a filename like "claude.svg" to its Vite-processed URL. */
+function iconUrl(name: string): string | undefined {
+  // Glob keys look like "../../assets/icons/claude.svg"
+  const key = `../../assets/icons/${name}`;
+  return svgModules[key];
 }
 
 // ─── Icon registry ──────────────────────────────────────────────────────────
 
-interface IconEntry {
-  light: string;
-  dark: string;
-}
+type IconDef = { single: string } | { light: string; dark: string };
 
-type IconDef = string | { light: string; dark: string };
+function buildMap(): Record<string, IconDef> {
+  const map: Record<string, IconDef> = {};
 
-function single(name: string): string {
-  return iconUrl(name);
-}
+  const s = (name: string): IconDef | null => {
+    const url = iconUrl(name);
+    return url ? { single: url } : null;
+  };
 
-function pair(lightName: string, darkName: string): IconEntry {
-  return { light: iconUrl(lightName), dark: iconUrl(darkName) };
-}
+  const p = (lightName: string, darkName: string): IconDef | null => {
+    const light = iconUrl(lightName);
+    const dark = iconUrl(darkName);
+    return light && dark ? { light, dark } : null;
+  };
 
-/** Map of provider/tool IDs to their SVG icon URLs (light and dark variants). */
-const ICON_MAP: Record<string, IconDef> = {
+  const set = (id: string, def: IconDef | null) => {
+    if (def) map[id] = def;
+  };
+
   // Agent CLIs
-  "claude-code": single("claude.svg"),
-  claude: single("claude.svg"),
-  codex: pair("openai-light.svg", "openai-dark.svg"),
-  openai: pair("openai-light.svg", "openai-dark.svg"),
-  gemini: single("gemini.svg"),
-  aider: single("antigravity.svg"),
-  goose: single("ghostty.svg"),
-  opencode: pair("opencode-light.svg", "opencode-dark.svg"),
-  windsurf: pair("windsurf-light.svg", "windsurf-dark.svg"),
-  kilocode: pair("kilocode-light.svg", "kilocode-dark.svg"),
-  ollama: pair("ollama-light.svg", "ollama-dark.svg"),
+  set("claude-code", s("claude.svg"));
+  set("claude", s("claude.svg"));
+  set("codex", p("openai-light.svg", "openai-dark.svg"));
+  set("openai", p("openai-light.svg", "openai-dark.svg"));
+  set("gemini", s("gemini.svg"));
+  set("aider", s("antigravity.svg"));
+  set("goose", s("ghostty.svg"));
+  set("opencode", p("opencode-light.svg", "opencode-dark.svg"));
+  set("windsurf", p("windsurf-light.svg", "windsurf-dark.svg"));
+  set("kilocode", p("kilocode-light.svg", "kilocode-dark.svg"));
+  set("ollama", p("ollama-light.svg", "ollama-dark.svg"));
 
   // IDEs
-  vscode: single("vscode.svg"),
+  set("vscode", s("vscode.svg"));
 
-  // Providers (for API key settings)
-  anthropic: single("claude.svg"),
-  google: single("gemini.svg"),
+  // Providers
+  set("anthropic", s("claude.svg"));
+  set("google", s("gemini.svg"));
 
   // MCP
-  mcp: pair("mcp-light.svg", "mcp-dark.svg"),
+  set("mcp", p("mcp-light.svg", "mcp-dark.svg"));
 
   // Routing
-  openrouter: pair("openrouter-light.svg", "openrouter-dark.svg"),
-};
+  set("openrouter", p("openrouter-light.svg", "openrouter-dark.svg"));
+
+  return map;
+}
+
+const ICON_MAP = buildMap();
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -81,7 +97,7 @@ export function AgentIcon({
   const entry = ICON_MAP[provider.toLowerCase()];
 
   if (entry) {
-    const src = typeof entry === "string" ? entry : isDark ? entry.dark : entry.light;
+    const src = "single" in entry ? entry.single : isDark ? entry.dark : entry.light;
     return (
       <img
         src={src}
