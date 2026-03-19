@@ -55,10 +55,11 @@ function PaneToolbar({
     const pane = panes[paneId];
     // Stop the agent when closing a terminal pane
     if (pane?.type === "terminal" && pane.agentId) {
-      trpcMutate("agents.stop", { id: pane.agentId }).catch(() => {
-        // Agent may already be stopped — ignore
-      });
-      removeAgent(pane.agentId);
+      const agentId = pane.agentId;
+      trpcMutate("agents.stop", { id: agentId })
+        .catch(() => {})
+        .then(() => trpcMutate("agents.delete", { id: agentId }).catch(() => {}));
+      removeAgent(agentId);
     }
     removePane(tabId, paneId);
   }, [tabId, paneId, panes, removePane, removeAgent]);

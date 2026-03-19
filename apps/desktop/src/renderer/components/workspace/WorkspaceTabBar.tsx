@@ -1,12 +1,12 @@
 import type { AgentCliType } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { Plus, X } from "lucide-react";
+import { Plus, Terminal, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
-import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
+import { collectPaneIds, findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
 // ─── CLI Agent definitions ──────────────────────────────────────────────────
@@ -38,10 +38,78 @@ export function WorkspaceTabBar() {
   const removeTab = useWorkspaceStore((s) => s.removeTab);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
   const renameTab = useWorkspaceStore((s) => s.renameTab);
+  const updatePane = useWorkspaceStore((s) => s.updatePane);
+  const addAgent = useAgentStore((s) => s.addAgent);
+  const removeAgent = useAgentStore((s) => s.removeAgent);
+  const createTerminal = useTerminalStore((s) => s.createTerminal);
+  const { projectId } = useProjectContext();
+
+  /** Close a tab and stop all its terminal agents */
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      // Read fresh state to avoid stale closure
+      const state = useWorkspaceStore.getState();
+      const tab = state.tabs.find((t) => t.id === tabId);
+      if (tab) {
+        const paneIds = collectPaneIds(tab.layout);
+        for (const pid of paneIds) {
+          const pane = state.panes[pid];
+          if (pane?.type === "terminal" && pane.agentId) {
+            const agentId = pane.agentId;
+            // Stop process then delete from DB — both non-fatal
+            trpcMutate("agents.stop", { id: agentId })
+              .catch(() => {})
+              .then(() => trpcMutate("agents.delete", { id: agentId }).catch(() => {}));
+            removeAgent(agentId);
+          }
+        }
+      }
+      removeTab(tabId);
+    },
+    [removeTab, removeAgent],
+  );
 
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleNewTerminal = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      // Create a new tab first
+      const newTabId = addTab("Terminal");
+      // Find its empty pane
+      const tab = useWorkspaceStore.getState().tabs.find((t) => t.id === newTabId);
+      const firstPaneId = tab ? findFirstPaneId(tab.layout) : null;
+
+      // Spawn a shell agent
+      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+      const agent = await trpcMutate<any>("agents.spawn", {
+        projectId,
+        cliType: "shell",
+        taskDescription: "Terminal",
+      });
+      addAgent({
+        id: agent.id,
+        projectId,
+        cliType: agent.cliType,
+        status: agent.status,
+        currentStep: agent.currentStep,
+        taskDescription: agent.taskDescription,
+        branchName: null,
+        tokenUsage: { input: 0, output: 0, cost: 0 },
+        startedAt: agent.startedAt,
+      });
+      createTerminal(agent.id);
+
+      // Convert the empty pane to terminal
+      if (firstPaneId) {
+        updatePane(firstPaneId, { type: "terminal", agentId: agent.id });
+      }
+    } catch {
+      // Spawn failed — tab stays with empty pane
+    }
+  }, [projectId, addTab, addAgent, createTerminal, updatePane]);
 
   const startEditing = useCallback((tabId: string, currentLabel: string) => {
     setEditingTabId(tabId);
@@ -103,7 +171,7 @@ export function WorkspaceTabBar() {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  removeTab(tab.id);
+                  handleCloseTab(tab.id);
                 }}
                 className={cn(
                   "ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded",
@@ -129,6 +197,15 @@ export function WorkspaceTabBar() {
           title="New tab"
         >
           <Plus className="h-3.5 w-3.5" />
+        </button>
+        {/* Quick terminal button */}
+        <button
+          type="button"
+          onClick={handleNewTerminal}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5 hover:text-accent"
+          title="New terminal"
+        >
+          <Terminal className="h-3.5 w-3.5" />
         </button>
       </div>
 

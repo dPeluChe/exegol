@@ -277,6 +277,7 @@ export class AgentManager {
 
     // ── PTY exit handler ──────────────────────────────────────────────
     proc.onExit(({ exitCode }) => {
+      // Clean up timers and in-memory state (always safe, no DB)
       const timer = this.scrollbackTimers.get(agent.id);
       if (timer) {
         clearInterval(timer);
@@ -285,9 +286,14 @@ export class AgentManager {
 
       const scrollbackForScoring = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
 
-      const scrollbackForMemory = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
-      if (scrollbackForMemory.length > 0) {
-        extractAndStoreMemories(db, agent.id, agent.projectId, scrollbackForMemory);
+      // All DB operations wrapped: DB may be closed during app shutdown
+      try {
+        const scrollbackForMemory = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+        if (scrollbackForMemory.length > 0) {
+          extractAndStoreMemories(db, agent.id, agent.projectId, scrollbackForMemory);
+        }
+      } catch {
+        /* DB closed during shutdown — non-fatal */
       }
 
       this.flushScrollback(agent.id, false);
@@ -296,12 +302,20 @@ export class AgentManager {
       this.tokenLimitDetected.delete(agent.id);
 
       finalizeAgentStatus(db, agent, exitCode);
-
-      const initSnapshot = this.initialSnapshots.get(agent.id);
-      scoreAndRecordOplog(db, agent, exitCode, scrollbackForScoring, initSnapshot);
+      scoreAndRecordOplog(
+        db,
+        agent,
+        exitCode,
+        scrollbackForScoring,
+        this.initialSnapshots.get(agent.id),
+      );
       this.initialSnapshots.delete(agent.id);
 
-      this.cleanupWorktree(db, agent.id);
+      try {
+        this.cleanupWorktree(db, agent.id);
+      } catch {
+        /* DB closed during shutdown — non-fatal */
+      }
 
       const completionCb = this.completionCallbacks.get(agent.id);
       if (completionCb) {

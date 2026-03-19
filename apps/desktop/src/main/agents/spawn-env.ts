@@ -116,36 +116,42 @@ export function finalizeAgentStatus(
   agent: Agent,
   exitCode: number,
 ): AgentStatus | null {
-  const currentAgent = getAgent(db, agent.id);
-  if (!currentAgent || currentAgent.status === "completed" || currentAgent.status === "failed") {
+  try {
+    const currentAgent = getAgent(db, agent.id);
+    if (!currentAgent || currentAgent.status === "completed" || currentAgent.status === "failed") {
+      return null;
+    }
+
+    const finalStatus: AgentStatus = exitCode === 0 ? "completed" : "failed";
+    stopAgent(db, agent.id, finalStatus);
+    broadcastAgentStatus({
+      agentId: agent.id,
+      projectId: agent.projectId,
+      status: finalStatus,
+      currentStep: null,
+      cliType: agent.cliType,
+      timestamp: Date.now(),
+    });
+
+    const actType = finalStatus === "completed" ? "agent_completed" : "agent_failed";
+    try {
+      insertActivity(db, {
+        type: actType as "agent_completed" | "agent_failed",
+        entityType: "agent",
+        entityId: agent.id,
+        projectId: agent.projectId,
+        description: `${agent.cliType} agent ${finalStatus}: ${agent.taskDescription.slice(0, 80)}`,
+      });
+    } catch (err) {
+      logger.warn("[AgentManager] Failed to log activity:", err);
+    }
+
+    return finalStatus;
+  } catch (err) {
+    // DB may be closed during app shutdown — non-fatal
+    logger.warn("[AgentManager] finalizeAgentStatus skipped (DB likely closed):", err);
     return null;
   }
-
-  const finalStatus: AgentStatus = exitCode === 0 ? "completed" : "failed";
-  stopAgent(db, agent.id, finalStatus);
-  broadcastAgentStatus({
-    agentId: agent.id,
-    projectId: agent.projectId,
-    status: finalStatus,
-    currentStep: null,
-    cliType: agent.cliType,
-    timestamp: Date.now(),
-  });
-
-  const actType = finalStatus === "completed" ? "agent_completed" : "agent_failed";
-  try {
-    insertActivity(db, {
-      type: actType as "agent_completed" | "agent_failed",
-      entityType: "agent",
-      entityId: agent.id,
-      projectId: agent.projectId,
-      description: `${agent.cliType} agent ${finalStatus}: ${agent.taskDescription.slice(0, 80)}`,
-    });
-  } catch (err) {
-    logger.warn("[AgentManager] Failed to log activity:", err);
-  }
-
-  return finalStatus;
 }
 
 /**
@@ -158,11 +164,11 @@ export function scoreAndRecordOplog(
   scrollback: string,
   initSnapshot: { headSha: string; cwd: string; projectId: string } | undefined,
 ): void {
-  const currentAgentForScoring = getAgent(db, agent.id);
-  scoreAgent(db, agent.id, exitCode, currentAgentForScoring?.status ?? "unknown", scrollback);
+  try {
+    const currentAgentForScoring = getAgent(db, agent.id);
+    scoreAgent(db, agent.id, exitCode, currentAgentForScoring?.status ?? "unknown", scrollback);
 
-  if (initSnapshot && coreRust) {
-    try {
+    if (initSnapshot && coreRust) {
       const afterSnapshot = coreRust.getRepoSnapshot(initSnapshot.cwd);
       if (afterSnapshot.headSha !== initSnapshot.headSha) {
         createOplogEntry(db, {
@@ -174,8 +180,8 @@ export function scoreAndRecordOplog(
           description: `Agent made commits (${initSnapshot.headSha.slice(0, 8)} → ${afterSnapshot.headSha.slice(0, 8)})`,
         });
       }
-    } catch {
-      // Non-fatal oplog recording
     }
+  } catch {
+    // Non-fatal: DB may be closed during shutdown, oplog/scoring are best-effort
   }
 }
