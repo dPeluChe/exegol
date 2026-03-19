@@ -65,14 +65,19 @@ export function WorkspaceTabBar() {
           const isEditing = editingTabId === tab.id;
 
           return (
-            <button
-              type="button"
+            // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
+            <div
+              role="button"
+              tabIndex={0}
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               onDoubleClick={() => startEditing(tab.id, tab.label)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setActiveTab(tab.id);
+              }}
               className={cn(
                 "group relative flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] font-medium transition-colors",
-                "hover:bg-white/5",
+                "hover:bg-white/5 cursor-pointer",
                 isActive ? "bg-white/10 text-text-primary" : "text-text-secondary",
               )}
             >
@@ -112,7 +117,7 @@ export function WorkspaceTabBar() {
               {isActive && (
                 <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent" />
               )}
-            </button>
+            </div>
           );
         })}
 

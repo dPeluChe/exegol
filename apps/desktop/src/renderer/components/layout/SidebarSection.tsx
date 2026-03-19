@@ -33,11 +33,16 @@ export function SidebarSection({
 
   return (
     <div className="py-1">
-      {/* Header — clickable to toggle */}
-      <button
-        type="button"
+      {/* Header — div instead of button because action slot contains buttons (no nesting) */}
+      {/* biome-ignore lint/a11y/useSemanticElements: button nesting — action slot contains buttons */}
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setOpen(!open);
+        }}
+        className="flex w-full cursor-pointer items-center gap-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary"
       >
         {open ? (
           <ChevronDown className="h-2.5 w-2.5 shrink-0" />
@@ -52,7 +57,7 @@ export function SidebarSection({
           </span>
         )}
         {action && <ActionWrapper>{action}</ActionWrapper>}
-      </button>
+      </div>
 
       {/* Content — collapsible */}
       {open && <div className={cn("px-3 pt-1", !open && "hidden")}>{children}</div>}

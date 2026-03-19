@@ -44,8 +44,9 @@ function buildMap(): Record<string, IconDef> {
   set("codex", p("openai-light.svg", "openai-dark.svg"));
   set("openai", p("openai-light.svg", "openai-dark.svg"));
   set("gemini", s("gemini.svg"));
-  set("aider", s("antigravity.svg"));
-  set("goose", s("ghostty.svg"));
+  // aider, goose: no official SVG yet — use text fallback
+  // set("aider", ...);
+  // set("goose", ...);
   set("opencode", p("opencode-light.svg", "opencode-dark.svg"));
   set("windsurf", p("windsurf-light.svg", "windsurf-dark.svg"));
   set("kilocode", p("kilocode-light.svg", "kilocode-dark.svg"));
