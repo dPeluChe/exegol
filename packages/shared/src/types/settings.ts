@@ -1,4 +1,4 @@
-export type IdeType = "vscode" | "cursor" | "zed" | "intellij" | "webstorm" | "custom";
+export type IdeType = "vscode" | "cursor" | "zed" | "windsurf" | "custom";
 
 export type AgentCliConfig = {
   cliType: string;

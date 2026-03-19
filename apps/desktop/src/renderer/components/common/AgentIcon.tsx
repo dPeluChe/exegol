@@ -3,7 +3,7 @@ import { useThemeValue } from "../../hooks/use-theme";
 
 // ─── Load all SVG icons via Vite glob (static analysis at build time) ───────
 
-const svgModules = import.meta.glob("../../assets/icons/*.svg", {
+const iconModules = import.meta.glob("../../assets/icons/*.{svg,png}", {
   eager: true,
   query: "?url",
   import: "default",
@@ -13,7 +13,7 @@ const svgModules = import.meta.glob("../../assets/icons/*.svg", {
 function iconUrl(name: string): string | undefined {
   // Glob keys look like "../../assets/icons/claude.svg"
   const key = `../../assets/icons/${name}`;
-  return svgModules[key];
+  return iconModules[key];
 }
 
 // ─── Icon registry ──────────────────────────────────────────────────────────
@@ -44,9 +44,8 @@ function buildMap(): Record<string, IconDef> {
   set("codex", p("openai-light.svg", "openai-dark.svg"));
   set("openai", p("openai-light.svg", "openai-dark.svg"));
   set("gemini", s("gemini.svg"));
+  set("crush", s("crush.png"));
   // aider, goose: no official SVG yet — use text fallback
-  // set("aider", ...);
-  // set("goose", ...);
   set("opencode", p("opencode-light.svg", "opencode-dark.svg"));
   set("windsurf", p("windsurf-light.svg", "windsurf-dark.svg"));
   set("kilocode", p("kilocode-light.svg", "kilocode-dark.svg"));
@@ -54,10 +53,17 @@ function buildMap(): Record<string, IconDef> {
 
   // IDEs
   set("vscode", s("vscode.svg"));
+  set("zed", p("zed-light.svg", "zed-dark.svg"));
+  // cursor: no SVG available yet — uses text fallback
 
   // Providers
   set("anthropic", s("claude.svg"));
   set("google", s("gemini.svg"));
+  set("copilot", p("copilot-light.svg", "copilot-dark.svg"));
+
+  // Git / GitHub
+  set("git", s("git.svg"));
+  set("github", p("github-light.svg", "github-dark.svg"));
 
   // MCP
   set("mcp", p("mcp-light.svg", "mcp-dark.svg"));

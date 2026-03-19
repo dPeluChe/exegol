@@ -7,8 +7,7 @@ const IDE_COMMANDS: Record<string, string> = {
   vscode: "code",
   cursor: "cursor",
   zed: "zed",
-  intellij: "idea",
-  webstorm: "webstorm",
+  windsurf: "windsurf",
 };
 
 function shellEscape(s: string): string {

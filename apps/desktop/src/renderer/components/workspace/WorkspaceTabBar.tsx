@@ -1,33 +1,14 @@
-import type { AgentCliType } from "@exegol/shared";
+import type { AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
+import { useQuery } from "@tanstack/react-query";
 import { Plus, Terminal, X } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { trpcMutate } from "../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { collectPaneIds, findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-
-// ─── CLI Agent definitions ──────────────────────────────────────────────────
-
-interface CliAgent {
-  type: AgentCliType;
-  short: string;
-  color: string;
-  name: string;
-}
-
-const CLI_AGENTS: CliAgent[] = [
-  { type: "claude-code", short: "C", color: "#D97706", name: "Claude" },
-  { type: "codex", short: "Co", color: "#10B981", name: "Codex" },
-  { type: "gemini", short: "G", color: "#3B82F6", name: "Gemini" },
-  { type: "aider", short: "A", color: "#8B5CF6", name: "Aider" },
-  { type: "opencode", short: "OC", color: "#EC4899", name: "OpenCode" },
-  { type: "goose", short: "Go", color: "#F97316", name: "Goose" },
-  { type: "amp", short: "Am", color: "#06B6D4", name: "Amp" },
-  { type: "kiro", short: "K", color: "#84CC16", name: "Kiro" },
-];
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -227,16 +208,22 @@ function QuickLaunchBar() {
   const tabs = useWorkspaceStore((s) => s.tabs);
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
+  const { data: providers } = useQuery({
+    queryKey: ["providers"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listProviders"),
+    staleTime: 60_000,
+  });
+  const cliAgents = (providers ?? []).filter((p) => p.id !== "shell" && p.enabled !== false);
 
   const handleLaunch = useCallback(
-    async (cli: CliAgent) => {
+    async (cli: AgentProvider) => {
       if (!projectId) return;
-      setLaunching(cli.type);
+      setLaunching(cli.id);
       try {
         // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
         const agent = await trpcMutate<any>("agents.spawn", {
           projectId,
-          cliType: cli.type,
+          cliType: cli.id as AgentCliType,
           taskDescription: cli.name,
         });
 
@@ -304,16 +291,16 @@ function QuickLaunchBar() {
 
   return (
     <div className="flex h-7 items-center gap-1.5 overflow-x-auto px-2">
-      {CLI_AGENTS.map((cli) => (
+      {cliAgents.map((cli) => (
         <button
           type="button"
-          key={cli.type}
-          disabled={launching === cli.type}
+          key={cli.id}
+          disabled={launching === cli.id}
           onClick={() => handleLaunch(cli)}
           className={cn(
             "group/cli relative flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold transition-all",
             "bg-zinc-700 text-zinc-400 hover:text-white",
-            launching === cli.type && "opacity-40",
+            launching === cli.id && "opacity-40",
           )}
           style={{ "--cli-color": cli.color } as React.CSSProperties}
           title={cli.name}
@@ -325,9 +312,9 @@ function QuickLaunchBar() {
           }}
         >
           <AgentIcon
-            provider={cli.type}
+            provider={cli.id}
             size={14}
-            fallback={cli.short}
+            fallback={cli.icon}
             fallbackColor={cli.color}
             className="rounded-full"
           />
@@ -336,6 +323,3 @@ function QuickLaunchBar() {
     </div>
   );
 }
-
-export type { CliAgent };
-export { CLI_AGENTS };

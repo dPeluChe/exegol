@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ideTypeSchema = z.enum(["vscode", "cursor", "zed", "intellij", "webstorm", "custom"]);
+export const ideTypeSchema = z.enum(["vscode", "cursor", "zed", "windsurf", "custom"]);
 
 export const agentCliConfigSchema = z.object({
   cliType: z.string().min(1),
