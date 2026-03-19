@@ -47,7 +47,7 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
   const spawnAgent = useSpawnAgent();
   const isFocused = focusedAgentId === agent.id;
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
-  const isInactive = ["completed", "failed", "stopped"].includes(agent.status);
+  const isInactive = ["completed", "failed", "stopped", "crashed"].includes(agent.status);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);

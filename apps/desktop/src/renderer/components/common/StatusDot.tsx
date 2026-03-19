@@ -15,6 +15,7 @@ const STATUS_COLORS: Record<AgentStatus, { color: string; defaultPulse: boolean 
   completed: { color: "var(--success)", defaultPulse: false },
   failed: { color: "var(--error)", defaultPulse: false },
   stopped: { color: "var(--text-muted)", defaultPulse: false },
+  crashed: { color: "var(--error)", defaultPulse: false },
   idle: { color: "var(--text-muted)", defaultPulse: false },
   paused: { color: "var(--text-muted)", defaultPulse: false },
 };

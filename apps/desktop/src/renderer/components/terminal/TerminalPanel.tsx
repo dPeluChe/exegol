@@ -15,7 +15,7 @@ interface TerminalPanelProps {
   onReady?: () => void;
 }
 
-const STOPPED_STATUSES = new Set(["completed", "failed", "stopped"]);
+const STOPPED_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 
 function useHandoff(agentId: string, enabled: boolean) {
   return useQuery({
@@ -111,9 +111,17 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
     return (
       <div className="relative flex h-full flex-col">
         {/* Read-only banner */}
-        <div className="flex shrink-0 items-center gap-2 bg-yellow-500/10 px-3 py-1.5 text-[11px]">
-          <AlertCircle className="h-3.5 w-3.5 text-yellow-400" />
-          <span className="text-yellow-200/80">Session ended — read-only</span>
+        <div
+          className={`flex shrink-0 items-center gap-2 px-3 py-1.5 text-[11px] ${agent?.status === "crashed" ? "bg-red-500/10" : "bg-yellow-500/10"}`}
+        >
+          <AlertCircle
+            className={`h-3.5 w-3.5 ${agent?.status === "crashed" ? "text-red-400" : "text-yellow-400"}`}
+          />
+          <span className={agent?.status === "crashed" ? "text-red-200/80" : "text-yellow-200/80"}>
+            {agent?.status === "crashed"
+              ? "Session crashed — scroll to review"
+              : "Session ended — read-only"}
+          </span>
           <div className="ml-auto flex items-center gap-2">
             {resolvedHandoff && (
               <Button

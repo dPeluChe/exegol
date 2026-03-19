@@ -21,6 +21,7 @@ export const AGENT_STATUSES = [
   "completed",
   "failed",
   "stopped",
+  "crashed",
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 

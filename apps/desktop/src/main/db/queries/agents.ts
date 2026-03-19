@@ -102,9 +102,52 @@ export function listRecentSessions(db: Database.Database, limit = 10): RecentSes
   }));
 }
 
-/** Mark any agents still in active status as 'stopped' -- their processes died with the app */
+/**
+ * Recover agents from a previous session.
+ * - If PID is still alive: leave as "running" (process survived)
+ * - If PID is dead: mark as "crashed" with scrollback preserved
+ * Returns the count of crashed and recovered agents.
+ */
+export function recoverStaleAgents(db: Database.Database): { crashed: number; alive: number } {
+  const stale = db
+    .prepare("SELECT id, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')")
+    .all() as Array<{ id: string; pid: number | null }>;
+
+  let crashed = 0;
+  const alive = 0;
+  const now = Math.floor(Date.now() / 1000);
+
+  for (const agent of stale) {
+    if (agent.pid && isPidAlive(agent.pid)) {
+      // Process survived the crash — but we can't re-attach to the PTY
+      // Mark as crashed too since we lost the PTY master fd
+      db.prepare(
+        "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — process was alive but PTY lost', pid = NULL WHERE id = ?",
+      ).run(now, agent.id);
+      crashed++;
+    } else {
+      // Process is dead
+      db.prepare(
+        "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
+      ).run(now, agent.id);
+      crashed++;
+    }
+  }
+
+  return { crashed, alive };
+}
+
+/** Check if a process ID is still running */
+function isPidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0); // Signal 0 = check existence without killing
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Legacy alias for backwards compatibility */
 export function cleanupStaleAgents(db: Database.Database): void {
-  db.prepare(
-    "UPDATE agents SET status = 'stopped', stopped_at = ?, current_step = NULL, pid = NULL WHERE status IN ('running', 'spawning', 'waiting_input')",
-  ).run(Math.floor(Date.now() / 1000));
+  recoverStaleAgents(db);
 }

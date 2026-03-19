@@ -6,8 +6,9 @@ import { getAgentManager } from "./agents/manager";
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
-import { cleanupStaleAgents } from "./db/queries";
+import { recoverStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
+import { logger } from "./lib/logger";
 import { getMcpHost } from "./mcp/host";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
@@ -113,8 +114,11 @@ function registerIpcHandlers(): void {
 
 app.whenReady().then(async () => {
   await initializeDatabase();
-  // Mark any agents still in "running"/"spawning" status as "stopped" — their processes died with the app
-  cleanupStaleAgents(getDb());
+  // Recover agents from previous session — mark interrupted as "crashed", preserve scrollback
+  const recovery = recoverStaleAgents(getDb());
+  if (recovery.crashed > 0) {
+    logger.info(`[Startup] Recovered ${recovery.crashed} crashed agent(s) from previous session`);
+  }
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();

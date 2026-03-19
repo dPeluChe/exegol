@@ -355,6 +355,28 @@ const migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_oplog_project ON oplog(project_id);
     CREATE INDEX IF NOT EXISTS idx_oplog_created ON oplog(created_at DESC)`,
   },
+  {
+    id: "023_agents_add_crashed_status",
+    sql: `
+      CREATE TABLE IF NOT EXISTS agents_new (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        worktree_id TEXT,
+        cli_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'idle'
+          CHECK (status IN ('idle', 'spawning', 'running', 'waiting_input', 'paused', 'completed', 'failed', 'stopped', 'crashed')),
+        task_description TEXT NOT NULL,
+        current_step TEXT,
+        pid INTEGER,
+        started_at INTEGER,
+        stopped_at INTEGER,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
+      INSERT OR IGNORE INTO agents_new SELECT * FROM agents;
+      DROP TABLE agents;
+      ALTER TABLE agents_new RENAME TO agents;
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {
