@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Agent, AgentCreate, AgentStatus } from "@exegol/shared";
+import type { Agent, AgentCliType, AgentCreate, AgentStatus } from "@exegol/shared";
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import type { IPty } from "node-pty";
@@ -58,9 +58,51 @@ interface WorktreeRecord {
   repoPath: string;
 }
 
+/** Unified output processor — Rust AgentOutputStream if available, JS fallback */
+type ProcessResult = { status?: string; currentStep?: string; tokenLimitWarning: boolean };
+type OutputProcessor = { process(data: string): ProcessResult };
+
+const useRustProcessor = !!coreRust?.AgentOutputStream;
+if (useRustProcessor) {
+  logger.info("[AgentManager] Rust processing pipeline available — using native output processor");
+}
+
+function createOutputProcessor(_agentId: string, cliType: AgentCliType): OutputProcessor {
+  if (useRustProcessor) {
+    try {
+      // biome-ignore lint/style/noNonNullAssertion: guarded by useRustProcessor check above
+      const stream = new coreRust!.AgentOutputStream(cliType);
+      return {
+        process(data: string) {
+          const r = stream.processChunk(data);
+          return {
+            status: r.status ?? undefined,
+            currentStep: r.currentStep ?? undefined,
+            tokenLimitWarning: r.tokenLimitWarning,
+          };
+        },
+      };
+    } catch {
+      // Fall through to JS on instantiation error
+    }
+  }
+
+  const parser = new AgentStatusParser(_agentId, cliType);
+  return {
+    process(data: string) {
+      const u = parser.parse(data);
+      return {
+        status: u?.status,
+        currentStep: u?.currentStep,
+        tokenLimitWarning: u?.tokenLimitWarning ?? false,
+      };
+    },
+  };
+}
+
 export class AgentManager {
   private processes: Map<string, IPty> = new Map();
-  private statusParsers: Map<string, AgentStatusParser> = new Map();
+  private outputProcessors: Map<string, OutputProcessor> = new Map();
   private worktrees: Map<string, WorktreeRecord> = new Map();
   private scrollbackBuffers: Map<string, string[]> = new Map();
   private scrollbackSizes: Map<string, number> = new Map();
@@ -209,16 +251,19 @@ export class AgentManager {
       logger.warn("[AgentManager] Failed to log activity:", err);
     }
 
-    const parser = new AgentStatusParser(agent.id, agent.cliType);
-    this.statusParsers.set(agent.id, parser);
-    this.scrollbackBuffers.set(agent.id, []);
-    this.scrollbackSizes.set(agent.id, 0);
-    this.scrollbackTimers.set(
-      agent.id,
-      setInterval(() => {
-        this.flushScrollback(agent.id, true);
-      }, SCROLLBACK_FLUSH_INTERVAL_MS),
-    );
+    // Shell terminals: no output processing, no scrollback buffering
+    if (!isPlainShell) {
+      const processor = createOutputProcessor(agent.id, agent.cliType);
+      this.outputProcessors.set(agent.id, processor);
+      this.scrollbackBuffers.set(agent.id, []);
+      this.scrollbackSizes.set(agent.id, 0);
+      this.scrollbackTimers.set(
+        agent.id,
+        setInterval(() => {
+          this.flushScrollback(agent.id, true);
+        }, SCROLLBACK_FLUSH_INTERVAL_MS),
+      );
+    }
 
     // ── PTY data handler ──────────────────────────────────────────────
     proc.onData((data: string) => {
@@ -226,51 +271,56 @@ export class AgentManager {
         win.webContents.send("terminal:data", agent.id, data);
       }
 
+      // Skip processing for plain shells — just forward terminal data
+      if (isPlainShell) return;
+
       const currentSize = this.scrollbackSizes.get(agent.id) ?? 0;
       if (currentSize < MAX_SCROLLBACK_BYTES) {
         this.scrollbackBuffers.get(agent.id)?.push(data);
         this.scrollbackSizes.set(agent.id, currentSize + data.length);
       }
 
-      const statusUpdate = parser.parse(data);
-      if (statusUpdate) {
-        if (statusUpdate.status) {
-          updateAgentStatus(db, agent.id, statusUpdate.status, statusUpdate.currentStep);
+      const processor = this.outputProcessors.get(agent.id);
+      if (!processor) return;
+      const result = processor.process(data);
+      if (result.status || result.currentStep) {
+        if (result.status) {
+          updateAgentStatus(db, agent.id, result.status as AgentStatus, result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
             projectId: agent.projectId,
-            status: statusUpdate.status as AgentStatus,
-            currentStep: statusUpdate.currentStep ?? null,
+            status: result.status as AgentStatus,
+            currentStep: result.currentStep ?? null,
             cliType: agent.cliType,
             timestamp: Date.now(),
           });
-        } else if (statusUpdate.currentStep) {
-          updateAgentStatus(db, agent.id, "running", statusUpdate.currentStep);
+        } else if (result.currentStep) {
+          updateAgentStatus(db, agent.id, "running", result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
             projectId: agent.projectId,
             status: "running",
-            currentStep: statusUpdate.currentStep,
+            currentStep: result.currentStep,
             cliType: agent.cliType,
             timestamp: Date.now(),
           });
         }
+      }
 
-        if (statusUpdate.tokenLimitWarning && !this.tokenLimitDetected.has(agent.id)) {
-          this.tokenLimitDetected.add(agent.id);
-          try {
-            const scrollback = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
-            const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
-            const handoff = createHandoff(db, { agentId: agent.id, ...summary });
-            for (const win of BrowserWindow.getAllWindows()) {
-              win.webContents.send("agent:handoff-ready", agent.id, handoff.id);
-            }
-            logger.info(
-              `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
-            );
-          } catch (err) {
-            logger.error(`[AgentManager] Failed to create handoff for ${agent.id}:`, err);
+      if (result.tokenLimitWarning && !this.tokenLimitDetected.has(agent.id)) {
+        this.tokenLimitDetected.add(agent.id);
+        try {
+          const scrollback = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+          const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
+          const handoff = createHandoff(db, { agentId: agent.id, ...summary });
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send("agent:handoff-ready", agent.id, handoff.id);
           }
+          logger.info(
+            `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
+          );
+        } catch (err) {
+          logger.error(`[AgentManager] Failed to create handoff for ${agent.id}:`, err);
         }
       }
     });
@@ -284,31 +334,40 @@ export class AgentManager {
         this.scrollbackTimers.delete(agent.id);
       }
 
-      const scrollbackForScoring = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+      const isShell = agent.cliType === "shell";
+      const scrollbackForScoring = isShell
+        ? ""
+        : (this.scrollbackBuffers.get(agent.id)?.join("") ?? "");
 
-      // All DB operations wrapped: DB may be closed during app shutdown
-      try {
-        const scrollbackForMemory = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
-        if (scrollbackForMemory.length > 0) {
-          extractAndStoreMemories(db, agent.id, agent.projectId, scrollbackForMemory);
+      // Memory extraction + scoring: skip for plain shells (no useful knowledge)
+      if (!isShell) {
+        try {
+          const scrollbackForMemory = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+          if (scrollbackForMemory.length > 0) {
+            extractAndStoreMemories(db, agent.id, agent.projectId, scrollbackForMemory);
+          }
+        } catch {
+          /* DB closed during shutdown — non-fatal */
         }
-      } catch {
-        /* DB closed during shutdown — non-fatal */
       }
 
       this.flushScrollback(agent.id, false);
       this.processes.delete(agent.id);
-      this.statusParsers.delete(agent.id);
+      this.outputProcessors.delete(agent.id);
       this.tokenLimitDetected.delete(agent.id);
 
       finalizeAgentStatus(db, agent, exitCode);
-      scoreAndRecordOplog(
-        db,
-        agent,
-        exitCode,
-        scrollbackForScoring,
-        this.initialSnapshots.get(agent.id),
-      );
+
+      // Scoring + oplog: skip for plain shells
+      if (!isShell) {
+        scoreAndRecordOplog(
+          db,
+          agent,
+          exitCode,
+          scrollbackForScoring,
+          this.initialSnapshots.get(agent.id),
+        );
+      }
       this.initialSnapshots.delete(agent.id);
 
       try {

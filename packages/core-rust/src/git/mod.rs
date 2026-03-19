@@ -13,7 +13,7 @@ use std::path::Path;
 
 /// Open a git repository at the given path, returning a napi::Error on failure.
 fn open_repo(path: &str) -> Result<Repository, Error> {
-  Repository::open(path).map_err(|e| Error::from_reason(format!("Failed to open repository at '{}': {}", path, e)))
+  Repository::open(path).map_err(|e| Error::from_reason(format!("Failed to open repository at '{path}': {e}")))
 }
 
 /// Get repository information including current branch, remote URL, dirty state, and HEAD commit.
@@ -24,7 +24,7 @@ pub fn get_repo_info(path: String) -> Result<RepoInfo, Error> {
   // Current branch
   let head = repo
     .head()
-    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {e}")))?;
   let current_branch = head
     .shorthand()
     .unwrap_or("HEAD (detached)")
@@ -43,13 +43,13 @@ pub fn get_repo_info(path: String) -> Result<RepoInfo, Error> {
     .recurse_untracked_dirs(true);
   let statuses = repo
     .statuses(Some(&mut status_opts))
-    .map_err(|e| Error::from_reason(format!("Failed to get statuses: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to get statuses: {e}")))?;
   let is_dirty = !statuses.is_empty();
 
   // HEAD commit info
   let head_commit = head
     .peel_to_commit()
-    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {e}")))?;
   let head_commit_sha = head_commit.id().to_string();
   let head_commit_message = head_commit
     .message()
@@ -94,15 +94,15 @@ pub fn create_worktree(
   // Get HEAD commit to base the new branch on
   let head = repo
     .head()
-    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {e}")))?;
   let head_commit = head
     .peel_to_commit()
-    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {e}")))?;
 
   // Create the new branch
   let branch = repo
     .branch(&branch_name, &head_commit, false)
-    .map_err(|e| Error::from_reason(format!("Failed to create branch '{}': {}", branch_name, e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to create branch '{branch_name}': {e}")))?;
 
   let branch_ref = branch
     .into_reference();
@@ -113,7 +113,7 @@ pub fn create_worktree(
   // Create the worktree
   let reference = repo
     .find_reference(branch_ref_name)
-    .map_err(|e| Error::from_reason(format!("Failed to find branch reference: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to find branch reference: {e}")))?;
 
   repo
     .worktree(
@@ -121,7 +121,7 @@ pub fn create_worktree(
       &worktree_path,
       Some(git2::WorktreeAddOptions::new().reference(Some(&reference))),
     )
-    .map_err(|e| Error::from_reason(format!("Failed to create worktree '{}': {}", worktree_name, e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to create worktree '{worktree_name}': {e}")))?;
 
   Ok(WorktreeInfo {
     name: worktree_name,
@@ -143,13 +143,12 @@ pub fn remove_worktree(
   // Find the worktree
   let worktree = repo
     .find_worktree(&worktree_name)
-    .map_err(|e| Error::from_reason(format!("Failed to find worktree '{}': {}", worktree_name, e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to find worktree '{worktree_name}': {e}")))?;
 
   // Check if it's valid (has changes) when not forcing
   if !force && worktree.validate().is_err() {
     return Err(Error::from_reason(format!(
-      "Worktree '{}' has issues. Use force=true to remove anyway.",
-      worktree_name
+      "Worktree '{worktree_name}' has issues. Use force=true to remove anyway."
     )));
   }
 
@@ -162,8 +161,7 @@ pub fn remove_worktree(
 
     if check_has_changes(wt_path)? {
       return Err(Error::from_reason(format!(
-        "Worktree '{}' has uncommitted changes. Use force=true to remove anyway.",
-        worktree_name
+        "Worktree '{worktree_name}' has uncommitted changes. Use force=true to remove anyway."
       )));
     }
   }
@@ -176,7 +174,7 @@ pub fn remove_worktree(
   }
   worktree
     .prune(Some(&mut opts))
-    .map_err(|e| Error::from_reason(format!("Failed to prune worktree '{}': {}", worktree_name, e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to prune worktree '{worktree_name}': {e}")))?;
 
   // Remove the worktree directory from disk
   let repo_root = Path::new(&repo_path);
@@ -187,7 +185,7 @@ pub fn remove_worktree(
 
   if worktree_dir.exists() {
     std::fs::remove_dir_all(&worktree_dir)
-      .map_err(|e| Error::from_reason(format!("Failed to remove worktree directory: {}", e)))?;
+      .map_err(|e| Error::from_reason(format!("Failed to remove worktree directory: {e}")))?;
   }
 
   Ok(true)
@@ -200,7 +198,7 @@ pub fn list_worktrees(repo_path: String) -> Result<Vec<WorktreeInfo>, Error> {
 
   let worktree_names = repo
     .worktrees()
-    .map_err(|e| Error::from_reason(format!("Failed to list worktrees: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to list worktrees: {e}")))?;
 
   let mut result = Vec::new();
 
@@ -224,7 +222,7 @@ pub fn list_worktrees(repo_path: String) -> Result<Vec<WorktreeInfo>, Error> {
   });
 
   // Add each linked worktree
-  for name in worktree_names.iter() {
+  for name in &worktree_names {
     let name = match name {
       Some(n) => n,
       None => continue,
@@ -281,7 +279,7 @@ fn check_has_changes(path: &str) -> Result<bool, Error> {
 
   let statuses = repo
     .statuses(Some(&mut opts))
-    .map_err(|e| Error::from_reason(format!("Failed to get statuses: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to get statuses: {e}")))?;
 
   Ok(!statuses.is_empty())
 }
@@ -303,7 +301,7 @@ pub fn get_worktree_diff(worktree_path: String) -> Result<String, Error> {
 
   let diff = repo
     .diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut diff_opts))
-    .map_err(|e| Error::from_reason(format!("Failed to compute diff: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to compute diff: {e}")))?;
 
   let mut output = String::new();
 
@@ -319,7 +317,7 @@ pub fn get_worktree_diff(worktree_path: String) -> Result<String, Error> {
       }
       true
     })
-    .map_err(|e| Error::from_reason(format!("Failed to format diff: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to format diff: {e}")))?;
 
   Ok(output)
 }

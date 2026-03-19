@@ -1,7 +1,8 @@
 import { useEffect } from "react";
+import { trpcMutate } from "../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
-import { useWorkspaceStore } from "../stores/workspace";
+import { collectPaneIds, useWorkspaceStore } from "../stores/workspace";
 
 export function useHotkeys() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -28,10 +29,10 @@ export function useHotkeys() {
         return;
       }
 
-      // Cmd+W: Close focused pane (or tab if last pane)
+      // Cmd+W: Close focused pane (or tab if last pane) + stop terminal agents
       if (e.key === "w") {
         e.preventDefault();
-        useWorkspaceStore.getState().closeFocusedPane();
+        cleanupAndCloseFocusedPane();
         return;
       }
 
@@ -123,6 +124,35 @@ export function useHotkeys() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleSidebar, setActiveView]);
+}
+
+/** Stop agents in terminal panes, then close the focused pane/tab */
+function cleanupAndCloseFocusedPane(): void {
+  const ws = useWorkspaceStore.getState();
+  const { focusedPaneId, activeTabId, tabs, panes } = ws;
+  if (!focusedPaneId || !activeTabId) return;
+
+  const tab = tabs.find((t) => t.id === activeTabId);
+  if (!tab) return;
+
+  const allPaneIds = collectPaneIds(tab.layout);
+  const isLastPane = allPaneIds.length <= 1;
+
+  // Collect panes to clean up: if last pane → all panes in tab, otherwise just the focused one
+  const paneIdsToClean = isLastPane ? allPaneIds : [focusedPaneId];
+
+  for (const pid of paneIdsToClean) {
+    const pane = panes[pid];
+    if (pane?.type === "terminal" && pane.agentId) {
+      const agentId = pane.agentId;
+      trpcMutate("agents.stop", { id: agentId })
+        .catch(() => {})
+        .then(() => trpcMutate("agents.delete", { id: agentId }).catch(() => {}));
+      useAgentStore.getState().removeAgent(agentId);
+    }
+  }
+
+  ws.closeFocusedPane();
 }
 
 function navigateAgentTab(

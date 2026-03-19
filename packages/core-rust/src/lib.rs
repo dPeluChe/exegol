@@ -1,8 +1,10 @@
 #![deny(clippy::all)]
 
 mod git;
+mod processing;
 
 pub use git::*;
+pub use processing::*;
 
 use napi_derive::napi;
 

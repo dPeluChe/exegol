@@ -1,5 +1,5 @@
 use super::open_repo;
-use super::types::*;
+use super::types::RepoSnapshot;
 use napi::Error;
 use napi_derive::napi;
 
@@ -10,7 +10,7 @@ pub fn get_repo_snapshot(repo_path: String) -> Result<RepoSnapshot, Error> {
 
   let head = repo
     .head()
-    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {e}")))?;
 
   let branch = head
     .shorthand()
@@ -19,7 +19,7 @@ pub fn get_repo_snapshot(repo_path: String) -> Result<RepoSnapshot, Error> {
 
   let commit = head
     .peel_to_commit()
-    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {e}")))?;
 
   let head_sha = commit.id().to_string();
   let timestamp = commit.time().seconds();
@@ -39,31 +39,31 @@ pub fn revert_to_snapshot(repo_path: String, target_sha: String) -> Result<Strin
 
   // Find the target commit
   let target_oid = git2::Oid::from_str(&target_sha)
-    .map_err(|e| Error::from_reason(format!("Invalid SHA '{}': {}", target_sha, e)))?;
+    .map_err(|e| Error::from_reason(format!("Invalid SHA '{target_sha}': {e}")))?;
   let target_commit = repo
     .find_commit(target_oid)
-    .map_err(|e| Error::from_reason(format!("Commit '{}' not found: {}", target_sha, e)))?;
+    .map_err(|e| Error::from_reason(format!("Commit '{target_sha}' not found: {e}")))?;
   let target_tree = target_commit
     .tree()
-    .map_err(|e| Error::from_reason(format!("Failed to get tree: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to get tree: {e}")))?;
 
   // Get current HEAD as parent
   let head = repo
     .head()
-    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {e}")))?;
   let head_commit = head
     .peel_to_commit()
-    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD: {e}")))?;
 
   // Create signature
   let sig = repo
     .signature()
     .or_else(|_| git2::Signature::now("Exegol", "exegol@local"))
-    .map_err(|e| Error::from_reason(format!("Failed to create signature: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to create signature: {e}")))?;
 
   // Create a new commit with the target tree on top of current HEAD
   let short_sha: String = target_sha.chars().take(8).collect();
-  let message = format!("Revert to {}", short_sha);
+  let message = format!("Revert to {short_sha}");
   let new_oid = repo
     .commit(
       Some("HEAD"),
@@ -73,7 +73,7 @@ pub fn revert_to_snapshot(repo_path: String, target_sha: String) -> Result<Strin
       &target_tree,
       &[&head_commit],
     )
-    .map_err(|e| Error::from_reason(format!("Failed to create revert commit: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to create revert commit: {e}")))?;
 
   // Checkout the new tree to update working directory
   repo
@@ -81,7 +81,7 @@ pub fn revert_to_snapshot(repo_path: String, target_sha: String) -> Result<Strin
       target_tree.as_object(),
       Some(git2::build::CheckoutBuilder::new().force()),
     )
-    .map_err(|e| Error::from_reason(format!("Failed to checkout tree: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to checkout tree: {e}")))?;
 
   Ok(new_oid.to_string())
 }

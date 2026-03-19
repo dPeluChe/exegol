@@ -1,5 +1,6 @@
 import type { Agent, AgentCliType, AgentStatus } from "@exegol/shared";
 import { create } from "zustand";
+import { useWorkspaceStore } from "./workspace";
 
 // ─── Push event subscription (T17) ──────────────────────────────────────
 
@@ -12,6 +13,22 @@ export function startAgentStatusPush(): void {
     const store = useAgentStore.getState();
     const existing = store.agents[event.agentId];
     if (existing) {
+      const isFinalStatus = ["completed", "failed", "stopped", "crashed"].includes(event.status);
+
+      // Auto-remove shell terminals when they finish (no need to keep in sidebar)
+      // Also convert their pane to empty so it doesn't show read-only scrollback
+      if (isFinalStatus && existing.cliType === "shell") {
+        store.removeAgent(event.agentId);
+        // Convert any terminal pane showing this agent to empty
+        const ws = useWorkspaceStore.getState();
+        for (const [paneId, pane] of Object.entries(ws.panes)) {
+          if (pane.type === "terminal" && pane.agentId === event.agentId) {
+            ws.updatePane(paneId, { type: "empty", agentId: undefined });
+          }
+        }
+        return;
+      }
+
       store.updateAgent(event.agentId, {
         status: event.status as AgentStatus,
         currentStep: event.currentStep,

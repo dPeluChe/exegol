@@ -576,11 +576,16 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.AgentOutputStream = nativeBinding.AgentOutputStream
 module.exports.createWorktree = nativeBinding.createWorktree
+module.exports.getDiff = nativeBinding.getDiff
 module.exports.getRepoInfo = nativeBinding.getRepoInfo
+module.exports.getRepoSnapshot = nativeBinding.getRepoSnapshot
 module.exports.getWorktreeDiff = nativeBinding.getWorktreeDiff
 module.exports.healthCheck = nativeBinding.healthCheck
 module.exports.listWorktrees = nativeBinding.listWorktrees
 module.exports.nativeVersion = nativeBinding.nativeVersion
 module.exports.removeWorktree = nativeBinding.removeWorktree
+module.exports.revertToSnapshot = nativeBinding.revertToSnapshot
+module.exports.stripAnsi = nativeBinding.stripAnsi
 module.exports.worktreeHasChanges = nativeBinding.worktreeHasChanges

@@ -3,8 +3,11 @@
   "private": true,
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "bun run build:rust && turbo run dev",
+    "dev:ui": "turbo run dev",
     "build": "turbo run build",
+    "build:rust": "cd packages/core-rust && npx napi build --platform --release",
+    "rebuild:native": "bun run build:rust && npx @electron/rebuild -v 41.0.2 -m . -o node-pty",
     "lint": "turbo run lint",
     "format": "biome format --write .",
     "format:check": "biome format .",

@@ -131,6 +131,7 @@ name = "exegol-core-rust"
 version = "0.1.0"
 dependencies = [
  "git2",
+ "memchr",
  "napi",
  "napi-build",
  "napi-derive",

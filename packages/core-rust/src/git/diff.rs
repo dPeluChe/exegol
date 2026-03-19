@@ -1,5 +1,5 @@
 use super::open_repo;
-use super::types::*;
+use super::types::{FileDiff, DiffHunk, DiffLine};
 use git2::{Delta, Diff, DiffOptions};
 use napi::Error;
 use napi_derive::napi;
@@ -138,7 +138,7 @@ fn extract_file_diffs(diff: &Diff) -> Result<Vec<FileDiff>, Error> {
 
       true
     })
-    .map_err(|e| Error::from_reason(format!("Failed to walk diff: {}", e)))?;
+    .map_err(|e| Error::from_reason(format!("Failed to walk diff: {e}")))?;
 
   // Flush last hunk
   if let Some(h) = current_hunk.take() {
@@ -166,7 +166,7 @@ pub fn get_diff(repo_path: String, staged: bool) -> Result<Vec<FileDiff>, Error>
       .and_then(|h| h.peel_to_tree().ok());
     repo
       .diff_tree_to_index(head_tree.as_ref(), None, Some(&mut diff_opts))
-      .map_err(|e| Error::from_reason(format!("Failed to compute staged diff: {}", e)))?
+      .map_err(|e| Error::from_reason(format!("Failed to compute staged diff: {e}")))?
   } else {
     diff_opts.include_untracked(true).recurse_untracked_dirs(true);
     let head_tree = repo
@@ -175,7 +175,7 @@ pub fn get_diff(repo_path: String, staged: bool) -> Result<Vec<FileDiff>, Error>
       .and_then(|h| h.peel_to_tree().ok());
     repo
       .diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut diff_opts))
-      .map_err(|e| Error::from_reason(format!("Failed to compute unstaged diff: {}", e)))?
+      .map_err(|e| Error::from_reason(format!("Failed to compute unstaged diff: {e}")))?
   };
 
   extract_file_diffs(&diff)
