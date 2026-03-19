@@ -8,6 +8,7 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useTerminalStore } from "../../stores/terminals";
+import { AgentIcon } from "../common/AgentIcon";
 
 // ─── Provider hook ───────────────────────────────────────────────────────────
 
@@ -167,12 +168,12 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
                     launching === provider.id && "opacity-50",
                   )}
                 >
-                  <span
-                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[9px] font-bold text-white"
-                    style={{ background: provider.color }}
-                  >
-                    {provider.icon}
-                  </span>
+                  <AgentIcon
+                    provider={provider.id}
+                    size={20}
+                    fallback={provider.icon}
+                    fallbackColor={provider.color}
+                  />
                   <span className="font-medium text-text-primary">{provider.name}</span>
                 </button>
               ))}

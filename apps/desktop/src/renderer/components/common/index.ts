@@ -1,3 +1,4 @@
+export { AgentIcon } from "./AgentIcon";
 export { ConfirmDialog } from "./ConfirmDialog";
 export { CronBuilder } from "./CronBuilder";
 export { EmptyState } from "./EmptyState";
