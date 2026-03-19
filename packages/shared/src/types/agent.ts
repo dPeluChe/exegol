@@ -7,6 +7,8 @@ export const AGENT_CLI_TYPES = [
   "goose",
   "amp",
   "kiro",
+  "kilocode",
+  "crush",
   "shell",
   "custom",
 ] as const;
@@ -54,6 +56,10 @@ export type AgentProviderCapabilities = {
   supportsResume: boolean;
   supportsRPC: boolean;
   supportsVision: boolean;
+  /** CLI accepts a prompt/task as a positional argument (e.g. `claude 'task'`) */
+  supportsPromptArg: boolean;
+  /** Flag to pass a prompt (e.g. `aider --message 'task'`). Empty = no flag support. */
+  promptFlag: string;
 };
 
 export type AgentProvider = {
@@ -67,6 +73,8 @@ export type AgentProvider = {
   color: string;
   capabilities: AgentProviderCapabilities;
   isBuiltin: boolean;
+  /** Whether this provider is shown in the launcher (default: true) */
+  enabled: boolean;
 };
 
 // ─── Messages ───────────────────────────────────────────────────────────────

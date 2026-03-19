@@ -56,7 +56,10 @@ export function buildSpawnContext(
 
 /**
  * Assemble the full CLI command string from the resolved config, context,
- * and task description.
+ * and task description. Respects provider capabilities:
+ * - supportsPromptArg: pass prompt as positional arg (`claude 'task'`)
+ * - promptFlag: pass via flag (`aider --message 'task'`)
+ * - neither: launch interactive only (`gemini`)
  */
 export function buildShellCommand(
   registry: AgentProviderRegistry,
@@ -64,24 +67,36 @@ export function buildShellCommand(
   cliConfig: { command: string; args: string[] },
   contextPrefix: string,
 ): string {
+  const provider = registry.get(agent.cliType);
+  const caps = provider?.capabilities;
   const cmdParts = [cliConfig.command, ...cliConfig.args];
-  // Only pass task description as argument if it looks like an actual task
-  // (not just the CLI name used as a label for quick-launch)
+
   const isQuickLaunch = registry.isQuickLaunchLabel(agent.taskDescription);
-  if (agent.taskDescription && !isQuickLaunch) {
-    // Prepend context to the task description
-    const fullPrompt = contextPrefix
+  const hasTask = agent.taskDescription && !isQuickLaunch;
+
+  // Build the full prompt (context + task description)
+  const fullPrompt = hasTask
+    ? contextPrefix
       ? `${contextPrefix}# Task\n\n${agent.taskDescription}`
-      : agent.taskDescription;
-    // Shell-escape the full prompt
-    const escaped = fullPrompt.replace(/'/g, "'\\''");
-    cmdParts.push(`'${escaped}'`);
-  } else {
-    // Quick-launch with context: inject context if available
-    if (contextPrefix) {
-      const escaped = contextPrefix.replace(/'/g, "'\\''");
-      cmdParts.push(`'${escaped}'`);
-    }
+      : agent.taskDescription
+    : contextPrefix || "";
+
+  if (!fullPrompt) {
+    // No prompt, no context — just launch the CLI
+    return cmdParts.join(" ");
   }
+
+  // Shell-escape the prompt
+  const escaped = fullPrompt.replace(/'/g, "'\\''");
+
+  if (caps?.promptFlag) {
+    // Use the specific flag (e.g. --message for Aider)
+    cmdParts.push(caps.promptFlag, `'${escaped}'`);
+  } else if (caps?.supportsPromptArg) {
+    // Pass as positional argument
+    cmdParts.push(`'${escaped}'`);
+  }
+  // else: CLI is interactive-only — don't pass any prompt, just launch
+
   return cmdParts.join(" ");
 }

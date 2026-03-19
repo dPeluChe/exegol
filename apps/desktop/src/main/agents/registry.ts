@@ -11,7 +11,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "claude",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command} '{task}'",
     icon: "C",
     color: "#D97706",
     capabilities: {
@@ -19,8 +19,11 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: true,
       supportsRPC: false,
       supportsVision: true,
+      supportsPromptArg: true,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
   },
   {
     id: "codex",
@@ -28,7 +31,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "codex",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command} '{task}'",
     icon: "Co",
     color: "#10B981",
     capabilities: {
@@ -36,8 +39,11 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: false,
+      supportsPromptArg: true,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
   },
   {
     id: "gemini",
@@ -45,7 +51,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "gemini",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command}",
     icon: "G",
     color: "#3B82F6",
     capabilities: {
@@ -53,8 +59,11 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: true,
+      supportsPromptArg: false,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
   },
   {
     id: "aider",
@@ -62,7 +71,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "aider",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command} --message '{task}'",
     icon: "A",
     color: "#8B5CF6",
     capabilities: {
@@ -70,8 +79,11 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: false,
+      supportsPromptArg: false,
+      promptFlag: "--message",
     },
     isBuiltin: true,
+    enabled: true,
   },
   {
     id: "goose",
@@ -79,7 +91,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "goose",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command} '{task}'",
     icon: "Go",
     color: "#F97316",
     capabilities: {
@@ -87,8 +99,11 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: false,
+      supportsPromptArg: true,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
   },
   {
     id: "opencode",
@@ -96,7 +111,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "opencode",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command}",
     icon: "OC",
     color: "#EC4899",
     capabilities: {
@@ -104,8 +119,11 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: false,
+      supportsPromptArg: false,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
   },
   {
     id: "amp",
@@ -113,7 +131,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "amp",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command} '{task}'",
     icon: "Am",
     color: "#06B6D4",
     capabilities: {
@@ -121,8 +139,11 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: false,
+      supportsPromptArg: true,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
   },
   {
     id: "kiro",
@@ -130,7 +151,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     command: "kiro",
     args: [],
     env: {},
-    argsTemplate: "{command} {task}",
+    argsTemplate: "{command}",
     icon: "K",
     color: "#84CC16",
     capabilities: {
@@ -138,8 +159,51 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: false,
+      supportsPromptArg: false,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
+  },
+  {
+    id: "kilocode",
+    name: "Kilo Code",
+    command: "kilocode",
+    args: [],
+    env: {},
+    argsTemplate: "{command}",
+    icon: "KC",
+    color: "#7C3AED",
+    capabilities: {
+      supportsWorktree: false,
+      supportsResume: false,
+      supportsRPC: false,
+      supportsVision: false,
+      supportsPromptArg: false,
+      promptFlag: "",
+    },
+    isBuiltin: true,
+    enabled: true,
+  },
+  {
+    id: "crush",
+    name: "Crush",
+    command: "crush",
+    args: [],
+    env: {},
+    argsTemplate: "{command} '{task}'",
+    icon: "Cr",
+    color: "#F472B6",
+    capabilities: {
+      supportsWorktree: false,
+      supportsResume: false,
+      supportsRPC: false,
+      supportsVision: false,
+      supportsPromptArg: true,
+      promptFlag: "",
+    },
+    isBuiltin: true,
+    enabled: true,
   },
   {
     id: "shell",
@@ -155,12 +219,16 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsResume: false,
       supportsRPC: false,
       supportsVision: false,
+      supportsPromptArg: false,
+      promptFlag: "",
     },
     isBuiltin: true,
+    enabled: true,
   },
 ];
 
 const CUSTOM_PROVIDERS_SETTINGS_KEY = "custom_providers";
+const PROVIDER_OVERRIDES_KEY = "provider_overrides";
 
 // ─── Registry Singleton ─────────────────────────────────────────────────────
 
@@ -183,22 +251,40 @@ export class AgentProviderRegistry {
     }
   }
 
-  /** Load custom providers from DB settings */
+  /** Load custom providers + built-in overrides from DB settings */
   loadFromDb(db: Database.Database): void {
     try {
-      const row = db
+      // Load custom providers
+      const customRow = db
         .prepare("SELECT value FROM settings WHERE key = ?")
         .get(CUSTOM_PROVIDERS_SETTINGS_KEY) as { value: string } | undefined;
-
-      if (row) {
-        const customs = JSON.parse(row.value) as AgentProvider[];
+      if (customRow) {
+        const customs = JSON.parse(customRow.value) as AgentProvider[];
         for (const provider of customs) {
           this.providers.set(provider.id, { ...provider, isBuiltin: false });
         }
         logger.info(`[Registry] Loaded ${customs.length} custom providers from DB`);
       }
+
+      // Load built-in overrides (args, enabled)
+      const overridesRow = db
+        .prepare("SELECT value FROM settings WHERE key = ?")
+        .get(PROVIDER_OVERRIDES_KEY) as { value: string } | undefined;
+      if (overridesRow) {
+        const overrides = JSON.parse(overridesRow.value) as Record<
+          string,
+          { args: string[]; enabled: boolean }
+        >;
+        for (const [id, override] of Object.entries(overrides)) {
+          const provider = this.providers.get(id);
+          if (provider) {
+            provider.args = override.args;
+            provider.enabled = override.enabled;
+          }
+        }
+      }
     } catch (err) {
-      logger.error("[Registry] Failed to load custom providers:", err);
+      logger.error("[Registry] Failed to load providers:", err);
     }
   }
 
@@ -208,6 +294,17 @@ export class AgentProviderRegistry {
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
       CUSTOM_PROVIDERS_SETTINGS_KEY,
       JSON.stringify(customs),
+    );
+    // Also save overrides for built-in providers (args, enabled)
+    const overrides: Record<string, { args: string[]; enabled: boolean }> = {};
+    for (const p of this.listBuiltin()) {
+      if (p.args.length > 0 || p.enabled === false) {
+        overrides[p.id] = { args: p.args, enabled: p.enabled };
+      }
+    }
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
+      PROVIDER_OVERRIDES_KEY,
+      JSON.stringify(overrides),
     );
   }
 
@@ -229,6 +326,19 @@ export class AgentProviderRegistry {
   /** List only custom providers */
   listCustom(): AgentProvider[] {
     return this.list().filter((p) => !p.isBuiltin);
+  }
+
+  /** Swap two providers by ID (for reordering). Persists to DB. */
+  swap(db: Database.Database, idA: string, idB: string): boolean {
+    const list = Array.from(this.providers.entries());
+    const indexA = list.findIndex(([id]) => id === idA);
+    const indexB = list.findIndex(([id]) => id === idB);
+    if (indexA === -1 || indexB === -1) return false;
+    // biome-ignore lint/style/noNonNullAssertion: bounds checked above
+    [list[indexA], list[indexB]] = [list[indexB]!, list[indexA]!];
+    this.providers = new Map(list);
+    this.saveCustomToDb(db);
+    return true;
   }
 
   /** Register a custom provider */

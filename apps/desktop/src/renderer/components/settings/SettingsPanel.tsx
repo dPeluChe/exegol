@@ -1,16 +1,7 @@
 import type { Settings } from "@exegol/shared";
-import { Button, cn } from "@exegol/ui";
+import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
-import {
-  ArrowLeft,
-  Key,
-  Keyboard,
-  Monitor,
-  RotateCcw,
-  Save,
-  Settings2,
-  Terminal,
-} from "lucide-react";
+import { ArrowLeft, Key, Keyboard, Monitor, Settings2, Terminal } from "lucide-react";
 import { useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
@@ -40,7 +31,6 @@ export function SettingsPanel() {
 
   // Derive initial form state from settings (Rule 1: derive, don't sync)
   const [form, setForm] = useState<Settings | null>(() => settings ?? null);
-  const [dirty, setDirty] = useState(false);
 
   // If settings loaded after initial render (async), initialize form from it
   if (settings && !form) {
@@ -55,75 +45,35 @@ export function SettingsPanel() {
     );
   }
 
+  // Auto-save on every change (General + Terminal tabs)
   const updateField = (updates: Partial<Settings>) => {
     setForm((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, ...updates };
-      // Auto-save on every change (fire-and-forget, errors shown in UI via mutation state)
       updateSettings.mutate(updated, {
         onError: (err) => console.error("[Settings] Auto-save failed:", err),
       });
       return updated;
     });
-    setDirty(true);
-  };
-
-  const handleSave = async () => {
-    if (!form) return;
-    await updateSettings.mutateAsync(form);
-    setDirty(false);
-  };
-
-  const handleReset = () => {
-    if (settings) {
-      setForm(settings);
-      setDirty(false);
-    }
   };
 
   return (
     <div className="flex h-full flex-col bg-bg-primary">
-      {/* Header with back button + title + save/reset */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setActiveView(activeProjectId ? "workspace" : "projects")}
-            className="flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </button>
-          <h1 className="text-base font-semibold text-text-primary">Settings</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {dirty && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleReset}
-              className="gap-1 text-[var(--text-secondary)]"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Reset
-            </Button>
-          )}
-          <Button
-            type="button"
-            size="sm"
-            onClick={handleSave}
-            disabled={!dirty || updateSettings.isPending}
-            className={cn("gap-1 text-white", dirty && "bg-accent")}
-          >
-            <Save className="h-3.5 w-3.5" />
-            {updateSettings.isPending ? "Saving..." : "Save"}
-          </Button>
-        </div>
+      {/* Header */}
+      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setActiveView(activeProjectId ? "workspace" : "projects")}
+          className="flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <h1 className="text-base font-semibold text-text-primary">Settings</h1>
       </div>
 
       {/* Body: vertical tabs on left + content on right */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Tab nav - left sidebar */}
+        {/* Tab nav */}
         <nav className="flex w-48 shrink-0 flex-col gap-0.5 border-r border-border bg-bg-secondary p-2">
           {TABS.map((tab) => (
             <button
@@ -143,23 +93,17 @@ export function SettingsPanel() {
           ))}
         </nav>
 
-        {/* Tab content - right area */}
+        {/* Tab content */}
         <div className="flex-1 overflow-auto p-6">
           {activeTab === "general" && <GeneralSettings settings={form} onChange={updateField} />}
-          {activeTab === "clis" && (
-            <CliSettings
-              clis={form.agentClis}
-              onChange={(clis) => updateField({ agentClis: clis })}
-            />
-          )}
+          {activeTab === "clis" && <CliSettings />}
           {activeTab === "terminal" && <TerminalSettings settings={form} onChange={updateField} />}
           {activeTab === "shortcuts" && <KeyboardShortcuts />}
           {activeTab === "apikeys" && <ApiKeysSettings />}
 
-          {/* Save error */}
           {updateSettings.isError && (
             <p className="mt-4 text-xs text-error">
-              Failed to save settings:{" "}
+              Failed to save:{" "}
               {updateSettings.error instanceof Error
                 ? updateSettings.error.message
                 : "Unknown error"}

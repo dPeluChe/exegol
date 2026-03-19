@@ -16,7 +16,7 @@ export const settingsSchema = z.object({
   agentClis: z.array(agentCliConfigSchema).default([]),
   globalHotkey: z.string().default("CommandOrControl+Shift+E"),
   terminalFontSize: z.number().int().min(8).max(32).default(14),
-  terminalFontFamily: z.string().default("JetBrains Mono, Menlo, Monaco, monospace"),
+  terminalFontFamily: z.string().default("Menlo, Monaco, monospace"),
 });
 
 export type SettingsSchema = z.infer<typeof settingsSchema>;

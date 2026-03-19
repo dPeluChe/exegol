@@ -1,5 +1,6 @@
-import type { AgentCliType } from "@exegol/shared";
+import type { AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   Code2,
@@ -16,7 +17,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent } from "../../hooks/use-trpc";
-import { trpcMutate } from "../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { type Pane, useWorkspaceStore } from "../../stores/workspace";
@@ -172,24 +173,6 @@ function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
 
-interface CliOption {
-  type: AgentCliType;
-  name: string;
-  short: string;
-  color: string;
-}
-
-const CLI_OPTIONS: CliOption[] = [
-  { type: "claude-code", name: "Claude Code", short: "C", color: "#D97706" },
-  { type: "codex", name: "Codex", short: "Co", color: "#10B981" },
-  { type: "gemini", name: "Gemini", short: "G", color: "#3B82F6" },
-  { type: "aider", name: "Aider", short: "A", color: "#8B5CF6" },
-  { type: "opencode", name: "OpenCode", short: "OC", color: "#EC4899" },
-  { type: "goose", name: "Goose", short: "Go", color: "#F97316" },
-  { type: "amp", name: "Amp", short: "Am", color: "#06B6D4" },
-  { type: "kiro", name: "Kiro", short: "K", color: "#84CC16" },
-];
-
 function EmptyPane({ paneId }: { paneId: string }) {
   const { projectId } = useProjectContext();
   const [launching, setLaunching] = useState<string | null>(null);
@@ -198,6 +181,12 @@ function EmptyPane({ paneId }: { paneId: string }) {
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<"full" | "compact" | "mini">("full");
+  const { data: providers } = useQuery({
+    queryKey: ["providers"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listProviders"),
+    staleTime: 60_000,
+  });
+  const cliOptions = (providers ?? []).filter((p) => p.id !== "shell" && p.enabled !== false);
 
   // Observe pane size for responsive layout
   useEffect(() => {
@@ -216,14 +205,14 @@ function EmptyPane({ paneId }: { paneId: string }) {
   }, []);
 
   const handleLaunchAgent = useCallback(
-    async (cli: CliOption) => {
+    async (cli: AgentProvider) => {
       if (!projectId) return;
-      setLaunching(cli.type);
+      setLaunching(cli.id);
       try {
         // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
         const agent = await trpcMutate<any>("agents.spawn", {
           projectId,
-          cliType: cli.type,
+          cliType: cli.id as AgentCliType,
           taskDescription: cli.name,
         });
 
@@ -329,22 +318,22 @@ function EmptyPane({ paneId }: { paneId: string }) {
 
       {/* Agent grid — responsive columns and sizes */}
       <div className={cn("grid w-full gap-1.5", gridCols, isMini ? "max-w-xs" : "max-w-sm")}>
-        {CLI_OPTIONS.map((cli) => (
+        {cliOptions.map((cli) => (
           <button
-            key={cli.type}
+            key={cli.id}
             type="button"
-            disabled={launching === cli.type}
+            disabled={launching === cli.id}
             onClick={() => handleLaunchAgent(cli)}
             className={cn(
               "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
               isMini ? "gap-0.5 p-1.5" : isCompact ? "gap-1 p-2" : "gap-1.5 p-2.5",
-              launching === cli.type && "opacity-50",
+              launching === cli.id && "opacity-50",
             )}
           >
             <AgentIcon
-              provider={cli.type}
+              provider={cli.id}
               size={iconSize}
-              fallback={cli.short}
+              fallback={cli.icon}
               fallbackColor={cli.color}
             />
             {!isMini && (

@@ -101,7 +101,7 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
     ? { top: rect.bottom + 4, left: rect.left, position: "fixed" as const }
     : { top: 0, left: 0, position: "fixed" as const, display: "none" as const };
 
-  const displayProviders = (providers ?? []).filter((p) => p.id !== "shell");
+  const displayProviders = (providers ?? []).filter((p) => p.id !== "shell" && p.enabled !== false);
 
   return (
     <>

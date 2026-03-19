@@ -39,8 +39,11 @@ export const agentRouter = router({
             supportsResume: z.boolean().default(false),
             supportsRPC: z.boolean().default(false),
             supportsVision: z.boolean().default(false),
+            supportsPromptArg: z.boolean().default(false),
+            promptFlag: z.string().default(""),
           })
           .default({}),
+        enabled: z.boolean().default(true),
       }),
     )
     .mutation(({ ctx, input }) => {
@@ -59,6 +62,49 @@ export const agentRouter = router({
       }
       return { success: true };
     }),
+
+  updateProviderArgs: publicProcedure
+    .input(z.object({ id: z.string(), args: z.array(z.string()) }))
+    .mutation(({ ctx, input }) => {
+      const registry = getProviderRegistry();
+      const provider = registry.get(input.id);
+      if (!provider) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Provider ${input.id} not found` });
+      }
+      // Update args in memory and persist
+      provider.args = input.args;
+      registry.saveCustomToDb(ctx.db);
+      return { success: true };
+    }),
+
+  toggleProviderEnabled: publicProcedure
+    .input(z.object({ id: z.string(), enabled: z.boolean() }))
+    .mutation(({ ctx, input }) => {
+      const registry = getProviderRegistry();
+      const provider = registry.get(input.id);
+      if (!provider) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Provider ${input.id} not found` });
+      }
+      provider.enabled = input.enabled;
+      registry.saveCustomToDb(ctx.db);
+      return { success: true };
+    }),
+
+  swapProviders: publicProcedure
+    .input(z.object({ idA: z.string(), idB: z.string() }))
+    .mutation(({ ctx, input }) => {
+      getProviderRegistry().swap(ctx.db, input.idA, input.idB);
+      return { success: true };
+    }),
+
+  resetProviderArgs: publicProcedure.mutation(({ ctx }) => {
+    const registry = getProviderRegistry();
+    for (const p of registry.list()) {
+      p.args = [];
+    }
+    registry.saveCustomToDb(ctx.db);
+    return { success: true };
+  }),
 
   recentSessions: publicProcedure
     .input(z.object({ limit: z.number().int().positive().optional() }).optional())

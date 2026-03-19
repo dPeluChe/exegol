@@ -119,6 +119,19 @@ app.whenReady().then(async () => {
   if (recovery.crashed > 0) {
     logger.info(`[Startup] Recovered ${recovery.crashed} crashed agent(s) from previous session`);
   }
+  // Clean up ANSI-contaminated memories from previous sessions
+  try {
+    const cleaned = getDb()
+      .prepare(
+        "DELETE FROM memories WHERE content LIKE '%' || X'1B' || '%' OR content LIKE '%' || X'0D' || '%'",
+      )
+      .run();
+    if (cleaned.changes > 0) {
+      logger.info(`[Startup] Cleaned ${cleaned.changes} ANSI-contaminated memories`);
+    }
+  } catch {
+    // Table may not exist yet
+  }
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();

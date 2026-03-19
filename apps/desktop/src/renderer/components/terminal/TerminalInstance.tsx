@@ -104,7 +104,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const { data: settings } = useSettings();
 
   const fontSize = settings?.terminalFontSize ?? 14;
-  const fontFamily = settings?.terminalFontFamily ?? "JetBrains Mono, Menlo, Monaco, monospace";
+  const fontFamily = settings?.terminalFontFamily ?? "Menlo, Monaco, monospace";
   const theme = settings?.theme ?? "dark";
   const isLight =
     theme === "light" ||
