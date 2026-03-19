@@ -6,12 +6,13 @@ import {
   Columns,
   Cpu,
   FolderTree,
+  GitBranch,
   Globe,
   RefreshCw,
   Rows,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -21,6 +22,7 @@ import { type Pane, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon, EmptyState, LoadingSpinner } from "../common";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { FileExplorer } from "../workspace/FileExplorer";
+import { GitPane } from "../workspace/GitPane";
 
 // ─── Pane Toolbar ───────────────────────────────────────────────────────────
 
@@ -178,6 +180,24 @@ function EmptyPane({ paneId }: { paneId: string }) {
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<"full" | "compact" | "mini">("full");
+
+  // Observe pane size for responsive layout
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const w = entry.contentRect.width;
+      const h = entry.contentRect.height;
+      if (w < 300 || h < 250) setSize("mini");
+      else if (w < 500 || h < 400) setSize("compact");
+      else setSize("full");
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const handleLaunchAgent = useCallback(
     async (cli: CliOption) => {
@@ -223,20 +243,46 @@ function EmptyPane({ paneId }: { paneId: string }) {
     updatePane(paneId, { type: "files" });
   }, [paneId, updatePane]);
 
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-5">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-bg-secondary">
-        <Cpu className="h-7 w-7 text-text-muted" />
-      </div>
-      <div className="text-center">
-        <h2 className="text-sm font-semibold text-text-primary">Launch an Agent</h2>
-        <p className="mt-1 max-w-xs text-[11px] text-text-muted">
-          Select an agent or open a browser pane.
-        </p>
-      </div>
+  const handleGit = useCallback(() => {
+    updatePane(paneId, { type: "git" });
+  }, [paneId, updatePane]);
 
-      {/* Agent grid */}
-      <div className="grid w-full max-w-sm grid-cols-4 gap-2 px-4">
+  const isMini = size === "mini";
+  const isCompact = size === "compact" || isMini;
+  const iconSize = isMini ? 18 : isCompact ? 22 : 28;
+  const gridCols = isMini ? "grid-cols-4" : isCompact ? "grid-cols-4" : "grid-cols-4";
+
+  return (
+    <div
+      ref={containerRef}
+      className="flex h-full flex-col items-center justify-center overflow-y-auto p-3"
+    >
+      {/* Header — hidden in mini */}
+      {!isMini && (
+        <div className="mb-3 flex shrink-0 flex-col items-center gap-2">
+          <div
+            className={cn(
+              "flex items-center justify-center rounded-2xl bg-bg-secondary",
+              isCompact ? "h-9 w-9" : "h-12 w-12",
+            )}
+          >
+            <Cpu className={cn("text-text-muted", isCompact ? "h-4 w-4" : "h-6 w-6")} />
+          </div>
+          <div className="text-center">
+            <h2
+              className={cn("font-semibold text-text-primary", isCompact ? "text-xs" : "text-sm")}
+            >
+              Launch an Agent
+            </h2>
+            {!isCompact && (
+              <p className="mt-0.5 text-[11px] text-text-muted">Select an agent or open a pane.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Agent grid — responsive columns and sizes */}
+      <div className={cn("grid w-full gap-1.5", gridCols, isMini ? "max-w-xs" : "max-w-sm")}>
         {CLI_OPTIONS.map((cli) => (
           <button
             key={cli.type}
@@ -244,39 +290,51 @@ function EmptyPane({ paneId }: { paneId: string }) {
             disabled={launching === cli.type}
             onClick={() => handleLaunchAgent(cli)}
             className={cn(
-              "flex flex-col items-center gap-1.5 rounded-lg border border-border bg-bg-secondary p-2.5 transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+              "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+              isMini ? "gap-0.5 p-1.5" : isCompact ? "gap-1 p-2" : "gap-1.5 p-2.5",
               launching === cli.type && "opacity-50",
             )}
           >
             <AgentIcon
               provider={cli.type}
-              size={28}
+              size={iconSize}
               fallback={cli.short}
               fallbackColor={cli.color}
             />
-            <span className="text-[9px] font-medium text-text-secondary">{cli.name}</span>
+            {!isMini && (
+              <span
+                className={cn(
+                  "font-medium text-text-secondary",
+                  isCompact ? "text-[8px]" : "text-[9px]",
+                )}
+              >
+                {cli.name}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Extra pane options */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleBrowser}
-          className="flex items-center gap-1.5 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-[11px] text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]"
-        >
-          <Globe className="h-3.5 w-3.5" />
-          Browser
-        </button>
-        <button
-          type="button"
-          onClick={handleFiles}
-          className="flex items-center gap-1.5 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-[11px] text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]"
-        >
-          <FolderTree className="h-3.5 w-3.5" />
-          Files
-        </button>
+      {/* Pane options — compact in small sizes */}
+      <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>
+        {[
+          { handler: handleBrowser, icon: Globe, label: "Browser" },
+          { handler: handleFiles, icon: FolderTree, label: "Files" },
+          { handler: handleGit, icon: GitBranch, label: "Git" },
+        ].map(({ handler, icon: PaneIcon, label }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={handler}
+            className={cn(
+              "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+              isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
+            )}
+          >
+            <PaneIcon className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
+            {!isMini && label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -377,6 +435,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
           <BrowserPane pane={pane} paneId={paneId} />
         )}
         {!pane.invalidReason && pane.type === "files" && <FilesPaneContent />}
+        {!pane.invalidReason && pane.type === "git" && <GitPane />}
         {!pane.invalidReason && pane.type === "empty" && <EmptyPane paneId={paneId} />}
         {!pane.invalidReason && pane.type === "terminal" && !pane.agentId && (
           <EmptyPane paneId={paneId} />

@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type PaneType = "terminal" | "browser" | "files" | "empty";
+export type PaneType = "terminal" | "browser" | "files" | "git" | "empty";
 
 export interface Pane {
   id: string;
@@ -375,7 +375,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         activeTabId: state.activeTabId,
         panes: state.panes,
       }),
-      // On rehydrate: clear invalidReason flags so panes get re-validated
+      // On rehydrate: clear invalid flags + collapse empty-only splits to single pane
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         const cleaned: Record<string, Pane> = {};
@@ -383,6 +383,22 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           const { invalidReason: _, ...rest } = pane;
           cleaned[id] = rest;
         }
+        state.panes = cleaned;
+
+        // Collapse tabs where ALL panes are empty → single empty pane
+        state.tabs = state.tabs.map((tab) => {
+          const paneIds = collectPaneIds(tab.layout);
+          const allEmpty = paneIds.every((pid) => cleaned[pid]?.type === "empty");
+          if (allEmpty && paneIds.length > 1) {
+            // Remove extra empty panes, keep only one
+            const keepId = paneIds[0] as string;
+            for (const pid of paneIds) {
+              if (pid !== keepId) delete cleaned[pid];
+            }
+            return { ...tab, layout: { type: "pane" as const, paneId: keepId } };
+          }
+          return tab;
+        });
         state.panes = cleaned;
       },
     },

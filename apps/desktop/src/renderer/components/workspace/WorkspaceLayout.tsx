@@ -16,15 +16,15 @@ function LayoutRenderer({ node, tabId }: LayoutRendererProps) {
   }
 
   return (
-    <PanelGroup direction={node.direction}>
+    <PanelGroup direction={node.direction} id={`group-${tabId}`}>
       {node.children.map((child, i) => {
-        const key = child.type === "pane" ? child.paneId : `split-${tabId}-${i}`;
+        const panelId = child.type === "pane" ? child.paneId : `split-${tabId}-${i}`;
         return (
-          <Fragment key={key}>
+          <Fragment key={panelId}>
             {i > 0 && (
               <PanelResizeHandle className="data-[resize-handle-state=hover]:bg-accent/50 data-[resize-handle-state=drag]:bg-accent bg-border transition-colors data-[panel-group-direction=horizontal]:w-px data-[panel-group-direction=vertical]:h-px" />
             )}
-            <Panel defaultSize={node.sizes[i] ?? 50} minSize={10}>
+            <Panel id={panelId} order={i} defaultSize={node.sizes[i] ?? 50} minSize={10}>
               <LayoutRenderer node={child} tabId={tabId} />
             </Panel>
           </Fragment>

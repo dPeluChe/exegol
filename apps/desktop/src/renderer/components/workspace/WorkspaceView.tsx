@@ -1,21 +1,12 @@
 import { useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
-import { ActivitySection } from "./sections/ActivitySection";
 import { AgentsSection } from "./sections/AgentsSection";
-import { DiffSection } from "./sections/DiffSection";
 import { MemorySection } from "./sections/MemorySection";
-import { MessagesSection } from "./sections/MessagesSection";
-import { OplogSection } from "./sections/OplogSection";
-import { PromptsSection } from "./sections/PromptsSection";
-import { QueueSection } from "./sections/QueueSection";
-import { ResourcesSection } from "./sections/ResourcesSection";
-import { SchedulerSection } from "./sections/SchedulerSection";
+import { PromptsSkillsSection } from "./sections/PromptsSkillsSection";
+import { ResourcesTokensSection } from "./sections/ResourcesTokensSection";
 import { ScoringSection } from "./sections/ScoringSection";
-import { SearchSection } from "./sections/SearchSection";
-import { SkillsSection } from "./sections/SkillsSection";
 import { TasksSection } from "./sections/TasksSection";
-import { TokensSection } from "./sections/TokensSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
 
 export function WorkspaceView() {
@@ -42,26 +33,20 @@ export function WorkspaceView() {
 
   return (
     <div className="flex h-full flex-col bg-bg-primary">
-      {/* Section tabs at top */}
       <WorkspaceTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
-      {/* Section content */}
       <div className="flex-1 overflow-hidden">
+        {/* Agents — workspace pane system */}
         {activeSection === "agents" && <AgentsSection />}
+
+        {/* Project sub-tabs */}
         {activeSection === "tasks" && <TasksSection />}
-        {activeSection === "prompts" && <PromptsSection />}
-        {activeSection === "diff" && <DiffSection />}
-        {activeSection === "oplog" && <OplogSection />}
-        {activeSection === "scheduler" && <SchedulerSection />}
-        {activeSection === "scoring" && <ScoringSection />}
-        {activeSection === "skills" && <SkillsSection />}
+        {activeSection === "prompts-skills" && <PromptsSkillsSection />}
         {activeSection === "memory" && <MemorySection />}
-        {activeSection === "messages" && <MessagesSection />}
-        {activeSection === "queue" && <QueueSection />}
-        {activeSection === "search" && <SearchSection />}
-        {activeSection === "tokens" && <TokensSection />}
-        {activeSection === "resources" && <ResourcesSection />}
-        {activeSection === "activity" && <ActivitySection />}
+
+        {/* Monitor sub-tabs */}
+        {activeSection === "resources-tokens" && <ResourcesTokensSection />}
+        {activeSection === "scoring" && <ScoringSection />}
       </div>
     </div>
   );

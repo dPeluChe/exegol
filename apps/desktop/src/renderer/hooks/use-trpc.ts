@@ -77,6 +77,12 @@ export function useAgent(id: string | null) {
     queryFn: () => trpcInvoke<Agent>("agents.get", { id }),
     enabled: !!id,
     refetchInterval: 10_000, // Reduced: push events (T17) handle real-time updates
+    retry: (failureCount, error) => {
+      // Don't retry if agent was deleted — prevents console spam from stale workspace panes
+      if (error && typeof error === "object" && "code" in error && error.code === "NOT_FOUND")
+        return false;
+      return failureCount < 2;
+    },
   });
 }
 
