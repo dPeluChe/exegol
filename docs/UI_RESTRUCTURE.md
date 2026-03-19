@@ -91,33 +91,51 @@ Resources Overview
 
 ## Implementation Phases
 
-### Phase 1 — Tab restructuring
-- WorkspaceTabs: 15 → 3 main tabs
-- WorkspaceView: sub-tab routing
-- New ProjectView with internal tab state
-- New MonitorView with internal tab state
+### Phase 1 — Tab restructuring ✅
+- WorkspaceTabs: 15 → 3 main tabs (Agents, Project, Monitor)
+- WorkspaceView: sub-tab routing with always-mounted Agents
+- PromptsSkillsSection, ResourcesTokensSection (merged)
+- GitPane (Diff + Oplog toggle, new pane type)
+- Responsive EmptyPane (3 breakpoints)
+- Agent cleanup on close (pane/tab/Cmd+W)
 
-### Phase 2 — Merge components
-- PromptsSkillsSection (merge Prompts + Skills with toggle)
-- ResourcesTokensSection (merge Resources + Tokens)
-- DiffOplog into Git pane (merge Diff + Oplog)
+### Phase 2 — Settings overhaul ✅
+- CliSettings: cards grid, YOLO/Active toggles, registry-connected
+- GeneralSettings: IDE cards, theme buttons, Kbd visual hotkeys
+- TerminalSettings: font detection, recommended fonts list
+- All launchers read from provider registry (enabled filter)
 
-### Phase 3 — Search modal
-- Cmd+K global shortcut
-- SearchModal component (spotlight-style overlay)
-- Remove Search tab
+### Phase 3 — Activity to sidebar
+- Move ActivitySection content to sidebar as collapsible feed
+- Show last 5 events, expandable
+- Remove standalone Activity section from workspace
 
-### Phase 4 — Activity to sidebar
-- ActivityFeed sidebar section
-- Remove Activity tab
+### Phase 4 — Git pane: stage + commit + push
+- File list with staged/unstaged toggle
+- Stage individual files or all
+- Commit message input + commit button
+- Push button with remote status
+- Oplog section preserved (agent operations + undo)
 
-### Phase 5 — Git pane type
-- New pane type "git" in workspace store
-- GitPane component: file list + diff + stage + commit + oplog
-- Openable from empty pane grid or sidebar
+### Phase 5 — Project run commands
+- Detect run scripts from package.json (dev, build, test, lint)
+- Quick-run buttons in project sidebar or Project tab
+- Port detection integration (show which port after `npm run dev`)
+- Stop running processes
 
-### Phase 6 — Tasks Kanban (biggest change)
-- Parse TODO.md as kanban source
+### Phase 6 — Cmd+K Search modal
+- Spotlight-style overlay (global shortcut)
+- Search across: scrollback, prompts, tasks, memories
+- Results with entity type icons + snippet preview
+- Navigate to result (open pane, scroll to match)
+
+### Phase 7 — Tasks Kanban
+- Parse TODO.md as kanban source (Backlog → In Progress → Done)
 - Card renderer with drag-and-drop
-- Assign → worktree + agent spawn pipeline
+- Assign task → create worktree + spawn agent
 - Queue/Messages integrated as execution layer
+
+### Phase 8 — Bundle Nerd Font
+- Include MesloLGS NF in app assets (~1MB)
+- @font-face in CSS, always available
+- Terminal icons work out of the box
