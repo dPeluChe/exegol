@@ -141,6 +141,23 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     },
     isBuiltin: true,
   },
+  {
+    id: "shell",
+    name: "Terminal",
+    command: "__shell__",
+    args: [],
+    env: {},
+    argsTemplate: "",
+    icon: ">_",
+    color: "#6B7280",
+    capabilities: {
+      supportsWorktree: false,
+      supportsResume: false,
+      supportsRPC: false,
+      supportsVision: false,
+    },
+    isBuiltin: true,
+  },
 ];
 
 const CUSTOM_PROVIDERS_SETTINGS_KEY = "custom_providers";

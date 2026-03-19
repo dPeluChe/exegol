@@ -7,6 +7,7 @@ export const AGENT_CLI_TYPES = [
   "goose",
   "amp",
   "kiro",
+  "shell",
   "custom",
 ] as const;
 export type AgentCliType = (typeof AGENT_CLI_TYPES)[number];

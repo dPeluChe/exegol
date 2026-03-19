@@ -133,43 +133,57 @@ export class AgentManager {
       }
     }
 
-    // ── Build context + command + API keys ──────────────────────────────
-    const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
-    const fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
-    const apiKeyEnv = buildApiKeyEnv(db);
-
-    // Capture initial HEAD snapshot for oplog
-    if (coreRust) {
-      try {
-        const snapshot = coreRust.getRepoSnapshot(cwd);
-        this.initialSnapshots.set(agent.id, {
-          headSha: snapshot.headSha,
-          cwd,
-          projectId: agent.projectId,
-        });
-      } catch {
-        /* Non-fatal */
-      }
-    }
-
-    // Spawn through the user's login shell so PATH, nvm, etc. are resolved
+    // ── Plain shell mode (no agent CLI, just $SHELL) ───────────────────
+    const isPlainShell = agent.cliType === "shell";
     const userShell = process.env.SHELL || "/bin/zsh";
-    logger.info("[AgentManager] Spawning:", {
-      userShell,
-      fullCommand,
-      cwd,
-      shellExists: require("node:fs").existsSync(userShell),
-    });
-    const proc = pty.spawn(userShell, ["-ilc", fullCommand], {
-      name: "xterm-256color",
-      cols: DEFAULT_PTY_COLS,
-      rows: DEFAULT_PTY_ROWS,
-      cwd,
-      env: { ...process.env, ...apiKeyEnv, ...cliConfig.env, TERM: "xterm-256color" } as Record<
-        string,
-        string
-      >,
-    });
+
+    let proc: IPty;
+    if (isPlainShell) {
+      // Interactive login shell in project directory — no command, no context injection
+      proc = pty.spawn(userShell, ["-il"], {
+        name: "xterm-256color",
+        cols: DEFAULT_PTY_COLS,
+        rows: DEFAULT_PTY_ROWS,
+        cwd,
+        env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>,
+      });
+    } else {
+      // ── Build context + command + API keys ──────────────────────────────
+      const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
+      const fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
+      const apiKeyEnv = buildApiKeyEnv(db);
+
+      // Capture initial HEAD snapshot for oplog
+      if (coreRust) {
+        try {
+          const snapshot = coreRust.getRepoSnapshot(cwd);
+          this.initialSnapshots.set(agent.id, {
+            headSha: snapshot.headSha,
+            cwd,
+            projectId: agent.projectId,
+          });
+        } catch {
+          /* Non-fatal */
+        }
+      }
+
+      logger.info("[AgentManager] Spawning:", {
+        userShell,
+        fullCommand,
+        cwd,
+        shellExists: require("node:fs").existsSync(userShell),
+      });
+      proc = pty.spawn(userShell, ["-ilc", fullCommand], {
+        name: "xterm-256color",
+        cols: DEFAULT_PTY_COLS,
+        rows: DEFAULT_PTY_ROWS,
+        cwd,
+        env: { ...process.env, ...apiKeyEnv, ...cliConfig.env, TERM: "xterm-256color" } as Record<
+          string,
+          string
+        >,
+      });
+    }
 
     this.processes.set(agent.id, proc);
     setAgentPid(db, agent.id, proc.pid);

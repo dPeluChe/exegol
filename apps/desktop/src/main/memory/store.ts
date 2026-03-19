@@ -7,6 +7,7 @@
 import type { MemoryCategory, MemoryCreate, MemoryEntry } from "@exegol/shared";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
+import { stripAnsi } from "../agents/status-parser";
 import { nanoid } from "../db/queries/helpers";
 
 export type { MemoryCategory, MemoryCreate, MemoryEntry };
@@ -180,7 +181,7 @@ export function buildMemoryContext(memories: MemoryEntry[]): string {
   const sections: string[] = [];
   for (const [category, entries] of grouped) {
     const label = categoryLabels[category] ?? category;
-    const items = entries.map((e) => `- ${e.content}`).join("\n");
+    const items = entries.map((e) => `- ${stripAnsi(e.content)}`).join("\n");
     sections.push(`### ${label}\n${items}`);
   }
 

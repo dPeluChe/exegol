@@ -31,20 +31,22 @@ export function WorkspaceView() {
     );
   }
 
+  const isAgents = activeSection === "agents";
+
   return (
     <div className="flex h-full flex-col bg-bg-primary">
       <WorkspaceTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
       <div className="flex-1 overflow-hidden">
-        {/* Agents — workspace pane system */}
-        {activeSection === "agents" && <AgentsSection />}
+        {/* Agents: always mounted, hidden via CSS to preserve xterm.js terminals */}
+        <div className={isAgents ? "h-full" : "hidden"}>
+          <AgentsSection />
+        </div>
 
-        {/* Project sub-tabs */}
+        {/* Other sections: conditionally rendered (no terminal state to preserve) */}
         {activeSection === "tasks" && <TasksSection />}
         {activeSection === "prompts-skills" && <PromptsSkillsSection />}
         {activeSection === "memory" && <MemorySection />}
-
-        {/* Monitor sub-tabs */}
         {activeSection === "resources-tokens" && <ResourcesTokensSection />}
         {activeSection === "scoring" && <ScoringSection />}
       </div>

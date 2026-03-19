@@ -11,6 +11,7 @@
 
 import type { MemoryCategory } from "@exegol/shared";
 import type Database from "libsql";
+import { stripAnsi } from "../agents/status-parser";
 import { logger } from "../lib/logger";
 import { createMemory } from "./store";
 
@@ -128,8 +129,11 @@ interface ExtractedMemory {
 export function extractFromScrollback(scrollback: string): ExtractedMemory[] {
   const results: ExtractedMemory[] = [];
 
+  // Strip ANSI escape codes before processing (terminal colors, cursor movements)
+  const cleanedScrollback = stripAnsi(scrollback);
+
   // Process line by line to find matching patterns
-  const lines = scrollback.split("\n");
+  const lines = cleanedScrollback.split("\n");
   for (const line of lines) {
     if (line.length < 10 || line.length > 500) continue;
 

@@ -10,6 +10,7 @@ import {
   Globe,
   RefreshCw,
   Rows,
+  Terminal,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -247,6 +248,36 @@ function EmptyPane({ paneId }: { paneId: string }) {
     updatePane(paneId, { type: "git" });
   }, [paneId, updatePane]);
 
+  const handleShell = useCallback(async () => {
+    if (!projectId) return;
+    setLaunching("shell");
+    try {
+      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+      const agent = await trpcMutate<any>("agents.spawn", {
+        projectId,
+        cliType: "shell",
+        taskDescription: "Terminal",
+      });
+      addAgent({
+        id: agent.id,
+        projectId,
+        cliType: agent.cliType,
+        status: agent.status,
+        currentStep: agent.currentStep,
+        taskDescription: agent.taskDescription,
+        branchName: null,
+        tokenUsage: { input: 0, output: 0, cost: 0 },
+        startedAt: agent.startedAt,
+      });
+      createTerminal(agent.id);
+      updatePane(paneId, { type: "terminal", agentId: agent.id });
+    } catch (err) {
+      console.error("[EmptyPane] Shell spawn failed:", err);
+    } finally {
+      setLaunching(null);
+    }
+  }, [projectId, paneId, addAgent, createTerminal, updatePane]);
+
   const isMini = size === "mini";
   const isCompact = size === "compact" || isMini;
   const iconSize = isMini ? 18 : isCompact ? 22 : 28;
@@ -318,6 +349,7 @@ function EmptyPane({ paneId }: { paneId: string }) {
       {/* Pane options — compact in small sizes */}
       <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>
         {[
+          { handler: handleShell, icon: Terminal, label: "Terminal" },
           { handler: handleBrowser, icon: Globe, label: "Browser" },
           { handler: handleFiles, icon: FolderTree, label: "Files" },
           { handler: handleGit, icon: GitBranch, label: "Git" },
