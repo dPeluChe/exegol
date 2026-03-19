@@ -1,28 +1,11 @@
 import { cn } from "@exegol/ui";
 import { useThemeValue } from "../../hooks/use-theme";
 
-// ─── SVG imports (bundled locally, no network) ──────────────────────────────
+// ─── SVG URL resolution (Vite-compatible for Electron) ──────────────────────
 
-import antigravity from "../../assets/icons/antigravity.svg";
-import claude from "../../assets/icons/claude.svg";
-import gemini from "../../assets/icons/gemini.svg";
-import ghostty from "../../assets/icons/ghostty.svg";
-// Light/dark pairs
-import kilocodeDark from "../../assets/icons/kilocode-dark.svg";
-import kilocodeLight from "../../assets/icons/kilocode-light.svg";
-import mcpDark from "../../assets/icons/mcp-dark.svg";
-import mcpLight from "../../assets/icons/mcp-light.svg";
-import ollamaDark from "../../assets/icons/ollama-dark.svg";
-import ollamaLight from "../../assets/icons/ollama-light.svg";
-import openaiDark from "../../assets/icons/openai-dark.svg";
-import openaiLight from "../../assets/icons/openai-light.svg";
-import opencodeDark from "../../assets/icons/opencode-dark.svg";
-import opencodeLight from "../../assets/icons/opencode-light.svg";
-import openrouterDark from "../../assets/icons/openrouter-dark.svg";
-import openrouterLight from "../../assets/icons/openrouter-light.svg";
-import vscode from "../../assets/icons/vscode.svg";
-import windsurfDark from "../../assets/icons/windsurf-dark.svg";
-import windsurfLight from "../../assets/icons/windsurf-light.svg";
+function iconUrl(name: string): string {
+  return new URL(`../../assets/icons/${name}`, import.meta.url).href;
+}
 
 // ─── Icon registry ──────────────────────────────────────────────────────────
 
@@ -31,35 +14,43 @@ interface IconEntry {
   dark: string;
 }
 
-/** Map of provider/tool IDs to their SVG icon paths (light and dark variants). */
-const ICON_MAP: Record<string, IconEntry | string> = {
+type IconDef = string | { light: string; dark: string };
+
+function single(name: string): string {
+  return iconUrl(name);
+}
+
+function pair(lightName: string, darkName: string): IconEntry {
+  return { light: iconUrl(lightName), dark: iconUrl(darkName) };
+}
+
+/** Map of provider/tool IDs to their SVG icon URLs (light and dark variants). */
+const ICON_MAP: Record<string, IconDef> = {
   // Agent CLIs
-  "claude-code": claude,
-  claude: claude,
-  codex: { light: openaiLight, dark: openaiDark },
-  openai: { light: openaiLight, dark: openaiDark },
-  gemini: gemini,
-  aider: antigravity, // Fallback — no official SVG available
-  goose: ghostty, // Fallback — no official SVG available
-  opencode: { light: opencodeLight, dark: opencodeDark },
-  windsurf: { light: windsurfLight, dark: windsurfDark },
-  kilocode: { light: kilocodeLight, dark: kilocodeDark },
-  ollama: { light: ollamaLight, dark: ollamaDark },
+  "claude-code": single("claude.svg"),
+  claude: single("claude.svg"),
+  codex: pair("openai-light.svg", "openai-dark.svg"),
+  openai: pair("openai-light.svg", "openai-dark.svg"),
+  gemini: single("gemini.svg"),
+  aider: single("antigravity.svg"),
+  goose: single("ghostty.svg"),
+  opencode: pair("opencode-light.svg", "opencode-dark.svg"),
+  windsurf: pair("windsurf-light.svg", "windsurf-dark.svg"),
+  kilocode: pair("kilocode-light.svg", "kilocode-dark.svg"),
+  ollama: pair("ollama-light.svg", "ollama-dark.svg"),
 
   // IDEs
-  vscode: vscode,
-  cursor: { light: openaiLight, dark: openaiDark }, // TODO: add cursor.svg when available
-  zed: ghostty, // TODO: add zed.svg when available
+  vscode: single("vscode.svg"),
 
   // Providers (for API key settings)
-  anthropic: claude,
-  google: gemini,
+  anthropic: single("claude.svg"),
+  google: single("gemini.svg"),
 
   // MCP
-  mcp: { light: mcpLight, dark: mcpDark },
+  mcp: pair("mcp-light.svg", "mcp-dark.svg"),
 
   // Routing
-  openrouter: { light: openrouterLight, dark: openrouterDark },
+  openrouter: pair("openrouter-light.svg", "openrouter-dark.svg"),
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
