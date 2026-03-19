@@ -18,7 +18,7 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { type Pane, useWorkspaceStore } from "../../stores/workspace";
-import { EmptyState, LoadingSpinner } from "../common";
+import { AgentIcon, EmptyState, LoadingSpinner } from "../common";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { FileExplorer } from "../workspace/FileExplorer";
 
@@ -248,12 +248,12 @@ function EmptyPane({ paneId }: { paneId: string }) {
               launching === cli.type && "opacity-50",
             )}
           >
-            <span
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[10px] font-bold text-white"
-              style={{ background: cli.color }}
-            >
-              {cli.short}
-            </span>
+            <AgentIcon
+              provider={cli.type}
+              size={28}
+              fallback={cli.short}
+              fallbackColor={cli.color}
+            />
             <span className="text-[9px] font-medium text-text-secondary">{cli.name}</span>
           </button>
         ))}

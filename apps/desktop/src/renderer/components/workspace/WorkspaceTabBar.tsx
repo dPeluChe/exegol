@@ -7,6 +7,7 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
+import { AgentIcon } from "../common/AgentIcon";
 
 // ─── CLI Agent definitions ──────────────────────────────────────────────────
 
@@ -241,7 +242,13 @@ function QuickLaunchBar() {
             (e.currentTarget as HTMLElement).style.background = "";
           }}
         >
-          {cli.short}
+          <AgentIcon
+            provider={cli.type}
+            size={14}
+            fallback={cli.short}
+            fallbackColor={cli.color}
+            className="rounded-full"
+          />
         </button>
       ))}
     </div>
