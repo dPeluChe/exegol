@@ -373,6 +373,9 @@ function Column({
   onAdd,
   onDropTask,
   onOpenTask,
+  isAdding,
+  onAddSubmit,
+  onAddCancel,
 }: {
   column: TaskColumn;
   tasks: TaskItem[];
@@ -384,6 +387,9 @@ function Column({
   onAdd: (column: TaskColumn) => void;
   onDropTask: (taskLine: number, fromColumn: TaskColumn, toColumn: TaskColumn) => void;
   onOpenTask: (task: TaskItem) => void;
+  isAdding: boolean;
+  onAddSubmit: (text: string, tags: string[]) => void;
+  onAddCancel: () => void;
 }) {
   const cfg = COLUMN_CONFIG[column];
   const Icon = cfg.icon;
@@ -482,9 +488,10 @@ function Column({
                 nextColumn={nextCol}
               />
             ))}
-            {tasks.length === 0 && (
+            {tasks.length === 0 && !isAdding && (
               <p className="py-4 text-center text-[10px] italic text-text-muted">No tasks</p>
             )}
+            {isAdding && <AddTaskInline onAdd={onAddSubmit} onCancel={onAddCancel} />}
           </div>
         </ScrollArea>
       )}
@@ -583,6 +590,14 @@ export function TasksSection() {
   const board: TaskBoard | null =
     fileData && filePath ? parseTaskBoard(fileData.content, filePath) : null;
 
+  // Compute display columns early (needed by handleToggle)
+  const displayColumns = (() => {
+    const core: TaskColumn[] = ["backlog", "todo", "in-progress", "validated", "done"];
+    if (!board) return core;
+    const extra = board.columnOrder.filter((c) => !core.includes(c));
+    return [...core, ...extra];
+  })();
+
   // Auto-detect task files
   useMountEffect(() => {
     if (!project || filePath || autoDetectDone || probeRan.current) return;
@@ -621,9 +636,26 @@ export function TasksSection() {
   const handleToggle = useCallback(
     (task: TaskItem) => {
       if (!fileData) return;
-      writeAndRefresh(toggleTask(fileData.content, task.line));
+      // Toggle = advance to next column in the flow
+      const colIndex = displayColumns.indexOf(task.column);
+      const nextCol = displayColumns[colIndex + 1];
+      if (nextCol && !task.completed) {
+        // Move forward: backlog→todo→in-progress→validated→done
+        writeAndRefresh(moveTask(fileData.content, task.line, nextCol));
+      } else if (task.completed) {
+        // If already completed, uncheck and move back to previous column
+        const prevCol = displayColumns[colIndex - 1];
+        if (prevCol) {
+          writeAndRefresh(moveTask(fileData.content, task.line, prevCol));
+        } else {
+          writeAndRefresh(toggleTask(fileData.content, task.line));
+        }
+      } else {
+        // Last column — just toggle the checkbox
+        writeAndRefresh(toggleTask(fileData.content, task.line));
+      }
     },
-    [fileData, writeAndRefresh],
+    [fileData, writeAndRefresh, displayColumns],
   );
 
   const handleMove = useCallback(
@@ -759,10 +791,7 @@ export function TasksSection() {
 
   if (!board) return null;
 
-  // Always show core columns + any extras from the file
-  const CORE_COLUMNS: TaskColumn[] = ["backlog", "todo", "in-progress", "validated", "done"];
-  const extraColumns = board.columnOrder.filter((c) => !CORE_COLUMNS.includes(c));
-  const displayColumns = [...CORE_COLUMNS, ...extraColumns];
+  // displayColumns computed above (before guards, for handleToggle access)
 
   const totalTasks = Object.values(board.columns).flat().length;
   const doneTasks = board.columns.done.length + board.columns.archived.length;
@@ -775,16 +804,33 @@ export function TasksSection() {
         <span className="truncate text-[10px] text-text-muted" title={filePath}>
           {filePath.split("/").pop()}
         </span>
-        <div className="flex items-center gap-1.5">
-          <div className="h-1 w-20 overflow-hidden rounded-full bg-bg-tertiary">
+        {/* Column counts */}
+        <div className="flex items-center gap-1">
+          {displayColumns.map((col) => {
+            const count = board.columns[col].length;
+            if (count === 0) return null;
+            const cfg = COLUMN_CONFIG[col];
+            return (
+              <span
+                key={col}
+                className={cn("rounded px-1.5 py-0.5 text-[8px] font-medium", cfg.color)}
+                title={cfg.label}
+              >
+                {cfg.label.slice(0, 3)} {count}
+              </span>
+            );
+          })}
+          <span className="text-[8px] text-text-muted">· {totalTasks} total</span>
+        </div>
+        {/* Progress bar */}
+        <div className="flex items-center gap-1">
+          <div className="h-1 w-16 overflow-hidden rounded-full bg-bg-tertiary">
             <div
               className="h-full rounded-full bg-accent transition-all"
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className="text-[9px] tabular-nums text-text-muted">
-            {doneTasks}/{totalTasks}
-          </span>
+          <span className="text-[8px] tabular-nums text-text-muted">{progress}%</span>
         </div>
         {doneTasks > 0 && (
           <Button
@@ -825,19 +871,15 @@ export function TasksSection() {
             onAdd={(c) => setAddingToColumn(c)}
             onDropTask={handleDropTask}
             onOpenTask={(t) => setSelectedTask(t)}
+            isAdding={addingToColumn === col}
+            onAddSubmit={(text, tags) => handleAdd(text, tags, col)}
+            onAddCancel={() => setAddingToColumn(null)}
           />
         ))}
       </div>
 
       {/* Inline add task */}
-      {addingToColumn && (
-        <div className="border-t border-border bg-bg-secondary px-3 py-2">
-          <AddTaskInline
-            onAdd={(text, tags) => handleAdd(text, tags, addingToColumn)}
-            onCancel={() => setAddingToColumn(null)}
-          />
-        </div>
-      )}
+      {/* Inline add now renders inside the Column component */}
 
       {/* Task detail modal */}
       {selectedTask && filePath && (
