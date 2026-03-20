@@ -23,6 +23,7 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useTerminalStore } from "../../stores/terminals";
+import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
 import { AgentLauncher } from "../agents/AgentLauncher";
 
 // ─── Agent Mini Card ──────────────────────────────────────────────────────────
@@ -126,7 +127,25 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
     >
       <button
         type="button"
-        onClick={() => setFocusedAgent(agent.id)}
+        onClick={() => {
+          setFocusedAgent(agent.id);
+          // Navigate to the workspace tab containing this agent
+          const ws = useWorkspaceStore.getState();
+          for (const tab of ws.tabs) {
+            const paneIds = collectPaneIds(tab.layout);
+            for (const pid of paneIds) {
+              if (ws.panes[pid]?.agentId === agent.id) {
+                ws.setActiveTab(tab.id);
+                ws.setFocusedPane(pid);
+                // Ensure we're on the Agents view
+                window.dispatchEvent(
+                  new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
+                );
+                return;
+              }
+            }
+          }
+        }}
         className="flex flex-1 items-center gap-1.5 text-left"
       >
         <span

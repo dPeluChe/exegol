@@ -3,7 +3,7 @@ import { useThemeValue } from "../../hooks/use-theme";
 
 // ─── Load all SVG icons via Vite glob (static analysis at build time) ───────
 
-const iconModules = import.meta.glob("../../assets/icons/*.{svg,png}", {
+const iconModules = import.meta.glob("../../assets/icons/*.{svg,png,jpg}", {
   eager: true,
   query: "?url",
   import: "default",
@@ -45,6 +45,7 @@ function buildMap(): Record<string, IconDef> {
   set("openai", p("openai-light.svg", "openai-dark.svg"));
   set("gemini", s("gemini.svg"));
   set("crush", s("crush.png"));
+  set("factory-droid", s("factory-droid.jpg"));
   // aider, goose: no official SVG yet — use text fallback
   set("opencode", p("opencode-light.svg", "opencode-dark.svg"));
   set("windsurf", p("windsurf-light.svg", "windsurf-dark.svg"));

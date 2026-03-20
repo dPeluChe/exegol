@@ -414,7 +414,7 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
     return <LoadingSpinner label="Loading agent..." className="h-full" />;
   }
 
-  return <TerminalPanel agentId={agentId} />;
+  return <TerminalPanel agentId={agentId} paneId={paneId} />;
 }
 
 // ─── Files Pane ─────────────────────────────────────────────────────────

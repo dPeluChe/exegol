@@ -9,6 +9,7 @@ export const AGENT_CLI_TYPES = [
   "kiro",
   "kilocode",
   "crush",
+  "factory-droid",
   "shell",
   "custom",
 ] as const;
@@ -54,6 +55,8 @@ export type AgentCreate = {
 export type AgentProviderCapabilities = {
   supportsWorktree: boolean;
   supportsResume: boolean;
+  /** Flag to resume the last session (e.g. `--continue`, `--resume`). Empty = no resume. */
+  resumeFlag: string;
   supportsRPC: boolean;
   supportsVision: boolean;
   /** CLI accepts a prompt/task as a positional argument (e.g. `claude 'task'`) */

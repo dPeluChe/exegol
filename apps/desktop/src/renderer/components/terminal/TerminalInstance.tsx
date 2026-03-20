@@ -17,6 +17,8 @@ import { useTerminalStore } from "../../stores/terminals";
 export interface TerminalInstanceHandle {
   /** Serialize the terminal buffer state (ANSI escape sequences + cursor/attribute state). */
   serialize: () => string | null;
+  /** Force re-fit + full repaint (call when tab becomes visible). */
+  refit: () => void;
 }
 
 interface TerminalInstanceProps {
@@ -85,7 +87,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const fitAddonRef = useRef<FitAddon | null>(null);
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
 
-  // Expose serialize method to parent via ref
+  // Expose serialize + refit methods to parent via ref
   useImperativeHandle(ref, () => ({
     serialize: () => {
       const addon = serializeAddonRef.current;
@@ -95,6 +97,18 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         return addon.serialize({ excludeAltBuffer: true, excludeModes: true });
       } catch {
         return null;
+      }
+    },
+    /** Force re-fit + full repaint (call when tab becomes visible) */
+    refit: () => {
+      const fit = fitAddonRef.current;
+      const terminal = terminalRef.current;
+      if (!fit || !terminal) return;
+      try {
+        fit.fit();
+        terminal.refresh(0, terminal.rows - 1);
+      } catch {
+        /* container may not be ready */
       }
     },
   }));
@@ -251,11 +265,26 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     }
   }, [fontSize, fontFamily]);
 
-  // Rule 4: external system sync — window resize listener for terminal fit
+  // Rule 4: external system sync — window resize + tab-switch refit listener
   useEffect(() => {
     const handleWindowResize = () => handleResize();
+    const handleRefit = () => {
+      const fit = fitAddonRef.current;
+      const terminal = terminalRef.current;
+      if (!fit || !terminal) return;
+      try {
+        fit.fit();
+        terminal.refresh(0, terminal.rows - 1);
+      } catch {
+        /* not ready */
+      }
+    };
     window.addEventListener("resize", handleWindowResize);
-    return () => window.removeEventListener("resize", handleWindowResize);
+    window.addEventListener("exegol:refit-terminals", handleRefit);
+    return () => {
+      window.removeEventListener("resize", handleWindowResize);
+      window.removeEventListener("exegol:refit-terminals", handleRefit);
+    };
   }, [handleResize]);
 
   return <div ref={containerRef} className="terminal-container h-full w-full bg-bg-primary" />;

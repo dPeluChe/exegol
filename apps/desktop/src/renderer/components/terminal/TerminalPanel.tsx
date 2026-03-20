@@ -7,11 +7,13 @@ import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
 interface TerminalPanelProps {
   agentId: string;
+  paneId?: string;
   onReady?: () => void;
 }
 
@@ -26,7 +28,7 @@ function useHandoff(agentId: string, enabled: boolean) {
   });
 }
 
-export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
+export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   const { data: agent } = useAgent(agentId);
   const isStopped = agent ? STOPPED_STATUSES.has(agent.status) : false;
   const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
@@ -37,6 +39,7 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
   const [liveHandoff, setLiveHandoff] = useState<HandoffSummary | null>(null);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const addAgent = useAgentStore((s) => s.addAgent);
+  const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
   const terminalRef = useRef<TerminalInstanceHandle>(null);
@@ -110,46 +113,83 @@ export function TerminalPanel({ agentId, onReady }: TerminalPanelProps) {
   if (isStopped && scrollbackContent) {
     return (
       <div className="relative flex h-full flex-col">
-        {/* Read-only banner */}
+        {/* Read-only banner — text left, buttons center */}
         <div
-          className={`flex shrink-0 items-center gap-2 px-3 py-1.5 text-[11px] ${agent?.status === "crashed" ? "bg-red-500/10" : "bg-yellow-500/10"}`}
+          className={`relative flex shrink-0 items-center px-3 py-1.5 text-[11px] ${agent?.status === "crashed" ? "bg-red-500/10" : "bg-yellow-500/10"}`}
         >
-          <AlertCircle
-            className={`h-3.5 w-3.5 ${agent?.status === "crashed" ? "text-red-400" : "text-yellow-400"}`}
-          />
-          <span className={agent?.status === "crashed" ? "text-red-200/80" : "text-yellow-200/80"}>
-            {agent?.status === "crashed"
-              ? "Session crashed — scroll to review"
-              : "Session ended — read-only"}
-          </span>
-          <div className="ml-auto flex items-center gap-2">
-            {resolvedHandoff && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px] text-accent"
-                onClick={handleContinueWithHandoff}
-                disabled={handoffLoading}
-              >
-                <ArrowRight className="h-3 w-3" />
-                {handoffLoading ? "Spawning..." : "Continue with new agent"}
-              </Button>
-            )}
+          {/* Left: status text */}
+          <div className="flex items-center gap-1.5">
+            <AlertCircle
+              className={`h-3.5 w-3.5 shrink-0 ${agent?.status === "crashed" ? "text-red-400" : "text-yellow-400"}`}
+            />
+            <span
+              className={agent?.status === "crashed" ? "text-red-200/80" : "text-yellow-200/80"}
+            >
+              {agent?.status === "crashed" ? "Crashed" : "Ended"}
+            </span>
+          </div>
+          {/* Center: action buttons (absolute to truly center regardless of left text width) */}
+          <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
             {agent && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 gap-1 px-2 text-[11px]"
-                onClick={() =>
-                  spawnAgent.mutate({
+                className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
+                onClick={async () => {
+                  // Build context from old scrollback for continuity
+                  const oldScrollback = scrollbackContent?.slice(-2000) ?? "";
+                  const continuationContext = oldScrollback
+                    ? `Continue from previous session. Last output:\n${oldScrollback.slice(-500)}\n\n`
+                    : "";
+                  const taskWithContext = continuationContext
+                    ? `${continuationContext}${agent.taskDescription}`
+                    : agent.taskDescription;
+
+                  const newAgent = await spawnAgent.mutateAsync({
                     projectId: agent.projectId,
                     cliType: agent.cliType,
-                    taskDescription: agent.taskDescription,
-                  })
-                }
+                    taskDescription: taskWithContext,
+                  });
+
+                  if (paneId && newAgent?.id) {
+                    // Clean up old crashed agent from store + DB
+                    removeAgent(agent.id);
+                    trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
+
+                    // Show new agent in same pane
+                    addAgent({
+                      id: newAgent.id,
+                      projectId: newAgent.projectId,
+                      cliType: newAgent.cliType,
+                      status: newAgent.status,
+                      currentStep: newAgent.currentStep,
+                      taskDescription: newAgent.taskDescription,
+                      branchName: null,
+                      tokenUsage: { input: 0, output: 0, cost: 0 },
+                      startedAt: newAgent.startedAt,
+                    });
+                    createTerminal(newAgent.id);
+                    useWorkspaceStore.getState().updatePane(paneId, {
+                      type: "terminal",
+                      agentId: newAgent.id,
+                    });
+                  }
+                }}
               >
                 <RotateCcw className="h-3 w-3" />
                 Re-launch
+              </Button>
+            )}
+            {resolvedHandoff && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="pointer-events-auto h-6 gap-1 rounded-md border border-border px-2 text-[10px] text-text-secondary hover:bg-white/5"
+                onClick={handleContinueWithHandoff}
+                disabled={handoffLoading}
+              >
+                <ArrowRight className="h-3 w-3" />
+                {handoffLoading ? "..." : "Continue"}
               </Button>
             )}
           </div>

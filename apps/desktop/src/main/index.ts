@@ -8,7 +8,7 @@ import { getProviderRegistry } from "./agents/registry";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { recoverStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
-import { logger } from "./lib/logger";
+import { logger, markShutdown } from "./lib/logger";
 import { getMcpHost } from "./mcp/host";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
@@ -119,6 +119,17 @@ app.whenReady().then(async () => {
   if (recovery.crashed > 0) {
     logger.info(`[Startup] Recovered ${recovery.crashed} crashed agent(s) from previous session`);
   }
+  // Auto-delete crashed shell terminals (no value in keeping them)
+  try {
+    const shellCleanup = getDb()
+      .prepare("DELETE FROM agents WHERE status = 'crashed' AND cli_type = 'shell'")
+      .run();
+    if (shellCleanup.changes > 0) {
+      logger.info(`[Startup] Cleaned ${shellCleanup.changes} crashed shell(s)`);
+    }
+  } catch {
+    /* table may not exist */
+  }
   // Clean up ANSI-contaminated memories from previous sessions
   try {
     const cleaned = getDb()
@@ -155,7 +166,14 @@ app.on("window-all-closed", () => {
   }
 });
 
+// Prevent crash on write EIO during shutdown (PTY writes after pipe closed)
+process.on("uncaughtException", (err) => {
+  if (err.message?.includes("EIO") || err.message?.includes("EPIPE")) return;
+  console.error("Uncaught exception:", err);
+});
+
 app.on("will-quit", () => {
+  markShutdown();
   globalShortcut.unregisterAll();
 
   // Stop all running agents and close the database

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { AgentsSection } from "./sections/AgentsSection";
@@ -12,6 +12,8 @@ import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
 export function WorkspaceView() {
   const { projectId } = useProjectContext();
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
+  const isAgents = activeSection === "agents";
+  const prevIsAgents = useRef(isAgents);
 
   // Listen for section switch events from sidebar (Rule 4: mount effect for event listener)
   useMountEffect(() => {
@@ -23,6 +25,16 @@ export function WorkspaceView() {
     return () => window.removeEventListener("exegol:switch-section", handler);
   });
 
+  // Force xterm.js terminals to re-fit when switching back to Agents tab
+  useEffect(() => {
+    if (isAgents && !prevIsAgents.current) {
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent("exegol:refit-terminals"));
+      });
+    }
+    prevIsAgents.current = isAgents;
+  }, [isAgents]);
+
   if (!projectId) {
     return (
       <div className="flex h-full items-center justify-center bg-bg-primary">
@@ -31,15 +43,14 @@ export function WorkspaceView() {
     );
   }
 
-  const isAgents = activeSection === "agents";
-
   return (
     <div className="flex h-full flex-col bg-bg-primary">
       <WorkspaceTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
-      <div className="flex-1 overflow-hidden">
-        {/* Agents: always mounted, hidden via CSS to preserve xterm.js terminals */}
-        <div className={isAgents ? "h-full" : "hidden"}>
+      <div className="relative flex-1 overflow-hidden">
+        {/* Agents: always mounted. When hidden, keep in DOM but invisible.
+            Dispatch resize event when becoming visible to trigger xterm.js fit() */}
+        <div className={isAgents ? "absolute inset-0" : "invisible absolute inset-0"}>
           <AgentsSection />
         </div>
 

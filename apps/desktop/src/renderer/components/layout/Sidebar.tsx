@@ -1,7 +1,8 @@
 import { ScrollArea, Separator } from "@exegol/ui";
-import { FolderOpen, History, Plus } from "lucide-react";
+import { FolderOpen, History, Plus, Rss } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
+import { ActivityFeed } from "./ActivityFeed";
 import { ProjectsSection } from "./ProjectsSection";
 import { RecentSessions } from "./RecentSessions";
 import { SidebarFooter } from "./SidebarFooter";
@@ -41,6 +42,12 @@ export function Sidebar() {
 
         <SidebarSection title="Recent Sessions" icon={History} defaultOpen={false}>
           <RecentSessions />
+        </SidebarSection>
+
+        <Separator className="mx-3 bg-border" />
+
+        <SidebarSection title="Activity" icon={Rss} defaultOpen={false}>
+          <ActivityFeed />
         </SidebarSection>
       </ScrollArea>
 

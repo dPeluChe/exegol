@@ -246,14 +246,15 @@ function QuickLaunchBar() {
           const firstPaneId = findFirstPaneId(activeTab.layout);
           const firstPane = firstPaneId ? panes[firstPaneId] : null;
 
-          if (firstPane?.type === "empty") {
-            // Convert empty pane to terminal
-            updatePane(firstPane.id, {
+          const canReplace = firstPane?.type === "empty" || firstPane?.type === "terminal";
+          if (canReplace && firstPaneId) {
+            // Replace current pane with new agent terminal
+            updatePane(firstPaneId, {
               type: "terminal",
               agentId: agent.id,
             });
           } else {
-            // Active pane is occupied: create a new tab
+            // Active pane is browser/files/git: create a new tab
             const newTabId = addTab(cli.name);
             const newTab = useWorkspaceStore.getState().tabs.find((t) => t.id === newTabId);
             if (newTab) {

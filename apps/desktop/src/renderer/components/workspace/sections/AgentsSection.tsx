@@ -1,4 +1,5 @@
 import { Cpu } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useWorkspaceStore } from "../../../stores/workspace";
@@ -18,12 +19,38 @@ function EmptyWorkspace() {
   );
 }
 
-// ─── Active Tab Layout ──────────────────────────────────────────────────────
+// ─── All Tabs Layout (keep terminals alive across tab switches) ──────────────
 
-function ActiveTabLayout() {
-  const activeTab = useWorkspaceStore((s) => s.getActiveTab());
-  if (!activeTab) return <EmptyWorkspace />;
-  return <WorkspaceLayout layout={activeTab.layout} tabId={activeTab.id} />;
+function AllTabsLayout() {
+  const tabs = useWorkspaceStore((s) => s.tabs);
+  const activeTabId = useWorkspaceStore((s) => s.activeTabId);
+  const prevActiveTabId = useRef(activeTabId);
+
+  // Force xterm.js re-fit when switching workspace tabs
+  useEffect(() => {
+    if (activeTabId !== prevActiveTabId.current) {
+      prevActiveTabId.current = activeTabId;
+      // Dispatch custom event that TerminalInstance listens to for targeted refit
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new CustomEvent("exegol:refit-terminals"));
+      });
+    }
+  }, [activeTabId]);
+
+  if (tabs.length === 0) return <EmptyWorkspace />;
+
+  return (
+    <>
+      {tabs.map((tab) => (
+        <div
+          key={tab.id}
+          className={tab.id === activeTabId ? "h-full" : "invisible absolute inset-0"}
+        >
+          <WorkspaceLayout layout={tab.layout} tabId={tab.id} />
+        </div>
+      ))}
+    </>
+  );
 }
 
 // ─── Agents Section ─────────────────────────────────────────────────────────
@@ -42,8 +69,8 @@ export function AgentsSection() {
   return (
     <div className="flex h-full flex-col">
       <WorkspaceTabBar />
-      <div className="flex-1 overflow-hidden">
-        <ActiveTabLayout />
+      <div className="relative flex-1 overflow-hidden">
+        <AllTabsLayout />
       </div>
     </div>
   );

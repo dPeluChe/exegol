@@ -37,6 +37,7 @@ export const agentRouter = router({
           .object({
             supportsWorktree: z.boolean().default(false),
             supportsResume: z.boolean().default(false),
+            resumeFlag: z.string().default(""),
             supportsRPC: z.boolean().default(false),
             supportsVision: z.boolean().default(false),
             supportsPromptArg: z.boolean().default(false),
