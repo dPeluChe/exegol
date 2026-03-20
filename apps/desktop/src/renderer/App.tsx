@@ -1,5 +1,6 @@
 import { TooltipProvider } from "@exegol/ui";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { UpdateBanner } from "./components/common/UpdateBanner";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -43,6 +44,7 @@ export default function App() {
     <TooltipProvider delayDuration={300}>
       <div className="flex h-screen w-screen flex-col bg-bg-primary">
         <TitleBar />
+        <UpdateBanner />
 
         <div className="flex-1 overflow-hidden">
           {showSidebar ? (

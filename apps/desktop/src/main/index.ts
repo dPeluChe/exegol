@@ -14,6 +14,12 @@ import { logger, markShutdown } from "./lib/logger";
 import { getMcpHost } from "./mcp/host";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
+import {
+  checkForUpdatesManual,
+  initAutoUpdater,
+  installUpdate,
+  stopAutoUpdater,
+} from "./system/auto-updater";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureShellWrappers } from "./terminal/shell-wrappers";
@@ -100,6 +106,14 @@ function registerIpcHandlers(): void {
     return dialog.showOpenDialog(options);
   });
 
+  // Auto-updater controls (T44)
+  ipcMain.handle("updater:check", () => {
+    checkForUpdatesManual();
+  });
+  ipcMain.handle("updater:install", () => {
+    installUpdate();
+  });
+
   // Window controls
   ipcMain.on("window:minimize", () => {
     mainWindow?.minimize();
@@ -180,6 +194,7 @@ app.whenReady().then(async () => {
   startMetricsCollector(); // Background: collects CPU/RAM/disk every 10s
   getSchedulerEngine().start(getDb()); // Load scheduled tasks and start cron jobs
   getQueueExecutor().start(getDb()); // Start task queue executor
+  initAutoUpdater(); // T44: check for updates on startup + every 4h
   createWindow();
 
   app.on("activate", () => {
@@ -208,6 +223,7 @@ app.on("will-quit", () => {
   // Stop all PTY subprocess sessions and close the database
   getPtyHost().destroyAll();
 
+  stopAutoUpdater();
   stopNotifyHandler();
   cleanupAgentWrappers();
   getMcpHost().disconnectAll();

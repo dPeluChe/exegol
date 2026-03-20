@@ -59,4 +59,16 @@ contextBridge.exposeInMainWorld("api", {
     maximize: () => ipcRenderer.send("window:maximize"),
     close: () => ipcRenderer.send("window:close"),
   },
+  // T44: Auto-updater
+  updater: {
+    check: () => ipcRenderer.invoke("updater:check"),
+    install: () => ipcRenderer.invoke("updater:install"),
+    onStatus: (callback: (status: unknown) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+      ipcRenderer.on("updater:status", handler);
+      return () => {
+        ipcRenderer.removeListener("updater:status", handler);
+      };
+    },
+  },
 });
