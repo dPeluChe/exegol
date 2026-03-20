@@ -2,6 +2,7 @@
 // Runs as child process with ELECTRON_RUN_AS_NODE=1.
 // Owns a single node-pty instance, communicates via binary framing on stdin/stdout.
 
+import { write as fsWrite } from "node:fs";
 import * as pty from "node-pty";
 import {
   type ExitPayload,
@@ -24,6 +25,8 @@ import {
 
 const OUTPUT_FLUSH_SIZE = 128 * 1024; // 128KB batch threshold
 const KILL_ESCALATION_MS = 2000;
+const MIN_WRITE_BACKOFF_MS = 2;
+const MAX_WRITE_BACKOFF_MS = 50;
 
 let proc: pty.IPty | null = null;
 const outputBatch: Buffer[] = [];
@@ -69,6 +72,83 @@ function scheduleFlush(): void {
   }
 }
 
+// ── Async PTY write queue with exponential backoff (Superset pattern) ────
+
+let ptyFd: number | null = null;
+const writeQueue: Buffer[] = [];
+let writeFlushing = false;
+let writeBackoffMs = 0;
+
+function enqueueWrite(data: Buffer): void {
+  writeQueue.push(data);
+  if (!writeFlushing) {
+    writeFlushing = true;
+    flushWrites();
+  }
+}
+
+function flushWrites(): void {
+  if (!proc || writeQueue.length === 0) {
+    writeFlushing = false;
+    return;
+  }
+
+  // Prefer async fs.write on PTY fd (non-blocking, won't stall event loop)
+  if (typeof ptyFd === "number" && ptyFd > 0) {
+    const buf = writeQueue[0];
+    if (!buf) {
+      writeFlushing = false;
+      return;
+    }
+    fsWrite(ptyFd, buf, 0, buf.length, null, (err, bytesWritten) => {
+      if (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        // EAGAIN/EWOULDBLOCK: kernel buffer full — retry with backoff
+        if (code === "EAGAIN" || code === "EWOULDBLOCK") {
+          writeBackoffMs =
+            writeBackoffMs === 0
+              ? MIN_WRITE_BACKOFF_MS
+              : Math.min(writeBackoffMs * 2, MAX_WRITE_BACKOFF_MS);
+          setTimeout(flushWrites, writeBackoffMs);
+          return;
+        }
+        // Other error — drop queue
+        writeQueue.length = 0;
+        writeFlushing = false;
+        return;
+      }
+      writeBackoffMs = 0;
+      const wrote = Math.max(0, bytesWritten ?? 0);
+      if (wrote >= (buf?.length ?? 0)) {
+        writeQueue.shift();
+      } else if (buf) {
+        writeQueue[0] = buf.subarray(wrote);
+      }
+      if (writeQueue.length > 0) {
+        setImmediate(flushWrites);
+      } else {
+        writeFlushing = false;
+      }
+    });
+    return;
+  }
+
+  // Fallback: synchronous pty.write (blocks event loop but always works)
+  const chunk = writeQueue.shift();
+  if (chunk) {
+    try {
+      proc.write(chunk.toString("utf-8"));
+    } catch {
+      writeQueue.length = 0;
+    }
+  }
+  if (writeQueue.length > 0) {
+    setImmediate(flushWrites);
+  } else {
+    writeFlushing = false;
+  }
+}
+
 // ── Frame handler ───────────────────────────────────────────────────────
 
 process.stdin.on("data", (chunk: Buffer) => {
@@ -89,6 +169,9 @@ process.stdin.on("data", (chunk: Buffer) => {
             env: opts.env,
           });
           sendJson(FRAME_SPAWNED, { pid: proc.pid });
+
+          // Capture PTY fd for async fs.write (avoids blocking pty.write)
+          ptyFd = (proc as unknown as { fd?: number }).fd ?? null;
 
           proc.onData((data: string) => {
             const buf = Buffer.from(data, "utf-8");
@@ -114,7 +197,7 @@ process.stdin.on("data", (chunk: Buffer) => {
       }
 
       case FRAME_WRITE:
-        proc?.write(payload.toString("utf-8"));
+        if (proc) enqueueWrite(payload);
         break;
 
       case FRAME_RESIZE: {

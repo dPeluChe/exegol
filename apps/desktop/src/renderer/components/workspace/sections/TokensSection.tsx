@@ -1,5 +1,6 @@
 import type { DailyTrendRow, TokenUsageSummary } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
+import { useQuery } from "@tanstack/react-query";
 import { Coins, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
@@ -10,6 +11,7 @@ import {
   useTokenScan,
   useTokenUsageSummary,
 } from "../../../hooks/use-trpc";
+import { trpcInvoke } from "../../../lib/trpc-client";
 import { EmptyState } from "../../common";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -26,22 +28,24 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-// ─── Model pricing catalog ───────────────────────────────────────────────
+// ─── Dynamic model pricing catalog (T19: DB-backed) ─────────────────────
 
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  "claude-opus-4-6": { input: 15 / 1e6, output: 75 / 1e6 },
-  "claude-sonnet-4-6": { input: 3 / 1e6, output: 15 / 1e6 },
-  "claude-haiku-4-5-20251001": { input: 0.8 / 1e6, output: 4 / 1e6 },
-  "gpt-4o": { input: 2.5 / 1e6, output: 10 / 1e6 },
-  "gpt-4o-mini": { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-  "gemini-2.5-pro": { input: 1.25 / 1e6, output: 10 / 1e6 },
-  "gemini-2.5-flash": { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-};
+function useModelCatalog() {
+  return useQuery({
+    queryKey: ["modelCatalog"],
+    queryFn: () =>
+      trpcInvoke<Record<string, { input: number; output: number }>>("settings.modelCatalog"),
+    staleTime: 60_000,
+  });
+}
 
-function getModelPrice(model: string): { input: number; output: number } | null {
-  // Exact match first, then prefix match
-  if (MODEL_PRICING[model]) return MODEL_PRICING[model];
-  for (const [key, val] of Object.entries(MODEL_PRICING)) {
+function getModelPrice(
+  model: string,
+  catalog: Record<string, { input: number; output: number }> | undefined,
+): { input: number; output: number } | null {
+  if (!catalog) return null;
+  if (catalog[model]) return catalog[model];
+  for (const [key, val] of Object.entries(catalog)) {
     if (model.startsWith(key) || key.startsWith(model)) return val;
   }
   return null;
@@ -126,6 +130,7 @@ function TrendChart({
 
 function ModelBreakdownTable({ projectId, days }: { projectId: string; days: number }) {
   const { data: models } = useModelBreakdown(projectId, days);
+  const { data: catalog } = useModelCatalog();
   const maxCost = models?.[0]?.totalCost ?? 1;
 
   if (!models || models.length === 0) {
@@ -135,7 +140,7 @@ function ModelBreakdownTable({ projectId, days }: { projectId: string; days: num
   return (
     <div className="space-y-2">
       {models.map((m) => {
-        const price = getModelPrice(m.model);
+        const price = getModelPrice(m.model, catalog);
         return (
           <div key={`${m.provider}/${m.model}`} className="space-y-1">
             <div className="flex items-center justify-between text-xs">

@@ -158,22 +158,20 @@ export function parseTaskBoard(content: string, filePath: string): TaskBoard {
       const priority = extractPriority(rawText);
       const text = cleanTaskText(rawText);
 
-      // If completed and not in a specific column, put in done
-      const effectiveColumn = completed && currentColumn === "backlog" ? "done" : currentColumn;
-
+      // Keep tasks in their file section — don't auto-move based on checkbox
       const task: TaskItem = {
         id: `task-${i}`,
         text,
         completed,
         depth: Math.floor(taskMatch[1].length / 2),
         line: i,
-        column: effectiveColumn,
+        column: currentColumn,
         tags,
         assignedAgent,
         priority,
       };
 
-      columns[effectiveColumn].push(task);
+      columns[currentColumn].push(task);
     }
   }
 

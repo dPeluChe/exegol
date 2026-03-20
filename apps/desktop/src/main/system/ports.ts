@@ -169,3 +169,32 @@ export async function getProjectPorts(projectPath: string): Promise<PortInfo[]> 
 
   return [...runtime, ...config];
 }
+
+/** Detect port conflicts: returns port numbers that are listening from multiple PIDs */
+export async function detectPortConflicts(): Promise<Map<number, string[]>> {
+  const conflicts = new Map<number, string[]>();
+  try {
+    const { stdout } = await execFileAsync("lsof", ["-iTCP", "-sTCP:LISTEN", "-P", "-n"], {
+      timeout: 5000,
+    });
+    const portPids = new Map<number, Set<string>>();
+    for (const line of stdout.split("\n").slice(1)) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 9) continue;
+      const proc = parts[0] ?? "";
+      const pid = parts[1] ?? "";
+      const nameCol = parts[parts.length - 1] ?? "";
+      const portMatch = nameCol.match(/:(\d+)$/);
+      if (!portMatch?.[1]) continue;
+      const port = Number.parseInt(portMatch[1], 10);
+      if (!portPids.has(port)) portPids.set(port, new Set());
+      portPids.get(port)?.add(`${proc}(${pid})`);
+    }
+    for (const [port, pids] of portPids) {
+      if (pids.size > 1) conflicts.set(port, Array.from(pids));
+    }
+  } catch {
+    /* lsof failed */
+  }
+  return conflicts;
+}

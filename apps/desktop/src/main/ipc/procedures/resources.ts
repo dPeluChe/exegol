@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { getAgentManager } from "../../agents/manager";
 import { listAgents } from "../../db/queries";
-import { getProjectPorts } from "../../system/ports";
+import { detectPortConflicts, getProjectPorts } from "../../system/ports";
 import { getMetricsHistory, getProjectMetrics, getSystemMetrics } from "../../system/resources";
 import { publicProcedure, router } from "../trpc";
 
@@ -42,5 +42,16 @@ export const resourcesRouter = router({
 
   ports: publicProcedure.input(z.object({ projectPath: z.string() })).query(async ({ input }) => {
     return getProjectPorts(input.projectPath);
+  }),
+
+  /** T07: detect ports with multiple listeners (conflict warning) */
+  portConflicts: publicProcedure.query(async () => {
+    const conflicts = await detectPortConflicts();
+    // Convert Map to plain object for serialization
+    const result: Record<number, string[]> = {};
+    for (const [port, procs] of conflicts) {
+      result[port] = procs;
+    }
+    return result;
   }),
 });

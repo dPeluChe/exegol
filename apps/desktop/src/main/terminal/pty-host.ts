@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { logger } from "../lib/logger";
-import { HeadlessEmulator } from "./headless-emulator";
+import { HeadlessEmulator, type SessionSnapshot } from "./headless-emulator";
 import {
   type ExitPayload,
   encodeFrame,
@@ -133,6 +133,11 @@ export class PtyHost {
 
   getSnapshot(id: string): string | null {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
+  }
+
+  /** Full session snapshot for reattach protocol (modes + rehydrate sequences + CWD) */
+  getSessionSnapshot(id: string): SessionSnapshot | null {
+    return this.sessions.get(id)?.emulator.sessionSnapshot() ?? null;
   }
 
   getCwd(id: string): string | null {

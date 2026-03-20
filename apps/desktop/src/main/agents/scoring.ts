@@ -9,10 +9,15 @@
  * Non-fatal: scoring never blocks agent completion (best-effort, try/catch).
  */
 
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { ExitReason } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
+import { getApiKey } from "../security/keystore";
 import { stripAnsi } from "./status-parser";
+
+const execFileAsync = promisify(execFile);
 
 // ─── Stdout Parsing (Tier 1) ────────────────────────────────────────────────
 
@@ -193,8 +198,103 @@ export function scoreAgent(
       filesChanged: tier1.filesChanged,
       taskCompleted: tier1.taskCompleted,
     });
+
+    // Tier 3 (async, non-blocking): LLM-as-judge quality eval
+    evaluateTier3(db, agentId, scrollback).catch(() => {});
   } catch (err) {
     // Non-fatal: scoring never blocks agent completion
     logger.error("[Scoring] Failed to score agent (non-fatal):", err);
+  }
+}
+
+// ─── Tier 3: LLM-as-Judge Quality Eval ──────────────────────────────────────
+
+const TIER3_MAX_SCROLLBACK = 8000; // chars to send to judge (cost control)
+
+/**
+ * Optional LLM-as-judge evaluation. Gated behind Anthropic API key.
+ * Uses claude-haiku for cost efficiency (~$0.001 per eval).
+ */
+async function evaluateTier3(
+  db: Database.Database,
+  agentId: string,
+  scrollback: string,
+): Promise<void> {
+  const apiKey = getApiKey(db, "anthropic");
+  if (!apiKey) return; // No API key — skip silently
+
+  const cleanedScrollback = stripAnsi(scrollback).slice(-TIER3_MAX_SCROLLBACK);
+  if (cleanedScrollback.length < 100) return; // Too short to evaluate
+
+  try {
+    const prompt = `You are evaluating the quality of an AI coding agent's work. Rate each dimension 1-5.
+
+Agent output (last ${TIER3_MAX_SCROLLBACK} chars):
+${cleanedScrollback}
+
+Rate these dimensions (1=poor, 5=excellent):
+1. Clarity: Is the agent's reasoning clear and well-structured?
+2. Completeness: Did the agent finish what it set out to do?
+3. Correctness: Does the work appear correct (no obvious bugs/errors)?
+
+Respond with ONLY a JSON object: {"clarity":N,"completeness":N,"correctness":N}`;
+
+    const { stdout } = await execFileAsync(
+      "curl",
+      [
+        "-s",
+        "-X",
+        "POST",
+        "https://api.anthropic.com/v1/messages",
+        "-H",
+        "content-type: application/json",
+        "-H",
+        `x-api-key: ${apiKey}`,
+        "-H",
+        "anthropic-version: 2023-06-01",
+        "-d",
+        JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 100,
+          messages: [{ role: "user", content: prompt }],
+        }),
+      ],
+      { timeout: 30_000 },
+    );
+
+    const response = JSON.parse(stdout);
+    const text = response?.content?.[0]?.text ?? "";
+    const jsonMatch = text.match(/\{[^}]+\}/);
+    if (!jsonMatch) return;
+
+    const scores = JSON.parse(jsonMatch[0]) as {
+      clarity: number;
+      completeness: number;
+      correctness: number;
+    };
+
+    // Validate scores are 1-5
+    const valid = [scores.clarity, scores.completeness, scores.correctness].every(
+      (s) => typeof s === "number" && s >= 1 && s <= 5,
+    );
+    if (!valid) return;
+
+    const llmScore = (scores.clarity + scores.completeness + scores.correctness) / 15; // normalize to 0-1
+
+    db.prepare(
+      `UPDATE agent_scores SET
+        llm_clarity = ?, llm_completeness = ?, llm_correctness = ?, llm_score = ?
+      WHERE agent_id = ?`,
+    ).run(scores.clarity, scores.completeness, scores.correctness, llmScore, agentId);
+
+    logger.info("[Scoring] Tier 3 LLM eval:", {
+      agentId,
+      clarity: scores.clarity,
+      completeness: scores.completeness,
+      correctness: scores.correctness,
+    });
+  } catch (err) {
+    // Non-fatal: LLM eval is best-effort
+    logger.warn("[Scoring] Tier 3 eval failed (non-fatal):", err);
   }
 }
