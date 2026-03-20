@@ -136,19 +136,12 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                 size="sm"
                 className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
                 onClick={async () => {
-                  // Build context from old scrollback for continuity
-                  const oldScrollback = scrollbackContent?.slice(-2000) ?? "";
-                  const continuationContext = oldScrollback
-                    ? `Continue from previous session. Last output:\n${oldScrollback.slice(-500)}\n\n`
-                    : "";
-                  const taskWithContext = continuationContext
-                    ? `${continuationContext}${agent.taskDescription}`
-                    : agent.taskDescription;
-
+                  // Re-launch with original task description only
+                  // (no scrollback injection — use CLI native resume when available)
                   const newAgent = await spawnAgent.mutateAsync({
                     projectId: agent.projectId,
                     cliType: agent.cliType,
-                    taskDescription: taskWithContext,
+                    taskDescription: agent.taskDescription,
                   });
 
                   if (paneId && newAgent?.id) {

@@ -130,11 +130,20 @@ app.whenReady().then(async () => {
   } catch {
     /* table may not exist */
   }
-  // Clean up ANSI-contaminated memories from previous sessions
+  // Clean up contaminated memories (ANSI codes, CLI install output, raw terminal noise)
   try {
     const cleaned = getDb()
       .prepare(
-        "DELETE FROM memories WHERE content LIKE '%' || X'1B' || '%' OR content LIKE '%' || X'0D' || '%'",
+        `DELETE FROM memories WHERE
+          content LIKE '%' || X'1B' || '%'
+          OR content LIKE '%' || X'0D' || '%'
+          OR content LIKE '%bun install%'
+          OR content LIKE '%npm install%'
+          OR content LIKE '%yarn add%'
+          OR content LIKE '%pip install%'
+          OR content LIKE '%packages installed%'
+          OR content LIKE '%Update now%'
+          OR content LIKE '%Skip until next%'`,
       )
       .run();
     if (cleaned.changes > 0) {

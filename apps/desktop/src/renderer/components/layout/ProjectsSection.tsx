@@ -81,8 +81,17 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
   const handleRemove = useCallback(async () => {
     closeContextMenu();
     try {
+      // Stop if running
+      trpcMutate("agents.stop", { id: agent.id }).catch(() => {});
       await trpcMutate("agents.delete", { id: agent.id });
       removeAgent(agent.id);
+      // Clean up any panes referencing this agent
+      const ws = useWorkspaceStore.getState();
+      for (const [paneId, pane] of Object.entries(ws.panes)) {
+        if (pane.agentId === agent.id) {
+          ws.updatePane(paneId, { type: "empty", agentId: undefined });
+        }
+      }
     } catch (err) {
       console.error("[AgentMiniCard] Failed to delete agent:", err);
     }

@@ -398,14 +398,14 @@ function InvalidPane({ reason, paneId }: { reason: string; paneId: string }) {
 
 function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId: string }) {
   const { data: agent, isError } = useAgent(agentId);
-  const invalidatePane = useWorkspaceStore((s) => s.invalidatePane);
+  const updatePane = useWorkspaceStore((s) => s.updatePane);
 
-  // Agent fetch failed — move side-effect out of render body
+  // Agent not found — convert pane to empty (agent was deleted)
   useEffect(() => {
     if (isError) {
-      invalidatePane(paneId, `Agent "${agentId}" no longer exists.`);
+      updatePane(paneId, { type: "empty", agentId: undefined });
     }
-  }, [isError, paneId, agentId, invalidatePane]);
+  }, [isError, paneId, updatePane]);
 
   if (isError) return null;
 

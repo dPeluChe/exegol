@@ -18,7 +18,6 @@ import {
 } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
-import { extractAndStoreMemories } from "../memory/extractor";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import { getProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
@@ -339,17 +338,8 @@ export class AgentManager {
         ? ""
         : (this.scrollbackBuffers.get(agent.id)?.join("") ?? "");
 
-      // Memory extraction + scoring: skip for plain shells (no useful knowledge)
-      if (!isShell) {
-        try {
-          const scrollbackForMemory = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
-          if (scrollbackForMemory.length > 0) {
-            extractAndStoreMemories(db, agent.id, agent.projectId, scrollbackForMemory);
-          }
-        } catch {
-          /* DB closed during shutdown — non-fatal */
-        }
-      }
+      // TODO: Memory extraction disabled until task pipeline is implemented.
+      // See: docs/UI_RESTRUCTURE.md Phase 7
 
       this.flushScrollback(agent.id, false);
       this.processes.delete(agent.id);

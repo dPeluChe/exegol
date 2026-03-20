@@ -53,13 +53,12 @@ const EXTRACTION_RULES: ExtractionRule[] = [
     },
   },
 
-  // Dependency information
+  // Dependency information — only from agent reasoning, not from CLI output
   {
     category: "dependency",
     patterns: [
-      /(?:install(?:ed|ing)?|add(?:ed|ing)?)\s+(?:package|dep(?:endency)?)\s*[:-]?\s*(.{5,100})/i,
-      /(?:npm|yarn|bun|pip|cargo)\s+(?:install|add)\s+(.{3,100})/,
       /(?:requires?|needs?)\s+(.{5,100})\s+(?:version|v)\s*([0-9.]+)/i,
+      /(?:depends?\s+on|peer\s+dep(?:endency)?)\s*[:-]?\s*(.{5,100})/i,
     ],
     relevance: 0.6,
     extractor: (match) => {
