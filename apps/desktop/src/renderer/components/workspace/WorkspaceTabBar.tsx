@@ -1,14 +1,56 @@
 import type { AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Terminal, X } from "lucide-react";
+import { FolderTree, GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
-import { collectPaneIds, findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
+import {
+  collectPaneIds,
+  findFirstPaneId,
+  type Pane,
+  useWorkspaceStore,
+} from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
+
+// ─── Tab auto-naming helpers ────────────────────────────────────────────────
+
+const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  terminal: Terminal,
+  browser: Globe,
+  files: FolderTree,
+  git: GitBranch,
+};
+
+/** Derive display name + icon from the tab's primary pane */
+function getTabMeta(
+  tabLabel: string,
+  tabLayout: import("../../stores/workspace").LayoutNode,
+  panes: Record<string, Pane>,
+  agents: Record<string, { cliType: string; taskDescription: string }>,
+): { displayName: string; Icon: React.ComponentType<{ className?: string }> | null } {
+  // If user explicitly renamed the tab (not a default name), respect it
+  const isDefault =
+    tabLabel.startsWith("Tab ") || tabLabel === "Workspace" || tabLabel === "Terminal";
+
+  const firstPaneId = findFirstPaneId(tabLayout);
+  const firstPane = firstPaneId ? panes[firstPaneId] : null;
+  const Icon = firstPane ? (PANE_TYPE_ICONS[firstPane.type] ?? null) : null;
+
+  if (!isDefault) return { displayName: tabLabel, Icon };
+
+  if (firstPane?.type === "terminal" && firstPane.agentId) {
+    const agent = agents[firstPane.agentId];
+    if (agent) return { displayName: agent.cliType, Icon: Terminal };
+  }
+  if (firstPane?.type === "browser") return { displayName: "Browser", Icon: Globe };
+  if (firstPane?.type === "git") return { displayName: "Git", Icon: GitBranch };
+  if (firstPane?.type === "files") return { displayName: "Files", Icon: FolderTree };
+
+  return { displayName: tabLabel, Icon };
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -24,6 +66,8 @@ export function WorkspaceTabBar() {
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
+  const panes = useWorkspaceStore((s) => s.panes);
+  const agents = useAgentStore((s) => s.agents);
   const { projectId } = useProjectContext();
 
   /** Close a tab and stop all its terminal agents */
@@ -66,6 +110,7 @@ export function WorkspaceTabBar() {
   const handleTabDragOver = useCallback((e: DragEvent, tabId: string) => {
     if (!e.dataTransfer.types.includes("application/exegol-tab")) return;
     e.preventDefault();
+    e.stopPropagation(); // Keep drag inside tab bar — don't trigger pane merge indicators
     e.dataTransfer.dropEffect = "move";
     setDragOverTabId(tabId);
   }, []);
@@ -77,6 +122,7 @@ export function WorkspaceTabBar() {
   const handleTabDrop = useCallback(
     (e: DragEvent, targetTabId: string) => {
       e.preventDefault();
+      e.stopPropagation(); // Prevent bubbling to WorkspacePane merge handler
       setDragOverTabId(null);
       const sourceTabId = e.dataTransfer.getData("application/exegol-tab");
       if (!sourceTabId || sourceTabId === targetTabId) return;
@@ -152,6 +198,7 @@ export function WorkspaceTabBar() {
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isEditing = editingTabId === tab.id;
+          const { displayName, Icon: TabIcon } = getTabMeta(tab.label, tab.layout, panes, agents);
 
           return (
             // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
@@ -193,7 +240,10 @@ export function WorkspaceTabBar() {
                   className="w-24 bg-transparent text-[11px] text-text-primary outline-none"
                 />
               ) : (
-                <span className="max-w-[140px] truncate">{tab.label}</span>
+                <>
+                  {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
+                  <span className="max-w-[140px] truncate">{displayName}</span>
+                </>
               )}
               <button
                 type="button"

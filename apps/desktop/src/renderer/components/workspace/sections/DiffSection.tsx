@@ -1,5 +1,13 @@
 import { Button, cn } from "@exegol/ui";
-import { Columns, GitCompare, Loader2, RefreshCw, Rows } from "lucide-react";
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Columns,
+  GitCompare,
+  Loader2,
+  RefreshCw,
+  Rows,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useDiff } from "../../../hooks/use-trpc";
@@ -13,16 +21,43 @@ type ViewMode = "unified" | "split";
 export function DiffSection() {
   const { projectId } = useProjectContext();
   const [diffMode, setDiffMode] = useState<DiffMode>("unstaged");
-  const [viewMode, setViewMode] = useState<ViewMode>("unified");
+  const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode);
+  // Track collapsed state per file (all collapsed by default)
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   // Derive parsed files from raw diff (Rule 1: derive, don't sync)
   const parsedFiles = useMemo<DiffFile[]>(
     () => (rawDiff !== undefined ? parseUnifiedDiff(rawDiff ?? "") : []),
     [rawDiff],
   );
+
+  // Reset expanded state when diff changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: rawDiff is intentional — reset on new diff data
+  useEffect(() => {
+    setExpandedFiles(new Set());
+  }, [rawDiff]);
+
+  const allExpanded =
+    parsedFiles.length > 0 && parsedFiles.every((f) => expandedFiles.has(f.newPath));
+  const toggleAll = useCallback(() => {
+    if (allExpanded) {
+      setExpandedFiles(new Set());
+    } else {
+      setExpandedFiles(new Set(parsedFiles.map((f) => f.newPath)));
+    }
+  }, [allExpanded, parsedFiles]);
+
+  const toggleFile = useCallback((path: string) => {
+    setExpandedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
 
   // Auto-refresh interval
   useEffect(() => {
@@ -101,6 +136,22 @@ export function DiffSection() {
 
         <div className="flex-1" />
 
+        {/* Expand/Collapse All */}
+        {parsedFiles.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleAll}
+            title={allExpanded ? "Collapse all files" : "Expand all files"}
+            className="rounded p-1 text-text-muted hover:bg-bg-primary hover:text-text-primary"
+          >
+            {allExpanded ? (
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+
         {/* View mode toggle */}
         <button
           type="button"
@@ -165,7 +216,13 @@ export function DiffSection() {
         ) : (
           <div className="space-y-3">
             {parsedFiles.map((file) => (
-              <DiffFileView key={file.newPath} file={file} viewMode={viewMode} />
+              <DiffFileView
+                key={file.newPath}
+                file={file}
+                viewMode={viewMode}
+                collapsed={!expandedFiles.has(file.newPath)}
+                onToggle={() => toggleFile(file.newPath)}
+              />
             ))}
           </div>
         )}

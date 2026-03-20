@@ -1,6 +1,5 @@
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, FilePlus, FileX, Pencil } from "lucide-react";
-import { useState } from "react";
 import { DiffHunkView } from "./DiffHunkView";
 import type { DiffFile } from "./diff-parser";
 
@@ -40,11 +39,11 @@ function isBinaryFile(filePath: string): boolean {
 interface DiffFileViewProps {
   file: DiffFile;
   viewMode: "unified" | "split";
+  collapsed: boolean;
+  onToggle: () => void;
 }
 
-export function DiffFileView({ file, viewMode }: DiffFileViewProps) {
-  const [collapsed, setCollapsed] = useState(false);
-
+export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileViewProps) {
   const additionCount = file.hunks.reduce(
     (sum, h) => sum + h.lines.filter((l) => l.type === "addition").length,
     0,
@@ -59,7 +58,7 @@ export function DiffFileView({ file, viewMode }: DiffFileViewProps) {
       {/* File header */}
       <button
         type="button"
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={onToggle}
         className={cn(
           "flex w-full items-center gap-2 px-3 py-1.5 text-left",
           "bg-bg-secondary hover:bg-bg-secondary/80 transition-colors",

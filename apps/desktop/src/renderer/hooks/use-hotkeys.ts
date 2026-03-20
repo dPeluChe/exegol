@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { trpcMutate } from "../lib/trpc-client";
-import { type AgentState, useAgentStore } from "../stores/agents";
+import { useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, useWorkspaceStore } from "../stores/workspace";
 
@@ -11,6 +11,13 @@ export function useHotkeys() {
   // Rule 4: external system sync — global keyboard event listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+Tab / Ctrl+Shift+Tab: cycle workspace tabs (works without Cmd)
+      if (e.ctrlKey && e.key === "Tab") {
+        e.preventDefault();
+        navigateWorkspaceTab(e.shiftKey ? "prev" : "next");
+        return;
+      }
+
       const mod = e.metaKey || e.ctrlKey; // Cmd on Mac, Ctrl on Win/Linux
 
       if (!mod) return;
@@ -89,30 +96,30 @@ export function useHotkeys() {
         return;
       }
 
-      // Read agents snapshot only when needed (avoids stale-closure + re-render issues)
-      const agentSnapshot = Object.values(useAgentStore.getState().agents);
-      const { focusedAgentId, setFocusedAgent } = useAgentStore.getState();
+      // ── Workspace tab navigation (T42) ────────────────────────────────
 
-      // Cmd+]: Next tab (next agent)
-      if (e.key === "]") {
+      // Cmd+Shift+]: Next workspace tab
+      if (e.shiftKey && e.key === "]") {
         e.preventDefault();
-        navigateAgentTab("next", agentSnapshot, focusedAgentId, setFocusedAgent);
+        navigateWorkspaceTab("next");
         return;
       }
 
-      // Cmd+[: Previous tab (previous agent)
-      if (e.key === "[") {
+      // Cmd+Shift+[: Previous workspace tab
+      if (e.shiftKey && e.key === "[") {
         e.preventDefault();
-        navigateAgentTab("prev", agentSnapshot, focusedAgentId, setFocusedAgent);
+        navigateWorkspaceTab("prev");
         return;
       }
 
-      // Cmd+1-9: Switch to agent session by index (sidebar agents)
+      // Cmd+1-9: Switch to workspace tab by position
       if (e.key >= "1" && e.key <= "9") {
         e.preventDefault();
-        const index = parseInt(e.key, 10) - 1;
-        if (index < agentSnapshot.length) {
-          setFocusedAgent(agentSnapshot[index]?.id ?? null);
+        const ws = useWorkspaceStore.getState();
+        const index = Number.parseInt(e.key, 10) - 1;
+        const tab = ws.tabs[index];
+        if (tab) {
+          ws.setActiveTab(tab.id);
           if (useAppStore.getState().activeView !== "workspace") {
             setActiveView("workspace");
           }
@@ -155,21 +162,15 @@ function cleanupAndCloseFocusedPane(): void {
   ws.closeFocusedPane();
 }
 
-function navigateAgentTab(
-  direction: "next" | "prev",
-  agents: AgentState[],
-  focusedAgentId: string | null,
-  setFocusedAgent: (id: string | null) => void,
-) {
-  if (agents.length === 0) return;
-  if (!focusedAgentId) {
-    setFocusedAgent(agents[0]?.id ?? null);
-    return;
-  }
-  const currentIndex = agents.findIndex((a) => a.id === focusedAgentId);
+/** Cycle through workspace tabs (next/prev) */
+function navigateWorkspaceTab(direction: "next" | "prev"): void {
+  const { tabs, activeTabId, setActiveTab } = useWorkspaceStore.getState();
+  if (tabs.length <= 1) return;
+  const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
   const nextIndex =
     direction === "next"
-      ? (currentIndex + 1) % agents.length
-      : (currentIndex - 1 + agents.length) % agents.length;
-  setFocusedAgent(agents[nextIndex]?.id ?? null);
+      ? (currentIndex + 1) % tabs.length
+      : (currentIndex - 1 + tabs.length) % tabs.length;
+  const nextTab = tabs[nextIndex];
+  if (nextTab) setActiveTab(nextTab.id);
 }

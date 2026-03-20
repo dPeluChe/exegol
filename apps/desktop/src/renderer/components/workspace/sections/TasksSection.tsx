@@ -1,5 +1,14 @@
 import { Button, cn, ScrollArea } from "@exegol/ui";
-import { ArrowRight, CheckSquare, Circle, FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArrowRight,
+  CheckSquare,
+  Circle,
+  FolderOpen,
+  Loader2,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
@@ -42,15 +51,19 @@ function TaskCard({
   onMove,
   onRemove,
   columns,
+  prevColumn,
+  nextColumn,
 }: {
   task: TaskItem;
   onToggle: () => void;
   onMove: (target: TaskColumn) => void;
   onRemove: () => void;
   columns: TaskColumn[];
+  prevColumn?: TaskColumn;
+  nextColumn?: TaskColumn;
 }) {
-  const [showActions, setShowActions] = useState(false);
-  const nextColumns = columns.filter((c) => c !== task.column);
+  const [showAllMoves, setShowAllMoves] = useState(false);
+  const otherColumns = columns.filter((c) => c !== task.column);
 
   return (
     <div
@@ -114,16 +127,36 @@ function TaskCard({
         </div>
       )}
 
-      {/* Hover actions */}
+      {/* Quick-move arrows + actions (always visible on hover) */}
       <div className="absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        {nextColumns.length > 0 && (
+        {prevColumn && (
           <button
             type="button"
-            onClick={() => setShowActions(!showActions)}
+            onClick={() => onMove(prevColumn)}
             className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-white/10 hover:text-text-primary"
-            title="Move to..."
+            title={`Move to ${COLUMN_CONFIG[prevColumn].label}`}
+          >
+            <ArrowRight className="h-3 w-3 rotate-180" />
+          </button>
+        )}
+        {nextColumn && (
+          <button
+            type="button"
+            onClick={() => onMove(nextColumn)}
+            className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-accent/20 hover:text-accent"
+            title={`Move to ${COLUMN_CONFIG[nextColumn].label}`}
           >
             <ArrowRight className="h-3 w-3" />
+          </button>
+        )}
+        {otherColumns.length > 2 && (
+          <button
+            type="button"
+            onClick={() => setShowAllMoves(!showAllMoves)}
+            className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-[8px] text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="More destinations..."
+          >
+            •••
           </button>
         )}
         <button
@@ -136,25 +169,22 @@ function TaskCard({
         </button>
       </div>
 
-      {/* Move menu */}
-      {showActions && (
+      {/* All destinations menu */}
+      {showAllMoves && (
         <div className="mt-1.5 flex flex-wrap gap-1 border-t border-border/50 pt-1.5">
-          {nextColumns.map((col) => {
-            const cfg = COLUMN_CONFIG[col];
-            return (
-              <button
-                key={col}
-                type="button"
-                onClick={() => {
-                  onMove(col);
-                  setShowActions(false);
-                }}
-                className="rounded bg-white/5 px-1.5 py-0.5 text-[8px] text-text-muted hover:bg-white/10 hover:text-text-primary"
-              >
-                → {cfg.label}
-              </button>
-            );
-          })}
+          {otherColumns.map((col) => (
+            <button
+              key={col}
+              type="button"
+              onClick={() => {
+                onMove(col);
+                setShowAllMoves(false);
+              }}
+              className="rounded bg-white/5 px-1.5 py-0.5 text-[8px] text-text-muted hover:bg-white/10 hover:text-text-primary"
+            >
+              → {COLUMN_CONFIG[col].label}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -167,6 +197,7 @@ function Column({
   column,
   tasks,
   allColumns,
+  columnIndex,
   onToggle,
   onMove,
   onRemove,
@@ -175,6 +206,7 @@ function Column({
   column: TaskColumn;
   tasks: TaskItem[];
   allColumns: TaskColumn[];
+  columnIndex: number;
   onToggle: (task: TaskItem) => void;
   onMove: (task: TaskItem, target: TaskColumn) => void;
   onRemove: (task: TaskItem) => void;
@@ -182,44 +214,79 @@ function Column({
 }) {
   const cfg = COLUMN_CONFIG[column];
   const Icon = cfg.icon;
+  const [collapsed, setCollapsed] = useState(false);
+
+  // Next/prev columns for quick-move arrows
+  const prevCol = columnIndex > 0 ? allColumns[columnIndex - 1] : undefined;
+  const nextCol = columnIndex < allColumns.length - 1 ? allColumns[columnIndex + 1] : undefined;
 
   return (
-    <div className="flex min-w-[220px] flex-1 flex-col rounded-xl border border-border/50 bg-bg-secondary">
-      {/* Column header */}
-      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
-        <Icon className={cn("h-3.5 w-3.5", cfg.color)} />
-        <span className="text-xs font-semibold text-text-primary">{cfg.label}</span>
-        <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] tabular-nums text-text-muted">
-          {tasks.length}
-        </span>
+    <div
+      className={cn(
+        "flex flex-col rounded-xl border border-border/50 bg-bg-secondary transition-all",
+        collapsed ? "w-10 min-w-10" : "min-w-[220px] flex-1",
+      )}
+    >
+      {/* Column header — click to collapse */}
+      <div className="flex cursor-pointer items-center gap-2 border-b border-border/50 px-2 py-2">
         <button
           type="button"
-          onClick={() => onAdd(column)}
-          className="ml-auto flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title={`Add task to ${cfg.label}`}
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex items-center gap-2"
         >
-          <Plus className="h-3 w-3" />
+          <Icon className={cn("h-3.5 w-3.5 shrink-0", cfg.color)} />
+          {!collapsed && (
+            <>
+              <span className="text-xs font-semibold text-text-primary">{cfg.label}</span>
+              <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] tabular-nums text-text-muted">
+                {tasks.length}
+              </span>
+            </>
+          )}
         </button>
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={() => onAdd(column)}
+            className="ml-auto flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title={`Add task to ${cfg.label}`}
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        )}
       </div>
 
-      {/* Cards */}
-      <ScrollArea className="flex-1">
-        <div className="space-y-1.5 p-2">
-          {tasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onToggle={() => onToggle(task)}
-              onMove={(target) => onMove(task, target)}
-              onRemove={() => onRemove(task)}
-              columns={allColumns}
-            />
-          ))}
-          {tasks.length === 0 && (
-            <p className="py-4 text-center text-[10px] italic text-text-muted">No tasks</p>
-          )}
+      {/* Collapsed: vertical count */}
+      {collapsed && tasks.length > 0 && (
+        <div className="flex flex-1 items-center justify-center">
+          <span className="text-[9px] font-medium text-text-muted [writing-mode:vertical-lr]">
+            {cfg.label} ({tasks.length})
+          </span>
         </div>
-      </ScrollArea>
+      )}
+
+      {/* Cards */}
+      {!collapsed && (
+        <ScrollArea className="flex-1">
+          <div className="space-y-1.5 p-2">
+            {tasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onToggle={() => onToggle(task)}
+                onMove={(target) => onMove(task, target)}
+                onRemove={() => onRemove(task)}
+                columns={allColumns}
+                prevColumn={prevCol}
+                nextColumn={nextCol}
+              />
+            ))}
+            {tasks.length === 0 && (
+              <p className="py-4 text-center text-[10px] italic text-text-muted">No tasks</p>
+            )}
+          </div>
+        </ScrollArea>
+      )}
     </div>
   );
 }
@@ -382,27 +449,110 @@ export function TasksSection() {
     [fileData, writeAndRefresh],
   );
 
+  const handleArchiveCompleted = useCallback(async () => {
+    if (!fileData || !filePath || !project) return;
+    const parsedBoard = parseTaskBoard(fileData.content, filePath);
+    const allTasks = Object.values(parsedBoard.columns).flat();
+    const completed = allTasks.filter((t) => t.completed);
+    if (completed.length === 0) return;
+
+    const date = new Date().toISOString().split("T")[0];
+    const archiveLines = completed.map((t) => `- [x] ${t.text}`).join("\n");
+    const archiveEntry = `\n## Archived ${date}\n${archiveLines}\n`;
+
+    const archivePath = `${project.path}/docs/tasks_completed.md`;
+    try {
+      const existing = await trpcInvoke<{ content: string }>("files.readFile", {
+        path: archivePath,
+      });
+      await writeFile.mutateAsync({
+        path: archivePath,
+        content: `${existing.content}${archiveEntry}`,
+      });
+    } catch {
+      await writeFile.mutateAsync({
+        path: archivePath,
+        content: `# Completed Tasks\n${archiveEntry}`,
+      });
+    }
+
+    const content = fileData.content;
+    const sortedLines = completed.map((t) => t.line).sort((a, b) => b - a);
+    const lines = content.split("\n");
+    for (const line of sortedLines) {
+      lines.splice(line, 1);
+    }
+    await writeAndRefresh(lines.join("\n"));
+  }, [fileData, filePath, project, writeFile, writeAndRefresh]);
+
+  const handleCreateTodo = useCallback(async () => {
+    if (!project) return;
+    const todoPath = `${project.path}/docs/TODO.md`;
+    const template = `# ${project.name} — Task Board
+
+## Backlog
+- [ ] Define project requirements
+- [ ] Setup development environment
+
+## Todo
+
+## In Progress
+
+## Validated
+
+## Done
+
+---
+> Managed by Exegol. Move tasks between sections to update status.
+> Tags: #feature #bug #refactor #docs | Priority: !high !medium !low | Agent: @claude-code
+`;
+    // Ensure docs/ directory exists
+    try {
+      await trpcInvoke("files.writeFile", { path: `${project.path}/docs/.gitkeep`, content: "" });
+    } catch {
+      /* dir may already exist */
+    }
+    await writeFile.mutateAsync({ path: todoPath, content: template });
+    setFilePath(todoPath);
+  }, [project, writeFile, setFilePath]);
+
   // ─── Empty state ──────────────────────────────────────────────────────
   if (!filePath || !fileData) {
     return (
-      <div className="flex h-full flex-col items-center justify-center">
+      <div className="flex h-full flex-col items-center justify-center gap-3">
         <EmptyState
           icon={<CheckSquare className="h-8 w-8 text-text-muted" />}
-          title="No task file loaded"
-          description="Open a markdown file with tasks (TODO.md, TASKS.md)"
-          action={{ label: "Open File", onClick: handlePickFile }}
+          title="No task file found"
+          description="Create a TODO.md or open an existing one"
         />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            onClick={handleCreateTodo}
+            className="gap-1.5 bg-accent text-white hover:bg-accent/90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Create TODO.md
+          </Button>
+          <Button
+            type="button"
+            onClick={handlePickFile}
+            className="gap-1.5 bg-bg-tertiary text-text-secondary hover:text-text-primary"
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            Open Existing
+          </Button>
+        </div>
       </div>
     );
   }
 
   if (!board) return null;
 
-  // Use detected columns, or defaults
-  const displayColumns =
-    board.columnOrder.length > 0
-      ? board.columnOrder
-      : (["backlog", "in-progress", "done"] as TaskColumn[]);
+  // Always show core columns + any extras from the file
+  const CORE_COLUMNS: TaskColumn[] = ["backlog", "todo", "in-progress", "validated", "done"];
+  const extraColumns = board.columnOrder.filter((c) => !CORE_COLUMNS.includes(c));
+  const displayColumns = [...CORE_COLUMNS, ...extraColumns];
 
   const totalTasks = Object.values(board.columns).flat().length;
   const doneTasks = board.columns.done.length + board.columns.archived.length;
@@ -426,10 +576,24 @@ export function TasksSection() {
             {doneTasks}/{totalTasks}
           </span>
         </div>
+        {doneTasks > 0 && (
+          <Button
+            type="button"
+            onClick={handleArchiveCompleted}
+            className="ml-auto h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary"
+            title="Move completed tasks to tasks_completed.md"
+          >
+            <Archive className="h-3 w-3" />
+            Archive {doneTasks}
+          </Button>
+        )}
         <Button
           type="button"
           onClick={handlePickFile}
-          className="ml-auto h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary"
+          className={cn(
+            doneTasks === 0 && "ml-auto",
+            "h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary",
+          )}
         >
           <FolderOpen className="h-3 w-3" />
           Open
@@ -438,12 +602,13 @@ export function TasksSection() {
 
       {/* Kanban board */}
       <div className="flex flex-1 gap-2 overflow-x-auto p-2">
-        {displayColumns.map((col) => (
+        {displayColumns.map((col, idx) => (
           <Column
             key={col}
             column={col}
             tasks={board.columns[col]}
             allColumns={displayColumns}
+            columnIndex={idx}
             onToggle={handleToggle}
             onMove={handleMove}
             onRemove={handleRemove}
