@@ -60,6 +60,15 @@ interface WorkspaceStore {
   removeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   renameTab: (tabId: string, label: string) => void;
+  /** Reorder tab by moving it from one position to another */
+  reorderTab: (fromIndex: number, toIndex: number) => void;
+  /** Merge a source tab's content into a target tab as a split pane */
+  mergeTabIntoSplit: (
+    sourceTabId: string,
+    targetTabId: string,
+    direction: "horizontal" | "vertical",
+    sourceFirst?: boolean,
+  ) => void;
 
   // Pane actions
   addPane: (tabId: string, type: PaneType, config?: { agentId?: string; url?: string }) => string;
@@ -224,6 +233,45 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         set((s) => ({
           tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, label } : t)),
         })),
+
+      reorderTab: (fromIndex, toIndex) =>
+        set((s) => {
+          if (fromIndex === toIndex) return s;
+          const newTabs = [...s.tabs];
+          const [moved] = newTabs.splice(fromIndex, 1);
+          if (!moved) return s;
+          newTabs.splice(toIndex, 0, moved);
+          return { tabs: newTabs };
+        }),
+
+      mergeTabIntoSplit: (sourceTabId, targetTabId, direction, sourceFirst = false) =>
+        set((s) => {
+          const sourceTab = s.tabs.find((t) => t.id === sourceTabId);
+          const targetTab = s.tabs.find((t) => t.id === targetTabId);
+          if (!sourceTab || !targetTab || sourceTabId === targetTabId) return s;
+
+          // Merge source layout into target as a new split
+          // sourceFirst: drop left/top → source appears first (left/top position)
+          const mergedLayout: LayoutNode = {
+            type: "split",
+            direction,
+            children: sourceFirst
+              ? [sourceTab.layout, targetTab.layout]
+              : [targetTab.layout, sourceTab.layout],
+            sizes: [50, 50],
+          };
+
+          // Remove source tab, update target tab's layout
+          const newTabs = s.tabs
+            .filter((t) => t.id !== sourceTabId)
+            .map((t) => (t.id === targetTabId ? { ...t, layout: mergedLayout } : t));
+
+          // Panes stay as-is — they're now referenced by the merged layout
+          return {
+            tabs: newTabs,
+            activeTabId: targetTabId,
+          };
+        }),
 
       addPane: (tabId, type, config) => {
         const pane: Pane = {

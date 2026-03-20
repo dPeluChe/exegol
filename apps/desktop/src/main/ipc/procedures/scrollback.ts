@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { app } from "electron";
 import { z } from "zod";
+import { getPtyHost } from "../../terminal/pty-host";
 import { publicProcedure, router } from "../trpc";
 
 // Only allow safe characters in agentId (nanoid alphabet + underscore/hyphen)
@@ -41,9 +42,16 @@ function getSerializedPath(agentId: string): string {
 }
 
 export const scrollbackRouter = router({
-  /** Get scrollback content. Prefers serialized state (colors/formatting intact), falls back to raw log. */
+  /** Get scrollback content. Prefers: live snapshot > serialized file > raw log. */
   get: publicProcedure.input(z.object({ agentId: z.string() })).query(({ input }) => {
-    // Try serialized state first (higher fidelity: preserves cursor pos, attributes)
+    // T36: Try live headless emulator snapshot first (most up-to-date)
+    const ptyHost = getPtyHost();
+    if (ptyHost.isAlive(input.agentId)) {
+      const snapshot = ptyHost.getSnapshot(input.agentId);
+      if (snapshot) return snapshot;
+    }
+
+    // Try serialized state file (renderer-persisted, highest fidelity)
     const serializedPath = getSerializedPath(input.agentId);
     if (existsSync(serializedPath)) {
       try {
@@ -53,7 +61,7 @@ export const scrollbackRouter = router({
       }
     }
 
-    // Fall back to raw scrollback log
+    // Fall back to raw scrollback log (headless emulator periodic snapshots)
     const filePath = getScrollbackPath(input.agentId);
     if (!existsSync(filePath)) {
       return null;

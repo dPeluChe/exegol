@@ -34,15 +34,11 @@ try {
   logger.warn("[AgentManager] @exegol/core-rust native module not available — worktrees disabled");
 }
 
-// ─── Scrollback / PTY constants ─────────────────────────────────────────
+// ─── PTY constants ──────────────────────────────────────────────────────
 
-export const MAX_SCROLLBACK_BYTES = 1024 * 1024; // 1MB per agent
-export const SCROLLBACK_FLUSH_INTERVAL_MS = 30_000; // 30s periodic flush
 export const SHELL_PATH_TIMEOUT_MS = 5_000;
 export const DEFAULT_PTY_COLS = 120;
 export const DEFAULT_PTY_ROWS = 30;
-export const STOP_POLL_INTERVAL_MS = 100;
-export const STOP_TIMEOUT_MS = 5_000;
 
 // ─── Shell PATH resolution ──────────────────────────────────────────────
 

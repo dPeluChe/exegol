@@ -3,8 +3,10 @@ import { is } from "@electron-toolkit/utils";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell } from "electron";
 import { getAgentManager } from "./agents/manager";
+import { startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
+import { cleanupAgentWrappers, ensureAgentWrappers } from "./agents/wrappers";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { recoverStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
@@ -13,6 +15,8 @@ import { getMcpHost } from "./mcp/host";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
+import { getPtyHost } from "./terminal/pty-host";
+import { ensureShellWrappers } from "./terminal/shell-wrappers";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -119,13 +123,23 @@ app.whenReady().then(async () => {
   if (recovery.crashed > 0) {
     logger.info(`[Startup] Recovered ${recovery.crashed} crashed agent(s) from previous session`);
   }
-  // Auto-delete crashed shell terminals (no value in keeping them)
+  // Clean up stale agents:
+  // - Shell terminals (always, no value)
+  // - Crashed older than 1h (recent crashes kept for re-launch)
+  // - Completed/failed/stopped older than 24h (recent ones stay for Recent Sessions)
   try {
-    const shellCleanup = getDb()
-      .prepare("DELETE FROM agents WHERE status = 'crashed' AND cli_type = 'shell'")
-      .run();
-    if (shellCleanup.changes > 0) {
-      logger.info(`[Startup] Cleaned ${shellCleanup.changes} crashed shell(s)`);
+    const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
+    const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
+    const staleCleanup = getDb()
+      .prepare(
+        `DELETE FROM agents WHERE
+          cli_type = 'shell'
+          OR (status = 'crashed' AND stopped_at < ?)
+          OR (status IN ('completed', 'failed', 'stopped') AND stopped_at < ?)`,
+      )
+      .run(oneHourAgo, oneDayAgo);
+    if (staleCleanup.changes > 0) {
+      logger.info(`[Startup] Cleaned ${staleCleanup.changes} stale agent(s)`);
     }
   } catch {
     /* table may not exist */
@@ -157,6 +171,12 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   registerGlobalHotkey();
   ensureDefaultSkills(); // Install default skills to ~/.exegol/skills/ if missing
+  ensureShellWrappers(); // Create zsh/bash wrapper files for shell-ready marker
+  ensureAgentWrappers(); // Create agent hooks + Claude Code settings merge
+  startNotifyHandler((event) => {
+    logger.info(`[NotifyHandler] Agent event: ${event.type} from ${event.agentId}`);
+    // TODO: Route events to AgentManager for status updates (Phase 2)
+  });
   startMetricsCollector(); // Background: collects CPU/RAM/disk every 10s
   getSchedulerEngine().start(getDb()); // Load scheduled tasks and start cron jobs
   getQueueExecutor().start(getDb()); // Start task queue executor
@@ -185,19 +205,11 @@ app.on("will-quit", () => {
   markShutdown();
   globalShortcut.unregisterAll();
 
-  // Stop all running agents and close the database
-  const manager = getAgentManager();
-  for (const agentId of manager.listRunning()) {
-    const proc = manager.getProcess(agentId);
-    if (proc) {
-      try {
-        proc.kill();
-      } catch {
-        // Process may have already exited
-      }
-    }
-  }
+  // Stop all PTY subprocess sessions and close the database
+  getPtyHost().destroyAll();
 
+  stopNotifyHandler();
+  cleanupAgentWrappers();
   getMcpHost().disconnectAll();
   getSchedulerEngine().stop();
   getQueueExecutor().stop();

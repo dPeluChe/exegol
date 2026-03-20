@@ -14,7 +14,7 @@ import {
   Terminal,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
@@ -441,8 +441,52 @@ interface WorkspacePaneProps {
 export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
   const pane = useWorkspaceStore((s) => s.panes[paneId]);
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
+  const mergeTabIntoSplit = useWorkspaceStore((s) => s.mergeTabIntoSplit);
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFocused = focusedPaneId === paneId;
+  const [dropSide, setDropSide] = useState<"left" | "right" | "top" | "bottom" | null>(null);
+
+  const handlePaneDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    if (!e.dataTransfer.types.includes("application/exegol-tab")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    // Determine drop side from mouse position relative to pane
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    // Edge zones: 30% from each edge
+    if (x < 0.3) setDropSide("left");
+    else if (x > 0.7) setDropSide("right");
+    else if (y < 0.3) setDropSide("top");
+    else if (y > 0.7) setDropSide("bottom");
+    else setDropSide(null);
+  }, []);
+
+  const handlePaneDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const sourceTabId = e.dataTransfer.getData("application/exegol-tab");
+      if (!sourceTabId || sourceTabId === tabId) {
+        setDropSide(null);
+        return;
+      }
+      const direction = dropSide === "left" || dropSide === "right" ? "horizontal" : "vertical";
+      const sourceFirst = dropSide === "left" || dropSide === "top";
+      mergeTabIntoSplit(sourceTabId, tabId, direction, sourceFirst);
+      setDropSide(null);
+      // Refit all terminals after layout change (xterm needs to recalculate dimensions)
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("exegol:refit-terminals"));
+      });
+    },
+    [tabId, dropSide, mergeTabIntoSplit],
+  );
+
+  // Only clear drop indicator when truly leaving the pane (not entering a child)
+  const handlePaneDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setDropSide(null);
+  }, []);
 
   if (!pane) {
     return (
@@ -460,7 +504,22 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         isFocused ? "border-2 border-accent/40" : "border-2 border-transparent",
       )}
       onMouseDown={() => setFocusedPane(paneId)}
+      onDragOver={handlePaneDragOver}
+      onDrop={handlePaneDrop}
+      onDragLeave={handlePaneDragLeave}
     >
+      {/* Tab merge drop indicator */}
+      {dropSide && (
+        <div
+          className={cn(
+            "pointer-events-none absolute z-20 bg-accent/20 border-2 border-accent/50 rounded transition-all",
+            dropSide === "left" && "inset-y-0 left-0 w-1/2",
+            dropSide === "right" && "inset-y-0 right-0 w-1/2",
+            dropSide === "top" && "inset-x-0 top-0 h-1/2",
+            dropSide === "bottom" && "inset-x-0 bottom-0 h-1/2",
+          )}
+        />
+      )}
       <PaneToolbar tabId={tabId} paneId={paneId} paneType={pane.type} />
       <div className="flex-1 overflow-hidden">
         {pane.invalidReason && <InvalidPane reason={pane.invalidReason} paneId={paneId} />}

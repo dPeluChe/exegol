@@ -11,6 +11,14 @@ export default defineConfig({
         "@main": resolve("src/main"),
       },
     },
+    build: {
+      rollupOptions: {
+        input: {
+          index: resolve("src/main/index.ts"),
+          "pty-subprocess": resolve("src/main/terminal/pty-subprocess.ts"),
+        },
+      },
+    },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],

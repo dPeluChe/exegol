@@ -1,10 +1,6 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 import type { Agent, AgentCliType, AgentCreate, AgentStatus } from "@exegol/shared";
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
-import type { IPty } from "node-pty";
-import * as pty from "node-pty";
 import {
   createOplogEntry,
   createWorktree as dbCreateWorktree,
@@ -18,6 +14,8 @@ import {
 } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
+import { getPtyHost } from "../terminal/pty-host";
+import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../terminal/shell-wrappers";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import { getProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
@@ -28,10 +26,6 @@ import {
   DEFAULT_PTY_COLS,
   DEFAULT_PTY_ROWS,
   finalizeAgentStatus,
-  MAX_SCROLLBACK_BYTES,
-  SCROLLBACK_FLUSH_INTERVAL_MS,
-  STOP_POLL_INTERVAL_MS,
-  STOP_TIMEOUT_MS,
   scoreAndRecordOplog,
   slugifyBranchName,
 } from "./spawn-env";
@@ -99,17 +93,20 @@ function createOutputProcessor(_agentId: string, cliType: AgentCliType): OutputP
   };
 }
 
+const STOP_POLL_INTERVAL_MS = 100;
+const STOP_TIMEOUT_MS = 5_000;
+
 export class AgentManager {
-  private processes: Map<string, IPty> = new Map();
   private outputProcessors: Map<string, OutputProcessor> = new Map();
   private worktrees: Map<string, WorktreeRecord> = new Map();
-  private scrollbackBuffers: Map<string, string[]> = new Map();
-  private scrollbackSizes: Map<string, number> = new Map();
-  private scrollbackTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
   private completionCallbacks: Map<string, (exitCode: number) => void> = new Map();
   private initialSnapshots: Map<string, { headSha: string; cwd: string; projectId: string }> =
     new Map();
   private tokenLimitDetected: Set<string> = new Set();
+  /** Track scrollback text for scoring (status parsing produces clean text) */
+  private scrollbackBuffers: Map<string, string[]> = new Map();
+  private scrollbackSizes: Map<string, number> = new Map();
+  private static readonly MAX_SCROLLBACK_BYTES = 1024 * 1024; // 1MB for scoring buffer
 
   async spawn(db: Database.Database, agent: Agent, config: AgentCreate): Promise<void> {
     const registry = getProviderRegistry();
@@ -178,23 +175,23 @@ export class AgentManager {
     const isPlainShell = agent.cliType === "shell";
     const userShell = process.env.SHELL || "/bin/zsh";
 
-    let proc: IPty;
+    let shell: string;
+    let args: string[];
+    let env: Record<string, string>;
+
     if (isPlainShell) {
-      // Interactive login shell in project directory — no command, no context injection
-      proc = pty.spawn(userShell, ["-il"], {
-        name: "xterm-256color",
-        cols: DEFAULT_PTY_COLS,
-        rows: DEFAULT_PTY_ROWS,
-        cwd,
-        env: { ...process.env, TERM: "xterm-256color" } as Record<string, string>,
-      });
+      shell = userShell;
+      args = ["-il"];
+      env = {
+        ...process.env,
+        TERM: "xterm-256color",
+        EXEGOL_AGENT_ID: agent.id,
+      } as Record<string, string>;
     } else {
-      // ── Build context + command + API keys ──────────────────────────────
       const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
       const fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
       const apiKeyEnv = buildApiKeyEnv(db);
 
-      // Capture initial HEAD snapshot for oplog
       if (coreRust) {
         try {
           const snapshot = coreRust.getRepoSnapshot(cwd);
@@ -214,20 +211,155 @@ export class AgentManager {
         cwd,
         shellExists: require("node:fs").existsSync(userShell),
       });
-      proc = pty.spawn(userShell, ["-ilc", fullCommand], {
-        name: "xterm-256color",
-        cols: DEFAULT_PTY_COLS,
-        rows: DEFAULT_PTY_ROWS,
-        cwd,
-        env: { ...process.env, ...apiKeyEnv, ...cliConfig.env, TERM: "xterm-256color" } as Record<
-          string,
-          string
-        >,
-      });
+
+      shell = userShell;
+      args = ["-ilc", fullCommand];
+      env = {
+        ...process.env,
+        ...apiKeyEnv,
+        ...cliConfig.env,
+        TERM: "xterm-256color",
+        EXEGOL_AGENT_ID: agent.id,
+      } as Record<string, string>;
     }
 
-    this.processes.set(agent.id, proc);
-    setAgentPid(db, agent.id, proc.pid);
+    // ── Shell readiness: only for plain shells (interactive prompt) ─────
+    // Agent CLIs use -ilc which runs a command directly — no prompt, no precmd,
+    // so the marker never fires and we'd wait 15s for nothing.
+    const shellName = userShell.split("/").pop() ?? "";
+    const enableMarker = isPlainShell && shellSupportsMarker(userShell);
+    if (enableMarker) {
+      if (shellName === "zsh") {
+        env.EXEGOL_ORIG_ZDOTDIR = process.env.ZDOTDIR || require("node:os").homedir();
+        env.ZDOTDIR = getZshWrapperDir();
+      } else if (shellName === "bash") {
+        args = ["-il", "--rcfile", getBashRcfile()];
+      }
+    }
+
+    // ── Output processing setup (non-shell agents only) ─────────────────
+    if (!isPlainShell) {
+      this.outputProcessors.set(agent.id, createOutputProcessor(agent.id, agent.cliType));
+      this.scrollbackBuffers.set(agent.id, []);
+      this.scrollbackSizes.set(agent.id, 0);
+    }
+
+    // ── Spawn PTY in isolated subprocess (T35) ──────────────────────────
+    const ptyHost = getPtyHost();
+    const scrollbackPath = isPlainShell ? undefined : getScrollbackPath(agent.id);
+
+    const { pid } = await ptyHost.createSession(
+      agent.id,
+      { shell, args, cwd, cols: DEFAULT_PTY_COLS, rows: DEFAULT_PTY_ROWS, env },
+      {
+        onData: (data: string) => {
+          // Broadcast raw terminal data to all renderer windows
+          for (const win of BrowserWindow.getAllWindows()) {
+            win.webContents.send("terminal:data", agent.id, data);
+          }
+
+          if (isPlainShell) return;
+
+          // Buffer raw data for scoring (capped at 1MB)
+          const currentSize = this.scrollbackSizes.get(agent.id) ?? 0;
+          if (currentSize < AgentManager.MAX_SCROLLBACK_BYTES) {
+            this.scrollbackBuffers.get(agent.id)?.push(data);
+            this.scrollbackSizes.set(agent.id, currentSize + data.length);
+          }
+
+          // Status parsing
+          const processor = this.outputProcessors.get(agent.id);
+          if (!processor) return;
+          const result = processor.process(data);
+          if (result.status || result.currentStep) {
+            if (result.status) {
+              updateAgentStatus(db, agent.id, result.status as AgentStatus, result.currentStep);
+              broadcastAgentStatus({
+                agentId: agent.id,
+                projectId: agent.projectId,
+                status: result.status as AgentStatus,
+                currentStep: result.currentStep ?? null,
+                cliType: agent.cliType,
+                timestamp: Date.now(),
+              });
+            } else if (result.currentStep) {
+              updateAgentStatus(db, agent.id, "running", result.currentStep);
+              broadcastAgentStatus({
+                agentId: agent.id,
+                projectId: agent.projectId,
+                status: "running",
+                currentStep: result.currentStep,
+                cliType: agent.cliType,
+                timestamp: Date.now(),
+              });
+            }
+          }
+
+          // Token limit detection + handoff
+          if (result.tokenLimitWarning && !this.tokenLimitDetected.has(agent.id)) {
+            this.tokenLimitDetected.add(agent.id);
+            try {
+              const scrollback = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+              const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
+              const handoff = createHandoff(db, { agentId: agent.id, ...summary });
+              for (const win of BrowserWindow.getAllWindows()) {
+                win.webContents.send("agent:handoff-ready", agent.id, handoff.id);
+              }
+              logger.info(
+                `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
+              );
+            } catch (err) {
+              logger.error(`[AgentManager] Failed to create handoff for ${agent.id}:`, err);
+            }
+          }
+        },
+
+        onExit: (exitCode: number) => {
+          const isShell = agent.cliType === "shell";
+          const scrollbackForScoring = isShell
+            ? ""
+            : (this.scrollbackBuffers.get(agent.id)?.join("") ?? "");
+
+          // Clean up in-memory state
+          this.outputProcessors.delete(agent.id);
+          this.tokenLimitDetected.delete(agent.id);
+          this.scrollbackBuffers.delete(agent.id);
+          this.scrollbackSizes.delete(agent.id);
+
+          finalizeAgentStatus(db, agent, exitCode);
+
+          if (!isShell) {
+            scoreAndRecordOplog(
+              db,
+              agent,
+              exitCode,
+              scrollbackForScoring,
+              this.initialSnapshots.get(agent.id),
+            );
+          }
+          this.initialSnapshots.delete(agent.id);
+
+          try {
+            this.cleanupWorktree(db, agent.id);
+          } catch {
+            /* DB closed during shutdown — non-fatal */
+          }
+
+          const completionCb = this.completionCallbacks.get(agent.id);
+          if (completionCb) {
+            this.completionCallbacks.delete(agent.id);
+            completionCb(exitCode);
+          }
+        },
+
+        onError: (message: string) => {
+          logger.error(`[AgentManager] PTY error for ${agent.id}: ${message}`);
+        },
+      },
+      { scrollbackPath, shellReadyGating: enableMarker },
+    );
+
+    setAgentPid(db, agent.id, pid);
     updateAgentStatus(db, agent.id, "running");
     broadcastAgentStatus({
       agentId: agent.id,
@@ -249,138 +381,16 @@ export class AgentManager {
     } catch (err) {
       logger.warn("[AgentManager] Failed to log activity:", err);
     }
-
-    // Shell terminals: no output processing, no scrollback buffering
-    if (!isPlainShell) {
-      const processor = createOutputProcessor(agent.id, agent.cliType);
-      this.outputProcessors.set(agent.id, processor);
-      this.scrollbackBuffers.set(agent.id, []);
-      this.scrollbackSizes.set(agent.id, 0);
-      this.scrollbackTimers.set(
-        agent.id,
-        setInterval(() => {
-          this.flushScrollback(agent.id, true);
-        }, SCROLLBACK_FLUSH_INTERVAL_MS),
-      );
-    }
-
-    // ── PTY data handler ──────────────────────────────────────────────
-    proc.onData((data: string) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("terminal:data", agent.id, data);
-      }
-
-      // Skip processing for plain shells — just forward terminal data
-      if (isPlainShell) return;
-
-      const currentSize = this.scrollbackSizes.get(agent.id) ?? 0;
-      if (currentSize < MAX_SCROLLBACK_BYTES) {
-        this.scrollbackBuffers.get(agent.id)?.push(data);
-        this.scrollbackSizes.set(agent.id, currentSize + data.length);
-      }
-
-      const processor = this.outputProcessors.get(agent.id);
-      if (!processor) return;
-      const result = processor.process(data);
-      if (result.status || result.currentStep) {
-        if (result.status) {
-          updateAgentStatus(db, agent.id, result.status as AgentStatus, result.currentStep);
-          broadcastAgentStatus({
-            agentId: agent.id,
-            projectId: agent.projectId,
-            status: result.status as AgentStatus,
-            currentStep: result.currentStep ?? null,
-            cliType: agent.cliType,
-            timestamp: Date.now(),
-          });
-        } else if (result.currentStep) {
-          updateAgentStatus(db, agent.id, "running", result.currentStep);
-          broadcastAgentStatus({
-            agentId: agent.id,
-            projectId: agent.projectId,
-            status: "running",
-            currentStep: result.currentStep,
-            cliType: agent.cliType,
-            timestamp: Date.now(),
-          });
-        }
-      }
-
-      if (result.tokenLimitWarning && !this.tokenLimitDetected.has(agent.id)) {
-        this.tokenLimitDetected.add(agent.id);
-        try {
-          const scrollback = this.scrollbackBuffers.get(agent.id)?.join("") ?? "";
-          const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
-          const handoff = createHandoff(db, { agentId: agent.id, ...summary });
-          for (const win of BrowserWindow.getAllWindows()) {
-            win.webContents.send("agent:handoff-ready", agent.id, handoff.id);
-          }
-          logger.info(
-            `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
-          );
-        } catch (err) {
-          logger.error(`[AgentManager] Failed to create handoff for ${agent.id}:`, err);
-        }
-      }
-    });
-
-    // ── PTY exit handler ──────────────────────────────────────────────
-    proc.onExit(({ exitCode }) => {
-      // Clean up timers and in-memory state (always safe, no DB)
-      const timer = this.scrollbackTimers.get(agent.id);
-      if (timer) {
-        clearInterval(timer);
-        this.scrollbackTimers.delete(agent.id);
-      }
-
-      const isShell = agent.cliType === "shell";
-      const scrollbackForScoring = isShell
-        ? ""
-        : (this.scrollbackBuffers.get(agent.id)?.join("") ?? "");
-
-      // TODO: Memory extraction disabled until task pipeline is implemented.
-      // See: docs/UI_RESTRUCTURE.md Phase 7
-
-      this.flushScrollback(agent.id, false);
-      this.processes.delete(agent.id);
-      this.outputProcessors.delete(agent.id);
-      this.tokenLimitDetected.delete(agent.id);
-
-      finalizeAgentStatus(db, agent, exitCode);
-
-      // Scoring + oplog: skip for plain shells
-      if (!isShell) {
-        scoreAndRecordOplog(
-          db,
-          agent,
-          exitCode,
-          scrollbackForScoring,
-          this.initialSnapshots.get(agent.id),
-        );
-      }
-      this.initialSnapshots.delete(agent.id);
-
-      try {
-        this.cleanupWorktree(db, agent.id);
-      } catch {
-        /* DB closed during shutdown — non-fatal */
-      }
-
-      const completionCb = this.completionCallbacks.get(agent.id);
-      if (completionCb) {
-        this.completionCallbacks.delete(agent.id);
-        completionCb(exitCode);
-      }
-    });
   }
 
   async stop(db: Database.Database, agentId: string): Promise<void> {
-    const proc = this.processes.get(agentId);
-    if (proc) {
-      proc.kill();
+    const ptyHost = getPtyHost();
+    if (ptyHost.isAlive(agentId)) {
+      ptyHost.kill(agentId);
+      // Wait for exit
       await new Promise<void>((resolve) => {
         const checkInterval = setInterval(() => {
-          if (!this.processes.has(agentId)) {
+          if (!ptyHost.hasSession(agentId)) {
             clearInterval(checkInterval);
             clearTimeout(timeout);
             resolve();
@@ -388,11 +398,6 @@ export class AgentManager {
         }, STOP_POLL_INTERVAL_MS);
         const timeout = setTimeout(() => {
           clearInterval(checkInterval);
-          try {
-            process.kill(proc.pid, "SIGKILL");
-          } catch {
-            /* already exited */
-          }
           resolve();
         }, STOP_TIMEOUT_MS);
       });
@@ -415,39 +420,25 @@ export class AgentManager {
     }
   }
 
-  getProcess(agentId: string): IPty | undefined {
-    return this.processes.get(agentId);
-  }
   listRunning(): string[] {
-    return Array.from(this.processes.keys());
+    return getPtyHost().listSessions();
   }
 
   write(agentId: string, data: string): void {
-    this.processes.get(agentId)?.write(data);
+    getPtyHost().write(agentId, data);
   }
 
   resize(agentId: string, cols: number, rows: number): void {
-    this.processes.get(agentId)?.resize(cols, rows);
+    getPtyHost().resize(agentId, cols, rows);
   }
 
   onAgentComplete(agentId: string, callback: (exitCode: number) => void): void {
     this.completionCallbacks.set(agentId, callback);
   }
 
-  private flushScrollback(agentId: string, keepBuffer: boolean): void {
-    const buffer = this.scrollbackBuffers.get(agentId);
-    if (!buffer || buffer.length === 0) return;
-    try {
-      const filePath = getScrollbackPath(agentId);
-      mkdirSync(dirname(filePath), { recursive: true });
-      writeFileSync(filePath, buffer.join(""), "utf-8");
-    } catch (err) {
-      logger.error(`[AgentManager] Failed to write scrollback for ${agentId}:`, err);
-    }
-    if (!keepBuffer) {
-      this.scrollbackBuffers.delete(agentId);
-      this.scrollbackSizes.delete(agentId);
-    }
+  /** Get PID from PtyHost session (for process metrics) */
+  getPid(agentId: string): number | null {
+    return getPtyHost().getPid(agentId);
   }
 
   private cleanupWorktree(db: Database.Database, agentId: string): void {

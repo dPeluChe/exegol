@@ -2,7 +2,7 @@ import type { AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, Terminal, X } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -19,6 +19,7 @@ export function WorkspaceTabBar() {
   const removeTab = useWorkspaceStore((s) => s.removeTab);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
   const renameTab = useWorkspaceStore((s) => s.renameTab);
+  const reorderTab = useWorkspaceStore((s) => s.reorderTab);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
@@ -53,6 +54,45 @@ export function WorkspaceTabBar() {
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
+  const draggedTabIdRef = useRef<string | null>(null);
+
+  const handleTabDragStart = useCallback((e: DragEvent, tabId: string) => {
+    draggedTabIdRef.current = tabId;
+    e.dataTransfer.setData("application/exegol-tab", tabId);
+    e.dataTransfer.effectAllowed = "move";
+  }, []);
+
+  const handleTabDragOver = useCallback((e: DragEvent, tabId: string) => {
+    if (!e.dataTransfer.types.includes("application/exegol-tab")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverTabId(tabId);
+  }, []);
+
+  const handleTabDragLeave = useCallback(() => {
+    setDragOverTabId(null);
+  }, []);
+
+  const handleTabDrop = useCallback(
+    (e: DragEvent, targetTabId: string) => {
+      e.preventDefault();
+      setDragOverTabId(null);
+      const sourceTabId = e.dataTransfer.getData("application/exegol-tab");
+      if (!sourceTabId || sourceTabId === targetTabId) return;
+      const fromIndex = tabs.findIndex((t) => t.id === sourceTabId);
+      const toIndex = tabs.findIndex((t) => t.id === targetTabId);
+      if (fromIndex !== -1 && toIndex !== -1) {
+        reorderTab(fromIndex, toIndex);
+      }
+    },
+    [tabs, reorderTab],
+  );
+
+  const handleTabDragEnd = useCallback(() => {
+    draggedTabIdRef.current = null;
+    setDragOverTabId(null);
+  }, []);
 
   const handleNewTerminal = useCallback(async () => {
     if (!projectId) return;
@@ -119,6 +159,12 @@ export function WorkspaceTabBar() {
               role="button"
               tabIndex={0}
               key={tab.id}
+              draggable={!isEditing}
+              onDragStart={(e) => handleTabDragStart(e, tab.id)}
+              onDragOver={(e) => handleTabDragOver(e, tab.id)}
+              onDragLeave={handleTabDragLeave}
+              onDrop={(e) => handleTabDrop(e, tab.id)}
+              onDragEnd={handleTabDragEnd}
               onClick={() => setActiveTab(tab.id)}
               onDoubleClick={() => startEditing(tab.id, tab.label)}
               onKeyDown={(e) => {
@@ -128,6 +174,7 @@ export function WorkspaceTabBar() {
                 "group relative flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] font-medium transition-colors",
                 "hover:bg-white/5 cursor-pointer",
                 isActive ? "bg-white/10 text-text-primary" : "text-text-secondary",
+                dragOverTabId === tab.id && "ring-1 ring-accent/50",
               )}
             >
               {isEditing ? (
@@ -240,21 +287,31 @@ function QuickLaunchBar() {
         });
         createTerminal(agent.id);
 
-        // Find active tab and check if current pane is empty
+        // Find active tab and check if current pane can be replaced
         const activeTab = tabs.find((t) => t.id === activeTabId);
         if (activeTab) {
           const firstPaneId = findFirstPaneId(activeTab.layout);
           const firstPane = firstPaneId ? panes[firstPaneId] : null;
 
-          const canReplace = firstPane?.type === "empty" || firstPane?.type === "terminal";
+          // Only replace empty panes or terminals with stopped/no agent
+          // NEVER replace a pane with a running agent — that orphans the session
+          const agentState = firstPane?.agentId
+            ? useAgentStore.getState().agents[firstPane.agentId]
+            : null;
+          const isRunningAgent =
+            agentState &&
+            ["running", "spawning", "waiting_input", "paused"].includes(agentState.status);
+          const canReplace =
+            firstPane?.type === "empty" || (firstPane?.type === "terminal" && !isRunningAgent);
+
           if (canReplace && firstPaneId) {
-            // Replace current pane with new agent terminal
+            // Replace empty/stopped pane with new agent terminal
             updatePane(firstPaneId, {
               type: "terminal",
               agentId: agent.id,
             });
           } else {
-            // Active pane is browser/files/git: create a new tab
+            // Pane has a running agent or is browser/files/git: create a new tab
             const newTabId = addTab(cli.name);
             const newTab = useWorkspaceStore.getState().tabs.find((t) => t.id === newTabId);
             if (newTab) {

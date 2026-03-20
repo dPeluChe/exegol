@@ -1,7 +1,7 @@
 import type { HandoffSummary } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowRight, RotateCcw } from "lucide-react";
+import { AlertCircle, ArrowRight, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
@@ -44,9 +44,20 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
   const terminalRef = useRef<TerminalInstanceHandle>(null);
   const didSerializeRef = useRef(false);
+  const [hasData, setHasData] = useState(false);
 
   // Resolved handoff: from query (stopped agents) or live IPC (running agents)
   const resolvedHandoff = isStopped ? (handoff ?? null) : liveHandoff;
+
+  // T39b: Detect first terminal data to dismiss loading overlay
+  useEffect(() => {
+    if (isStopped || hasData) return;
+    const unsub = window.api.terminal.onData(agentId, () => {
+      setHasData(true);
+      unsub();
+    });
+    return unsub;
+  }, [agentId, isStopped, hasData]);
 
   // Listen for real-time handoff notifications on live agents (external system sync — rule #4)
   useEffect(() => {
@@ -224,9 +235,17 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     );
   }
 
-  // Live terminal — show handoff banner if token limit detected
+  // Live terminal — show loading overlay until first data arrives
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
+      {!hasData && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg-primary transition-opacity">
+          <Loader2 className="h-5 w-5 animate-spin text-accent" />
+          <span className="text-[11px] text-text-muted">
+            Starting {agent?.cliType ?? "agent"}...
+          </span>
+        </div>
+      )}
       {resolvedHandoff && (
         <div className="flex shrink-0 items-center gap-2 bg-orange-500/10 px-3 py-1.5 text-[11px]">
           <AlertCircle className="h-3.5 w-3.5 text-orange-400" />

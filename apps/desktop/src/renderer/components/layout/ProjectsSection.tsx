@@ -7,7 +7,6 @@ import {
   FolderOpen,
   GitBranch,
   Globe,
-  RotateCw,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,14 +16,13 @@ import {
   useProjectPorts,
   useProjects,
   useSettings,
-  useSpawnAgent,
 } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { useTerminalStore } from "../../stores/terminals";
 import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
 import { AgentLauncher } from "../agents/AgentLauncher";
+import { AgentIcon } from "../common/AgentIcon";
 
 // ─── Agent Mini Card ──────────────────────────────────────────────────────────
 
@@ -32,41 +30,41 @@ const STATUS_COLORS: Record<string, string> = {
   running: "bg-green-500",
   waiting_input: "bg-yellow-500",
   spawning: "bg-blue-500",
-  completed: "bg-green-500",
-  failed: "bg-red-500",
-  stopped: "bg-zinc-500",
-  idle: "bg-zinc-500",
-  paused: "bg-zinc-500",
+  crashed: "bg-red-500",
 };
+
+/** Only show agents that are active or crashed (recoverable) */
+const VISIBLE_STATUSES = new Set(["running", "spawning", "waiting_input", "crashed"]);
+
+function formatTimeAgo(ts: number | null): string {
+  if (!ts) return "";
+  const diff = Math.floor(Date.now() / 1000) - ts;
+  if (diff < 60) return "now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  return `${Math.floor(diff / 86400)}d`;
+}
 
 function AgentMiniCard({ agent }: { agent: AgentState }) {
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
-  const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
-  const createTerminal = useTerminalStore((s) => s.createTerminal);
-  const spawnAgent = useSpawnAgent();
   const isFocused = focusedAgentId === agent.id;
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
-  const isInactive = ["completed", "failed", "stopped", "crashed"].includes(agent.status);
+  const isCrashed = agent.status === "crashed";
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      if (!isInactive) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setContextMenu({ x: e.clientX, y: e.clientY });
-    },
-    [isInactive],
-  );
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
-  // Close context menu on click outside
   useEffect(() => {
     if (!contextMenu) return;
     const handleClick = (e: MouseEvent) => {
@@ -81,11 +79,9 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
   const handleRemove = useCallback(async () => {
     closeContextMenu();
     try {
-      // Stop if running
       trpcMutate("agents.stop", { id: agent.id }).catch(() => {});
       await trpcMutate("agents.delete", { id: agent.id });
       removeAgent(agent.id);
-      // Clean up any panes referencing this agent
       const ws = useWorkspaceStore.getState();
       for (const [paneId, pane] of Object.entries(ws.panes)) {
         if (pane.agentId === agent.id) {
@@ -97,29 +93,27 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
     }
   }, [agent.id, removeAgent, closeContextMenu]);
 
-  const handleRelaunch = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      const newAgent = await spawnAgent.mutateAsync({
-        projectId: agent.projectId,
-        cliType: agent.cliType,
-        taskDescription: agent.taskDescription,
-      });
-      addAgent({
-        id: newAgent.id,
-        projectId: newAgent.projectId,
-        cliType: newAgent.cliType,
-        status: newAgent.status,
-        currentStep: newAgent.currentStep,
-        taskDescription: newAgent.taskDescription,
-        branchName: null,
-        tokenUsage: { input: 0, output: 0, cost: 0 },
-        startedAt: newAgent.startedAt,
-      });
-      createTerminal(newAgent.id);
-      setFocusedAgent(newAgent.id);
-    } catch (err) {
-      console.error("[AgentMiniCard] Failed to relaunch agent:", err);
+  // Display name: task description or provider name
+  const displayName =
+    agent.taskDescription && agent.taskDescription !== agent.cliType
+      ? agent.taskDescription.slice(0, 40)
+      : agent.cliType;
+
+  const navigateToAgent = () => {
+    setFocusedAgent(agent.id);
+    const ws = useWorkspaceStore.getState();
+    for (const tab of ws.tabs) {
+      const paneIds = collectPaneIds(tab.layout);
+      for (const pid of paneIds) {
+        if (ws.panes[pid]?.agentId === agent.id) {
+          ws.setActiveTab(tab.id);
+          ws.setFocusedPane(pid);
+          window.dispatchEvent(
+            new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
+          );
+          return;
+        }
+      }
     }
   };
 
@@ -127,7 +121,7 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
     <div
       role="none"
       className={cn(
-        "relative flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-[10px] transition-colors",
+        "relative flex w-full items-center gap-2 rounded-md px-1.5 py-1 transition-colors",
         isFocused
           ? "bg-white/10 text-text-primary"
           : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
@@ -136,49 +130,45 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
     >
       <button
         type="button"
-        onClick={() => {
-          setFocusedAgent(agent.id);
-          // Navigate to the workspace tab containing this agent
-          const ws = useWorkspaceStore.getState();
-          for (const tab of ws.tabs) {
-            const paneIds = collectPaneIds(tab.layout);
-            for (const pid of paneIds) {
-              if (ws.panes[pid]?.agentId === agent.id) {
-                ws.setActiveTab(tab.id);
-                ws.setFocusedPane(pid);
-                // Ensure we're on the Agents view
-                window.dispatchEvent(
-                  new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-                );
-                return;
-              }
-            }
-          }
-        }}
-        className="flex flex-1 items-center gap-1.5 text-left"
+        onClick={navigateToAgent}
+        className="flex flex-1 items-center gap-2 text-left"
       >
-        <span
-          className={cn(
-            "h-1.5 w-1.5 shrink-0 rounded-full",
-            STATUS_COLORS[agent.status] ?? "bg-zinc-500",
-            isActive && "animate-status-pulse",
-          )}
+        {/* Provider icon (mini) */}
+        <AgentIcon
+          provider={agent.cliType}
+          size={16}
+          fallbackColor={STATUS_COLORS[agent.status] ?? "#6B7280"}
         />
-        <span className="flex-1 truncate">{agent.taskDescription}</span>
-      </button>
-      {isInactive && (
-        <button
-          type="button"
-          onClick={handleRelaunch}
-          disabled={spawnAgent.isPending}
-          className="shrink-0 rounded p-0.5 text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
-          title="Re-launch agent"
-        >
-          <RotateCw className={cn("h-2.5 w-2.5", spawnAgent.isPending && "animate-spin")} />
-        </button>
-      )}
 
-      {/* Context menu for inactive agents */}
+        {/* Name + step */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <span
+              className={cn(
+                "h-1.5 w-1.5 shrink-0 rounded-full",
+                STATUS_COLORS[agent.status] ?? "bg-zinc-500",
+                isActive && "animate-status-pulse",
+              )}
+            />
+            <span className="flex-1 truncate text-[10px] font-medium">{displayName}</span>
+            <span className="shrink-0 text-[8px] tabular-nums text-text-muted">
+              {formatTimeAgo(agent.startedAt)}
+            </span>
+          </div>
+          {(agent.currentStep || isCrashed) && (
+            <p
+              className={cn(
+                "truncate text-[9px] pl-2.5",
+                isCrashed ? "text-red-400" : "text-text-muted",
+              )}
+            >
+              {isCrashed ? "Crashed — click to re-launch" : agent.currentStep}
+            </p>
+          )}
+        </div>
+      </button>
+
+      {/* Context menu */}
       {contextMenu && (
         <div
           ref={menuRef}
@@ -191,7 +181,7 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-red-400 transition-colors hover:bg-white/10"
           >
             <Trash2 className="h-3 w-3" />
-            Remove from history
+            Remove
           </button>
         </div>
       )}
@@ -331,31 +321,15 @@ function ProjectItem({
           {/* Detected ports */}
           <PortBadges projectPath={project.path} />
 
-          {/* Agents: all active + last 3 inactive */}
-          {agents.length > 0 ? (
-            (() => {
-              const active = agents.filter((a) =>
-                ["running", "spawning", "waiting_input"].includes(a.status),
-              );
-              const inactive = agents
-                .filter((a) => !["running", "spawning", "waiting_input"].includes(a.status))
-                .slice(0, 3);
-              const visible = [...active, ...inactive];
-              const hidden = agents.length - visible.length;
-              return (
-                <>
-                  {visible.map((agent) => (
-                    <AgentMiniCard key={agent.id} agent={agent} />
-                  ))}
-                  {hidden > 0 && (
-                    <p className="py-0.5 text-[10px] text-text-muted">+{hidden} more</p>
-                  )}
-                </>
-              );
-            })()
-          ) : (
-            <p className="py-1 text-[10px] italic text-text-muted">No agents</p>
-          )}
+          {/* Agents: only running + crashed (recoverable) */}
+          {(() => {
+            const visibleAgents = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
+            return visibleAgents.length > 0 ? (
+              visibleAgents.map((agent) => <AgentMiniCard key={agent.id} agent={agent} />)
+            ) : (
+              <p className="py-1 text-[10px] italic text-text-muted">No agents</p>
+            );
+          })()}
         </div>
       )}
     </div>

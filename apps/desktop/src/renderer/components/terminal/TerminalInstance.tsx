@@ -10,6 +10,7 @@ import {
   useEffect,
   useImperativeHandle,
   useRef,
+  useState,
 } from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { useTerminalStore } from "../../stores/terminals";
@@ -86,6 +87,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
+  const webglAddonRef = useRef<WebglAddon | null>(null);
+  const [isVisible, setIsVisible] = useState(true);
 
   // Expose serialize + refit methods to parent via ref
   useImperativeHandle(ref, () => ({
@@ -152,7 +155,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       fontFamily,
       cursorBlink: !readOnly,
       cursorStyle: "bar",
-      scrollback: 10_000,
+      scrollback: 5_000,
       allowProposedApi: true,
       convertEol: true,
       disableStdin: readOnly,
@@ -170,13 +173,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     terminal.open(container);
 
-    try {
-      const webglAddon = new WebglAddon();
-      webglAddon.onContextLoss(() => webglAddon.dispose());
-      terminal.loadAddon(webglAddon);
-    } catch {
-      // WebGL not supported
-    }
+    // WebGL loaded later by visibility observer (T38)
 
     // Write initial content for read-only (scrollback replay)
     if (initialContent) {
@@ -239,6 +236,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       for (const d of disposables) d.dispose();
       unsubData?.();
       resizeObserver.disconnect();
+      webglAddonRef.current?.dispose();
+      webglAddonRef.current = null;
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -264,6 +263,42 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       fitAddonRef.current?.fit();
     }
   }, [fontSize, fontFamily]);
+
+  // T38: WebGL context pooling — load/unload WebGL based on viewport visibility
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry) setIsVisible(entry.isIntersecting);
+      },
+      { threshold: 0.01 },
+    );
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+
+    if (isVisible && !webglAddonRef.current) {
+      try {
+        const webgl = new WebglAddon();
+        webgl.onContextLoss(() => {
+          webgl.dispose();
+          webglAddonRef.current = null;
+        });
+        terminal.loadAddon(webgl);
+        webglAddonRef.current = webgl;
+      } catch {
+        /* WebGL not supported — canvas fallback */
+      }
+    } else if (!isVisible && webglAddonRef.current) {
+      webglAddonRef.current.dispose();
+      webglAddonRef.current = null;
+    }
+  }, [isVisible]);
 
   // Rule 4: external system sync — window resize + tab-switch refit listener
   useEffect(() => {

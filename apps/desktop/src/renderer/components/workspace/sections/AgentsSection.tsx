@@ -1,23 +1,9 @@
-import { Cpu } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { WorkspaceLayout } from "../WorkspaceLayout";
 import { WorkspaceTabBar } from "../WorkspaceTabBar";
-
-// ─── Empty State ────────────────────────────────────────────────────────────
-
-function EmptyWorkspace() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center gap-4">
-      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-bg-secondary">
-        <Cpu className="h-7 w-7 text-text-muted" />
-      </div>
-      <p className="text-sm text-text-muted">Create a tab to get started</p>
-    </div>
-  );
-}
 
 // ─── All Tabs Layout (keep terminals alive across tab switches) ──────────────
 
@@ -37,7 +23,11 @@ function AllTabsLayout() {
     }
   }, [activeTabId]);
 
-  if (tabs.length === 0) return <EmptyWorkspace />;
+  if (tabs.length === 0) {
+    // Auto-create a default tab instead of showing a dead-end empty state
+    useWorkspaceStore.getState().addTab("Workspace");
+    return null;
+  }
 
   return (
     <>
