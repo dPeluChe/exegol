@@ -124,8 +124,14 @@ export class AgentManager {
 
     let cwd = project.path;
 
+    // ── cwdOverride (e.g. pipeline shared worktree) — skip worktree creation
+    if (config.cwdOverride) {
+      cwd = config.cwdOverride;
+      logger.info("[AgentManager] Using cwdOverride:", { cwd });
+    }
+
     // ── Worktree creation ──────────────────────────────────────────────
-    if (config.useWorktree && coreRust) {
+    if (!config.cwdOverride && config.useWorktree && coreRust) {
       const branchName = config.branchName?.trim() || slugifyBranchName(agent.taskDescription);
       const worktreeName = branchName.replace(/\//g, "-");
 

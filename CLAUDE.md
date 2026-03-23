@@ -26,7 +26,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 
 ### Workspace (3 tabs + sub-tabs)
 - **Agents**: multi-pane workspace (terminal, browser, files, git, empty)
-- **Project**: Tasks | Prompts & Skills | Memory
+- **Project**: Tasks | Prompts & Skills | Memory | Pipelines
 - **Monitor**: Resources & Tokens | Scoring
 
 ### Pane types
@@ -44,11 +44,21 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 5. On exit: memory extraction → scoring → oplog → worktree cleanup (all non-fatal, try/catch)
 6. Close pane/tab/Cmd+W → stop agent + delete from DB + remove from store
 
+### Multi-agent pipelines
+Sequential agent orchestration in shared worktrees. Exegol controls everything — agents never launch each other.
+1. User creates pipeline template (steps: provider + role + prompt template)
+2. `PipelineExecutor.startRun()` → creates shared worktree → `advanceStep(0)`
+3. Each step: build prompt ({{task}}, {{diff}}, {{previousOutput}}) → spawn agent with `cwdOverride`
+4. `onAgentComplete` callback → capture git diff + scrollback → evaluate: advance / loop-back / pause
+5. Loop mechanism: review→fix cycle with `loopBackTo` + max iterations guard
+6. On complete/cancel: cleanup worktree if clean, preserve if dirty
+7. Crash recovery: `recoverStalePipelineRuns()` marks running pipelines as paused on startup
+
 ### Provider registry
 11 built-in providers (Claude Code, Codex, Gemini, Aider, Goose, OpenCode, Amp, Kiro, KiloCode, Crush, Shell) + custom. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. Interactive CLIs (Gemini, OpenCode, Kiro) launch without prompt injection.
 
 ### Key patterns
-- **tRPC over IPC**: 20 routers in main process, renderer calls via `window.api.trpc.invoke`
+- **tRPC over IPC**: 21 routers in main process, renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
 - **Crash recovery**: `recoverStaleAgents()` on startup — PID check, mark "crashed", scrollback preserved
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
@@ -66,8 +76,9 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 apps/desktop/src/
   main/
     agents/         manager, spawn-env, spawn-context, registry, handoff, scoring, queue, status-parser
-    db/             client, migrations (23), queries/ (12 domain modules)
-    ipc/            router, procedures/ (20 modules)
+    db/             client, migrations (24), queries/ (13 domain modules)
+    ipc/            router, procedures/ (21 modules)
+    pipeline/       executor (singleton, event-driven), context (prompt builder), defaults (presets)
     mcp/            host (stdio/HTTP), registry
     memory/         extractor (ANSI-stripped), store (relevance scoring)
     skills/         loader, discovery, defaults (5 personas)
@@ -79,14 +90,14 @@ apps/desktop/src/
     components/
       workspace/    WorkspaceView, WorkspaceTabs (3 main + sub-tabs), WorkspacePane (5 types),
                     WorkspaceTabBar (quick launch from registry), WorkspaceLayout, GitPane,
-                    sections/ (15 section components), diff/
+                    sections/ (16 section components + pipeline/), diff/
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,
                     YOLO/Active toggles), TerminalSettings (font detection), ApiKeysSettings
       terminal/     TerminalPanel (live/read-only/crashed), TerminalInstance (xterm.js + WebGL + Serialize)
       common/       AgentIcon (glob *.{svg,png}, dark/light), EmptyState, StatusDot, CronBuilder
       agents/       AgentLauncher (portal dropdown from registry)
       layout/       Sidebar, ProjectsSection, StatusBar, TitleBar
-    hooks/          use-hotkeys, use-theme (useThemeValue), use-trpc (barrel + 8 domain files)
+    hooks/          use-hotkeys, use-theme (useThemeValue), use-trpc (barrel + 9 domain files)
     stores/         app, agents (push events, shell auto-cleanup), terminals, workspace (5 pane types, recovery)
     assets/icons/   26 SVG/PNG icons (agents, IDEs, providers)
   preload/          contextBridge: trpc, terminal, dialog, push events
@@ -100,7 +111,7 @@ docs/
 
 ## Database
 
-23 migrations · 20 tables: projects, agents, worktrees, activities, search_index (FTS5), handoffs, messages, scheduled_tasks/results, task_queue, token_usage, settings, prompts, skills_state, memories, agent_scores, oplog
+24 migrations · 22 tables: projects, agents, worktrees, activities, search_index (FTS5), handoffs, messages, scheduled_tasks/results, task_queue, token_usage, settings, prompts, skills_state, memories, agent_scores, oplog, pipeline_templates, pipeline_runs
 
 Agent status: `idle | spawning | running | waiting_input | paused | completed | failed | stopped | crashed`
 

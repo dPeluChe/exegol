@@ -24,6 +24,7 @@ export const agentCreateSchema = z.object({
   useWorktree: z.boolean().optional(),
   branchName: z.string().optional(),
   skillNames: z.array(z.string()).optional(),
+  cwdOverride: z.string().optional(),
 });
 
 export type AgentSchema = z.infer<typeof agentSchema>;

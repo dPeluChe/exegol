@@ -2,6 +2,7 @@ export * from "./queries/activities";
 export * from "./queries/agents";
 export * from "./queries/messages";
 export * from "./queries/oplog";
+export * from "./queries/pipeline";
 export * from "./queries/projects";
 export * from "./queries/prompts";
 export * from "./queries/scheduler";

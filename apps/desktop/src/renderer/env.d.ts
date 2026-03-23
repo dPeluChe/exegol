@@ -16,6 +16,15 @@ interface SystemMetricsEvent {
   uptime: number;
 }
 
+interface PipelineStatusEvent {
+  runId: string;
+  projectId: string;
+  status: string;
+  currentStepIndex: number;
+  stepLabel: string | null;
+  timestamp: number;
+}
+
 interface Window {
   api: {
     trpc: {
@@ -42,6 +51,12 @@ interface Window {
     };
     onAgentHandoff?: (callback: (agentId: string, handoffId: string) => void) => () => void;
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
+    onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
+    updater: {
+      check: () => Promise<void>;
+      install: () => Promise<void>;
+      onStatus: (callback: (status: unknown) => void) => () => void;
+    };
   };
 }

@@ -134,6 +134,20 @@ export function TaskDetailModal({
           >
             {copied ? "Copied ✓" : "Copy for Agent"}
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent("exegol:switch-section", {
+                  detail: { section: "pipelines" },
+                }),
+              );
+              onClose();
+            }}
+            className="rounded-lg bg-purple-500/15 px-3 py-2 text-xs font-medium text-purple-400 hover:bg-purple-500/25"
+          >
+            Run Pipeline
+          </button>
           {otherColumns.length > 0 && (
             <div className="flex items-center gap-1">
               {otherColumns.slice(0, 3).map((col) => (

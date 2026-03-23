@@ -16,6 +16,7 @@ import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
 export * from "./use-trpc-mcp";
 export * from "./use-trpc-memory";
+export * from "./use-trpc-pipeline";
 export * from "./use-trpc-resources";
 export * from "./use-trpc-scheduler";
 export * from "./use-trpc-scoring";

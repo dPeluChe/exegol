@@ -3,6 +3,7 @@ import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { AgentsSection } from "./sections/AgentsSection";
 import { MemorySection } from "./sections/MemorySection";
+import { PipelineSection } from "./sections/PipelineSection";
 import { PromptsSkillsSection } from "./sections/PromptsSkillsSection";
 import { ResourcesTokensSection } from "./sections/ResourcesTokensSection";
 import { ScoringSection } from "./sections/ScoringSection";
@@ -58,6 +59,7 @@ export function WorkspaceView() {
         {activeSection === "tasks" && <TasksSection />}
         {activeSection === "prompts-skills" && <PromptsSkillsSection />}
         {activeSection === "memory" && <MemorySection />}
+        {activeSection === "pipelines" && <PipelineSection />}
         {activeSection === "resources-tokens" && <ResourcesTokensSection />}
         {activeSection === "scoring" && <ScoringSection />}
       </div>

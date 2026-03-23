@@ -3,6 +3,7 @@ export * from "./agent";
 export * from "./dashboard";
 export * from "./mcp";
 export * from "./memory";
+export * from "./pipeline";
 export * from "./project";
 export * from "./prompt";
 export * from "./scheduler";

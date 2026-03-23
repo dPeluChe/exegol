@@ -12,8 +12,10 @@ import { recoverStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { logger, markShutdown } from "./lib/logger";
 import { getMcpHost } from "./mcp/host";
+import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
+import { ensureCanonicalPaths } from "./skills/paths";
 import {
   checkForUpdatesManual,
   initAutoUpdater,
@@ -184,7 +186,8 @@ app.whenReady().then(async () => {
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerGlobalHotkey();
-  ensureDefaultSkills(); // Install default skills to ~/.exegol/skills/ if missing
+  ensureCanonicalPaths(); // Migrate to ~/.agents/skills/ + create agent symlinks
+  ensureDefaultSkills(); // Install default skills to ~/.agents/skills/ if missing
   ensureShellWrappers(); // Create zsh/bash wrapper files for shell-ready marker
   ensureAgentWrappers(); // Create agent hooks + Claude Code settings merge
   startNotifyHandler((event) => {
@@ -194,6 +197,7 @@ app.whenReady().then(async () => {
   startMetricsCollector(); // Background: collects CPU/RAM/disk every 10s
   getSchedulerEngine().start(getDb()); // Load scheduled tasks and start cron jobs
   getQueueExecutor().start(getDb()); // Start task queue executor
+  getPipelineExecutor().recoverOnStartup(getDb()); // Recover stale pipeline runs
   initAutoUpdater(); // T44: check for updates on startup + every 4h
   createWindow();
 

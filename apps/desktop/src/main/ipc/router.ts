@@ -7,6 +7,7 @@ import { mcpRouter } from "./procedures/mcp";
 import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
 import { oplogRouter } from "./procedures/oplog";
+import { pipelineRouter } from "./procedures/pipeline";
 import { projectRouter } from "./procedures/projects";
 import { promptsRouter } from "./procedures/prompts";
 import { queueRouter } from "./procedures/queue";
@@ -16,6 +17,7 @@ import { scoringRouter } from "./procedures/scoring";
 import { scrollbackRouter } from "./procedures/scrollback";
 import { searchRouter } from "./procedures/search";
 import { settingsRouter } from "./procedures/settings";
+import { skillInstallerRouter } from "./procedures/skill-installer";
 import { skillsRouter } from "./procedures/skills";
 import { tokenUsageRouter } from "./procedures/token-usage";
 import { router } from "./trpc";
@@ -34,7 +36,9 @@ export const appRouter = router({
   scrollback: scrollbackRouter,
   scoring: scoringRouter,
   oplog: oplogRouter,
+  pipeline: pipelineRouter,
   skills: skillsRouter,
+  skillInstaller: skillInstallerRouter,
   mcp: mcpRouter,
   memory: memoryRouter,
   messages: messagesRouter,

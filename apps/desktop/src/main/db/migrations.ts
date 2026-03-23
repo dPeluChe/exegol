@@ -356,6 +356,41 @@ const migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_oplog_created ON oplog(created_at DESC)`,
   },
   {
+    id: "024_pipeline",
+    sql: `CREATE TABLE IF NOT EXISTS pipeline_templates (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      steps TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS pipeline_runs (
+      id TEXT PRIMARY KEY,
+      template_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending','running','paused','completed','failed','cancelled')),
+      current_step_index INTEGER NOT NULL DEFAULT 0,
+      step_results TEXT NOT NULL DEFAULT '[]',
+      iteration_count INTEGER NOT NULL DEFAULT 0,
+      max_iterations INTEGER NOT NULL DEFAULT 5,
+      original_task TEXT NOT NULL DEFAULT '',
+      worktree_path TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      started_at INTEGER,
+      completed_at INTEGER,
+      FOREIGN KEY (template_id) REFERENCES pipeline_templates(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pipeline_runs_project ON pipeline_runs(project_id, status);
+    CREATE INDEX IF NOT EXISTS idx_pipeline_runs_template ON pipeline_runs(template_id)`,
+  },
+  {
     id: "023_agents_add_crashed_status",
     sql: `
       CREATE TABLE IF NOT EXISTS agents_new (

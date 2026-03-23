@@ -50,6 +50,13 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.removeListener("metrics:update", handler);
     };
   },
+  onPipelineStatus: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    ipcRenderer.on("pipeline:status-changed", handler);
+    return () => {
+      ipcRenderer.removeListener("pipeline:status-changed", handler);
+    };
+  },
   dialog: {
     // biome-ignore lint/suspicious/noExplicitAny: Electron dialog options are dynamic
     showOpenDialog: (options: any) => ipcRenderer.invoke("dialog:showOpenDialog", options),

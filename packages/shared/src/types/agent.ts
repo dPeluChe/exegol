@@ -48,6 +48,8 @@ export type AgentCreate = {
   useWorktree?: boolean;
   branchName?: string;
   skillNames?: string[];
+  /** Override cwd for agent (e.g. pipeline shared worktree). Skips worktree creation. */
+  cwdOverride?: string;
 };
 
 // ─── Provider Registry ──────────────────────────────────────────────────────
