@@ -93,7 +93,21 @@
 
 ---
 
-## Completed (V3 — 2026-03-20)
+## Completed (V3 — 2026-03-23)
+
+### Multi-Agent Pipelines
+- [x] T50 — Pipeline Executor (singleton, event-driven: startRun/advanceStep/onStepComplete)
+- [x] T50 — Pipeline Data Layer (migration 024, templates + runs tables, shared types/schemas)
+- [x] T50 — Pipeline IPC (11 tRPC procedures, push events, preload bridge)
+- [x] T50 — Pipeline UI (Pipelines sub-tab, template editor, run timeline, preset templates)
+- [x] T50 — cwdOverride for shared worktrees (AgentCreate + AgentManager)
+- [x] T50 — Loop mechanism (review→fix cycle, loopBackTo + max iterations guard)
+- [x] T50 — Crash recovery (recoverStalePipelineRuns on startup)
+
+### Skill Installer
+- [x] T51 — Curated Registry + Installer Module
+- [x] T51 — Skill Import/Install UI (SkillInstallModal, SkillImportDialog)
+- [x] T51 — Canonical path management (~/.agents/skills/)
 
 ### Cluster F — Terminal Scalability
 - [x] T35 — PTY Subprocess Isolation + Backpressure + Binary IPC
