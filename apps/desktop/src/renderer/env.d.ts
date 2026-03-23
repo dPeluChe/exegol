@@ -53,6 +53,7 @@ interface Window {
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
+    onNotificationNavigate?: (callback: (data: { agentId: string }) => void) => () => void;
     updater: {
       check: () => Promise<void>;
       install: () => Promise<void>;

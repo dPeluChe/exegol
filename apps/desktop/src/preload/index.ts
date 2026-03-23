@@ -66,6 +66,14 @@ contextBridge.exposeInMainWorld("api", {
     maximize: () => ipcRenderer.send("window:maximize"),
     close: () => ipcRenderer.send("window:close"),
   },
+  // T47: Notification navigation
+  onNotificationNavigate: (callback: (data: { agentId: string }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: { agentId: string }) => callback(data);
+    ipcRenderer.on("notification:navigate", handler);
+    return () => {
+      ipcRenderer.removeListener("notification:navigate", handler);
+    };
+  },
   // T44: Auto-updater
   updater: {
     check: () => ipcRenderer.invoke("updater:check"),

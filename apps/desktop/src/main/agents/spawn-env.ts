@@ -5,6 +5,7 @@ import type Database from "libsql";
 import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
+import { showAgentNotification } from "../system/notifications";
 import { scoreAgent } from "./scoring";
 
 // ─── Push event types ────────────────────────────────────────────────────
@@ -120,14 +121,16 @@ export function finalizeAgentStatus(
 
     const finalStatus: AgentStatus = exitCode === 0 ? "completed" : "failed";
     stopAgent(db, agent.id, finalStatus);
-    broadcastAgentStatus({
+    const statusEvent: AgentStatusEvent = {
       agentId: agent.id,
       projectId: agent.projectId,
       status: finalStatus,
       currentStep: null,
       cliType: agent.cliType,
       timestamp: Date.now(),
-    });
+    };
+    broadcastAgentStatus(statusEvent);
+    showAgentNotification(statusEvent, db);
 
     const actType = finalStatus === "completed" ? "agent_completed" : "agent_failed";
     try {

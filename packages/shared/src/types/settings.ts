@@ -15,6 +15,8 @@ export type Settings = {
   globalHotkey: string;
   terminalFontSize: number;
   terminalFontFamily: string;
+  notificationsEnabled: boolean;
+  toastsEnabled: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,4 +32,6 @@ export const DEFAULT_SETTINGS: Settings = {
   globalHotkey: "CommandOrControl+Shift+E",
   terminalFontSize: 14,
   terminalFontFamily: "Menlo, Monaco, monospace",
+  notificationsEnabled: true,
+  toastsEnabled: true,
 };

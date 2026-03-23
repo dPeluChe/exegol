@@ -100,3 +100,10 @@ body {
 .animate-status-pulse {
   animation: status-pulse 2s ease-in-out infinite;
 }
+
+/* Toast slide-in animation (T48) */
+@keyframes toast-slide-in {
+  from { transform: translateX(calc(100% + 1rem)); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-toast-in { animation: toast-slide-in 0.25s ease-out forwards; }

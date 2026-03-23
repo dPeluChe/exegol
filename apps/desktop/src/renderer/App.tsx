@@ -1,5 +1,6 @@
 import { TooltipProvider } from "@exegol/ui";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
@@ -10,6 +11,7 @@ import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { useTheme } from "./hooks/use-theme";
+import { useToastEvents } from "./hooks/use-toast-events";
 import { useAppStore } from "./stores/app";
 
 function MainContent() {
@@ -36,6 +38,7 @@ export default function App() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
 
   useHotkeys();
+  useToastEvents();
   useTheme();
 
   const showSidebar = activeView === "workspace";
@@ -67,6 +70,7 @@ export default function App() {
         </div>
 
         <StatusBar />
+        <ToastStack />
       </div>
     </TooltipProvider>
   );
