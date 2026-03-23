@@ -1,20 +1,27 @@
-import type { SkillCategory, SkillWithState } from "@exegol/shared";
+import type { SkillCategory, SkillTrust, SkillWithState } from "@exegol/shared";
 import { SKILL_CATEGORIES } from "@exegol/shared";
-import { Badge, cn, ScrollArea } from "@exegol/ui";
+import { Badge, Button, cn, ScrollArea } from "@exegol/ui";
 import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  Download,
+  FolderInput,
   FolderOpen,
   Globe,
   Shield,
+  ShieldCheck,
+  Trash2,
+  Users,
   Wand2,
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useProject } from "../../../hooks/use-trpc";
-import { useSkills, useToggleSkill } from "../../../hooks/use-trpc-skills";
+import { useSkills, useToggleSkill, useUninstallSkill } from "../../../hooks/use-trpc-skills";
 import { EmptyState } from "../../common/EmptyState";
+import { SkillImportDialog } from "./SkillImportDialog";
+import { SkillInstallModal } from "./SkillInstallModal";
 
 // ─── Category styling ────────────────────────────────────────────────────────
 
@@ -44,6 +51,8 @@ export function SkillsSection() {
   const { data: skills } = useSkills(projectId, project?.path ?? null);
   const [filterCategory, setFilterCategory] = useState<SkillCategory | "all">("all");
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   const filtered = skills?.filter((s) => filterCategory === "all" || s.category === filterCategory);
 
@@ -80,7 +89,27 @@ export function SkillsSection() {
             {skills.filter((s) => s.enabled).length}/{skills.length} enabled
           </span>
         )}
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowInstallModal(true)}
+          className="ml-2 h-6 text-[10px] gap-1"
+        >
+          <Download className="h-3 w-3" /> Install
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setShowImportDialog(true)}
+          className="h-6 text-[10px] gap-1"
+        >
+          <FolderInput className="h-3 w-3" /> Import Local
+        </Button>
       </div>
+
+      {showInstallModal && <SkillInstallModal onClose={() => setShowInstallModal(false)} />}
+      {showImportDialog && <SkillImportDialog onClose={() => setShowImportDialog(false)} />}
 
       {/* Content */}
       {!filtered || filtered.length === 0 ? (
@@ -88,7 +117,7 @@ export function SkillsSection() {
           <EmptyState
             icon={<Wand2 className="h-8 w-8 text-text-muted" />}
             title="No skills found"
-            description="Skills are loaded from ~/.exegol/skills/ (global) and .exegol/skills/ (project). Restart the app to install defaults."
+            description="Skills are loaded from ~/.agents/skills/ (global) and .agents/skills/ (project). Restart the app to install defaults."
           />
         </div>
       ) : (
@@ -149,7 +178,9 @@ function SkillCard({
   onToggleExpand: () => void;
 }) {
   const toggleSkill = useToggleSkill();
+  const uninstall = useUninstallSkill();
   const category = skill.category as SkillCategory;
+  const trust = skill.source?.trust as SkillTrust | undefined;
 
   const handleToggle = useCallback(() => {
     if (!projectId) return;
@@ -159,6 +190,10 @@ function SkillCard({
       enabled: !skill.enabled,
     });
   }, [projectId, skill.name, skill.enabled, toggleSkill]);
+
+  const handleUninstall = useCallback(() => {
+    uninstall.mutate({ skillName: skill.name, scope: skill.scope });
+  }, [skill.name, skill.scope, uninstall]);
 
   return (
     <div
@@ -199,6 +234,8 @@ function SkillCard({
             >
               {CATEGORY_LABELS[category] ?? skill.category}
             </Badge>
+
+            {trust && <TrustBadge trust={trust} />}
 
             <span title={skill.scope === "project" ? "Project skill" : "Global skill"}>
               {skill.scope === "project" ? (
@@ -254,6 +291,16 @@ function SkillCard({
             )}
           </div>
 
+          {/* Source info */}
+          {skill.source?.repo && (
+            <div className="mb-3 flex items-center gap-1.5 text-[10px] text-text-muted">
+              <span>From {skill.source.repo}</span>
+              {skill.source.trust === "community" && (
+                <span className="text-yellow-400">(community — review before use)</span>
+              )}
+            </div>
+          )}
+
           {/* Requirements */}
           {(skill.requires.bins.length > 0 || skill.requires.env.length > 0) && (
             <div className="mb-3 rounded bg-bg-tertiary p-2">
@@ -275,11 +322,42 @@ function SkillCard({
             </pre>
           </div>
 
-          <p className="mt-2 text-[9px] text-text-muted truncate">{skill.filePath}</p>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-[9px] text-text-muted truncate">{skill.filePath}</p>
+            {skill.source && (
+              <button
+                type="button"
+                onClick={handleUninstall}
+                className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 shrink-0 ml-2"
+              >
+                <Trash2 className="h-3 w-3" /> Uninstall
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
   );
+}
+
+// ─── Trust badge ────────────────────────────────────────────────────────────
+
+function TrustBadge({ trust }: { trust: SkillTrust }) {
+  if (trust === "official") {
+    return (
+      <span title="Official" className="shrink-0">
+        <ShieldCheck className="h-3 w-3 text-green-400" />
+      </span>
+    );
+  }
+  if (trust === "community") {
+    return (
+      <span title="Community" className="shrink-0">
+        <Users className="h-3 w-3 text-yellow-400" />
+      </span>
+    );
+  }
+  return null;
 }
 
 // ─── Requirement item ────────────────────────────────────────────────────────

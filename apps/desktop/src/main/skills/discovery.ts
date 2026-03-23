@@ -1,25 +1,15 @@
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Skill } from "@exegol/shared";
-import { app } from "electron";
 import { logger } from "../lib/logger";
 import { DEFAULT_SKILLS } from "./defaults";
 import { loadSkillFromFile } from "./loader";
-
-// ─── Paths ───────────────────────────────────────────────────────────────────
-
-function getGlobalSkillsDir(): string {
-  return join(app.getPath("home"), ".exegol", "skills");
-}
-
-function getProjectSkillsDir(projectPath: string): string {
-  return join(projectPath, ".exegol", "skills");
-}
+import { getCanonicalSkillsDir, getLegacyProjectSkillsDir, getProjectSkillsDir } from "./paths";
 
 // ─── Default skills installation ─────────────────────────────────────────────
 
 export function ensureDefaultSkills(): void {
-  const globalDir = getGlobalSkillsDir();
+  const globalDir = getCanonicalSkillsDir();
   mkdirSync(globalDir, { recursive: true });
 
   for (const [dirName, content] of Object.entries(DEFAULT_SKILLS)) {
@@ -66,14 +56,24 @@ function discoverSkillsInDir(dir: string, scope: "global" | "project"): Skill[] 
  * Discover all available skills. Project skills override global by name.
  */
 export function discoverSkills(projectPath: string | null): Skill[] {
-  const globalSkills = discoverSkillsInDir(getGlobalSkillsDir(), "global");
+  const globalSkills = discoverSkillsInDir(getCanonicalSkillsDir(), "global");
 
   if (!projectPath) return globalSkills;
 
   const projectSkills = discoverSkillsInDir(getProjectSkillsDir(projectPath), "project");
 
-  // Project skills override global by name
+  // Legacy fallback: also check .exegol/skills/ for one release cycle
+  const legacyDir = getLegacyProjectSkillsDir(projectPath);
+  const legacySkills = discoverSkillsInDir(legacyDir, "project");
   const projectNames = new Set(projectSkills.map((s) => s.name));
+  for (const ls of legacySkills) {
+    if (!projectNames.has(ls.name)) {
+      projectSkills.push(ls);
+      projectNames.add(ls.name);
+    }
+  }
+
+  // Project skills override global by name
   const merged = [...projectSkills, ...globalSkills.filter((s) => !projectNames.has(s.name))];
 
   return merged.sort((a, b) => a.name.localeCompare(b.name));

@@ -1,6 +1,13 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import type { Skill, SkillCategory, SkillRequirements } from "@exegol/shared";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import type {
+  Skill,
+  SkillCategory,
+  SkillLockFile,
+  SkillRequirements,
+  SkillSource,
+} from "@exegol/shared";
 import { SKILL_CATEGORIES } from "@exegol/shared";
 import { logger } from "../lib/logger";
 
@@ -66,7 +73,11 @@ function checkRequirements(requires: SkillRequirements): boolean {
 export function loadSkillFromFile(filePath: string, scope: "global" | "project"): Skill | null {
   try {
     const raw = readFileSync(filePath, "utf-8");
-    return parseSkillContent(raw, filePath, scope);
+    const skill = parseSkillContent(raw, filePath, scope);
+    if (skill) {
+      skill.source = resolveSource(filePath);
+    }
+    return skill;
   } catch (err) {
     logger.warn(`[Skills] Failed to load skill from ${filePath}:`, err);
     return null;
@@ -119,4 +130,36 @@ export function parseSkillContent(
     scope,
     available,
   };
+}
+
+// ─── Lock file source resolution ────────────────────────────────────────────
+
+const lockCache = new Map<string, { lock: SkillLockFile; ts: number }>();
+const LOCK_TTL = 10_000; // 10s cache
+
+function readLockFileCached(skillsDir: string): SkillLockFile {
+  const cached = lockCache.get(skillsDir);
+  if (cached && Date.now() - cached.ts < LOCK_TTL) return cached.lock;
+
+  const empty: SkillLockFile = { version: 1, skills: [] };
+  try {
+    const lockPath = join(skillsDir, "skills-lock.json");
+    if (!existsSync(lockPath)) return empty;
+    const lock = JSON.parse(readFileSync(lockPath, "utf-8")) as SkillLockFile;
+    lockCache.set(skillsDir, { lock, ts: Date.now() });
+    return lock;
+  } catch {
+    return empty;
+  }
+}
+
+function resolveSource(filePath: string): SkillSource | undefined {
+  // filePath is e.g. ~/.agents/skills/my-skill/SKILL.md
+  const skillDir = dirname(filePath);
+  const skillName = basename(skillDir);
+  const skillsDir = dirname(skillDir);
+
+  const lock = readLockFileCached(skillsDir);
+  const entry = lock.skills.find((e) => e.name === skillName);
+  return entry?.source;
 }

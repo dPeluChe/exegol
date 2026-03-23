@@ -1,6 +1,6 @@
 /**
  * Default global skills shipped with Exegol.
- * Copied to ~/.exegol/skills/ on first run.
+ * Copied to ~/.agents/skills/ on first run.
  * Inspired by gstack's expert persona pattern with named cognitive frameworks.
  */
 
