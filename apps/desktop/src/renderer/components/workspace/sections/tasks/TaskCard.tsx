@@ -64,6 +64,9 @@ export function TaskCard({
             task.completed ? "text-text-muted line-through" : "text-text-primary",
           )}
         >
+          {task.source === "github" && (
+            <span className="mr-1 font-mono text-[10px] text-text-muted">#{task.issueNumber}</span>
+          )}
           {task.text}
         </button>
       </div>
@@ -131,14 +134,16 @@ export function TaskCard({
             •••
           </button>
         )}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-red-500/10 hover:text-red-400"
-          title="Remove task"
-        >
-          <Trash2 className="h-2.5 w-2.5" />
-        </button>
+        {task.source !== "github" && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-red-500/10 hover:text-red-400"
+            title="Remove task"
+          >
+            <Trash2 className="h-2.5 w-2.5" />
+          </button>
+        )}
       </div>
 
       {/* All destinations menu */}

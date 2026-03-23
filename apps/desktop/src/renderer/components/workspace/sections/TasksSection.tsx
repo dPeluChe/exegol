@@ -1,9 +1,17 @@
 import { Button, cn } from "@exegol/ui";
-import { Archive, CheckSquare, FolderOpen, Plus } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { Archive, CheckSquare, FolderOpen, Github, Plus } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
-import { useFileContent, usePickFile, useWriteFile } from "../../../hooks/use-trpc";
+import {
+  useFileContent,
+  useGitHubIssues,
+  usePickFile,
+  useUpdateIssueLabels,
+  useUpdateIssueState,
+  useWriteFile,
+} from "../../../hooks/use-trpc";
+import { mapIssuesToTasks } from "../../../lib/github-tasks";
 import {
   addTask,
   moveTask,
@@ -52,10 +60,19 @@ export function TasksSection() {
   const [autoDetectDone, setAutoDetectDone] = useState(false);
   const [addingToColumn, setAddingToColumn] = useState<TaskColumn | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+  const [showGitHubIssues, setShowGitHubIssues] = useState(false);
   const probeRan = useRef(false);
   const { data: fileData, refetch } = useFileContent(filePath);
   const pickFile = usePickFile();
   const writeFile = useWriteFile();
+
+  // GitHub integration
+  const hasGitRemote = !!project?.gitRemote;
+  const { data: ghIssues } = useGitHubIssues(
+    showGitHubIssues && hasGitRemote ? (project?.id ?? null) : null,
+  );
+  const updateIssueState = useUpdateIssueState();
+  const updateIssueLabels = useUpdateIssueLabels();
 
   const board: TaskBoard | null =
     fileData && filePath ? parseTaskBoard(fileData.content, filePath) : null;
@@ -67,6 +84,34 @@ export function TasksSection() {
     const extra = board.columnOrder.filter((c) => !core.includes(c));
     return [...core, ...extra];
   })();
+
+  // Merge GitHub tasks into board columns
+  const mergedColumns = useMemo(() => {
+    const base: Record<TaskColumn, TaskItem[]> = {
+      backlog: [],
+      todo: [],
+      "in-progress": [],
+      validated: [],
+      archived: [],
+      done: [],
+    };
+    // Copy markdown tasks
+    if (board) {
+      for (const col of displayColumns) {
+        base[col] = [...(board.columns[col] ?? [])];
+      }
+    }
+    // Append GitHub tasks
+    if (showGitHubIssues && ghIssues) {
+      const ghTasks = mapIssuesToTasks(ghIssues);
+      for (const task of ghTasks) {
+        if (base[task.column]) {
+          base[task.column].push(task);
+        }
+      }
+    }
+    return base;
+  }, [board, displayColumns, showGitHubIssues, ghIssues]);
 
   // Auto-detect task files
   useMountEffect(() => {
@@ -105,6 +150,16 @@ export function TasksSection() {
 
   const handleToggle = useCallback(
     (task: TaskItem) => {
+      // GitHub issue: close/reopen
+      if (task.source === "github" && task.issueNumber && project?.id) {
+        const newState = task.completed ? "open" : "closed";
+        updateIssueState.mutate({
+          projectId: project.id,
+          issueNumber: task.issueNumber,
+          state: newState,
+        });
+        return;
+      }
       if (!fileData) return;
       // Toggle = advance to next column in the flow
       const colIndex = displayColumns.indexOf(task.column);
@@ -125,19 +180,53 @@ export function TasksSection() {
         writeAndRefresh(toggleTask(fileData.content, task.line));
       }
     },
-    [fileData, writeAndRefresh, displayColumns],
+    [fileData, writeAndRefresh, displayColumns, project, updateIssueState],
   );
 
   const handleMove = useCallback(
     (task: TaskItem, target: TaskColumn) => {
+      // GitHub issue: update state + labels for column transition
+      if (task.source === "github" && task.issueNumber && project?.id) {
+        const isDone = target === "done" || target === "archived";
+        const isInProgress = target === "in-progress";
+        // Close or reopen based on target column
+        updateIssueState.mutate({
+          projectId: project.id,
+          issueNumber: task.issueNumber,
+          state: isDone ? "closed" : "open",
+        });
+        // Manage "in progress" label
+        if (isInProgress) {
+          updateIssueLabels.mutate({
+            projectId: project.id,
+            issueNumber: task.issueNumber,
+            addLabels: ["in progress"],
+          });
+        } else {
+          // Remove WIP labels when moving out of in-progress
+          const wipLabels = (task.tags ?? []).filter(
+            (l) => l.toLowerCase() === "in progress" || l.toLowerCase() === "wip",
+          );
+          if (wipLabels.length > 0) {
+            updateIssueLabels.mutate({
+              projectId: project.id,
+              issueNumber: task.issueNumber,
+              removeLabels: wipLabels,
+            });
+          }
+        }
+        return;
+      }
       if (!fileData) return;
       writeAndRefresh(moveTask(fileData.content, task.line, target));
     },
-    [fileData, writeAndRefresh],
+    [fileData, writeAndRefresh, project, updateIssueState, updateIssueLabels],
   );
 
   const handleRemove = useCallback(
     (task: TaskItem) => {
+      // Cannot remove GitHub issues from the board
+      if (task.source === "github") return;
       if (!fileData) return;
       writeAndRefresh(removeTask(fileData.content, task.line));
     },
@@ -263,8 +352,8 @@ export function TasksSection() {
 
   // displayColumns computed above (before guards, for handleToggle access)
 
-  const totalTasks = Object.values(board.columns).flat().length;
-  const doneTasks = board.columns.done.length + board.columns.archived.length;
+  const totalTasks = Object.values(mergedColumns).flat().length;
+  const doneTasks = mergedColumns.done.length + mergedColumns.archived.length;
   const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   return (
@@ -277,7 +366,7 @@ export function TasksSection() {
         {/* Column counts */}
         <div className="flex items-center gap-1">
           {displayColumns.map((col) => {
-            const count = board.columns[col].length;
+            const count = mergedColumns[col].length;
             if (count === 0) return null;
             const cfg = COLUMN_CONFIG[col];
             return (
@@ -302,11 +391,30 @@ export function TasksSection() {
           </div>
           <span className="text-[8px] tabular-nums text-text-muted">{progress}%</span>
         </div>
+        {hasGitRemote && (
+          <Button
+            type="button"
+            onClick={() => setShowGitHubIssues(!showGitHubIssues)}
+            className={cn(
+              "ml-auto h-6 gap-1 px-2 text-[10px]",
+              showGitHubIssues
+                ? "bg-accent/15 text-accent hover:bg-accent/25"
+                : "bg-bg-tertiary text-text-secondary hover:text-text-primary",
+            )}
+            title={showGitHubIssues ? "Hide GitHub Issues" : "Show GitHub Issues"}
+          >
+            <Github className="h-3 w-3" />
+            Issues
+          </Button>
+        )}
         {doneTasks > 0 && (
           <Button
             type="button"
             onClick={handleArchiveCompleted}
-            className="ml-auto h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary"
+            className={cn(
+              !hasGitRemote && "ml-auto",
+              "h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary",
+            )}
             title="Move completed tasks to tasks_completed.md"
           >
             <Archive className="h-3 w-3" />
@@ -317,7 +425,7 @@ export function TasksSection() {
           type="button"
           onClick={handlePickFile}
           className={cn(
-            doneTasks === 0 && "ml-auto",
+            !hasGitRemote && doneTasks === 0 && "ml-auto",
             "h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary",
           )}
         >
@@ -332,7 +440,7 @@ export function TasksSection() {
           <TaskColumnComponent
             key={col}
             column={col}
-            tasks={board.columns[col]}
+            tasks={mergedColumns[col]}
             allColumns={displayColumns}
             columnIndex={idx}
             onToggle={handleToggle}

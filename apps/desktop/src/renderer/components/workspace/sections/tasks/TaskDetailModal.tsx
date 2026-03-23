@@ -73,7 +73,40 @@ export function TaskDetailModal({
         </div>
 
         {/* Task title */}
-        <h3 className="mb-2 text-sm font-semibold text-text-primary">{task.text}</h3>
+        <h3 className="mb-2 text-sm font-semibold text-text-primary">
+          {task.source === "github" && (
+            <span className="mr-1.5 font-mono text-xs text-text-muted">#{task.issueNumber}</span>
+          )}
+          {task.text}
+        </h3>
+
+        {/* GitHub info */}
+        {task.source === "github" && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {task.issueUrl && (
+              <a
+                href={task.issueUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded bg-white/5 px-2 py-0.5 text-[9px] font-medium text-accent hover:bg-accent/15"
+              >
+                Open on GitHub
+              </a>
+            )}
+            {task.issueAssignees && task.issueAssignees.length > 0 && (
+              <div className="flex items-center gap-1">
+                {task.issueAssignees.map((a) => (
+                  <span
+                    key={a}
+                    className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-400"
+                  >
+                    @{a}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Metadata */}
         <div className="mb-3 flex flex-wrap gap-1.5">
@@ -104,12 +137,18 @@ export function TaskDetailModal({
           )}
         </div>
 
-        {/* Source file */}
+        {/* Source file / GitHub issue */}
         <div className="mb-3 rounded-lg bg-bg-tertiary px-3 py-2">
           <p className="text-[9px] text-text-muted">Source</p>
-          <p className="truncate text-[10px] text-text-secondary">
-            {filePath.split("/").slice(-2).join("/")}:{task.line + 1}
-          </p>
+          {task.source === "github" ? (
+            <p className="truncate text-[10px] text-text-secondary">
+              GitHub Issue #{task.issueNumber}
+            </p>
+          ) : (
+            <p className="truncate text-[10px] text-text-secondary">
+              {filePath.split("/").slice(-2).join("/")}:{task.line + 1}
+            </p>
+          )}
         </div>
 
         {/* Agent prompt preview */}

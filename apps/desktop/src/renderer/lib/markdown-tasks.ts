@@ -34,6 +34,16 @@ export interface TaskItem {
   assignedAgent: string | null;
   /** Priority extracted from !high, !medium, !low or !! !!! syntax */
   priority: "high" | "medium" | "low" | null;
+  /** Source of the task: markdown file or GitHub issue */
+  source?: "markdown" | "github";
+  /** GitHub issue number (when source is "github") */
+  issueNumber?: number;
+  /** GitHub issue URL (when source is "github") */
+  issueUrl?: string;
+  /** GitHub issue body (when source is "github") */
+  issueBody?: string | null;
+  /** GitHub issue assignees (when source is "github") */
+  issueAssignees?: string[];
 }
 
 export interface TaskBoard {

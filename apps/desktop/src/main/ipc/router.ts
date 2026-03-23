@@ -3,6 +3,7 @@ import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { diffRouter } from "./procedures/diff";
 import { filesRouter } from "./procedures/files";
+import { githubRouter } from "./procedures/github";
 import { mcpRouter } from "./procedures/mcp";
 import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
@@ -45,6 +46,7 @@ export const appRouter = router({
   queue: queueRouter,
   activities: activitiesRouter,
   search: searchRouter,
+  github: githubRouter,
 });
 
 export type AppRouter = typeof appRouter;
