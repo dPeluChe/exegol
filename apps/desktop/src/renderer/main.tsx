@@ -28,9 +28,9 @@ ReactDOM.createRoot(rootEl).render(
   </React.StrictMode>,
 );
 
-// Dismiss splash screen — show for at least 2s so it's visible, then fade out
+// Dismiss splash screen — show for at least 2s, then fade out
 const SPLASH_MIN_MS = 2000;
-const splashStart = performance.timing?.navigationStart ?? performance.now();
+const splashStart = performance.now();
 
 requestAnimationFrame(() => {
   const splash = document.getElementById("splash");
