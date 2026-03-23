@@ -38,27 +38,31 @@ export function getLegacyProjectSkillsDir(projectPath: string): string {
 }
 
 // ─── Agent symlink targets ──────────────────────────────────────────────────
+//
+// Only CLIs that have a single skill discovery path get a full directory symlink.
+// CLIs that scan multiple paths or have their own internal skill system are
+// excluded to avoid duplicate detection (skill conflict warnings).
+//
+// EXCLUDED:
+//   - Claude Code: uses ~/.claude/commands/ (not skills/), has own discovery
+//   - Codex: has ~/.codex/skills/.system/ with built-in system skills
+//   - Gemini: scans BOTH ~/.gemini/skills/ AND ~/.agents/skills/ → duplicates
+//   - Crush/KiloCode/Factory: already have real dirs with individual symlinks
 
 const AGENT_SKILL_DIRS = [
-  // ── CLIs with native skills support ──
-  { configDir: join(homedir(), ".claude"), skillsSubdir: "skills" },
   { configDir: join(homedir(), ".cursor"), skillsSubdir: "skills" },
-  { configDir: join(homedir(), ".codex"), skillsSubdir: "skills" },
-  { configDir: join(homedir(), ".gemini"), skillsSubdir: "skills" },
   { configDir: join(homedir(), ".config", "goose"), skillsSubdir: "skills" },
   { configDir: join(homedir(), ".config", "opencode"), skillsSubdir: "skills" },
-  { configDir: join(homedir(), ".config", "crush"), skillsSubdir: "skills" },
-  { configDir: join(homedir(), ".kilocode"), skillsSubdir: "skills" },
   { configDir: join(homedir(), ".kiro"), skillsSubdir: "skills" },
   { configDir: join(homedir(), ".config", "amp"), skillsSubdir: "skills" },
-  { configDir: join(homedir(), ".factory"), skillsSubdir: "skills" },
 ];
 
 // ─── Setup ──────────────────────────────────────────────────────────────────
 
 /**
- * One-time migration to ~/.agents/skills/ + symlink creation for each agent.
- * Idempotent — safe to call on every startup. Skips fast via marker file.
+ * One-time migration to ~/.agents/skills/ + symlink creation for safe agents.
+ * Idempotent — safe to call on every startup. Also cleans up stale symlinks
+ * from previously-linked agents that were removed from AGENT_SKILL_DIRS.
  */
 export function ensureCanonicalPaths(): void {
   try {
@@ -68,13 +72,16 @@ export function ensureCanonicalPaths(): void {
     // 2. Migrate legacy dir if needed
     migrateLegacyDir();
 
-    // 3. Symlink agent skill dirs
+    // 3. Symlink safe agent skill dirs
     for (const { configDir, skillsSubdir } of AGENT_SKILL_DIRS) {
       ensureAgentSymlink(configDir, skillsSubdir);
     }
 
-    // 4. Write marker
-    writeFileSync(SETUP_MARKER, JSON.stringify({ timestamp: Date.now(), version: 1 }), "utf-8");
+    // 4. Clean up stale symlinks from agents no longer in AGENT_SKILL_DIRS
+    cleanupStaleSymlinks();
+
+    // 5. Write marker
+    writeFileSync(SETUP_MARKER, JSON.stringify({ timestamp: Date.now(), version: 2 }), "utf-8");
 
     logger.info("[SkillPaths] Canonical paths ensured");
   } catch (err) {
@@ -186,6 +193,38 @@ export function validateSymlinks(): { agent: string; dir: string; status: Symlin
   }
 
   return results;
+}
+
+// ─── Cleanup stale symlinks ─────────────────────────────────────────────────
+
+/**
+ * Agents that previously had full-dir symlinks but were removed from
+ * AGENT_SKILL_DIRS. If they still have a symlink to canonical, remove it
+ * so the CLI can manage its own skills directory without conflicts.
+ */
+const PREVIOUSLY_LINKED = [
+  { configDir: join(homedir(), ".claude"), skillsSubdir: "skills" },
+  { configDir: join(homedir(), ".codex"), skillsSubdir: "skills" },
+  { configDir: join(homedir(), ".gemini"), skillsSubdir: "skills" },
+  { configDir: join(homedir(), ".config", "crush"), skillsSubdir: "skills" },
+  { configDir: join(homedir(), ".kilocode"), skillsSubdir: "skills" },
+  { configDir: join(homedir(), ".factory"), skillsSubdir: "skills" },
+];
+
+function cleanupStaleSymlinks(): void {
+  for (const { configDir, skillsSubdir } of PREVIOUSLY_LINKED) {
+    const skillsDir = join(configDir, skillsSubdir);
+    if (!isSymlinkTo(skillsDir, CANONICAL_DIR)) continue;
+
+    try {
+      rmSync(skillsDir);
+      // Recreate as empty real directory so the CLI doesn't break
+      mkdirSync(skillsDir, { recursive: true });
+      logger.info(`[SkillPaths] Removed stale symlink, restored real dir: ${skillsDir}`);
+    } catch (err) {
+      logger.warn(`[SkillPaths] Failed to clean up stale symlink at ${skillsDir}:`, err);
+    }
+  }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
