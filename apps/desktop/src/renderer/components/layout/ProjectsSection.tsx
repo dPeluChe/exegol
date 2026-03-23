@@ -151,6 +151,14 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
               )}
             />
             <span className="flex-1 truncate text-[10px] font-medium">{displayName}</span>
+            {agent.tokenUsage.cost > 0 && (
+              <span className="shrink-0 text-[8px] tabular-nums text-accent">
+                $
+                {agent.tokenUsage.cost < 0.01
+                  ? agent.tokenUsage.cost.toFixed(4)
+                  : agent.tokenUsage.cost.toFixed(2)}
+              </span>
+            )}
             <span className="shrink-0 text-[8px] tabular-nums text-text-muted">
               {formatTimeAgo(agent.startedAt)}
             </span>

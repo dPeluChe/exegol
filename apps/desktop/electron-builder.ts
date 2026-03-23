@@ -1,27 +1,27 @@
-import type { Configuration } from "electron-builder";
 import { resolve } from "node:path";
+import type { Configuration } from "electron-builder";
 
 const iconPath = resolve("src/resources/build/icons");
+
+// biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars (not JS)
+const DMG_NAME = "Exegol-${version}-${arch}.dmg";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
+const EXE_NAME = "Exegol-${version}-${arch}.exe";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
+const APPIMAGE_NAME = "Exegol-${version}-${arch}.AppImage";
 
 const config: Configuration = {
   appId: "com.exegol.desktop",
   productName: "Exegol",
   copyright: "Copyright 2026 Exegol",
 
-  // Directories
   directories: {
     output: "dist",
     buildResources: "src/resources/build",
   },
 
-  // Use electron-vite output
-  files: [
-    "out/**/*",
-    "!out/**/*.map",
-    "package.json",
-  ],
+  files: ["out/**/*", "!out/**/*.map", "package.json"],
 
-  // ASAR with unpacking for native modules
   asar: true,
   asarUnpack: [
     "node_modules/node-pty/**",
@@ -34,7 +34,6 @@ const config: Configuration = {
     "node_modules/better-sqlite3/**",
   ],
 
-  // Extra files to include outside ASAR (native .node bindings at workspace level)
   extraResources: [
     {
       from: "../../packages/core-rust/core-rust.*.node",
@@ -43,14 +42,13 @@ const config: Configuration = {
     },
   ],
 
-  // Generate update manifests for all channels
   generateUpdatesFilesForAllChannels: true,
 
   // ─── macOS ──────────────────────────────────────────────────────────
   mac: {
     icon: resolve(iconPath, "icon.icns"),
     category: "public.app-category.developer-tools",
-    target: "default", // DMG + ZIP
+    target: "default",
     hardenedRuntime: true,
     gatekeeperAssess: false,
     notarize: false, // Enable when Apple credentials are configured
@@ -58,12 +56,13 @@ const config: Configuration = {
     entitlementsInherit: "src/resources/build/entitlements.mac.inherit.plist",
     darkModeSupport: true,
     extendInfo: {
-      NSAppleEventsUsageDescription: "Exegol needs automation access to open IDEs and manage terminals.",
+      NSAppleEventsUsageDescription:
+        "Exegol needs automation access to open IDEs and manage terminals.",
     },
   },
 
   dmg: {
-    artifactName: "Exegol-${version}-${arch}.dmg",
+    artifactName: DMG_NAME,
     contents: [
       { x: 130, y: 220 },
       { x: 410, y: 220, type: "link", path: "/Applications" },
@@ -74,7 +73,7 @@ const config: Configuration = {
   win: {
     icon: resolve(iconPath, "icon.ico"),
     target: [{ target: "nsis", arch: ["x64"] }],
-    artifactName: "Exegol-${version}-${arch}.exe",
+    artifactName: EXE_NAME,
   },
 
   nsis: {
@@ -89,7 +88,7 @@ const config: Configuration = {
     icon: resolve(iconPath, "icon.png"),
     target: [{ target: "AppImage", arch: ["x64"] }],
     category: "Development",
-    artifactName: "Exegol-${version}-${arch}.AppImage",
+    artifactName: APPIMAGE_NAME,
   },
 
   // ─── Auto-update publish config (GitHub Releases) ──────────────────

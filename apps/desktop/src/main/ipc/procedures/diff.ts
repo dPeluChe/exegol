@@ -88,4 +88,81 @@ export const diffRouter = router({
       const projectPath = resolveProjectPath(ctx.db, input.projectId);
       return runGitDiff(projectPath, ["--cached", "--unified=3"]);
     }),
+
+  /** Git status: list changed files with their staging state */
+  status: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      try {
+        const { stdout } = await execFileAsync("git", ["status", "--porcelain=v1", "-uall"], {
+          cwd,
+          maxBuffer: 1024 * 1024,
+        });
+        return stdout
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => ({
+            status: line.slice(0, 2).trim(),
+            staged: line[0] !== " " && line[0] !== "?",
+            path: line.slice(3),
+          }));
+      } catch {
+        return [];
+      }
+    }),
+
+  /** Stage specific files or all */
+  stage: publicProcedure
+    .input(z.object({ projectId: z.string(), files: z.array(z.string()).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const args = input.files && input.files.length > 0 ? ["add", ...input.files] : ["add", "-A"];
+      await execFileAsync("git", args, { cwd });
+      return { success: true };
+    }),
+
+  /** Unstage specific files or all */
+  unstage: publicProcedure
+    .input(z.object({ projectId: z.string(), files: z.array(z.string()).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const args =
+        input.files && input.files.length > 0
+          ? ["reset", "HEAD", ...input.files]
+          : ["reset", "HEAD"];
+      await execFileAsync("git", args, { cwd });
+      return { success: true };
+    }),
+
+  /** Commit staged changes */
+  commit: publicProcedure
+    .input(z.object({ projectId: z.string(), message: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const { stdout } = await execFileAsync("git", ["commit", "-m", input.message], { cwd });
+      return { output: stdout.trim() };
+    }),
+
+  /** Push to remote */
+  push: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const { stdout } = await execFileAsync("git", ["push"], { cwd, timeout: 30_000 });
+      return { output: stdout.trim() };
+    }),
+
+  /** Get current branch name */
+  branch: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      try {
+        const { stdout } = await execFileAsync("git", ["branch", "--show-current"], { cwd });
+        return stdout.trim();
+      } catch {
+        return "unknown";
+      }
+    }),
 });
