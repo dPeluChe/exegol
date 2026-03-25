@@ -63,9 +63,11 @@ const config: Configuration = {
 
   dmg: {
     artifactName: DMG_NAME,
+    background: "src/resources/build/dmg-background.png",
+    window: { width: 540, height: 380 },
     contents: [
-      { x: 130, y: 220 },
-      { x: 410, y: 220, type: "link", path: "/Applications" },
+      { x: 145, y: 185 },
+      { x: 395, y: 185, type: "link", path: "/Applications" },
     ],
   },
 
