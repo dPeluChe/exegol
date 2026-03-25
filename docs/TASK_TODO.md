@@ -43,57 +43,26 @@
 
 ---
 
-## Cluster I — Notifications System (pending)
-
-> Good candidate for a parallel agent — no file conflicts with other clusters.
-
-### T47 — System Notifications (Native OS)
-**Complexity**: Low
-**Priority**: Medium
-
-**Files**: New `main/system/notifications.ts`, `main/agents/manager.ts`
-
-**Acceptance**:
-- [ ] Electron `Notification` API on agent completed/failed/crashed/waiting_input
-- [ ] Click notification → focus window + navigate to agent terminal
-- [ ] Settings toggle enable/disable (default: enabled)
-- [ ] Skip shells (cliType === "shell")
-
-### T48 — In-App Toast Notifications
-**Complexity**: Low
-**Priority**: Medium
-
-**Files**: New `renderer/components/common/ToastProvider.tsx`, `renderer/stores/toasts.ts`
-
-**Acceptance**:
-- [ ] Toast stack (bottom-right, auto-dismiss 5s, max 3 visible)
-- [ ] Types: info, success, warning, error
-- [ ] Events: agent lifecycle, update available, port conflict, scheduler fired
-- [ ] Click toast → navigate to relevant view
-
-### T49 — System Tray
-**Complexity**: Low
-**Priority**: Low
-
-**Acceptance**:
-- [ ] Tray icon + menu (show/hide, running agents, quit)
-- [ ] App stays alive when window closed
-- [ ] Badge: number of running agents
-
----
-
 ## Remaining Minor Items
 
-| Source | Item | Status |
-|--------|------|--------|
-| T03 | Parse Codex or Aider JSONL logs | Deferred |
-| T03 | Token cost in sidebar AgentMiniCard | Deferred |
-| T04 | Filter tasks: all / pending / completed | Deferred |
-| T40b | Pane drag-out to new tab | Low priority |
+No pending items — all deferred tasks completed.
 
 ---
 
-## Completed (V3 — 2026-03-23)
+## Completed (V3 — 2026-03-23/24)
+
+### UI Polish
+- [x] T04 — Task Filter (All/Active/Done toggle in kanban top bar, filters visible columns)
+
+### Notifications & Tray
+- [x] T49 — System Tray (tray icon + context menu, show/hide + running agents list + quit, badge count, app stays alive on close, refreshTray on agent status change)
+- [x] T40b — Pane Drag-Out to New Tab (extractPaneToNewTab store action, draggable PaneToolbar with grip handle, pop-out button, drop target on tab bar with visual indicator)
+
+### Notifications System
+- [x] T47 — System Notifications (Electron Notification API, click→focus+navigate, skip shells, settings toggle)
+- [x] T48 — In-App Toast Stack (bottom-right, auto-dismiss 5s, max 3, color-coded, click→navigate)
+- [x] T03 — Parse Codex/Aider JSONL Logs (log-parser.ts: Codex sessions + Aider markdown/cache, scan mutation with dedup)
+- [x] T03 — Token Cost in Sidebar AgentMiniCard (ProjectsSection.tsx, accent color, adaptive decimals)
 
 ### Multi-Agent Pipelines
 - [x] T50 — Pipeline Executor (singleton, event-driven: startRun/advanceStep/onStepComplete)

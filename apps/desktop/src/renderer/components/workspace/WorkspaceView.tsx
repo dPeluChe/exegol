@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
+import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { AgentsSection } from "./sections/AgentsSection";
 import { MemorySection } from "./sections/MemorySection";
 import { PipelineSection } from "./sections/PipelineSection";
@@ -29,9 +30,7 @@ export function WorkspaceView() {
   // Force xterm.js terminals to re-fit when switching back to Agents tab
   useEffect(() => {
     if (isAgents && !prevIsAgents.current) {
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new CustomEvent("exegol:refit-terminals"));
-      });
+      dispatchRefitTerminals();
     }
     prevIsAgents.current = isAgents;
   }, [isAgents]);

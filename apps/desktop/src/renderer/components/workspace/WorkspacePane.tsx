@@ -3,12 +3,14 @@ import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowUpRight,
   Code2,
   Columns,
   Cpu,
   FolderTree,
   GitBranch,
   Globe,
+  GripVertical,
   RefreshCw,
   Rows,
   Terminal,
@@ -17,10 +19,11 @@ import {
 import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent } from "../../hooks/use-trpc";
+import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
-import { type Pane, useWorkspaceStore } from "../../stores/workspace";
+import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon, EmptyState, LoadingSpinner } from "../common";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { FileExplorer } from "../workspace/FileExplorer";
@@ -32,13 +35,16 @@ function PaneToolbar({
   tabId,
   paneId,
   paneType,
+  isSplitPane,
 }: {
   tabId: string;
   paneId: string;
   paneType: string;
+  isSplitPane: boolean;
 }) {
   const splitPane = useWorkspaceStore((s) => s.splitPane);
   const removePane = useWorkspaceStore((s) => s.removePane);
+  const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);
   const panes = useWorkspaceStore((s) => s.panes);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const { projectId } = useProjectContext();
@@ -65,8 +71,32 @@ function PaneToolbar({
     removePane(tabId, paneId);
   }, [tabId, paneId, panes, removePane, removeAgent]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      e.dataTransfer.setData("application/exegol-pane", JSON.stringify({ paneId, tabId }));
+      e.dataTransfer.effectAllowed = "move";
+    },
+    [paneId, tabId],
+  );
+
+  const handleExtractToTab = useCallback(() => {
+    extractPaneToNewTab(tabId, paneId);
+    dispatchRefitTerminals();
+  }, [tabId, paneId, extractPaneToNewTab]);
+
   return (
     <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded bg-bg-secondary/80 opacity-0 transition-opacity group-hover/pane:opacity-100">
+      {isSplitPane && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: drag handle for pane extraction
+        <div
+          draggable
+          onDragStart={handleDragStart}
+          className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary active:cursor-grabbing"
+          title="Drag to tab bar to extract"
+        >
+          <GripVertical className="h-3 w-3" />
+        </div>
+      )}
       {showIdeButton && projectId && (
         <button
           type="button"
@@ -75,6 +105,16 @@ function PaneToolbar({
           title="Open in IDE"
         >
           <Code2 className="h-3 w-3" />
+        </button>
+      )}
+      {isSplitPane && (
+        <button
+          type="button"
+          onClick={handleExtractToTab}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+          title="Pop out to new tab"
+        >
+          <ArrowUpRight className="h-3 w-3" />
         </button>
       )}
       <button
@@ -446,15 +486,21 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
   const isFocused = focusedPaneId === paneId;
   const [dropSide, setDropSide] = useState<"left" | "right" | "top" | "bottom" | null>(null);
 
+  // Check if this pane is inside a split (has siblings) — enables drag-out
+  const isSplitPane = useWorkspaceStore((s) => {
+    const tab = s.tabs.find((t) => t.id === tabId);
+    return tab ? collectPaneIds(tab.layout).length > 1 : false;
+  });
+
   const handlePaneDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
-    if (!e.dataTransfer.types.includes("application/exegol-tab")) return;
+    const hasTab = e.dataTransfer.types.includes("application/exegol-tab");
+    const hasPane = e.dataTransfer.types.includes("application/exegol-pane");
+    if (!hasTab && !hasPane) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    // Determine drop side from mouse position relative to pane
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    // Edge zones: 30% from each edge
     if (x < 0.3) setDropSide("left");
     else if (x > 0.7) setDropSide("right");
     else if (y < 0.3) setDropSide("top");
@@ -465,19 +511,19 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
   const handlePaneDrop = useCallback(
     (e: DragEvent<HTMLDivElement>) => {
       e.preventDefault();
+      setDropSide(null);
+
+      // Handle tab → pane merge (existing)
       const sourceTabId = e.dataTransfer.getData("application/exegol-tab");
-      if (!sourceTabId || sourceTabId === tabId) {
-        setDropSide(null);
+      if (sourceTabId && sourceTabId !== tabId) {
+        const direction = dropSide === "left" || dropSide === "right" ? "horizontal" : "vertical";
+        const sourceFirst = dropSide === "left" || dropSide === "top";
+        mergeTabIntoSplit(sourceTabId, tabId, direction, sourceFirst);
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event("exegol:refit-terminals"));
+        });
         return;
       }
-      const direction = dropSide === "left" || dropSide === "right" ? "horizontal" : "vertical";
-      const sourceFirst = dropSide === "left" || dropSide === "top";
-      mergeTabIntoSplit(sourceTabId, tabId, direction, sourceFirst);
-      setDropSide(null);
-      // Refit all terminals after layout change (xterm needs to recalculate dimensions)
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new Event("exegol:refit-terminals"));
-      });
     },
     [tabId, dropSide, mergeTabIntoSplit],
   );
@@ -520,7 +566,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
           )}
         />
       )}
-      <PaneToolbar tabId={tabId} paneId={paneId} paneType={pane.type} />
+      <PaneToolbar tabId={tabId} paneId={paneId} paneType={pane.type} isSplitPane={isSplitPane} />
       <div className="flex-1 overflow-hidden">
         {pane.invalidReason && <InvalidPane reason={pane.invalidReason} paneId={paneId} />}
         {!pane.invalidReason && pane.type === "terminal" && pane.agentId && (

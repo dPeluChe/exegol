@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FolderTree, GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -95,10 +96,13 @@ export function WorkspaceTabBar() {
     [removeTab, removeAgent],
   );
 
+  const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);
+
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
+  const [paneDragOverBar, setPaneDragOverBar] = useState(false);
   const draggedTabIdRef = useRef<string | null>(null);
 
   const handleTabDragStart = useCallback((e: DragEvent, tabId: string) => {
@@ -139,6 +143,37 @@ export function WorkspaceTabBar() {
     draggedTabIdRef.current = null;
     setDragOverTabId(null);
   }, []);
+
+  // Pane drag → tab bar: extract pane to new tab
+  const handleBarDragOver = useCallback((e: DragEvent) => {
+    if (!e.dataTransfer.types.includes("application/exegol-pane")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setPaneDragOverBar(true);
+  }, []);
+
+  const handleBarDragLeave = useCallback((e: DragEvent) => {
+    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
+    setPaneDragOverBar(false);
+  }, []);
+
+  const handleBarDrop = useCallback(
+    (e: DragEvent) => {
+      setPaneDragOverBar(false);
+      const raw = e.dataTransfer.getData("application/exegol-pane");
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const { paneId, tabId: sourceTabId } = JSON.parse(raw);
+        extractPaneToNewTab(sourceTabId, paneId);
+        dispatchRefitTerminals();
+      } catch {
+        // Malformed data — ignore
+      }
+    },
+    [extractPaneToNewTab],
+  );
 
   const handleNewTerminal = useCallback(async () => {
     if (!projectId) return;
@@ -194,7 +229,16 @@ export function WorkspaceTabBar() {
   return (
     <div className="shrink-0 border-b border-border bg-bg-secondary">
       {/* Tab row */}
-      <div className="flex h-9 items-center gap-0.5 overflow-x-auto px-1">
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for pane extraction */}
+      <div
+        className={cn(
+          "flex h-9 items-center gap-0.5 overflow-x-auto px-1 transition-colors",
+          paneDragOverBar && "bg-accent/10 ring-1 ring-inset ring-accent/40",
+        )}
+        onDragOver={handleBarDragOver}
+        onDragLeave={handleBarDragLeave}
+        onDrop={handleBarDrop}
+      >
         {tabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isEditing = editingTabId === tab.id;

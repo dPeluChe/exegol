@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
+import { dispatchRefitTerminals } from "../../../lib/dispatch-refit";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { WorkspaceLayout } from "../WorkspaceLayout";
 import { WorkspaceTabBar } from "../WorkspaceTabBar";
@@ -17,9 +18,7 @@ function AllTabsLayout() {
     if (activeTabId !== prevActiveTabId.current) {
       prevActiveTabId.current = activeTabId;
       // Dispatch custom event that TerminalInstance listens to for targeted refit
-      requestAnimationFrame(() => {
-        window.dispatchEvent(new CustomEvent("exegol:refit-terminals"));
-      });
+      dispatchRefitTerminals();
     }
   }, [activeTabId]);
 

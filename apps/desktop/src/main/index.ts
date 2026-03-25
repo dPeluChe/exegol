@@ -23,6 +23,7 @@ import {
   stopAutoUpdater,
 } from "./system/auto-updater";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
+import { destroyTray, initTray } from "./system/tray";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureShellWrappers } from "./terminal/shell-wrappers";
 
@@ -200,6 +201,7 @@ app.whenReady().then(async () => {
   getPipelineExecutor().recoverOnStartup(getDb()); // Recover stale pipeline runs
   initAutoUpdater(); // T44: check for updates on startup + every 4h
   createWindow();
+  initTray(); // T49: system tray with running agents badge
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -208,11 +210,8 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+// Keep app alive in system tray — quit only from tray menu
+app.on("window-all-closed", () => {});
 
 // Prevent crash on write EIO during shutdown (PTY writes after pipe closed)
 process.on("uncaughtException", (err) => {
@@ -227,6 +226,7 @@ app.on("will-quit", () => {
   // Stop all PTY subprocess sessions and close the database
   getPtyHost().destroyAll();
 
+  destroyTray();
   stopAutoUpdater();
   stopNotifyHandler();
   cleanupAgentWrappers();

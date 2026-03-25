@@ -6,6 +6,7 @@ import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/que
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
 import { showAgentNotification } from "../system/notifications";
+import { refreshTray } from "../system/tray";
 import { scoreAgent } from "./scoring";
 
 // ─── Push event types ────────────────────────────────────────────────────
@@ -19,11 +20,12 @@ export interface AgentStatusEvent {
   timestamp: number;
 }
 
-/** Broadcast an agent status event to all renderer windows */
+/** Broadcast an agent status event to all renderer windows + refresh tray badge */
 export function broadcastAgentStatus(event: AgentStatusEvent): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send("agent:status-changed", event);
   }
+  refreshTray();
 }
 
 // ─── Rust native module (git2 worktree ops) ──────────────────────────────

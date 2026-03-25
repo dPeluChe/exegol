@@ -54,6 +54,12 @@ function usePersistedTaskFile(projectId: string | undefined) {
 
 // ─── Main Section ───────────────────────────────────────────────────────────
 
+const TASK_FILTERS = ["all", "active", "done"] as const;
+type TaskFilter = (typeof TASK_FILTERS)[number];
+
+const ACTIVE_COLUMNS: Set<TaskColumn> = new Set(["backlog", "todo", "in-progress", "validated"]);
+const DONE_COLUMNS: Set<TaskColumn> = new Set(["done", "archived"]);
+
 export function TasksSection() {
   const { project } = useProjectContext();
   const [filePath, setFilePath] = usePersistedTaskFile(project?.id);
@@ -61,6 +67,7 @@ export function TasksSection() {
   const [addingToColumn, setAddingToColumn] = useState<TaskColumn | null>(null);
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [showGitHubIssues, setShowGitHubIssues] = useState(false);
+  const [filter, setFilter] = useState<TaskFilter>("all");
   const probeRan = useRef(false);
   const { data: fileData, refetch } = useFileContent(filePath);
   const pickFile = usePickFile();
@@ -350,7 +357,13 @@ export function TasksSection() {
 
   if (!board) return null;
 
-  // displayColumns computed above (before guards, for handleToggle access)
+  // Filter visible columns
+  const visibleColumns =
+    filter === "all"
+      ? displayColumns
+      : displayColumns.filter((c) =>
+          filter === "active" ? ACTIVE_COLUMNS.has(c) : DONE_COLUMNS.has(c),
+        );
 
   const totalTasks = Object.values(mergedColumns).flat().length;
   const doneTasks = mergedColumns.done.length + mergedColumns.archived.length;
@@ -363,6 +376,24 @@ export function TasksSection() {
         <span className="truncate text-[10px] text-text-muted" title={filePath}>
           {filePath.split("/").pop()}
         </span>
+        {/* Filter toggle */}
+        <div className="flex items-center rounded-md border border-border">
+          {TASK_FILTERS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFilter(f)}
+              className={cn(
+                "px-2 py-0.5 text-[9px] font-medium capitalize transition-colors",
+                filter === f
+                  ? "bg-accent/15 text-accent"
+                  : "text-text-muted hover:text-text-secondary",
+              )}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
         {/* Column counts */}
         <div className="flex items-center gap-1">
           {displayColumns.map((col) => {
@@ -436,7 +467,7 @@ export function TasksSection() {
 
       {/* Kanban board */}
       <div className="flex flex-1 gap-2 overflow-x-auto p-2">
-        {displayColumns.map((col, idx) => (
+        {visibleColumns.map((col, idx) => (
           <TaskColumnComponent
             key={col}
             column={col}

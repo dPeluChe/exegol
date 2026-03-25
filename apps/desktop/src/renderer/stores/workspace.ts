@@ -83,6 +83,9 @@ interface WorkspaceStore {
   updatePane: (paneId: string, updates: Partial<Pane>) => void;
   setFocusedPane: (paneId: string | null) => void;
 
+  /** Extract a pane from its current tab into a new tab */
+  extractPaneToNewTab: (sourceTabId: string, paneId: string) => void;
+
   /** Close the focused pane. If it's the last pane, close the tab. */
   closeFocusedPane: () => void;
 
@@ -359,6 +362,41 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         }),
 
       setFocusedPane: (paneId) => set({ focusedPaneId: paneId }),
+
+      extractPaneToNewTab: (sourceTabId, paneId) =>
+        set((s) => {
+          const sourceTab = s.tabs.find((t) => t.id === sourceTabId);
+          if (!sourceTab) return s;
+          const pane = s.panes[paneId];
+          if (!pane) return s;
+
+          // Don't extract if it's the only pane (nothing to split from)
+          const allPaneIds = collectPaneIds(sourceTab.layout);
+          if (allPaneIds.length <= 1) return s;
+
+          // Remove pane from source tab's layout
+          const newLayout = removeNodeByPaneId(sourceTab.layout, paneId);
+          if (!newLayout) return s;
+
+          // Create new tab with the extracted pane
+          const newTab: WorkspaceTab = {
+            id: nanoid(8),
+            label: pane.type === "terminal" ? "Terminal" : `Tab ${s.tabs.length + 1}`,
+            layout: { type: "pane", paneId },
+          };
+
+          // Insert new tab right after source tab
+          const sourceIdx = s.tabs.findIndex((t) => t.id === sourceTabId);
+          const newTabs = [...s.tabs];
+          newTabs[sourceIdx] = { ...sourceTab, layout: newLayout };
+          newTabs.splice(sourceIdx + 1, 0, newTab);
+
+          return {
+            tabs: newTabs,
+            activeTabId: newTab.id,
+            focusedPaneId: paneId,
+          };
+        }),
 
       closeFocusedPane: () => {
         const { focusedPaneId, activeTabId, tabs } = get();
