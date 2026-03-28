@@ -43,12 +43,36 @@
 
 ---
 
-## Pending UX Items
+## Pending Pipeline & UX Items
+
+### T53 — Worktree Path Relocation
+**Priority**: High
+- Move worktree creation from sibling dir to `~/.exegol/pipelines/{project-name}/{branch}`
+- Requires Rust `create_worktree()` change in `core-rust/src/git/mod.rs`
+- Update executor.ts path construction
+
+### T54 — Pipeline Auto-Close for Interactive CLIs
+**Priority**: High
+- Add `pipelineIdleCloseSeconds` config field to AgentProvider (Settings UI)
+- Pipeline executor monitors PTY output idle time
+- After N seconds of no output → send Ctrl+C to force-close interactive CLIs
+- Default: 50s. Configurable per provider in Settings
+- Affects: Gemini, OpenCode, Kiro (CLIs that don't auto-exit)
+
+### T55 — Push Validation Before Worktree
+**Priority**: High
+- Before creating pipeline worktree: check `git rev-list HEAD...@{u}`
+- If local ahead of origin → show warning modal with "Push & Continue" / "Continue anyway"
+- Block pipeline start until resolved
+- Also check `git status --porcelain` for uncommitted changes
+
+### Other Pending Items
 
 | Item | Description | Priority |
 |------|-------------|----------|
-| Worktree creation UI | Sidebar form: prompt + branch name + agent selector → spawn in worktree | Medium |
-| Pipeline testing & review | Validate pipeline execution flow, template editor, run timeline | Medium |
+| Pipeline terminal repaint | Investigate xterm.js repaint artifacts in inline pipeline terminal | Medium |
+| T45 — CI/CD Release Pipeline | GitHub Actions when repo goes to GitHub | Medium |
+| T46 — Canary Channel | Optional, after T45 | Low |
 
 ---
 
