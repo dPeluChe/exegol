@@ -12,7 +12,7 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   useCancelPipelineRun,
   usePausePipelineRun,
@@ -21,7 +21,20 @@ import {
   useResumePipelineRun,
 } from "../../../../hooks/use-trpc-pipeline";
 import { useAgentStore } from "../../../../stores/agents";
+import { useTerminalStore } from "../../../../stores/terminals";
 import { findFirstPaneId, useWorkspaceStore } from "../../../../stores/workspace";
+import { TerminalPanel } from "../../../terminal/TerminalPanel";
+
+/** Ensure terminal exists in store before rendering TerminalPanel */
+function PipelineTerminal({ agentId }: { agentId: string }) {
+  const createTerminal = useTerminalStore((s) => s.createTerminal);
+  const hasTerminal = useTerminalStore((s) => !!s.terminals[agentId]);
+  useEffect(() => {
+    if (!hasTerminal) createTerminal(agentId);
+  }, [agentId, hasTerminal, createTerminal]);
+  if (!hasTerminal) return null;
+  return <TerminalPanel agentId={agentId} paneId={`pipeline-${agentId}`} />;
+}
 
 function StepStatusIcon({ status }: { status: PipelineStepResult["status"] }) {
   switch (status) {
@@ -232,8 +245,15 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                     </div>
                   </div>
 
-                  {/* Output summary (collapsed) */}
-                  {result?.outputSummary && result.status !== "pending" && (
+                  {/* Live terminal for active step */}
+                  {isActive && result?.agentId && (
+                    <div className="mt-2 h-64 overflow-hidden rounded border border-border">
+                      <PipelineTerminal agentId={result.agentId} />
+                    </div>
+                  )}
+
+                  {/* Output summary for completed/failed steps */}
+                  {!isActive && result?.outputSummary && result.status !== "pending" && (
                     <details className="mt-2">
                       <summary className="cursor-pointer text-[10px] text-text-muted hover:text-text-secondary">
                         Output

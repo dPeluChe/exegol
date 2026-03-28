@@ -18,7 +18,7 @@ import { getPtyHost } from "../terminal/pty-host";
 import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../terminal/shell-wrappers";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import { getProviderRegistry } from "./registry";
-import { buildShellCommand, buildSpawnContext, needsStdinInjection } from "./spawn-context";
+import { buildShellCommand, buildSpawnContext } from "./spawn-context";
 import {
   broadcastAgentStatus,
   buildApiKeyEnv,
@@ -375,18 +375,6 @@ export class AgentManager {
       cliType: agent.cliType,
       timestamp: Date.now(),
     });
-
-    // Interactive CLIs (Gemini, OpenCode, Kiro): inject prompt via stdin after spawn
-    if (needsStdinInjection(registry, agent.cliType, agent.taskDescription)) {
-      const prompt = agent.taskDescription;
-      // Wait for CLI to be ready (1.5s delay), then write prompt + Enter
-      setTimeout(() => {
-        ptyHost.write(agent.id, `${prompt}\n`);
-        logger.info(
-          `[AgentManager] Injected prompt via stdin for interactive CLI: ${agent.cliType}`,
-        );
-      }, 1500);
-    }
 
     try {
       insertActivity(db, {

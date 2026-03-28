@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { Agent, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
 import type { AgentProviderRegistry } from "./registry";
@@ -20,9 +21,6 @@ export function buildSpawnContext(
   _cwd: string,
 ): SpawnContextResult {
   // TODO: Context injection disabled until task pipeline is implemented.
-  // Memory, MCP, and skills will be injected when agents are spawned
-  // from the kanban task system with explicit user intent.
-  // See: docs/UI_RESTRUCTURE.md Phase 7 (Tasks Kanban)
   return { memoryContext: "", mcpContext: "", skillContext: "", contextPrefix: "" };
 }
 
@@ -31,7 +29,9 @@ export function buildSpawnContext(
  * and task description. Respects provider capabilities:
  * - supportsPromptArg: pass prompt as positional arg (`claude 'task'`)
  * - promptFlag: pass via flag (`aider --message 'task'`)
- * - neither: launch interactive only (`gemini`)
+ * - neither (interactive): heredoc stdin injection (`gemini "$(cat <<'DELIM'\n...\nDELIM\n)"`)
+ *
+ * Heredoc pattern inspired by Superset's agent-command.ts.
  */
 export function buildShellCommand(
   registry: AgentProviderRegistry,
@@ -46,8 +46,6 @@ export function buildShellCommand(
   const isQuickLaunch = registry.isQuickLaunchLabel(agent.taskDescription);
   const hasTask = agent.taskDescription && !isQuickLaunch;
 
-  // Build the full prompt (context + task description)
-  // Only inject context when there's an actual task — not for quick-launch
   const fullPrompt = hasTask
     ? contextPrefix
       ? `${contextPrefix}# Task\n\n${agent.taskDescription}`
@@ -55,7 +53,6 @@ export function buildShellCommand(
     : "";
 
   if (!fullPrompt) {
-    // No prompt, no context — just launch the CLI
     return cmdParts.join(" ");
   }
 
@@ -68,24 +65,13 @@ export function buildShellCommand(
   } else if (caps?.supportsPromptArg) {
     // Pass as positional argument
     cmdParts.push(`'${escaped}'`);
+  } else {
+    // Interactive CLI: use heredoc to pipe prompt via stdin
+    // This works for Gemini, OpenCode, Kiro, etc.
+    const delimiter = `EXEGOL_PROMPT_${randomBytes(4).toString("hex")}`;
+    const base = cmdParts.join(" ");
+    return `${base} "$(cat <<'${delimiter}'\n${fullPrompt}\n${delimiter}\n)"`;
   }
-  // else: CLI is interactive-only — prompt injected via stdin after spawn (see manager.ts)
 
   return cmdParts.join(" ");
-}
-
-/**
- * Check if a provider needs stdin injection (interactive CLI that doesn't accept prompt args).
- */
-export function needsStdinInjection(
-  registry: AgentProviderRegistry,
-  cliType: string,
-  taskDescription: string,
-): boolean {
-  const provider = registry.get(cliType);
-  if (!provider) return false;
-  const caps = provider.capabilities;
-  if (caps.supportsPromptArg || caps.promptFlag) return false;
-  if (registry.isQuickLaunchLabel(taskDescription)) return false;
-  return !!taskDescription;
 }
