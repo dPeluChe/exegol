@@ -5,8 +5,8 @@ import { GitBranch, Layers, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
-import { useAppStore } from "../../stores/app";
 import { useTerminalStore } from "../../stores/terminals";
+import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
 function slugify(text: string): string {
@@ -90,8 +90,17 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
       });
       createTerminal(agent.id);
       setFocusedAgent(agent.id);
-      if (useAppStore.getState().activeView !== "workspace") {
-        useAppStore.getState().setActiveView("workspace");
+      // Switch to Agents section and open terminal in active pane
+      window.dispatchEvent(
+        new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
+      );
+      const store = useWorkspaceStore.getState();
+      const activeTab = store.getActiveTab();
+      if (activeTab) {
+        const paneId = findFirstPaneId(activeTab.layout);
+        if (paneId) {
+          store.updatePane(paneId, { type: "terminal", agentId: agent.id });
+        }
       }
       onClose();
     } catch (err) {
