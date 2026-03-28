@@ -1,6 +1,7 @@
 import { PIPELINE_PRESETS, type PipelineRun, type PipelineTemplate } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
+  AlertTriangle,
   CheckCircle,
   GitBranch,
   Loader2,
@@ -22,6 +23,7 @@ import {
   usePipelineTemplates,
   useStartPipelineRun,
 } from "../../../hooks/use-trpc-pipeline";
+import { trpcInvoke } from "../../../lib/trpc-client";
 
 import { PipelineRunView } from "./pipeline/PipelineRunView";
 import { PipelineTemplateEditor } from "./pipeline/PipelineTemplateEditor";
@@ -59,6 +61,7 @@ export function PipelineSection() {
   const [view, setView] = useState<View>({ type: "list" });
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [useWorktree, setUseWorktree] = useState(true);
+  const [gitWarning, setGitWarning] = useState<string | null>(null);
 
   const selectedTemplate = templates?.find((t) => t.id === selectedTemplateId);
 
@@ -78,8 +81,26 @@ export function PipelineSection() {
     return <PipelineRunView runId={view.runId} onClose={() => setView({ type: "list" })} />;
   }
 
-  const handleStartRun = () => {
+  const handleStartRun = async () => {
     if (!projectId || !selectedTemplateId) return;
+
+    // Check git sync before creating worktree
+    if (useWorktree) {
+      try {
+        const sync = await trpcInvoke<{
+          clean: boolean;
+          message: string;
+        }>("pipeline.checkGitSync", { projectId });
+        if (!sync.clean) {
+          setGitWarning(sync.message);
+          return;
+        }
+      } catch {
+        // Non-fatal
+      }
+    }
+    setGitWarning(null);
+
     startRun.mutate(
       {
         templateId: selectedTemplateId,
@@ -141,6 +162,31 @@ export function PipelineSection() {
             {startRun.isPending ? "Starting..." : "Run"}
           </button>
         </div>
+        {/* Git sync warning */}
+        {gitWarning && (
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-yellow-400" />
+            <span className="flex-1 text-[10px] text-yellow-300">{gitWarning}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setGitWarning(null);
+                setUseWorktree(false);
+                handleStartRun();
+              }}
+              className="shrink-0 rounded px-2 py-0.5 text-[9px] text-text-muted hover:bg-white/10"
+            >
+              Run without worktree
+            </button>
+            <button
+              type="button"
+              onClick={() => setGitWarning(null)}
+              className="shrink-0 rounded px-2 py-0.5 text-[9px] text-yellow-400 hover:bg-yellow-500/20"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {/* Step preview for selected template */}
         {selectedTemplate && (
           <div className="mt-2 space-y-1.5">

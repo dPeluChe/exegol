@@ -136,7 +136,15 @@ export class AgentManager {
       const worktreeName = branchName.replace(/\//g, "-");
 
       try {
-        const wtInfo = coreRust.createWorktree(project.path, worktreeName, branchName);
+        const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+        const targetPath = require("node:path").join(
+          require("node:os").homedir(),
+          ".exegol",
+          "worktrees",
+          projectSlug,
+          worktreeName,
+        );
+        const wtInfo = coreRust.createWorktree(project.path, worktreeName, branchName, targetPath);
         cwd = wtInfo.path;
 
         const dbWt = dbCreateWorktree(db, {
@@ -263,6 +271,8 @@ export class AgentManager {
           for (const win of BrowserWindow.getAllWindows()) {
             win.webContents.send("terminal:data", agent.id, data);
           }
+          // Notify data subscribers (pipeline idle monitoring)
+          this.dataCallbacks.get(agent.id)?.(data);
 
           if (isPlainShell) return;
 
@@ -548,6 +558,14 @@ export class AgentManager {
 
   onAgentComplete(agentId: string, callback: (exitCode: number) => void): void {
     this.completionCallbacks.set(agentId, callback);
+  }
+
+  /** Register a one-shot or persistent data callback for an agent (pipeline idle monitoring) */
+  private dataCallbacks: Map<string, (data: string) => void> = new Map();
+
+  onAgentData(agentId: string, callback: (data: string) => void): () => void {
+    this.dataCallbacks.set(agentId, callback);
+    return () => this.dataCallbacks.delete(agentId);
   }
 
   /** Get PID from PtyHost session (for process metrics) */

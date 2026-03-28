@@ -1,5 +1,7 @@
 import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type {
   AgentCliType,
   PipelineRun,
@@ -34,6 +36,49 @@ import {
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput } from "./context";
+
+// ─── Git status check ─────────────────────────────────────────────────────
+
+export interface GitSyncStatus {
+  clean: boolean;
+  uncommittedChanges: boolean;
+  unpushedCommits: number;
+  message: string;
+}
+
+export function checkGitSync(projectPath: string): Promise<GitSyncStatus> {
+  return new Promise((resolve) => {
+    // Check for uncommitted changes
+    exec(
+      "git status --porcelain",
+      { cwd: projectPath, encoding: "utf-8", timeout: 5_000 },
+      (err1, dirtyOut) => {
+        const uncommitted = !err1 && dirtyOut.trim().length > 0;
+
+        // Check for unpushed commits
+        exec(
+          "git rev-list @{u}..HEAD --count 2>/dev/null",
+          { cwd: projectPath, encoding: "utf-8", timeout: 5_000 },
+          (err2, aheadOut) => {
+            const ahead = err2 ? 0 : Number.parseInt(aheadOut.trim(), 10) || 0;
+
+            const issues: string[] = [];
+            if (uncommitted) issues.push("uncommitted changes");
+            if (ahead > 0) issues.push(`${ahead} unpushed commit${ahead > 1 ? "s" : ""}`);
+
+            resolve({
+              clean: !uncommitted && ahead === 0,
+              uncommittedChanges: uncommitted,
+              unpushedCommits: ahead,
+              message:
+                issues.length > 0 ? `Warning: ${issues.join(" and ")}` : "Repository is up to date",
+            });
+          },
+        );
+      },
+    );
+  });
+}
 
 // ─── Singleton ─────────────────────────────────────────────────────────────
 
@@ -91,6 +136,8 @@ function now(): number {
 export class PipelineExecutor {
   /** Track which run's agent is currently active */
   private activeAgents: Map<string, string> = new Map(); // runId → agentId
+  /** Idle timers for interactive CLIs in pipeline mode */
+  private idleTimers: Map<string, ReturnType<typeof setTimeout>> = new Map(); // agentId → timer
 
   /**
    * Start a new pipeline run from a template.
@@ -114,7 +161,9 @@ export class PipelineExecutor {
         try {
           const branchName = `pipeline/${slugifyBranchName(task)}`;
           const wtName = branchName.replace(/\//g, "-");
-          const wtInfo = coreRust.createWorktree(project.path, wtName, branchName);
+          const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+          const targetPath = join(homedir(), ".exegol", "pipelines", projectSlug, wtName);
+          const wtInfo = coreRust.createWorktree(project.path, wtName, branchName, targetPath);
           worktreePath = wtInfo.path;
           logger.info("[Pipeline] Created shared worktree:", { path: worktreePath });
         } catch (err) {
@@ -250,6 +299,12 @@ export class PipelineExecutor {
         provider.args = provider.args.filter((a) => a !== yoloFlag);
       }
     }
+
+    // Start idle monitoring for interactive CLIs
+    const idleSeconds = provider?.capabilities?.pipelineIdleCloseSeconds ?? 0;
+    if (idleSeconds > 0) {
+      this.startIdleMonitor(agent.id, idleSeconds, db);
+    }
   }
 
   /**
@@ -264,6 +319,12 @@ export class PipelineExecutor {
     template: PipelineTemplate,
   ): Promise<void> {
     this.activeAgents.delete(runId);
+    // Clean up idle monitor if running
+    const idleTimer = this.idleTimers.get(agentId);
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      this.idleTimers.delete(agentId);
+    }
 
     const run = getPipelineRun(db, runId);
     if (!run || run.status === "cancelled") return;
@@ -344,6 +405,36 @@ export class PipelineExecutor {
         );
       }
     }
+  }
+
+  /**
+   * Monitor PTY output idle time for interactive CLIs.
+   * Resets timer on each output. Auto-kills agent after N seconds of silence.
+   */
+  private startIdleMonitor(agentId: string, idleSeconds: number, _db: Database.Database): void {
+    const timeoutMs = idleSeconds * 1000;
+    const manager = getAgentManager();
+
+    const resetTimer = (): void => {
+      const existing = this.idleTimers.get(agentId);
+      if (existing) clearTimeout(existing);
+      this.idleTimers.set(
+        agentId,
+        setTimeout(() => {
+          this.idleTimers.delete(agentId);
+          unsubData();
+          const ptyHost = getPtyHost();
+          if (ptyHost.isAlive(agentId)) {
+            logger.info(`[Pipeline] Auto-closing idle agent: ${agentId} (${idleSeconds}s timeout)`);
+            ptyHost.kill(agentId);
+          }
+        }, timeoutMs),
+      );
+    };
+
+    // Subscribe to agent data — reset idle timer on each PTY output
+    const unsubData = manager.onAgentData(agentId, () => resetTimer());
+    resetTimer();
   }
 
   /**

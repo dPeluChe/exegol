@@ -11,11 +11,12 @@ import {
   deletePipelineTemplate,
   getPipelineRun,
   getPipelineTemplate,
+  getProject,
   listPipelineRuns,
   listPipelineTemplates,
   updatePipelineTemplate,
 } from "../../db/queries";
-import { getPipelineExecutor } from "../../pipeline/executor";
+import { checkGitSync, getPipelineExecutor } from "../../pipeline/executor";
 import { publicProcedure, router } from "../trpc";
 
 export const pipelineRouter = router({
@@ -101,4 +102,20 @@ export const pipelineRouter = router({
     deletePipelineRun(ctx.db, input.id);
     return { success: true };
   }),
+
+  /** Check if a project's git repo is synced (no uncommitted changes, no unpushed commits) */
+  checkGitSync: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) {
+        return {
+          clean: true,
+          uncommittedChanges: false,
+          unpushedCommits: 0,
+          message: "Project not found",
+        };
+      }
+      return checkGitSync(project.path);
+    }),
 });

@@ -22,7 +22,7 @@ export declare class AgentOutputStream {
  * The worktree is placed at `<repo_path>/../<worktree_name>` by convention,
  * and a new branch `branch_name` is created pointing at the current HEAD.
  */
-export declare function createWorktree(repoPath: string, worktreeName: string, branchName: string): WorktreeInfo
+export declare function createWorktree(repoPath: string, worktreeName: string, branchName: string, targetPath?: string | undefined | null): WorktreeInfo
 
 /** A contiguous section of changes within a file. */
 export interface DiffHunk {

@@ -70,22 +70,31 @@ pub fn get_repo_info(path: String) -> Result<RepoInfo, Error> {
 
 /// Create a new git worktree with a new branch.
 ///
-/// The worktree is placed at `<repo_path>/../<worktree_name>` by convention,
-/// and a new branch `branch_name` is created pointing at the current HEAD.
+/// If `target_path` is provided, the worktree is placed there.
+/// Otherwise falls back to `<repo_path>/../<worktree_name>`.
+/// A new branch `branch_name` is created pointing at the current HEAD.
 #[napi]
 pub fn create_worktree(
   repo_path: String,
   worktree_name: String,
   branch_name: String,
+  target_path: Option<String>,
 ) -> Result<WorktreeInfo, Error> {
   let repo = open_repo(&repo_path)?;
 
-  // Resolve worktree path as a sibling directory to the repo
-  let repo_root = Path::new(&repo_path);
-  let worktree_path = repo_root
-    .parent()
-    .unwrap_or(repo_root)
-    .join(&worktree_name);
+  // Use explicit target path if provided, otherwise sibling directory
+  let worktree_path = if let Some(ref tp) = target_path {
+    let p = Path::new(tp);
+    // Ensure parent directory exists
+    if let Some(parent) = p.parent() {
+      std::fs::create_dir_all(parent)
+        .map_err(|e| Error::from_reason(format!("Failed to create worktree directory: {e}")))?;
+    }
+    p.to_path_buf()
+  } else {
+    let repo_root = Path::new(&repo_path);
+    repo_root.parent().unwrap_or(repo_root).join(&worktree_name)
+  };
   let worktree_path_str = worktree_path
     .to_str()
     .ok_or_else(|| Error::from_reason("Invalid worktree path (non-UTF-8)"))?

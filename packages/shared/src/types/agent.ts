@@ -65,6 +65,8 @@ export type AgentProviderCapabilities = {
   supportsPromptArg: boolean;
   /** Flag to pass a prompt (e.g. `aider --message 'task'`). Empty = no flag support. */
   promptFlag: string;
+  /** Seconds of idle (no PTY output) before auto-closing in pipeline mode. 0 = disabled. */
+  pipelineIdleCloseSeconds: number;
 };
 
 export type AgentProvider = {
