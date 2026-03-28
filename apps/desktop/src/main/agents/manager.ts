@@ -115,9 +115,9 @@ export class AgentManager {
       throw new Error(`No CLI configuration found for agent type: ${agent.cliType}`);
     }
 
-    const project = db.prepare("SELECT path FROM projects WHERE id = ?").get(agent.projectId) as
-      | { path: string }
-      | undefined;
+    const project = db
+      .prepare("SELECT path, name FROM projects WHERE id = ?")
+      .get(agent.projectId) as { path: string; name: string } | undefined;
     if (!project) {
       throw new Error(`Project ${agent.projectId} not found`);
     }

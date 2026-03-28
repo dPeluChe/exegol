@@ -19,8 +19,9 @@ export declare class AgentOutputStream {
 /**
  * Create a new git worktree with a new branch.
  *
- * The worktree is placed at `<repo_path>/../<worktree_name>` by convention,
- * and a new branch `branch_name` is created pointing at the current HEAD.
+ * If `target_path` is provided, the worktree is placed there.
+ * Otherwise falls back to `<repo_path>/../<worktree_name>`.
+ * A new branch `branch_name` is created pointing at the current HEAD.
  */
 export declare function createWorktree(repoPath: string, worktreeName: string, branchName: string, targetPath?: string | undefined | null): WorktreeInfo
 

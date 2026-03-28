@@ -49,6 +49,7 @@ export const agentRouter = router({
             supportsVision: z.boolean().default(false),
             supportsPromptArg: z.boolean().default(false),
             promptFlag: z.string().default(""),
+            pipelineIdleCloseSeconds: z.number().default(0),
           })
           .default({}),
         enabled: z.boolean().default(true),

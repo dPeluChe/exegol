@@ -88,6 +88,7 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
       supportsVision: false,
       supportsPromptArg: false,
       promptFlag: "--message",
+      pipelineIdleCloseSeconds: 0,
     },
     isBuiltin: true,
     enabled: true,

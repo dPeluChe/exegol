@@ -14,6 +14,7 @@ import type Database from "libsql";
 import { getAgentManager } from "../agents/manager";
 import { getProviderRegistry } from "../agents/registry";
 import { coreRust, slugifyBranchName } from "../agents/spawn-env";
+import { getPtyHost } from "../terminal/pty-host";
 
 // Auto-approve flags per CLI — pipeline steps always run in full-auto mode
 const YOLO_FLAGS: Record<string, string> = {

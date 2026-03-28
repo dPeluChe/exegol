@@ -1,4 +1,4 @@
-import type { Project } from "@exegol/shared";
+import type { Project, Worktree } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import {
   ChevronDown,
@@ -18,7 +18,7 @@ import {
   useProjects,
   useSettings,
 } from "../../hooks/use-trpc";
-import { trpcMutate } from "../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
@@ -247,6 +247,38 @@ function PortBadges({ projectPath }: { projectPath: string }) {
 
 // ─── Project Item ─────────────────────────────────────────────────────────────
 
+// ─── Worktree List ────────────────────────────────────────────────────────────
+
+function WorktreeList({ projectId }: { projectId: string }) {
+  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
+
+  useEffect(() => {
+    trpcInvoke<Worktree[]>("projects.listWorktrees", { projectId })
+      .then(setWorktrees)
+      .catch(() => {});
+  }, [projectId]);
+
+  if (worktrees.length === 0) return null;
+
+  return (
+    <div className="space-y-0.5">
+      {worktrees.map((wt) => (
+        <div
+          key={wt.id}
+          className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[9px] text-text-muted"
+        >
+          <GitBranch className="h-2.5 w-2.5 shrink-0 text-accent/60" />
+          <span className="truncate" title={wt.path}>
+            {wt.branchName}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Project Item ─────────────────────────────────────────────────────────────
+
 interface ProjectItemProps {
   project: Project;
   isSelected: boolean;
@@ -339,6 +371,9 @@ function ProjectItem({
               <OpenInIdeButton projectId={project.id} />
             </div>
           </div>
+
+          {/* Active worktrees */}
+          <WorktreeList projectId={project.id} />
 
           {/* Detected ports */}
           <PortBadges projectPath={project.path} />

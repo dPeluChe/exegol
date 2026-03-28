@@ -12,6 +12,7 @@ import {
   deleteProject,
   getProject,
   listProjects,
+  listWorktrees,
   updateProjectLastOpened,
 } from "../../db/queries";
 import { openInIde } from "../../ide/opener";
@@ -144,4 +145,10 @@ export const projectRouter = router({
     }
     return updated;
   }),
+
+  listWorktrees: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(({ ctx, input }) => {
+      return listWorktrees(ctx.db, input.projectId);
+    }),
 });
