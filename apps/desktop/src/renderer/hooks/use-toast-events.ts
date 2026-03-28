@@ -19,13 +19,18 @@ export function useToastEvents(): void {
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
-    // ── Agent status toasts ─────────────────────────────────────────────
+    // ── Agent status toasts (deduplicated per agent+status) ─────────────
+    const lastToasted = new Map<string, string>(); // agentId → last status toasted
     const unsubStatus = window.api.onAgentStatus((event) => {
-      // Skip shell agents
       if (event.cliType === "shell") return;
 
       const mapping = STATUS_TOAST_MAP[event.status];
       if (!mapping) return;
+
+      // Skip if same agent+status was already toasted (prevents spam from rapid status cycling)
+      const prev = lastToasted.get(event.agentId);
+      if (prev === event.status) return;
+      lastToasted.set(event.agentId, event.status);
 
       useToastStore.getState().addToast({
         type: mapping.type,

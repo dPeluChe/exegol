@@ -10,7 +10,17 @@ import type {
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import { getAgentManager } from "../agents/manager";
+import { getProviderRegistry } from "../agents/registry";
 import { coreRust, slugifyBranchName } from "../agents/spawn-env";
+
+// Auto-approve flags per CLI — pipeline steps always run in full-auto mode
+const YOLO_FLAGS: Record<string, string> = {
+  "claude-code": "--dangerously-skip-permissions",
+  codex: "--full-auto",
+  aider: "--yes-always",
+  goose: "--no-confirm",
+};
+
 import { stripAnsi } from "../agents/status-parser";
 import {
   createAgent,
@@ -176,11 +186,13 @@ export class PipelineExecutor {
     // Build prompt
     const diff = run.worktreePath ? await captureGitDiff(run.worktreePath) : "";
     const previousOutput = getPreviousOutput(run.stepResults);
+    const isLastStep = stepIndex === template.steps.length - 1;
     const prompt = buildStepPrompt(stepDef, {
       task: run.originalTask,
       diff,
       previousOutput,
       iteration: run.iterationCount,
+      isLastStep,
     });
 
     // Spawn agent — store the full prompt as taskDescription so buildShellCommand() can inject it
@@ -215,6 +227,13 @@ export class PipelineExecutor {
       this.onStepComplete(db, runId, stepIndex, agent.id, exitCode, template!);
     });
 
+    // Pipeline steps always run in full-auto (YOLO) mode — inject flag temporarily
+    const registry = getProviderRegistry();
+    const provider = registry.get(stepDef.cliType);
+    const yoloFlag = YOLO_FLAGS[stepDef.cliType];
+    const addedYolo = yoloFlag && provider && !provider.args.includes(yoloFlag);
+    if (addedYolo && provider) provider.args.push(yoloFlag);
+
     try {
       await manager.spawn(db, agent, {
         projectId: run.projectId,
@@ -225,6 +244,11 @@ export class PipelineExecutor {
     } catch (err) {
       logger.error("[Pipeline] Failed to spawn agent for step:", err);
       this.onStepComplete(db, runId, stepIndex, agent.id, 1, template);
+    } finally {
+      // Remove temporarily injected YOLO flag
+      if (addedYolo && provider) {
+        provider.args = provider.args.filter((a) => a !== yoloFlag);
+      }
     }
   }
 

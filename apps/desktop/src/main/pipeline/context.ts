@@ -16,6 +16,9 @@ const DEFAULT_TEMPLATES: Record<string, string> = {
 /**
  * Build the prompt for a pipeline step by resolving template variables.
  */
+const PR_INSTRUCTION =
+  "\n\nIMPORTANT: When all work is complete, create a Pull Request to main with a clear title and description summarizing the changes. Use `gh pr create` or the equivalent git workflow.";
+
 export function buildStepPrompt(
   step: PipelineStepDef,
   vars: {
@@ -23,6 +26,7 @@ export function buildStepPrompt(
     diff: string;
     previousOutput: string;
     iteration: number;
+    isLastStep?: boolean;
   },
 ): string {
   const template =
@@ -31,11 +35,22 @@ export function buildStepPrompt(
     DEFAULT_TEMPLATES.custom ||
     "{{task}}";
 
-  return template
+  let prompt = template
     .replace(/\{\{task\}\}/g, vars.task)
     .replace(/\{\{diff\}\}/g, vars.diff)
     .replace(/\{\{previousOutput\}\}/g, vars.previousOutput)
     .replace(/\{\{iteration\}\}/g, String(vars.iteration));
+
+  // Auto-inject PR instruction on the last step (unless user already mentioned PR)
+  if (
+    vars.isLastStep &&
+    !prompt.toLowerCase().includes("pull request") &&
+    !prompt.includes("gh pr")
+  ) {
+    prompt += PR_INSTRUCTION;
+  }
+
+  return prompt;
 }
 
 /**

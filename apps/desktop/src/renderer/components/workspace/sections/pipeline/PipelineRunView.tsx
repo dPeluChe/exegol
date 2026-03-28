@@ -23,9 +23,9 @@ import {
 import { useAgentStore } from "../../../../stores/agents";
 import { useTerminalStore } from "../../../../stores/terminals";
 import { findFirstPaneId, useWorkspaceStore } from "../../../../stores/workspace";
-import { TerminalPanel } from "../../../terminal/TerminalPanel";
+import { TerminalInstance } from "../../../terminal/TerminalInstance";
 
-/** Ensure terminal exists in store before rendering TerminalPanel */
+/** Lightweight inline terminal for pipeline steps — uses TerminalInstance directly */
 function PipelineTerminal({ agentId }: { agentId: string }) {
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const hasTerminal = useTerminalStore((s) => !!s.terminals[agentId]);
@@ -33,7 +33,7 @@ function PipelineTerminal({ agentId }: { agentId: string }) {
     if (!hasTerminal) createTerminal(agentId);
   }, [agentId, hasTerminal, createTerminal]);
   if (!hasTerminal) return null;
-  return <TerminalPanel agentId={agentId} paneId={`pipeline-${agentId}`} />;
+  return <TerminalInstance agentId={agentId} readOnly={false} />;
 }
 
 function StepStatusIcon({ status }: { status: PipelineStepResult["status"] }) {
