@@ -1,4 +1,4 @@
-import type { Project, Worktree } from "@exegol/shared";
+import type { Project } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import {
   ChevronDown,
@@ -18,10 +18,10 @@ import {
   useProjects,
   useSettings,
 } from "../../hooks/use-trpc";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
+import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { AgentIcon } from "../common/AgentIcon";
 
@@ -100,22 +100,9 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
       ? agent.taskDescription.slice(0, 40)
       : agent.cliType;
 
-  const navigateToAgent = () => {
+  const handleNavigate = () => {
     setFocusedAgent(agent.id);
-    const ws = useWorkspaceStore.getState();
-    for (const tab of ws.tabs) {
-      const paneIds = collectPaneIds(tab.layout);
-      for (const pid of paneIds) {
-        if (ws.panes[pid]?.agentId === agent.id) {
-          ws.setActiveTab(tab.id);
-          ws.setFocusedPane(pid);
-          window.dispatchEvent(
-            new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-          );
-          return;
-        }
-      }
-    }
+    navigateToAgent(agent.id);
   };
 
   return (
@@ -131,7 +118,7 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
     >
       <button
         type="button"
-        onClick={navigateToAgent}
+        onClick={handleNavigate}
         className="flex flex-1 items-center gap-2 text-left"
       >
         {/* Provider icon (mini) */}
@@ -247,31 +234,41 @@ function PortBadges({ projectPath }: { projectPath: string }) {
 
 // ─── Project Item ─────────────────────────────────────────────────────────────
 
-// ─── Worktree List ────────────────────────────────────────────────────────────
+/** Navigate to an agent's terminal in the workspace */
+function navigateToAgent(agentId: string): void {
+  window.dispatchEvent(new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }));
+  const store = useWorkspaceStore.getState();
+  const activeTab = store.getActiveTab();
+  if (activeTab) {
+    const paneId = findFirstPaneId(activeTab.layout);
+    if (paneId) store.updatePane(paneId, { type: "terminal", agentId });
+  }
+  useAgentStore.getState().setFocusedAgent(agentId);
+}
 
-function WorktreeList({ projectId }: { projectId: string }) {
-  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
-
-  useEffect(() => {
-    trpcInvoke<Worktree[]>("projects.listWorktrees", { projectId })
-      .then(setWorktrees)
-      .catch(() => {});
-  }, [projectId]);
-
-  if (worktrees.length === 0) return null;
-
+/** Branch group: shows branch name + agents under it, clickeable */
+function BranchGroup({
+  branchName,
+  agents,
+  isWorktree,
+}: {
+  branchName: string;
+  agents: AgentState[];
+  isWorktree: boolean;
+}) {
   return (
     <div className="space-y-0.5">
-      {worktrees.map((wt) => (
-        <div
-          key={wt.id}
-          className="flex items-center gap-1.5 rounded px-1 py-0.5 text-[9px] text-text-muted"
-        >
-          <GitBranch className="h-2.5 w-2.5 shrink-0 text-accent/60" />
-          <span className="truncate" title={wt.path}>
-            {wt.branchName}
-          </span>
-        </div>
+      <div className="flex items-center gap-1.5 px-1 py-0.5 text-[9px] text-text-muted">
+        <GitBranch
+          className={cn(
+            "h-2.5 w-2.5 shrink-0",
+            isWorktree ? "text-accent/60" : "text-text-muted/50",
+          )}
+        />
+        <span className="truncate font-medium">{branchName}</span>
+      </div>
+      {agents.map((agent) => (
+        <AgentMiniCard key={agent.id} agent={agent} />
       ))}
     </div>
   );
@@ -372,19 +369,47 @@ function ProjectItem({
             </div>
           </div>
 
-          {/* Active worktrees */}
-          <WorktreeList projectId={project.id} />
-
           {/* Detected ports */}
           <PortBadges projectPath={project.path} />
 
-          {/* Agents: only running + crashed (recoverable) */}
+          {/* Agents grouped by branch */}
           {(() => {
-            const visibleAgents = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
-            return visibleAgents.length > 0 ? (
-              visibleAgents.map((agent) => <AgentMiniCard key={agent.id} agent={agent} />)
-            ) : (
-              <p className="py-1 text-[10px] italic text-text-muted">No agents</p>
+            const visible = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
+            if (visible.length === 0) {
+              return <p className="py-1 text-[10px] italic text-text-muted">No agents</p>;
+            }
+
+            // Group agents: main branch (no branchName) vs worktree branches
+            const mainAgents = visible.filter((a) => !a.branchName);
+            const branchMap = new Map<string, AgentState[]>();
+            for (const a of visible) {
+              if (a.branchName) {
+                const list = branchMap.get(a.branchName) ?? [];
+                list.push(a);
+                branchMap.set(a.branchName, list);
+              }
+            }
+
+            return (
+              <>
+                {/* Main branch agents */}
+                {mainAgents.length > 0 && (
+                  <BranchGroup
+                    branchName={project.defaultBranch}
+                    agents={mainAgents}
+                    isWorktree={false}
+                  />
+                )}
+                {/* Worktree branch agents */}
+                {Array.from(branchMap.entries()).map(([branch, branchAgents]) => (
+                  <BranchGroup
+                    key={branch}
+                    branchName={branch}
+                    agents={branchAgents}
+                    isWorktree={true}
+                  />
+                ))}
+              </>
             );
           })()}
         </div>
