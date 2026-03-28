@@ -350,11 +350,11 @@ function QuickLaunchBar() {
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const { data: providers } = useQuery({
-    queryKey: ["providers"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listProviders"),
-    staleTime: 60_000,
+    queryKey: ["enabledProviders"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
+    staleTime: 30_000,
   });
-  const cliAgents = (providers ?? []).filter((p) => p.id !== "shell" && p.enabled !== false);
+  const cliAgents = providers ?? [];
 
   const handleLaunch = useCallback(
     async (cli: AgentProvider) => {

@@ -95,6 +95,7 @@ function ProviderCard({
     try {
       await trpcMutate("agents.toggleProviderEnabled", { id: provider.id, enabled: !isEnabled });
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      queryClient.invalidateQueries({ queryKey: ["enabledProviders"] });
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch {

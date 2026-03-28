@@ -222,11 +222,11 @@ function EmptyPane({ paneId }: { paneId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<"full" | "compact" | "mini">("full");
   const { data: providers } = useQuery({
-    queryKey: ["providers"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listProviders"),
-    staleTime: 60_000,
+    queryKey: ["enabledProviders"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
+    staleTime: 30_000,
   });
-  const cliOptions = (providers ?? []).filter((p) => p.id !== "shell" && p.enabled !== false);
+  const cliOptions = providers ?? [];
 
   // Observe pane size for responsive layout
   useEffect(() => {

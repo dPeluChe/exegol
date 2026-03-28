@@ -1,7 +1,7 @@
 import type { AgentCliType, AgentProvider, QueueTask } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ListOrdered, Plus, Zap } from "lucide-react";
+import { FileCode, ListOrdered, Plus, Zap } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
@@ -9,14 +9,15 @@ import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useTerminalStore } from "../../stores/terminals";
 import { AgentIcon } from "../common/AgentIcon";
+import { SpawnAgentModal } from "./SpawnAgentModal";
 
 // ─── Provider hook ───────────────────────────────────────────────────────────
 
-function useProviders() {
+function useEnabledProviders() {
   return useQuery({
-    queryKey: ["providers"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listProviders"),
-    staleTime: 60_000,
+    queryKey: ["enabledProviders"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
+    staleTime: 30_000,
   });
 }
 
@@ -41,11 +42,13 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [launching, setLaunching] = useState<string | null>(null);
   const [mode, setMode] = useState<"spawn" | "queue">("spawn");
+  const [showSpawnModal, setShowSpawnModal] = useState(false);
+  const [modalProvider, setModalProvider] = useState<AgentProvider | undefined>(undefined);
   const btnRef = useRef<HTMLButtonElement>(null);
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
-  const { data: providers } = useProviders();
+  const { data: providers } = useEnabledProviders();
   const addToQueue = useAddToQueue();
 
   const handleLaunch = useCallback(
@@ -101,7 +104,7 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
     ? { top: rect.bottom + 4, left: rect.left, position: "fixed" as const }
     : { top: 0, left: 0, position: "fixed" as const, display: "none" as const };
 
-  const displayProviders = (providers ?? []).filter((p) => p.id !== "shell" && p.enabled !== false);
+  const displayProviders = providers ?? [];
 
   return (
     <>
@@ -154,6 +157,21 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
                   )}
                 </button>
               </div>
+              {/* New Task — opens modal with full options */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  setModalProvider(undefined);
+                  setShowSpawnModal(true);
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/10 text-accent"
+              >
+                <FileCode className="h-4 w-4" />
+                <span className="font-semibold">New Task...</span>
+              </button>
+              <div className="my-1 h-px bg-border" />
               {displayProviders.map((provider) => (
                 <button
                   key={provider.id}
@@ -161,6 +179,13 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
                   disabled={launching === provider.id}
                   onClick={(e) => {
                     e.stopPropagation();
+                    if (e.altKey) {
+                      // Alt+click → open modal with this provider pre-selected
+                      setMenuOpen(false);
+                      setModalProvider(provider);
+                      setShowSpawnModal(true);
+                      return;
+                    }
                     handleLaunch(provider);
                   }}
                   className={cn(
@@ -181,6 +206,15 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
           </>,
           document.body,
         )}
+
+      {/* Spawn Agent Modal — full task form with worktree options */}
+      {showSpawnModal && (
+        <SpawnAgentModal
+          projectId={projectId}
+          onClose={() => setShowSpawnModal(false)}
+          initialProvider={modalProvider}
+        />
+      )}
     </>
   );
 }

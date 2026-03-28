@@ -97,6 +97,7 @@ export type PipelineRunCreate = {
   projectId: string;
   task: string;
   maxIterations?: number;
+  useWorktree?: boolean;
 };
 
 // ─── Default Pipeline Presets ──────────────────────────────────────────────

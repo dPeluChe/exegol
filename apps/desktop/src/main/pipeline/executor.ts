@@ -91,13 +91,14 @@ export class PipelineExecutor {
     projectId: string,
     task: string,
     maxIterations = 5,
+    useWorktree = true,
   ): Promise<PipelineRun> {
     const template = getPipelineTemplate(db, templateId);
     if (!template) throw new Error(`Pipeline template ${templateId} not found`);
 
-    // Create shared worktree for the entire pipeline
+    // Create shared worktree for the entire pipeline (unless user opted out)
     let worktreePath: string | null = null;
-    if (coreRust) {
+    if (useWorktree && coreRust) {
       const project = getProject(db, projectId);
       if (project) {
         try {

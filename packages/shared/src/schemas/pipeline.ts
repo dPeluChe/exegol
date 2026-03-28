@@ -48,4 +48,5 @@ export const pipelineRunCreateSchema = z.object({
   projectId: z.string().min(1),
   task: z.string().min(1),
   maxIterations: z.number().int().min(1).max(20).optional(),
+  useWorktree: z.boolean().optional(),
 });

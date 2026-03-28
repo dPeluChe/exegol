@@ -71,6 +71,7 @@ export const pipelineRouter = router({
       input.projectId,
       input.task,
       input.maxIterations,
+      input.useWorktree,
     );
   }),
 

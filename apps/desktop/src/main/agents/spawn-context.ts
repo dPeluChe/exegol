@@ -69,7 +69,23 @@ export function buildShellCommand(
     // Pass as positional argument
     cmdParts.push(`'${escaped}'`);
   }
-  // else: CLI is interactive-only — don't pass any prompt, just launch
+  // else: CLI is interactive-only — prompt injected via stdin after spawn (see manager.ts)
 
   return cmdParts.join(" ");
+}
+
+/**
+ * Check if a provider needs stdin injection (interactive CLI that doesn't accept prompt args).
+ */
+export function needsStdinInjection(
+  registry: AgentProviderRegistry,
+  cliType: string,
+  taskDescription: string,
+): boolean {
+  const provider = registry.get(cliType);
+  if (!provider) return false;
+  const caps = provider.capabilities;
+  if (caps.supportsPromptArg || caps.promptFlag) return false;
+  if (registry.isQuickLaunchLabel(taskDescription)) return false;
+  return !!taskDescription;
 }

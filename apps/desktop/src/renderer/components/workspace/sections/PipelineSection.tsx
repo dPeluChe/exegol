@@ -1,6 +1,16 @@
 import { PIPELINE_PRESETS, type PipelineRun, type PipelineTemplate } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { CheckCircle, Loader2, Pause, Play, Plus, Sparkles, Trash2, XCircle } from "lucide-react";
+import {
+  CheckCircle,
+  GitBranch,
+  Loader2,
+  Pause,
+  Play,
+  Plus,
+  Sparkles,
+  Trash2,
+  XCircle,
+} from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
@@ -47,8 +57,10 @@ export function PipelineSection() {
   const cancelRun = useCancelPipelineRun();
 
   const [view, setView] = useState<View>({ type: "list" });
-  const [taskInput, setTaskInput] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [useWorktree, setUseWorktree] = useState(true);
+
+  const selectedTemplate = templates?.find((t) => t.id === selectedTemplateId);
 
   if (view.type === "editor") {
     return (
@@ -67,12 +79,16 @@ export function PipelineSection() {
   }
 
   const handleStartRun = () => {
-    if (!projectId || !selectedTemplateId || !taskInput.trim()) return;
+    if (!projectId || !selectedTemplateId) return;
     startRun.mutate(
-      { templateId: selectedTemplateId, projectId, task: taskInput },
+      {
+        templateId: selectedTemplateId,
+        projectId,
+        task: selectedTemplate?.name || "Pipeline run",
+        useWorktree,
+      },
       {
         onSuccess: (run) => {
-          setTaskInput("");
           setView({ type: "run", runId: run.id });
         },
       },
@@ -87,30 +103,36 @@ export function PipelineSection() {
           <select
             value={selectedTemplateId ?? ""}
             onChange={(e) => setSelectedTemplateId(e.target.value || null)}
-            className="rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
+            className="flex-1 rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
           >
-            <option value="">Select template...</option>
+            <option value="">Select pipeline...</option>
             {templates?.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
               </option>
             ))}
           </select>
-          <input
-            type="text"
-            value={taskInput}
-            onChange={(e) => setTaskInput(e.target.value)}
-            placeholder="Describe the task..."
-            className="flex-1 rounded-lg border border-border bg-bg-secondary px-3 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted/50 focus:border-accent focus:outline-none"
-            onKeyDown={(e) => e.key === "Enter" && handleStartRun()}
-          />
+          <label
+            className="flex items-center gap-1.5 cursor-pointer shrink-0"
+            htmlFor="pipeline-worktree"
+          >
+            <input
+              type="checkbox"
+              id="pipeline-worktree"
+              checked={useWorktree}
+              onChange={(e) => setUseWorktree(e.target.checked)}
+              className="h-3 w-3 rounded border-border accent-accent"
+            />
+            <GitBranch className="h-3 w-3 text-text-muted" />
+            <span className="text-[10px] text-text-muted">Worktree</span>
+          </label>
           <button
             type="button"
             onClick={handleStartRun}
-            disabled={!selectedTemplateId || !taskInput.trim() || startRun.isPending}
+            disabled={!selectedTemplateId || startRun.isPending}
             className={cn(
-              "flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-medium",
-              selectedTemplateId && taskInput.trim()
+              "flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-medium shrink-0",
+              selectedTemplateId
                 ? "bg-accent text-white hover:bg-accent/90"
                 : "bg-white/5 text-text-muted",
             )}
@@ -119,6 +141,30 @@ export function PipelineSection() {
             {startRun.isPending ? "Starting..." : "Run"}
           </button>
         </div>
+        {/* Step preview for selected template */}
+        {selectedTemplate && (
+          <div className="mt-2 space-y-1.5">
+            {selectedTemplate.description && (
+              <p className="text-[10px] text-text-muted/70 italic">
+                {selectedTemplate.description}
+              </p>
+            )}
+            {selectedTemplate.steps.map((step, i) => (
+              <div
+                key={step.label || `preview-${i}`}
+                className="flex items-start gap-2 rounded bg-white/[0.02] px-2 py-1.5"
+              >
+                <span className="shrink-0 rounded bg-white/5 px-1.5 py-0.5 text-[9px] font-medium text-text-secondary">
+                  {i + 1}. {step.cliType}
+                  <span className="ml-1 text-text-muted">({step.role})</span>
+                </span>
+                <p className="text-[10px] text-text-muted leading-relaxed truncate">
+                  {step.promptTemplate || `Default ${step.role} template`}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 overflow-hidden">

@@ -22,6 +22,13 @@ export const agentRouter = router({
     return getProviderRegistry().list();
   }),
 
+  /** List only enabled providers (for launcher/modal UI — respects Settings toggles) */
+  listEnabledProviders: publicProcedure.query(() => {
+    return getProviderRegistry()
+      .list()
+      .filter((p) => p.enabled !== false && p.id !== "shell");
+  }),
+
   registerProvider: publicProcedure
     .input(
       z.object({

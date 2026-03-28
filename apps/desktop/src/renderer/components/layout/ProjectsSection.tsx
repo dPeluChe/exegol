@@ -7,6 +7,7 @@ import {
   FolderOpen,
   GitBranch,
   Globe,
+  Layers,
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -322,6 +323,19 @@ function ProjectItem({
             </div>
             <div className="flex items-center gap-0.5">
               <AgentLauncher projectId={project.id} />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(
+                    new CustomEvent("exegol:switch-section", { detail: { section: "pipelines" } }),
+                  );
+                }}
+                className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-accent/20 hover:text-accent"
+                title="Pipelines"
+              >
+                <Layers className="h-3 w-3" />
+              </button>
               <OpenInIdeButton projectId={project.id} />
             </div>
           </div>

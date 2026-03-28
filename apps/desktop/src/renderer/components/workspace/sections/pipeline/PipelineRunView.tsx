@@ -1,6 +1,18 @@
 import type { PipelineRun, PipelineRunStatus, PipelineStepResult } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { CheckCircle, Circle, Loader2, Pause, Play, SkipForward, X, XCircle } from "lucide-react";
+import {
+  CheckCircle,
+  Circle,
+  GitBranch,
+  Loader2,
+  Pause,
+  Play,
+  SkipForward,
+  Terminal,
+  X,
+  XCircle,
+} from "lucide-react";
+import { useCallback } from "react";
 import {
   useCancelPipelineRun,
   usePausePipelineRun,
@@ -8,6 +20,8 @@ import {
   usePipelineTemplate,
   useResumePipelineRun,
 } from "../../../../hooks/use-trpc-pipeline";
+import { useAgentStore } from "../../../../stores/agents";
+import { findFirstPaneId, useWorkspaceStore } from "../../../../stores/workspace";
 
 function StepStatusIcon({ status }: { status: PipelineStepResult["status"] }) {
   switch (status) {
@@ -56,6 +70,33 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
   const resumeMutation = useResumePipelineRun();
   const cancelMutation = useCancelPipelineRun();
 
+  const navigateToTerminal = useCallback((agentId: string) => {
+    // Switch to Agents section (from Pipelines sub-tab)
+    window.dispatchEvent(
+      new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
+    );
+    // Open the agent's terminal in the active pane
+    const store = useWorkspaceStore.getState();
+    const activeTab = store.getActiveTab();
+    if (activeTab) {
+      const firstPaneId = findFirstPaneId(activeTab.layout);
+      if (firstPaneId) {
+        store.updatePane(firstPaneId, { type: "terminal", agentId });
+      }
+    } else {
+      // No tab — create one with the terminal
+      const tabId = store.addTab("Pipeline Agent");
+      const newTab = store.tabs.find((t) => t.id === tabId);
+      if (newTab) {
+        const paneId = findFirstPaneId(newTab.layout);
+        if (paneId) {
+          store.updatePane(paneId, { type: "terminal", agentId });
+        }
+      }
+    }
+    useAgentStore.getState().setFocusedAgent(agentId);
+  }, []);
+
   if (!run) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -90,6 +131,14 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
             </h3>
             <p className="max-w-md truncate text-[10px] text-text-muted">{run.originalTask}</p>
           </div>
+          {run.worktreePath && (
+            <div className="flex items-center gap-1 rounded bg-white/5 px-2 py-0.5">
+              <GitBranch className="h-3 w-3 text-text-muted" />
+              <span className="text-[9px] text-text-muted">
+                {run.worktreePath.split("/").pop()}
+              </span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <RunStatusBadge status={run.status} />
@@ -163,11 +212,24 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                       </span>
                       <span className="text-[9px] text-text-muted">{step.role}</span>
                     </div>
-                    {result && (
-                      <span className="text-[9px] text-text-muted">
-                        {formatDuration(result.startedAt, result.completedAt)}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {result?.agentId && (
+                        <button
+                          type="button"
+                          onClick={() => navigateToTerminal(result.agentId as string)}
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/10 hover:text-accent"
+                          title="View terminal"
+                        >
+                          <Terminal className="h-3 w-3" />
+                          Terminal
+                        </button>
+                      )}
+                      {result && (
+                        <span className="text-[9px] text-text-muted">
+                          {formatDuration(result.startedAt, result.completedAt)}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Output summary (collapsed) */}

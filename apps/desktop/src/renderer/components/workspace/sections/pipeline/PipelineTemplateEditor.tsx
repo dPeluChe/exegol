@@ -1,5 +1,7 @@
-import { AGENT_CLI_TYPES, PIPELINE_STEP_ROLES, type PipelineStepDef } from "@exegol/shared";
+import type { AgentProvider } from "@exegol/shared";
+import { PIPELINE_STEP_ROLES, type PipelineStepDef } from "@exegol/shared";
 import { cn } from "@exegol/ui";
+import { useQuery } from "@tanstack/react-query";
 import { GripVertical, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../../contexts/ProjectContext";
@@ -7,14 +9,12 @@ import {
   useCreatePipelineTemplate,
   useUpdatePipelineTemplate,
 } from "../../../../hooks/use-trpc-pipeline";
+import { trpcInvoke } from "../../../../lib/trpc-client";
 
-// Filter out "shell" (not useful in pipelines) from the canonical list
-const CLI_OPTIONS = AGENT_CLI_TYPES.filter((t) => t !== "shell" && t !== "custom");
-
-function emptyStep(): PipelineStepDef {
+function emptyStep(defaultCliType = "claude-code"): PipelineStepDef {
   return {
     label: "",
-    cliType: "claude-code",
+    cliType: defaultCliType,
     role: "implement",
     promptTemplate: "",
   };
@@ -34,6 +34,12 @@ export function PipelineTemplateEditor({
   onClose: () => void;
 }) {
   const { projectId } = useProjectContext();
+  const { data: enabledProviders } = useQuery({
+    queryKey: ["enabledProviders"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
+    staleTime: 30_000,
+  });
+  const cliOptions = (enabledProviders ?? []).map((p) => p.id);
   const [name, setName] = useState(existingName ?? "");
   const [description, setDescription] = useState(existingDescription ?? "");
   const [steps, setSteps] = useState<PipelineStepDef[]>(
@@ -160,7 +166,7 @@ export function PipelineTemplateEditor({
                     onChange={(e) => updateStep(i, { cliType: e.target.value })}
                     className="rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
                   >
-                    {CLI_OPTIONS.map((cli) => (
+                    {cliOptions.map((cli) => (
                       <option key={cli} value={cli}>
                         {cli}
                       </option>
