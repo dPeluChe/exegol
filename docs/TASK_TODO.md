@@ -21,7 +21,7 @@
    - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
 3. Update `GITHUB_OWNER` and `GITHUB_REPO` in `auto-updater.ts` and `electron-builder.ts`
 4. Enable `notarize: true` in `electron-builder.ts` mac section
-5. Design final app icon (replace placeholder in `src/resources/build/icons/`)
+5. ~~Design final app icon~~ (done — hexagon + code symbols icon)
 6. Create workflows and release script (see acceptance below)
 
 **Acceptance**:
@@ -43,9 +43,34 @@
 
 ---
 
-## Remaining Minor Items
+## Pending UX Items
 
-No pending items — all deferred tasks completed.
+| Item | Description | Priority |
+|------|-------------|----------|
+| Worktree creation UI | Sidebar form: prompt + branch name + agent selector → spawn in worktree | Medium |
+| Pipeline testing & review | Validate pipeline execution flow, template editor, run timeline | Medium |
+
+---
+
+## Completed (V3 — 2026-03-27)
+
+### PTY Sidecar Architecture (inspired by collaborator-ai/collab-public)
+- [x] T52 — Ring Buffer (8MB circular byte buffer per session, snapshot/write/clear)
+- [x] T52 — Sidecar Protocol (JSON-RPC 2.0 over Unix domain socket, NDJSON framing)
+- [x] T52 — Sidecar Entry Point (standalone detached process, manages all PTY sessions)
+- [x] T52 — Sidecar Client + Discovery (spawn/reuse/PID file, JSON-RPC client with 10s request timeout)
+- [x] T52 — PtyHost Facade (sidecar mode + legacy fallback, session routing by mode)
+- [x] T52 — Session Reconnection (reattach surviving agents after window reload, ring buffer replay)
+- [x] T52 — Renderer Data Coalescing (5ms batch before term.write(), reduces render artifacts)
+
+### Build & Branding
+- [x] App Icon — Hexagon network with code symbols (>_, {}, #, //)
+- [x] DMG Background — Dark terminal theme with code snippets
+- [x] Build Config — author/description in package.json, pinned Electron 41.0.2
+
+### Bug Fixes
+- [x] Agent "not found" errors — agents.get returns null instead of throwing (stale pane recovery)
+- [x] Tray menu rebuild optimization — only rebuild when agent count changes
 
 ---
 

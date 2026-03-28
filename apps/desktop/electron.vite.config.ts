@@ -16,6 +16,7 @@ export default defineConfig({
         input: {
           index: resolve("src/main/index.ts"),
           "pty-subprocess": resolve("src/main/terminal/pty-subprocess.ts"),
+          "pty-sidecar-entry": resolve("src/main/terminal/pty-sidecar-entry.ts"),
         },
       },
     },

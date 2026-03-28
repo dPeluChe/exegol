@@ -195,6 +195,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     const disposables: Array<{ dispose: () => void }> = [];
     let unsubData: (() => void) | null = null;
+    let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (!readOnly) {
       // Connect terminal input -> main process
@@ -204,9 +205,20 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         }),
       );
 
-      // Connect main process output -> terminal
+      // Connect main process output -> terminal (5ms coalescing to reduce partial-render artifacts)
+      let coalescedData = "";
+      const flushCoalesced = (): void => {
+        if (coalescedData.length > 0) {
+          terminal.write(coalescedData);
+          coalescedData = "";
+        }
+        coalesceTimer = null;
+      };
       unsubData = window.api.terminal.onData(agentId, (data) => {
-        terminal.write(data);
+        coalescedData += data;
+        if (!coalesceTimer) {
+          coalesceTimer = setTimeout(flushCoalesced, 5);
+        }
       });
     }
 
@@ -233,6 +245,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     resizeObserver.observe(container);
 
     return () => {
+      if (coalesceTimer) clearTimeout(coalesceTimer);
       for (const d of disposables) d.dispose();
       unsubData?.();
       resizeObserver.disconnect();

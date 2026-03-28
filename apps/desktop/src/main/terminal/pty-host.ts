@@ -27,6 +27,7 @@ import {
   type SpawnedPayload,
   type SpawnPayload,
 } from "./pty-ipc";
+import type { SidecarClient } from "./pty-sidecar-client";
 import { SHELL_READY_MARKER } from "./shell-wrappers";
 
 /** Resolve the subprocess JS file path. Handles both dev and prod output structures. */
@@ -55,10 +56,13 @@ export interface SessionCallbacks {
   onError: (message: string) => void;
 }
 
+type SessionMode = "legacy" | "sidecar";
+
 interface Session {
   id: string;
-  child: ChildProcess;
-  decoder: FrameDecoder;
+  mode: SessionMode;
+  child: ChildProcess | null; // null in sidecar mode
+  decoder: FrameDecoder | null; // null in sidecar mode
   emulator: HeadlessEmulator;
   pid: number | null;
   alive: boolean;
@@ -77,20 +81,186 @@ export class PtyHost {
   private sessions = new Map<string, Session>();
   private activeSpawns = 0;
   private spawnQueue: Array<() => void> = [];
+  private sidecarClient: SidecarClient | null = null;
 
-  /** Create a new PTY session in a subprocess */
+  // ─── Sidecar integration ────────────────────────────────────────────
+
+  /** Connect to a running sidecar process */
+  connectToSidecar(client: SidecarClient): void {
+    this.sidecarClient = client;
+
+    client.onSessionData((id, data) => {
+      const s = this.sessions.get(id);
+      if (!s) return;
+
+      // Shell-ready marker scanning (same as legacy path)
+      let processedData = data;
+      if (s.shellReadyState === "pending") {
+        let output = "";
+        for (let i = 0; i < data.length; i++) {
+          if (data[i] === SHELL_READY_MARKER[s.markerMatchPos]) {
+            s.markerHeldBytes += data[i];
+            s.markerMatchPos++;
+            if (s.markerMatchPos === SHELL_READY_MARKER.length) {
+              s.markerHeldBytes = "";
+              s.markerMatchPos = 0;
+              this.resolveShellReady(s, "ready");
+              output += data.slice(i + 1);
+              break;
+            }
+          } else {
+            output += s.markerHeldBytes + data[i];
+            s.markerHeldBytes = "";
+            s.markerMatchPos = 0;
+          }
+        }
+        processedData = output;
+      }
+
+      if (processedData.length > 0) {
+        s.emulator.write(processedData);
+        this.scheduleScrollbackFlush(s);
+        s.callbacks.onData(processedData);
+      }
+    });
+
+    client.onSessionExit((id, exitCode, signal) => {
+      const s = this.sessions.get(id);
+      if (!s) return;
+      s.alive = false;
+      this.flushScrollbackSync(s);
+      this.cleanup(id);
+      s.callbacks.onExit(exitCode, signal);
+    });
+
+    client.onSessionError((id, message) => {
+      const s = this.sessions.get(id);
+      if (!s) return;
+      s.callbacks.onError(message);
+    });
+
+    logger.info("[PtyHost] Connected to sidecar");
+  }
+
+  disconnectSidecar(): void {
+    this.sidecarClient?.disconnect();
+    this.sidecarClient = null;
+  }
+
+  isUsingSidecar(): boolean {
+    return this.sidecarClient?.isConnected() ?? false;
+  }
+
+  /** List sessions alive in the sidecar (for crash recovery) */
+  async listSidecarSessions(): Promise<string[]> {
+    if (!this.sidecarClient?.isConnected()) return [];
+    return this.sidecarClient.listSessions();
+  }
+
+  /** Reattach to a session that survived in the sidecar after app restart */
+  async reattachSession(
+    id: string,
+    spawnOpts: { cols: number; rows: number },
+    callbacks: SessionCallbacks,
+    options?: { scrollbackPath?: string },
+  ): Promise<void> {
+    if (!this.sidecarClient?.isConnected()) return;
+
+    const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
+    const session: Session = {
+      id,
+      mode: "sidecar",
+      child: null,
+      decoder: null,
+      emulator,
+      pid: null,
+      alive: true,
+      callbacks,
+      scrollbackPath: options?.scrollbackPath ?? null,
+      flushTimer: null,
+      shellReadyState: "unsupported",
+      preReadyStdinQueue: [],
+      markerMatchPos: 0,
+      markerHeldBytes: "",
+      shellReadyTimeout: null,
+    };
+    this.sessions.set(id, session);
+
+    // Replay ring buffer snapshot to rebuild emulator state
+    try {
+      const snapshot = await this.sidecarClient.snapshot(id);
+      if (snapshot) {
+        emulator.write(snapshot);
+        callbacks.onData(snapshot);
+      }
+    } catch {
+      // Snapshot unavailable — session still reattaches, just without scrollback history
+    }
+  }
+
+  /** Create a new PTY session — uses sidecar if available, falls back to subprocess */
   async createSession(
     id: string,
     spawnOpts: SpawnPayload,
     callbacks: SessionCallbacks,
     options?: { scrollbackPath?: string; shellReadyGating?: boolean },
   ): Promise<{ pid: number }> {
+    if (this.sidecarClient?.isConnected()) {
+      return this.doCreateSidecar(id, spawnOpts, callbacks, options);
+    }
     await this.acquireSpawnSlot();
     try {
-      return await this.doCreate(id, spawnOpts, callbacks, options);
+      return await this.doCreateLegacy(id, spawnOpts, callbacks, options);
     } finally {
       this.releaseSpawnSlot();
     }
+  }
+
+  private async doCreateSidecar(
+    id: string,
+    spawnOpts: SpawnPayload,
+    callbacks: SessionCallbacks,
+    options?: { scrollbackPath?: string; shellReadyGating?: boolean },
+  ): Promise<{ pid: number }> {
+    const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
+    const session: Session = {
+      id,
+      mode: "sidecar",
+      child: null,
+      decoder: null,
+      emulator,
+      pid: null,
+      alive: true,
+      callbacks,
+      scrollbackPath: options?.scrollbackPath ?? null,
+      flushTimer: null,
+      shellReadyState: options?.shellReadyGating ? "pending" : "unsupported",
+      preReadyStdinQueue: [],
+      markerMatchPos: 0,
+      markerHeldBytes: "",
+      shellReadyTimeout: null,
+    };
+    this.sessions.set(id, session);
+
+    if (session.shellReadyState === "pending") {
+      session.shellReadyTimeout = setTimeout(() => {
+        this.resolveShellReady(session, "timed_out");
+      }, SHELL_READY_TIMEOUT_MS);
+    }
+
+    // biome-ignore lint/style/noNonNullAssertion: checked above
+    const result = await this.sidecarClient!.createSession({
+      id,
+      shell: spawnOpts.shell,
+      args: spawnOpts.args,
+      cwd: spawnOpts.cwd,
+      cols: spawnOpts.cols,
+      rows: spawnOpts.rows,
+      env: spawnOpts.env,
+    });
+
+    session.pid = result.pid;
+    return { pid: result.pid };
   }
 
   write(id: string, data: string): void {
@@ -98,13 +268,16 @@ export class PtyHost {
     if (!s?.alive) return;
     // Shell readiness gating: buffer writes during pending state
     if (s.shellReadyState === "pending") {
-      // Drop escape sequences (stale terminal query responses)
       if (data.startsWith("\x1b")) return;
       s.preReadyStdinQueue.push(data);
       return;
     }
+    if (s.mode === "sidecar") {
+      this.sidecarClient?.write(id, data).catch(() => {});
+      return;
+    }
     try {
-      s.child.stdin?.write(encodeString(FRAME_WRITE, data));
+      s.child?.stdin?.write(encodeString(FRAME_WRITE, data));
     } catch {
       /* pipe broken */
     }
@@ -114,8 +287,12 @@ export class PtyHost {
     const s = this.sessions.get(id);
     if (!s?.alive) return;
     s.emulator.resize(cols, rows);
+    if (s.mode === "sidecar") {
+      this.sidecarClient?.resize(id, cols, rows).catch(() => {});
+      return;
+    }
     try {
-      s.child.stdin?.write(encodeJson(FRAME_RESIZE, { cols, rows }));
+      s.child?.stdin?.write(encodeJson(FRAME_RESIZE, { cols, rows }));
     } catch {
       /* pipe broken */
     }
@@ -124,8 +301,12 @@ export class PtyHost {
   kill(id: string): void {
     const s = this.sessions.get(id);
     if (!s?.alive) return;
+    if (s.mode === "sidecar") {
+      this.sidecarClient?.kill(id).catch(() => {});
+      return;
+    }
     try {
-      s.child.stdin?.write(encodeFrame(FRAME_KILL, Buffer.alloc(0)));
+      s.child?.stdin?.write(encodeFrame(FRAME_KILL, Buffer.alloc(0)));
     } catch {
       /* pipe broken */
     }
@@ -172,30 +353,34 @@ export class PtyHost {
     if (!session.alive) return;
     session.alive = false;
     this.flushScrollbackSync(session);
-    // Try graceful dispose first
-    try {
-      session.child.stdin?.write(encodeFrame(FRAME_DISPOSE, Buffer.alloc(0)));
-    } catch {
-      /* pipe closed */
-    }
-    // Safety net: SIGKILL after 1s if subprocess hasn't exited
-    const child = session.child;
-    setTimeout(() => {
-      if (!child.killed) {
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          /* already dead */
-        }
+
+    if (session.mode === "sidecar") {
+      this.sidecarClient?.destroy(session.id).catch(() => {});
+    } else if (session.child) {
+      try {
+        session.child.stdin?.write(encodeFrame(FRAME_DISPOSE, Buffer.alloc(0)));
+      } catch {
+        /* pipe closed */
       }
-    }, 1000);
+      const child = session.child;
+      setTimeout(() => {
+        if (!child.killed) {
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            /* already dead */
+          }
+        }
+      }, 1000);
+    }
+
     if (session.flushTimer) clearTimeout(session.flushTimer);
     session.emulator.dispose();
   }
 
   // ─── Private ──────────────────────────────────────────────────────────
 
-  private doCreate(
+  private doCreateLegacy(
     id: string,
     spawnOpts: SpawnPayload,
     callbacks: SessionCallbacks,
@@ -213,6 +398,7 @@ export class PtyHost {
       const decoder = new FrameDecoder();
       const session: Session = {
         id,
+        mode: "legacy",
         child,
         decoder,
         emulator,
@@ -379,10 +565,14 @@ export class PtyHost {
     const queue = session.preReadyStdinQueue;
     session.preReadyStdinQueue = [];
     for (const data of queue) {
-      try {
-        session.child.stdin?.write(encodeString(FRAME_WRITE, data));
-      } catch {
-        /* pipe broken */
+      if (session.mode === "sidecar") {
+        this.sidecarClient?.write(session.id, data).catch(() => {});
+      } else {
+        try {
+          session.child?.stdin?.write(encodeString(FRAME_WRITE, data));
+        } catch {
+          /* pipe broken */
+        }
       }
     }
     if (state === "timed_out") {

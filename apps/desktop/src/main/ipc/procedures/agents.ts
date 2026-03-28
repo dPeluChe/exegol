@@ -118,11 +118,7 @@ export const agentRouter = router({
   }),
 
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    const agent = getAgent(ctx.db, input.id);
-    if (!agent) {
-      throw new TRPCError({ code: "NOT_FOUND", message: `Agent ${input.id} not found` });
-    }
-    return agent;
+    return getAgent(ctx.db, input.id);
   }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {

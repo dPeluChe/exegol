@@ -24,6 +24,7 @@ const config: Configuration = {
 
   asar: true,
   asarUnpack: [
+    "out/main/pty-sidecar-entry.js",
     "node_modules/node-pty/**",
     "node_modules/libsql/**",
     "node_modules/@libsql/**",

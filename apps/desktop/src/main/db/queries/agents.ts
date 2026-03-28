@@ -104,11 +104,16 @@ export function listRecentSessions(db: Database.Database, limit = 10): RecentSes
 
 /**
  * Recover agents from a previous session.
- * - If PID is still alive: leave as "running" (process survived)
- * - If PID is dead: mark as "crashed" with scrollback preserved
- * Returns the count of crashed and recovered agents.
+ * Agents already reattached to a sidecar (via AgentManager.reattachSidecarAgents)
+ * are skipped — they have a live PtyHost session.
+ * Remaining agents are marked as "crashed".
+ *
+ * @param skipIds - agent IDs to skip (already recovered via sidecar)
  */
-export function recoverStaleAgents(db: Database.Database): { crashed: number; alive: number } {
+export function recoverStaleAgents(
+  db: Database.Database,
+  skipIds?: Set<string>,
+): { crashed: number; alive: number } {
   const stale = db
     .prepare("SELECT id, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')")
     .all() as Array<{ id: string; pid: number | null }>;
@@ -118,33 +123,17 @@ export function recoverStaleAgents(db: Database.Database): { crashed: number; al
   const now = Math.floor(Date.now() / 1000);
 
   for (const agent of stale) {
-    if (agent.pid && isPidAlive(agent.pid)) {
-      // Process survived the crash — but we can't re-attach to the PTY
-      // Mark as crashed too since we lost the PTY master fd
-      db.prepare(
-        "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — process was alive but PTY lost', pid = NULL WHERE id = ?",
-      ).run(now, agent.id);
-      crashed++;
-    } else {
-      // Process is dead
-      db.prepare(
-        "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
-      ).run(now, agent.id);
-      crashed++;
+    if (skipIds?.has(agent.id)) {
+      continue; // Already reattached via sidecar
     }
+
+    db.prepare(
+      "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
+    ).run(now, agent.id);
+    crashed++;
   }
 
   return { crashed, alive };
-}
-
-/** Check if a process ID is still running */
-function isPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0); // Signal 0 = check existence without killing
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /** Legacy alias for backwards compatibility */

@@ -389,6 +389,114 @@ export class AgentManager {
     }
   }
 
+  /**
+   * Reattach to agents that survived in the sidecar after app restart.
+   * Rebuilds output processors + callbacks so they continue working as if freshly spawned.
+   */
+  async reattachSidecarAgents(db: Database.Database, sidecarSessionIds: string[]): Promise<number> {
+    const stale = db
+      .prepare("SELECT * FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')")
+      .all() as Array<Record<string, unknown>>;
+
+    let reattached = 0;
+    const ptyHost = getPtyHost();
+
+    for (const row of stale) {
+      const agentId = row.id as string;
+      const cliType = row.cli_type as AgentCliType;
+      const projectId = row.project_id as string;
+      const isShell = cliType === "shell";
+
+      if (!sidecarSessionIds.includes(agentId)) continue;
+
+      // Rebuild output processor for non-shell agents
+      try {
+        if (!isShell) {
+          this.outputProcessors.set(agentId, createOutputProcessor(agentId, cliType));
+          this.scrollbackBuffers.set(agentId, []);
+          this.scrollbackSizes.set(agentId, 0);
+        }
+
+        const scrollbackPath = isShell ? undefined : getScrollbackPath(agentId);
+
+        await ptyHost.reattachSession(
+          agentId,
+          { cols: DEFAULT_PTY_COLS, rows: DEFAULT_PTY_ROWS },
+          {
+            onData: (data: string) => {
+              for (const win of BrowserWindow.getAllWindows()) {
+                win.webContents.send("terminal:data", agentId, data);
+              }
+              if (isShell) return;
+
+              const currentSize = this.scrollbackSizes.get(agentId) ?? 0;
+              if (currentSize < AgentManager.MAX_SCROLLBACK_BYTES) {
+                this.scrollbackBuffers.get(agentId)?.push(data);
+                this.scrollbackSizes.set(agentId, currentSize + data.length);
+              }
+
+              const processor = this.outputProcessors.get(agentId);
+              if (!processor) return;
+              const result = processor.process(data);
+              if (result.status || result.currentStep) {
+                const status = (result.status as AgentStatus) ?? "running";
+                updateAgentStatus(db, agentId, status, result.currentStep);
+                broadcastAgentStatus({
+                  agentId,
+                  projectId,
+                  status,
+                  currentStep: result.currentStep ?? null,
+                  cliType,
+                  timestamp: Date.now(),
+                });
+              }
+            },
+
+            onExit: (exitCode: number) => {
+              this.outputProcessors.delete(agentId);
+              this.tokenLimitDetected.delete(agentId);
+              this.scrollbackBuffers.delete(agentId);
+              this.scrollbackSizes.delete(agentId);
+              finalizeAgentStatus(db, { id: agentId, cliType, projectId } as Agent, exitCode);
+              const completionCb = this.completionCallbacks.get(agentId);
+              if (completionCb) {
+                this.completionCallbacks.delete(agentId);
+                completionCb(exitCode);
+              }
+            },
+
+            onError: (message: string) => {
+              logger.error(`[AgentManager] PTY error for reattached ${agentId}: ${message}`);
+            },
+          },
+          { scrollbackPath },
+        );
+
+        // Confirm running status (may have been "spawning" before crash)
+        updateAgentStatus(db, agentId, "running");
+        broadcastAgentStatus({
+          agentId,
+          projectId,
+          status: "running",
+          currentStep: row.current_step as string | null,
+          cliType,
+          timestamp: Date.now(),
+        });
+
+        reattached++;
+        logger.info(`[AgentManager] Reattached to sidecar session: ${agentId} (${cliType})`);
+      } catch (err) {
+        // Clean up orphaned state on failure
+        this.outputProcessors.delete(agentId);
+        this.scrollbackBuffers.delete(agentId);
+        this.scrollbackSizes.delete(agentId);
+        logger.warn(`[AgentManager] Failed to reattach ${agentId}: ${err}`);
+      }
+    }
+
+    return reattached;
+  }
+
   async stop(db: Database.Database, agentId: string): Promise<void> {
     const ptyHost = getPtyHost();
     if (ptyHost.isAlive(agentId)) {

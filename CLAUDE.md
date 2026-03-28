@@ -36,13 +36,22 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 - `git` — Diff (changes) + Oplog (agent operations with undo)
 - `empty` — responsive agent launcher grid (3 breakpoints)
 
+### PTY Sidecar Architecture
+- **Sidecar process**: standalone detached Node.js process (`pty-sidecar-entry.ts`), survives window reload/crash
+- **JSON-RPC over Unix socket**: `~/.exegol/pty-sidecar.sock` for control, NDJSON framing
+- **Ring buffer**: 8MB circular buffer per session, stores raw ANSI output for instant reconnect
+- **Discovery**: PID file at `~/.exegol/pty-sidecar.pid`, reuse existing or spawn new
+- **Fallback**: if sidecar fails, falls back to legacy per-session subprocess mode transparently
+- **Reconnection**: on app restart, `reattachSidecarAgents()` rebuilds callbacks + replays ring buffer snapshot
+
 ### Agent lifecycle
 1. User clicks agent in launcher/grid/quick-bar (all read from provider registry)
-2. `AgentManager.spawn()` → resolves provider → builds context (memory + MCP + skills) → spawns PTY
-3. PTY output → Rust `AgentOutputStream` (ANSI strip + status parse, 50-100x faster) or JS fallback
+2. `AgentManager.spawn()` → resolves provider → builds context (memory + MCP + skills) → spawns PTY via sidecar
+3. PTY output → sidecar ring buffer → JSON-RPC notification → main process → Rust `AgentOutputStream` (ANSI strip + status parse) or JS fallback
 4. Status broadcast via IPC push events → Zustand store → UI
 5. On exit: memory extraction → scoring → oplog → worktree cleanup (all non-fatal, try/catch)
 6. Close pane/tab/Cmd+W → stop agent + delete from DB + remove from store
+7. Window reload → sidecar keeps PTY alive → app reconnects on restart
 
 ### Multi-agent pipelines
 Sequential agent orchestration in shared worktrees. Exegol controls everything — agents never launch each other.
@@ -60,7 +69,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 ### Key patterns
 - **tRPC over IPC**: 21 routers in main process, renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
-- **Crash recovery**: `recoverStaleAgents()` on startup — PID check, mark "crashed", scrollback preserved
+- **Crash recovery**: sidecar reattach first → `recoverStaleAgents()` for remaining → mark "crashed", scrollback preserved
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Auto-save**: Settings tabs save independently (General/Terminal auto-save on change, CLIs save per field)
 

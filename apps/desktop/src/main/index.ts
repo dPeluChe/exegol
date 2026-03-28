@@ -25,6 +25,7 @@ import {
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 import { destroyTray, initTray } from "./system/tray";
 import { getPtyHost } from "./terminal/pty-host";
+import { ensureSidecar } from "./terminal/pty-sidecar-discovery";
 import { ensureShellWrappers } from "./terminal/shell-wrappers";
 
 let mainWindow: BrowserWindow | null = null;
@@ -135,11 +136,10 @@ function registerIpcHandlers(): void {
 
 app.whenReady().then(async () => {
   await initializeDatabase();
-  // Recover agents from previous session — mark interrupted as "crashed", preserve scrollback
-  const recovery = recoverStaleAgents(getDb());
-  if (recovery.crashed > 0) {
-    logger.info(`[Startup] Recovered ${recovery.crashed} crashed agent(s) from previous session`);
-  }
+  // Recovery is done in two phases:
+  // Phase 1: Connect to sidecar (done later, after wrappers)
+  // Phase 2: For agents NOT in sidecar, mark as "crashed"
+  // This is deferred until after sidecar connection to allow reattach
   // Clean up stale agents:
   // - Shell terminals (always, no value)
   // - Crashed older than 1h (recent crashes kept for re-launch)
@@ -191,6 +191,29 @@ app.whenReady().then(async () => {
   ensureDefaultSkills(); // Install default skills to ~/.agents/skills/ if missing
   ensureShellWrappers(); // Create zsh/bash wrapper files for shell-ready marker
   ensureAgentWrappers(); // Create agent hooks + Claude Code settings merge
+  // PTY Sidecar: connect to existing or spawn new (sessions survive window reload)
+  let sidecarSessionIds: string[] = [];
+  try {
+    const sidecarClient = await ensureSidecar();
+    getPtyHost().connectToSidecar(sidecarClient);
+    sidecarSessionIds = await getPtyHost().listSidecarSessions();
+    logger.info(`[Startup] Connected to PTY sidecar (${sidecarSessionIds.length} live session(s))`);
+  } catch (err) {
+    logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);
+  }
+
+  // Recover agents: reattach to sidecar sessions, mark rest as crashed
+  if (sidecarSessionIds.length > 0) {
+    const reattached = await getAgentManager().reattachSidecarAgents(getDb(), sidecarSessionIds);
+    if (reattached > 0) {
+      logger.info(`[Startup] Reattached ${reattached} agent(s) from sidecar`);
+    }
+  }
+  // Mark remaining stale agents (not in sidecar) as crashed
+  const recovery = recoverStaleAgents(getDb(), new Set(sidecarSessionIds));
+  if (recovery.crashed > 0) {
+    logger.info(`[Startup] Marked ${recovery.crashed} agent(s) as crashed (no sidecar session)`);
+  }
   startNotifyHandler((event) => {
     logger.info(`[NotifyHandler] Agent event: ${event.type} from ${event.agentId}`);
     // TODO: Route events to AgentManager for status updates (Phase 2)
@@ -223,8 +246,14 @@ app.on("will-quit", () => {
   markShutdown();
   globalShortcut.unregisterAll();
 
-  // Stop all PTY subprocess sessions and close the database
-  getPtyHost().destroyAll();
+  // Sidecar mode: disconnect (sessions survive for reconnect on next launch)
+  // Legacy mode: kill all subprocess PTY sessions
+  const ptyHost = getPtyHost();
+  if (ptyHost.isUsingSidecar()) {
+    ptyHost.disconnectSidecar();
+  } else {
+    ptyHost.destroyAll();
+  }
 
   destroyTray();
   stopAutoUpdater();

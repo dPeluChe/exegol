@@ -110,8 +110,9 @@ export function initTray(): void {
 }
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+let lastAgentCount = -1;
 
-/** Rebuild tray menu + badge. Throttled to avoid DB queries on hot path. */
+/** Rebuild tray badge + menu. Throttled, and skips menu rebuild if agent count unchanged. */
 export function refreshTray(): void {
   if (!tray) return;
   if (refreshTimer) return;
@@ -119,8 +120,13 @@ export function refreshTray(): void {
     refreshTimer = null;
     if (!tray) return;
     const agents = getRunningAgents();
-    tray.setContextMenu(buildContextMenu(agents));
-    updateTrayBadge(agents.length);
+    const count = agents.length;
+    // Always update badge (cheap), only rebuild menu when count changes (avoids macOS warning)
+    updateTrayBadge(count);
+    if (count !== lastAgentCount) {
+      lastAgentCount = count;
+      tray.setContextMenu(buildContextMenu(agents));
+    }
   }, 200);
 }
 
