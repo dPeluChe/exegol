@@ -91,9 +91,9 @@ export const diffRouter = router({
 
   /** Git status: list changed files with their staging state */
   status: publicProcedure
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       try {
         const { stdout } = await execFileAsync("git", ["status", "--porcelain=v1", "-uall"], {
           cwd,
@@ -155,9 +155,9 @@ export const diffRouter = router({
 
   /** Get current branch name */
   branch: publicProcedure
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       try {
         const { stdout } = await execFileAsync("git", ["branch", "--show-current"], { cwd });
         return stdout.trim();

@@ -13,6 +13,7 @@ import {
   getProject,
   listProjects,
   listWorktrees,
+  removeWorktree,
   updateProjectLastOpened,
 } from "../../db/queries";
 import { openInIde } from "../../ide/opener";
@@ -150,5 +151,36 @@ export const projectRouter = router({
     .input(z.object({ projectId: z.string() }))
     .query(({ ctx, input }) => {
       return listWorktrees(ctx.db, input.projectId);
+    }),
+
+  /** Delete a worktree (removes from disk + DB) */
+  deleteWorktree: publicProcedure
+    .input(
+      z.object({ worktreeId: z.string(), projectId: z.string(), force: z.boolean().optional() }),
+    )
+    .mutation(({ ctx, input }) => {
+      const wt = ctx.db.prepare("SELECT * FROM worktrees WHERE id = ?").get(input.worktreeId) as
+        | { id: string; path: string; branch_name: string }
+        | undefined;
+      if (!wt) return { success: false, message: "Worktree not found" };
+
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) return { success: false, message: "Project not found" };
+
+      try {
+        const coreRust = require("@exegol/core-rust");
+        const wtName = wt.branch_name.replace(/\//g, "-");
+        coreRust.removeWorktree(project.path, wtName, input.force ?? false);
+      } catch {
+        // Fallback: remove directory manually
+        try {
+          require("node:fs").rmSync(wt.path, { recursive: true, force: true });
+        } catch {
+          /* */
+        }
+      }
+
+      removeWorktree(ctx.db, wt.id);
+      return { success: true, message: "Worktree deleted" };
     }),
 });

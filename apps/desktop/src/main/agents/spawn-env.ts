@@ -141,7 +141,7 @@ export function finalizeAgentStatus(
         entityType: "agent",
         entityId: agent.id,
         projectId: agent.projectId,
-        description: `${agent.cliType} agent ${finalStatus}: ${agent.taskDescription.slice(0, 80)}`,
+        description: `${agent.cliType} agent ${finalStatus}: ${(agent.taskDescription ?? "").slice(0, 80)}`,
       });
     } catch (err) {
       logger.warn("[AgentManager] Failed to log activity:", err);

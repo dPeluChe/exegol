@@ -22,6 +22,7 @@ const YOLO_FLAGS: Record<string, string> = {
   codex: "--full-auto",
   aider: "--yes-always",
   goose: "--no-confirm",
+  crush: "--yolo",
 };
 
 import { stripAnsi } from "../agents/status-parser";

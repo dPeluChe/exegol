@@ -459,16 +459,17 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 
 // ─── Files Pane ─────────────────────────────────────────────────────────
 
-function FilesPaneContent() {
+function FilesPaneContent({ overridePath }: { overridePath?: string }) {
   const { project } = useProjectContext();
-  if (!project) {
+  const rootPath = overridePath || project?.path;
+  if (!rootPath) {
     return (
       <div className="flex h-full items-center justify-center">
         <p className="text-xs text-text-muted">No project selected</p>
       </div>
     );
   }
-  return <FileExplorer rootPath={project.path} />;
+  return <FileExplorer rootPath={rootPath} />;
 }
 
 // ─── Main WorkspacePane ─────────────────────────────────────────────────────
@@ -575,8 +576,12 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         {!pane.invalidReason && pane.type === "browser" && (
           <BrowserPane pane={pane} paneId={paneId} />
         )}
-        {!pane.invalidReason && pane.type === "files" && <FilesPaneContent />}
-        {!pane.invalidReason && pane.type === "git" && <GitPane />}
+        {!pane.invalidReason && pane.type === "files" && (
+          <FilesPaneContent key={pane.filePath ?? "default"} overridePath={pane.filePath} />
+        )}
+        {!pane.invalidReason && pane.type === "git" && (
+          <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />
+        )}
         {!pane.invalidReason && pane.type === "empty" && <EmptyPane paneId={paneId} />}
         {!pane.invalidReason && pane.type === "terminal" && !pane.agentId && (
           <EmptyPane paneId={paneId} />

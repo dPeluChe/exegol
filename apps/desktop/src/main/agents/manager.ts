@@ -467,7 +467,16 @@ export class AgentManager {
               this.tokenLimitDetected.delete(agentId);
               this.scrollbackBuffers.delete(agentId);
               this.scrollbackSizes.delete(agentId);
-              finalizeAgentStatus(db, { id: agentId, cliType, projectId } as Agent, exitCode);
+              finalizeAgentStatus(
+                db,
+                {
+                  id: agentId,
+                  cliType,
+                  projectId,
+                  taskDescription: (row.task_description as string) ?? "",
+                } as Agent,
+                exitCode,
+              );
               const completionCb = this.completionCallbacks.get(agentId);
               if (completionCb) {
                 this.completionCallbacks.delete(agentId);

@@ -48,7 +48,11 @@ const IGNORED_NAMES = new Set([
 function assertPathInsideProject(filePath: string, ctx: { db: import("libsql").Database }): void {
   const normalized = resolve(filePath);
   const projects = listProjects(ctx.db);
-  const isAllowed = projects.some((p) => normalized.startsWith(resolve(p.path)));
+  // Allow project directories + worktree directories (~/.exegol/worktrees/ and ~/.exegol/pipelines/)
+  const exegolDir = resolve(require("node:os").homedir(), ".exegol");
+  const isAllowed =
+    projects.some((p) => normalized.startsWith(resolve(p.path))) ||
+    normalized.startsWith(exegolDir);
   if (!isAllowed) {
     throw new TRPCError({
       code: "FORBIDDEN",

@@ -1,4 +1,4 @@
-import type { Project } from "@exegol/shared";
+import type { Project, Worktree } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import {
   ChevronDown,
@@ -18,12 +18,13 @@ import {
   useProjects,
   useSettings,
 } from "../../hooks/use-trpc";
-import { trpcMutate } from "../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { AgentIcon } from "../common/AgentIcon";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 
 // ─── Agent Mini Card ──────────────────────────────────────────────────────────
 
@@ -246,30 +247,122 @@ function navigateToAgent(agentId: string): void {
   useAgentStore.getState().setFocusedAgent(agentId);
 }
 
-/** Branch group: shows branch name + agents under it, clickeable */
+/** Branch group: shows branch name + agents + actions for worktrees */
 function BranchGroup({
   branchName,
   agents,
   isWorktree,
+  worktree,
+  projectId,
+  onWorktreeDeleted,
 }: {
   branchName: string;
   agents: AgentState[];
   isWorktree: boolean;
+  worktree?: Worktree;
+  projectId: string;
+  onWorktreeDeleted?: () => void;
 }) {
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleViewChanges = () => {
+    if (!worktree) return;
+    window.dispatchEvent(
+      new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
+    );
+    const store = useWorkspaceStore.getState();
+    const activeTab = store.getActiveTab();
+    if (!activeTab) return;
+    const layout = activeTab.layout;
+    const paneId = findFirstPaneId(layout);
+    if (paneId) store.updatePane(paneId, { type: "files", filePath: worktree.path });
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!worktree || deleting) return;
+    setDeleting(true);
+    try {
+      await trpcMutate("projects.deleteWorktree", {
+        worktreeId: worktree.id,
+        projectId,
+        force: true,
+      });
+      onWorktreeDeleted?.();
+    } catch {
+      /* */
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-0.5">
-      <div className="flex items-center gap-1.5 px-1 py-0.5 text-[9px] text-text-muted">
+      <div className="group/branch flex items-center gap-1.5 px-1 py-0.5 text-[9px] text-text-muted">
         <GitBranch
           className={cn(
             "h-2.5 w-2.5 shrink-0",
             isWorktree ? "text-accent/60" : "text-text-muted/50",
           )}
         />
-        <span className="truncate font-medium">{branchName}</span>
+        <span className="flex-1 truncate font-medium">{branchName}</span>
+        {isWorktree && worktree && (
+          <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/branch:opacity-100">
+            <button
+              type="button"
+              onClick={handleViewChanges}
+              className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+              title="Browse files"
+            >
+              <FolderOpen className="h-2.5 w-2.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
+                );
+                const store = useWorkspaceStore.getState();
+                const activeTab = store.getActiveTab();
+                if (activeTab) {
+                  const paneId = findFirstPaneId(activeTab.layout);
+                  if (paneId && worktree) {
+                    store.updatePane(paneId, { type: "git", filePath: worktree.path });
+                  }
+                }
+              }}
+              className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-accent"
+              title="Git status"
+            >
+              <GitBranch className="h-2.5 w-2.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={deleting}
+              className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-red-400/20 hover:text-red-400"
+              title="Delete worktree"
+            >
+              <Trash2 className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        )}
       </div>
       {agents.map((agent) => (
         <AgentMiniCard key={agent.id} agent={agent} />
       ))}
+
+      {isWorktree && worktree && (
+        <ConfirmDialog
+          open={showDeleteConfirm}
+          onOpenChange={setShowDeleteConfirm}
+          title="Delete Worktree"
+          description={`This will permanently delete the branch "${branchName}" and all files at:\n${worktree.path}\n\nThis action cannot be undone.`}
+          confirmLabel={deleting ? "Deleting..." : "Delete"}
+          variant="destructive"
+          onConfirm={handleDeleteConfirmed}
+        />
+      )}
     </div>
   );
 }
@@ -296,6 +389,15 @@ function ProjectItem({
   const runningCount = agents.filter((a) =>
     ["running", "spawning", "waiting_input"].includes(a.status),
   ).length;
+
+  // Fetch worktrees from DB for this project
+  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
+  useEffect(() => {
+    if (!isExpanded) return;
+    trpcInvoke<Worktree[]>("projects.listWorktrees", { projectId: project.id })
+      .then(setWorktrees)
+      .catch(() => {});
+  }, [isExpanded, project.id]);
 
   return (
     <div>
@@ -372,43 +474,53 @@ function ProjectItem({
           {/* Detected ports */}
           <PortBadges projectPath={project.path} />
 
-          {/* Agents grouped by branch */}
+          {/* Branches: worktrees + agents grouped */}
           {(() => {
             const visible = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
-            if (visible.length === 0) {
-              return <p className="py-1 text-[10px] italic text-text-muted">No agents</p>;
-            }
 
-            // Group agents: main branch (no branchName) vs worktree branches
+            // Group agents by branch
             const mainAgents = visible.filter((a) => !a.branchName);
-            const branchMap = new Map<string, AgentState[]>();
+            const branchAgentMap = new Map<string, AgentState[]>();
             for (const a of visible) {
               if (a.branchName) {
-                const list = branchMap.get(a.branchName) ?? [];
+                const list = branchAgentMap.get(a.branchName) ?? [];
                 list.push(a);
-                branchMap.set(a.branchName, list);
+                branchAgentMap.set(a.branchName, list);
               }
             }
 
+            // Collect all worktree branches (even without active agents)
+            const worktreeBranches = new Set(worktrees.map((wt) => wt.branchName));
+
+            // Merge: worktrees + agent branches
+            const allBranches = new Set([...worktreeBranches, ...branchAgentMap.keys()]);
+
             return (
               <>
-                {/* Main branch agents */}
                 {mainAgents.length > 0 && (
                   <BranchGroup
                     branchName={project.defaultBranch}
                     agents={mainAgents}
                     isWorktree={false}
+                    projectId={project.id}
                   />
                 )}
-                {/* Worktree branch agents */}
-                {Array.from(branchMap.entries()).map(([branch, branchAgents]) => (
+                {Array.from(allBranches).map((branch) => (
                   <BranchGroup
                     key={branch}
                     branchName={branch}
-                    agents={branchAgents}
+                    agents={branchAgentMap.get(branch) ?? []}
                     isWorktree={true}
+                    worktree={worktrees.find((wt) => wt.branchName === branch)}
+                    projectId={project.id}
+                    onWorktreeDeleted={() => {
+                      setWorktrees((prev) => prev.filter((wt) => wt.branchName !== branch));
+                    }}
                   />
                 ))}
+                {visible.length === 0 && worktrees.length === 0 && (
+                  <p className="py-1 text-[10px] italic text-text-muted">No agents</p>
+                )}
               </>
             );
           })()}

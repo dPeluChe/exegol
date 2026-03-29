@@ -26,19 +26,19 @@ interface FileStatus {
 
 // ─── Hooks ──────────────────────────────────────────────────────────────────
 
-function useGitStatus(projectId: string | undefined) {
+function useGitStatus(projectId: string | undefined, pathOverride?: string) {
   return useQuery({
-    queryKey: ["git", "status", projectId],
-    queryFn: () => trpcInvoke<FileStatus[]>("diff.status", { projectId }),
+    queryKey: ["git", "status", pathOverride || projectId],
+    queryFn: () => trpcInvoke<FileStatus[]>("diff.status", { projectId, pathOverride }),
     enabled: !!projectId,
     refetchInterval: 5_000,
   });
 }
 
-function useGitBranch(projectId: string | undefined) {
+function useGitBranch(projectId: string | undefined, pathOverride?: string) {
   return useQuery({
-    queryKey: ["git", "branch", projectId],
-    queryFn: () => trpcInvoke<string>("diff.branch", { projectId }),
+    queryKey: ["git", "branch", pathOverride || projectId],
+    queryFn: () => trpcInvoke<string>("diff.branch", { projectId, pathOverride }),
     enabled: !!projectId,
     staleTime: 10_000,
   });
@@ -58,10 +58,10 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 // ─── Changes View ───────────────────────────────────────────────────────────
 
-function ChangesView({ projectId }: { projectId: string }) {
+function ChangesView({ projectId, overridePath }: { projectId: string; overridePath?: string }) {
   const queryClient = useQueryClient();
-  const { data: files, isLoading } = useGitStatus(projectId);
-  const { data: branch } = useGitBranch(projectId);
+  const { data: files, isLoading } = useGitStatus(projectId, overridePath);
+  const { data: branch } = useGitBranch(projectId, overridePath);
   const [commitMsg, setCommitMsg] = useState("");
   const [pushing, setPushing] = useState(false);
   const [pushResult, setPushResult] = useState<string | null>(null);
@@ -279,7 +279,7 @@ function FileRow({
 
 // ─── Main GitPane ───────────────────────────────────────────────────────────
 
-export function GitPane() {
+export function GitPane({ overridePath }: { overridePath?: string } = {}) {
   const { projectId } = useProjectContext();
   const [view, setView] = useState<GitView>("changes");
 
@@ -311,7 +311,9 @@ export function GitPane() {
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
-        {view === "changes" && projectId && <ChangesView projectId={projectId} />}
+        {view === "changes" && projectId && (
+          <ChangesView projectId={projectId} overridePath={overridePath} />
+        )}
         {view === "diff" && <DiffSection />}
         {view === "oplog" && <OplogSection />}
       </div>
