@@ -5,11 +5,8 @@
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {
-    "name": "core-rust",
-    "triples": {
-      "defaults": true,
-      "additional": []
-    }
+    "binaryName": "core-rust",
+    "targets": []
   },
   "scripts": {
     "artifacts": "napi artifacts",

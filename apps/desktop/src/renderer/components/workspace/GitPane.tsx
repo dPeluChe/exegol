@@ -64,7 +64,7 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
   const { data: branch } = useGitBranch(projectId, overridePath);
   const [commitMsg, setCommitMsg] = useState("");
   const [pushing, setPushing] = useState(false);
-  const [pushResult, setPushResult] = useState<string | null>(null);
+  const [resultMsg, setResultMsg] = useState<string | null>(null);
 
   const staged = files?.filter((f) => f.staged) ?? [];
   const unstaged = files?.filter((f) => !f.staged) ?? [];
@@ -74,32 +74,46 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
   }, [queryClient]);
 
   const stageMutation = useMutation({
-    mutationFn: (fileList?: string[]) => trpcMutate("diff.stage", { projectId, files: fileList }),
+    mutationFn: (fileList?: string[]) =>
+      trpcMutate("diff.stage", { projectId, files: fileList, pathOverride: overridePath }),
     onSuccess: invalidate,
   });
 
   const unstageMutation = useMutation({
-    mutationFn: (fileList?: string[]) => trpcMutate("diff.unstage", { projectId, files: fileList }),
+    mutationFn: (fileList?: string[]) =>
+      trpcMutate("diff.unstage", { projectId, files: fileList, pathOverride: overridePath }),
     onSuccess: invalidate,
   });
 
   const commitMutation = useMutation({
-    mutationFn: () =>
-      trpcMutate<{ output: string }>("diff.commit", { projectId, message: commitMsg }),
-    onSuccess: () => {
+    mutationFn: (opts?: { stageAll?: boolean }) =>
+      trpcMutate<{ output: string }>("diff.commit", {
+        projectId,
+        message: commitMsg,
+        pathOverride: overridePath,
+        stageAll: opts?.stageAll,
+      }),
+    onSuccess: (result) => {
       setCommitMsg("");
+      setResultMsg(result.output || "Committed successfully");
       invalidate();
+    },
+    onError: (err) => {
+      setResultMsg(`Commit failed: ${err instanceof Error ? err.message : String(err)}`);
     },
   });
 
   const handlePush = async () => {
     setPushing(true);
-    setPushResult(null);
+    setResultMsg(null);
     try {
-      const result = await trpcMutate<{ output: string }>("diff.push", { projectId });
-      setPushResult(result.output || "Pushed successfully");
+      const result = await trpcMutate<{ output: string }>("diff.push", {
+        projectId,
+        pathOverride: overridePath,
+      });
+      setResultMsg(result.output || "Pushed successfully");
     } catch (err) {
-      setPushResult(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
+      setResultMsg(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setPushing(false);
       invalidate();
@@ -208,8 +222,8 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
             value={commitMsg}
             onChange={(e) => setCommitMsg(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && commitMsg.trim() && staged.length > 0) {
-                commitMutation.mutate();
+              if (e.key === "Enter" && commitMsg.trim() && totalChanges > 0) {
+                commitMutation.mutate({ stageAll: staged.length === 0 });
               }
             }}
             placeholder="Commit message..."
@@ -217,12 +231,12 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
           />
           <Button
             type="button"
-            onClick={() => commitMutation.mutate()}
-            disabled={!commitMsg.trim() || staged.length === 0 || commitMutation.isPending}
+            onClick={() => commitMutation.mutate({ stageAll: staged.length === 0 })}
+            disabled={!commitMsg.trim() || totalChanges === 0 || commitMutation.isPending}
             className="h-7 gap-1 px-2 text-[10px]"
           >
             <Check className="h-3 w-3" />
-            {commitMutation.isPending ? "..." : "Commit"}
+            {commitMutation.isPending ? "..." : staged.length > 0 ? "Commit" : "Commit All"}
           </Button>
           <Button
             type="button"
@@ -234,14 +248,14 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
             {pushing ? "..." : "Push"}
           </Button>
         </div>
-        {pushResult && (
+        {resultMsg && (
           <p
             className={cn(
               "text-[9px]",
-              pushResult.includes("failed") ? "text-red-400" : "text-green-400",
+              resultMsg.includes("failed") ? "text-red-400" : "text-green-400",
             )}
           >
-            {pushResult}
+            {resultMsg}
           </p>
         )}
       </div>

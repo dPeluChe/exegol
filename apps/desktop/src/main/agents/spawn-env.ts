@@ -166,8 +166,10 @@ export function scoreAndRecordOplog(
   initSnapshot: { headSha: string; cwd: string; projectId: string } | undefined,
 ): void {
   try {
+    // Skip scoring if agent was already deleted (race condition with renderer delete)
     const currentAgentForScoring = getAgent(db, agent.id);
-    scoreAgent(db, agent.id, exitCode, currentAgentForScoring?.status ?? "unknown", scrollback);
+    if (!currentAgentForScoring) return;
+    scoreAgent(db, agent.id, exitCode, currentAgentForScoring.status ?? "unknown", scrollback);
 
     if (initSnapshot && coreRust) {
       const afterSnapshot = coreRust.getRepoSnapshot(initSnapshot.cwd);

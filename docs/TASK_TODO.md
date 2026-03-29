@@ -37,9 +37,10 @@
 
 | Item | Description | Priority |
 |------|-------------|----------|
-| GitPane worktree stage/commit | Add stage/commit/push actions for worktree paths (currently view-only) | Medium |
-| FOREIGN KEY scoring error | Race condition: agent deleted before scoring completes on exit | Low |
-| napi-rs deprecation warnings | Update napi.name → napi.binaryName, napi.triples → napi.targets | Low |
+| Timezone config | Verify timestamps display in user's local timezone. Add timezone selector in Settings if needed (currently UTC epoch → relative time) | Low |
+| GitPane worktree stage/commit | ~~Add stage/commit/push actions for worktree paths~~ (done) | ~~Medium~~ |
+| FOREIGN KEY scoring error | ~~Race condition: agent deleted before scoring completes~~ (done) | ~~Low~~ |
+| napi-rs deprecation warnings | ~~Update napi.name → napi.binaryName~~ (done) | ~~Low~~ |
 
 ---
 

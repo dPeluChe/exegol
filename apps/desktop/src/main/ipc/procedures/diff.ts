@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { existsSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { TRPCError } from "@trpc/server";
 import type Database from "libsql";
@@ -114,9 +116,15 @@ export const diffRouter = router({
 
   /** Stage specific files or all */
   stage: publicProcedure
-    .input(z.object({ projectId: z.string(), files: z.array(z.string()).optional() }))
+    .input(
+      z.object({
+        projectId: z.string(),
+        files: z.array(z.string()).optional(),
+        pathOverride: z.string().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       const args = input.files && input.files.length > 0 ? ["add", ...input.files] : ["add", "-A"];
       await execFileAsync("git", args, { cwd });
       return { success: true };
@@ -124,9 +132,15 @@ export const diffRouter = router({
 
   /** Unstage specific files or all */
   unstage: publicProcedure
-    .input(z.object({ projectId: z.string(), files: z.array(z.string()).optional() }))
+    .input(
+      z.object({
+        projectId: z.string(),
+        files: z.array(z.string()).optional(),
+        pathOverride: z.string().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       const args =
         input.files && input.files.length > 0
           ? ["reset", "HEAD", ...input.files]
@@ -135,22 +149,59 @@ export const diffRouter = router({
       return { success: true };
     }),
 
-  /** Commit staged changes */
+  /** Commit staged changes (auto-stages all if nothing staged) */
   commit: publicProcedure
-    .input(z.object({ projectId: z.string(), message: z.string().min(1) }))
+    .input(
+      z.object({
+        projectId: z.string(),
+        message: z.string().min(1),
+        pathOverride: z.string().optional(),
+        stageAll: z.boolean().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
-      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
+      // Remove stale lock file if exists
+      const lockPath = join(cwd, ".git", "index.lock");
+      if (existsSync(lockPath)) {
+        try {
+          unlinkSync(lockPath);
+        } catch {
+          /* */
+        }
+      }
+      // Stage all if requested (avoids race condition from separate stage+commit calls)
+      if (input.stageAll) {
+        await execFileAsync("git", ["add", "-A"], { cwd });
+      }
       const { stdout } = await execFileAsync("git", ["commit", "-m", input.message], { cwd });
       return { output: stdout.trim() };
     }),
 
-  /** Push to remote */
+  /** Push to remote (auto-sets upstream for new branches) */
   push: publicProcedure
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const cwd = resolveProjectPath(ctx.db, input.projectId);
-      const { stdout } = await execFileAsync("git", ["push"], { cwd, timeout: 30_000 });
-      return { output: stdout.trim() };
+      const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
+      try {
+        const { stdout } = await execFileAsync("git", ["push"], { cwd, timeout: 30_000 });
+        return { output: stdout.trim() };
+      } catch (err) {
+        // If no upstream, auto-set it and retry
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("no upstream branch") || msg.includes("has no upstream")) {
+          const { stdout: branch } = await execFileAsync("git", ["branch", "--show-current"], {
+            cwd,
+          });
+          const { stdout: out } = await execFileAsync(
+            "git",
+            ["push", "--set-upstream", "origin", branch.trim()],
+            { cwd, timeout: 30_000 },
+          );
+          return { output: out.trim() || "Pushed with upstream set" };
+        }
+        throw err;
+      }
     }),
 
   /** Get current branch name */
