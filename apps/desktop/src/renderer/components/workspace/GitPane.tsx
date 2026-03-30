@@ -31,7 +31,7 @@ function useGitStatus(projectId: string | undefined, pathOverride?: string) {
     queryKey: ["git", "status", pathOverride || projectId],
     queryFn: () => trpcInvoke<FileStatus[]>("diff.status", { projectId, pathOverride }),
     enabled: !!projectId,
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -40,7 +40,7 @@ function useGitBranch(projectId: string | undefined, pathOverride?: string) {
     queryKey: ["git", "branch", pathOverride || projectId],
     queryFn: () => trpcInvoke<string>("diff.branch", { projectId, pathOverride }),
     enabled: !!projectId,
-    staleTime: 10_000,
+    staleTime: 30_000,
   });
 }
 

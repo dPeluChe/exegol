@@ -1,8 +1,10 @@
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
-import { CodeViewer } from "./CodeViewer";
+
+// Lazy-load Monaco editor (~12MB) — only loaded when user opens a file
+const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
 
 // ─── Extension Labels ────────────────────────────────────────────────────────
 
@@ -87,7 +89,15 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
             </button>
           </div>
           <div className="flex-1 overflow-auto">
-            <CodeViewer content={fileData.content} fileName={selectedFile} />
+            <Suspense
+              fallback={
+                <div className="flex h-full items-center justify-center text-xs text-text-muted">
+                  Loading editor...
+                </div>
+              }
+            >
+              <CodeViewer content={fileData.content} fileName={selectedFile} />
+            </Suspense>
           </div>
         </div>
       )}

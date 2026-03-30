@@ -412,6 +412,14 @@ const migrations: Migration[] = [
       ALTER TABLE agents_new RENAME TO agents;
     `,
   },
+  {
+    id: "025_agents_indexes",
+    sql: `
+      CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
+      CREATE INDEX IF NOT EXISTS idx_agents_project_status ON agents(project_id, status);
+      CREATE INDEX IF NOT EXISTS idx_agents_project_id ON agents(project_id);
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

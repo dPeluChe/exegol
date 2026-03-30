@@ -187,44 +187,59 @@ app.whenReady().then(async () => {
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerGlobalHotkey();
-  ensureCanonicalPaths(); // Migrate to ~/.agents/skills/ + create agent symlinks
-  ensureDefaultSkills(); // Install default skills to ~/.agents/skills/ if missing
-  ensureShellWrappers(); // Create zsh/bash wrapper files for shell-ready marker
-  ensureAgentWrappers(); // Create agent hooks + Claude Code settings merge
-  // PTY Sidecar: connect to existing or spawn new (sessions survive window reload)
-  let sidecarSessionIds: string[] = [];
-  try {
-    const sidecarClient = await ensureSidecar();
-    getPtyHost().connectToSidecar(sidecarClient);
-    sidecarSessionIds = await getPtyHost().listSidecarSessions();
-    logger.info(`[Startup] Connected to PTY sidecar (${sidecarSessionIds.length} live session(s))`);
-  } catch (err) {
-    logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);
-  }
+  // Filesystem initialization (all synchronous, no await needed)
+  ensureCanonicalPaths();
+  ensureDefaultSkills();
+  ensureShellWrappers();
+  ensureAgentWrappers();
 
-  // Recover agents: reattach to sidecar sessions, mark rest as crashed
-  if (sidecarSessionIds.length > 0) {
-    const reattached = await getAgentManager().reattachSidecarAgents(getDb(), sidecarSessionIds);
-    if (reattached > 0) {
-      logger.info(`[Startup] Reattached ${reattached} agent(s) from sidecar`);
+  // Show window FIRST (fast TTI), then connect sidecar + recover in background
+  createWindow();
+  initTray();
+
+  // Background: sidecar connection + agent recovery (non-blocking)
+  (async () => {
+    let sidecarSessionIds: string[] = [];
+    try {
+      const sidecarClient = await ensureSidecar();
+      getPtyHost().connectToSidecar(sidecarClient);
+      sidecarSessionIds = await getPtyHost().listSidecarSessions();
+      logger.info(
+        `[Startup] Connected to PTY sidecar (${sidecarSessionIds.length} live session(s))`,
+      );
+    } catch (err) {
+      logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);
     }
-  }
-  // Mark remaining stale agents (not in sidecar) as crashed
-  const recovery = recoverStaleAgents(getDb(), new Set(sidecarSessionIds));
-  if (recovery.crashed > 0) {
-    logger.info(`[Startup] Marked ${recovery.crashed} agent(s) as crashed (no sidecar session)`);
-  }
+    try {
+      if (sidecarSessionIds.length > 0) {
+        const reattached = await getAgentManager().reattachSidecarAgents(
+          getDb(),
+          sidecarSessionIds,
+        );
+        if (reattached > 0) {
+          logger.info(`[Startup] Reattached ${reattached} agent(s) from sidecar`);
+        }
+      }
+      const recovery = recoverStaleAgents(getDb(), new Set(sidecarSessionIds));
+      if (recovery.crashed > 0) {
+        logger.info(
+          `[Startup] Marked ${recovery.crashed} agent(s) as crashed (no sidecar session)`,
+        );
+      }
+    } catch (err) {
+      logger.error("[Startup] Agent recovery failed (non-fatal):", err);
+    }
+  })();
+
+  // Background services (non-blocking, start after window)
   startNotifyHandler((event) => {
     logger.info(`[NotifyHandler] Agent event: ${event.type} from ${event.agentId}`);
-    // TODO: Route events to AgentManager for status updates (Phase 2)
   });
-  startMetricsCollector(); // Background: collects CPU/RAM/disk every 10s
-  getSchedulerEngine().start(getDb()); // Load scheduled tasks and start cron jobs
-  getQueueExecutor().start(getDb()); // Start task queue executor
-  getPipelineExecutor().recoverOnStartup(getDb()); // Recover stale pipeline runs
-  initAutoUpdater(); // T44: check for updates on startup + every 4h
-  createWindow();
-  initTray(); // T49: system tray with running agents badge
+  startMetricsCollector();
+  getSchedulerEngine().start(getDb());
+  getQueueExecutor().start(getDb());
+  getPipelineExecutor().recoverOnStartup(getDb());
+  initAutoUpdater(); // Deferred: check for updates after window shows
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

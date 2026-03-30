@@ -6,7 +6,7 @@ export function useMcpServers() {
   return useQuery({
     queryKey: ["mcp", "servers"],
     queryFn: () => trpcInvoke<McpServerState[]>("mcp.listServers"),
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -53,6 +53,6 @@ export function useMcpTools() {
   return useQuery({
     queryKey: ["mcp", "tools"],
     queryFn: () => trpcInvoke<McpTool[]>("mcp.listTools"),
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
   });
 }

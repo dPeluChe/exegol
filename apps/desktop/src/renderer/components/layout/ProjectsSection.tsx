@@ -576,6 +576,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
   const { data: projects } = useProjects();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const setActiveProject = useAppStore((s) => s.setActiveProject);
+  // Use agent store version to force re-render only when store changes
   const agents = useAgentStore((s) => s.agents);
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -599,8 +600,6 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
     });
   };
 
-  const agentList = Object.values(agents);
-
   return (
     <div className="space-y-0.5">
       {projects && projects.length > 0 ? (
@@ -612,7 +611,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
             isExpanded={effectiveExpandedIds.has(project.id)}
             onSelect={() => setActiveProject(project.id)}
             onToggle={() => toggleProject(project.id)}
-            agents={agentList.filter((a) => a.projectId === project.id)}
+            agents={Object.values(agents).filter((a) => a.projectId === project.id)}
           />
         ))
       ) : (

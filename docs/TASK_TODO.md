@@ -37,14 +37,13 @@
 
 | Item | Description | Priority |
 |------|-------------|----------|
-| Timezone config | Verify timestamps display in user's local timezone. Add timezone selector in Settings if needed (currently UTC epoch → relative time) | Low |
-| GitPane worktree stage/commit | ~~Add stage/commit/push actions for worktree paths~~ (done) | ~~Medium~~ |
-| FOREIGN KEY scoring error | ~~Race condition: agent deleted before scoring completes~~ (done) | ~~Low~~ |
-| napi-rs deprecation warnings | ~~Update napi.name → napi.binaryName~~ (done) | ~~Low~~ |
+| Timezone config | Verify timestamps display in user's local timezone. Add timezone selector in Settings if needed | Low |
+| Polling constants | Centralize all refetchInterval values into shared constants file with documented reasons | Low |
+| Settings UI for pipelineIdleCloseSeconds | Add per-provider toggle in Settings CLI cards | Low |
 
 ---
 
 ## Completed
 
-V1 (T01-T16), V2 (T17-T34), V3 (T35-T55): 55+ tasks complete.
+V1 (T01-T16), V2 (T17-T34), V3 (T35-T55), Performance Pass: 60+ tasks complete.
 See `docs/tasks_completed/2026_03.md` for full log.
