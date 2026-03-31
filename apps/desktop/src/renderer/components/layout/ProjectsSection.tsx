@@ -35,8 +35,17 @@ const STATUS_COLORS: Record<string, string> = {
   crashed: "bg-red-500",
 };
 
-/** Only show agents that are active or crashed (recoverable) */
-const VISIBLE_STATUSES = new Set(["running", "spawning", "waiting_input", "crashed"]);
+/** Show agents that are active, recently completed, or crashed */
+const VISIBLE_STATUSES = new Set([
+  "running",
+  "spawning",
+  "waiting_input",
+  "paused",
+  "completed",
+  "failed",
+  "stopped",
+  "crashed",
+]);
 
 function formatTimeAgo(ts: number | null): string {
   if (!ts) return "";
@@ -51,6 +60,7 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
+  const isUnread = useAgentStore((s) => !!s.unreadAgents[agent.id]);
   const isFocused = focusedAgentId === agent.id;
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
   const isCrashed = agent.status === "crashed";
@@ -122,6 +132,8 @@ function AgentMiniCard({ agent }: { agent: AgentState }) {
         onClick={handleNavigate}
         className="flex flex-1 items-center gap-2 text-left"
       >
+        {/* Unread dot (T57) */}
+        {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
         {/* Provider icon (mini) */}
         <AgentIcon
           provider={agent.cliType}

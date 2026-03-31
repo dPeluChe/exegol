@@ -90,14 +90,16 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
       });
       createTerminal(agent.id);
       setFocusedAgent(agent.id);
-      // Switch to Agents section and open terminal in active pane
+      // Switch to Agents section
       window.dispatchEvent(
         new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
       );
+      // Create a new tab for this agent (don't replace existing pane)
       const store = useWorkspaceStore.getState();
-      const activeTab = store.getActiveTab();
-      if (activeTab) {
-        const paneId = findFirstPaneId(activeTab.layout);
+      const newTabId = store.addTab(agent.cliType);
+      const newTab = store.tabs.find((t) => t.id === newTabId);
+      if (newTab) {
+        const paneId = findFirstPaneId(newTab.layout);
         if (paneId) {
           store.updatePane(paneId, { type: "terminal", agentId: agent.id });
         }

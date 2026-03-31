@@ -33,6 +33,11 @@ export function startAgentStatusPush(): void {
         status: event.status as AgentStatus,
         currentStep: event.currentStep,
       });
+
+      // T57: Mark as unread when agent finishes (working → completed/failed/idle)
+      if (isFinalStatus || event.status === "waiting_input") {
+        store.markUnread(event.agentId);
+      }
     }
   });
 }
@@ -83,13 +88,42 @@ interface AgentStore {
 
   /** Get a single agent by ID */
   getAgent: (id: string) => AgentState | undefined;
+
+  /** Unread agent IDs — agents that completed while not focused (T57) */
+  unreadAgents: Record<string, boolean>;
+  markUnread: (id: string) => void;
+  markRead: (id: string) => void;
 }
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
   agents: {},
   focusedAgentId: null,
+  unreadAgents: {},
 
-  setFocusedAgent: (id) => set({ focusedAgentId: id }),
+  setFocusedAgent: (id) => {
+    if (id) {
+      set((s) => {
+        const { [id]: _, ...rest } = s.unreadAgents;
+        return { focusedAgentId: id, unreadAgents: rest };
+      });
+    } else {
+      set({ focusedAgentId: id });
+    }
+  },
+
+  markUnread: (id) =>
+    set((s) => {
+      if (s.focusedAgentId === id) return s;
+      if (s.unreadAgents[id]) return s; // Already unread
+      return { unreadAgents: { ...s.unreadAgents, [id]: true } };
+    }),
+
+  markRead: (id) =>
+    set((s) => {
+      if (!s.unreadAgents[id]) return s;
+      const { [id]: _, ...rest } = s.unreadAgents;
+      return { unreadAgents: rest };
+    }),
 
   updateAgent: (id, update) =>
     set((state) => {

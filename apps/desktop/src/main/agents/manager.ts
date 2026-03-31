@@ -12,6 +12,7 @@ import {
   stopAgent,
   updateAgentStatus,
 } from "../db/queries";
+import { runSetupHook } from "../hooks/project-hooks";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
@@ -30,6 +31,7 @@ import {
   slugifyBranchName,
 } from "./spawn-env";
 import { AgentStatusParser } from "./status-parser";
+import { createTitleStatusTracker } from "./title-status";
 
 export type { AgentStatusEvent } from "./spawn-env";
 
@@ -107,6 +109,8 @@ export class AgentManager {
   private scrollbackBuffers: Map<string, string[]> = new Map();
   private scrollbackSizes: Map<string, number> = new Map();
   private static readonly MAX_SCROLLBACK_BYTES = 1024 * 1024; // 1MB for scoring buffer
+  /** Title-based status trackers (T56: detect agent state from terminal title) */
+  private titleTrackers: Map<string, (data: string) => void> = new Map();
 
   async spawn(db: Database.Database, agent: Agent, config: AgentCreate): Promise<void> {
     const registry = getProviderRegistry();
@@ -177,6 +181,9 @@ export class AgentManager {
         }
 
         logger.info("[AgentManager] Created worktree:", { branch: branchName, path: wtInfo.path });
+
+        // Run project setup hook (T60: exegol.yaml) — non-blocking
+        runSetupHook(project.path, wtInfo.path, branchName).catch(() => {});
       } catch (err) {
         logger.error(
           "[AgentManager] Failed to create worktree, falling back to project root:",
@@ -254,6 +261,22 @@ export class AgentManager {
     // ── Output processing setup (non-shell agents only) ─────────────────
     if (!isPlainShell) {
       this.outputProcessors.set(agent.id, createOutputProcessor(agent.id, agent.cliType));
+      // Title-based status detection (T56) — only for CLIs that set terminal titles
+      if (["claude-code", "gemini", "codex", "crush"].includes(agent.cliType)) {
+        this.titleTrackers.set(
+          agent.id,
+          createTitleStatusTracker((status, _title) => {
+            broadcastAgentStatus({
+              agentId: agent.id,
+              projectId: agent.projectId,
+              status,
+              currentStep: null,
+              cliType: agent.cliType,
+              timestamp: Date.now(),
+            });
+          }),
+        );
+      }
       this.scrollbackBuffers.set(agent.id, []);
       this.scrollbackSizes.set(agent.id, 0);
     }
@@ -273,6 +296,8 @@ export class AgentManager {
           }
           // Notify data subscribers (pipeline idle monitoring)
           this.dataCallbacks.get(agent.id)?.(data);
+          // Title-based status detection (T56)
+          this.titleTrackers.get(agent.id)?.(data);
 
           if (isPlainShell) return;
 
@@ -338,6 +363,7 @@ export class AgentManager {
 
           // Clean up in-memory state
           this.outputProcessors.delete(agent.id);
+          this.titleTrackers.delete(agent.id);
           this.tokenLimitDetected.delete(agent.id);
           this.scrollbackBuffers.delete(agent.id);
           this.scrollbackSizes.delete(agent.id);

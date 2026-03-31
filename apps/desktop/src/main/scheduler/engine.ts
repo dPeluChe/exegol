@@ -141,7 +141,7 @@ export class SchedulerEngine {
     }
 
     const task = getScheduledTask(this.db, taskId);
-    if (!task || !task.enabled) return;
+    if (!task?.enabled) return;
 
     // ── Concurrency limit check ─────────────────────────────────────────
     if (this.runningTasks.size >= this.maxConcurrent) {

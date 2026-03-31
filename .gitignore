@@ -33,5 +33,11 @@ Thumbs.db
 *.log
 npm-debug.log*
 
+# Exegol local config
+exegol.yaml
+
+# Pencil design files
+*.pen
+
 # Misc
 *.tsbuildinfo

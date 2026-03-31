@@ -14,6 +14,7 @@ import type Database from "libsql";
 import { getAgentManager } from "../agents/manager";
 import { getProviderRegistry } from "../agents/registry";
 import { coreRust, slugifyBranchName } from "../agents/spawn-env";
+import { runSetupHook } from "../hooks/project-hooks";
 import { getPtyHost } from "../terminal/pty-host";
 
 // Auto-approve flags per CLI — pipeline steps always run in full-auto mode
@@ -168,6 +169,8 @@ export class PipelineExecutor {
           const wtInfo = coreRust.createWorktree(project.path, wtName, branchName, targetPath);
           worktreePath = wtInfo.path;
           logger.info("[Pipeline] Created shared worktree:", { path: worktreePath });
+          // Run project setup hook (T60) — non-blocking
+          runSetupHook(project.path, worktreePath, branchName).catch(() => {});
         } catch (err) {
           logger.warn("[Pipeline] Failed to create worktree, using project root:", err);
         }

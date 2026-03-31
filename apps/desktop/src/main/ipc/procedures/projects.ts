@@ -153,12 +153,12 @@ export const projectRouter = router({
       return listWorktrees(ctx.db, input.projectId);
     }),
 
-  /** Delete a worktree (removes from disk + DB) */
+  /** Delete a worktree (runs archive hook, removes from disk + DB) */
   deleteWorktree: publicProcedure
     .input(
       z.object({ worktreeId: z.string(), projectId: z.string(), force: z.boolean().optional() }),
     )
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const wt = ctx.db.prepare("SELECT * FROM worktrees WHERE id = ?").get(input.worktreeId) as
         | { id: string; path: string; branch_name: string }
         | undefined;
@@ -167,12 +167,19 @@ export const projectRouter = router({
       const project = getProject(ctx.db, input.projectId);
       if (!project) return { success: false, message: "Project not found" };
 
+      // Run archive hook before deletion (T60: exegol.yaml)
+      try {
+        const { runArchiveHook } = require("../../hooks/project-hooks");
+        await runArchiveHook(project.path, wt.path, wt.branch_name);
+      } catch {
+        /* Non-fatal */
+      }
+
       try {
         const coreRust = require("@exegol/core-rust");
         const wtName = wt.branch_name.replace(/\//g, "-");
         coreRust.removeWorktree(project.path, wtName, input.force ?? false);
       } catch {
-        // Fallback: remove directory manually
         try {
           require("node:fs").rmSync(wt.path, { recursive: true, force: true });
         } catch {
