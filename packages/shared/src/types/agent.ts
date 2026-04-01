@@ -32,6 +32,7 @@ export type Agent = {
   id: string;
   projectId: string;
   worktreeId: string | null;
+  branchName?: string | null;
   cliType: AgentCliType;
   status: AgentStatus;
   taskDescription: string;

@@ -153,6 +153,7 @@ pub fn remove_worktree(
   let worktree = repo
     .find_worktree(&worktree_name)
     .map_err(|e| Error::from_reason(format!("Failed to find worktree '{worktree_name}': {e}")))?;
+  let worktree_dir = worktree.path().to_path_buf();
 
   // Check if it's valid (has changes) when not forcing
   if !force && worktree.validate().is_err() {
@@ -186,12 +187,6 @@ pub fn remove_worktree(
     .map_err(|e| Error::from_reason(format!("Failed to prune worktree '{worktree_name}': {e}")))?;
 
   // Remove the worktree directory from disk
-  let repo_root = Path::new(&repo_path);
-  let worktree_dir = repo_root
-    .parent()
-    .unwrap_or(repo_root)
-    .join(&worktree_name);
-
   if worktree_dir.exists() {
     std::fs::remove_dir_all(&worktree_dir)
       .map_err(|e| Error::from_reason(format!("Failed to remove worktree directory: {e}")))?;

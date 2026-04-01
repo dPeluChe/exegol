@@ -107,7 +107,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         status: successor.status,
         currentStep: successor.currentStep,
         taskDescription: successor.taskDescription,
-        branchName: null,
+        branchName: successor.branchName ?? null,
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: successor.startedAt,
       });
@@ -153,6 +153,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                     projectId: agent.projectId,
                     cliType: agent.cliType,
                     taskDescription: agent.taskDescription,
+                    useWorktree: !!agent.branchName,
+                    branchName: agent.branchName ?? undefined,
                   });
 
                   if (paneId && newAgent?.id) {
@@ -168,7 +170,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                       status: newAgent.status,
                       currentStep: newAgent.currentStep,
                       taskDescription: newAgent.taskDescription,
-                      branchName: null,
+                      branchName: newAgent.branchName ?? null,
                       tokenUsage: { input: 0, output: 0, cost: 0 },
                       startedAt: newAgent.startedAt,
                     });

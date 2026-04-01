@@ -4,13 +4,26 @@ import { mapAgentRow, nanoid } from "./helpers";
 
 export function listAgents(db: Database.Database, projectId: string): Agent[] {
   const rows = db
-    .prepare("SELECT * FROM agents WHERE project_id = ? ORDER BY started_at DESC")
+    .prepare(
+      `SELECT a.*, w.branch_name
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       WHERE a.project_id = ?
+       ORDER BY a.started_at DESC`,
+    )
     .all(projectId);
   return (rows as Record<string, unknown>[]).map(mapAgentRow);
 }
 
 export function getAgent(db: Database.Database, id: string): Agent | null {
-  const row = db.prepare("SELECT * FROM agents WHERE id = ?").get(id);
+  const row = db
+    .prepare(
+      `SELECT a.*, w.branch_name
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       WHERE a.id = ?`,
+    )
+    .get(id);
   return row ? mapAgentRow(row as Record<string, unknown>) : null;
 }
 
@@ -57,6 +70,10 @@ export function stopAgent(
 
 export function setAgentWorktree(db: Database.Database, agentId: string, worktreeId: string): void {
   db.prepare("UPDATE agents SET worktree_id = ? WHERE id = ?").run(worktreeId, agentId);
+}
+
+export function clearAgentWorktree(db: Database.Database, agentId: string): void {
+  db.prepare("UPDATE agents SET worktree_id = NULL WHERE id = ?").run(agentId);
 }
 
 export function setAgentPid(db: Database.Database, agentId: string, pid: number): void {

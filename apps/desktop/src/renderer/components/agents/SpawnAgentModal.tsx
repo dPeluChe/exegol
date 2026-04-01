@@ -84,7 +84,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
         status: agent.status,
         currentStep: agent.currentStep,
         taskDescription: agent.taskDescription,
-        branchName: useWorktree ? branchName : null,
+        branchName: agent.branchName ?? (useWorktree ? branchName : null),
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: agent.startedAt,
       });

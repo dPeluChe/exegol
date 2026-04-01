@@ -252,6 +252,8 @@ export const agentRouter = router({
           projectId: originalAgent.projectId,
           cliType: successor.cliType,
           taskDescription: handoffContext,
+          useWorktree: originalAgent.worktreeId != null,
+          branchName: originalAgent.branchName ?? undefined,
         });
       } catch (err) {
         updateAgentStatus(ctx.db, successor.id, "failed", String(err));

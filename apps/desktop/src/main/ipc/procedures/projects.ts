@@ -7,6 +7,7 @@ import { z } from "zod";
 const execFileAsync = promisify(execFile);
 
 import { projectCreateSchema } from "@exegol/shared";
+import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import {
   createProject,
   deleteProject,
@@ -176,9 +177,12 @@ export const projectRouter = router({
       }
 
       try {
-        const coreRust = require("@exegol/core-rust");
-        const wtName = wt.branch_name.replace(/\//g, "-");
-        coreRust.removeWorktree(project.path, wtName, input.force ?? false);
+        removeManagedWorktree(
+          project.path,
+          getWorktreeName(wt.branch_name),
+          wt.path,
+          input.force ?? false,
+        );
       } catch {
         try {
           require("node:fs").rmSync(wt.path, { recursive: true, force: true });

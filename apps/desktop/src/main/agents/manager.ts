@@ -2,11 +2,13 @@ import type { Agent, AgentCliType, AgentCreate, AgentStatus } from "@exegol/shar
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import {
+  clearAgentWorktree,
   createOplogEntry,
   createWorktree as dbCreateWorktree,
-  removeWorktree as dbRemoveWorktree,
   getAgent,
+  getWorktreeByAgentId,
   insertActivity,
+  removeWorktree as dbRemoveWorktree,
   setAgentPid,
   setAgentWorktree,
   stopAgent,
@@ -32,6 +34,7 @@ import {
 } from "./spawn-env";
 import { AgentStatusParser } from "./status-parser";
 import { createTitleStatusTracker } from "./title-status";
+import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
 
 export type { AgentStatusEvent } from "./spawn-env";
 
@@ -136,32 +139,24 @@ export class AgentManager {
 
     // ── Worktree creation ──────────────────────────────────────────────
     if (!config.cwdOverride && config.useWorktree && coreRust) {
-      const branchName = config.branchName?.trim() || slugifyBranchName(agent.taskDescription);
-      const worktreeName = branchName.replace(/\//g, "-");
+      const requestedBranchName =
+        config.branchName?.trim() || slugifyBranchName(agent.taskDescription);
 
       try {
-        const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-        const targetPath = require("node:path").join(
-          require("node:os").homedir(),
-          ".exegol",
-          "worktrees",
-          projectSlug,
-          worktreeName,
-        );
-        const wtInfo = coreRust.createWorktree(project.path, worktreeName, branchName, targetPath);
+        const wtInfo = createManagedWorktree(project.path, project.name, requestedBranchName);
         cwd = wtInfo.path;
 
         const dbWt = dbCreateWorktree(db, {
           projectId: agent.projectId,
           agentId: agent.id,
           path: wtInfo.path,
-          branchName,
+          branchName: wtInfo.branchName,
           autoCleanup: true,
         });
         setAgentWorktree(db, agent.id, dbWt.id);
         this.worktrees.set(agent.id, {
           dbId: dbWt.id,
-          worktreeName,
+          worktreeName: wtInfo.worktreeName,
           worktreePath: wtInfo.path,
           repoPath: project.path,
         });
@@ -174,16 +169,20 @@ export class AgentManager {
             operation: "worktree_create",
             refBefore: snapshot.headSha,
             refAfter: snapshot.headSha,
-            description: `Created worktree '${worktreeName}' on branch '${branchName}'`,
+            description: `Created worktree '${wtInfo.worktreeName}' on branch '${wtInfo.branchName}'`,
           });
         } catch {
           /* Non-fatal oplog recording */
         }
 
-        logger.info("[AgentManager] Created worktree:", { branch: branchName, path: wtInfo.path });
+        logger.info("[AgentManager] Created worktree:", {
+          requestedBranch: requestedBranchName,
+          branch: wtInfo.branchName,
+          path: wtInfo.path,
+        });
 
         // Run project setup hook (T60: exegol.yaml) — non-blocking
-        runSetupHook(project.path, wtInfo.path, branchName).catch(() => {});
+        runSetupHook(project.path, wtInfo.path, wtInfo.branchName).catch(() => {});
       } catch (err) {
         logger.error(
           "[AgentManager] Failed to create worktree, falling back to project root:",
@@ -447,6 +446,7 @@ export class AgentManager {
 
       // Rebuild output processor for non-shell agents
       try {
+        this.hydrateTrackedWorktree(db, agentId);
         if (!isShell) {
           this.outputProcessors.set(agentId, createOutputProcessor(agentId, cliType));
           this.scrollbackBuffers.set(agentId, []);
@@ -493,6 +493,7 @@ export class AgentManager {
               this.tokenLimitDetected.delete(agentId);
               this.scrollbackBuffers.delete(agentId);
               this.scrollbackSizes.delete(agentId);
+              this.titleTrackers.delete(agentId);
               finalizeAgentStatus(
                 db,
                 {
@@ -503,6 +504,7 @@ export class AgentManager {
                 } as Agent,
                 exitCode,
               );
+              this.cleanupWorktree(db, agentId);
               const completionCb = this.completionCallbacks.get(agentId);
               if (completionCb) {
                 this.completionCallbacks.delete(agentId);
@@ -562,6 +564,7 @@ export class AgentManager {
       });
     } else {
       stopAgent(db, agentId, "completed");
+      this.cleanupWorktree(db, agentId);
       try {
         const stoppedAgent = getAgent(db, agentId);
         if (stoppedAgent) {
@@ -608,7 +611,26 @@ export class AgentManager {
     return getPtyHost().getPid(agentId);
   }
 
+  private hydrateTrackedWorktree(db: Database.Database, agentId: string): void {
+    if (this.worktrees.has(agentId)) return;
+    const wt = getWorktreeByAgentId(db, agentId);
+    if (!wt) return;
+
+    const project = db.prepare("SELECT path FROM projects WHERE id = ?").get(wt.projectId) as
+      | { path: string }
+      | undefined;
+    if (!project) return;
+
+    this.worktrees.set(agentId, {
+      dbId: wt.id,
+      worktreeName: getWorktreeName(wt.branchName),
+      worktreePath: wt.path,
+      repoPath: project.path,
+    });
+  }
+
   private cleanupWorktree(db: Database.Database, agentId: string): void {
+    this.hydrateTrackedWorktree(db, agentId);
     const wt = this.worktrees.get(agentId);
     if (!wt || !coreRust) return;
     try {
@@ -618,8 +640,9 @@ export class AgentManager {
           `[AgentManager] Worktree '${wt.worktreeName}' has changes — keeping at ${wt.worktreePath}`,
         );
       } else {
-        coreRust.removeWorktree(wt.repoPath, wt.worktreeName, false);
+        removeManagedWorktree(wt.repoPath, wt.worktreeName, wt.worktreePath, false);
         dbRemoveWorktree(db, wt.dbId);
+        clearAgentWorktree(db, agentId);
         logger.info(`[AgentManager] Cleaned up empty worktree '${wt.worktreeName}'`);
       }
     } catch (err) {
