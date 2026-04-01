@@ -22,7 +22,8 @@ export function useTokenUsageSummary(agentId?: string, projectId?: string) {
         Object.keys(input).length > 0 ? input : undefined,
       );
     },
-    refetchInterval: 5_000,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
   });
 }
 

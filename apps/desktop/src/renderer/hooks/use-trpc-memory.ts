@@ -11,7 +11,7 @@ export function useMemories(projectId: string | null, category?: string) {
       return trpcInvoke<MemoryEntry[]>("memory.list", input);
     },
     enabled: !!projectId,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 }
 

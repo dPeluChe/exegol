@@ -78,7 +78,8 @@ export function useAgent(id: string | null) {
     queryKey: ["agent", id],
     queryFn: () => trpcInvoke<Agent>("agents.get", { id }),
     enabled: !!id,
-    refetchInterval: 10_000, // Reduced: push events (T17) handle real-time updates
+    refetchInterval: 30_000, // Fallback only — push events (T17) handle real-time updates
+    staleTime: 10_000,
     retry: (failureCount, error) => {
       // Don't retry if agent was deleted — prevents console spam from stale workspace panes
       if (error && typeof error === "object" && "code" in error && error.code === "NOT_FOUND")
