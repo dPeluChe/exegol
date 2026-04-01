@@ -328,7 +328,7 @@ export function GitPane({ overridePath }: { overridePath?: string } = {}) {
         {view === "changes" && projectId && (
           <ChangesView projectId={projectId} overridePath={overridePath} />
         )}
-        {view === "diff" && <DiffSection />}
+        {view === "diff" && <DiffSection overridePath={overridePath} />}
         {view === "oplog" && <OplogSection />}
       </div>
     </div>

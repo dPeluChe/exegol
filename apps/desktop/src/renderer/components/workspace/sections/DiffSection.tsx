@@ -149,14 +149,14 @@ function ReviewSummaryBanner({ summary }: { summary: ReviewSummary }) {
   );
 }
 
-export function DiffSection() {
+export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
   const { projectId } = useProjectContext();
   const [diffMode, setDiffMode] = useState<DiffMode>("unstaged");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [autoRefresh, setAutoRefresh] = useState(false);
 
-  const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode);
-  const { data: reviewSummary } = useReviewSummary(projectId);
+  const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode, overridePath);
+  const { data: reviewSummary } = useReviewSummary(projectId, overridePath, diffMode === "staged");
   // Track collapsed state per file (all collapsed by default)
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 

@@ -70,10 +70,9 @@ export const diffRouter = router({
 
   /** Legacy string diff — kept for backward compat, prefers Rust when available */
   projectDiff: publicProcedure
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const projectPath = resolveProjectPath(ctx.db, input.projectId);
-      // Try Rust first for the raw unified string (via getWorktreeDiff)
+      const projectPath = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       if (coreRust) {
         try {
           return coreRust.getWorktreeDiff(projectPath);
@@ -86,9 +85,9 @@ export const diffRouter = router({
 
   /** Legacy staged diff */
   stagedDiff: publicProcedure
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
-      const projectPath = resolveProjectPath(ctx.db, input.projectId);
+      const projectPath = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       return runGitDiff(projectPath, ["--cached", "--unified=3"]);
     }),
 
@@ -220,10 +219,16 @@ export const diffRouter = router({
 
   /** Review summary: risk signals for changed files before diving into full diff */
   reviewSummary: publicProcedure
-    .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
+    .input(
+      z.object({
+        projectId: z.string(),
+        pathOverride: z.string().optional(),
+        staged: z.boolean().optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      return buildReviewSummary(cwd);
+      return buildReviewSummary(cwd, input.staged);
     }),
 });
 
@@ -306,7 +311,7 @@ interface ReviewSummary {
   deletions: number;
 }
 
-async function buildReviewSummary(cwd: string): Promise<ReviewSummary> {
+async function buildReviewSummary(cwd: string, staged?: boolean): Promise<ReviewSummary> {
   const signals: ReviewSignal[] = [];
   const filesByType: Record<string, number> = {};
 
@@ -354,8 +359,9 @@ async function buildReviewSummary(cwd: string): Promise<ReviewSummary> {
   }
 
   // Fetch diff stats + ports in parallel (both non-fatal)
+  const diffArgs = staged ? ["diff", "--cached", "--shortstat"] : ["diff", "--shortstat"];
   const [diffStat, ports] = await Promise.all([
-    execFileAsync("git", ["diff", "--shortstat"], { cwd, maxBuffer: 64 * 1024 })
+    execFileAsync("git", diffArgs, { cwd, maxBuffer: 64 * 1024 })
       .then(({ stdout }) => stdout)
       .catch(() => ""),
     getProjectPorts(cwd).catch(() => []),

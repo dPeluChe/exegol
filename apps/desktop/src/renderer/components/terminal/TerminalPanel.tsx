@@ -29,7 +29,11 @@ function useHandoff(agentId: string, enabled: boolean) {
 }
 
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
-  const { data: agent } = useAgent(agentId);
+  // Use push-driven store for instant status updates (not 30s polling)
+  const storeAgent = useAgentStore((s) => s.agents[agentId]);
+  const { data: dbAgent } = useAgent(agentId);
+  // Prefer store (push events) over DB query (polling fallback)
+  const agent = storeAgent ?? dbAgent ?? null;
   const isStopped = agent ? STOPPED_STATUSES.has(agent.status) : false;
   const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
     isStopped ? agentId : null,

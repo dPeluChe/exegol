@@ -11,6 +11,7 @@ import { getProviderRegistry } from "../../agents/registry";
 import {
   createAgent,
   getAgent,
+  getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
   updateAgentStatus,
@@ -245,14 +246,19 @@ export const agentRouter = router({
       // Link handoff to successor
       setHandoffSuccessor(ctx.db, handoff.id, successor.id);
 
-      // Spawn the successor
+      // Spawn the successor — reuse existing worktree if preserved
       const manager = getAgentManager();
+      const existingWt = originalAgent.worktreeId
+        ? getWorktreeByAgentId(ctx.db, originalAgent.id)
+        : null;
       try {
         await manager.spawn(ctx.db, successor, {
           projectId: originalAgent.projectId,
           cliType: successor.cliType,
           taskDescription: handoffContext,
-          useWorktree: originalAgent.worktreeId != null,
+          // Reuse preserved worktree path instead of creating a new one
+          cwdOverride: existingWt?.path,
+          useWorktree: !existingWt && originalAgent.worktreeId != null,
           branchName: originalAgent.branchName ?? undefined,
         });
       } catch (err) {

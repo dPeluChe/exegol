@@ -9,6 +9,7 @@ import {
   getAgent,
   getWorktreeByAgentId,
   insertActivity,
+  listWorktrees,
   setAgentPid,
   setAgentWorktree,
   stopAgent,
@@ -137,58 +138,75 @@ export class AgentManager {
       logger.info("[AgentManager] Using cwdOverride:", { cwd });
     }
 
-    // ── Worktree creation ──────────────────────────────────────────────
+    // ── Worktree creation / reuse ───────────────────────────────────────
     if (!config.cwdOverride && config.useWorktree && coreRust) {
       const requestedBranchName =
         config.branchName?.trim() || slugifyBranchName(agent.taskDescription);
 
-      try {
-        const wtInfo = createManagedWorktree(project.path, project.name, requestedBranchName);
-        cwd = wtInfo.path;
-
-        const dbWt = dbCreateWorktree(db, {
-          projectId: agent.projectId,
-          agentId: agent.id,
-          path: wtInfo.path,
-          branchName: wtInfo.branchName,
-          autoCleanup: true,
-        });
-        setAgentWorktree(db, agent.id, dbWt.id);
+      // Check for existing worktree with same branch (reuse on relaunch/handoff)
+      const existingWts = listWorktrees(db, agent.projectId);
+      const reuseWt = existingWts.find((w) => w.branchName === requestedBranchName);
+      if (reuseWt) {
+        cwd = reuseWt.path;
+        setAgentWorktree(db, agent.id, reuseWt.id);
         this.worktrees.set(agent.id, {
-          dbId: dbWt.id,
-          worktreeName: wtInfo.worktreeName,
-          worktreePath: wtInfo.path,
+          dbId: reuseWt.id,
+          worktreeName: getWorktreeName(reuseWt.branchName),
+          worktreePath: reuseWt.path,
           repoPath: project.path,
         });
-
-        try {
-          const snapshot = coreRust.getRepoSnapshot(project.path);
-          createOplogEntry(db, {
-            agentId: agent.id,
-            projectId: agent.projectId,
-            operation: "worktree_create",
-            refBefore: snapshot.headSha,
-            refAfter: snapshot.headSha,
-            description: `Created worktree '${wtInfo.worktreeName}' on branch '${wtInfo.branchName}'`,
-          });
-        } catch {
-          /* Non-fatal oplog recording */
-        }
-
-        logger.info("[AgentManager] Created worktree:", {
-          requestedBranch: requestedBranchName,
-          branch: wtInfo.branchName,
-          path: wtInfo.path,
+        logger.info("[AgentManager] Reusing existing worktree:", {
+          branch: requestedBranchName,
+          path: reuseWt.path,
         });
+      } else
+        try {
+          const wtInfo = createManagedWorktree(project.path, project.name, requestedBranchName);
+          cwd = wtInfo.path;
 
-        // Run project setup hook (T60: exegol.yaml) — non-blocking
-        runSetupHook(project.path, wtInfo.path, wtInfo.branchName).catch(() => {});
-      } catch (err) {
-        logger.error(
-          "[AgentManager] Failed to create worktree, falling back to project root:",
-          err,
-        );
-      }
+          const dbWt = dbCreateWorktree(db, {
+            projectId: agent.projectId,
+            agentId: agent.id,
+            path: wtInfo.path,
+            branchName: wtInfo.branchName,
+            autoCleanup: true,
+          });
+          setAgentWorktree(db, agent.id, dbWt.id);
+          this.worktrees.set(agent.id, {
+            dbId: dbWt.id,
+            worktreeName: wtInfo.worktreeName,
+            worktreePath: wtInfo.path,
+            repoPath: project.path,
+          });
+
+          try {
+            const snapshot = coreRust.getRepoSnapshot(project.path);
+            createOplogEntry(db, {
+              agentId: agent.id,
+              projectId: agent.projectId,
+              operation: "worktree_create",
+              refBefore: snapshot.headSha,
+              refAfter: snapshot.headSha,
+              description: `Created worktree '${wtInfo.worktreeName}' on branch '${wtInfo.branchName}'`,
+            });
+          } catch {
+            /* Non-fatal oplog recording */
+          }
+
+          logger.info("[AgentManager] Created worktree:", {
+            requestedBranch: requestedBranchName,
+            branch: wtInfo.branchName,
+            path: wtInfo.path,
+          });
+
+          // Run project setup hook (T60: exegol.yaml) — non-blocking
+          runSetupHook(project.path, wtInfo.path, wtInfo.branchName).catch(() => {});
+        } catch (err) {
+          logger.error(
+            "[AgentManager] Failed to create worktree, falling back to project root:",
+            err,
+          );
+        }
     }
 
     // ── Plain shell mode (no agent CLI, just $SHELL) ───────────────────

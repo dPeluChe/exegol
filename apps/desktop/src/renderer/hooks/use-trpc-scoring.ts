@@ -54,11 +54,15 @@ export function useActivities(projectId: string | null, type?: string) {
 
 // ─── Diff ────────────────────────────────────────────────────────────────────
 
-export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
+export function useDiff(
+  projectId: string | null,
+  mode: "unstaged" | "staged",
+  pathOverride?: string,
+) {
   const procedure = mode === "staged" ? "diff.stagedDiff" : "diff.projectDiff";
   return useQuery({
-    queryKey: ["diff", projectId, mode],
-    queryFn: () => trpcInvoke<string>(procedure, { projectId }),
+    queryKey: ["diff", pathOverride || projectId, mode],
+    queryFn: () => trpcInvoke<string>(procedure, { projectId, pathOverride }),
     enabled: !!projectId,
   });
 }
@@ -79,10 +83,15 @@ export interface ReviewSummary {
   deletions: number;
 }
 
-export function useReviewSummary(projectId: string | null) {
+export function useReviewSummary(
+  projectId: string | null,
+  pathOverride?: string,
+  staged?: boolean,
+) {
   return useQuery({
-    queryKey: ["diff", "reviewSummary", projectId],
-    queryFn: () => trpcInvoke<ReviewSummary>("diff.reviewSummary", { projectId }),
+    queryKey: ["diff", "reviewSummary", pathOverride || projectId, staged],
+    queryFn: () =>
+      trpcInvoke<ReviewSummary>("diff.reviewSummary", { projectId, pathOverride, staged }),
     enabled: !!projectId,
     staleTime: 10_000,
   });
