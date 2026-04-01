@@ -1,7 +1,5 @@
 import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type {
   AgentCliType,
   PipelineRun,
@@ -14,6 +12,7 @@ import type Database from "libsql";
 import { getAgentManager } from "../agents/manager";
 import { getProviderRegistry } from "../agents/registry";
 import { coreRust, slugifyBranchName } from "../agents/spawn-env";
+import { createManagedWorktree, removeManagedWorktree } from "../agents/worktrees";
 import { runSetupHook } from "../hooks/project-hooks";
 import { getPtyHost } from "../terminal/pty-host";
 
@@ -163,14 +162,11 @@ export class PipelineExecutor {
       if (project) {
         try {
           const branchName = `pipeline/${slugifyBranchName(task)}`;
-          const wtName = branchName.replace(/\//g, "-");
-          const projectSlug = project.name.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-          const targetPath = join(homedir(), ".exegol", "pipelines", projectSlug, wtName);
-          const wtInfo = coreRust.createWorktree(project.path, wtName, branchName, targetPath);
+          const wtInfo = createManagedWorktree(project.path, project.name, branchName, "pipelines");
           worktreePath = wtInfo.path;
           logger.info("[Pipeline] Created shared worktree:", { path: worktreePath });
           // Run project setup hook (T60) — non-blocking
-          runSetupHook(project.path, worktreePath, branchName).catch(() => {});
+          runSetupHook(project.path, worktreePath, wtInfo.branchName).catch(() => {});
         } catch (err) {
           logger.warn("[Pipeline] Failed to create worktree, using project root:", err);
         }
@@ -479,7 +475,7 @@ export class PipelineExecutor {
       const project = getProject(db, run.projectId);
       if (project) {
         const wtName = run.worktreePath.split("/").pop() ?? "";
-        coreRust.removeWorktree(project.path, wtName, false);
+        removeManagedWorktree(project.path, wtName, run.worktreePath, false);
         logger.info("[Pipeline] Cleaned up worktree after completion");
       }
     } catch {

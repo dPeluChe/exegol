@@ -8,6 +8,7 @@ export const agentSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
   worktreeId: z.string().nullable(),
+  branchName: z.string().nullable().optional(),
   cliType: agentCliTypeSchema,
   status: agentStatusSchema,
   taskDescription: z.string().min(1, "Task description is required"),

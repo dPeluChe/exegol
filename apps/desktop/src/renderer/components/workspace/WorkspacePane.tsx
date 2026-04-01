@@ -263,7 +263,7 @@ function EmptyPane({ paneId }: { paneId: string }) {
           status: agent.status,
           currentStep: agent.currentStep,
           taskDescription: agent.taskDescription,
-          branchName: null,
+          branchName: agent.branchName ?? null,
           tokenUsage: { input: 0, output: 0, cost: 0 },
           startedAt: agent.startedAt,
         });
@@ -309,7 +309,7 @@ function EmptyPane({ paneId }: { paneId: string }) {
         status: agent.status,
         currentStep: agent.currentStep,
         taskDescription: agent.taskDescription,
-        branchName: null,
+        branchName: agent.branchName ?? null,
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: agent.startedAt,
       });

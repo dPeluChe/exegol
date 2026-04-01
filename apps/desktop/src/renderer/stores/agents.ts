@@ -157,6 +157,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
           updated[dbAgent.id] = {
             ...existing,
             status: dbAgent.status as AgentStatus,
+            branchName: dbAgent.branchName ?? existing.branchName ?? null,
             currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
           };
         } else {
@@ -168,7 +169,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
             status: dbAgent.status as AgentStatus,
             currentStep: dbAgent.currentStep ?? null,
             taskDescription: dbAgent.taskDescription,
-            branchName: null,
+            branchName: dbAgent.branchName ?? null,
             tokenUsage: { input: 0, output: 0, cost: 0 },
             startedAt: dbAgent.startedAt,
           };

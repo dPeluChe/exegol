@@ -46,6 +46,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     id: row.id as string,
     projectId: row.project_id as string,
     worktreeId: (row.worktree_id as string) ?? null,
+    branchName: (row.branch_name as string) ?? null,
     cliType: row.cli_type as Agent["cliType"],
     status: row.status as AgentStatus,
     taskDescription: row.task_description as string,

@@ -30,6 +30,12 @@ export function createWorktree(
   return mapWorktreeRow(row as Record<string, unknown>);
 }
 
+export function getWorktreeByAgentId(db: Database.Database, agentId: string): Worktree | null {
+  const row = db.prepare("SELECT * FROM worktrees WHERE agent_id = ? LIMIT 1").get(agentId);
+  return row ? mapWorktreeRow(row as Record<string, unknown>) : null;
+}
+
 export function removeWorktree(db: Database.Database, id: string): void {
+  db.prepare("UPDATE agents SET worktree_id = NULL WHERE worktree_id = ?").run(id);
   db.prepare("DELETE FROM worktrees WHERE id = ?").run(id);
 }
