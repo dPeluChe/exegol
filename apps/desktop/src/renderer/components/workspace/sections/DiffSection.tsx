@@ -1,22 +1,153 @@
 import { Button, cn } from "@exegol/ui";
 import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   Columns,
   GitCompare,
+  Info,
   Loader2,
   RefreshCw,
   Rows,
+  ShieldAlert,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { useDiff } from "../../../hooks/use-trpc";
+import {
+  type ReviewSignal,
+  type ReviewSummary,
+  useDiff,
+  useReviewSummary,
+} from "../../../hooks/use-trpc";
 import { EmptyState } from "../../common/EmptyState";
 import { DiffFileView } from "./diff/DiffFileView";
 import { type DiffFile, parseUnifiedDiff } from "./diff/diff-parser";
 
 type DiffMode = "unstaged" | "staged";
 type ViewMode = "unified" | "split";
+
+// ─── Signal icon helper ────────────────────────────────────────────────────
+
+const RISK_COLORS: Record<ReviewSignal["type"], { border: string; badge: string }> = {
+  info: { border: "border-border", badge: "bg-blue-400/15 text-blue-400" },
+  warn: { border: "border-yellow-400/30", badge: "bg-yellow-400/15 text-yellow-400" },
+  risk: { border: "border-red-400/30", badge: "bg-red-400/15 text-red-400" },
+};
+
+const SIGNAL_STYLES: Record<
+  ReviewSignal["type"],
+  { icon: typeof Info; color: string; bg: string }
+> = {
+  info: { icon: Info, color: "text-blue-400", bg: "bg-blue-400/10" },
+  warn: { icon: AlertTriangle, color: "text-yellow-400", bg: "bg-yellow-400/10" },
+  risk: { icon: ShieldAlert, color: "text-red-400", bg: "bg-red-400/10" },
+};
+
+// ─── Review Summary Banner ─────────────────────────────────────────────────
+
+function ReviewSummaryBanner({ summary }: { summary: ReviewSummary }) {
+  const [expanded, setExpanded] = useState(true);
+
+  const riskLevel = summary.signals.some((s) => s.type === "risk")
+    ? "risk"
+    : summary.signals.some((s) => s.type === "warn")
+      ? "warn"
+      : "info";
+  const colors = RISK_COLORS[riskLevel];
+
+  const topTypes = useMemo(
+    () =>
+      Object.entries(summary.filesByType)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5),
+    [summary.filesByType],
+  );
+  const typeCount = Object.keys(summary.filesByType).length;
+
+  return (
+    <div className={cn("rounded border mb-3", colors.border, "bg-bg-secondary/50")}>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        {expanded ? (
+          <ChevronDown className="h-3 w-3 shrink-0 text-text-muted" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0 text-text-muted" />
+        )}
+        <span className="text-[11px] font-semibold text-text-primary">Review Summary</span>
+        <span className="text-[10px] text-text-muted">
+          {summary.totalFiles} file{summary.totalFiles !== 1 ? "s" : ""}
+        </span>
+        {summary.additions > 0 && (
+          <span className="text-[10px] text-green-400">+{summary.additions}</span>
+        )}
+        {summary.deletions > 0 && (
+          <span className="text-[10px] text-red-400">-{summary.deletions}</span>
+        )}
+        {!expanded && summary.signals.length > 0 && (
+          <span
+            className={cn("ml-auto rounded-full px-2 py-0.5 text-[9px] font-medium", colors.badge)}
+          >
+            {summary.signals.length} signal{summary.signals.length !== 1 ? "s" : ""}
+          </span>
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border/30 px-3 py-2 space-y-2">
+          {topTypes.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {topTypes.map(([ext, count]) => (
+                <span
+                  key={ext}
+                  className="rounded bg-bg-primary px-1.5 py-0.5 text-[9px] text-text-muted"
+                >
+                  {ext} <span className="font-medium text-text-secondary">{count}</span>
+                </span>
+              ))}
+              {typeCount > 5 && (
+                <span className="rounded bg-bg-primary px-1.5 py-0.5 text-[9px] text-text-muted">
+                  +{typeCount - 5} more
+                </span>
+              )}
+            </div>
+          )}
+
+          {summary.signals.length > 0 ? (
+            <div className="space-y-1">
+              {summary.signals.map((signal) => {
+                const style = SIGNAL_STYLES[signal.type];
+                const Icon = style.icon;
+                return (
+                  <div
+                    key={signal.label}
+                    className={cn("flex items-start gap-2 rounded px-2 py-1", style.bg)}
+                  >
+                    <Icon className={cn("mt-0.5 h-3 w-3 shrink-0", style.color)} />
+                    <div className="min-w-0">
+                      <span className={cn("text-[10px] font-medium", style.color)}>
+                        {signal.label}
+                      </span>
+                      {signal.detail && (
+                        <p className="truncate text-[9px] text-text-muted">{signal.detail}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[10px] text-green-400">No risk signals detected</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function DiffSection() {
   const { projectId } = useProjectContext();
@@ -25,6 +156,7 @@ export function DiffSection() {
   const [autoRefresh, setAutoRefresh] = useState(false);
 
   const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode);
+  const { data: reviewSummary } = useReviewSummary(projectId);
   // Track collapsed state per file (all collapsed by default)
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
@@ -215,6 +347,9 @@ export function DiffSection() {
           </div>
         ) : (
           <div className="space-y-3">
+            {reviewSummary && reviewSummary.totalFiles > 0 && (
+              <ReviewSummaryBanner summary={reviewSummary} />
+            )}
             {parsedFiles.map((file) => (
               <DiffFileView
                 key={file.newPath}

@@ -63,6 +63,31 @@ export function useDiff(projectId: string | null, mode: "unstaged" | "staged") {
   });
 }
 
+// ─── Review Summary ─────────────────────────────────────────────────────────
+
+export interface ReviewSignal {
+  type: "info" | "warn" | "risk";
+  label: string;
+  detail?: string;
+}
+
+export interface ReviewSummary {
+  totalFiles: number;
+  filesByType: Record<string, number>;
+  signals: ReviewSignal[];
+  additions: number;
+  deletions: number;
+}
+
+export function useReviewSummary(projectId: string | null) {
+  return useQuery({
+    queryKey: ["diff", "reviewSummary", projectId],
+    queryFn: () => trpcInvoke<ReviewSummary>("diff.reviewSummary", { projectId }),
+    enabled: !!projectId,
+    staleTime: 10_000,
+  });
+}
+
 export function useStructuredDiff(projectId: string | null, staged: boolean) {
   return useQuery({
     queryKey: ["diff", "structured", projectId, staged],
