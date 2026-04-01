@@ -258,23 +258,40 @@ async function getDiskMetrics() {
 
 // ─── Project Metrics ────────────────────────────────────────────────────────────
 
+interface CacheEntry<T> {
+  value: T;
+  expiresAt: number;
+}
+const dirSizeCache = new Map<string, CacheEntry<number>>();
+const worktreeCache = new Map<string, CacheEntry<number>>();
+const DIR_SIZE_TTL = 60_000;
+const WORKTREE_TTL = 30_000;
+
 async function getDirectorySize(dirPath: string): Promise<number> {
+  const cached = dirSizeCache.get(dirPath);
+  if (cached && Date.now() < cached.expiresAt) return cached.value;
   try {
     const { stdout } = await execFileAsync("du", ["-sk", dirPath], { timeout: 10_000 });
     const kb = parseInt(stdout.split(/\s/)[0] ?? "0", 10);
-    return Number.isNaN(kb) ? 0 : kb * 1024;
+    const bytes = Number.isNaN(kb) ? 0 : kb * 1024;
+    dirSizeCache.set(dirPath, { value: bytes, expiresAt: Date.now() + DIR_SIZE_TTL });
+    return bytes;
   } catch {
     return 0;
   }
 }
 
 async function getWorktreeCount(dirPath: string): Promise<number> {
+  const cached = worktreeCache.get(dirPath);
+  if (cached && Date.now() < cached.expiresAt) return cached.value;
   try {
     const { stdout } = await execFileAsync("git", ["worktree", "list", "--porcelain"], {
       cwd: dirPath,
       timeout: 5_000,
     });
-    return stdout.split("\n").filter((l) => l.startsWith("worktree ")).length;
+    const count = stdout.split("\n").filter((l) => l.startsWith("worktree ")).length;
+    worktreeCache.set(dirPath, { value: count, expiresAt: Date.now() + WORKTREE_TTL });
+    return count;
   } catch {
     return 1;
   }

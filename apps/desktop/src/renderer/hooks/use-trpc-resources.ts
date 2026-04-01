@@ -24,7 +24,8 @@ export function useSystemMetrics() {
   return useQuery({
     queryKey: ["resources", "system"],
     queryFn: () => trpcInvoke<SystemMetrics>("resources.system"),
-    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
+    refetchInterval: 60_000, // Fallback — push events deliver every 10s
+    staleTime: 15_000,
   });
 }
 
@@ -32,7 +33,8 @@ export function useMetricsHistory() {
   return useQuery({
     queryKey: ["resources", "history"],
     queryFn: () => trpcInvoke<MetricsSnapshot[]>("resources.history"),
-    refetchInterval: 30_000, // Reduced: push events (T17) handle real-time updates
+    refetchInterval: 60_000,
+    staleTime: 15_000,
   });
 }
 
@@ -45,7 +47,8 @@ export function useProjectMetrics(
     queryKey: ["resources", "project", projectId],
     queryFn: () =>
       trpcInvoke<ProjectMetrics>("resources.project", { projectId, projectPath, projectName }),
-    refetchInterval: 15_000, // Project metrics are heavier (du, git worktree)
+    refetchInterval: 60_000, // Heavy: du, git worktree, pgrep, ps
+    staleTime: 30_000,
     enabled: !!projectId && !!projectPath,
   });
 }

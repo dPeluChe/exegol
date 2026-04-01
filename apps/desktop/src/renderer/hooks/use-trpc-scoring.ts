@@ -23,7 +23,7 @@ export function useProjectScores(projectId: string | null) {
     queryKey: ["scoring", "project", projectId],
     queryFn: () => trpcInvoke<AgentScoreRow[]>("scoring.listScores", { projectId }),
     enabled: !!projectId,
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -32,7 +32,7 @@ export function useScoringStats(projectId: string | null) {
     queryKey: ["scoring", "stats", projectId],
     queryFn: () => trpcInvoke<ScoringStats>("scoring.stats", { projectId }),
     enabled: !!projectId,
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -48,7 +48,7 @@ export function useActivities(projectId: string | null, type?: string) {
         limit: 100,
       }),
     enabled: !!projectId,
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -78,7 +78,7 @@ export function useProjectOplog(projectId: string | null, limit = 100) {
     queryKey: ["oplog", "project", projectId, limit],
     queryFn: () => trpcInvoke<OplogEntry[]>("oplog.listProject", { projectId, limit }),
     enabled: !!projectId,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 }
 

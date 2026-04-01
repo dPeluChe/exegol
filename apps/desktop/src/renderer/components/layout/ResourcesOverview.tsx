@@ -1,5 +1,8 @@
 import { Cpu, HardDrive, MemoryStick } from "lucide-react";
+import { useRef, useState } from "react";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useSystemMetrics } from "../../hooks/use-trpc";
+import type { SystemMetrics } from "../../hooks/use-trpc-resources";
 
 function barColor(pct: number): string {
   if (pct < 60) return "bg-green-500";
@@ -43,7 +46,27 @@ function MiniMetric({
  * Shows in the sidebar as a collapsible section.
  */
 export function ResourcesOverview() {
-  const { data: metrics } = useSystemMetrics();
+  const { data: queryMetrics } = useSystemMetrics();
+  const [liveMetrics, setLiveMetrics] = useState<SystemMetrics | null>(null);
+  const prevRef = useRef({ cpu: -1, mem: -1, disk: -1 });
+
+  useMountEffect(() => {
+    return window.api.onMetrics((m) => {
+      const cpu = m.cpu.usage;
+      const mem = m.memory.usagePercent;
+      const disk = m.disk.usagePercent;
+      if (
+        cpu !== prevRef.current.cpu ||
+        mem !== prevRef.current.mem ||
+        disk !== prevRef.current.disk
+      ) {
+        prevRef.current = { cpu, mem, disk };
+        setLiveMetrics(m as SystemMetrics);
+      }
+    });
+  });
+
+  const metrics = liveMetrics ?? queryMetrics;
 
   return (
     <div className="space-y-1.5">

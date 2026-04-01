@@ -9,7 +9,7 @@ export function useScheduledTasks(projectId?: string | null) {
     queryKey: ["scheduler", "tasks", projectId ?? "all"],
     queryFn: () =>
       trpcInvoke<ScheduledTask[]>("scheduler.list", projectId ? { projectId } : undefined),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -18,7 +18,7 @@ export function useScheduledResults(taskId: string | null) {
     queryKey: ["scheduler", "results", taskId],
     queryFn: () => trpcInvoke<ScheduledResult[]>("scheduler.results", { taskId }),
     enabled: !!taskId,
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 }
 
@@ -89,6 +89,6 @@ export function useProjectPorts(projectPath: string | null) {
     queryKey: ["resources", "ports", projectPath],
     queryFn: () => trpcInvoke<PortInfo[]>("resources.ports", { projectPath }),
     enabled: !!projectPath,
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
   });
 }

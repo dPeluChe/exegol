@@ -12,7 +12,7 @@ function useMessages(agentId?: string) {
   return useQuery({
     queryKey: ["messages", agentId ?? "all"],
     queryFn: () => trpcInvoke<AgentMessage[]>("messages.list", agentId ? { agentId } : undefined),
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
   });
 }
 

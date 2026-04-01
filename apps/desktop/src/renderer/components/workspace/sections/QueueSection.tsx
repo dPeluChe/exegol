@@ -21,7 +21,7 @@ function useQueueTasks(projectId?: string) {
   return useQuery({
     queryKey: ["queue", projectId ?? "all"],
     queryFn: () => trpcInvoke<QueueTask[]>("queue.list", projectId ? { projectId } : undefined),
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
   });
 }
 

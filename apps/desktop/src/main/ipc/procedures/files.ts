@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { access, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog } from "electron";
@@ -70,27 +70,37 @@ export interface DirectoryEntry {
 }
 
 export const filesRouter = router({
-  exists: publicProcedure.input(z.object({ path: z.string() })).query(({ ctx, input }) => {
+  exists: publicProcedure.input(z.object({ path: z.string() })).query(async ({ ctx, input }) => {
     assertPathInsideProject(input.path, ctx);
-    return { exists: existsSync(input.path) };
+    try {
+      await access(input.path);
+      return { exists: true };
+    } catch {
+      return { exists: false };
+    }
   }),
 
-  readFile: publicProcedure.input(z.object({ path: z.string() })).query(({ ctx, input }) => {
+  readFile: publicProcedure.input(z.object({ path: z.string() })).query(async ({ ctx, input }) => {
     assertPathInsideProject(input.path, ctx);
-    if (!existsSync(input.path)) {
+    try {
+      const content = await readFile(input.path, "utf-8");
+      const ext = extname(input.path);
+      const language = EXTENSION_LANGUAGES[ext] ?? "plaintext";
+      return { content, language };
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EACCES" || code === "EPERM") {
+        throw new TRPCError({ code: "FORBIDDEN", message: `Permission denied: ${input.path}` });
+      }
       throw new TRPCError({ code: "NOT_FOUND", message: `File not found: ${input.path}` });
     }
-    const content = readFileSync(input.path, "utf-8");
-    const ext = extname(input.path);
-    const language = EXTENSION_LANGUAGES[ext] ?? "plaintext";
-    return { content, language };
   }),
 
   writeFile: publicProcedure
     .input(z.object({ path: z.string(), content: z.string() }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       assertPathInsideProject(input.path, ctx);
-      writeFileSync(input.path, input.content, "utf-8");
+      await writeFile(input.path, input.content, "utf-8");
       return { success: true };
     }),
 
@@ -117,39 +127,48 @@ export const filesRouter = router({
       return result.filePaths[0];
     }),
 
-  listDirectory: publicProcedure.input(z.object({ path: z.string() })).query(({ ctx, input }) => {
-    assertPathInsideProject(input.path, ctx);
-    if (!existsSync(input.path)) {
-      throw new TRPCError({ code: "NOT_FOUND", message: `Directory not found: ${input.path}` });
-    }
-
-    const entries: DirectoryEntry[] = [];
-    const items = readdirSync(input.path);
-
-    for (const name of items) {
-      if (IGNORED_NAMES.has(name)) continue;
-
-      const fullPath = join(input.path, name);
+  listDirectory: publicProcedure
+    .input(z.object({ path: z.string() }))
+    .query(async ({ ctx, input }) => {
+      assertPathInsideProject(input.path, ctx);
+      let items: string[];
       try {
-        const stat = statSync(fullPath);
-        entries.push({
-          name,
-          path: fullPath,
-          isDirectory: stat.isDirectory(),
-          size: stat.size,
-          modified: Math.floor(stat.mtimeMs / 1000),
-        });
+        items = await readdir(input.path);
       } catch {
-        // Skip entries we can't stat (permission errors, etc.)
+        throw new TRPCError({ code: "NOT_FOUND", message: `Directory not found: ${input.path}` });
       }
-    }
 
-    // Sort: directories first, then alphabetically
-    entries.sort((a, b) => {
-      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+      const entries: DirectoryEntry[] = [];
 
-    return entries;
-  }),
+      const statPromises = items
+        .filter((name) => !IGNORED_NAMES.has(name))
+        .map(async (name) => {
+          const fullPath = join(input.path, name);
+          try {
+            const s = await stat(fullPath);
+            return {
+              name,
+              path: fullPath,
+              isDirectory: s.isDirectory(),
+              size: s.size,
+              modified: Math.floor(s.mtimeMs / 1000),
+            } satisfies DirectoryEntry;
+          } catch {
+            return null; // Skip entries we can't stat
+          }
+        });
+
+      const results = await Promise.all(statPromises);
+      for (const entry of results) {
+        if (entry) entries.push(entry);
+      }
+
+      // Sort: directories first, then alphabetically
+      entries.sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      return entries;
+    }),
 });
