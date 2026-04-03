@@ -16,9 +16,16 @@ import {
   Terminal,
   X,
 } from "lucide-react";
-import { type DragEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent } from "../../hooks/use-trpc";
+import {
+  type PortInfo,
+  usePreferredPort,
+  useProjectPorts,
+  useProjectScripts,
+  useSetPreferredPort,
+} from "../../hooks/use-trpc-scheduler";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -148,10 +155,46 @@ function PaneToolbar({
 // ─── Browser Pane ───────────────────────────────────────────────────────────
 
 function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
-  const [urlInput, setUrlInput] = useState(pane.url ?? "http://localhost:3000");
-  const [currentUrl, setCurrentUrl] = useState(pane.url ?? "http://localhost:3000");
+  const { projectId, project } = useProjectContext();
+  const { data: ports } = useProjectPorts(project?.path ?? null);
+  const { data: preferredPort } = usePreferredPort(projectId);
+  const setPreferred = useSetPreferredPort();
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
+
+  // Deduplicate ports, prefer runtime over config
+  const uniquePorts = useMemo(() => {
+    if (!ports) return [];
+    const map = new Map<number, PortInfo>();
+    for (const p of ports) {
+      const existing = map.get(p.port);
+      if (!existing || (p.source === "runtime" && existing.source === "config")) {
+        map.set(p.port, p);
+      }
+    }
+    return Array.from(map.values());
+  }, [ports]);
+
+  const initUrl = pane.url ?? "http://localhost:3000";
+  const [urlInput, setUrlInput] = useState(initUrl);
+  const [currentUrl, setCurrentUrl] = useState(initUrl);
+  const [didAutoSync, setDidAutoSync] = useState(!!pane.url);
+
+  // Auto-sync to preferred or first detected port on initial load (once)
+  useEffect(() => {
+    if (didAutoSync) return;
+    const port =
+      preferredPort ??
+      uniquePorts.find((p) => p.source === "runtime")?.port ??
+      uniquePorts[0]?.port;
+    if (port) {
+      const url = `http://localhost:${port}`;
+      setUrlInput(url);
+      setCurrentUrl(url);
+      updatePane(pane.id, { url });
+      setDidAutoSync(true);
+    }
+  }, [didAutoSync, preferredPort, uniquePorts, pane.id, updatePane]);
 
   const navigate = useCallback(() => {
     let url = urlInput.trim();
@@ -162,6 +205,16 @@ function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     updatePane(pane.id, { url });
   }, [urlInput, pane.id, updatePane]);
 
+  const navigateToPort = useCallback(
+    (port: number) => {
+      const url = `http://localhost:${port}`;
+      setUrlInput(url);
+      setCurrentUrl(url);
+      updatePane(pane.id, { url });
+    },
+    [pane.id, updatePane],
+  );
+
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFocused = focusedPaneId === paneId;
 
@@ -170,6 +223,47 @@ function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       {/* URL bar */}
       <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border bg-bg-secondary px-2">
         <Globe className="h-3 w-3 shrink-0 text-text-muted" />
+        {uniquePorts.length > 0 && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {uniquePorts.map((p) => (
+              <button
+                key={p.port}
+                type="button"
+                onClick={() => navigateToPort(p.port)}
+                className={cn(
+                  "flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] transition-colors",
+                  currentUrl.includes(`:${p.port}`)
+                    ? "bg-accent/20 text-accent"
+                    : "text-text-muted hover:bg-white/10 hover:text-text-primary",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-block h-1.5 w-1.5 rounded-full",
+                    p.source === "runtime" ? "bg-green-500" : "bg-zinc-500",
+                  )}
+                />
+                {p.port}
+                {projectId && (
+                  <button
+                    type="button"
+                    className={cn(
+                      "ml-0.5 cursor-pointer text-[8px]",
+                      preferredPort === p.port ? "text-amber-400" : "text-text-muted/40",
+                    )}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreferred.mutate({ projectId, port: p.port });
+                    }}
+                    title={preferredPort === p.port ? "Preferred port" : "Set as preferred"}
+                  >
+                    &#9733;
+                  </button>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
         <input
           type="text"
           value={urlInput}
@@ -198,7 +292,6 @@ function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           /* @ts-expect-error Electron webview attributes */
           allowpopups="true"
         />
-        {/* Transparent overlay to capture clicks when pane is not focused */}
         {!isFocused && (
           <div
             role="none"
@@ -214,7 +307,8 @@ function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
 
 function EmptyPane({ paneId }: { paneId: string }) {
-  const { projectId } = useProjectContext();
+  const { projectId, project } = useProjectContext();
+  const { data: scripts } = useProjectScripts(project?.path ?? null);
   const [launching, setLaunching] = useState<string | null>(null);
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
@@ -280,9 +374,28 @@ function EmptyPane({ paneId }: { paneId: string }) {
     [projectId, paneId, addAgent, createTerminal, updatePane],
   );
 
-  const handleBrowser = useCallback(() => {
-    updatePane(paneId, { type: "browser", url: "http://localhost:3000" });
-  }, [paneId, updatePane]);
+  const handleBrowser = useCallback(async () => {
+    let url = "http://localhost:3000";
+    try {
+      // Preferred port > first runtime port > first config port > 3000
+      if (projectId) {
+        const preferred = await trpcInvoke<number | null>("resources.preferredPort", { projectId });
+        if (preferred) {
+          url = `http://localhost:${preferred}`;
+        } else if (project?.path) {
+          const ports = await trpcInvoke<PortInfo[]>("resources.ports", {
+            projectPath: project.path,
+          });
+          const runtime = ports?.find((p) => p.source === "runtime");
+          const first = runtime ?? ports?.[0];
+          if (first) url = `http://localhost:${first.port}`;
+        }
+      }
+    } catch {
+      /* fallback to default */
+    }
+    updatePane(paneId, { type: "browser", url });
+  }, [paneId, projectId, project?.path, updatePane]);
 
   const handleFiles = useCallback(() => {
     updatePane(paneId, { type: "files" });
@@ -321,6 +434,41 @@ function EmptyPane({ paneId }: { paneId: string }) {
       setLaunching(null);
     }
   }, [projectId, paneId, addAgent, createTerminal, updatePane]);
+
+  const handleRunScript = useCallback(
+    async (command: string, label: string) => {
+      if (!projectId) return;
+      setLaunching(`script-${label}`);
+      try {
+        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+        const agent = await trpcMutate<any>("agents.spawn", {
+          projectId,
+          cliType: "shell",
+          taskDescription: label,
+        });
+        addAgent({
+          id: agent.id,
+          projectId,
+          cliType: agent.cliType,
+          status: agent.status,
+          currentStep: agent.currentStep,
+          taskDescription: agent.taskDescription,
+          branchName: agent.branchName ?? null,
+          tokenUsage: { input: 0, output: 0, cost: 0 },
+          startedAt: agent.startedAt,
+        });
+        createTerminal(agent.id);
+        updatePane(paneId, { type: "terminal", agentId: agent.id });
+        // Inject command into shell (queued until PTY is ready)
+        window.api.terminal.write(agent.id, `${command}\n`);
+      } catch (err) {
+        console.error("[EmptyPane] Script launch failed:", err);
+      } finally {
+        setLaunching(null);
+      }
+    },
+    [projectId, paneId, addAgent, createTerminal, updatePane],
+  );
 
   const isMini = size === "mini";
   const isCompact = size === "compact" || isMini;
@@ -389,6 +537,34 @@ function EmptyPane({ paneId }: { paneId: string }) {
           </button>
         ))}
       </div>
+
+      {/* Dev scripts quick-launch */}
+      {scripts && scripts.length > 0 && (
+        <div className={cn("flex w-full flex-col items-center", isMini ? "mt-1.5" : "mt-3")}>
+          {!isMini && <span className="mb-1 text-[9px] text-text-muted">Dev Scripts</span>}
+          <div className="flex flex-wrap justify-center gap-1">
+            {scripts.map((s) => (
+              <button
+                key={s.command}
+                type="button"
+                disabled={launching === `script-${s.name}`}
+                onClick={() => handleRunScript(s.command, s.name)}
+                className={cn(
+                  "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+                  isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
+                  launching === `script-${s.name}` && "opacity-50",
+                )}
+              >
+                <Terminal className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
+                {s.name}
+                {!isMini && s.framework && (
+                  <span className="text-[9px] text-text-muted">({s.framework})</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Pane options — compact in small sizes */}
       <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>
