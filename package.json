@@ -12,7 +12,10 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "test": "cd apps/desktop && vitest run",
+    "test:watch": "cd apps/desktop && vitest",
+    "test:coverage": "cd apps/desktop && vitest run --coverage"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
