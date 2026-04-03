@@ -19,15 +19,24 @@
 - Performance stabilization pass
 - Command Palette
 - Multi-agent paralelo sobre worktrees
+- **Test coverage (T74)** — zero TS/JS tests is the highest technical risk
+- **Monolith decomposition (T75)** — 4 files exceed 500 LOC
 
 ### P1 — Strong differentiation right after P0
 - Session resume determinístico
 - Agent hook system con eventos estructurados
 - Repo map + semantic search
+- **Tier 3 scoring via SDK (T76)** — replace curl with proper HTTP client
+- **DB validation layer (T77)** — Zod schemas for DB rows
 
 ### P2 — Valuable follow-ups once the core is stable
 - Diff line comments
 - Activity classification
+- **Pipeline state machine (T78)** — explicit transitions
+- **MCP reconnection (T79)** — auto-reconnect on server drop
+- **Structured error handling (T80)** — transient vs permanent classification
+- **DI for singletons (T81)** — testability improvement
+- **Shared package enrichment (T82)** — more Zod schemas for IPC/DB payloads
 - Lifecycle scripts por proyecto
 - Issue tracker expansion
 - Dark-black theme
@@ -440,6 +449,262 @@
 
 ---
 
+---
+
+## Codebase Quality & Health (from deep analysis)
+
+> These tasks surfaced from a comprehensive codebase audit (April 2026).
+> They address technical debt, testability, and robustness gaps that will compound if left unattended.
+
+### T74 — Test Coverage Foundation
+**Priority**: P0 | **Effort**: High | **Source**: Deep codebase analysis
+
+**Why**
+- The project has **zero TypeScript/JavaScript tests**. With ~32K LOC and complex business logic
+  (pipeline state machine, scoring heuristics, memory extraction, handoff generation, ring buffer),
+  this is the single highest technical risk. A bug in the pipeline state machine or scoring formula
+  can silently corrupt data with no safety net.
+
+**Scope**
+- Add Vitest (preferred) or Jest as test runner
+- Priority 1: Unit tests for pure functions:
+  - `agents/scoring.ts` — scoring formula, Tier 1 regex patterns, composite score calculation
+  - `agents/handoff.ts` — token limit detection patterns, scrollback summary generation
+  - `memory/extractor.ts` — extraction rules, deduplication logic, similarity scoring
+  - `memory/store.ts` — relevance scoring formula, token budget enforcement
+  - `pipeline/context.ts` — prompt template interpolation (`{{task}}`, `{{diff}}`, `{{previousOutput}}`)
+  - `terminal/ring-buffer.ts` — write, wrap, snapshot correctness
+- Priority 2: Integration tests:
+  - Pipeline state transitions (pending → running → paused → completed → cancelled)
+  - Queue executor dispatch with dependency resolution
+  - Agent spawn lifecycle with worktree creation/cleanup
+- Priority 3: Component tests for critical UI:
+  - WorkspacePane pane type rendering
+  - Agent store push event handling
+- Target: ≥60% coverage on main process business logic
+
+**Likely files**
+- New: `apps/desktop/src/main/__tests__/*`
+- New: `apps/desktop/src/renderer/__tests__/*`
+- `package.json` (add test runner dependency + script)
+- `apps/desktop/package.json` or `apps/desktop/vitest.config.ts`
+
+---
+
+### T75 — Monolith File Decomposition
+**Priority**: P0 | **Effort**: Medium | **Source**: Deep codebase analysis
+
+**Why**
+- Four files significantly exceed the 400-500 LOC quality gate:
+  - `manager.ts` (~682 LOC): AgentManager handles spawn, reattach, stop, worktree cleanup,
+    output processing, scrollback buffering, completion callbacks, title tracking
+  - `WorkspacePane.tsx` (~800 LOC / 28KB): single component renders 5 pane types
+  - `executor.ts` (~550 LOC / 19KB): PipelineExecutor with complex state machine
+  - `pty-host.ts` (~630 LOC / 21KB): PtyHost handles legacy + sidecar + shell gating + scrollback
+
+**Scope**
+- `manager.ts` → split into:
+  - `agent-spawner.ts` (spawn logic, worktree setup, env building)
+  - `agent-output-processor.ts` (output parsing, scrollback buffering, token limit detection)
+  - `agent-lifecycle.ts` (stop, cleanup, reattach, completion callbacks)
+  - `agent-manager.ts` (thin orchestrator, public API)
+- `WorkspacePane.tsx` → extract each pane type into its own component:
+  - `TerminalPaneContent.tsx`, `BrowserPaneContent.tsx`, `FilesPaneContent.tsx`,
+  - `GitPaneContent.tsx`, `EmptyPaneContent.tsx`
+- `executor.ts` → split into:
+  - `pipeline-state-machine.ts` (transition logic, validation)
+  - `pipeline-agent-spawner.ts` (step execution, YOLO flag injection)
+  - `pipeline-executor.ts` (orchestrator, public API)
+- `pty-host.ts` → split into:
+  - `pty-session-manager.ts` (session lifecycle, cleanup)
+  - `pty-shell-gating.ts` (shell readiness marker logic)
+  - `pty-scrollback.ts` (scrollback flush, throttle)
+  - `pty-host.ts` (thin facade)
+
+**Acceptance**
+- No file exceeds 400 LOC (excluding type-only files)
+- All existing behavior preserved (no functional changes)
+- Quality gate passes after refactor
+
+---
+
+### T76 — Replace curl with SDK in Tier 3 Scoring
+**Priority**: P1 | **Effort**: Low | **Source**: Deep codebase analysis
+
+**Why**
+- Tier 3 LLM-as-judge scoring calls the Anthropic API via `execFile("curl", ...)`:
+  - API key travels as a CLI argument (visible in `ps aux`)
+  - No retry logic on transient failures
+  - Manual JSON parsing from stdout is fragile
+  - 30s timeout doesn't cover all edge cases
+
+**Scope**
+- Replace `execFileAsync("curl", ...)` with either:
+  - The `@anthropic-ai/sdk` package (preferred, already exists in the ecosystem)
+  - Or `fetch()` with proper headers (lighter alternative)
+- Add structured error handling (rate limit, timeout, auth error)
+- Ensure API key is never passed as CLI argument
+- Keep the non-fatal pattern (scoring never blocks agent completion)
+
+**Likely files**
+- `apps/desktop/src/main/agents/scoring.ts` — `evaluateTier3()` function
+
+---
+
+### T77 — DB Row Validation with Zod Schemas
+**Priority**: P1 | **Effort**: Medium | **Source**: Deep codebase analysis
+
+**Why**
+- DB rows are cast with `as Record<string, unknown>` and mapped manually
+  (`row.id as string`, `row.status as AgentStatus`). No validation layer exists between
+  SQLite and business logic. A schema mismatch or migration gap can cause silent type corruption.
+
+**Scope**
+- Add Zod schemas for all DB row types in `packages/shared/src/schemas/`:
+  - `agent-row.ts`, `project-row.ts`, `worktree-row.ts`, `pipeline-row.ts`
+  - `memory-row.ts`, `score-row.ts`, `activity-row.ts`, etc.
+- Validate rows at the query boundary (in `db/queries/*.ts`)
+- Use `schema.parse(row)` or `schema.safeParse(row)` with logging on failure
+- Keep performance in mind: parse on read, not on every intermediate operation
+
+**Likely files**
+- `packages/shared/src/schemas/*` (new schemas)
+- `apps/desktop/src/main/db/queries/*.ts` (add validation)
+- `apps/desktop/src/main/db/migrations.ts` (ensure new columns have schemas)
+
+---
+
+### T78 — Explicit Pipeline State Machine
+**Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
+
+**Why**
+- Pipeline state transitions (pending → running → paused → completed → cancelled) are handled
+  via direct DB updates + callbacks without explicit transition validation. Invalid transitions
+  (e.g., cancelling a completed pipeline, advancing a cancelled one) are not guarded.
+
+**Scope**
+- Define allowed transitions as a map:
+  ```
+  pending  → running
+  running  → paused, completed, failed, cancelled
+  paused   → running, cancelled
+  completed → (terminal)
+  failed   → (terminal)
+  cancelled → (terminal)
+  ```
+- Add transition guard in `PipelineExecutor` methods
+- Log invalid transition attempts as warnings
+- Optionally: use a lightweight FSM library (xstate/fsm) or just a transition table
+
+**Likely files**
+- `apps/desktop/src/main/pipeline/executor.ts`
+- New: `apps/desktop/src/main/pipeline/state-machine.ts`
+
+---
+
+### T79 — MCP Host Auto-Reconnection
+**Priority**: P2 | **Effort**: Low | **Source**: Deep codebase analysis
+
+**Why**
+- The MCP host connects via stdio or HTTP but has no reconnection logic. If an MCP server
+  crashes or restarts, it stays in "error" state until the user reconnects manually.
+  This is especially painful for stdio-based servers that may crash on large inputs.
+
+**Scope**
+- Add exponential backoff reconnection for disconnected servers
+- Track last-known config in `McpHost.servers` for reconnection
+- Limit retries (max 5 attempts, then mark as "failed")
+- Add manual reconnect button in UI (or auto-reconnect on next tool call)
+- Emit IPC event on reconnection status change
+
+**Likely files**
+- `apps/desktop/src/main/mcp/host.ts`
+- `apps/desktop/src/main/ipc/procedures/mcp.ts`
+- `apps/desktop/src/renderer/hooks/use-trpc-mcp.ts`
+
+---
+
+### T80 — Structured Error Classification
+**Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
+
+**Why**
+- Error handling is inconsistent: some operations are "non-fatal, try/catch" (scoring, memory,
+  worktree cleanup), others propagate errors. There's no classification between transient
+  (retryable) and permanent (fatal) errors. This makes debugging harder and prevents intelligent
+  retry logic.
+
+**Scope**
+- Define error classes: `TransientError`, `PermanentError`, `TimeoutError`
+- Classify known failure modes:
+  - Transient: DB locked, socket ECONNREFUSED, API rate limit
+  - Permanent: file not found, invalid config, auth failure
+  - Timeout: PTY spawn, API call, git operation
+- Add retry helper for transient errors (max 3, exponential backoff)
+- Standardize logger calls with error classification metadata
+
+**Likely files**
+- New: `apps/desktop/src/main/lib/errors.ts`
+- `apps/desktop/src/main/lib/logger.ts` (enrich with error type)
+- All main process modules (gradual adoption)
+
+---
+
+### T81 — Dependency Injection for Singletons
+**Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
+
+**Why**
+- Six core subsystems use global singletons: `getAgentManager()`, `getPtyHost()`,
+  `getPipelineExecutor()`, `getSchedulerEngine()`, `getProviderRegistry()`, `getMcpHost()`.
+  This makes unit testing nearly impossible (can't inject mocks), prevents parallel test execution,
+  and makes reasoning about state harder.
+
+**Scope**
+- Introduce a lightweight AppContext or ServiceContainer:
+  ```ts
+  interface AppContext {
+    db: Database;
+    agentManager: AgentManager;
+    ptyHost: PtyHost;
+    pipelineExecutor: PipelineExecutor;
+    scheduler: SchedulerEngine;
+    registry: AgentProviderRegistry;
+    mcpHost: McpHost;
+  }
+  ```
+- Pass context via constructor injection (not global accessors)
+- Keep singletons as a thin facade for backward compat during migration
+- Enable test contexts with mock implementations
+
+**Likely files**
+- New: `apps/desktop/src/main/app-context.ts`
+- All singleton modules (gradual migration)
+
+---
+
+### T82 — Shared Package Schema Enrichment
+**Priority**: P2 | **Effort**: Low | **Source**: Deep codebase analysis
+
+**Why**
+- `@exegol/shared` has 18 type files but only 5 Zod schemas. IPC payloads and DB rows
+  lack runtime validation. Adding schemas would catch contract violations at the boundary
+  between main/renderer processes.
+
+**Scope**
+- Add Zod schemas for:
+  - IPC request/response payloads (tRPC procedure inputs)
+  - DB write operations (AgentCreate, ProjectCreate, etc.)
+  - MCP tool call results
+  - Pipeline step definitions and run states
+  - Scheduler task definitions
+- Export from `packages/shared/src/schemas/index.ts`
+- Use in tRPC procedure validators (`.input(schema)`)
+
+**Likely files**
+- `packages/shared/src/schemas/*` (new and existing)
+- `packages/shared/src/types/*` (keep types, add corresponding schemas)
+
+---
+
 ## Execution Lanes for Parallel Work
 
 Use these lanes only if multiple agents are working concurrently. The goal is disjoint write sets.
@@ -449,6 +714,7 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 - T61
 - T65
 - T66
+- T78
 
 **Owned files**
 - `packages/core-rust/src/git/*`
@@ -495,6 +761,8 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 **Tasks**
 - T59
 - T63
+- T75
+- T80
 
 **Owned files**
 - `apps/desktop/src/renderer/hooks/use-trpc*.ts`
@@ -510,6 +778,7 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 - T67
 - T68
 - T71
+- T79
 
 **Owned files**
 - `apps/desktop/src/main/hooks/*`
@@ -521,19 +790,48 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 **Do not overlap with**
 - Lane A unless a shared spawn-context contract changes
 
+### Lane F — Testability & Quality Foundation
+**Tasks**
+- T74
+- T76
+- T77
+- T81
+- T82
+
+**Owned files**
+- New: `apps/desktop/src/main/__tests__/*`
+- New: `apps/desktop/src/renderer/__tests__/*`
+- `packages/shared/src/schemas/*`
+- `apps/desktop/src/main/lib/errors.ts` (new)
+- `apps/desktop/src/main/app-context.ts` (new)
+- `apps/desktop/src/main/agents/scoring.ts` (T76: curl → SDK)
+
+**Do not overlap with**
+- Lane D file decomposition (T75) — coordinate on manager.ts split
+- Lane A spawn context changes unless agreed first
+
 ---
 
 ## Suggested Order
 
 1. T61 — Real Worktree Isolation per Agent
-2. T63 — Desktop Performance Stabilization Pass
-3. T57 — Review Inbox / Attention Center
-4. T62 — Review Readiness + Risk Summary
-5. T64 — Command Palette
-6. T65 — Parallel Multi-Agent on Worktrees
-7. T66 — Session Isolation & Deterministic Resume
-8. T67 — Agent Hook Event System
-9. T68 — Repo Map + Semantic Search
+2. T75 — Monolith File Decomposition (prerequisite for testability)
+3. T74 — Test Coverage Foundation (highest risk mitigation)
+4. T63 — Desktop Performance Stabilization Pass
+5. T57 — Review Inbox / Attention Center
+6. T62 — Review Readiness + Risk Summary
+7. T64 — Command Palette
+8. T65 — Parallel Multi-Agent on Worktrees
+9. T76 — Replace curl with SDK in Tier 3 Scoring (quick security win)
+10. T77 — DB Row Validation with Zod Schemas
+11. T66 — Session Isolation & Deterministic Resume
+12. T67 — Agent Hook Event System
+13. T68 — Repo Map + Semantic Search
+14. T78 — Explicit Pipeline State Machine
+15. T79 — MCP Host Auto-Reconnection
+16. T80 — Structured Error Classification
+17. T81 — Dependency Injection for Singletons
+18. T82 — Shared Package Schema Enrichment
 
 ---
 
