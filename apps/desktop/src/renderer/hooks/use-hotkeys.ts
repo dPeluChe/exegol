@@ -50,10 +50,11 @@ export function useHotkeys() {
         return;
       }
 
-      // Cmd+Shift+P: Go to Projects
-      if (e.shiftKey && e.key.toLowerCase() === "p") {
+      // Cmd+K or Cmd+Shift+P: Toggle Command Palette
+      if (e.key === "k" || (e.shiftKey && e.key.toLowerCase() === "p")) {
         e.preventDefault();
-        useAppStore.getState().setActiveProject(null);
+        const app = useAppStore.getState();
+        app.setCommandPaletteOpen(!app.commandPaletteOpen);
         return;
       }
 

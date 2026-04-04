@@ -13,14 +13,14 @@
 ## Priority Order
 
 ### P0 — Must land before broad release push
-- Worktrees real por agente
-- Inbox de revisión y atención
-- Review flow con resumen de riesgo
-- Performance stabilization pass
-- Command Palette
-- Multi-agent paralelo sobre worktrees
-- **Test coverage (T74)** — zero TS/JS tests is the highest technical risk
-- **Monolith decomposition (T75)** — 4 files exceed 500 LOC
+- ~~Worktrees real por agente~~ ✅ T61
+- Inbox de revisión y atención (T57)
+- ~~Review flow con resumen de riesgo~~ ✅ T62
+- ~~Performance stabilization pass~~ ✅ T63
+- ~~Command Palette~~ ✅ T64
+- Multi-agent paralelo sobre worktrees (T65)
+- ~~**Test coverage (T74)**~~ ✅
+- ~~**Monolith decomposition (T75)**~~ ✅
 
 ### P1 — Strong differentiation right after P0
 - Session resume determinístico
@@ -50,7 +50,7 @@
 
 ## Active Backlog
 
-### T56 — Agent Status via Terminal Title
+### T56 — Agent Status via Terminal Title ✅ COMPLETED
 **Priority**: High | **Effort**: Low | **Source**: Orca
 
 **Why**
@@ -157,7 +157,7 @@
 
 ---
 
-### T61 — Real Worktree Isolation per Agent
+### T61 — Real Worktree Isolation per Agent ✅ COMPLETED (PR #13)
 **Priority**: P0 | **Effort**: High | **Source**: Codex + Superset + Exegol analysis
 
 **Why**
@@ -185,7 +185,7 @@
 
 ---
 
-### T62 — Review Readiness + Risk Summary
+### T62 — Review Readiness + Risk Summary ✅ COMPLETED (PR #11)
 **Priority**: P0 | **Effort**: Medium | **Source**: Exegol analysis
 
 **Why**
@@ -210,7 +210,7 @@
 
 ---
 
-### T63 — Desktop Performance Stabilization Pass
+### T63 — Desktop Performance Stabilization Pass ✅ COMPLETED (PR #12)
 **Priority**: P0 | **Effort**: Medium | **Source**: Exegol analysis
 
 **Why**
@@ -238,7 +238,7 @@
 
 ---
 
-### T64 — Command Palette
+### T64 — Command Palette ✅ COMPLETED
 **Priority**: P0 | **Effort**: Low | **Source**: Emdash
 
 **Why**
@@ -456,7 +456,7 @@
 > These tasks surfaced from a comprehensive codebase audit (April 2026).
 > They address technical debt, testability, and robustness gaps that will compound if left unattended.
 
-### T74 — Test Coverage Foundation
+### T74 — Test Coverage Foundation ✅ COMPLETED (PR #14)
 **Priority**: P0 | **Effort**: High | **Source**: Deep codebase analysis
 
 **Why**
@@ -491,7 +491,7 @@
 
 ---
 
-### T75 — Monolith File Decomposition
+### T75 — Monolith File Decomposition ✅ COMPLETED (PR #14)
 **Priority**: P0 | **Effort**: Medium | **Source**: Deep codebase analysis
 
 **Why**
