@@ -1,6 +1,6 @@
+import type { MemoryCategory, MemoryEntry } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import { buildMemoryContext } from "./store";
-import type { MemoryCategory, MemoryEntry } from "@exegol/shared";
 
 function makeEntry(overrides: Partial<MemoryEntry> = {}): MemoryEntry {
   return {
@@ -46,7 +46,9 @@ describe("buildMemoryContext", () => {
       "dependency",
       "convention",
     ];
-    const memories = categories.map((category) => makeEntry({ category, content: `Content for ${category}` }));
+    const memories = categories.map((category) =>
+      makeEntry({ category, content: `Content for ${category}` }),
+    );
     const context = buildMemoryContext(memories);
     expect(context).toContain("### Preferences");
     expect(context).toContain("### Patterns");

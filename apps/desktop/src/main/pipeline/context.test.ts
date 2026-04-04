@@ -1,6 +1,6 @@
+import type { PipelineStepDef, PipelineStepResult } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import { buildStepPrompt, getPreviousOutput } from "./context";
-import type { PipelineStepDef, PipelineStepResult } from "@exegol/shared";
 
 function makeStep(overrides: Partial<PipelineStepDef> = {}): PipelineStepDef {
   return {
@@ -14,9 +14,7 @@ function makeStep(overrides: Partial<PipelineStepDef> = {}): PipelineStepDef {
   };
 }
 
-function makeStepResult(
-  overrides: Partial<PipelineStepResult> = {},
-): PipelineStepResult {
+function makeStepResult(overrides: Partial<PipelineStepResult> = {}): PipelineStepResult {
   return {
     stepIndex: 0,
     iteration: 0,

@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import type { Agent, AgentStatus } from "@exegol/shared";
+import type { AgentCliType, AgentStatus } from "@exegol/shared";
 import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
@@ -8,6 +8,13 @@ import { getApiKey } from "../security/keystore";
 import { showAgentNotification } from "../system/notifications";
 import { refreshTray } from "../system/tray";
 import { scoreAgent } from "./scoring";
+
+export interface AgentContext {
+  id: string;
+  cliType: AgentCliType;
+  projectId: string;
+  taskDescription: string;
+}
 
 // ─── Push event types ────────────────────────────────────────────────────
 
@@ -112,7 +119,7 @@ export function buildApiKeyEnv(db: Database.Database): Record<string, string> {
  */
 export function finalizeAgentStatus(
   db: Database.Database,
-  agent: Agent,
+  agent: AgentContext,
   exitCode: number,
 ): AgentStatus | null {
   try {
@@ -160,7 +167,7 @@ export function finalizeAgentStatus(
  */
 export function scoreAndRecordOplog(
   db: Database.Database,
-  agent: Agent,
+  agent: AgentContext,
   exitCode: number,
   scrollback: string,
   initSnapshot: { headSha: string; cwd: string; projectId: string } | undefined,

@@ -115,7 +115,7 @@ describe("extractFromScrollback — edge cases", () => {
   });
 
   it("should skip lines longer than 500 chars", () => {
-    const results = extractFromScrollback("error: " + "x".repeat(600));
+    const results = extractFromScrollback(`error: ${"x".repeat(600)}`);
     expect(results).toEqual([]);
   });
 

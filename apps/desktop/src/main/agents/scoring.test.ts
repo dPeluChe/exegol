@@ -12,7 +12,7 @@ describe("parseTier1FromScrollback — file modifications", () => {
   });
 
   it("should detect Write() calls", () => {
-    const scrollback = 'Write(config.json)';
+    const scrollback = "Write(config.json)";
     const result = parseTier1FromScrollback(scrollback);
     expect(result.filesChanged).toBe(1);
   });

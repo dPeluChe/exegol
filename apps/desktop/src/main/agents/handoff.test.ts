@@ -1,10 +1,10 @@
+import type { HandoffSummary } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import {
   detectTokenLimitWarning,
-  generateHandoffFromScrollback,
   formatHandoffForInjection,
+  generateHandoffFromScrollback,
 } from "./handoff";
-import type { HandoffSummary } from "@exegol/shared";
 
 // ─── Token Limit Detection ──────────────────────────────────────────────
 
