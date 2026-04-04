@@ -1,5 +1,6 @@
 import { TooltipProvider } from "@exegol/ui";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { CommandPalette } from "./components/CommandPalette";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -71,6 +72,7 @@ export default function App() {
 
         <StatusBar />
         <ToastStack />
+        <CommandPalette />
       </div>
     </TooltipProvider>
   );
