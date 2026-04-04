@@ -20,6 +20,7 @@ import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../terminal/shell-wrappers";
+import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import { getProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
@@ -33,7 +34,6 @@ import {
   scoreAndRecordOplog,
   slugifyBranchName,
 } from "./spawn-env";
-import { AgentStatusParser } from "./status-parser";
 import { createTitleStatusTracker } from "./title-status";
 import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
 
@@ -55,48 +55,6 @@ interface WorktreeRecord {
   worktreeName: string;
   worktreePath: string;
   repoPath: string;
-}
-
-/** Unified output processor — Rust AgentOutputStream if available, JS fallback */
-type ProcessResult = { status?: string; currentStep?: string; tokenLimitWarning: boolean };
-type OutputProcessor = { process(data: string): ProcessResult };
-
-const useRustProcessor = !!coreRust?.AgentOutputStream;
-if (useRustProcessor) {
-  logger.info("[AgentManager] Rust processing pipeline available — using native output processor");
-}
-
-function createOutputProcessor(_agentId: string, cliType: AgentCliType): OutputProcessor {
-  if (useRustProcessor) {
-    try {
-      // biome-ignore lint/style/noNonNullAssertion: guarded by useRustProcessor check above
-      const stream = new coreRust!.AgentOutputStream(cliType);
-      return {
-        process(data: string) {
-          const r = stream.processChunk(data);
-          return {
-            status: r.status ?? undefined,
-            currentStep: r.currentStep ?? undefined,
-            tokenLimitWarning: r.tokenLimitWarning,
-          };
-        },
-      };
-    } catch {
-      // Fall through to JS on instantiation error
-    }
-  }
-
-  const parser = new AgentStatusParser(_agentId, cliType);
-  return {
-    process(data: string) {
-      const u = parser.parse(data);
-      return {
-        status: u?.status,
-        currentStep: u?.currentStep,
-        tokenLimitWarning: u?.tokenLimitWarning ?? false,
-      };
-    },
-  };
 }
 
 const STOP_POLL_INTERVAL_MS = 100;
