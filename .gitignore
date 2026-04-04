@@ -39,5 +39,8 @@ exegol.yaml
 # Pencil design files
 *.pen
 
+# Test coverage
+coverage/
+
 # Misc
 *.tsbuildinfo

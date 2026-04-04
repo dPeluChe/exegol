@@ -92,3 +92,40 @@ export function useProjectPorts(projectPath: string | null) {
     refetchInterval: 30_000,
   });
 }
+
+export function usePreferredPort(projectId: string | null) {
+  return useQuery({
+    queryKey: ["resources", "preferredPort", projectId],
+    queryFn: () => trpcInvoke<number | null>("resources.preferredPort", { projectId }),
+    enabled: !!projectId,
+  });
+}
+
+export function useSetPreferredPort() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { projectId: string; port: number }) =>
+      trpcMutate<number>("resources.setPreferredPort", input),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["resources", "preferredPort", vars.projectId] });
+    },
+  });
+}
+
+// ─── Scripts ───────────────────────────────────────────────────────────────
+
+export interface DetectedScript {
+  name: string;
+  command: string;
+  source: string;
+  framework?: string;
+}
+
+export function useProjectScripts(projectPath: string | null) {
+  return useQuery({
+    queryKey: ["resources", "scripts", projectPath],
+    queryFn: () => trpcInvoke<DetectedScript[]>("resources.scripts", { projectPath }),
+    enabled: !!projectPath,
+    staleTime: 60_000,
+  });
+}
