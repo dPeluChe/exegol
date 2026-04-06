@@ -9,15 +9,11 @@
  * Non-fatal: scoring never blocks agent completion (best-effort, try/catch).
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { ExitReason } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
 import { stripAnsi } from "./status-parser";
-
-const execFileAsync = promisify(execFile);
 
 // ─── Stdout Parsing (Tier 1) ────────────────────────────────────────────────
 
@@ -239,30 +235,27 @@ Rate these dimensions (1=poor, 5=excellent):
 
 Respond with ONLY a JSON object: {"clarity":N,"completeness":N,"correctness":N}`;
 
-    const { stdout } = await execFileAsync(
-      "curl",
-      [
-        "-s",
-        "-X",
-        "POST",
-        "https://api.anthropic.com/v1/messages",
-        "-H",
-        "content-type: application/json",
-        "-H",
-        `x-api-key: ${apiKey}`,
-        "-H",
-        "anthropic-version: 2023-06-01",
-        "-d",
-        JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 100,
-          messages: [{ role: "user", content: prompt }],
-        }),
-      ],
-      { timeout: 30_000 },
-    );
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 100,
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
 
-    const response = JSON.parse(stdout);
+    if (!res.ok) {
+      logger.warn("[Scoring] Tier 3 API error:", res.status, res.statusText);
+      return;
+    }
+
+    const response = (await res.json()) as { content?: Array<{ text?: string }> };
     const text = response?.content?.[0]?.text ?? "";
     const jsonMatch = text.match(/\{[^}]+\}/);
     if (!jsonMatch) return;

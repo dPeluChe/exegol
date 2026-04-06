@@ -189,7 +189,16 @@ export class AgentManager {
       } as Record<string, string>;
     } else {
       const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
-      const fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
+      let fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
+
+      // Resume: replace prompt with provider's resume flag (e.g. claude --continue)
+      if (config.resumeSession) {
+        const provider = registry.get(agent.cliType);
+        const resumeFlag = provider?.capabilities?.resumeFlag;
+        if (resumeFlag) {
+          fullCommand = `${cliConfig.command} ${resumeFlag}`;
+        }
+      }
       const apiKeyEnv = buildApiKeyEnv(db);
 
       if (coreRust) {
@@ -278,6 +287,8 @@ export class AgentManager {
     );
 
     setAgentPid(db, agent.id, pid);
+    // Session ID = agent ID (PTY sessions are keyed by agent.id)
+    db.prepare("UPDATE agents SET session_id = ? WHERE id = ?").run(agent.id, agent.id);
     updateAgentStatus(db, agent.id, "running");
     broadcastAgentStatus({
       agentId: agent.id,

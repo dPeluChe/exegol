@@ -26,6 +26,8 @@ export const agentCreateSchema = z.object({
   branchName: z.string().optional(),
   skillNames: z.array(z.string()).optional(),
   cwdOverride: z.string().optional(),
+  /** T66: Resume a previous session (appends provider's resumeFlag to command) */
+  resumeSession: z.boolean().optional(),
 });
 
 export type AgentSchema = z.infer<typeof agentSchema>;

@@ -43,6 +43,22 @@
   --info: #3b82f6;
 }
 
+[data-theme="dark-black"] {
+  --bg-primary: #000000;
+  --bg-secondary: #080808;
+  --bg-tertiary: #111111;
+  --border: #1a1a1a;
+  --text-primary: #e8e8e8;
+  --text-secondary: #a0a0a0;
+  --text-muted: #666666;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --success: #22c55e;
+  --warning: #eab308;
+  --error: #ef4444;
+  --info: #3b82f6;
+}
+
 [data-theme="light"] {
   --bg-primary: #ffffff;
   --bg-secondary: #f4f4f5;

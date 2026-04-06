@@ -57,6 +57,13 @@ const DARK_TERMINAL_THEME = {
   brightWhite: "#fafafa",
 };
 
+const DARK_BLACK_TERMINAL_THEME = {
+  ...DARK_TERMINAL_THEME,
+  background: "#000000",
+  cursorAccent: "#000000",
+  black: "#000000",
+};
+
 const LIGHT_TERMINAL_THEME = {
   background: "#ffffff",
   foreground: "#18181b",
@@ -131,6 +138,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const isLight =
     theme === "light" ||
     (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
+  const terminalTheme = isLight
+    ? LIGHT_TERMINAL_THEME
+    : theme === "dark-black"
+      ? DARK_BLACK_TERMINAL_THEME
+      : DARK_TERMINAL_THEME;
 
   const handleResize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
@@ -156,7 +168,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     if (!container) return;
 
     const terminal = new Terminal({
-      theme: isLight ? LIGHT_TERMINAL_THEME : DARK_TERMINAL_THEME,
+      theme: terminalTheme,
       fontSize,
       fontFamily,
       cursorBlink: !readOnly,

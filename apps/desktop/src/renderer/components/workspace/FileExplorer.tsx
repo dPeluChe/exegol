@@ -61,10 +61,12 @@ function FileContextMenu({
   menu,
   onClose,
   onRefresh,
+  onStartCreate,
 }: {
   menu: ContextMenuState;
   onClose: () => void;
   onRefresh: () => void;
+  onStartCreate: (parentDir: string, type: "file" | "folder") => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -77,22 +79,14 @@ function FileContextMenu({
   }, [onClose]);
 
   const handleCreate = useCallback(
-    async (type: "file" | "folder") => {
-      const name = window.prompt(`New ${type} name:`);
-      if (!name) return;
+    (type: "file" | "folder") => {
       const parentDir = menu.isDirectory
         ? menu.targetPath
         : menu.targetPath.replace(/\/[^/]+$/, "");
-      const fullPath = `${parentDir}/${name}`;
-      try {
-        await trpcMutate("files.create", { path: fullPath, type });
-        onRefresh();
-      } catch (err) {
-        console.error(`[FileExplorer] Failed to create ${type}:`, err);
-      }
       onClose();
+      onStartCreate(parentDir, type);
     },
-    [menu, onClose, onRefresh],
+    [menu, onClose, onStartCreate],
   );
 
   const handleDelete = useCallback(async () => {
@@ -150,10 +144,16 @@ interface FileExplorerProps {
   rootPath: string;
 }
 
+interface InlineCreateState {
+  parentDir: string;
+  type: "file" | "folder";
+}
+
 export function FileExplorer({ rootPath }: FileExplorerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set([rootPath]));
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [inlineCreate, setInlineCreate] = useState<InlineCreateState | null>(null);
   const { data: fileData } = useFileContent(selectedFile);
   const queryClient = useQueryClient();
 
@@ -165,6 +165,34 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
       return next;
     });
   }, []);
+
+  const startInlineCreate = useCallback((parentDir: string, type: "file" | "folder") => {
+    // Ensure parent dir is expanded so the inline input is visible
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      next.add(parentDir);
+      return next;
+    });
+    setInlineCreate({ parentDir, type });
+  }, []);
+
+  const handleInlineCreateConfirm = useCallback(
+    async (name: string) => {
+      if (!inlineCreate || !name.trim()) {
+        setInlineCreate(null);
+        return;
+      }
+      const fullPath = `${inlineCreate.parentDir}/${name.trim()}`;
+      try {
+        await trpcMutate("files.create", { path: fullPath, type: inlineCreate.type });
+        queryClient.invalidateQueries({ queryKey: ["directory"] });
+      } catch (err) {
+        console.error(`[FileExplorer] Failed to create ${inlineCreate.type}:`, err);
+      }
+      setInlineCreate(null);
+    },
+    [inlineCreate, queryClient],
+  );
 
   const refreshAll = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["directory"] });
@@ -215,6 +243,9 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
               expandedDirs={expandedDirs}
               onToggleDir={toggleDir}
               onContextMenu={handleContextMenu}
+              inlineCreate={inlineCreate}
+              onInlineConfirm={handleInlineCreateConfirm}
+              onInlineCancel={() => setInlineCreate(null)}
             />
           </div>
         </div>
@@ -254,6 +285,7 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
           onRefresh={refreshAll}
+          onStartCreate={startInlineCreate}
         />
       )}
     </div>
@@ -261,6 +293,62 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
 }
 
 // ─── Directory Node (controlled expansion) ─────────────────────────────────
+
+function InlineInput({
+  depth,
+  type,
+  onConfirm,
+  onCancel,
+}: {
+  depth: number;
+  type: "file" | "folder";
+  onConfirm: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const handledRef = useRef(false);
+
+  const submit = useCallback(
+    (value: string) => {
+      if (handledRef.current) return;
+      handledRef.current = true;
+      if (value.trim()) onConfirm(value);
+      else onCancel();
+    },
+    [onConfirm, onCancel],
+  );
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      className="flex items-center gap-1 px-2 py-0.5"
+      style={{ paddingLeft: `${depth * 12 + 8}px` }}
+    >
+      {type === "folder" ? (
+        <FolderPlus className="h-3.5 w-3.5 shrink-0 text-accent" />
+      ) : (
+        <FilePlus className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+      )}
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder={`New ${type}...`}
+        className="flex-1 rounded bg-bg-tertiary px-1.5 py-0.5 text-[11px] text-text-primary outline-none ring-1 ring-accent/50"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit((e.target as HTMLInputElement).value);
+          if (e.key === "Escape") {
+            handledRef.current = true;
+            onCancel();
+          }
+        }}
+        onBlur={(e) => submit(e.target.value)}
+      />
+    </div>
+  );
+}
 
 function DirectoryNode({
   path,
@@ -270,6 +358,9 @@ function DirectoryNode({
   expandedDirs,
   onToggleDir,
   onContextMenu,
+  inlineCreate,
+  onInlineConfirm,
+  onInlineCancel,
 }: {
   path: string;
   depth: number;
@@ -278,9 +369,13 @@ function DirectoryNode({
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
   onContextMenu: (e: React.MouseEvent, path: string, isDir: boolean) => void;
+  inlineCreate: InlineCreateState | null;
+  onInlineConfirm: (name: string) => void;
+  onInlineCancel: () => void;
 }) {
   const expanded = expandedDirs.has(path);
   const { data: entries } = useDirectoryListing(expanded ? path : null);
+  const showInlineInput = inlineCreate?.parentDir === path;
 
   return (
     <>
@@ -309,6 +404,15 @@ function DirectoryNode({
         </button>
       )}
 
+      {showInlineInput && (
+        <InlineInput
+          depth={depth + 1}
+          type={inlineCreate.type}
+          onConfirm={onInlineConfirm}
+          onCancel={onInlineCancel}
+        />
+      )}
+
       {expanded &&
         entries?.map((entry) =>
           entry.isDirectory ? (
@@ -321,6 +425,9 @@ function DirectoryNode({
               expandedDirs={expandedDirs}
               onToggleDir={onToggleDir}
               onContextMenu={onContextMenu}
+              inlineCreate={inlineCreate}
+              onInlineConfirm={onInlineConfirm}
+              onInlineCancel={onInlineCancel}
             />
           ) : (
             <FileNode

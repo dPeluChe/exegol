@@ -1,6 +1,6 @@
 import type { IdeType, Settings } from "@exegol/shared";
 import { cn, Input } from "@exegol/ui";
-import { Bell, MessageSquare, Moon, Palette, Sun } from "lucide-react";
+import { Bell, MessageSquare, Monitor, Moon, Palette, Sun } from "lucide-react";
 import { AgentIcon } from "../common/AgentIcon";
 
 // ─── IDE options with icon metadata ─────────────────────────────────────────
@@ -15,6 +15,7 @@ const IDE_OPTIONS: { value: IdeType; label: string; icon: string; color: string 
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
+  { value: "dark-black", label: "OLED Black", icon: Monitor },
   { value: "light", label: "Light", icon: Sun },
   { value: "system", label: "System", icon: Palette },
 ] as const;

@@ -10,7 +10,7 @@ export type AgentCliConfig = {
 export type Settings = {
   defaultIde: IdeType;
   customIdePath: string | null;
-  theme: "dark" | "light" | "system";
+  theme: "dark" | "dark-black" | "light" | "system";
   agentClis: AgentCliConfig[];
   globalHotkey: string;
   terminalFontSize: number;

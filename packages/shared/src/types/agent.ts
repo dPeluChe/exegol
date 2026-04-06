@@ -51,6 +51,8 @@ export type AgentCreate = {
   skillNames?: string[];
   /** Override cwd for agent (e.g. pipeline shared worktree). Skips worktree creation. */
   cwdOverride?: string;
+  /** T66: Resume a previous session (appends provider's resumeFlag to command) */
+  resumeSession?: boolean;
 };
 
 // ─── Provider Registry ──────────────────────────────────────────────────────

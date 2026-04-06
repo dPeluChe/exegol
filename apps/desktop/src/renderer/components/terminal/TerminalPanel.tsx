@@ -1,4 +1,4 @@
-import type { AgentCliType, HandoffSummary } from "@exegol/shared";
+import type { AgentProvider, HandoffSummary } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -11,7 +11,7 @@ import {
   RotateCcw,
   Send,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -20,8 +20,18 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
-/** CLI types that support --continue / session resume */
-const RESUME_CLI_TYPES = new Set<AgentCliType>(["claude-code", "aider", "codex"]);
+/** Hook: set of CLI types that support session resume (from provider registry) */
+function useResumableCliTypes(): Set<string> {
+  const { data: providers } = useQuery({
+    queryKey: ["enabledProviders"],
+    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
+    staleTime: 60_000,
+  });
+  return useMemo(
+    () => new Set((providers ?? []).filter((p) => p.capabilities?.supportsResume).map((p) => p.id)),
+    [providers],
+  );
+}
 
 interface TerminalPanelProps {
   agentId: string;
@@ -42,6 +52,7 @@ function useHandoff(agentId: string, enabled: boolean) {
 
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   // Use push-driven store for instant status updates (not 30s polling)
+  const resumableCliTypes = useResumableCliTypes();
   const storeAgent = useAgentStore((s) => s.agents[agentId]);
   const { data: dbAgent } = useAgent(agentId);
   // Prefer store (push events) over DB query (polling fallback)
@@ -186,7 +197,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
             {agent &&
               (() => {
-                const canResume = RESUME_CLI_TYPES.has(agent.cliType as AgentCliType);
+                const canResume = resumableCliTypes.has(agent.cliType);
                 const ResumeIcon = canResume ? Play : RotateCcw;
                 const label = canResume ? "Resume" : "Re-launch";
 
@@ -202,6 +213,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                         taskDescription: agent.taskDescription,
                         useWorktree: !!agent.branchName,
                         branchName: agent.branchName ?? undefined,
+                        resumeSession: canResume,
                       });
 
                       if (paneId && newAgent?.id) {

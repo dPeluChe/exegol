@@ -37,6 +37,8 @@ class StdioTransport {
     number,
     { resolve: (value: unknown) => void; reject: (reason: Error) => void }
   >();
+  /** Called when the process exits unexpectedly */
+  onDisconnect: (() => void) | null = null;
 
   constructor(
     private command: string,
@@ -73,6 +75,7 @@ class StdioTransport {
         pending.reject(err);
       }
       this.pendingRequests.clear();
+      this.onDisconnect?.();
     });
   }
 
@@ -230,8 +233,13 @@ export function getMcpHost(): McpHost {
   return instance;
 }
 
+const MAX_RECONNECT_ATTEMPTS = 5;
+const INITIAL_RECONNECT_DELAY_MS = 2_000;
+
 export class McpHost {
   private servers = new Map<string, { transport: Transport; state: McpServerState }>();
+  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private reconnectAttempts = new Map<string, number>();
 
   /**
    * Connect to an MCP server and discover its tools.
@@ -253,7 +261,9 @@ export class McpHost {
         state.error = "No command specified for stdio transport";
         return state;
       }
-      transport = new StdioTransport(config.command, config.args ?? []);
+      const stdioTransport = new StdioTransport(config.command, config.args ?? []);
+      stdioTransport.onDisconnect = () => this.scheduleReconnect(config);
+      transport = stdioTransport;
     } else {
       if (!config.url) {
         state.status = "error";
@@ -292,6 +302,7 @@ export class McpHost {
       }));
 
       state.status = "connected";
+      this.reconnectAttempts.delete(config.id);
       logger.info(`[MCP] Connected to ${config.name}, discovered ${state.tools.length} tools`);
     } catch (err) {
       state.status = "error";
@@ -303,11 +314,54 @@ export class McpHost {
   }
 
   /**
+   * Schedule auto-reconnect with exponential backoff.
+   */
+  private scheduleReconnect(config: McpServerConfig): void {
+    // Prevent overlapping reconnect timers
+    const existingTimer = this.reconnectTimers.get(config.id);
+    if (existingTimer) return;
+
+    const attempt = (this.reconnectAttempts.get(config.id) ?? 0) + 1;
+    if (attempt > MAX_RECONNECT_ATTEMPTS) {
+      logger.warn(`[MCP] Max reconnect attempts reached for ${config.name}, giving up`);
+      const entry = this.servers.get(config.id);
+      if (entry) entry.state.status = "error";
+      return;
+    }
+
+    this.reconnectAttempts.set(config.id, attempt);
+    const delay = INITIAL_RECONNECT_DELAY_MS * 2 ** (attempt - 1);
+    logger.info(
+      `[MCP] Reconnecting to ${config.name} in ${delay}ms (attempt ${attempt}/${MAX_RECONNECT_ATTEMPTS})`,
+    );
+
+    const entry = this.servers.get(config.id);
+    if (entry) entry.state.status = "connecting";
+
+    const timer = setTimeout(() => {
+      this.reconnectTimers.delete(config.id);
+      this.connect(config).catch(() => {});
+    }, delay);
+    this.reconnectTimers.set(config.id, timer);
+  }
+
+  /**
    * Disconnect from an MCP server.
    */
   disconnect(serverId: string): void {
+    // Cancel any pending reconnect
+    const timer = this.reconnectTimers.get(serverId);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(serverId);
+    }
+    this.reconnectAttempts.delete(serverId);
+
     const entry = this.servers.get(serverId);
     if (entry) {
+      if (entry.transport instanceof StdioTransport) {
+        entry.transport.onDisconnect = null;
+      }
       entry.transport.stop();
       this.servers.delete(serverId);
       logger.info(`[MCP] Disconnected from ${entry.state.config.name}`);
@@ -361,6 +415,9 @@ export class McpHost {
    * Disconnect all servers.
    */
   disconnectAll(): void {
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.reconnectTimers.clear();
+    this.reconnectAttempts.clear();
     for (const [id] of this.servers) {
       this.disconnect(id);
     }
