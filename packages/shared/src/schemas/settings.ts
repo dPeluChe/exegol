@@ -12,7 +12,7 @@ export const agentCliConfigSchema = z.object({
 export const settingsSchema = z.object({
   defaultIde: ideTypeSchema.default("vscode"),
   customIdePath: z.string().nullable().default(null),
-  theme: z.enum(["dark", "light", "system"]).default("dark"),
+  theme: z.enum(["dark", "dark-black", "light", "system"]).default("dark"),
   agentClis: z.array(agentCliConfigSchema).default([]),
   globalHotkey: z.string().default("CommandOrControl+Shift+E"),
   terminalFontSize: z.number().int().min(8).max(32).default(14),

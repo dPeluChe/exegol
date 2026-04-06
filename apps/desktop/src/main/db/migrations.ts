@@ -420,6 +420,22 @@ const migrations: Migration[] = [
       CREATE INDEX IF NOT EXISTS idx_agents_project_id ON agents(project_id);
     `,
   },
+  {
+    id: "026_agents_session_id",
+    sql: `ALTER TABLE agents ADD COLUMN session_id TEXT;`,
+  },
+  {
+    id: "027_agent_events",
+    sql: `CREATE TABLE IF NOT EXISTS agent_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (agent_id) REFERENCES agents(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_events_agent ON agent_events(agent_id, created_at);`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

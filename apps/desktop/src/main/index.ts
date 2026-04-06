@@ -3,7 +3,7 @@ import { is } from "@electron-toolkit/utils";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell } from "electron";
 import { getAgentManager } from "./agents/manager";
-import { startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
+import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
 import { cleanupAgentWrappers, ensureAgentWrappers } from "./agents/wrappers";
@@ -246,6 +246,7 @@ app.whenReady().then(async () => {
   })();
 
   // Background services (non-blocking, start after window)
+  cleanupOldEvents(getDb());
   startNotifyHandler((event) => {
     logger.info(`[NotifyHandler] Agent event: ${event.type} from ${event.agentId}`);
   });

@@ -23,23 +23,23 @@
 - ~~**Monolith decomposition (T75)**~~ ✅
 
 ### P1 — Strong differentiation right after P0
-- Session resume determinístico
-- Agent hook system con eventos estructurados
-- Repo map + semantic search
-- **Tier 3 scoring via SDK (T76)** — replace curl with proper HTTP client
+- ~~Session resume determinístico~~ ✅ T66
+- ~~Agent hook system con eventos estructurados~~ ✅ T67
+- Repo map + semantic search (T68)
+- ~~**Tier 3 scoring via SDK (T76)**~~ ✅
 - **DB validation layer (T77)** — Zod schemas for DB rows
 
 ### P2 — Valuable follow-ups once the core is stable
 - Diff line comments
 - Activity classification
 - **Pipeline state machine (T78)** — explicit transitions
-- **MCP reconnection (T79)** — auto-reconnect on server drop
+- ~~**MCP reconnection (T79)**~~ ✅
 - **Structured error handling (T80)** — transient vs permanent classification
 - **DI for singletons (T81)** — testability improvement
 - **Shared package enrichment (T82)** — more Zod schemas for IPC/DB payloads
 - Lifecycle scripts por proyecto
 - Issue tracker expansion
-- Dark-black theme
+- ~~Dark-black theme~~ ✅ T72
 
 ### P3 — Strategic bets / larger scope
 - SSH remote development
@@ -281,7 +281,7 @@
 
 ---
 
-### T66 — Session Isolation & Deterministic Resume
+### T66 — Session Isolation & Deterministic Resume ✅ COMPLETED
 **Priority**: P1 | **Effort**: Medium | **Source**: Emdash
 
 **Why**
@@ -305,7 +305,7 @@
 
 ---
 
-### T67 — Agent Hook Event System
+### T67 — Agent Hook Event System ✅ COMPLETED
 **Priority**: P1 | **Effort**: Medium | **Source**: Emdash + Codex direction
 
 **Why**
@@ -413,7 +413,7 @@
 
 ---
 
-### T72 — Dark-Black Theme
+### T72 — Dark-Black Theme ✅ COMPLETED
 **Priority**: P2 | **Effort**: Low | **Source**: Emdash
 
 **Why**
@@ -528,7 +528,7 @@
 
 ---
 
-### T76 — Replace curl with SDK in Tier 3 Scoring
+### T76 — Replace curl with SDK in Tier 3 Scoring ✅ COMPLETED
 **Priority**: P1 | **Effort**: Low | **Source**: Deep codebase analysis
 
 **Why**
@@ -602,7 +602,7 @@
 
 ---
 
-### T79 — MCP Host Auto-Reconnection
+### T79 — MCP Host Auto-Reconnection ✅ COMPLETED
 **Priority**: P2 | **Effort**: Low | **Source**: Deep codebase analysis
 
 **Why**
