@@ -2,6 +2,18 @@ use super::strip_ansi::strip_ansi_bytes;
 use napi::Error;
 use napi_derive::napi;
 
+/// Truncate a string to at most `max_bytes` bytes, ensuring the cut falls on a char boundary.
+fn truncate_str(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 /// Result of processing a chunk of PTY output.
 #[napi(object)]
 #[derive(Debug, Clone)]
@@ -158,7 +170,7 @@ fn parse_claude_code(line: &str) -> Option<(Option<String>, Option<String>)> {
 
     // File operations
     if starts_with_ci(line, "editing ") || starts_with_ci(line, "writing ") || starts_with_ci(line, "reading ") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((None, Some(step.to_string())));
     }
 
@@ -176,7 +188,7 @@ fn parse_claude_code(line: &str) -> Option<(Option<String>, Option<String>)> {
 
     // Error
     if starts_with_ci(line, "error:") || starts_with_ci(line, "internal error") || starts_with_ci(line, "fatal:") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((Some("failed".to_string()), Some(step.to_string())));
     }
 
@@ -214,7 +226,7 @@ fn parse_codex(line: &str) -> Option<(Option<String>, Option<String>)> {
     }
 
     if starts_with_ci(line, "error") || starts_with_ci(line, "failed") || starts_with_ci(line, "exception") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((Some("failed".to_string()), Some(step.to_string())));
     }
 
@@ -223,7 +235,7 @@ fn parse_codex(line: &str) -> Option<(Option<String>, Option<String>)> {
 
 fn parse_aider(line: &str) -> Option<(Option<String>, Option<String>)> {
     if contains_ci(line, "editing ") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((None, Some(step.to_string())));
     }
 
@@ -251,7 +263,7 @@ fn parse_aider(line: &str) -> Option<(Option<String>, Option<String>)> {
     }
 
     if starts_with_ci(line, "error") || starts_with_ci(line, "traceback") || starts_with_ci(line, "exception") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((Some("failed".to_string()), Some(step.to_string())));
     }
 
@@ -283,7 +295,7 @@ fn parse_gemini(line: &str) -> Option<(Option<String>, Option<String>)> {
     }
 
     if starts_with_ci(line, "error") || starts_with_ci(line, "failed") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((Some("failed".to_string()), Some(step.to_string())));
     }
 
@@ -292,7 +304,7 @@ fn parse_gemini(line: &str) -> Option<(Option<String>, Option<String>)> {
 
 fn parse_generic(line: &str) -> Option<(Option<String>, Option<String>)> {
     if starts_with_ci(line, "error") || starts_with_ci(line, "fail") || starts_with_ci(line, "fatal") || contains_ci(line, "exception") || contains_ci(line, "traceback") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((Some("failed".to_string()), Some(step.to_string())));
     }
 
@@ -304,12 +316,12 @@ fn parse_generic(line: &str) -> Option<(Option<String>, Option<String>)> {
     }
 
     if contains_ci(line, "test") && (contains_ci(line, "passed") || contains_ci(line, "failed") || contains_ci(line, "running")) {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((None, Some(step.to_string())));
     }
 
     if contains_ci(line, "reading ") || contains_ci(line, "writing ") || contains_ci(line, "editing ") || contains_ci(line, "creating ") || contains_ci(line, "deleting ") {
-        let step = &line[..line.len().min(120)];
+        let step = truncate_str(line, 120);
         return Some((None, Some(step.to_string())));
     }
 

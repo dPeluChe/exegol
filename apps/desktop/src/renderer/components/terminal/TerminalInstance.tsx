@@ -23,8 +23,12 @@ export interface TerminalInstanceHandle {
   getSelection: () => string;
 }
 
+/** TUI CLIs that break with WebGL renderer (alternate screen buffer issues) */
+const CANVAS_ONLY_CLI_TYPES = new Set(["crush", "opencode", "kiro", "gemini"]);
+
 interface TerminalInstanceProps {
   agentId: string;
+  cliType?: string;
   readOnly?: boolean;
   initialContent?: string;
   onReady?: () => void;
@@ -90,7 +94,14 @@ const LIGHT_TERMINAL_THEME = {
 };
 
 export const TerminalInstance = forwardRef(function TerminalInstance(
-  { agentId, readOnly = false, initialContent, onReady, onScrollPosition }: TerminalInstanceProps,
+  {
+    agentId,
+    cliType,
+    readOnly = false,
+    initialContent,
+    onReady,
+    onScrollPosition,
+  }: TerminalInstanceProps,
   ref: ForwardedRef<TerminalInstanceHandle>,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -198,22 +209,36 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       terminal.write(initialContent);
     }
 
+    // Double-RAF: first frame settles layout, second fits terminal accurately
     requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        try {
+          fitAddon.fit();
+          const { cols, rows } = terminal;
+          setTerminalSize(agentId, cols, rows);
+          if (!readOnly) {
+            window.api.terminal.resize(agentId, cols, rows);
+          }
+        } catch {
+          // Ignore initial fit failures
+        }
+      });
+    });
+
+    // Fallback fit after layout fully settles (split panes, tab switches)
+    const settleTimer = setTimeout(() => {
       try {
         fitAddon.fit();
         const { cols, rows } = terminal;
         setTerminalSize(agentId, cols, rows);
-        if (!readOnly) {
-          window.api.terminal.resize(agentId, cols, rows);
-        }
+        if (!readOnly) window.api.terminal.resize(agentId, cols, rows);
       } catch {
-        // Ignore initial fit failures
+        /* ignore */
       }
-    });
+    }, 150);
 
     const disposables: Array<{ dispose: () => void }> = [];
     let unsubData: (() => void) | null = null;
-    let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (!readOnly) {
       // Ctrl+Backspace → send \x17 (ETB = erase word) instead of single backspace
@@ -248,20 +273,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         }),
       );
 
-      // Connect main process output -> terminal (5ms coalescing to reduce partial-render artifacts)
-      let coalescedData = "";
-      const flushCoalesced = (): void => {
-        if (coalescedData.length > 0) {
-          terminal.write(coalescedData);
-          coalescedData = "";
-        }
-        coalesceTimer = null;
-      };
+      // Write PTY data directly — xterm.js handles internal batching.
+      // No manual coalescing: TUI apps (Crush, Gemini) send escape sequences
+      // that must be written atomically to avoid corrupting alternate screen state.
       unsubData = window.api.terminal.onData(agentId, (data) => {
-        coalescedData += data;
-        if (!coalesceTimer) {
-          coalesceTimer = setTimeout(flushCoalesced, 5);
-        }
+        terminal.write(data);
       });
     }
 
@@ -284,8 +300,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       disposables.push(terminal.onWriteParsed(checkScroll));
     }
 
+    let resizeRaf: number | null = null;
     const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = null;
         try {
           fitAddon.fit();
           const { cols, rows } = terminal;
@@ -301,7 +320,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     resizeObserver.observe(container);
 
     return () => {
-      if (coalesceTimer) clearTimeout(coalesceTimer);
+      clearTimeout(settleTimer);
+      if (resizeRaf) cancelAnimationFrame(resizeRaf);
       for (const d of disposables) d.dispose();
       unsubData?.();
       resizeObserver.disconnect();
@@ -347,11 +367,14 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     return () => observer.disconnect();
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cliType is stable per terminal instance
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
 
-    if (isVisible && !webglAddonRef.current) {
+    // Skip WebGL for TUI CLIs — canvas renderer handles alternate screen buffer better
+    const useCanvas = cliType && CANVAS_ONLY_CLI_TYPES.has(cliType);
+    if (isVisible && !webglAddonRef.current && !useCanvas) {
       try {
         const webgl = new WebglAddon();
         webgl.onContextLoss(() => {

@@ -125,10 +125,14 @@ export function finalizeAgentStatus(
   try {
     const currentAgent = getAgent(db, agent.id);
     if (!currentAgent || currentAgent.status === "completed" || currentAgent.status === "failed") {
+      logger.info(
+        `[Finalize] Skip ${agent.id} (${agent.cliType}) — already ${currentAgent?.status ?? "deleted"}`,
+      );
       return null;
     }
 
     const finalStatus: AgentStatus = exitCode === 0 ? "completed" : "failed";
+    logger.info(`[Finalize] ${agent.id} (${agent.cliType}) → ${finalStatus} (exit=${exitCode})`);
     stopAgent(db, agent.id, finalStatus);
     const statusEvent: AgentStatusEvent = {
       agentId: agent.id,

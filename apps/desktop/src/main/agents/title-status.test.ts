@@ -104,8 +104,8 @@ describe("titleStatusToAgentStatus", () => {
     expect(titleStatusToAgentStatus("working")).toBe("running");
   });
 
-  it("maps idle to completed", () => {
-    expect(titleStatusToAgentStatus("idle")).toBe("completed");
+  it("maps idle to waiting_input", () => {
+    expect(titleStatusToAgentStatus("idle")).toBe("waiting_input");
   });
 
   it("maps permission to waiting_input", () => {
@@ -158,7 +158,7 @@ describe("createTitleStatusTracker", () => {
 
     expect(callback).toHaveBeenCalledTimes(2);
     expect(callback).toHaveBeenNthCalledWith(1, "running", "✦ Working");
-    expect(callback).toHaveBeenNthCalledWith(2, "completed", "◇ Done");
+    expect(callback).toHaveBeenNthCalledWith(2, "waiting_input", "◇ Done");
     vi.useRealTimers();
   });
 

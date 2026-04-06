@@ -61,7 +61,9 @@ export function titleStatusToAgentStatus(ts: TitleStatus): AgentStatus | null {
     case "working":
       return "running";
     case "idle":
-      return "completed";
+      // "idle" means the agent is waiting for input, NOT that it completed.
+      // "completed" should only come from onExit (process actually terminated).
+      return "waiting_input";
     case "permission":
       return "waiting_input";
     default:

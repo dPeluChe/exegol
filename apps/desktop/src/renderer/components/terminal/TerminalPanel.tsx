@@ -81,6 +81,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   // Don't show "Ended" UI until we've received at least one data chunk,
   // OR until scrollback is available in DB (reattach/reload scenario)
   const isStopped = rawIsStopped && (hasEverHadDataRef.current || !!scrollbackContent);
+
   const allAgents = useAgentStore((s) => s.agents);
 
   const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean) => {
@@ -273,6 +274,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
             ref={terminalRef}
             key={`scrollback-${agentId}`}
             agentId={agentId}
+            cliType={agent?.cliType}
             readOnly
             initialContent={scrollbackContent}
             onScrollPosition={handleScrollPosition}
@@ -338,6 +340,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           ref={terminalRef}
           key={agentId}
           agentId={agentId}
+          cliType={agent?.cliType}
           onReady={onReady}
           onScrollPosition={handleScrollPosition}
         />

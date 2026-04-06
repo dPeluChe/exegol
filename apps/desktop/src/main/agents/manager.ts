@@ -178,6 +178,7 @@ export class AgentManager {
     let shell: string;
     let args: string[];
     let env: Record<string, string>;
+    let stdinCommand: string | null = null; // For interactive CLIs: injected after shell ready
 
     if (isPlainShell) {
       shell = userShell;
@@ -214,15 +215,27 @@ export class AgentManager {
         }
       }
 
+      // Interactive CLIs (no prompt arg support) need a persistent shell
+      // that stays open. We launch as shell (-il) and inject the command
+      // via stdin write after shell is ready.
+      const provider = registry.get(agent.cliType);
+      const isInteractiveCli = !provider?.capabilities?.supportsPromptArg;
+
       logger.info("[AgentManager] Spawning:", {
         userShell,
         fullCommand,
+        isInteractiveCli,
         cwd,
         shellExists: require("node:fs").existsSync(userShell),
       });
 
       shell = userShell;
-      args = ["-ilc", fullCommand];
+      if (isInteractiveCli) {
+        args = ["-il"];
+        stdinCommand = fullCommand;
+      } else {
+        args = ["-ilc", fullCommand];
+      }
       env = {
         ...process.env,
         ...apiKeyEnv,
@@ -289,6 +302,14 @@ export class AgentManager {
     setAgentPid(db, agent.id, pid);
     // Session ID = agent ID (PTY sessions are keyed by agent.id)
     db.prepare("UPDATE agents SET session_id = ? WHERE id = ?").run(agent.id, agent.id);
+
+    // Interactive CLIs: inject the command after shell initializes
+    if (stdinCommand) {
+      setTimeout(() => {
+        ptyHost.write(agent.id, `${stdinCommand}\n`);
+      }, 500);
+    }
+
     updateAgentStatus(db, agent.id, "running");
     broadcastAgentStatus({
       agentId: agent.id,

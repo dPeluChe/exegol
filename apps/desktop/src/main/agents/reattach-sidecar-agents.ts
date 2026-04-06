@@ -68,6 +68,13 @@ export async function reattachSidecarAgents(
         { scrollbackPath },
       );
 
+      // Only mark as running if the PTY process is actually alive
+      // (sidecar may hold a dead session whose exit event fires immediately)
+      if (!ptyHost.isAlive(agentId)) {
+        logger.info(`[AgentManager] Skipping dead sidecar session: ${agentId} (${cliType})`);
+        continue;
+      }
+
       updateAgentStatus(db, agentId, "running");
       broadcastAgentStatus({
         agentId,

@@ -8,8 +8,11 @@ const STATUS_TOAST_MAP: Record<string, { type: ToastType; label: string }> = {
   completed: { type: "success", label: "completed" },
   failed: { type: "error", label: "failed" },
   crashed: { type: "error", label: "crashed" },
-  waiting_input: { type: "warning", label: "waiting for input" },
 };
+
+/** CLIs that frequently toggle waiting_input (interactive TUIs) — skip toast for these */
+const INTERACTIVE_CLI_TYPES = new Set(["crush", "gemini", "opencode", "kiro"]);
+const TOAST_THROTTLE_MS = 10_000;
 
 /**
  * Subscribe to IPC push events and surface them as in-app toasts.
@@ -19,18 +22,29 @@ export function useToastEvents(): void {
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
-    // ── Agent status toasts (deduplicated per agent+status) ─────────────
-    const lastToasted = new Map<string, string>(); // agentId → last status toasted
+    // ── Agent status toasts (deduplicated + throttled per agent) ─────────
+    const lastToasted = new Map<string, string>();
+    const lastToastTime = new Map<string, number>();
     const unsubStatus = window.api.onAgentStatus((event) => {
       if (event.cliType === "shell") return;
 
       const mapping = STATUS_TOAST_MAP[event.status];
       if (!mapping) return;
 
-      // Skip if same agent+status was already toasted (prevents spam from rapid status cycling)
+      // Skip waiting_input toasts for interactive CLIs (they toggle constantly)
+      if (event.status === "waiting_input" && INTERACTIVE_CLI_TYPES.has(event.cliType)) return;
+
+      // Skip if same agent+status was already toasted
       const prev = lastToasted.get(event.agentId);
       if (prev === event.status) return;
+
+      // Throttle: max 1 toast per agent every 10s
+      const now = Date.now();
+      const lastTime = lastToastTime.get(event.agentId) ?? 0;
+      if (now - lastTime < TOAST_THROTTLE_MS) return;
+
       lastToasted.set(event.agentId, event.status);
+      lastToastTime.set(event.agentId, now);
 
       useToastStore.getState().addToast({
         type: mapping.type,

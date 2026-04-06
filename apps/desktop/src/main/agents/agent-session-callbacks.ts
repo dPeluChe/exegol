@@ -38,7 +38,11 @@ export function createSpawnCallbacks(
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
-      if (agent.cliType === "shell") return;
+      // Skip output processing for shells and interactive TUI CLIs
+      // (their output contains TUI escape sequences and status-like text that
+      // the parser misinterprets as "failed"/"waiting_input")
+      const SKIP_PARSING: Set<string> = new Set(["shell", "crush", "opencode", "kiro"]);
+      if (SKIP_PARSING.has(agent.cliType)) return;
 
       const currentSize = maps.scrollbackSizes.get(agent.id) ?? 0;
       if (currentSize < maxScrollbackBytes) {
@@ -51,6 +55,9 @@ export function createSpawnCallbacks(
       const result = processor.process(data);
       if (result.status || result.currentStep) {
         if (result.status) {
+          logger.info(
+            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${result.status}${result.currentStep ? ` [${result.currentStep}]` : ""}`,
+          );
           updateAgentStatus(db, agent.id, result.status as AgentStatus, result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
@@ -92,6 +99,7 @@ export function createSpawnCallbacks(
     },
 
     onExit: (exitCode: number) => {
+      logger.info(`[AgentCallback] onExit: ${agent.id} (${agent.cliType}) exitCode=${exitCode}`);
       const isShell = agent.cliType === "shell";
       const scrollbackForScoring = isShell
         ? ""
