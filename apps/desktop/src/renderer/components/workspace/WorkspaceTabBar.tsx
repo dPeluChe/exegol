@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FolderTree, GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -69,7 +70,6 @@ export function WorkspaceTabBar() {
   const reorderTab = useWorkspaceStore((s) => s.reorderTab);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const addAgent = useAgentStore((s) => s.addAgent);
-  const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const panes = useWorkspaceStore(selectPanes);
   const agents = useAgentStore((s) => s.agents);
@@ -86,18 +86,13 @@ export function WorkspaceTabBar() {
         for (const pid of paneIds) {
           const pane = pw.panes[pid];
           if (pane?.type === "terminal" && pane.agentId) {
-            const agentId = pane.agentId;
-            // Stop process then delete from DB — both non-fatal
-            trpcMutate("agents.stop", { id: agentId })
-              .catch(() => {})
-              .then(() => trpcMutate("agents.delete", { id: agentId }).catch(() => {}));
-            removeAgent(agentId);
+            deleteAgentImperative(pane.agentId);
           }
         }
       }
       removeTab(tabId);
     },
-    [removeTab, removeAgent],
+    [removeTab],
   );
 
   const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);

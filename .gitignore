@@ -44,3 +44,4 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+.factory/

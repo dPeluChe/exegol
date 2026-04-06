@@ -1,17 +1,15 @@
-import type { Project, Worktree } from "@exegol/shared";
+import type { Project } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, Code2, Cuboid, GitBranch, Globe, Layers } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ChevronDown,
-  ChevronRight,
-  Code2,
-  FolderOpen,
-  GitBranch,
-  Globe,
-  Layers,
-} from "lucide-react";
-import { useEffect, useState } from "react";
-import { type PortInfo, useOpenInIde, useProjectPorts, useSettings } from "../../hooks/use-trpc";
-import { trpcInvoke } from "../../lib/trpc-client";
+  type PortInfo,
+  useOpenInIde,
+  useProjectPorts,
+  useSettings,
+  useWorktrees,
+} from "../../hooks/use-trpc";
 import type { AgentState } from "../../stores/agents";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { VISIBLE_STATUSES } from "./AgentMiniCard";
@@ -102,7 +100,13 @@ interface ProjectItemProps {
   isExpanded: boolean;
   onSelect: () => void;
   onToggle: () => void;
+  onRename: (id: string, name: string) => void;
   agents: AgentState[];
+  /** Drag-and-drop index */
+  index: number;
+  onDragStart: (index: number) => void;
+  onDragOver: (e: React.DragEvent, index: number) => void;
+  onDrop: (index: number) => void;
 }
 
 export function ProjectItem({
@@ -111,25 +115,53 @@ export function ProjectItem({
   isExpanded,
   onSelect,
   onToggle,
+  onRename,
   agents,
+  index,
+  onDragStart,
+  onDragOver,
+  onDrop,
 }: ProjectItemProps) {
   const runningCount = agents.filter((a) =>
     ["running", "spawning", "waiting_input"].includes(a.status),
   ).length;
+  const queryClient = useQueryClient();
 
-  const [worktrees, setWorktrees] = useState<Worktree[]>([]);
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(project.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { data: worktrees = [] } = useWorktrees(project.id, isExpanded);
+
   useEffect(() => {
-    if (!isExpanded) return;
-    trpcInvoke<Worktree[]>("projects.listWorktrees", { projectId: project.id })
-      .then(setWorktrees)
-      .catch(() => {});
-  }, [isExpanded, project.id]);
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const submitRename = useCallback(() => {
+    const trimmed = editName.trim();
+    if (trimmed && trimmed !== project.name) {
+      onRename(project.id, trimmed);
+    }
+    setEditing(false);
+  }, [editName, project.id, project.name, onRename]);
 
   return (
-    <div>
+    // biome-ignore lint/a11y/noStaticElementInteractions: draggable project item
+    <section
+      draggable
+      onDragStart={() => onDragStart(index)}
+      onDragOver={(e) => onDragOver(e, index)}
+      onDrop={() => onDrop(index)}
+      className="cursor-grab active:cursor-grabbing"
+    >
       <button
         type="button"
         onClick={onSelect}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          setEditName(project.name);
+          setEditing(true);
+        }}
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
           isSelected ? "bg-white/10 text-text-primary" : "text-text-secondary hover:bg-white/5",
@@ -153,9 +185,26 @@ export function ProjectItem({
           {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </span>
 
-        <FolderOpen className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+        <Cuboid className="h-3.5 w-3.5 shrink-0 text-accent" />
 
-        <span className="flex-1 truncate font-medium">{project.name}</span>
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitRename();
+              if (e.key === "Escape") setEditing(false);
+              e.stopPropagation();
+            }}
+            onBlur={submitRename}
+            onClick={(e) => e.stopPropagation()}
+            className="flex-1 rounded bg-bg-tertiary px-1 py-0 text-xs text-text-primary outline-none ring-1 ring-accent/50"
+          />
+        ) : (
+          <span className="flex-1 truncate font-medium">{project.name}</span>
+        )}
 
         {runningCount > 0 && (
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent/20 px-1 text-[10px] text-accent">
@@ -227,7 +276,7 @@ export function ProjectItem({
                     worktree={worktrees.find((wt) => wt.branchName === branch)}
                     projectId={project.id}
                     onWorktreeDeleted={() => {
-                      setWorktrees((prev) => prev.filter((wt) => wt.branchName !== branch));
+                      queryClient.invalidateQueries({ queryKey: ["worktrees", project.id] });
                     }}
                   />
                 ))}
@@ -241,6 +290,6 @@ export function ProjectItem({
           {isSelected && <TabsOverview />}
         </div>
       )}
-    </div>
+    </section>
   );
 }

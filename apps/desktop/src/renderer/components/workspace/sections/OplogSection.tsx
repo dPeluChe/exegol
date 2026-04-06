@@ -13,6 +13,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useProjectOplog, useUndoOplog } from "../../../hooks/use-trpc";
+import { formatTimeAgoLong } from "../../../lib/format";
 import { ConfirmDialog, EmptyState, LoadingSpinner } from "../../common";
 
 // ─── Operation icon mapping ─────────────────────────────────────────────────
@@ -48,13 +49,7 @@ function OplogTimelineEntry({
   const iconColor = OPERATION_COLORS[entry.operation] ?? "text-text-muted";
   const canUndo = entry.refBefore && entry.operation !== "revert";
 
-  const timeAgo = useMemo(() => {
-    const diff = Math.floor(Date.now() / 1000) - entry.createdAt;
-    if (diff < 60) return "just now";
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  }, [entry.createdAt]);
+  const timeAgo = formatTimeAgoLong(entry.createdAt);
 
   return (
     <div className="flex items-start gap-3 group">

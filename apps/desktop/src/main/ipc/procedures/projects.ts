@@ -15,7 +15,9 @@ import {
   listProjects,
   listWorktrees,
   removeWorktree,
+  renameProject,
   updateProjectLastOpened,
+  updateProjectSortOrder,
 } from "../../db/queries";
 import { openInIde } from "../../ide/opener";
 import { publicProcedure, router } from "../trpc";
@@ -86,6 +88,22 @@ export const projectRouter = router({
       gitRemote,
     });
   }),
+
+  rename: publicProcedure
+    .input(z.object({ id: z.string(), name: z.string().min(1) }))
+    .mutation(({ ctx, input }) => {
+      renameProject(ctx.db, input.id, input.name);
+      return getProject(ctx.db, input.id);
+    }),
+
+  reorder: publicProcedure
+    .input(z.object({ orderedIds: z.array(z.string()) }))
+    .mutation(({ ctx, input }) => {
+      for (let i = 0; i < input.orderedIds.length; i++) {
+        updateProjectSortOrder(ctx.db, input.orderedIds[i] as string, i);
+      }
+      return { success: true };
+    }),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     const project = getProject(ctx.db, input.id);

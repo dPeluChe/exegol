@@ -436,6 +436,10 @@ const migrations: Migration[] = [
     );
     CREATE INDEX IF NOT EXISTS idx_agent_events_agent ON agent_events(agent_id, created_at);`,
   },
+  {
+    id: "028_projects_sort_order",
+    sql: `ALTER TABLE projects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

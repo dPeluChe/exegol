@@ -3,21 +3,10 @@ import { Button, cn } from "@exegol/ui";
 import { Clock, Cpu, FolderOpen, GitBranch, Plus } from "lucide-react";
 import { useState } from "react";
 import { useProjects } from "../../hooks/use-trpc";
+import { formatTimeAgoLong } from "../../lib/format";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { AddProjectDialog } from "./AddProjectDialog";
-
-function formatRelativeTime(timestampSeconds: number): string {
-  const diff = Date.now() - timestampSeconds * 1000;
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return new Date(timestampSeconds * 1000).toLocaleDateString();
-}
 
 function ProjectCard({ project }: { project: Project }) {
   const setActiveProject = useAppStore((s) => s.setActiveProject);
@@ -54,7 +43,7 @@ function ProjectCard({ project }: { project: Project }) {
         </span>
         <span className="flex items-center gap-1">
           <Clock className="h-3 w-3" />
-          {formatRelativeTime(project.lastOpenedAt)}
+          {formatTimeAgoLong(project.lastOpenedAt)}
         </span>
         {projectAgentCount > 0 && (
           <span className="flex items-center gap-1">

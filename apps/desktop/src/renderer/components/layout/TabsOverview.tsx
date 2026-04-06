@@ -23,24 +23,18 @@ const PANE_ICON: Record<string, ComponentType<{ className?: string }>> = {
   empty: Layout,
 };
 
-function PaneDot({
-  pane,
-  agents,
-}: {
-  pane: Pane | undefined;
-  agents: Record<string, { cliType: string; status: string }>;
-}) {
+function PaneDot({ pane }: { pane: Pane | undefined }) {
+  const agentCli = useAgentStore((s) =>
+    pane?.type === "terminal" && pane.agentId ? s.agents[pane.agentId]?.cliType : undefined,
+  );
+
   if (!pane) return null;
-  // Terminal panes with agents show the agent icon
-  if (pane.type === "terminal" && pane.agentId) {
-    const agent = agents[pane.agentId];
-    if (agent) {
-      return (
-        <span title={agent.cliType} className="flex items-center justify-center">
-          <AgentIcon provider={agent.cliType} size={12} />
-        </span>
-      );
-    }
+  if (agentCli) {
+    return (
+      <span title={agentCli} className="flex items-center justify-center">
+        <AgentIcon provider={agentCli} size={12} />
+      </span>
+    );
   }
   const Icon = PANE_ICON[pane.type] ?? Layout;
   return (
@@ -52,22 +46,22 @@ function PaneDot({
 
 function TabRow({ tab, isActive }: { tab: WorkspaceTab; isActive: boolean }) {
   const panes = useWorkspaceStore(selectPanes);
-  const agents = useAgentStore((s) => s.agents);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
 
   const paneIds = collectPaneIds(tab.layout);
   const firstPaneId = findFirstPaneId(tab.layout);
   const firstPane = firstPaneId ? panes[firstPaneId] : null;
+  const primaryAgentId = firstPane?.type === "terminal" ? firstPane.agentId : undefined;
+  const primaryAgent = useAgentStore((s) =>
+    primaryAgentId ? s.agents[primaryAgentId] : undefined,
+  );
 
   // Derive tab name and icon from primary pane
   let name = tab.label;
   let agentForIcon: { cliType: string; status: string } | null = null;
-  if (firstPane?.type === "terminal" && firstPane.agentId) {
-    const agent = agents[firstPane.agentId];
-    if (agent) {
-      name = agent.cliType;
-      agentForIcon = agent;
-    }
+  if (primaryAgent) {
+    name = primaryAgent.cliType;
+    agentForIcon = primaryAgent;
   } else if (firstPane?.type === "browser") name = "Browser";
   else if (firstPane?.type === "git") name = "Git";
   else if (firstPane?.type === "files") name = "Files";
@@ -96,7 +90,7 @@ function TabRow({ tab, isActive }: { tab: WorkspaceTab; isActive: boolean }) {
       {paneIds.length > 1 && (
         <span className="flex items-center gap-0.5">
           {paneIds.map((pid) => (
-            <PaneDot key={pid} pane={panes[pid]} agents={agents} />
+            <PaneDot key={pid} pane={panes[pid]} />
           ))}
         </span>
       )}

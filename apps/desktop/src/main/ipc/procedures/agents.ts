@@ -162,11 +162,8 @@ export const agentRouter = router({
 
     const manager = getAgentManager();
     await manager.stop(ctx.db, input.id);
-    const stopped = getAgent(ctx.db, input.id);
-    if (!stopped) {
-      throw new TRPCError({ code: "NOT_FOUND", message: `Agent ${input.id} not found after stop` });
-    }
-    return stopped;
+    // Agent may have been deleted by a concurrent cleanup — return whatever we have
+    return getAgent(ctx.db, input.id) ?? agent;
   }),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {

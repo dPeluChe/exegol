@@ -1,8 +1,8 @@
 import { useEffect } from "react";
-import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
+import { deleteAgentImperative } from "./use-delete-agent";
 
 export function useHotkeys() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -154,11 +154,7 @@ function cleanupAndCloseFocusedPane(): void {
   for (const pid of paneIdsToClean) {
     const pane = panes[pid];
     if (pane?.type === "terminal" && pane.agentId) {
-      const agentId = pane.agentId;
-      trpcMutate("agents.stop", { id: agentId })
-        .catch(() => {})
-        .then(() => trpcMutate("agents.delete", { id: agentId }).catch(() => {}));
-      useAgentStore.getState().removeAgent(agentId);
+      deleteAgentImperative(pane.agentId);
     }
   }
 
