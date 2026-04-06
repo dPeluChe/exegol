@@ -6,7 +6,7 @@ import { useAgent } from "../../hooks/use-trpc";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
-import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
+import { collectPaneIds, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { FileExplorer } from "../workspace/FileExplorer";
@@ -30,7 +30,7 @@ function PaneToolbar({
   const splitPane = useWorkspaceStore((s) => s.splitPane);
   const removePane = useWorkspaceStore((s) => s.removePane);
   const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);
-  const panes = useWorkspaceStore((s) => s.panes);
+  const panes = useWorkspaceStore(selectPanes);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const { projectId } = useProjectContext();
 
@@ -196,7 +196,7 @@ interface WorkspacePaneProps {
 }
 
 export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
-  const pane = useWorkspaceStore((s) => s.panes[paneId]);
+  const pane = useWorkspaceStore((s) => selectPanes(s)[paneId]);
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
   const mergeTabIntoSplit = useWorkspaceStore((s) => s.mergeTabIntoSplit);
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
@@ -205,7 +205,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
 
   // Check if this pane is inside a split (has siblings) — enables drag-out
   const isSplitPane = useWorkspaceStore((s) => {
-    const tab = s.tabs.find((t) => t.id === tabId);
+    const tab = selectTabs(s).find((t) => t.id === tabId);
     return tab ? collectPaneIds(tab.layout).length > 1 : false;
   });
 

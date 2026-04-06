@@ -22,7 +22,7 @@ import {
 } from "../../../../hooks/use-trpc-pipeline";
 import { useAgentStore } from "../../../../stores/agents";
 import { useTerminalStore } from "../../../../stores/terminals";
-import { findFirstPaneId, useWorkspaceStore } from "../../../../stores/workspace";
+import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../../../stores/workspace";
 import { TerminalInstance } from "../../../terminal/TerminalInstance";
 
 /** Lightweight inline terminal for pipeline steps — uses TerminalInstance directly */
@@ -99,7 +99,7 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
     } else {
       // No tab — create one with the terminal
       const tabId = store.addTab("Pipeline Agent");
-      const newTab = store.tabs.find((t) => t.id === tabId);
+      const newTab = getProjectState().tabs.find((t) => t.id === tabId);
       if (newTab) {
         const paneId = findFirstPaneId(newTab.layout);
         if (paneId) {

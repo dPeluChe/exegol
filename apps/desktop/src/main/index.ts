@@ -100,6 +100,20 @@ function registerIpcHandlers(): void {
     manager.resize(agentId, cols, rows);
   });
 
+  // Save clipboard image as temp file for terminal paste
+  ipcMain.handle("terminal:save-clipboard-image", async () => {
+    const { clipboard } = await import("electron");
+    const img = clipboard.readImage();
+    if (img.isEmpty()) return null;
+    const { writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const name = `exegol-paste-${Date.now()}.png`;
+    const filePath = join(tmpdir(), name);
+    await writeFile(filePath, img.toPNG());
+    return filePath;
+  });
+
   // App version
   ipcMain.handle("app:version", () => {
     return app.getVersion();

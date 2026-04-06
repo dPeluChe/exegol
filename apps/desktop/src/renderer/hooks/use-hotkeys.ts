@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
-import { collectPaneIds, useWorkspaceStore } from "../stores/workspace";
+import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
 
 export function useHotkeys() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -118,7 +118,7 @@ export function useHotkeys() {
         e.preventDefault();
         const ws = useWorkspaceStore.getState();
         const index = Number.parseInt(e.key, 10) - 1;
-        const tab = ws.tabs[index];
+        const tab = getProjectState().tabs[index];
         if (tab) {
           ws.setActiveTab(tab.id);
           if (useAppStore.getState().activeView !== "workspace") {
@@ -137,7 +137,9 @@ export function useHotkeys() {
 /** Stop agents in terminal panes, then close the focused pane/tab */
 function cleanupAndCloseFocusedPane(): void {
   const ws = useWorkspaceStore.getState();
-  const { focusedPaneId, activeTabId, tabs, panes } = ws;
+  const pw = getProjectState();
+  const { focusedPaneId } = ws;
+  const { activeTabId, tabs, panes } = pw;
   if (!focusedPaneId || !activeTabId) return;
 
   const tab = tabs.find((t) => t.id === activeTabId);
@@ -165,7 +167,8 @@ function cleanupAndCloseFocusedPane(): void {
 
 /** Cycle through workspace tabs (next/prev) */
 function navigateWorkspaceTab(direction: "next" | "prev"): void {
-  const { tabs, activeTabId, setActiveTab } = useWorkspaceStore.getState();
+  const { setActiveTab } = useWorkspaceStore.getState();
+  const { tabs, activeTabId } = getProjectState();
   if (tabs.length <= 1) return;
   const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
   const nextIndex =

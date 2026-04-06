@@ -2,15 +2,15 @@ import { useEffect, useRef } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../../lib/dispatch-refit";
-import { useWorkspaceStore } from "../../../stores/workspace";
+import { selectActiveTabId, selectTabs, useWorkspaceStore } from "../../../stores/workspace";
 import { WorkspaceLayout } from "../WorkspaceLayout";
 import { WorkspaceTabBar } from "../WorkspaceTabBar";
 
 // ─── All Tabs Layout (keep terminals alive across tab switches) ──────────────
 
 function AllTabsLayout() {
-  const tabs = useWorkspaceStore((s) => s.tabs);
-  const activeTabId = useWorkspaceStore((s) => s.activeTabId);
+  const tabs = useWorkspaceStore(selectTabs);
+  const activeTabId = useWorkspaceStore(selectActiveTabId);
   const prevActiveTabId = useRef(activeTabId);
 
   // Force xterm.js re-fit when switching workspace tabs

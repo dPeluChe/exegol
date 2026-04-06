@@ -1,6 +1,6 @@
 import type { Agent, AgentCliType, AgentStatus } from "@exegol/shared";
 import { create } from "zustand";
-import { useWorkspaceStore } from "./workspace";
+import { getProjectState, useWorkspaceStore } from "./workspace";
 
 // ─── Push event subscription (T17) ──────────────────────────────────────
 
@@ -21,7 +21,7 @@ export function startAgentStatusPush(): void {
         store.removeAgent(event.agentId);
         // Convert any terminal pane showing this agent to empty
         const ws = useWorkspaceStore.getState();
-        for (const [paneId, pane] of Object.entries(ws.panes)) {
+        for (const [paneId, pane] of Object.entries(getProjectState().panes)) {
           if (pane.type === "terminal" && pane.agentId === event.agentId) {
             ws.updatePane(paneId, { type: "empty", agentId: undefined });
           }

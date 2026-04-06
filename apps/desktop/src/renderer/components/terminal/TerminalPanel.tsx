@@ -1,7 +1,16 @@
-import type { HandoffSummary } from "@exegol/shared";
-import { Button } from "@exegol/ui";
+import type { AgentCliType, HandoffSummary } from "@exegol/shared";
+import { Button, cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, ArrowRight, Loader2, RotateCcw } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowDownToLine,
+  ArrowRight,
+  ArrowUpToLine,
+  Loader2,
+  Play,
+  RotateCcw,
+  Send,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
@@ -10,6 +19,9 @@ import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
+
+/** CLI types that support --continue / session resume */
+const RESUME_CLI_TYPES = new Set<AgentCliType>(["claude-code", "aider", "codex"]);
 
 interface TerminalPanelProps {
   agentId: string;
@@ -34,14 +46,17 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const { data: dbAgent } = useAgent(agentId);
   // Prefer store (push events) over DB query (polling fallback)
   const agent = storeAgent ?? dbAgent ?? null;
-  const isStopped = agent ? STOPPED_STATUSES.has(agent.status) : false;
+  const rawIsStopped = agent ? STOPPED_STATUSES.has(agent.status) : false;
   const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
-    isStopped ? agentId : null,
+    rawIsStopped ? agentId : null,
   );
   const spawnAgent = useSpawnAgent();
-  const { data: handoff } = useHandoff(agentId, isStopped);
+  const { data: handoff } = useHandoff(agentId, rawIsStopped);
   const [liveHandoff, setLiveHandoff] = useState<HandoffSummary | null>(null);
   const [handoffLoading, setHandoffLoading] = useState(false);
+  const [scrollAtTop, setScrollAtTop] = useState(true);
+  const [scrollAtBottom, setScrollAtBottom] = useState(true);
+  const [showSendTo, setShowSendTo] = useState(false);
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
@@ -49,6 +64,30 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const terminalRef = useRef<TerminalInstanceHandle>(null);
   const didSerializeRef = useRef(false);
   const [hasData, setHasData] = useState(false);
+  const hasEverHadDataRef = useRef(false);
+  if (hasData) hasEverHadDataRef.current = true;
+
+  // Don't show "Ended" UI until we've received at least one data chunk,
+  // OR until scrollback is available in DB (reattach/reload scenario)
+  const isStopped = rawIsStopped && (hasEverHadDataRef.current || !!scrollbackContent);
+  const allAgents = useAgentStore((s) => s.agents);
+
+  const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean) => {
+    setScrollAtTop(atTop);
+    setScrollAtBottom(atBottom);
+  }, []);
+
+  /** Running agents in other panes (targets for "Send to") */
+  const sendTargets = Object.values(allAgents).filter(
+    (a) => a.id !== agentId && ["running", "waiting_input"].includes(a.status),
+  );
+
+  const handleSendTo = useCallback((targetId: string) => {
+    const text = terminalRef.current?.getSelection();
+    if (!text) return;
+    window.api.terminal.write(targetId, text);
+    setShowSendTo(false);
+  }, []);
 
   // Resolved handoff: from query (stopped agents) or live IPC (running agents)
   const resolvedHandoff = isStopped ? (handoff ?? null) : liveHandoff;
@@ -145,51 +184,54 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           </div>
           {/* Center: action buttons (absolute to truly center regardless of left text width) */}
           <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-            {agent && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
-                onClick={async () => {
-                  // Re-launch with original task description only
-                  // (no scrollback injection — use CLI native resume when available)
-                  const newAgent = await spawnAgent.mutateAsync({
-                    projectId: agent.projectId,
-                    cliType: agent.cliType,
-                    taskDescription: agent.taskDescription,
-                    useWorktree: !!agent.branchName,
-                    branchName: agent.branchName ?? undefined,
-                  });
+            {agent &&
+              (() => {
+                const canResume = RESUME_CLI_TYPES.has(agent.cliType as AgentCliType);
+                const ResumeIcon = canResume ? Play : RotateCcw;
+                const label = canResume ? "Resume" : "Re-launch";
 
-                  if (paneId && newAgent?.id) {
-                    // Clean up old crashed agent from store + DB
-                    removeAgent(agent.id);
-                    trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
+                return (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
+                    onClick={async () => {
+                      const newAgent = await spawnAgent.mutateAsync({
+                        projectId: agent.projectId,
+                        cliType: agent.cliType,
+                        taskDescription: agent.taskDescription,
+                        useWorktree: !!agent.branchName,
+                        branchName: agent.branchName ?? undefined,
+                      });
 
-                    // Show new agent in same pane
-                    addAgent({
-                      id: newAgent.id,
-                      projectId: newAgent.projectId,
-                      cliType: newAgent.cliType,
-                      status: newAgent.status,
-                      currentStep: newAgent.currentStep,
-                      taskDescription: newAgent.taskDescription,
-                      branchName: newAgent.branchName ?? null,
-                      tokenUsage: { input: 0, output: 0, cost: 0 },
-                      startedAt: newAgent.startedAt,
-                    });
-                    createTerminal(newAgent.id);
-                    useWorkspaceStore.getState().updatePane(paneId, {
-                      type: "terminal",
-                      agentId: newAgent.id,
-                    });
-                  }
-                }}
-              >
-                <RotateCcw className="h-3 w-3" />
-                Re-launch
-              </Button>
-            )}
+                      if (paneId && newAgent?.id) {
+                        removeAgent(agent.id);
+                        trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
+
+                        addAgent({
+                          id: newAgent.id,
+                          projectId: newAgent.projectId,
+                          cliType: newAgent.cliType,
+                          status: newAgent.status,
+                          currentStep: newAgent.currentStep,
+                          taskDescription: newAgent.taskDescription,
+                          branchName: newAgent.branchName ?? null,
+                          tokenUsage: { input: 0, output: 0, cost: 0 },
+                          startedAt: newAgent.startedAt,
+                        });
+                        createTerminal(newAgent.id);
+                        useWorkspaceStore.getState().updatePane(paneId, {
+                          type: "terminal",
+                          agentId: newAgent.id,
+                        });
+                      }
+                    }}
+                  >
+                    <ResumeIcon className="h-3 w-3" />
+                    {label}
+                  </Button>
+                );
+              })()}
             {resolvedHandoff && (
               <Button
                 variant="ghost"
@@ -214,12 +256,23 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
             </p>
           </div>
         )}
-        <div className="flex-1">
+        <div className="relative flex-1">
           <TerminalInstance
+            ref={terminalRef}
             key={`scrollback-${agentId}`}
             agentId={agentId}
             readOnly
             initialContent={scrollbackContent}
+            onScrollPosition={handleScrollPosition}
+          />
+          <TerminalFloatingButtons
+            terminalRef={terminalRef}
+            scrollAtTop={scrollAtTop}
+            scrollAtBottom={scrollAtBottom}
+            sendTargets={sendTargets}
+            showSendTo={showSendTo}
+            setShowSendTo={setShowSendTo}
+            onSendTo={handleSendTo}
           />
         </div>
       </div>
@@ -268,8 +321,114 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           </Button>
         </div>
       )}
-      <div className="flex-1">
-        <TerminalInstance ref={terminalRef} key={agentId} agentId={agentId} onReady={onReady} />
+      <div className="relative flex-1">
+        <TerminalInstance
+          ref={terminalRef}
+          key={agentId}
+          agentId={agentId}
+          onReady={onReady}
+          onScrollPosition={handleScrollPosition}
+        />
+        <TerminalFloatingButtons
+          terminalRef={terminalRef}
+          scrollAtTop={scrollAtTop}
+          scrollAtBottom={scrollAtBottom}
+          sendTargets={sendTargets}
+          showSendTo={showSendTo}
+          setShowSendTo={setShowSendTo}
+          onSendTo={handleSendTo}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Floating scroll + send-to buttons ──────────────────────────────────────
+
+function TerminalFloatingButtons({
+  terminalRef,
+  scrollAtTop,
+  scrollAtBottom,
+  sendTargets,
+  showSendTo,
+  setShowSendTo,
+  onSendTo,
+}: {
+  terminalRef: React.RefObject<TerminalInstanceHandle | null>;
+  scrollAtTop: boolean;
+  scrollAtBottom: boolean;
+  sendTargets: Array<{ id: string; cliType: string; taskDescription: string }>;
+  showSendTo: boolean;
+  setShowSendTo: (v: boolean) => void;
+  onSendTo: (targetId: string) => void;
+}) {
+  return (
+    <div className="absolute right-3 bottom-3 z-10 flex flex-col items-end gap-1.5">
+      {/* Send to picker */}
+      {showSendTo && sendTargets.length > 0 && (
+        <div
+          className="mb-1 rounded-lg border p-1 shadow-xl"
+          style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
+        >
+          <p className="px-2 py-1 text-[9px] font-medium uppercase tracking-wider text-text-muted">
+            Send selection to
+          </p>
+          {sendTargets.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onSendTo(a.id)}
+              className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-text-secondary hover:bg-white/10"
+            >
+              <span className="font-medium text-accent">{a.cliType}</span>
+              <span className="truncate text-text-muted">
+                {a.taskDescription?.slice(0, 40) || a.id}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center gap-1">
+        {/* Send to button (visible when there are other running agents) */}
+        {sendTargets.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowSendTo(!showSendTo)}
+            className={cn(
+              "flex h-7 items-center gap-1 rounded-full border px-2.5 text-[10px] shadow-lg transition-all",
+              showSendTo
+                ? "border-accent/40 bg-accent/10 text-accent"
+                : "border-border bg-bg-secondary/90 text-text-muted hover:text-text-primary",
+            )}
+            title="Send selected text to another agent"
+          >
+            <Send className="h-3 w-3" />
+            <span>Send to</span>
+          </button>
+        )}
+
+        {/* Scroll navigation */}
+        {!scrollAtTop && (
+          <button
+            type="button"
+            onClick={() => terminalRef.current?.scrollToTop()}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-bg-secondary/90 text-text-muted shadow-lg transition-colors hover:text-text-primary"
+            title="Scroll to top"
+          >
+            <ArrowUpToLine className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {!scrollAtBottom && (
+          <button
+            type="button"
+            onClick={() => terminalRef.current?.scrollToBottom()}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-bg-secondary/90 text-text-muted shadow-lg transition-colors hover:text-text-primary"
+            title="Scroll to bottom"
+          >
+            <ArrowDownToLine className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );

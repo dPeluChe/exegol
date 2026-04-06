@@ -1,9 +1,20 @@
 import { cn } from "@exegol/ui";
-import { ChevronDown, ChevronRight, File, Folder, FolderOpen } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  ChevronRight,
+  File,
+  FilePlus,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
+import { trpcMutate } from "../../lib/trpc-client";
 
-// Lazy-load Monaco editor (~12MB) — only loaded when user opens a file
 const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
 
 // ─── Extension Labels ────────────────────────────────────────────────────────
@@ -37,6 +48,102 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 }
 
+// ─── Context Menu ──────────────────────────────────────────────────────────
+
+interface ContextMenuState {
+  x: number;
+  y: number;
+  targetPath: string;
+  isDirectory: boolean;
+}
+
+function FileContextMenu({
+  menu,
+  onClose,
+  onRefresh,
+}: {
+  menu: ContextMenuState;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    window.addEventListener("mousedown", handleClick);
+    return () => window.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  const handleCreate = useCallback(
+    async (type: "file" | "folder") => {
+      const name = window.prompt(`New ${type} name:`);
+      if (!name) return;
+      const parentDir = menu.isDirectory
+        ? menu.targetPath
+        : menu.targetPath.replace(/\/[^/]+$/, "");
+      const fullPath = `${parentDir}/${name}`;
+      try {
+        await trpcMutate("files.create", { path: fullPath, type });
+        onRefresh();
+      } catch (err) {
+        console.error(`[FileExplorer] Failed to create ${type}:`, err);
+      }
+      onClose();
+    },
+    [menu, onClose, onRefresh],
+  );
+
+  const handleDelete = useCallback(async () => {
+    const name = menu.targetPath.split("/").pop();
+    if (!window.confirm(`Delete "${name}"?`)) return;
+    try {
+      await trpcMutate("files.delete", { path: menu.targetPath });
+      onRefresh();
+    } catch (err) {
+      console.error("[FileExplorer] Failed to delete:", err);
+    }
+    onClose();
+  }, [menu, onClose, onRefresh]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="fixed z-50 min-w-[140px] rounded-md border py-1 shadow-xl"
+      style={{
+        left: menu.x,
+        top: menu.y,
+        background: "var(--bg-secondary)",
+        borderColor: "var(--border)",
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => handleCreate("file")}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-white/10"
+      >
+        <FilePlus className="h-3.5 w-3.5" /> New File
+      </button>
+      <button
+        type="button"
+        onClick={() => handleCreate("folder")}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-white/10"
+      >
+        <FolderPlus className="h-3.5 w-3.5" /> New Folder
+      </button>
+      <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+      <button
+        type="button"
+        onClick={handleDelete}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-white/10"
+      >
+        <Trash2 className="h-3.5 w-3.5" /> Delete
+      </button>
+    </div>
+  );
+}
+
 // ─── FileExplorer ──────────────────────────────────────────────────────────
 
 interface FileExplorerProps {
@@ -45,35 +152,75 @@ interface FileExplorerProps {
 
 export function FileExplorer({ rootPath }: FileExplorerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set([rootPath]));
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const { data: fileData } = useFileContent(selectedFile);
+  const queryClient = useQueryClient();
+
+  const toggleDir = useCallback((path: string) => {
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const refreshAll = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["directory"] });
+    if (selectedFile) queryClient.invalidateQueries({ queryKey: ["file", selectedFile] });
+  }, [queryClient, selectedFile]);
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, targetPath: string, isDirectory: boolean) => {
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, targetPath, isDirectory });
+    },
+    [],
+  );
 
   return (
     <div className="flex h-full bg-bg-primary">
-      {/* Tree view — left side, scrollable both ways */}
+      {/* Tree view */}
       <div
         className={cn(
           "flex shrink-0 flex-col border-r border-border",
           selectedFile ? "w-[200px]" : "flex-1",
         )}
       >
-        <div className="flex h-7 shrink-0 items-center border-b border-border bg-bg-secondary px-3">
+        <div className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
             Files
           </span>
+          <button
+            type="button"
+            onClick={refreshAll}
+            className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
+            title="Refresh"
+          >
+            <RefreshCw className="h-2.5 w-2.5" />
+          </button>
         </div>
-        <div className="flex-1 overflow-auto">
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: context menu on tree background */}
+        <div
+          className="flex-1 overflow-auto"
+          onContextMenu={(e) => handleContextMenu(e, rootPath, true)}
+        >
           <div className="min-w-max py-1">
             <DirectoryNode
               path={rootPath}
               depth={0}
               onSelectFile={setSelectedFile}
               selectedFile={selectedFile}
+              expandedDirs={expandedDirs}
+              onToggleDir={toggleDir}
+              onContextMenu={handleContextMenu}
             />
           </div>
         </div>
       </div>
 
-      {/* File preview — right side */}
+      {/* File preview */}
       {selectedFile && fileData && (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3">
@@ -101,24 +248,38 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
           </div>
         </div>
       )}
+
+      {contextMenu && (
+        <FileContextMenu
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onRefresh={refreshAll}
+        />
+      )}
     </div>
   );
 }
 
-// ─── Directory Node (lazy-loaded) ───────────────────────────────────────────
+// ─── Directory Node (controlled expansion) ─────────────────────────────────
 
 function DirectoryNode({
   path,
   depth,
   onSelectFile,
   selectedFile,
+  expandedDirs,
+  onToggleDir,
+  onContextMenu,
 }: {
   path: string;
   depth: number;
   onSelectFile: (path: string) => void;
   selectedFile: string | null;
+  expandedDirs: Set<string>;
+  onToggleDir: (path: string) => void;
+  onContextMenu: (e: React.MouseEvent, path: string, isDir: boolean) => void;
 }) {
-  const [expanded, setExpanded] = useState(depth === 0);
+  const expanded = expandedDirs.has(path);
   const { data: entries } = useDirectoryListing(expanded ? path : null);
 
   return (
@@ -126,7 +287,11 @@ function DirectoryNode({
       {depth > 0 && (
         <button
           type="button"
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => onToggleDir(path)}
+          onContextMenu={(e) => {
+            e.stopPropagation();
+            onContextMenu(e, path, true);
+          }}
           className="flex w-full items-center gap-1 px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-white/5"
           style={{ paddingLeft: `${depth * 12 + 8}px` }}
         >
@@ -153,6 +318,9 @@ function DirectoryNode({
               depth={depth + 1}
               onSelectFile={onSelectFile}
               selectedFile={selectedFile}
+              expandedDirs={expandedDirs}
+              onToggleDir={onToggleDir}
+              onContextMenu={onContextMenu}
             />
           ) : (
             <FileNode
@@ -161,6 +329,7 @@ function DirectoryNode({
               depth={depth + 1}
               onSelect={onSelectFile}
               isSelected={selectedFile === entry.path}
+              onContextMenu={onContextMenu}
             />
           ),
         )}
@@ -175,11 +344,13 @@ function FileNode({
   depth,
   onSelect,
   isSelected,
+  onContextMenu,
 }: {
   entry: DirectoryEntry;
   depth: number;
   onSelect: (path: string) => void;
   isSelected: boolean;
+  onContextMenu: (e: React.MouseEvent, path: string, isDir: boolean) => void;
 }) {
   const extLabel = getExtLabel(entry.name);
 
@@ -187,6 +358,10 @@ function FileNode({
     <button
       type="button"
       onClick={() => onSelect(entry.path)}
+      onContextMenu={(e) => {
+        e.stopPropagation();
+        onContextMenu(e, entry.path, false);
+      }}
       className={cn(
         "flex w-full items-center gap-1 px-2 py-0.5 text-[11px] transition-colors",
         isSelected

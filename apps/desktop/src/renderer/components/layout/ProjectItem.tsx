@@ -16,6 +16,7 @@ import type { AgentState } from "../../stores/agents";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
+import { TabsOverview } from "./TabsOverview";
 
 function PortBadges({ projectPath }: { projectPath: string }) {
   const { data: ports } = useProjectPorts(projectPath);
@@ -236,6 +237,8 @@ export function ProjectItem({
               </>
             );
           })()}
+
+          {isSelected && <TabsOverview />}
         </div>
       )}
     </div>

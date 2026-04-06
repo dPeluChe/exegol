@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useAppStore } from "./app";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -16,10 +17,6 @@ export interface Pane {
   invalidReason?: string;
 }
 
-/**
- * Recovery token — portable snapshot of a pane's state for reconstruction.
- * Inspired by Tabby's getRecoveryToken() pattern.
- */
 export interface RecoveryToken {
   type: PaneType;
   agentId?: string;
@@ -47,22 +44,29 @@ export interface WorkspaceTab {
   layout: LayoutNode;
 }
 
+/** Per-project workspace state */
+interface ProjectWorkspace {
+  tabs: WorkspaceTab[];
+  activeTabId: string | null;
+  panes: Record<string, Pane>;
+}
+
 // ─── Store interface ────────────────────────────────────────────────────────
 
 interface WorkspaceStore {
-  tabs: WorkspaceTab[];
-  activeTabId: string | null;
+  /** All workspace state keyed by projectId */
+  projectWorkspaces: Record<string, ProjectWorkspace>;
+  /** Mirror of app store's activeProjectId — kept in sync so selectors re-evaluate on project switch */
+  _activeProjectId: string | null;
+  /** Focused pane (global — only one pane focused at a time) */
   focusedPaneId: string | null;
-  panes: Record<string, Pane>;
 
   // Tab actions
   addTab: (label?: string) => string;
   removeTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   renameTab: (tabId: string, label: string) => void;
-  /** Reorder tab by moving it from one position to another */
   reorderTab: (fromIndex: number, toIndex: number) => void;
-  /** Merge a source tab's content into a target tab as a split pane */
   mergeTabIntoSplit: (
     sourceTabId: string,
     targetTabId: string,
@@ -83,22 +87,13 @@ interface WorkspaceStore {
   updatePane: (paneId: string, updates: Partial<Pane>) => void;
   setFocusedPane: (paneId: string | null) => void;
 
-  /** Extract a pane from its current tab into a new tab */
   extractPaneToNewTab: (sourceTabId: string, paneId: string) => void;
-
-  /** Close the focused pane. If it's the last pane, close the tab. */
   closeFocusedPane: () => void;
 
   // Derived
   getActiveTab: () => WorkspaceTab | null;
-
-  /** Ensure at least one tab exists (call on mount) */
   ensureDefaultTab: () => void;
-
-  /** Extract recovery token for a pane (for persistence/sharing). */
   getRecoveryToken: (paneId: string) => RecoveryToken | null;
-
-  /** Mark a pane as invalid (agent deleted, file missing, etc.) → converts to empty with error. */
   invalidatePane: (paneId: string, reason: string) => void;
 }
 
@@ -106,6 +101,26 @@ interface WorkspaceStore {
 
 function createEmptyPane(): Pane {
   return { id: nanoid(8), type: "empty" };
+}
+
+const EMPTY_PW: ProjectWorkspace = { tabs: [], activeTabId: null, panes: {} };
+
+function getPw(state: WorkspaceStore): ProjectWorkspace {
+  const pid = state._activeProjectId;
+  if (!pid) return EMPTY_PW;
+  return state.projectWorkspaces[pid] ?? EMPTY_PW;
+}
+
+function setPw(state: WorkspaceStore, updates: Partial<ProjectWorkspace>): Partial<WorkspaceStore> {
+  const pid = state._activeProjectId;
+  if (!pid) return {};
+  const current = state.projectWorkspaces[pid] ?? EMPTY_PW;
+  return {
+    projectWorkspaces: {
+      ...state.projectWorkspaces,
+      [pid]: { ...current, ...updates },
+    },
+  };
 }
 
 function removeNodeByPaneId(node: LayoutNode, paneId: string): LayoutNode | null {
@@ -129,7 +144,6 @@ function removeNodeByPaneId(node: LayoutNode, paneId: string): LayoutNode | null
   // biome-ignore lint/style/noNonNullAssertion: layout tree guarantees non-null
   if (remaining.length === 1) return remaining[0]!;
 
-  // Renormalize sizes
   const total = remainingSizes.reduce((a, b) => a + b, 0);
   const normalizedSizes = remainingSizes.map((s) =>
     total > 0 ? (s / total) * 100 : 100 / remainingSizes.length,
@@ -172,89 +186,110 @@ function splitNodeByPaneId(
   return changed ? { ...node, children: newChildren } : node;
 }
 
+function collectPaneIds(node: LayoutNode): string[] {
+  if (node.type === "pane") return [node.paneId];
+  return node.children.flatMap(collectPaneIds);
+}
+
+// ─── Selectors (resolve active project) ─────────────────────────────────────
+
+/** Select current project's tabs. Use: useWorkspaceStore(selectTabs) */
+export function selectTabs(s: WorkspaceStore): WorkspaceTab[] {
+  return getPw(s).tabs;
+}
+export function selectActiveTabId(s: WorkspaceStore): string | null {
+  return getPw(s).activeTabId;
+}
+export function selectPanes(s: WorkspaceStore): Record<string, Pane> {
+  return getPw(s).panes;
+}
+
 // ─── Store ──────────────────────────────────────────────────────────────────
 
 export const useWorkspaceStore = create<WorkspaceStore>()(
   persist(
     (set, get) => ({
-      tabs: [],
-      activeTabId: null,
+      projectWorkspaces: {},
+      _activeProjectId: useAppStore.getState().activeProjectId,
       focusedPaneId: null,
-      panes: {},
 
       addTab: (label) => {
         const pane = createEmptyPane();
+        const pw = getPw(get());
         const tab: WorkspaceTab = {
           id: nanoid(8),
-          label: label ?? `Tab ${get().tabs.length + 1}`,
+          label: label ?? `Tab ${pw.tabs.length + 1}`,
           layout: { type: "pane", paneId: pane.id },
         };
         set((s) => ({
-          tabs: [...s.tabs, tab],
-          activeTabId: tab.id,
+          ...setPw(s, {
+            tabs: [...pw.tabs, tab],
+            activeTabId: tab.id,
+            panes: { ...pw.panes, [pane.id]: pane },
+          }),
           focusedPaneId: pane.id,
-          panes: { ...s.panes, [pane.id]: pane },
         }));
         return tab.id;
       },
 
       removeTab: (tabId) =>
         set((s) => {
-          const idx = s.tabs.findIndex((t) => t.id === tabId);
+          const pw = getPw(s);
+          const idx = pw.tabs.findIndex((t) => t.id === tabId);
           if (idx === -1) return s;
 
-          // biome-ignore lint/style/noNonNullAssertion: layout tree guarantees non-null
-          const tab = s.tabs[idx]!;
+          // biome-ignore lint/style/noNonNullAssertion: index valid
+          const tab = pw.tabs[idx]!;
           const paneIds = collectPaneIds(tab.layout);
-          const newPanes = { ...s.panes };
+          const newPanes = { ...pw.panes };
           for (const pid of paneIds) {
             delete newPanes[pid];
           }
 
-          const newTabs = s.tabs.filter((t) => t.id !== tabId);
-          let newActiveTabId = s.activeTabId;
-          if (s.activeTabId === tabId) {
-            // Pick neighbor
+          const newTabs = pw.tabs.filter((t) => t.id !== tabId);
+          let newActiveTabId = pw.activeTabId;
+          if (pw.activeTabId === tabId) {
             const neighborIdx = Math.min(idx, newTabs.length - 1);
             newActiveTabId = neighborIdx >= 0 ? (newTabs[neighborIdx]?.id ?? null) : null;
           }
 
-          return {
-            tabs: newTabs,
-            activeTabId: newActiveTabId,
-            panes: newPanes,
-          };
+          return setPw(s, { tabs: newTabs, activeTabId: newActiveTabId, panes: newPanes });
         }),
 
       setActiveTab: (tabId) => {
-        const tab = get().tabs.find((t) => t.id === tabId);
+        const pw = getPw(get());
+        const tab = pw.tabs.find((t) => t.id === tabId);
         const firstPane = tab ? findFirstPaneId(tab.layout) : null;
-        set({ activeTabId: tabId, focusedPaneId: firstPane });
+        set((s) => ({
+          ...setPw(s, { activeTabId: tabId }),
+          focusedPaneId: firstPane,
+        }));
       },
 
       renameTab: (tabId, label) =>
-        set((s) => ({
-          tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, label } : t)),
-        })),
+        set((s) => {
+          const pw = getPw(s);
+          return setPw(s, { tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, label } : t)) });
+        }),
 
       reorderTab: (fromIndex, toIndex) =>
         set((s) => {
           if (fromIndex === toIndex) return s;
-          const newTabs = [...s.tabs];
+          const pw = getPw(s);
+          const newTabs = [...pw.tabs];
           const [moved] = newTabs.splice(fromIndex, 1);
           if (!moved) return s;
           newTabs.splice(toIndex, 0, moved);
-          return { tabs: newTabs };
+          return setPw(s, { tabs: newTabs });
         }),
 
       mergeTabIntoSplit: (sourceTabId, targetTabId, direction, sourceFirst = false) =>
         set((s) => {
-          const sourceTab = s.tabs.find((t) => t.id === sourceTabId);
-          const targetTab = s.tabs.find((t) => t.id === targetTabId);
+          const pw = getPw(s);
+          const sourceTab = pw.tabs.find((t) => t.id === sourceTabId);
+          const targetTab = pw.tabs.find((t) => t.id === targetTabId);
           if (!sourceTab || !targetTab || sourceTabId === targetTabId) return s;
 
-          // Merge source layout into target as a new split
-          // sourceFirst: drop left/top → source appears first (left/top position)
           const mergedLayout: LayoutNode = {
             type: "split",
             direction,
@@ -264,16 +299,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
             sizes: [50, 50],
           };
 
-          // Remove source tab, update target tab's layout
-          const newTabs = s.tabs
+          const newTabs = pw.tabs
             .filter((t) => t.id !== sourceTabId)
             .map((t) => (t.id === targetTabId ? { ...t, layout: mergedLayout } : t));
 
-          // Panes stay as-is — they're now referenced by the merged layout
-          return {
-            tabs: newTabs,
-            activeTabId: targetTabId,
-          };
+          return setPw(s, { tabs: newTabs, activeTabId: targetTabId });
         }),
 
       addPane: (tabId, type, config) => {
@@ -284,56 +314,54 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           url: config?.url,
         };
         set((s) => {
-          const tab = s.tabs.find((t) => t.id === tabId);
+          const pw = getPw(s);
+          const tab = pw.tabs.find((t) => t.id === tabId);
           if (!tab) return s;
 
-          // Find the first pane and split to add the new one
           const firstPaneId = findFirstPaneId(tab.layout);
           if (!firstPaneId) return s;
 
           const newLayout = splitNodeByPaneId(tab.layout, firstPaneId, "horizontal", pane.id);
 
-          return {
-            tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
-            panes: { ...s.panes, [pane.id]: pane },
-          };
+          return setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
+            panes: { ...pw.panes, [pane.id]: pane },
+          });
         });
         return pane.id;
       },
 
       removePane: (tabId, paneId) =>
         set((s) => {
-          const tab = s.tabs.find((t) => t.id === tabId);
+          const pw = getPw(s);
+          const tab = pw.tabs.find((t) => t.id === tabId);
           if (!tab) return s;
 
           const newLayout = removeNodeByPaneId(tab.layout, paneId);
-          const { [paneId]: _, ...restPanes } = s.panes;
+          const { [paneId]: _, ...restPanes } = pw.panes;
 
-          // If no panes left, replace with an empty pane
           if (!newLayout) {
             const emptyPane = createEmptyPane();
-            return {
-              tabs: s.tabs.map((t) =>
+            return setPw(s, {
+              tabs: pw.tabs.map((t) =>
                 t.id === tabId
-                  ? {
-                      ...t,
-                      layout: { type: "pane" as const, paneId: emptyPane.id },
-                    }
+                  ? { ...t, layout: { type: "pane" as const, paneId: emptyPane.id } }
                   : t,
               ),
               panes: { ...restPanes, [emptyPane.id]: emptyPane },
-            };
+            });
           }
 
-          return {
-            tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
+          return setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
             panes: restPanes,
-          };
+          });
         }),
 
       splitPane: (tabId, paneId, direction, newPaneType, config) =>
         set((s) => {
-          const tab = s.tabs.find((t) => t.id === tabId);
+          const pw = getPw(s);
+          const tab = pw.tabs.find((t) => t.id === tabId);
           if (!tab) return s;
 
           const newPane: Pane = {
@@ -345,19 +373,22 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
           const newLayout = splitNodeByPaneId(tab.layout, paneId, direction, newPane.id);
 
-          return {
-            tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
-            panes: { ...s.panes, [newPane.id]: newPane },
-          };
+          return setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
+            panes: { ...pw.panes, [newPane.id]: newPane },
+          });
         }),
 
       updatePane: (paneId, updates) =>
         set((s) => {
-          const existing = s.panes[paneId];
+          const pw = getPw(s);
+          const existing = pw.panes[paneId];
           if (!existing) return s;
           return {
+            ...setPw(s, {
+              panes: { ...pw.panes, [paneId]: { ...existing, ...updates } },
+            }),
             focusedPaneId: paneId,
-            panes: { ...s.panes, [paneId]: { ...existing, ...updates } },
           };
         }),
 
@@ -365,54 +396,50 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
       extractPaneToNewTab: (sourceTabId, paneId) =>
         set((s) => {
-          const sourceTab = s.tabs.find((t) => t.id === sourceTabId);
+          const pw = getPw(s);
+          const sourceTab = pw.tabs.find((t) => t.id === sourceTabId);
           if (!sourceTab) return s;
-          const pane = s.panes[paneId];
+          const pane = pw.panes[paneId];
           if (!pane) return s;
 
-          // Don't extract if it's the only pane (nothing to split from)
           const allPaneIds = collectPaneIds(sourceTab.layout);
           if (allPaneIds.length <= 1) return s;
 
-          // Remove pane from source tab's layout
           const newLayout = removeNodeByPaneId(sourceTab.layout, paneId);
           if (!newLayout) return s;
 
-          // Create new tab with the extracted pane
           const newTab: WorkspaceTab = {
             id: nanoid(8),
-            label: pane.type === "terminal" ? "Terminal" : `Tab ${s.tabs.length + 1}`,
+            label: pane.type === "terminal" ? "Terminal" : `Tab ${pw.tabs.length + 1}`,
             layout: { type: "pane", paneId },
           };
 
-          // Insert new tab right after source tab
-          const sourceIdx = s.tabs.findIndex((t) => t.id === sourceTabId);
-          const newTabs = [...s.tabs];
+          const sourceIdx = pw.tabs.findIndex((t) => t.id === sourceTabId);
+          const newTabs = [...pw.tabs];
           newTabs[sourceIdx] = { ...sourceTab, layout: newLayout };
           newTabs.splice(sourceIdx + 1, 0, newTab);
 
           return {
-            tabs: newTabs,
-            activeTabId: newTab.id,
+            ...setPw(s, { tabs: newTabs, activeTabId: newTab.id }),
             focusedPaneId: paneId,
           };
         }),
 
       closeFocusedPane: () => {
-        const { focusedPaneId, activeTabId, tabs } = get();
-        if (!focusedPaneId || !activeTabId) return;
+        const pw = getPw(get());
+        const { focusedPaneId } = get();
+        if (!focusedPaneId || !pw.activeTabId) return;
 
-        const tab = tabs.find((t) => t.id === activeTabId);
+        const tab = pw.tabs.find((t) => t.id === pw.activeTabId);
         if (!tab) return;
 
-        // If the focused pane is the only pane in the tab, close the tab
         const allPaneIds = collectPaneIds(tab.layout);
         if (allPaneIds.length <= 1) {
-          get().removeTab(activeTabId);
+          get().removeTab(pw.activeTabId);
         } else {
-          get().removePane(activeTabId, focusedPaneId);
-          // Focus the first remaining pane
-          const updatedTab = get().tabs.find((t) => t.id === activeTabId);
+          get().removePane(pw.activeTabId, focusedPaneId);
+          const updatedPw = getPw(get());
+          const updatedTab = updatedPw.tabs.find((t) => t.id === pw.activeTabId);
           if (updatedTab) {
             const nextPaneId = findFirstPaneId(updatedTab.layout);
             set({ focusedPaneId: nextPaneId });
@@ -421,18 +448,20 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       },
 
       getActiveTab: () => {
-        const { tabs, activeTabId } = get();
-        return tabs.find((t) => t.id === activeTabId) ?? null;
+        const pw = getPw(get());
+        return pw.tabs.find((t) => t.id === pw.activeTabId) ?? null;
       },
 
       ensureDefaultTab: () => {
-        if (get().tabs.length === 0) {
+        const pw = getPw(get());
+        if (pw.tabs.length === 0) {
           get().addTab("Workspace");
         }
       },
 
       getRecoveryToken: (paneId) => {
-        const pane = get().panes[paneId];
+        const pw = getPw(get());
+        const pane = pw.panes[paneId];
         if (!pane) return null;
         return {
           type: pane.type,
@@ -444,58 +473,81 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
       invalidatePane: (paneId, reason) =>
         set((s) => {
-          const existing = s.panes[paneId];
+          const pw = getPw(s);
+          const existing = pw.panes[paneId];
           if (!existing) return s;
-          return {
+          return setPw(s, {
             panes: {
-              ...s.panes,
+              ...pw.panes,
               [paneId]: { ...existing, type: "empty", agentId: undefined, invalidReason: reason },
             },
-          };
+          });
         }),
     }),
     {
       name: "exegol-workspace",
       partialize: (state) => ({
-        tabs: state.tabs,
-        activeTabId: state.activeTabId,
-        panes: state.panes,
+        projectWorkspaces: state.projectWorkspaces,
       }),
-      // On rehydrate: clear invalid flags + collapse empty-only splits to single pane
+      // Bump version when schema changes to trigger migration
+      version: 1,
+      migrate: (persisted: unknown, version: number) => {
+        if (version === 0) {
+          // v0 → v1: migrate flat {tabs, panes, activeTabId} to projectWorkspaces
+          const old = persisted as Record<string, unknown>;
+          if (old.tabs && !old.projectWorkspaces) {
+            // Can't determine which project these belong to, so discard old state
+            return { projectWorkspaces: {} };
+          }
+        }
+        return persisted as Record<string, unknown>;
+      },
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        const cleaned: Record<string, Pane> = {};
-        for (const [id, pane] of Object.entries(state.panes)) {
-          const { invalidReason: _, ...rest } = pane;
-          cleaned[id] = rest;
-        }
-        state.panes = cleaned;
+        // Sync _activeProjectId from app store after rehydration
+        state._activeProjectId = useAppStore.getState().activeProjectId;
 
-        // Collapse tabs where ALL panes are empty → single empty pane
-        state.tabs = state.tabs.map((tab) => {
-          const paneIds = collectPaneIds(tab.layout);
-          const allEmpty = paneIds.every((pid) => cleaned[pid]?.type === "empty");
-          if (allEmpty && paneIds.length > 1) {
-            // Remove extra empty panes, keep only one
-            const keepId = paneIds[0] as string;
-            for (const pid of paneIds) {
-              if (pid !== keepId) delete cleaned[pid];
-            }
-            return { ...tab, layout: { type: "pane" as const, paneId: keepId } };
+        for (const pw of Object.values(state.projectWorkspaces)) {
+          const cleaned: Record<string, Pane> = {};
+          for (const [id, pane] of Object.entries(pw.panes)) {
+            const { invalidReason: _, ...rest } = pane;
+            cleaned[id] = rest;
           }
-          return tab;
-        });
-        state.panes = cleaned;
+          pw.panes = cleaned;
+
+          pw.tabs = pw.tabs.map((tab) => {
+            const paneIds = collectPaneIds(tab.layout);
+            const allEmpty = paneIds.every((pid) => cleaned[pid]?.type === "empty");
+            if (allEmpty && paneIds.length > 1) {
+              const keepId = paneIds[0] as string;
+              for (const pid of paneIds) {
+                if (pid !== keepId) delete cleaned[pid];
+              }
+              return { ...tab, layout: { type: "pane" as const, paneId: keepId } };
+            }
+            return tab;
+          });
+          pw.panes = cleaned;
+        }
       },
     },
   ),
 );
 
+// ─── Sync activeProjectId from app store → workspace store ──────────────────
+
+useAppStore.subscribe((state) => {
+  const current = useWorkspaceStore.getState()._activeProjectId;
+  if (state.activeProjectId !== current) {
+    useWorkspaceStore.setState({ _activeProjectId: state.activeProjectId });
+  }
+});
+
 // ─── Utility ────────────────────────────────────────────────────────────────
 
-function collectPaneIds(node: LayoutNode): string[] {
-  if (node.type === "pane") return [node.paneId];
-  return node.children.flatMap(collectPaneIds);
+/** Get current project's workspace from outside React (imperative). */
+export function getProjectState(): ProjectWorkspace {
+  return getPw(useWorkspaceStore.getState());
 }
 
 export { collectPaneIds, findFirstPaneId };

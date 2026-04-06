@@ -11,7 +11,11 @@ import { useTerminalStore } from "../../stores/terminals";
 import {
   collectPaneIds,
   findFirstPaneId,
+  getProjectState,
   type Pane,
+  selectActiveTabId,
+  selectPanes,
+  selectTabs,
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
@@ -56,8 +60,8 @@ function getTabMeta(
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function WorkspaceTabBar() {
-  const tabs = useWorkspaceStore((s) => s.tabs);
-  const activeTabId = useWorkspaceStore((s) => s.activeTabId);
+  const tabs = useWorkspaceStore(selectTabs);
+  const activeTabId = useWorkspaceStore(selectActiveTabId);
   const addTab = useWorkspaceStore((s) => s.addTab);
   const removeTab = useWorkspaceStore((s) => s.removeTab);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
@@ -67,7 +71,7 @@ export function WorkspaceTabBar() {
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
-  const panes = useWorkspaceStore((s) => s.panes);
+  const panes = useWorkspaceStore(selectPanes);
   const agents = useAgentStore((s) => s.agents);
   const { projectId } = useProjectContext();
 
@@ -75,12 +79,12 @@ export function WorkspaceTabBar() {
   const handleCloseTab = useCallback(
     (tabId: string) => {
       // Read fresh state to avoid stale closure
-      const state = useWorkspaceStore.getState();
-      const tab = state.tabs.find((t) => t.id === tabId);
+      const pw = getProjectState();
+      const tab = pw.tabs.find((t) => t.id === tabId);
       if (tab) {
         const paneIds = collectPaneIds(tab.layout);
         for (const pid of paneIds) {
-          const pane = state.panes[pid];
+          const pane = pw.panes[pid];
           if (pane?.type === "terminal" && pane.agentId) {
             const agentId = pane.agentId;
             // Stop process then delete from DB — both non-fatal
@@ -181,7 +185,7 @@ export function WorkspaceTabBar() {
       // Create a new tab first
       const newTabId = addTab("Terminal");
       // Find its empty pane
-      const tab = useWorkspaceStore.getState().tabs.find((t) => t.id === newTabId);
+      const tab = getProjectState().tabs.find((t) => t.id === newTabId);
       const firstPaneId = tab ? findFirstPaneId(tab.layout) : null;
 
       // Spawn a shell agent
@@ -342,11 +346,8 @@ export function WorkspaceTabBar() {
 function QuickLaunchBar() {
   const { projectId } = useProjectContext();
   const [launching, setLaunching] = useState<string | null>(null);
-  const activeTabId = useWorkspaceStore((s) => s.activeTabId);
-  const panes = useWorkspaceStore((s) => s.panes);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const addTab = useWorkspaceStore((s) => s.addTab);
-  const tabs = useWorkspaceStore((s) => s.tabs);
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const { data: providers } = useQuery({
@@ -358,7 +359,7 @@ function QuickLaunchBar() {
 
   const handleLaunch = useCallback(
     async (cli: AgentProvider) => {
-      if (!projectId) return;
+      if (!projectId || launching) return;
       setLaunching(cli.id);
       try {
         // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
@@ -381,11 +382,12 @@ function QuickLaunchBar() {
         });
         createTerminal(agent.id);
 
-        // Find active tab and check if current pane can be replaced
-        const activeTab = tabs.find((t) => t.id === activeTabId);
+        // Read fresh state to avoid stale closure
+        const freshPw = getProjectState();
+        const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
         if (activeTab) {
           const firstPaneId = findFirstPaneId(activeTab.layout);
-          const firstPane = firstPaneId ? panes[firstPaneId] : null;
+          const firstPane = firstPaneId ? freshPw.panes[firstPaneId] : null;
 
           // Only replace empty panes or terminals with stopped/no agent
           // NEVER replace a pane with a running agent — that orphans the session
@@ -407,7 +409,7 @@ function QuickLaunchBar() {
           } else {
             // Pane has a running agent or is browser/files/git: create a new tab
             const newTabId = addTab(cli.name);
-            const newTab = useWorkspaceStore.getState().tabs.find((t) => t.id === newTabId);
+            const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
             if (newTab) {
               const newPaneId = findFirstPaneId(newTab.layout);
               if (newPaneId) {
@@ -421,7 +423,7 @@ function QuickLaunchBar() {
         } else {
           // No active tab: create one
           const newTabId = addTab(cli.name);
-          const newTab = useWorkspaceStore.getState().tabs.find((t) => t.id === newTabId);
+          const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
           if (newTab) {
             const newPaneId = findFirstPaneId(newTab.layout);
             if (newPaneId) {
@@ -438,7 +440,7 @@ function QuickLaunchBar() {
         setLaunching(null);
       }
     },
-    [projectId, activeTabId, tabs, panes, addAgent, createTerminal, updatePane, addTab],
+    [projectId, launching, addAgent, createTerminal, updatePane, addTab],
   );
 
   return (

@@ -16,10 +16,11 @@ import { useSettings } from "../../hooks/use-trpc";
 import { useTerminalStore } from "../../stores/terminals";
 
 export interface TerminalInstanceHandle {
-  /** Serialize the terminal buffer state (ANSI escape sequences + cursor/attribute state). */
   serialize: () => string | null;
-  /** Force re-fit + full repaint (call when tab becomes visible). */
   refit: () => void;
+  scrollToTop: () => void;
+  scrollToBottom: () => void;
+  getSelection: () => string;
 }
 
 interface TerminalInstanceProps {
@@ -27,6 +28,8 @@ interface TerminalInstanceProps {
   readOnly?: boolean;
   initialContent?: string;
   onReady?: () => void;
+  /** Called when scroll position changes: atTop, atBottom */
+  onScrollPosition?: (atTop: boolean, atBottom: boolean) => void;
 }
 
 const DARK_TERMINAL_THEME = {
@@ -80,7 +83,7 @@ const LIGHT_TERMINAL_THEME = {
 };
 
 export const TerminalInstance = forwardRef(function TerminalInstance(
-  { agentId, readOnly = false, initialContent, onReady }: TerminalInstanceProps,
+  { agentId, readOnly = false, initialContent, onReady, onScrollPosition }: TerminalInstanceProps,
   ref: ForwardedRef<TerminalInstanceHandle>,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -102,7 +105,6 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         return null;
       }
     },
-    /** Force re-fit + full repaint (call when tab becomes visible) */
     refit: () => {
       const fit = fitAddonRef.current;
       const terminal = terminalRef.current;
@@ -114,6 +116,9 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         /* container may not be ready */
       }
     },
+    scrollToTop: () => terminalRef.current?.scrollToTop(),
+    scrollToBottom: () => terminalRef.current?.scrollToBottom(),
+    getSelection: () => terminalRef.current?.getSelection() ?? "",
   }));
 
   const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
@@ -145,6 +150,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   }, [agentId, setTerminalSize, readOnly]);
 
   // Rule 4: external system sync — xterm.js setup/teardown, PTY wiring, resize observer
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onScrollPosition is stable (useCallback), adding it would remount the entire terminal
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -198,6 +204,31 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
 
     if (!readOnly) {
+      // Ctrl+Backspace → send \x17 (ETB = erase word) instead of single backspace
+      terminal.attachCustomKeyEventHandler((e) => {
+        if (e.type === "keydown" && e.key === "Backspace" && (e.ctrlKey || e.metaKey)) {
+          window.api.terminal.write(agentId, "\x17");
+          return false;
+        }
+        return true;
+      });
+
+      // Image paste: save clipboard image as temp file, paste path into terminal
+      const handlePaste = async (e: ClipboardEvent) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        for (const item of items) {
+          if (item.type.startsWith("image/")) {
+            e.preventDefault();
+            const filePath = await window.api.terminal.saveClipboardImage();
+            if (filePath) window.api.terminal.write(agentId, filePath);
+            return;
+          }
+        }
+      };
+      container.addEventListener("paste", handlePaste);
+      disposables.push({ dispose: () => container.removeEventListener("paste", handlePaste) });
+
       // Connect terminal input -> main process
       disposables.push(
         terminal.onData((data) => {
@@ -227,6 +258,19 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     setTerminalReady(agentId);
     onReady?.();
+
+    // Scroll position reporting for navigation buttons
+    if (onScrollPosition) {
+      const checkScroll = () => {
+        const buf = terminal.buffer.active;
+        const atTop = buf.viewportY === 0;
+        const atBottom = buf.viewportY >= buf.baseY;
+        onScrollPosition(atTop, atBottom);
+      };
+      disposables.push(terminal.onScroll(checkScroll));
+      // Also check after writes (new content may change position)
+      disposables.push(terminal.onWriteParsed(checkScroll));
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       requestAnimationFrame(() => {
