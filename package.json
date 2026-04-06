@@ -15,7 +15,11 @@
     "typecheck": "turbo run typecheck",
     "test": "cd apps/desktop && vitest run",
     "test:watch": "cd apps/desktop && vitest",
-    "test:coverage": "cd apps/desktop && vitest run --coverage"
+    "test:coverage": "cd apps/desktop && vitest run --coverage",
+    "package": "cd apps/desktop && bun run package",
+    "package:mac": "cd apps/desktop && bun run package:mac",
+    "package:win": "cd apps/desktop && bun run package:win",
+    "package:linux": "cd apps/desktop && bun run package:linux"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

@@ -152,8 +152,11 @@ function InvalidPane({ reason, paneId }: { reason: string; paneId: string }) {
 
 // ─── Recoverable Terminal Pane (validates agent exists) ──────────────────
 
+const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
+
 function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId: string }) {
   const { data: agent, isError } = useAgent(agentId);
+  const storeAgent = useAgentStore((s) => s.agents[agentId]);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
 
   // Agent not found — convert pane to empty (agent was deleted)
@@ -163,7 +166,17 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
     }
   }, [isError, paneId, updatePane]);
 
-  if (isError) return null;
+  // Agent in terminal state with no live store entry — stale pane from previous session
+  // (store only has agents that were spawned or reattached in this session)
+  const isStaleFromPreviousSession = agent && TERMINAL_STATUSES.has(agent.status) && !storeAgent;
+
+  useEffect(() => {
+    if (isStaleFromPreviousSession) {
+      updatePane(paneId, { type: "empty", agentId: undefined });
+    }
+  }, [isStaleFromPreviousSession, paneId, updatePane]);
+
+  if (isError || isStaleFromPreviousSession) return null;
 
   // Agent found or still loading
   if (agent === undefined) {
