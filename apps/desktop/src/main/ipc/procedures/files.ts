@@ -1,4 +1,4 @@
-import { access, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog } from "electron";
@@ -126,6 +126,24 @@ export const filesRouter = router({
       if (result.canceled || result.filePaths.length === 0) return null;
       return result.filePaths[0];
     }),
+
+  create: publicProcedure
+    .input(z.object({ path: z.string(), type: z.enum(["file", "folder"]) }))
+    .mutation(async ({ ctx, input }) => {
+      assertPathInsideProject(input.path, ctx);
+      if (input.type === "folder") {
+        await mkdir(input.path, { recursive: true });
+      } else {
+        await writeFile(input.path, "", "utf-8");
+      }
+      return { success: true };
+    }),
+
+  delete: publicProcedure.input(z.object({ path: z.string() })).mutation(async ({ ctx, input }) => {
+    assertPathInsideProject(input.path, ctx);
+    await rm(input.path, { recursive: true });
+    return { success: true };
+  }),
 
   listDirectory: publicProcedure
     .input(z.object({ path: z.string() }))

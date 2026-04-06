@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trpcInvoke } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
-import { useWorkspaceStore } from "../stores/workspace";
+import { getProjectState, useWorkspaceStore } from "../stores/workspace";
 
 // ─── Types ────────���─────────────────────────────────────────────────────────
 
@@ -156,7 +156,7 @@ function useCommands(close: () => void): Command[] {
           icon: Bot,
           action: run(() => {
             const ws = useWorkspaceStore.getState();
-            const pane = Object.values(ws.panes).find(
+            const pane = Object.values(getProjectState().panes).find(
               (p) => p.type === "terminal" && p.agentId === a.id,
             );
             if (pane) ws.setFocusedPane(pane.id);

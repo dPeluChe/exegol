@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
-import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
+import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
 function slugify(text: string): string {
@@ -97,7 +97,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
       // Create a new tab for this agent (don't replace existing pane)
       const store = useWorkspaceStore.getState();
       const newTabId = store.addTab(agent.cliType);
-      const newTab = store.tabs.find((t) => t.id === newTabId);
+      const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
       if (newTab) {
         const paneId = findFirstPaneId(newTab.layout);
         if (paneId) {

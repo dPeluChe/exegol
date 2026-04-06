@@ -17,6 +17,9 @@ contextBridge.exposeInMainWorld("api", {
     write: (id: string, data: string) => ipcRenderer.send("terminal:write", id, data),
     resize: (id: string, cols: number, rows: number) =>
       ipcRenderer.send("terminal:resize", id, cols, rows),
+    /** Save clipboard image as temp file, returns file path or null */
+    saveClipboardImage: (): Promise<string | null> =>
+      ipcRenderer.invoke("terminal:save-clipboard-image"),
   },
   app: {
     getVersion: () => ipcRenderer.invoke("app:version"),

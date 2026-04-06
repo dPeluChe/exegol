@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../stores/agents";
-import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
+import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -82,7 +82,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
       await trpcMutate("agents.delete", { id: agent.id });
       removeAgent(agent.id);
       const ws = useWorkspaceStore.getState();
-      for (const [paneId, pane] of Object.entries(ws.panes)) {
+      for (const [paneId, pane] of Object.entries(getProjectState().panes)) {
         if (pane.agentId === agent.id) {
           ws.updatePane(paneId, { type: "empty", agentId: undefined });
         }
