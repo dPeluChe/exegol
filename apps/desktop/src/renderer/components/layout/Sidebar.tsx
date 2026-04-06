@@ -1,5 +1,5 @@
 import { ScrollArea, Separator } from "@exegol/ui";
-import { FolderOpen, History, Plus, Rss } from "lucide-react";
+import { Cuboid, History, Plus, Rss } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 import { ActivityFeed } from "./ActivityFeed";
@@ -21,7 +21,7 @@ export function Sidebar() {
       <ScrollArea className="flex-1">
         <SidebarSection
           title="Projects"
-          icon={FolderOpen}
+          icon={Cuboid}
           defaultOpen={true}
           count={projectCount}
           action={

@@ -62,6 +62,16 @@ export function useDeleteProject() {
   });
 }
 
+export function useWorktrees(projectId: string, enabled = true) {
+  return useQuery({
+    queryKey: ["worktrees", projectId],
+    queryFn: () =>
+      trpcInvoke<import("@exegol/shared").Worktree[]>("projects.listWorktrees", { projectId }),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 // ─── Agents ──────────────────────────────────────────────────────────────────
 
 export function useAgents(projectId: string | null) {

@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle, Clock, Globe, Play, Rss, Square, XCircle } 
 import { useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useActivities } from "../../../hooks/use-trpc";
+import { formatTimeAgoLong } from "../../../lib/format";
 import { EmptyState, LoadingSpinner } from "../../common";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -28,17 +29,6 @@ const TYPE_CONFIG: Record<string, { icon: typeof Play; color: string; bg: string
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-function formatRelativeTime(timestamp: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - timestamp;
-
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return new Date(timestamp * 1000).toLocaleDateString();
-}
 
 function formatDate(timestamp: number): string {
   const d = new Date(timestamp * 1000);
@@ -69,7 +59,7 @@ function ActivityRow({ activity }: { activity: Activity }) {
       <div className="min-w-0 flex-1">
         <p className="text-xs text-text-primary">{activity.description}</p>
         <p className="mt-0.5 text-[10px] text-text-muted">
-          {formatRelativeTime(activity.createdAt)}
+          {formatTimeAgoLong(activity.createdAt)}
         </p>
       </div>
     </div>

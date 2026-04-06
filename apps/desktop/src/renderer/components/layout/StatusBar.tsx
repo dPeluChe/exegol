@@ -1,28 +1,18 @@
 import { Coins, Cpu, GitBranch } from "lucide-react";
 import { useProject, useTokenUsageSummary } from "../../hooks/use-trpc";
+import { formatCost, formatTokens } from "../../lib/format";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-
-function formatCost(usd: number): string {
-  if (usd < 0.01) return "<$0.01";
-  return `$${usd.toFixed(2)}`;
-}
-
-function formatTokens(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
-  return String(count);
-}
 
 export function StatusBar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const { data: project } = useProject(activeProjectId);
   const { data: tokenSummary } = useTokenUsageSummary();
-  const agents = useAgentStore((s) => s.agents);
-
-  const runningCount = Object.values(agents).filter(
-    (a) => a.status === "running" || a.status === "spawning",
-  ).length;
+  const runningCount = useAgentStore(
+    (s) =>
+      Object.values(s.agents).filter((a) => a.status === "running" || a.status === "spawning")
+        .length,
+  );
 
   const platform = window.api?.app?.getPlatform?.() ?? "unknown";
 

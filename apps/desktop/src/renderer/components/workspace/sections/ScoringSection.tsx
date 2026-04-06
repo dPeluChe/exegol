@@ -1,9 +1,9 @@
 import type { AgentScoreRow } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Award, CheckCircle, FileEdit, XCircle, Zap } from "lucide-react";
-import { useMemo } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useProjectScores, useScoringStats } from "../../../hooks/use-trpc";
+import { formatTimeAgoLong } from "../../../lib/format";
 import { EmptyState, LoadingSpinner } from "../../common";
 
 // ─── Score Badge ────────────────────────────────────────────────────────────
@@ -68,13 +68,7 @@ function BoolIndicator({ value, label }: { value: boolean | null; label: string 
 // ─── Score Row ──────────────────────────────────────────────────────────────
 
 function ScoreRow({ score }: { score: AgentScoreRow }) {
-  const timeAgo = useMemo(() => {
-    const diff = Math.floor(Date.now() / 1000) - score.scoredAt;
-    if (diff < 60) return "just now";
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-    return `${Math.floor(diff / 86400)}d ago`;
-  }, [score.scoredAt]);
+  const timeAgo = formatTimeAgoLong(score.scoredAt);
 
   return (
     <div className="flex items-center gap-3 rounded-lg border border-border bg-bg-secondary px-3 py-2">

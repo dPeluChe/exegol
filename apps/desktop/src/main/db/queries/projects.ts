@@ -3,7 +3,9 @@ import type Database from "libsql";
 import { mapProjectRow, nanoid } from "./helpers";
 
 export function listProjects(db: Database.Database): Project[] {
-  const rows = db.prepare("SELECT * FROM projects ORDER BY last_opened_at DESC").all();
+  const rows = db
+    .prepare("SELECT * FROM projects ORDER BY sort_order ASC, last_opened_at DESC")
+    .all();
   return (rows as Record<string, unknown>[]).map(mapProjectRow);
 }
 
@@ -28,6 +30,14 @@ export function createProject(db: Database.Database, data: ProjectCreate): Proje
 export function updateProjectLastOpened(db: Database.Database, id: string): void {
   const now = Math.floor(Date.now() / 1000);
   db.prepare("UPDATE projects SET last_opened_at = ? WHERE id = ?").run(now, id);
+}
+
+export function renameProject(db: Database.Database, id: string, name: string): void {
+  db.prepare("UPDATE projects SET name = ? WHERE id = ?").run(name, id);
+}
+
+export function updateProjectSortOrder(db: Database.Database, id: string, sortOrder: number): void {
+  db.prepare("UPDATE projects SET sort_order = ? WHERE id = ?").run(sortOrder, id);
 }
 
 export function deleteProject(db: Database.Database, id: string): void {

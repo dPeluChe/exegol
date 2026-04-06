@@ -1,5 +1,6 @@
 import { cn } from "@exegol/ui";
 import { useRecentSessions } from "../../hooks/use-trpc";
+import { formatTimeAgoLong } from "../../lib/format";
 import { useAppStore } from "../../stores/app";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -7,15 +8,6 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "bg-red-500",
   stopped: "bg-zinc-500",
 };
-
-function formatRelativeTime(timestamp: number | null): string {
-  if (!timestamp) return "";
-  const diff = Math.floor(Date.now() / 1000) - timestamp;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
 
 export function RecentSessions() {
   const { data: sessions, isLoading } = useRecentSessions(10);
@@ -53,7 +45,7 @@ export function RecentSessions() {
             )}
           />
           <span className="flex-1 truncate">{session.taskDescription}</span>
-          <span className="shrink-0 text-[9px]">{formatRelativeTime(session.stoppedAt)}</span>
+          <span className="shrink-0 text-[9px]">{formatTimeAgoLong(session.stoppedAt)}</span>
         </button>
       ))}
     </div>

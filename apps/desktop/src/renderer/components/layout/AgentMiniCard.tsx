@@ -1,9 +1,10 @@
 import { cn } from "@exegol/ui";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { trpcMutate } from "../../lib/trpc-client";
+import { useDeleteAgent } from "../../hooks/use-delete-agent";
+import { formatTimeAgo } from "../../lib/format";
 import { type AgentState, useAgentStore } from "../../stores/agents";
-import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
+import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -24,15 +25,6 @@ export const VISIBLE_STATUSES = new Set([
   "crashed",
 ]);
 
-function formatTimeAgo(ts: number | null): string {
-  if (!ts) return "";
-  const diff = Math.floor(Date.now() / 1000) - ts;
-  if (diff < 60) return "now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return `${Math.floor(diff / 86400)}d`;
-}
-
 export function navigateToAgent(agentId: string): void {
   window.dispatchEvent(new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }));
   const store = useWorkspaceStore.getState();
@@ -46,10 +38,9 @@ export function navigateToAgent(agentId: string): void {
 
 export function AgentMiniCard({ agent }: { agent: AgentState }) {
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
-  const removeAgent = useAgentStore((s) => s.removeAgent);
-  const focusedAgentId = useAgentStore((s) => s.focusedAgentId);
+  const isFocused = useAgentStore((s) => s.focusedAgentId === agent.id);
   const isUnread = useAgentStore((s) => !!s.unreadAgents[agent.id]);
-  const isFocused = focusedAgentId === agent.id;
+  const deleteAgent = useDeleteAgent();
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
   const isCrashed = agent.status === "crashed";
 
@@ -78,19 +69,11 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
   const handleRemove = useCallback(async () => {
     closeContextMenu();
     try {
-      trpcMutate("agents.stop", { id: agent.id }).catch(() => {});
-      await trpcMutate("agents.delete", { id: agent.id });
-      removeAgent(agent.id);
-      const ws = useWorkspaceStore.getState();
-      for (const [paneId, pane] of Object.entries(getProjectState().panes)) {
-        if (pane.agentId === agent.id) {
-          ws.updatePane(paneId, { type: "empty", agentId: undefined });
-        }
-      }
+      await deleteAgent(agent.id);
     } catch (err) {
       console.error("[AgentMiniCard] Failed to delete agent:", err);
     }
-  }, [agent.id, removeAgent, closeContextMenu]);
+  }, [agent.id, deleteAgent, closeContextMenu]);
 
   const displayName =
     agent.taskDescription && agent.taskDescription !== agent.cliType

@@ -2,6 +2,7 @@ import type { Activity } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { CheckCircle, Clock, Globe, Play, Square, XCircle } from "lucide-react";
 import { useActivities } from "../../hooks/use-trpc";
+import { formatTimeAgo } from "../../lib/format";
 import { useAppStore } from "../../stores/app";
 
 const TYPE_CONFIG: Record<string, { icon: typeof Play; color: string }> = {
@@ -12,15 +13,6 @@ const TYPE_CONFIG: Record<string, { icon: typeof Play; color: string }> = {
   scheduler_fired: { icon: Clock, color: "text-purple-400" },
   port_detected: { icon: Globe, color: "text-cyan-400" },
 };
-
-function formatRelativeTime(timestamp: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - timestamp;
-  if (diff < 60) return "now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
-  return `${Math.floor(diff / 86400)}d`;
-}
 
 function ActivityItem({ activity, showProject }: { activity: Activity; showProject?: boolean }) {
   const config = TYPE_CONFIG[activity.type] ?? { icon: Play, color: "text-text-muted" };
@@ -49,7 +41,7 @@ function ActivityItem({ activity, showProject }: { activity: Activity; showProje
       </div>
       <p className="flex-1 truncate text-[10px] text-text-secondary">{desc}</p>
       <span className="shrink-0 text-[9px] tabular-nums text-text-muted">
-        {formatRelativeTime(activity.createdAt)}
+        {formatTimeAgo(activity.createdAt)}
       </span>
     </div>
   );
