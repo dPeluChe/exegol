@@ -179,7 +179,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const isMini = size === "mini";
   const isCompact = size === "compact" || isMini;
   const iconSize = isMini ? 18 : isCompact ? 22 : 28;
-  const gridCols = isMini ? "grid-cols-4" : isCompact ? "grid-cols-4" : "grid-cols-4";
+  const gridCols = isMini ? "grid-cols-3" : isCompact ? "grid-cols-4" : "grid-cols-4";
 
   return (
     <div

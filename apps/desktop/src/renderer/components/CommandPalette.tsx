@@ -2,7 +2,7 @@ import { Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Bot,
-  FolderOpen,
+  Cuboid,
   Keyboard,
   Layout,
   type LucideIcon,
@@ -58,7 +58,7 @@ function useCommands(close: () => void): Command[] {
         id: "nav:projects",
         label: "Go to Projects",
         category: "navigation",
-        icon: FolderOpen,
+        icon: Cuboid,
         shortcut: "⌘⇧P",
         action: run(() => useAppStore.getState().setActiveProject(null)),
       },
@@ -215,7 +215,7 @@ function useProjectSearch(query: string, close: () => void): Command[] {
         id: `project:${p.id}`,
         label: p.name,
         category: "project" as CommandCategory,
-        icon: FolderOpen,
+        icon: Cuboid,
         action: () => {
           useAppStore.getState().setActiveProject(p.id);
           close();

@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUp } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -21,11 +21,17 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const dragIndexRef = useRef<number | null>(null);
 
-  const effectiveExpandedIds = useMemo(() => {
-    const ids = new Set(expandedIds);
-    if (activeProjectId) ids.add(activeProjectId);
-    return ids;
-  }, [expandedIds, activeProjectId]);
+  // Auto-expand when a project is selected (but don't force — collapse-all can override)
+  useEffect(() => {
+    if (activeProjectId) {
+      setExpandedIds((prev) => {
+        if (prev.has(activeProjectId)) return prev;
+        const next = new Set(prev);
+        next.add(activeProjectId);
+        return next;
+      });
+    }
+  }, [activeProjectId]);
 
   const toggleProject = (id: string) => {
     setExpandedIds((prev) => {
@@ -72,7 +78,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
 
   return (
     <div className="space-y-0.5">
-      {effectiveExpandedIds.size > 0 && (
+      {expandedIds.size > 0 && (
         <button
           type="button"
           onClick={() => setExpandedIds(new Set())}
@@ -89,7 +95,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
             key={project.id}
             project={project}
             isSelected={project.id === activeProjectId}
-            isExpanded={effectiveExpandedIds.has(project.id)}
+            isExpanded={expandedIds.has(project.id)}
             onSelect={() => setActiveProject(project.id)}
             onToggle={() => toggleProject(project.id)}
             onRename={handleRename}

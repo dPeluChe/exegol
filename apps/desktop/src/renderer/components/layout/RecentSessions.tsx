@@ -1,13 +1,8 @@
 import { cn } from "@exegol/ui";
 import { useRecentSessions } from "../../hooks/use-trpc";
 import { formatTimeAgoLong } from "../../lib/format";
+import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { useAppStore } from "../../stores/app";
-
-const STATUS_COLORS: Record<string, string> = {
-  completed: "bg-green-500",
-  failed: "bg-red-500",
-  stopped: "bg-zinc-500",
-};
 
 export function RecentSessions() {
   const { data: sessions, isLoading } = useRecentSessions(10);
@@ -41,7 +36,7 @@ export function RecentSessions() {
           <span
             className={cn(
               "h-1.5 w-1.5 shrink-0 rounded-full",
-              STATUS_COLORS[session.status] ?? "bg-zinc-500",
+              STATUS_DOT_COLORS[session.status] ?? "bg-zinc-500",
             )}
           />
           <span className="flex-1 truncate">{session.taskDescription}</span>

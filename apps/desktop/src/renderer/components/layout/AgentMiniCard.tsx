@@ -3,16 +3,10 @@ import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDeleteAgent } from "../../hooks/use-delete-agent";
 import { formatTimeAgo } from "../../lib/format";
+import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-
-const STATUS_COLORS: Record<string, string> = {
-  running: "bg-green-500",
-  waiting_input: "bg-yellow-500",
-  spawning: "bg-blue-500",
-  crashed: "bg-red-500",
-};
 
 export const VISIBLE_STATUSES = new Set([
   "running",
@@ -102,18 +96,14 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
         className="flex flex-1 items-center gap-2 text-left"
       >
         {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
-        <AgentIcon
-          provider={agent.cliType}
-          size={16}
-          fallbackColor={STATUS_COLORS[agent.status] ?? "#6B7280"}
-        />
+        <AgentIcon provider={agent.cliType} size={16} />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             <span
               className={cn(
                 "h-1.5 w-1.5 shrink-0 rounded-full",
-                STATUS_COLORS[agent.status] ?? "bg-zinc-500",
+                STATUS_DOT_COLORS[agent.status] ?? "bg-zinc-500",
                 isActive && "animate-status-pulse",
               )}
             />
