@@ -21,6 +21,7 @@ export interface TerminalInstanceHandle {
   scrollToTop: () => void;
   scrollToBottom: () => void;
   getSelection: () => string;
+  clear: () => void;
 }
 
 /** TUI CLIs that break with WebGL renderer (alternate screen buffer issues) */
@@ -137,6 +138,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     scrollToTop: () => terminalRef.current?.scrollToTop(),
     scrollToBottom: () => terminalRef.current?.scrollToBottom(),
     getSelection: () => terminalRef.current?.getSelection() ?? "",
+    clear: () => terminalRef.current?.clear(),
   }));
 
   const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);

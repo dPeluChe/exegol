@@ -2,6 +2,7 @@ import { cn } from "@exegol/ui";
 import { AlertTriangle, ArrowUpRight, Code2, Columns, GripVertical, Rows, X } from "lucide-react";
 import { type DragEvent, useCallback, useEffect, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -13,6 +14,7 @@ import { FileExplorer } from "../workspace/FileExplorer";
 import { GitPane } from "../workspace/GitPane";
 import { BrowserPane } from "./BrowserPaneContent";
 import { EmptyPane } from "./EmptyPaneContent";
+import { PaneContextMenu } from "./PaneContextMenu";
 
 // ─── Pane Toolbar ───────────────────────────────────────────────────────────
 
@@ -297,25 +299,44 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         />
       )}
       <PaneToolbar tabId={tabId} paneId={paneId} paneType={pane.type} isSplitPane={isSplitPane} />
-      <div className="flex-1 overflow-hidden">
-        {pane.invalidReason && <InvalidPane reason={pane.invalidReason} paneId={paneId} />}
-        {!pane.invalidReason && pane.type === "terminal" && pane.agentId && (
-          <RecoverableTerminalPane agentId={pane.agentId} paneId={paneId} />
-        )}
-        {!pane.invalidReason && pane.type === "browser" && (
-          <BrowserPane pane={pane} paneId={paneId} />
-        )}
-        {!pane.invalidReason && pane.type === "files" && (
-          <FilesPaneContent key={pane.filePath ?? "default"} overridePath={pane.filePath} />
-        )}
-        {!pane.invalidReason && pane.type === "git" && (
-          <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />
-        )}
-        {!pane.invalidReason && pane.type === "empty" && <EmptyPane paneId={paneId} />}
-        {!pane.invalidReason && pane.type === "terminal" && !pane.agentId && (
-          <EmptyPane paneId={paneId} />
-        )}
-      </div>
+      <PaneContextMenu
+        tabId={tabId}
+        paneId={paneId}
+        paneType={pane.type}
+        agentId={pane.agentId}
+        isSplitPane={isSplitPane}
+        onSplit={(dir, newType) =>
+          useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty")
+        }
+        onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
+        onClose={() => {
+          if (pane.type === "terminal" && pane.agentId) {
+            deleteAgentImperative(pane.agentId);
+          } else {
+            useWorkspaceStore.getState().removePane(tabId, paneId);
+          }
+        }}
+      >
+        <div className="flex-1 overflow-hidden">
+          {pane.invalidReason && <InvalidPane reason={pane.invalidReason} paneId={paneId} />}
+          {!pane.invalidReason && pane.type === "terminal" && pane.agentId && (
+            <RecoverableTerminalPane agentId={pane.agentId} paneId={paneId} />
+          )}
+          {!pane.invalidReason && pane.type === "browser" && (
+            <BrowserPane pane={pane} paneId={paneId} />
+          )}
+          {!pane.invalidReason && pane.type === "files" && (
+            <FilesPaneContent key={pane.filePath ?? "default"} overridePath={pane.filePath} />
+          )}
+          {!pane.invalidReason && pane.type === "git" && (
+            <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />
+          )}
+          {!pane.invalidReason && pane.type === "empty" && <EmptyPane paneId={paneId} />}
+          {!pane.invalidReason && pane.type === "terminal" && !pane.agentId && (
+            <EmptyPane paneId={paneId} />
+          )}
+        </div>
+      </PaneContextMenu>
     </div>
   );
 }
