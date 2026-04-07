@@ -1,6 +1,6 @@
 import type { Project } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
-import { Clock, Cpu, FolderOpen, GitBranch, Plus } from "lucide-react";
+import { Clock, Cpu, Cuboid, GitBranch, Plus } from "lucide-react";
 import { useState } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { formatTimeAgoLong } from "../../lib/format";
@@ -27,7 +27,7 @@ function ProjectCard({ project }: { project: Project }) {
       {/* Header */}
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary">
-          <FolderOpen className="h-5 w-5 text-accent" />
+          <Cuboid className="h-5 w-5 text-accent" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-text-primary">{project.name}</h3>
@@ -91,7 +91,7 @@ export function ProjectList() {
         {projects && projects.length === 0 && (
           <div className="flex h-60 flex-col items-center justify-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-secondary">
-              <FolderOpen className="h-8 w-8 text-text-muted" />
+              <Cuboid className="h-8 w-8 text-text-muted" />
             </div>
             <div className="text-center">
               <p className="text-sm font-medium text-text-primary">No projects yet</p>
