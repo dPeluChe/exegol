@@ -279,6 +279,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       unsubData = window.api.terminal.onData(agentId, (data) => {
         terminal.write(data);
       });
+
+      // Replay ring buffer snapshot for data that arrived before listener registered
+      window.api.terminal.getSnapshot(agentId).then((snapshot) => {
+        if (snapshot) terminal.write(snapshot);
+      });
     }
 
     terminalRef.current = terminal;

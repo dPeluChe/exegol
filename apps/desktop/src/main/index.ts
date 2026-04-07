@@ -100,6 +100,12 @@ function registerIpcHandlers(): void {
     manager.resize(agentId, cols, rows);
   });
 
+  // Terminal snapshot: replay ring buffer content for late-mounting terminals
+  ipcMain.handle("terminal:get-snapshot", (_event, agentId: string) => {
+    const { getPtyHost } = require("./terminal/pty-host");
+    return getPtyHost().getSnapshot(agentId);
+  });
+
   // Save clipboard image as temp file for terminal paste
   ipcMain.handle("terminal:save-clipboard-image", async () => {
     const { clipboard } = await import("electron");

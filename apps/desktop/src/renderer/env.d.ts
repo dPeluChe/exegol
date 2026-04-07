@@ -34,6 +34,7 @@ interface Window {
       onData: (id: string, callback: (data: string) => void) => () => void;
       write: (id: string, data: string) => void;
       resize: (id: string, cols: number, rows: number) => void;
+      getSnapshot: (id: string) => Promise<string | null>;
       saveClipboardImage: () => Promise<string | null>;
     };
     app: {
