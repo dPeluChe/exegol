@@ -309,6 +309,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
           useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty")
         }
         onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
+        onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}
         onClose={() => {
           if (pane.type === "terminal" && pane.agentId) {
             deleteAgentImperative(pane.agentId);

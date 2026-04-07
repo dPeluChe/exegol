@@ -95,6 +95,8 @@ interface WorkspaceStore {
   ensureDefaultTab: () => void;
   getRecoveryToken: (paneId: string) => RecoveryToken | null;
   invalidatePane: (paneId: string, reason: string) => void;
+  /** Reset all split sizes in the active tab to equal proportions */
+  equalizeSplits: (tabId: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -470,6 +472,29 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           url: pane.url,
         };
       },
+
+      equalizeSplits: (tabId) =>
+        set((s) => {
+          const pw = getPw(s);
+          const tab = pw.tabs.find((t) => t.id === tabId);
+          if (!tab || tab.layout.type !== "split") return s;
+
+          const equalize = (node: LayoutNode): LayoutNode => {
+            if (node.type === "pane") return node;
+            const count = node.children.length;
+            const equalSize = 100 / count;
+            return {
+              ...node,
+              sizes: node.children.map(() => equalSize),
+              children: node.children.map(equalize),
+            };
+          };
+
+          const newLayout = equalize(tab.layout);
+          return setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
+          });
+        }),
 
       invalidatePane: (paneId, reason) =>
         set((s) => {

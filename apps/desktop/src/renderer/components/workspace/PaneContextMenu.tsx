@@ -4,6 +4,7 @@ import {
   Clipboard,
   ClipboardPaste,
   Columns,
+  Equal,
   Globe,
   MoveRight,
   Rows,
@@ -26,6 +27,7 @@ interface PaneContextMenuProps {
   isSplitPane: boolean;
   onSplit: (direction: "horizontal" | "vertical", newType?: PaneType) => void;
   onExtractToTab: () => void;
+  onEqualize: () => void;
   onClose: () => void;
   onCopy?: () => void;
   onPaste?: () => void;
@@ -71,6 +73,7 @@ export function PaneContextMenu({
   isSplitPane,
   onSplit,
   onExtractToTab,
+  onEqualize,
   onClose,
   onCopy,
   onPaste,
@@ -141,7 +144,10 @@ export function PaneContextMenu({
       { label: "Split Vertically", icon: Rows, shortcut: "⌘⇧D", action: () => onSplit("vertical") },
       { label: "Split with Browser", icon: Globe, action: () => onSplit("horizontal", "browser") },
       ...(isSplitPane
-        ? [{ label: "Move to New Tab", icon: MoveRight, action: onExtractToTab }]
+        ? [
+            { label: "Equalize Splits", icon: Equal, shortcut: "⌘⇧0", action: onEqualize },
+            { label: "Move to New Tab", icon: MoveRight, action: onExtractToTab },
+          ]
         : []),
     ],
   });
