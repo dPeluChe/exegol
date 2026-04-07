@@ -3,7 +3,7 @@ import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
 
-/** Clean up panes and remove empty single-pane tabs after agent deletion */
+/** Clean up panes and remove tabs that become all-empty after agent deletion */
 function cleanupAgentPanes(agentId: string): void {
   const ws = useWorkspaceStore.getState();
   const pw = getProjectState();
@@ -12,13 +12,19 @@ function cleanupAgentPanes(agentId: string): void {
     if (pane.type === "terminal" && pane.agentId === agentId) {
       // Find the tab that owns this pane
       const ownerTab = pw.tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
-      const isSinglePane = ownerTab && collectPaneIds(ownerTab.layout).length === 1;
+      if (!ownerTab) continue;
 
-      if (isSinglePane && ownerTab) {
-        // Single-pane tab: remove the entire tab
+      const paneIds = collectPaneIds(ownerTab.layout);
+      const isSinglePane = paneIds.length === 1;
+
+      // Check if all OTHER panes in this tab are also empty
+      const allOthersEmpty = paneIds
+        .filter((pid) => pid !== paneId)
+        .every((pid) => pw.panes[pid]?.type === "empty");
+
+      if (isSinglePane || allOthersEmpty) {
         ws.removeTab(ownerTab.id);
       } else {
-        // Multi-pane tab: just convert to empty
         ws.updatePane(paneId, { type: "empty", agentId: undefined });
       }
     }

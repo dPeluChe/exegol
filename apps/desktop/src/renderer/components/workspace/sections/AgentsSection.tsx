@@ -11,22 +11,23 @@ import { WorkspaceTabBar } from "../WorkspaceTabBar";
 function AllTabsLayout() {
   const tabs = useWorkspaceStore(selectTabs);
   const activeTabId = useWorkspaceStore(selectActiveTabId);
+  const ensureDefaultTab = useWorkspaceStore((s) => s.ensureDefaultTab);
   const prevActiveTabId = useRef(activeTabId);
 
   // Force xterm.js re-fit when switching workspace tabs
   useEffect(() => {
     if (activeTabId !== prevActiveTabId.current) {
       prevActiveTabId.current = activeTabId;
-      // Dispatch custom event that TerminalInstance listens to for targeted refit
       dispatchRefitTerminals();
     }
   }, [activeTabId]);
 
-  if (tabs.length === 0) {
-    // Auto-create a default tab instead of showing a dead-end empty state
-    useWorkspaceStore.getState().addTab("Workspace");
-    return null;
-  }
+  // Ensure at least one tab exists (moved from render body to effect)
+  useEffect(() => {
+    if (tabs.length === 0) ensureDefaultTab();
+  }, [tabs.length, ensureDefaultTab]);
+
+  if (tabs.length === 0) return null;
 
   return (
     <>
