@@ -19,28 +19,33 @@ const RECOMMENDED_FONTS: {
   description: string;
   url: string;
   nerdFont: boolean;
+  /** Bundled inside the app — no install required. Always available. */
+  bundled?: boolean;
 }[] = [
-  // ── Nerd Fonts (icons + glyphs) ────────────────────────────────────────
+  // ── Bundled Nerd Fonts (shipped inside the .app, no install needed) ───
   {
     name: "MesloLGS NF",
     family: "MesloLGS NF",
-    description: "Powerlevel10k recommended — Nerd Font with icons",
+    description: "Powerlevel10k recommended — bundled, no install needed",
     url: "https://github.com/romkatv/powerlevel10k#manual-font-installation",
     nerdFont: true,
+    bundled: true,
   },
   {
     name: "FiraCode Nerd Font",
     family: "FiraCode Nerd Font Mono",
-    description: "Ligatures + Nerd Font icons (very popular for dev)",
+    description: "Ligatures + Nerd Font icons — bundled, no install needed",
     url: "https://www.nerdfonts.com/font-downloads",
     nerdFont: true,
+    bundled: true,
   },
   {
     name: "JetBrainsMono Nerd Font",
     family: "JetBrainsMono Nerd Font Mono",
-    description: "JetBrains Mono with Nerd Font icons",
+    description: "JetBrains Mono with Nerd Font icons — bundled",
     url: "https://www.nerdfonts.com/font-downloads",
     nerdFont: true,
+    bundled: true,
   },
   {
     name: "Hack Nerd Font",
@@ -143,7 +148,11 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
   const detectFonts = useCallback(() => {
     const status: Record<string, boolean> = {};
     for (const font of RECOMMENDED_FONTS) {
-      status[font.family] = isFontInstalled(font.family);
+      // Bundled fonts are loaded via @font-face in fonts.css — always
+      // present, no need to probe the canvas. (Canvas detection also
+      // doesn't work reliably for recently-@font-face'd fonts because
+      // they may not be fully loaded yet on first paint.)
+      status[font.family] = font.bundled ? true : isFontInstalled(font.family);
     }
     setFontStatus(status);
   }, []);
@@ -247,6 +256,11 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
                 <div className="flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-medium text-text-primary">{font.name}</span>
+                    {font.bundled && (
+                      <span className="rounded bg-green-500/15 px-1 py-0.5 text-[7px] font-medium text-green-400">
+                        Included
+                      </span>
+                    )}
                     {font.nerdFont && (
                       <span className="rounded bg-purple-500/15 px-1 py-0.5 text-[7px] font-medium text-purple-400">
                         Nerd Font

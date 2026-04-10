@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@xterm/xterm/css/xterm.css";
+@import "./fonts.css";
 
 @theme {
   --color-bg-primary: var(--bg-primary);
