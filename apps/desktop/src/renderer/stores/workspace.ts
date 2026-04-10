@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { getLayoutPreset, type LayoutPresetId } from "../lib/layout-presets";
 import { useAppStore } from "./app";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -97,6 +98,8 @@ interface WorkspaceStore {
   invalidatePane: (paneId: string, reason: string) => void;
   /** Reset all split sizes in the active tab to equal proportions */
   equalizeSplits: (tabId: string) => void;
+  /** Replace the tab layout with a preset, reusing existing panes (extras preserved) */
+  applyLayoutPreset: (tabId: string, presetId: LayoutPresetId) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -493,6 +496,57 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           const newLayout = equalize(tab.layout);
           return setPw(s, {
             tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
+          });
+        }),
+
+      applyLayoutPreset: (tabId, presetId) =>
+        set((s) => {
+          const pw = getPw(s);
+          const tab = pw.tabs.find((t) => t.id === tabId);
+          const preset = getLayoutPreset(presetId);
+          if (!tab || !preset) return s;
+
+          // Reuse existing pane IDs in order. If preset needs more slots than
+          // we have panes, create new empty panes for the extra slots. If we
+          // have more panes than slots, stuff the extras into the last slot
+          // as a further vertical split so nothing is lost.
+          const existingIds = collectPaneIds(tab.layout);
+          const newPanes: Record<string, Pane> = { ...pw.panes };
+          const paddedIds = [...existingIds];
+          while (paddedIds.length < preset.slots) {
+            const freshPane = createEmptyPane();
+            newPanes[freshPane.id] = freshPane;
+            paddedIds.push(freshPane.id);
+          }
+
+          let layout: LayoutNode;
+          if (existingIds.length > preset.slots) {
+            // Extras → collapse into a vertical split at the last slot
+            const baseIds = paddedIds.slice(0, preset.slots - 1);
+            const extraIds = paddedIds.slice(preset.slots - 1);
+            const extraLayout: LayoutNode = {
+              type: "split",
+              direction: "vertical",
+              sizes: extraIds.map(() => 100 / extraIds.length),
+              children: extraIds.map((id): LayoutNode => ({ type: "pane", paneId: id })),
+            };
+            // Build preset with placeholders, then replace the last slot
+            const placeholder = [...baseIds, "__extra__"];
+            const built = preset.build(placeholder);
+            const replaceExtra = (node: LayoutNode): LayoutNode => {
+              if (node.type === "pane") {
+                return node.paneId === "__extra__" ? extraLayout : node;
+              }
+              return { ...node, children: node.children.map(replaceExtra) };
+            };
+            layout = replaceExtra(built);
+          } else {
+            layout = preset.build(paddedIds);
+          }
+
+          return setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
+            panes: newPanes,
           });
         }),
 

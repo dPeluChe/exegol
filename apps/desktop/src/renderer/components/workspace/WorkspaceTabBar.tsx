@@ -20,6 +20,7 @@ import {
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
+import { LayoutPresets } from "./LayoutPresets";
 
 // ─── Tab auto-naming helpers ────────────────────────────────────────────────
 
@@ -328,6 +329,8 @@ export function WorkspaceTabBar() {
         >
           <Terminal className="h-3.5 w-3.5" />
         </button>
+        {/* Layout presets */}
+        <LayoutPresets tabId={activeTabId} />
       </div>
 
       {/* Quick-launch bar */}
