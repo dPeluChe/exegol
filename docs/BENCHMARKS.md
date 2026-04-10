@@ -69,8 +69,29 @@ Everything else (skills, wrappers, stale cleanup, metrics collector,
 scheduler, queue, pipeline executor recovery, sidecar connection, agent
 reattach) runs in background IIFEs after the window is visible.
 
+### Measured on M1 Pro, dev mode, 2026-04-10 (post T86/T87)
+
+```
+[Startup] dbInit:        9ms
+[Startup] criticalPath:  12ms
+[Startup] windowCreated: 100ms
+[Startup] firstPaint:    391ms
+```
+
+Breakdown:
+- `dbInit` → `criticalPath`: **3 ms** (provider registry + IPC handler
+  registration + path resolution; trivial)
+- `criticalPath` → `windowCreated`: **88 ms** (`new BrowserWindow` +
+  `loadURL(dev-server)`; Electron-intrinsic)
+- `windowCreated` → `firstPaint`: **291 ms** (renderer JS download from
+  vite, dependency reoptimization, React hydration, first paint)
+
+The 291 ms renderer phase is where T86/T87 bundle splits pay off.
+Packaged builds skip the vite dev server round trip entirely and should
+land in the 150-250 ms range — to be measured after next packaged build.
+
 ## Baseline targets
 
 - `index.js` initial chunk: **< 1 MB** ✅ (986 KB)
-- First paint (M1, dev mode): **< 1.5s** (not yet measured post-changes)
-- First paint (packaged): **< 1s** (not yet measured)
+- First paint (M1, dev mode): **< 500 ms** ✅ (391 ms)
+- First paint (packaged): **< 250 ms** (pending measurement)
