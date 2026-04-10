@@ -1,18 +1,19 @@
-import { Button, cn, Input, ScrollArea } from "@exegol/ui";
+import { cn, Input, ScrollArea } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUpFromLine,
-  Check,
   GitBranch,
   History,
   Minus,
   Plus,
   RefreshCw,
-  Upload,
+  Sparkles,
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { useToastStore } from "../../stores/toasts";
+import { SmartGitAction } from "./SmartGitAction";
 import { DiffSection } from "./sections/DiffSection";
 import { OplogSection } from "./sections/OplogSection";
 
@@ -63,8 +64,6 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
   const { data: files, isLoading } = useGitStatus(projectId, overridePath);
   const { data: branch } = useGitBranch(projectId, overridePath);
   const [commitMsg, setCommitMsg] = useState("");
-  const [pushing, setPushing] = useState(false);
-  const [resultMsg, setResultMsg] = useState<string | null>(null);
 
   const staged = files?.filter((f) => f.staged) ?? [];
   const unstaged = files?.filter((f) => !f.staged) ?? [];
@@ -95,30 +94,43 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
       }),
     onSuccess: (result) => {
       setCommitMsg("");
-      setResultMsg(result.output || "Committed successfully");
+      useToastStore
+        .getState()
+        .addToast({ type: "success", title: "Committed", body: result.output });
       invalidate();
     },
     onError: (err) => {
-      setResultMsg(`Commit failed: ${err instanceof Error ? err.message : String(err)}`);
+      useToastStore.getState().addToast({
+        type: "error",
+        title: "Commit failed",
+        body: err instanceof Error ? err.message : String(err),
+      });
     },
   });
 
-  const handlePush = async () => {
-    setPushing(true);
-    setResultMsg(null);
-    try {
-      const result = await trpcMutate<{ output: string }>("diff.push", {
+  const suggestMutation = useMutation({
+    mutationFn: () =>
+      trpcMutate<{ message: string }>("diff.suggestCommitMessage", {
         projectId,
         pathOverride: overridePath,
+        staged: staged.length > 0,
+      }),
+    onSuccess: (r) => {
+      setCommitMsg(r.message);
+    },
+    onError: (err) => {
+      useToastStore.getState().addToast({
+        type: "error",
+        title: "Could not generate commit message",
+        body: err instanceof Error ? err.message : String(err),
       });
-      setResultMsg(result.output || "Pushed successfully");
-    } catch (err) {
-      setResultMsg(`Push failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setPushing(false);
-      invalidate();
-    }
-  };
+    },
+  });
+
+  const handleCommit = useCallback(() => {
+    if (!commitMsg.trim()) return;
+    commitMutation.mutate({ stageAll: staged.length === 0 });
+  }, [commitMsg, commitMutation, staged.length]);
 
   if (isLoading) {
     return <p className="p-4 text-xs text-text-muted">Loading git status...</p>;
@@ -215,49 +227,41 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
         </div>
       </ScrollArea>
 
-      {/* Commit + Push bar */}
-      <div className="border-t border-border bg-bg-secondary p-2 space-y-1.5">
+      {/* Commit input + Smart git action */}
+      <div className="space-y-1.5 border-t border-border bg-bg-secondary p-2">
         <div className="flex items-center gap-1.5">
-          <Input
-            value={commitMsg}
-            onChange={(e) => setCommitMsg(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && commitMsg.trim() && totalChanges > 0) {
-                commitMutation.mutate({ stageAll: staged.length === 0 });
-              }
-            }}
-            placeholder="Commit message..."
-            className="h-7 flex-1 border-[var(--border)] bg-[var(--bg-tertiary)] text-[10px] text-[var(--text-primary)]"
+          <div className="relative flex-1">
+            <Input
+              value={commitMsg}
+              onChange={(e) => setCommitMsg(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && commitMsg.trim() && totalChanges > 0) {
+                  handleCommit();
+                }
+              }}
+              placeholder="Commit message..."
+              className="h-7 w-full border-[var(--border)] bg-[var(--bg-tertiary)] pr-6 text-[10px] text-[var(--text-primary)]"
+            />
+            <button
+              type="button"
+              onClick={() => suggestMutation.mutate()}
+              disabled={suggestMutation.isPending || totalChanges === 0}
+              className="absolute right-1 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-accent disabled:opacity-40"
+              title="Suggest commit message (uses Anthropic API key)"
+            >
+              <Sparkles
+                className={cn("h-3 w-3", suggestMutation.isPending && "animate-pulse text-accent")}
+              />
+            </button>
+          </div>
+          <SmartGitAction
+            projectId={projectId}
+            overridePath={overridePath}
+            hasCommitMessage={commitMsg.trim().length > 0}
+            onCommit={handleCommit}
+            isCommitting={commitMutation.isPending}
           />
-          <Button
-            type="button"
-            onClick={() => commitMutation.mutate({ stageAll: staged.length === 0 })}
-            disabled={!commitMsg.trim() || totalChanges === 0 || commitMutation.isPending}
-            className="h-7 gap-1 px-2 text-[10px]"
-          >
-            <Check className="h-3 w-3" />
-            {commitMutation.isPending ? "..." : staged.length > 0 ? "Commit" : "Commit All"}
-          </Button>
-          <Button
-            type="button"
-            onClick={handlePush}
-            disabled={pushing}
-            className="h-7 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary"
-          >
-            <Upload className="h-3 w-3" />
-            {pushing ? "..." : "Push"}
-          </Button>
         </div>
-        {resultMsg && (
-          <p
-            className={cn(
-              "text-[9px]",
-              resultMsg.includes("failed") ? "text-red-400" : "text-green-400",
-            )}
-          >
-            {resultMsg}
-          </p>
-        )}
       </div>
     </div>
   );

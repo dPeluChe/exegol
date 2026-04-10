@@ -116,7 +116,6 @@ function registerIpcHandlers(): void {
 
   // Terminal snapshot: replay ring buffer content for late-mounting terminals
   ipcMain.handle("terminal:get-snapshot", (_event, agentId: string) => {
-    const { getPtyHost } = require("./terminal/pty-host");
     return getPtyHost().getSnapshot(agentId);
   });
 
