@@ -1,7 +1,14 @@
 import { nanoid } from "nanoid";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { getLayoutPreset, type LayoutPresetId } from "../lib/layout-presets";
+import {
+  type CustomLayoutPreset,
+  computeCustomPresetTransformation,
+  computePresetTransformation,
+  getLayoutPreset,
+  type LayoutPresetId,
+  templateFromLayout,
+} from "../lib/layout-presets";
 import { useAppStore } from "./app";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -61,6 +68,8 @@ interface WorkspaceStore {
   _activeProjectId: string | null;
   /** Focused pane (global — only one pane focused at a time) */
   focusedPaneId: string | null;
+  /** User-saved layout templates — global, not per-project */
+  customLayouts: CustomLayoutPreset[];
 
   // Tab actions
   addTab: (label?: string) => string;
@@ -98,8 +107,18 @@ interface WorkspaceStore {
   invalidatePane: (paneId: string, reason: string) => void;
   /** Reset all split sizes in the active tab to equal proportions */
   equalizeSplits: (tabId: string) => void;
-  /** Replace the tab layout with a preset, reusing existing panes (extras preserved) */
-  applyLayoutPreset: (tabId: string, presetId: LayoutPresetId) => void;
+  /**
+   * Replace the tab layout with a built-in preset, reusing existing panes.
+   * Returns the IDs of any new panes that were created as terminal slots,
+   * so the caller can spawn shell agents for them.
+   */
+  applyLayoutPreset: (tabId: string, presetId: LayoutPresetId) => { terminalsToSpawn: string[] };
+  /** Apply a user-saved custom layout template to a tab */
+  applyCustomLayout: (tabId: string, customId: string) => void;
+  /** Save the current tab layout as a named custom preset */
+  saveCustomLayout: (tabId: string, name: string) => string | null;
+  /** Delete a user-saved custom preset */
+  deleteCustomLayout: (customId: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -217,6 +236,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       projectWorkspaces: {},
       _activeProjectId: useAppStore.getState().activeProjectId,
       focusedPaneId: null,
+      customLayouts: [],
 
       addTab: (label) => {
         const pane = createEmptyPane();
@@ -499,56 +519,74 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           });
         }),
 
-      applyLayoutPreset: (tabId, presetId) =>
+      applyLayoutPreset: (tabId, presetId) => {
+        const state = get();
+        const pw = getPw(state);
+        const tab = pw.tabs.find((t) => t.id === tabId);
+        const preset = getLayoutPreset(presetId);
+        if (!tab || !preset) return { terminalsToSpawn: [] };
+
+        const existingIds = collectPaneIds(tab.layout);
+        const { layout, newPanes, terminalsToSpawn } = computePresetTransformation(
+          preset,
+          existingIds,
+        );
+
+        const panesRecord: Record<string, Pane> = { ...pw.panes };
+        for (const p of newPanes) panesRecord[p.id] = p;
+
+        set((s) =>
+          setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
+            panes: panesRecord,
+          }),
+        );
+        return { terminalsToSpawn };
+      },
+
+      applyCustomLayout: (tabId, customId) =>
         set((s) => {
           const pw = getPw(s);
           const tab = pw.tabs.find((t) => t.id === tabId);
-          const preset = getLayoutPreset(presetId);
-          if (!tab || !preset) return s;
+          const custom = s.customLayouts.find((c) => c.id === customId);
+          if (!tab || !custom) return s;
 
-          // Reuse existing pane IDs in order. If preset needs more slots than
-          // we have panes, create new empty panes for the extra slots. If we
-          // have more panes than slots, stuff the extras into the last slot
-          // as a further vertical split so nothing is lost.
           const existingIds = collectPaneIds(tab.layout);
-          const newPanes: Record<string, Pane> = { ...pw.panes };
-          const paddedIds = [...existingIds];
-          while (paddedIds.length < preset.slots) {
-            const freshPane = createEmptyPane();
-            newPanes[freshPane.id] = freshPane;
-            paddedIds.push(freshPane.id);
-          }
+          const { layout, newPanes } = computeCustomPresetTransformation(custom, existingIds);
 
-          let layout: LayoutNode;
-          if (existingIds.length > preset.slots) {
-            // Extras → collapse into a vertical split at the last slot
-            const baseIds = paddedIds.slice(0, preset.slots - 1);
-            const extraIds = paddedIds.slice(preset.slots - 1);
-            const extraLayout: LayoutNode = {
-              type: "split",
-              direction: "vertical",
-              sizes: extraIds.map(() => 100 / extraIds.length),
-              children: extraIds.map((id): LayoutNode => ({ type: "pane", paneId: id })),
-            };
-            // Build preset with placeholders, then replace the last slot
-            const placeholder = [...baseIds, "__extra__"];
-            const built = preset.build(placeholder);
-            const replaceExtra = (node: LayoutNode): LayoutNode => {
-              if (node.type === "pane") {
-                return node.paneId === "__extra__" ? extraLayout : node;
-              }
-              return { ...node, children: node.children.map(replaceExtra) };
-            };
-            layout = replaceExtra(built);
-          } else {
-            layout = preset.build(paddedIds);
-          }
+          const panesRecord: Record<string, Pane> = { ...pw.panes };
+          for (const p of newPanes) panesRecord[p.id] = p;
 
           return setPw(s, {
             tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
-            panes: newPanes,
+            panes: panesRecord,
           });
         }),
+
+      saveCustomLayout: (tabId, name) => {
+        const state = get();
+        const pw = getPw(state);
+        const tab = pw.tabs.find((t) => t.id === tabId);
+        if (!tab) return null;
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+
+        const { template, slots } = templateFromLayout(tab.layout);
+        const custom: CustomLayoutPreset = {
+          id: nanoid(8),
+          name: trimmed,
+          template,
+          slots,
+          createdAt: Date.now(),
+        };
+        set((s) => ({ customLayouts: [...s.customLayouts, custom] }));
+        return custom.id;
+      },
+
+      deleteCustomLayout: (customId) =>
+        set((s) => ({
+          customLayouts: s.customLayouts.filter((c) => c.id !== customId),
+        })),
 
       invalidatePane: (paneId, reason) =>
         set((s) => {
@@ -567,6 +605,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       name: "exegol-workspace",
       partialize: (state) => ({
         projectWorkspaces: state.projectWorkspaces,
+        customLayouts: state.customLayouts,
       }),
       // Bump version when schema changes to trigger migration
       version: 1,
