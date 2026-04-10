@@ -12,13 +12,23 @@
 
 ## Priority Order
 
-### P0 — Pre-launch polish wave (current focus)
+### P0 — Pre-launch polish wave ✅ COMPLETED (v0.3.0)
 > Goal: ship a tight, fast, delightful V1 before tackling any new feature surface.
-- **Smart git button** (T83) — one-button commit/push/PR/merge flow in GitPane
-- **Picture-in-Picture pane float** (T84) — detach any pane to a floating window
-- **Layout presets** (T85) — stacked / horizontal / bottom-terminal quick switches
-- **First paint optimization** (T86) — lazy tRPC routers, startup time < 1s
-- **Renderer bundle audit** (T87) — trim initial bundle, measure what loads
+- ~~**Smart git button** (T83)~~ ✅ — context-aware button with 11 states + AI commit messages
+- ~~**Picture-in-Picture pane float** (T84)~~ ✅ — terminal + browser floating windows
+- ~~**Layout presets** (T85)~~ ✅ — 6 built-in + custom saved + Bottom Terminal w/ shell
+- ~~**First paint optimization** (T86)~~ ✅ — 4-12ms criticalPath, ~280ms firstPaint dev
+- ~~**Renderer bundle audit** (T87)~~ ✅ — 1,987 KB → 1,026 KB (−48%) via lazy chunks
+
+Bonus wins in the same wave (not in the original T83-T87 scope):
+- Sidecar version protocol + auto-upgrade (session.listInfo)
+- Real dead-session recovery (no more stuck-as-running agents)
+- 3 Nerd Fonts bundled (MesloLGS NF, FiraCode NF, JetBrainsMono NF) — 6.8 MB
+- Font settings UX: grouped list, per-card preview, promote on click
+- Cmd+W closes pane (not window) via custom macOS app menu
+- Workspace as default view + stale project auto-recovery
+- Browser pane back/forward/reload + empty state
+- Terminal "Starting..." overlay no longer stuck on reattach
 
 ### P0 — Must land before broad release push
 - ~~Worktrees real por agente~~ ✅ T61
@@ -721,8 +731,19 @@
 
 ## Pre-launch Polish Wave
 
-### T83 — Smart Git Button in GitPane
+### T83 — Smart Git Button in GitPane ✅ COMPLETED (v0.3.0)
 **Priority**: P0 | **Effort**: Low (1 day) | **Source**: Superconductor inspiration
+
+**Shipped**
+- `diff.gitState` / `createPullRequest` / `mergePullRequest` /
+  `suggestCommitMessage` tRPC procedures.
+- `SmartGitAction` component with 11 states: conflicts, commit (N files),
+  push, push-new-branch, create-PR, merge-PR, view-PR, pr-merged,
+  pr-closed, install-gh, up-to-date.
+- gh CLI detection cached on first use.
+- Sparkles button on the commit input runs Claude Haiku on the diff to
+  generate a conventional-commit-style message (gated on Anthropic API
+  key).
 
 **Why**
 - GitPane currently shows diff + oplog but commit/push/PR flow requires multiple
@@ -752,8 +773,23 @@
 
 ---
 
-### T84 — Picture-in-Picture Pane Float
+### T84 — Picture-in-Picture Pane Float ✅ COMPLETED (v0.3.0)
 **Priority**: P0 | **Effort**: Low (half day) | **Source**: Superconductor inspiration
+
+**Shipped**
+- `apps/desktop/src/main/windows/floating.ts` manages per-paneId
+  BrowserWindows (frameless, alwaysOnTop: "floating").
+- Renderer routes on `?floatingPane=...` query string: main window
+  mounts `<App/>`, floating windows lazy-load `<FloatingPaneRoot/>`.
+- Terminal float shares the PTY via ring buffer + getSnapshot replay.
+  Main pane shows a "Floating — Return to pane" placeholder so only
+  one xterm instance is ever attached to the PTY at a time.
+- Browser float has full back/forward/reload + DevTools toggle.
+  DevTools opens on the webview's webContents (not the React shell)
+  and temporarily drops alwaysOnTop so the detached DevTools window
+  is visible.
+- `use-floating-pane-sync` hook auto-unfloats when the floating
+  window closes via traffic light.
 
 **Why**
 - Ability to float any pane (terminal, browser, files) into a detached always-on-top
@@ -780,8 +816,25 @@
 
 ---
 
-### T85 — Layout Presets
+### T85 — Layout Presets ✅ COMPLETED (v0.3.0)
 **Priority**: P0 | **Effort**: Low (half day) | **Source**: Superconductor inspiration
+
+**Shipped**
+- 6 built-in presets: Single, Split Horizontal, Split Vertical,
+  Three Columns, Bottom Terminal (70/30), 2×2 Grid.
+- `apps/desktop/src/renderer/lib/layout-presets.ts` exports
+  pure-function helpers: `computePresetTransformation`,
+  `computeCustomPresetTransformation`, `templateFromLayout`.
+- `LayoutPresets` dropdown in the tab bar with live SVG glyph previews.
+- Preset slots accept `slotTypes` hints — Bottom Terminal creates a
+  real terminal with a shell agent spawned on apply, not an empty pane.
+- **Save current layout** as a named custom preset (persisted in
+  workspace store). Custom layouts capture per-slot type + url +
+  filePath so applying them to a fresh tab recreates equivalent
+  panes.
+- Extras preservation: if the destination tab has more panes than
+  the preset has slots, the overflow is stuffed into the last slot
+  as a nested vertical split so no pane is ever lost.
 
 **Why**
 - Users often want a quick switch between canonical layouts without manually
@@ -808,9 +861,26 @@
 
 ---
 
-### T86 — First Paint Optimization
+### T86 — First Paint Optimization ✅ COMPLETED (v0.3.0)
 **Priority**: P0 | **Effort**: Medium | **Source**: Superconductor benchmark
 ("<50ms startup")
+
+**Shipped — measured on M1 Pro, dev mode**
+```
+[Startup] dbInit:        2-9ms
+[Startup] criticalPath:  4-12ms
+[Startup] windowCreated: 80-102ms
+[Startup] firstPaint:    277-391ms  (target was <1.5s)
+```
+
+- Deferred ensureDefaultSkills/ShellWrappers/AgentWrappers to a
+  background IIFE after window creation.
+- Deferred stale agents + memories cleanup to background.
+- Added startMark/endMark instrumentation with a single-log guard
+  (firstPaint no longer re-logs on window reactivation).
+- Lazy-loaded all non-default workspace sections, xterm + addons,
+  SettingsPanel, ProjectList, CommandPalette, and FloatingPaneRoot.
+- See `docs/BENCHMARKS.md` for the full before/after breakdown.
 
 **Why**
 - Electron cold start is our biggest measurable weakness vs. native competitors.
@@ -841,8 +911,18 @@
 
 ---
 
-### T87 — Renderer Bundle Audit
+### T87 — Renderer Bundle Audit ✅ COMPLETED (v0.3.0)
 **Priority**: P0 | **Effort**: Low | **Source**: T86 companion
+
+**Shipped**
+- Added `rollup-plugin-visualizer` + `ANALYZE=1 bun run build:analyze`
+  script producing `apps/desktop/dist/bundle-stats.html` treemap.
+- `index.js` initial chunk: **1,987 KB → 1,026 KB** (−48%).
+- Lazy chunks produced for: TerminalInstance (595 KB), Zod schemas
+  (113 KB), all 6 non-default workspace sections (31-53 KB each),
+  SettingsPanel (51 KB), ProjectList, CommandPalette, FloatingPaneRoot.
+- Remaining weight in `index.js` documented in `docs/BENCHMARKS.md`
+  (react-dom, react-resizable-panels, tailwind-merge, Radix primitives).
 
 **Why**
 - Bundle size directly impacts first paint and memory footprint. We haven't
