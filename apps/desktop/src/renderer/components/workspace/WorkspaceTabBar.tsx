@@ -228,109 +228,113 @@ export function WorkspaceTabBar() {
 
   return (
     <div className="shrink-0 border-b border-border bg-bg-secondary">
-      {/* Tab row */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for pane extraction */}
-      <div
-        className={cn(
-          "flex h-9 items-center gap-0.5 overflow-x-auto px-1 transition-colors",
-          paneDragOverBar && "bg-accent/10 ring-1 ring-inset ring-accent/40",
-        )}
-        onDragOver={handleBarDragOver}
-        onDragLeave={handleBarDragLeave}
-        onDrop={handleBarDrop}
-      >
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          const isEditing = editingTabId === tab.id;
-          const { displayName, Icon: TabIcon } = getTabMeta(tab.label, tab.layout, panes, agents);
+      {/* Tab row: scrollable tabs + trailing action bar (outside overflow) */}
+      <div className="flex h-9 items-center">
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for pane extraction */}
+        <div
+          className={cn(
+            "flex h-9 flex-1 items-center gap-0.5 overflow-x-auto px-1 transition-colors",
+            paneDragOverBar && "bg-accent/10 ring-1 ring-inset ring-accent/40",
+          )}
+          onDragOver={handleBarDragOver}
+          onDragLeave={handleBarDragLeave}
+          onDrop={handleBarDrop}
+        >
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            const isEditing = editingTabId === tab.id;
+            const { displayName, Icon: TabIcon } = getTabMeta(tab.label, tab.layout, panes, agents);
 
-          return (
-            // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
-            <div
-              role="button"
-              tabIndex={0}
-              key={tab.id}
-              draggable={!isEditing}
-              onDragStart={(e) => handleTabDragStart(e, tab.id)}
-              onDragOver={(e) => handleTabDragOver(e, tab.id)}
-              onDragLeave={handleTabDragLeave}
-              onDrop={(e) => handleTabDrop(e, tab.id)}
-              onDragEnd={handleTabDragEnd}
-              onClick={() => setActiveTab(tab.id)}
-              onDoubleClick={() => startEditing(tab.id, tab.label)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") setActiveTab(tab.id);
-              }}
-              className={cn(
-                "group relative flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] font-medium transition-colors",
-                "hover:bg-white/5 cursor-pointer",
-                isActive ? "bg-white/10 text-text-primary" : "text-text-secondary",
-                dragOverTabId === tab.id && "ring-1 ring-accent/50",
-              )}
-            >
-              {isEditing ? (
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                  onBlur={finishEditing}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") finishEditing();
-                    if (e.key === "Escape") setEditingTabId(null);
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-24 bg-transparent text-[11px] text-text-primary outline-none"
-                />
-              ) : (
-                <>
-                  {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
-                  <span className="max-w-[140px] truncate">{displayName}</span>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCloseTab(tab.id);
+            return (
+              // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
+              <div
+                role="button"
+                tabIndex={0}
+                key={tab.id}
+                draggable={!isEditing}
+                onDragStart={(e) => handleTabDragStart(e, tab.id)}
+                onDragOver={(e) => handleTabDragOver(e, tab.id)}
+                onDragLeave={handleTabDragLeave}
+                onDrop={(e) => handleTabDrop(e, tab.id)}
+                onDragEnd={handleTabDragEnd}
+                onClick={() => setActiveTab(tab.id)}
+                onDoubleClick={() => startEditing(tab.id, tab.label)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") setActiveTab(tab.id);
                 }}
                 className={cn(
-                  "ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded",
-                  "opacity-0 transition-opacity group-hover:opacity-100",
-                  "hover:bg-white/10",
+                  "group relative flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] font-medium transition-colors",
+                  "hover:bg-white/5 cursor-pointer",
+                  isActive ? "bg-white/10 text-text-primary" : "text-text-secondary",
+                  dragOverTabId === tab.id && "ring-1 ring-accent/50",
                 )}
-                title="Close tab"
               >
-                <X className="h-2.5 w-2.5" />
-              </button>
-              {isActive && (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent" />
-              )}
-            </div>
-          );
-        })}
+                {isEditing ? (
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onBlur={finishEditing}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") finishEditing();
+                      if (e.key === "Escape") setEditingTabId(null);
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-24 bg-transparent text-[11px] text-text-primary outline-none"
+                  />
+                ) : (
+                  <>
+                    {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
+                    <span className="max-w-[140px] truncate">{displayName}</span>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCloseTab(tab.id);
+                  }}
+                  className={cn(
+                    "ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded",
+                    "opacity-0 transition-opacity group-hover:opacity-100",
+                    "hover:bg-white/10",
+                  )}
+                  title="Close tab"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+                {isActive && (
+                  <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent" />
+                )}
+              </div>
+            );
+          })}
 
-        {/* Add tab button */}
-        <button
-          type="button"
-          onClick={() => addTab()}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5"
-          title="New tab"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-        {/* Quick terminal button */}
-        <button
-          type="button"
-          onClick={handleNewTerminal}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5 hover:text-accent"
-          title="New terminal"
-        >
-          <Terminal className="h-3.5 w-3.5" />
-        </button>
-        {/* Layout presets */}
-        <LayoutPresets tabId={activeTabId} />
+          {/* Add tab button */}
+          <button
+            type="button"
+            onClick={() => addTab()}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5"
+            title="New tab"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+          {/* Quick terminal button */}
+          <button
+            type="button"
+            onClick={handleNewTerminal}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5 hover:text-accent"
+            title="New terminal"
+          >
+            <Terminal className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {/* Trailing actions — outside the overflow container so dropdowns escape clipping */}
+        <div className="flex h-9 shrink-0 items-center border-l border-border/40 px-1">
+          <LayoutPresets tabId={activeTabId} />
+        </div>
       </div>
 
       {/* Quick-launch bar */}
