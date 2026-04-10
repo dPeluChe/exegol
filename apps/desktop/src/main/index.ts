@@ -27,6 +27,11 @@ import { destroyTray, initTray } from "./system/tray";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureSidecar } from "./terminal/pty-sidecar-discovery";
 import { ensureShellWrappers } from "./terminal/shell-wrappers";
+import {
+  closeAllFloatingPanes,
+  registerFloatingIpcHandlers,
+  registerMainWindow,
+} from "./windows/floating";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -66,6 +71,8 @@ function createWindow(): void {
     mainWindow?.show();
     endMark("firstPaint");
   });
+
+  if (mainWindow) registerMainWindow(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
@@ -175,6 +182,7 @@ app.whenReady().then(async () => {
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();
+  registerFloatingIpcHandlers();
   registerGlobalHotkey();
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
   endMark("criticalPath");
@@ -302,6 +310,8 @@ process.on("uncaughtException", (err) => {
 app.on("will-quit", () => {
   markShutdown();
   globalShortcut.unregisterAll();
+
+  closeAllFloatingPanes();
 
   // Sidecar mode: disconnect (sessions survive for reconnect on next launch)
   // Legacy mode: kill all subprocess PTY sessions

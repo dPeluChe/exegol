@@ -61,5 +61,18 @@ interface Window {
       install: () => Promise<void>;
       onStatus: (callback: (status: unknown) => void) => () => void;
     };
+    floating: {
+      open: (config: {
+        paneId: string;
+        type: "terminal" | "browser";
+        title: string;
+        agentId?: string;
+        url?: string;
+      }) => Promise<void>;
+      close: (paneId: string) => Promise<void>;
+      selfClose: () => void;
+      selfToggleDevTools: () => void;
+      onClosed: (callback: (paneId: string) => void) => () => void;
+    };
   };
 }

@@ -70,6 +70,11 @@ interface WorkspaceStore {
   focusedPaneId: string | null;
   /** User-saved layout templates — global, not per-project */
   customLayouts: CustomLayoutPreset[];
+  /**
+   * Panes currently displayed in a floating (always-on-top) window.
+   * In-memory only — resets on reload. Keyed by paneId.
+   */
+  floatingPanes: Record<string, { type: "terminal" | "browser"; openedAt: number }>;
 
   // Tab actions
   addTab: (label?: string) => string;
@@ -119,6 +124,10 @@ interface WorkspaceStore {
   saveCustomLayout: (tabId: string, name: string) => string | null;
   /** Delete a user-saved custom preset */
   deleteCustomLayout: (customId: string) => void;
+  /** Mark a pane as currently shown in a floating window */
+  markPaneFloating: (paneId: string, type: "terminal" | "browser") => void;
+  /** Remove the floating marker (used when the floating window closes) */
+  unmarkPaneFloating: (paneId: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -237,6 +246,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       _activeProjectId: useAppStore.getState().activeProjectId,
       focusedPaneId: null,
       customLayouts: [],
+      floatingPanes: {},
 
       addTab: (label) => {
         const pane = createEmptyPane();
@@ -587,6 +597,19 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         set((s) => ({
           customLayouts: s.customLayouts.filter((c) => c.id !== customId),
         })),
+
+      markPaneFloating: (paneId, type) =>
+        set((s) => ({
+          floatingPanes: { ...s.floatingPanes, [paneId]: { type, openedAt: Date.now() } },
+        })),
+
+      unmarkPaneFloating: (paneId) =>
+        set((s) => {
+          if (!s.floatingPanes[paneId]) return s;
+          const next = { ...s.floatingPanes };
+          delete next[paneId];
+          return { floatingPanes: next };
+        }),
 
       invalidatePane: (paneId, reason) =>
         set((s) => {

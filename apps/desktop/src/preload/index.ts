@@ -92,4 +92,29 @@ contextBridge.exposeInMainWorld("api", {
       };
     },
   },
+  // T84: Picture-in-Picture pane floating windows
+  floating: {
+    /** Open a floating pane window from the main window */
+    open: (config: {
+      paneId: string;
+      type: "terminal" | "browser";
+      title: string;
+      agentId?: string;
+      url?: string;
+    }) => ipcRenderer.invoke("floating:open", config),
+    /** Close a specific floating pane window by paneId (from main window) */
+    close: (paneId: string) => ipcRenderer.invoke("floating:close", paneId),
+    /** Close the current floating window (called from inside it) */
+    selfClose: () => ipcRenderer.send("floating:self-close"),
+    /** Toggle devtools in the current floating window */
+    selfToggleDevTools: () => ipcRenderer.send("floating:self-devtools"),
+    /** Main window: subscribe to "floating window closed" events */
+    onClosed: (callback: (paneId: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, paneId: string) => callback(paneId);
+      ipcRenderer.on("floating:closed", handler);
+      return () => {
+        ipcRenderer.removeListener("floating:closed", handler);
+      };
+    },
+  },
 });

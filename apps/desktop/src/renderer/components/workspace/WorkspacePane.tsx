@@ -1,5 +1,14 @@
 import { cn } from "@exegol/ui";
-import { AlertTriangle, ArrowUpRight, Code2, Columns, GripVertical, Rows, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Code2,
+  Columns,
+  GripVertical,
+  PictureInPicture2,
+  Rows,
+  X,
+} from "lucide-react";
 import { type DragEvent, lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
@@ -36,11 +45,35 @@ function PaneToolbar({
   const splitPane = useWorkspaceStore((s) => s.splitPane);
   const removePane = useWorkspaceStore((s) => s.removePane);
   const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);
+  const markPaneFloating = useWorkspaceStore((s) => s.markPaneFloating);
   const panes = useWorkspaceStore(selectPanes);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const { projectId } = useProjectContext();
 
   const showIdeButton = paneType === "terminal" || paneType === "files";
+  const showFloatButton = paneType === "terminal" || paneType === "browser";
+
+  const handleFloat = useCallback(() => {
+    const pane = panes[paneId];
+    if (!pane) return;
+    if (pane.type === "terminal" && pane.agentId) {
+      markPaneFloating(paneId, "terminal");
+      window.api.floating.open({
+        paneId,
+        type: "terminal",
+        title: `Terminal — ${pane.agentId.slice(0, 8)}`,
+        agentId: pane.agentId,
+      });
+    } else if (pane.type === "browser" && pane.url) {
+      markPaneFloating(paneId, "browser");
+      window.api.floating.open({
+        paneId,
+        type: "browser",
+        title: "Browser",
+        url: pane.url,
+      });
+    }
+  }, [panes, paneId, markPaneFloating]);
 
   const handleOpenInIde = useCallback(() => {
     if (!projectId) return;
@@ -108,6 +141,16 @@ function PaneToolbar({
           <ArrowUpRight className="h-3 w-3" />
         </button>
       )}
+      {showFloatButton && (
+        <button
+          type="button"
+          onClick={handleFloat}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+          title="Float to separate window"
+        >
+          <PictureInPicture2 className="h-3 w-3" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => splitPane(tabId, paneId, "horizontal", "empty")}
@@ -137,6 +180,37 @@ function PaneToolbar({
 }
 
 // ─── Browser Pane ───────────────────────────────────────────────────────────
+
+// ─── Floating placeholder ─────────────────────────────────────────────────
+
+function FloatingPlaceholder({ paneId }: { paneId: string }) {
+  const unmarkPaneFloating = useWorkspaceStore((s) => s.unmarkPaneFloating);
+  const handleReturn = useCallback(() => {
+    // Close the floating window — the main process will fire "floating:closed"
+    // which is already wired via useFloatingPaneSync to unmark the pane. We
+    // also unmark defensively here in case the window was already gone.
+    window.api.floating.close(paneId);
+    unmarkPaneFloating(paneId);
+  }, [paneId, unmarkPaneFloating]);
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-bg-primary text-center">
+      <PictureInPicture2 className="h-7 w-7 text-text-muted" />
+      <div className="space-y-0.5">
+        <div className="text-xs font-medium text-text-primary">Floating</div>
+        <div className="text-[10px] text-text-muted">
+          This pane is open in a separate always-on-top window
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={handleReturn}
+        className="rounded border border-border bg-bg-secondary px-3 py-1 text-[10px] text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+      >
+        Return to pane
+      </button>
+    </div>
+  );
+}
 
 // ─── Invalid / Recovery-Failed Pane ──────────────────────────────────────
 
@@ -223,6 +297,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
   const mergeTabIntoSplit = useWorkspaceStore((s) => s.mergeTabIntoSplit);
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
+  const isFloating = useWorkspaceStore((s) => !!s.floatingPanes[paneId]);
   const isFocused = focusedPaneId === paneId;
   const [dropSide, setDropSide] = useState<"left" | "right" | "top" | "bottom" | null>(null);
 
@@ -318,6 +393,29 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         }
         onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}
+        onFloat={
+          (pane.type === "terminal" && pane.agentId) || (pane.type === "browser" && pane.url)
+            ? () => {
+                if (pane.type === "terminal" && pane.agentId) {
+                  useWorkspaceStore.getState().markPaneFloating(paneId, "terminal");
+                  window.api.floating.open({
+                    paneId,
+                    type: "terminal",
+                    title: `Terminal — ${pane.agentId.slice(0, 8)}`,
+                    agentId: pane.agentId,
+                  });
+                } else if (pane.type === "browser" && pane.url) {
+                  useWorkspaceStore.getState().markPaneFloating(paneId, "browser");
+                  window.api.floating.open({
+                    paneId,
+                    type: "browser",
+                    title: "Browser",
+                    url: pane.url,
+                  });
+                }
+              }
+            : undefined
+        }
         onClose={() => {
           if (pane.type === "terminal" && pane.agentId) {
             deleteAgentImperative(pane.agentId);
@@ -328,20 +426,23 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
       >
         <div className="flex-1 overflow-hidden">
           {pane.invalidReason && <InvalidPane reason={pane.invalidReason} paneId={paneId} />}
-          {!pane.invalidReason && pane.type === "terminal" && pane.agentId && (
+          {!pane.invalidReason && isFloating && <FloatingPlaceholder paneId={paneId} />}
+          {!pane.invalidReason && !isFloating && pane.type === "terminal" && pane.agentId && (
             <RecoverableTerminalPane agentId={pane.agentId} paneId={paneId} />
           )}
-          {!pane.invalidReason && pane.type === "browser" && (
+          {!pane.invalidReason && !isFloating && pane.type === "browser" && (
             <BrowserPane pane={pane} paneId={paneId} />
           )}
-          {!pane.invalidReason && pane.type === "files" && (
+          {!pane.invalidReason && !isFloating && pane.type === "files" && (
             <FilesPaneContent key={pane.filePath ?? "default"} overridePath={pane.filePath} />
           )}
-          {!pane.invalidReason && pane.type === "git" && (
+          {!pane.invalidReason && !isFloating && pane.type === "git" && (
             <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />
           )}
-          {!pane.invalidReason && pane.type === "empty" && <EmptyPane paneId={paneId} />}
-          {!pane.invalidReason && pane.type === "terminal" && !pane.agentId && (
+          {!pane.invalidReason && !isFloating && pane.type === "empty" && (
+            <EmptyPane paneId={paneId} />
+          )}
+          {!pane.invalidReason && !isFloating && pane.type === "terminal" && !pane.agentId && (
             <EmptyPane paneId={paneId} />
           )}
         </div>

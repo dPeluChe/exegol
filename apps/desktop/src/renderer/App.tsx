@@ -10,6 +10,7 @@ import { TitleBar } from "./components/layout/TitleBar";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
+import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
@@ -68,6 +69,7 @@ export default function App() {
   useToastEvents();
   useTheme();
   useAutoSelectProject();
+  useFloatingPaneSync();
 
   const showSidebar = activeView === "workspace";
 

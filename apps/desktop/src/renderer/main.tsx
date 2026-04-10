@@ -1,9 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles/globals.css";
+
+// T84: floating pane windows render a minimal UI (not the full app shell).
+// Check the URL for `?floatingPane=...` before deciding what to mount.
+// FloatingPaneRoot is lazy so the main window never pays for it.
+const isFloatingWindow = new URLSearchParams(window.location.search).has("floatingPane");
+const FloatingPaneRoot = lazy(() =>
+  import("./FloatingPaneRoot").then((m) => ({ default: m.FloatingPaneRoot })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,14 +30,21 @@ ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <App />
+        {isFloatingWindow ? (
+          <Suspense fallback={null}>
+            <FloatingPaneRoot />
+          </Suspense>
+        ) : (
+          <App />
+        )}
       </QueryClientProvider>
     </ErrorBoundary>
   </React.StrictMode>,
 );
 
-// Dismiss splash screen — show for at least 2s, then fade out
-const SPLASH_MIN_MS = 2000;
+// Dismiss splash screen immediately for floating windows (they're small and
+// don't need the brand intro). For the main window, honor the minimum time.
+const SPLASH_MIN_MS = isFloatingWindow ? 0 : 2000;
 const splashStart = performance.now();
 
 requestAnimationFrame(() => {
