@@ -29,17 +29,26 @@ const config: Configuration = {
     "node_modules/libsql/**",
     "node_modules/@libsql/**",
     "node_modules/@neon-rs/**",
-    "node_modules/@exegol/core-rust/**",
     "node_modules/bindings/**",
     "node_modules/file-uri-to-path/**",
     "node_modules/better-sqlite3/**",
+    // @exegol/core-rust is shipped via extraResources (see below), not
+    // asarUnpack, because it's a workspace symlink outside apps/desktop
+    // scope that electron-builder doesn't resolve through the usual
+    // node_modules collection.
   ],
 
+  // Bundle the @exegol/core-rust package as an extra resource. It's a
+  // workspace package symlinked at the repo root's node_modules, so
+  // electron-builder's default file collector doesn't include it. We
+  // ship index.js/d.ts + package.json (so it can be required normally)
+  // and all .node binaries for the current platform. The runtime
+  // fallback in spawn-env.ts loads it from process.resourcesPath.
   extraResources: [
     {
-      from: "../../packages/core-rust/core-rust.*.node",
-      to: "core-rust/",
-      filter: ["**/*.node"],
+      from: "../../packages/core-rust",
+      to: "core-rust",
+      filter: ["*.node", "index.js", "index.d.ts", "package.json"],
     },
   ],
 

@@ -27,13 +27,11 @@ async function detectGhCli(): Promise<boolean> {
 }
 
 // ─── Rust native module (git2 diff) ────────────────────────────────────────
+//
+// Reuse the single coreRust loader from spawn-env.ts so the packaged-app
+// fallback (process.resourcesPath/core-rust) is only implemented once.
 
-let coreRust: typeof import("@exegol/core-rust") | null = null;
-try {
-  coreRust = require("@exegol/core-rust");
-} catch {
-  logger.warn("[Diff] @exegol/core-rust not available — falling back to git CLI");
-}
+import { coreRust } from "../../agents/spawn-env";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

@@ -36,12 +36,34 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
 }
 
 // ─── Rust native module (git2 worktree ops) ──────────────────────────────
+//
+// Resolution order:
+// 1. Normal require (dev mode + any classic node_modules install).
+// 2. `process.resourcesPath/core-rust` — packaged app via electron-builder's
+//    extraResources. This is where we land in production because
+//    @exegol/core-rust is a bun workspace symlink that lives at the repo
+//    root's node_modules and electron-builder doesn't resolve it through
+//    the usual apps/desktop node_modules collection.
 
 export let coreRust: typeof import("@exegol/core-rust") | null = null;
 try {
   coreRust = require("@exegol/core-rust");
 } catch {
-  logger.warn("[AgentManager] @exegol/core-rust native module not available — worktrees disabled");
+  try {
+    const electron = require("electron") as { app?: { isPackaged?: boolean } } | undefined;
+    if (electron?.app?.isPackaged && process.resourcesPath) {
+      const path = require("node:path") as typeof import("node:path");
+      const fallbackPath = path.join(process.resourcesPath, "core-rust");
+      coreRust = require(fallbackPath);
+      logger.info("[AgentManager] Loaded @exegol/core-rust from resourcesPath fallback");
+    } else {
+      throw new Error("not packaged, no fallback");
+    }
+  } catch (err) {
+    logger.warn(
+      `[AgentManager] @exegol/core-rust native module not available — worktrees + Rust git/diff disabled: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 // ─── PTY constants ──────────────────────────────────────────────────────
