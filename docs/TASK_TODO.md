@@ -12,9 +12,6 @@
 
 ## Priority Order
 
-> Only pending work. Completed tasks live in `docs/tasks_completed/` and
-> release-level summaries in `docs/CHANGELOG.md`.
-
 ### P0 — Must land before broad release push
 - **Review Inbox / Attention Center** (T57)
 - **Parallel Multi-Agent on Worktrees** (T65)
@@ -702,7 +699,7 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ---
 
-## Suggested Order (pending only — completed tasks moved to tasks_completed/)
+## Suggested Order
 
 ### Next wave (P0 + P1)
 1. **T57** — Review Inbox / Attention Center
@@ -735,12 +732,3 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 ### T46 — Canary Channel
 **Priority**: P3
 
----
-
-## History
-
-Completed work has moved out of this file. See:
-- `docs/CHANGELOG.md` — release-level summaries (what users see per version)
-- `docs/tasks_completed/2026_03.md` — V1-V3 foundation + performance pass
-- `docs/tasks_completed/2026_04.md` — April quickwins, quality foundation, and
-  the v0.3.0 pre-launch polish wave (T83-T87 + PiP + recovery + fonts)
