@@ -28,6 +28,18 @@ contextBridge.exposeInMainWorld("api", {
     getVersion: () => ipcRenderer.invoke("app:version"),
     getPlatform: () => process.platform,
   },
+  // Menu-driven actions (macOS app menu routes accelerators via IPC so the
+  // renderer can close panes/tabs instead of the whole window on Cmd+W).
+  onMenuAction: (callback: (action: "new-tab" | "close-pane") => void) => {
+    const onNewTab = () => callback("new-tab");
+    const onClosePane = () => callback("close-pane");
+    ipcRenderer.on("menu:new-tab", onNewTab);
+    ipcRenderer.on("menu:close-pane", onClosePane);
+    return () => {
+      ipcRenderer.removeListener("menu:new-tab", onNewTab);
+      ipcRenderer.removeListener("menu:close-pane", onClosePane);
+    };
+  },
   onAgentHandoff: (callback: (agentId: string, handoffId: string) => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
@@ -89,6 +101,31 @@ contextBridge.exposeInMainWorld("api", {
       ipcRenderer.on("updater:status", handler);
       return () => {
         ipcRenderer.removeListener("updater:status", handler);
+      };
+    },
+  },
+  // T84: Picture-in-Picture pane floating windows
+  floating: {
+    /** Open a floating pane window from the main window */
+    open: (config: {
+      paneId: string;
+      type: "terminal" | "browser";
+      title: string;
+      agentId?: string;
+      url?: string;
+    }) => ipcRenderer.invoke("floating:open", config),
+    /** Close a specific floating pane window by paneId (from main window) */
+    close: (paneId: string) => ipcRenderer.invoke("floating:close", paneId),
+    /** Close the current floating window (called from inside it) */
+    selfClose: () => ipcRenderer.send("floating:self-close"),
+    /** Toggle devtools in the current floating window */
+    selfToggleDevTools: () => ipcRenderer.send("floating:self-devtools"),
+    /** Main window: subscribe to "floating window closed" events */
+    onClosed: (callback: (paneId: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, paneId: string) => callback(paneId);
+      ipcRenderer.on("floating:closed", handler);
+      return () => {
+        ipcRenderer.removeListener("floating:closed", handler);
       };
     },
   },

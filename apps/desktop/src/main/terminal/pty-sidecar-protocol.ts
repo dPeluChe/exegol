@@ -9,7 +9,10 @@ import { join } from "node:path";
 export const EXEGOL_DIR = join(homedir(), ".exegol");
 export const SIDECAR_SOCK_PATH = join(EXEGOL_DIR, "pty-sidecar.sock");
 export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
-export const SIDECAR_VERSION = "1.0.0";
+// Bumped to 1.1.0 when session.listInfo was added. Older running sidecars
+// are auto-upgraded by main/index.ts on startup when safe.
+export const SIDECAR_VERSION = "1.1.0";
+export const SIDECAR_MIN_COMPATIBLE_VERSION = "1.1.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 
@@ -87,6 +90,22 @@ export interface SessionSnapshotResult {
 
 export interface SessionListResult {
   sessions: string[];
+}
+
+/**
+ * Richer session listing that distinguishes live PTYs from exited-but-still-buffered
+ * sessions (inside the sidecar's 60s grace period for scrollback retrieval).
+ * Used by startup recovery so dead sessions aren't re-marked as running.
+ */
+export interface SessionInfo {
+  id: string;
+  alive: boolean;
+  exitCode: number | null;
+  signal: string | null;
+}
+
+export interface SessionListInfoResult {
+  sessions: SessionInfo[];
 }
 
 export interface PingResult {

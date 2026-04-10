@@ -1,0 +1,40 @@
+/**
+ * Bundled Nerd Fonts for the terminal.
+ *
+ * These files live in apps/desktop/src/renderer/assets/fonts/ and are
+ * packaged into the renderer build by Vite (the ?url import in
+ * main.tsx produces a hashed asset path). Once loaded via @font-face,
+ * xterm.js can use them without the user installing anything system-wide.
+ *
+ * We bundle only the Regular weight for each font to keep the DMG
+ * small (~7 MB total). xterm.js synthesizes bold when needed.
+ *
+ * Licenses:
+ * - MesloLGS NF        → MIT (github.com/romkatv/powerlevel10k-media)
+ * - FiraCode Nerd Font → OFL (github.com/tonsky/FiraCode + Nerd Fonts patch)
+ * - JetBrainsMono NF   → OFL (github.com/JetBrains/JetBrainsMono + NF patch)
+ */
+
+@font-face {
+  font-family: "MesloLGS NF";
+  src: url("../assets/fonts/MesloLGS-NF-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "FiraCode Nerd Font Mono";
+  src: url("../assets/fonts/FiraCodeNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("../assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}

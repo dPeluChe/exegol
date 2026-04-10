@@ -50,12 +50,10 @@ export const projectRouter = router({
     return listProjects(ctx.db);
   }),
 
+  // Returns null (not throws) when project not found: stale persisted
+  // activeProjectId is a normal state to recover from, not an error.
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    const project = getProject(ctx.db, input.id);
-    if (!project) {
-      throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.id} not found` });
-    }
-    return project;
+    return getProject(ctx.db, input.id) ?? null;
   }),
 
   create: publicProcedure.input(projectCreateSchema).mutation(async ({ ctx, input }) => {

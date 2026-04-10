@@ -2,6 +2,7 @@ import type { Project } from "@exegol/shared";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { useMountEffect } from "../hooks/use-mount-effect";
 import { useAgents, useProject } from "../hooks/use-trpc";
+// Stale activeProjectId is cleaned up by useAutoSelectProject in App.tsx.
 import {
   type AgentState,
   startAgentStatusPush,
@@ -28,14 +29,6 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const { data: dbAgents } = useAgents(activeProjectId);
   const syncFromDb = useAgentStore((s) => s.syncFromDb);
   const agentsRecord = useAgentStore((s) => s.agents);
-
-  // Guard: if the persisted project no longer exists in DB, reset to project list.
-  // Kept as effect because it reacts to an async query result, not a user action.
-  useEffect(() => {
-    if (activeProjectId && !isLoading && !project) {
-      useAppStore.getState().setActiveProject(null);
-    }
-  }, [activeProjectId, isLoading, project]);
 
   // T17: Subscribe to push events for agent status updates (Rule 4: external system sync)
   useMountEffect(() => {

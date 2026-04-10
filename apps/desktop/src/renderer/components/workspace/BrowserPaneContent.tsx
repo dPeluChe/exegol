@@ -1,6 +1,6 @@
 import { cn } from "@exegol/ui";
-import { Globe, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ArrowRight, Globe, RefreshCw, RotateCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import {
   type PortInfo,
@@ -38,6 +38,66 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [urlInput, setUrlInput] = useState(initUrl);
   const [currentUrl, setCurrentUrl] = useState(initUrl);
   const [didAutoSync, setDidAutoSync] = useState(!!pane.url);
+  const webviewRef = useRef<HTMLElement | null>(null);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+  const [loadError, setLoadError] = useState<{ code: number; desc: string } | null>(null);
+
+  // Track navigation history availability + load-failure state on the webview
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes
+  useEffect(() => {
+    const webview = webviewRef.current as unknown as {
+      addEventListener: (e: string, fn: (ev: Event) => void) => void;
+      removeEventListener: (e: string, fn: (ev: Event) => void) => void;
+      canGoBack: () => boolean;
+      canGoForward: () => boolean;
+    } | null;
+    if (!webview) return;
+    const update = () => {
+      try {
+        setCanGoBack(webview.canGoBack());
+        setCanGoForward(webview.canGoForward());
+      } catch {
+        /* webview not ready */
+      }
+    };
+    const onFailLoad = (ev: Event) => {
+      const e = ev as unknown as {
+        errorCode: number;
+        errorDescription: string;
+        isMainFrame: boolean;
+      };
+      if (e.isMainFrame) {
+        setLoadError({ code: e.errorCode, desc: e.errorDescription });
+      }
+    };
+    const onStartLoad = () => setLoadError(null);
+    webview.addEventListener("did-navigate", update as (ev: Event) => void);
+    webview.addEventListener("did-navigate-in-page", update as (ev: Event) => void);
+    webview.addEventListener("did-finish-load", update as (ev: Event) => void);
+    webview.addEventListener("did-fail-load", onFailLoad);
+    webview.addEventListener("did-start-loading", onStartLoad);
+    return () => {
+      webview.removeEventListener("did-navigate", update as (ev: Event) => void);
+      webview.removeEventListener("did-navigate-in-page", update as (ev: Event) => void);
+      webview.removeEventListener("did-finish-load", update as (ev: Event) => void);
+      webview.removeEventListener("did-fail-load", onFailLoad);
+      webview.removeEventListener("did-start-loading", onStartLoad);
+    };
+  }, [currentUrl]);
+
+  const handleBack = useCallback(() => {
+    const wv = webviewRef.current as unknown as { goBack?: () => void } | null;
+    wv?.goBack?.();
+  }, []);
+  const handleForward = useCallback(() => {
+    const wv = webviewRef.current as unknown as { goForward?: () => void } | null;
+    wv?.goForward?.();
+  }, []);
+  const handleReload = useCallback(() => {
+    const wv = webviewRef.current as unknown as { reload?: () => void } | null;
+    wv?.reload?.();
+  }, []);
 
   // Auto-sync to preferred or first detected port on initial load (once)
   useEffect(() => {
@@ -81,6 +141,32 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     <div role="none" className="flex h-full flex-col" onMouseDown={() => setFocusedPane(paneId)}>
       {/* URL bar */}
       <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border bg-bg-secondary px-2">
+        <button
+          type="button"
+          onClick={handleBack}
+          disabled={!canGoBack}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
+          title="Back"
+        >
+          <ArrowLeft className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={handleForward}
+          disabled={!canGoForward}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
+          title="Forward"
+        >
+          <ArrowRight className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={handleReload}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+          title="Reload"
+        >
+          <RotateCw className="h-3 w-3" />
+        </button>
         <Globe className="h-3 w-3 shrink-0 text-text-muted" />
         {uniquePorts.length > 0 && (
           <div className="flex shrink-0 items-center gap-0.5">
@@ -138,7 +224,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           type="button"
           onClick={navigate}
           className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Refresh / Go"
+          title="Go to URL"
         >
           <RefreshCw className="h-3 w-3" />
         </button>
@@ -146,11 +232,42 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       {/* Webview with focus capture overlay when not active */}
       <div className="relative flex-1">
         <webview
+          // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
+          ref={webviewRef as React.Ref<any>}
           src={currentUrl}
           className="h-full w-full"
           /* @ts-expect-error Electron webview attributes */
           allowpopups="true"
         />
+        {loadError && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-bg-primary/95 p-4 text-center">
+            <Globe className="h-8 w-8 text-text-muted/60" />
+            <div className="space-y-0.5">
+              <div className="text-xs font-medium text-text-primary">
+                Can't reach {new URL(currentUrl).host}
+              </div>
+              <div className="max-w-sm text-[10px] text-text-muted">
+                {loadError.desc} ({loadError.code}). Is your dev server running? Try starting it and
+                click Retry, or enter a different URL above.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleReload}
+                className="flex items-center gap-1 rounded border border-border bg-bg-secondary px-2.5 py-1 text-[10px] text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+              >
+                <RotateCw className="h-3 w-3" />
+                Retry
+              </button>
+              {uniquePorts.length > 0 && (
+                <span className="text-[10px] text-text-muted">
+                  Or pick a port from the bar above
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {!isFocused && (
           <div
             role="none"

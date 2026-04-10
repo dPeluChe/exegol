@@ -13,61 +13,37 @@
 ## Priority Order
 
 ### P0 — Must land before broad release push
-- ~~Worktrees real por agente~~ ✅ T61
-- Inbox de revisión y atención (T57)
-- ~~Review flow con resumen de riesgo~~ ✅ T62
-- ~~Performance stabilization pass~~ ✅ T63
-- ~~Command Palette~~ ✅ T64
-- Multi-agent paralelo sobre worktrees (T65)
-- ~~**Test coverage (T74)**~~ ✅
-- ~~**Monolith decomposition (T75)**~~ ✅
+- **Review Inbox / Attention Center** (T57)
+- **Parallel Multi-Agent on Worktrees** (T65)
 
 ### P1 — Strong differentiation right after P0
-- ~~Session resume determinístico~~ ✅ T66
-- ~~Agent hook system con eventos estructurados~~ ✅ T67
-- Repo map + semantic search (T68)
-- ~~**Tier 3 scoring via SDK (T76)**~~ ✅
-- **DB validation layer (T77)** — Zod schemas for DB rows
+- **Repo Map + Semantic Search** (T68)
+- **DB validation layer** (T77) — Zod schemas for DB rows
 
 ### P2 — Valuable follow-ups once the core is stable
-- Diff line comments
-- Activity classification
-- **Pipeline state machine (T78)** — explicit transitions
-- ~~**MCP reconnection (T79)**~~ ✅
-- **Structured error handling (T80)** — transient vs permanent classification
-- **DI for singletons (T81)** — testability improvement
-- **Shared package enrichment (T82)** — more Zod schemas for IPC/DB payloads
-- Lifecycle scripts por proyecto
-- Issue tracker expansion
-- ~~Dark-black theme~~ ✅ T72
+- Diff line comments (T69)
+- Activity classification (T70)
+- Issue tracker expansion (T71)
+- **Pipeline state machine** (T78) — explicit transitions
+- **Structured error handling** (T80) — transient vs permanent classification
+- **DI for singletons** (T81) — testability improvement
+- **Shared package enrichment** (T82) — more Zod schemas for IPC/DB payloads
+- **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
+- **Exegol CLI** (T89) — headless client over sidecar socket
+- **Terminal ↔ Chat dual view** (T90) — same session, two presentations
+- **Lifecycle scripts per repo** (T91) — setup/run/teardown in git
 
 ### P3 — Strategic bets / larger scope
-- SSH remote development
-- CI/CD release pipeline
-- Canary channel
+- **SSH Remote Development** (T73)
+- **CI/CD release pipeline** (T45) — activate when repo goes public
+- **Canary channel** (T46)
+- **Cross-repo workspaces** (T92) — front + back in one workspace
+- **Mobile companion app** (T93) — monitor agents from phone via daemon
+- **Headless daemon mode** (T94) — remote WebSocket for cloud/server deploys
 
 ---
 
 ## Active Backlog
-
-### T56 — Agent Status via Terminal Title ✅ COMPLETED
-**Priority**: High | **Effort**: Low | **Source**: Orca
-
-**Why**
-- Complement the current Rust stdout/status parsing with title escape sequence signals.
-- Reduces parser brittleness for providers that already expose state in terminal title.
-
-**Scope**
-- Read terminal title escape sequences (`\033]0;...\007`) in PTY flow
-- Detect: idle, working, permission-needed, waiting-input
-- Update agent badge/state without extra renderer polling
-
-**Likely files**
-- `apps/desktop/src/main/terminal/*`
-- `apps/desktop/src/main/agents/title-status.ts`
-- `apps/desktop/src/renderer/stores/agents.ts`
-
----
 
 ### T57 — Review Inbox / Attention Center
 **Priority**: P0 | **Effort**: Medium | **Source**: cmux + Orca + Exegol analysis
@@ -157,106 +133,6 @@
 
 ---
 
-### T61 — Real Worktree Isolation per Agent ✅ COMPLETED (PR #13)
-**Priority**: P0 | **Effort**: High | **Source**: Codex + Superset + Exegol analysis
-
-**Why**
-- Biggest trust gap today: agents still run in the project root instead of isolated worktrees.
-- This is the main operational-confidence feature for release.
-
-**Scope**
-- Wire the existing Rust git2 scaffold into agent spawn flow
-- Create one worktree per agent with deterministic branch naming
-- Persist worktree metadata and auto-cleanup policy
-- Allow handoff/continue to reuse or branch from prior worktree when appropriate
-- Surface current worktree path and branch in UI
-
-**Acceptance**
-- New agent spawns into its own worktree, not the root project
-- Two agents can modify the same repo in parallel without touching each other
-- Worktree cleanup is explicit, safe, and logged
-
-**Likely files**
-- `packages/core-rust/src/git/*`
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/db/*`
-- `apps/desktop/src/main/ipc/procedures/agents.ts`
-- `packages/shared/*`
-
----
-
-### T62 — Review Readiness + Risk Summary ✅ COMPLETED (PR #11)
-**Priority**: P0 | **Effort**: Medium | **Source**: Exegol analysis
-
-**Why**
-- Diff alone is not enough; the review bottleneck is reading and reconstructing risk manually.
-
-**Scope**
-- Create a “ready for review” summary per agent/session
-- Include: files touched, commands run, tests detected, open ports, dependency file changes, binary changes, and failure signals
-- Add a compact reviewer summary card before full diff
-- Make review state visible from sidebar and diff workspace
-
-**Acceptance**
-- Reviewer can understand blast radius without opening every file hunk
-- High-risk changes are highlighted first
-
-**Likely files**
-- `apps/desktop/src/main/ipc/procedures/diff.ts`
-- `apps/desktop/src/main/agents/scoring.ts`
-- `apps/desktop/src/main/system/ports.ts`
-- `apps/desktop/src/renderer/components/workspace/sections/DiffSection.tsx`
-- `apps/desktop/src/renderer/components/workspace/GitPane.tsx`
-
----
-
-### T63 — Desktop Performance Stabilization Pass ✅ COMPLETED (PR #12)
-**Priority**: P0 | **Effort**: Medium | **Source**: Exegol analysis
-
-**Why**
-- The current product has several hotspots that will get worse as more features land.
-- This should happen before adding more constant polling and heavy summaries.
-
-**Scope**
-- Replace scattered polling with centralized push-first refresh where possible
-- Reduce or cache heavy resource calls (`du`, `git worktree`, `pgrep`, `ps`)
-- Stop reparsing full diffs when only status metadata changed
-- Move sync file I/O in the main process to async where it affects user flows
-- Centralize refetch constants and stop duplicate intervals
-
-**Hotspots already identified**
-- `apps/desktop/src/renderer/hooks/use-trpc.ts`
-- `apps/desktop/src/renderer/hooks/use-trpc-resources.ts`
-- `apps/desktop/src/main/system/resources.ts`
-- `apps/desktop/src/main/ipc/procedures/files.ts`
-- `apps/desktop/src/renderer/components/workspace/FileExplorer.tsx`
-
-**Acceptance**
-- Fewer background intervals
-- Lower CPU wakeups while idle
-- Large repos remain responsive while resources/diff/task panes are open
-
----
-
-### T64 — Command Palette ✅ COMPLETED
-**Priority**: P0 | **Effort**: Low | **Source**: Emdash
-
-**Why**
-- High UX value for relatively small effort.
-- Gives one entry point for projects, agents, panes, settings, search, and commands.
-
-**Scope**
-- `Cmd+Shift+P` global palette
-- Search projects, agents, tabs, settings, scheduler actions, prompts, and common commands
-- Fuzzy search with keyboard-only navigation
-
-**Likely files**
-- `apps/desktop/src/renderer/components/*`
-- `apps/desktop/src/renderer/hooks/use-hotkeys.ts`
-- `apps/desktop/src/renderer/stores/app.ts`
-
----
-
 ### T65 — Parallel Multi-Agent on Worktrees
 **Priority**: P0 | **Effort**: Medium | **Source**: Emdash + Codex + Exegol analysis
 
@@ -278,51 +154,6 @@
 - `apps/desktop/src/main/agents/*`
 - `apps/desktop/src/renderer/components/workspace/sections/PipelineSection.tsx`
 - `apps/desktop/src/renderer/hooks/use-trpc-pipeline.ts`
-
----
-
-### T66 — Session Isolation & Deterministic Resume ✅ COMPLETED
-**Priority**: P1 | **Effort**: Medium | **Source**: Emdash
-
-**Why**
-- Users expect “continue where it left off” after app close/crash.
-- Exegol already has PTY sidecar and scrollback persistence, so this is a natural next step.
-
-**Scope**
-- Deterministic `session-id` mapping per provider where supported
-- Persist PTY session map and agent-to-session relationship
-- Discover resumable sessions on startup
-- Resume with explicit user action and safety checks
-
-**Depends on**
-- T61 recommended
-
-**Likely files**
-- `apps/desktop/src/main/terminal/*`
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/db/*`
-- `apps/desktop/src/renderer/components/terminal/*`
-
----
-
-### T67 — Agent Hook Event System ✅ COMPLETED
-**Priority**: P1 | **Effort**: Medium | **Source**: Emdash + Codex direction
-
-**Why**
-- Output parsing alone is fragile.
-- Structured agent-originated events enable better review, inbox, scheduler, and automations.
-
-**Scope**
-- Local callback endpoint or secure IPC bridge for agent-emitted events
-- Supported events: task complete, permission needed, test result, PR opened, review ready
-- Per-agent token/secret for event auth
-- Native hook support for providers that expose it; wrapper fallback for others
-
-**Likely files**
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/terminal/shell-wrappers.ts`
-- `apps/desktop/src/main/hooks/*`
-- `apps/desktop/src/main/ipc/*`
 
 ---
 
@@ -413,23 +244,6 @@
 
 ---
 
-### T72 — Dark-Black Theme ✅ COMPLETED
-**Priority**: P2 | **Effort**: Low | **Source**: Emdash
-
-**Why**
-- Quick UX win, especially for OLED-heavy users.
-
-**Scope**
-- Add `dark-black` variant to current theme system
-- Keep xterm and chrome aligned
-
-**Likely files**
-- `apps/desktop/src/renderer/styles/globals.css`
-- `apps/desktop/src/renderer/hooks/use-theme.ts`
-- `apps/desktop/src/renderer/components/settings/GeneralSettings.tsx`
-
----
-
 ### T73 — SSH Remote Development
 **Priority**: P3 | **Effort**: High | **Source**: Emdash
 
@@ -455,101 +269,6 @@
 
 > These tasks surfaced from a comprehensive codebase audit (April 2026).
 > They address technical debt, testability, and robustness gaps that will compound if left unattended.
-
-### T74 — Test Coverage Foundation ✅ COMPLETED (PR #14)
-**Priority**: P0 | **Effort**: High | **Source**: Deep codebase analysis
-
-**Why**
-- The project has **zero TypeScript/JavaScript tests**. With ~32K LOC and complex business logic
-  (pipeline state machine, scoring heuristics, memory extraction, handoff generation, ring buffer),
-  this is the single highest technical risk. A bug in the pipeline state machine or scoring formula
-  can silently corrupt data with no safety net.
-
-**Scope**
-- Add Vitest (preferred) or Jest as test runner
-- Priority 1: Unit tests for pure functions:
-  - `agents/scoring.ts` — scoring formula, Tier 1 regex patterns, composite score calculation
-  - `agents/handoff.ts` — token limit detection patterns, scrollback summary generation
-  - `memory/extractor.ts` — extraction rules, deduplication logic, similarity scoring
-  - `memory/store.ts` — relevance scoring formula, token budget enforcement
-  - `pipeline/context.ts` — prompt template interpolation (`{{task}}`, `{{diff}}`, `{{previousOutput}}`)
-  - `terminal/ring-buffer.ts` — write, wrap, snapshot correctness
-- Priority 2: Integration tests:
-  - Pipeline state transitions (pending → running → paused → completed → cancelled)
-  - Queue executor dispatch with dependency resolution
-  - Agent spawn lifecycle with worktree creation/cleanup
-- Priority 3: Component tests for critical UI:
-  - WorkspacePane pane type rendering
-  - Agent store push event handling
-- Target: ≥60% coverage on main process business logic
-
-**Likely files**
-- New: `apps/desktop/src/main/__tests__/*`
-- New: `apps/desktop/src/renderer/__tests__/*`
-- `package.json` (add test runner dependency + script)
-- `apps/desktop/package.json` or `apps/desktop/vitest.config.ts`
-
----
-
-### T75 — Monolith File Decomposition ✅ COMPLETED (PR #14)
-**Priority**: P0 | **Effort**: Medium | **Source**: Deep codebase analysis
-
-**Why**
-- Four files significantly exceed the 400-500 LOC quality gate:
-  - `manager.ts` (~682 LOC): AgentManager handles spawn, reattach, stop, worktree cleanup,
-    output processing, scrollback buffering, completion callbacks, title tracking
-  - `WorkspacePane.tsx` (~800 LOC / 28KB): single component renders 5 pane types
-  - `executor.ts` (~550 LOC / 19KB): PipelineExecutor with complex state machine
-  - `pty-host.ts` (~630 LOC / 21KB): PtyHost handles legacy + sidecar + shell gating + scrollback
-
-**Scope**
-- `manager.ts` → split into:
-  - `agent-spawner.ts` (spawn logic, worktree setup, env building)
-  - `agent-output-processor.ts` (output parsing, scrollback buffering, token limit detection)
-  - `agent-lifecycle.ts` (stop, cleanup, reattach, completion callbacks)
-  - `agent-manager.ts` (thin orchestrator, public API)
-- `WorkspacePane.tsx` → extract each pane type into its own component:
-  - `TerminalPaneContent.tsx`, `BrowserPaneContent.tsx`, `FilesPaneContent.tsx`,
-  - `GitPaneContent.tsx`, `EmptyPaneContent.tsx`
-- `executor.ts` → split into:
-  - `pipeline-state-machine.ts` (transition logic, validation)
-  - `pipeline-agent-spawner.ts` (step execution, YOLO flag injection)
-  - `pipeline-executor.ts` (orchestrator, public API)
-- `pty-host.ts` → split into:
-  - `pty-session-manager.ts` (session lifecycle, cleanup)
-  - `pty-shell-gating.ts` (shell readiness marker logic)
-  - `pty-scrollback.ts` (scrollback flush, throttle)
-  - `pty-host.ts` (thin facade)
-
-**Acceptance**
-- No file exceeds 400 LOC (excluding type-only files)
-- All existing behavior preserved (no functional changes)
-- Quality gate passes after refactor
-
----
-
-### T76 — Replace curl with SDK in Tier 3 Scoring ✅ COMPLETED
-**Priority**: P1 | **Effort**: Low | **Source**: Deep codebase analysis
-
-**Why**
-- Tier 3 LLM-as-judge scoring calls the Anthropic API via `execFile("curl", ...)`:
-  - API key travels as a CLI argument (visible in `ps aux`)
-  - No retry logic on transient failures
-  - Manual JSON parsing from stdout is fragile
-  - 30s timeout doesn't cover all edge cases
-
-**Scope**
-- Replace `execFileAsync("curl", ...)` with either:
-  - The `@anthropic-ai/sdk` package (preferred, already exists in the ecosystem)
-  - Or `fetch()` with proper headers (lighter alternative)
-- Add structured error handling (rate limit, timeout, auth error)
-- Ensure API key is never passed as CLI argument
-- Keep the non-fatal pattern (scoring never blocks agent completion)
-
-**Likely files**
-- `apps/desktop/src/main/agents/scoring.ts` — `evaluateTier3()` function
-
----
 
 ### T77 — DB Row Validation with Zod Schemas
 **Priority**: P1 | **Effort**: Medium | **Source**: Deep codebase analysis
@@ -599,28 +318,6 @@
 **Likely files**
 - `apps/desktop/src/main/pipeline/executor.ts`
 - New: `apps/desktop/src/main/pipeline/state-machine.ts`
-
----
-
-### T79 — MCP Host Auto-Reconnection ✅ COMPLETED
-**Priority**: P2 | **Effort**: Low | **Source**: Deep codebase analysis
-
-**Why**
-- The MCP host connects via stdio or HTTP but has no reconnection logic. If an MCP server
-  crashes or restarts, it stays in "error" state until the user reconnects manually.
-  This is especially painful for stdio-based servers that may crash on large inputs.
-
-**Scope**
-- Add exponential backoff reconnection for disconnected servers
-- Track last-known config in `McpHost.servers` for reconnection
-- Limit retries (max 5 attempts, then mark as "failed")
-- Add manual reconnect button in UI (or auto-reconnect on next tool call)
-- Emit IPC event on reconnection status change
-
-**Likely files**
-- `apps/desktop/src/main/mcp/host.ts`
-- `apps/desktop/src/main/ipc/procedures/mcp.ts`
-- `apps/desktop/src/renderer/hooks/use-trpc-mcp.ts`
 
 ---
 
@@ -702,6 +399,196 @@
 **Likely files**
 - `packages/shared/src/schemas/*` (new and existing)
 - `packages/shared/src/types/*` (keep types, add corresponding schemas)
+
+---
+
+## Post-launch Backlog — Inspired by Competitors
+
+### T88 — Ralph Loops in Pipelines
+**Priority**: P2 | **Effort**: Medium | **Source**: Paseo orchestration skills
+
+**Why**
+- Current pipeline loop mechanism (`loopBackTo` + maxIterations) is static. Paseo's
+  "Ralph" pattern runs a lightweight evaluator between steps that decides whether
+  the previous step met the acceptance criteria. This turns pipelines from scripts
+  into goal-seeking workflows.
+
+**Scope**
+- New step type: `evaluator` with fields `acceptanceCriteria` (prompt),
+  `onPassNext` (step id), `onFailNext` (step id, usually a loop-back), `maxLoops`
+- PipelineExecutor: when the evaluator step runs, it spawns a small agent with
+  `{{previousOutput}}` + `{{diff}}` + criteria, parses response as `PASS` or
+  `RETRY: <feedback>`, and routes accordingly
+- Retry path injects the `<feedback>` into the next step's prompt as
+  `{{retryFeedback}}`
+- UI: distinct icon in PipelineEditor, visual loop arrow when editing
+- Safety: hard max (e.g., 10 iterations) even if maxLoops is higher
+
+**Likely files**
+- `packages/shared/src/types/pipeline.ts` (new step type)
+- `apps/desktop/src/main/pipeline/executor.ts` (evaluator routing)
+- `apps/desktop/src/main/pipeline/context.ts` (retryFeedback variable)
+- `apps/desktop/src/renderer/components/workspace/sections/pipeline/PipelineEditor.tsx`
+
+---
+
+### T89 — Exegol CLI (sidecar client)
+**Priority**: P2 | **Effort**: Medium | **Source**: Paseo multi-client architecture
+
+**Why**
+- Having a CLI that talks to the running sidecar unlocks: CI automation, scripting,
+  headless usage on servers, and parity with Paseo's workflow. It also doubles as
+  a test harness for the sidecar itself.
+
+**Scope**
+- New package: `packages/cli/` — Bun/Node CLI, published as `exegol` binary
+- Connects to `~/.exegol/pty-sidecar.sock` using the existing JSON-RPC protocol
+- Commands (v1):
+  - `exegol status` — list agents + pipeline runs
+  - `exegol run <pipeline-name> [--project <id>] [--watch]`
+  - `exegol logs <agent-id> [--follow]` — stream ring buffer
+  - `exegol projects` — list projects
+  - `exegol providers` — list available providers
+- Commands (v1.1):
+  - `exegol spawn <provider> --prompt "..."` — one-off agent
+  - `exegol stop <agent-id>`
+  - `exegol export <run-id>` — dump pipeline run as JSON
+- Reuses shared types from `@exegol/shared` (no duplication)
+
+**Likely files**
+- New: `packages/cli/src/index.ts`
+- New: `packages/cli/src/sidecar-client.ts`
+- New: `packages/cli/src/commands/*.ts`
+- `packages/shared/src/types/sidecar-protocol.ts` (may need to export)
+
+---
+
+### T90 — Terminal ↔ Chat Dual View
+**Priority**: P2 | **Effort**: Medium | **Source**: Superconductor
+
+**Why**
+- Non-technical users (PMs, designers watching a demo) benefit from a conversational
+  view of an agent session without the ANSI noise. Toggling lets you get CLI depth
+  when debugging and clean reading when reviewing.
+
+**Scope**
+- Parse the existing scrollback buffer into conversational turns: detect user
+  prompts (input echoes) vs agent output (post-prompt blocks)
+- Provider-specific parsers for Claude Code, Codex, Aider (they have distinct
+  output patterns); fallback to generic "alternate lines"
+- Toggle button in terminal pane header: Terminal / Chat
+- Chat view is read-only, reuses DarkReader-style clean rendering
+- Do NOT touch the underlying PTY — this is a pure render layer
+
+**Likely files**
+- New: `apps/desktop/src/renderer/components/terminal/ChatView.tsx`
+- New: `apps/desktop/src/renderer/lib/terminal-to-chat.ts` (parsers)
+- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (toggle state)
+
+---
+
+### T91 — Lifecycle Scripts per Repo
+**Priority**: P2 | **Effort**: Low | **Source**: Superconductor + our own T60
+
+**Why**
+- Power users want deterministic environment setup per repo: "before spawning any
+  agent, run `npm install`", "after commit, run tests". Shareable via git.
+- Supersedes T60's project-hook idea with a simpler concrete format.
+
+**Scope**
+- Define `.exegol/lifecycle.yaml` format:
+  ```yaml
+  setup: npm install && bun run build:rust
+  beforeAgent: source .env.local
+  afterCommit: bun test
+  teardown: rm -rf dist
+  ```
+- Loaded on project detect, cached in settings
+- Run setup on first agent spawn (show progress in status bar)
+- Run beforeAgent per agent spawn (inject into PTY env)
+- Run afterCommit from smart git button (T83)
+- Teardown on worktree cleanup
+- UI: Settings tab showing the loaded script with edit button
+
+**Likely files**
+- New: `apps/desktop/src/main/lifecycle/loader.ts`
+- `apps/desktop/src/main/agents/manager.ts` (run beforeAgent)
+- `apps/desktop/src/main/agents/worktrees.ts` (run teardown)
+- `apps/desktop/src/renderer/components/workspace/sections/SettingsSection.tsx`
+
+---
+
+### T92 — Cross-repo Workspaces
+**Priority**: P3 | **Effort**: Large | **Source**: Superconductor
+
+**Why**
+- Multi-repo projects (frontend + backend + infra) are extremely common. Users
+  today open 3 Exegol windows or switch projects constantly. Sharing a workspace
+  across repos with coordinated branches would be a significant differentiator.
+
+**Scope**
+- Allow a workspace tab to bind to N projects instead of 1
+- Branch coordination: when creating a branch in repo A, offer to create the same
+  named branch in repo B, C
+- Shared agent context: an agent spawned in this workspace can have working paths
+  in all bound repos
+- Cross-repo diff view: single diff screen showing changes across repos
+- Requires significant refactor of workspace store + ProjectContext
+
+**Likely files**
+- `apps/desktop/src/renderer/stores/workspace.ts` (multi-project binding)
+- `apps/desktop/src/renderer/contexts/ProjectContext.tsx`
+- `apps/desktop/src/main/agents/manager.ts` (multi-cwd agent)
+- `apps/desktop/src/renderer/components/workspace/GitPane.tsx` (cross-repo diff)
+
+---
+
+### T93 — Mobile Companion App
+**Priority**: P3 | **Effort**: Very large | **Source**: Paseo Expo client
+
+**Why**
+- Long-running agents benefit enormously from remote monitoring: get notified on
+  the phone when an agent enters `waiting_input`, approve/deny, read scrollback.
+  This is Paseo's killer differentiator.
+- Requires T94 (daemon mode) as prerequisite.
+
+**Scope**
+- New Expo/React Native app in `apps/mobile/`
+- Connects to daemon via WebSocket + auth token (QR code pairing)
+- v1: read-only — list agents, status, read ring buffer, push notifications
+- v1.1: approve waiting_input, send one-line prompts, kill agents
+- v2: full terminal view via a terminal emulator library
+
+**Likely files**
+- New: `apps/mobile/` (entire new Expo app)
+- `apps/desktop/src/main/daemon/ws-server.ts` (WebSocket transport for mobile)
+- `apps/desktop/src/main/security/pairing.ts` (QR token exchange)
+
+---
+
+### T94 — Headless Daemon Mode
+**Priority**: P3 | **Effort**: Large | **Source**: Paseo daemon architecture
+
+**Why**
+- Prerequisite for T93 (mobile) and a valuable standalone feature: run Exegol
+  on a server/VPS and connect from anywhere. Enables CI-style agent pipelines
+  without keeping the desktop app open.
+
+**Scope**
+- Extract the sidecar + DB + agent manager into a standalone daemon that runs
+  without Electron (pure Node)
+- Expose the existing tRPC router over WebSocket in addition to IPC
+- Auth: token-based, stored in OS keychain for desktop client, in user file for
+  mobile/CLI
+- Desktop app becomes "a thin client to the daemon" by default, can still run
+  embedded daemon for local use
+- CLI (T89) also benefits from remote connection mode
+
+**Likely files**
+- New: `apps/daemon/` (standalone daemon bundle)
+- `apps/desktop/src/main/ipc/router.ts` (WebSocket transport)
+- `apps/desktop/src/main/security/keystore.ts` (daemon tokens)
+- `packages/shared/src/transport/*` (shared ws protocol)
 
 ---
 
@@ -814,24 +701,26 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ## Suggested Order
 
-1. T61 — Real Worktree Isolation per Agent
-2. T75 — Monolith File Decomposition (prerequisite for testability)
-3. T74 — Test Coverage Foundation (highest risk mitigation)
-4. T63 — Desktop Performance Stabilization Pass
-5. T57 — Review Inbox / Attention Center
-6. T62 — Review Readiness + Risk Summary
-7. T64 — Command Palette
-8. T65 — Parallel Multi-Agent on Worktrees
-9. T76 — Replace curl with SDK in Tier 3 Scoring (quick security win)
-10. T77 — DB Row Validation with Zod Schemas
-11. T66 — Session Isolation & Deterministic Resume
-12. T67 — Agent Hook Event System
-13. T68 — Repo Map + Semantic Search
-14. T78 — Explicit Pipeline State Machine
-15. T79 — MCP Host Auto-Reconnection
-16. T80 — Structured Error Classification
-17. T81 — Dependency Injection for Singletons
-18. T82 — Shared Package Schema Enrichment
+### Next wave (P0 + P1)
+1. **T57** — Review Inbox / Attention Center
+2. **T65** — Parallel Multi-Agent on Worktrees
+3. **T68** — Repo Map + Semantic Search
+4. **T77** — DB Row Validation with Zod Schemas
+
+### Stabilization & quality (P2 — do in any order)
+5. T78 — Explicit Pipeline State Machine
+6. T80 — Structured Error Classification
+7. T81 — Dependency Injection for Singletons
+8. T82 — Shared Package Schema Enrichment
+
+### Competitor-inspired backlog (P2-P3)
+9. **T88** — Ralph Loops in Pipelines (evaluator step)
+10. **T89** — Exegol CLI (sidecar client)
+11. **T90** — Terminal ↔ Chat dual view
+12. **T91** — Lifecycle scripts per repo
+13. **T92** — Cross-repo workspaces
+14. **T93** — Mobile companion app
+15. **T94** — Headless daemon mode
 
 ---
 
@@ -843,9 +732,3 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 ### T46 — Canary Channel
 **Priority**: P3
 
----
-
-## Completed
-
-V1-V3 + performance pass: 69+ tasks complete.
-See `docs/tasks_completed/2026_03.md` for the full log.

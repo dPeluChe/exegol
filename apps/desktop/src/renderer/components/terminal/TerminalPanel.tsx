@@ -104,12 +104,21 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   // Resolved handoff: from query (stopped agents) or live IPC (running agents)
   const resolvedHandoff = isStopped ? (handoff ?? null) : liveHandoff;
 
-  // T39b: Detect first terminal data to dismiss loading overlay
+  // T39b: Detect first terminal data to dismiss loading overlay.
+  // On a cold mount (reattach after app restart), the PTY may be silent
+  // (e.g., an interactive CLI waiting for input) but the ring buffer
+  // already contains output from before the restart — so we ALSO probe
+  // the snapshot on mount and treat non-empty snapshots as "has data".
+  // Without this, reattached terminals stay stuck on "Starting crush..."
+  // forever because no new data event ever fires.
   useEffect(() => {
     if (isStopped || hasData) return;
     const unsub = window.api.terminal.onData(agentId, () => {
       setHasData(true);
       unsub();
+    });
+    window.api.terminal.getSnapshot(agentId).then((snapshot) => {
+      if (snapshot && snapshot.length > 0) setHasData(true);
     });
     return unsub;
   }, [agentId, isStopped, hasData]);

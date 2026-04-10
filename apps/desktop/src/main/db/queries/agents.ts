@@ -1,5 +1,6 @@
 import type { Agent, AgentCreate, AgentStatus } from "@exegol/shared";
 import type Database from "libsql";
+import { logger } from "../../lib/logger";
 import { mapAgentRow, nanoid } from "./helpers";
 
 export function listAgents(db: Database.Database, projectId: string): Agent[] {
@@ -125,25 +126,39 @@ export function listRecentSessions(db: Database.Database, limit = 10): RecentSes
  * are skipped — they have a live PtyHost session.
  * Remaining agents are marked as "crashed".
  *
- * @param skipIds - agent IDs to skip (already recovered via sidecar)
+ * @param skipIds - agent IDs to skip (already recovered via sidecar).
+ *                  IMPORTANT: this must only contain agents whose PTY is
+ *                  ACTUALLY alive, not just agents whose sidecar session
+ *                  exists. Dead sidecar sessions should be left out so
+ *                  they get marked as crashed here.
  */
 export function recoverStaleAgents(
   db: Database.Database,
   skipIds?: Set<string>,
 ): { crashed: number; alive: number } {
   const stale = db
-    .prepare("SELECT id, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')")
-    .all() as Array<{ id: string; pid: number | null }>;
+    .prepare(
+      "SELECT id, cli_type, status, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')",
+    )
+    .all() as Array<{ id: string; cli_type: string; status: string; pid: number | null }>;
 
   let crashed = 0;
-  const alive = 0;
+  const alive = skipIds?.size ?? 0;
   const now = Math.floor(Date.now() / 1000);
+
+  if (stale.length > 0) {
+    logger.info(`[Recovery] Crash sweep: ${stale.length} stale agent(s), ${alive} in skip set`);
+  }
 
   for (const agent of stale) {
     if (skipIds?.has(agent.id)) {
-      continue; // Already reattached via sidecar
+      logger.info(`[Recovery] Skip ${agent.id} (${agent.cli_type}) — alive via sidecar`);
+      continue;
     }
 
+    logger.info(
+      `[Recovery] Mark crashed: ${agent.id} (${agent.cli_type}, status=${agent.status}, pid=${agent.pid ?? "null"})`,
+    );
     db.prepare(
       "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
     ).run(now, agent.id);

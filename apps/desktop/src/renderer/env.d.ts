@@ -41,6 +41,7 @@ interface Window {
       getVersion: () => Promise<string>;
       getPlatform: () => string;
     };
+    onMenuAction: (callback: (action: "new-tab" | "close-pane") => void) => () => void;
     dialog: {
       showOpenDialog: (
         options: Record<string, unknown>,
@@ -60,6 +61,19 @@ interface Window {
       check: () => Promise<void>;
       install: () => Promise<void>;
       onStatus: (callback: (status: unknown) => void) => () => void;
+    };
+    floating: {
+      open: (config: {
+        paneId: string;
+        type: "terminal" | "browser";
+        title: string;
+        agentId?: string;
+        url?: string;
+      }) => Promise<void>;
+      close: (paneId: string) => Promise<void>;
+      selfClose: () => void;
+      selfToggleDevTools: () => void;
+      onClosed: (callback: (paneId: string) => void) => () => void;
     };
   };
 }

@@ -149,10 +149,13 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   syncFromDb: (_projectId, dbAgents) =>
     set((state) => {
       const updated = { ...state.agents };
+      let added = 0;
+      let merged = 0;
 
       for (const dbAgent of dbAgents) {
         const existing = updated[dbAgent.id];
         if (existing) {
+          merged++;
           // Merge: keep live runtime state (currentStep from parser), update DB state
           updated[dbAgent.id] = {
             ...existing,
@@ -161,6 +164,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
             currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
           };
         } else {
+          added++;
           // New from DB — agent we don't have in memory yet
           updated[dbAgent.id] = {
             id: dbAgent.id,
@@ -176,6 +180,11 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
         }
       }
 
+      if (added > 0 || merged > 0) {
+        console.log(
+          `[AgentStore] syncFromDb: ${added} added, ${merged} merged, total=${Object.keys(updated).length}`,
+        );
+      }
       return { agents: updated };
     }),
 

@@ -10,6 +10,7 @@ export function useHotkeys() {
 
   // Rule 4: external system sync — global keyboard event listener
   useEffect(() => {
+    const isMac = window.api.app.getPlatform() === "darwin";
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl+Tab / Ctrl+Shift+Tab: cycle workspace tabs (works without Cmd)
       if (e.ctrlKey && e.key === "Tab") {
@@ -18,7 +19,10 @@ export function useHotkeys() {
         return;
       }
 
-      const mod = e.metaKey || e.ctrlKey; // Cmd on Mac, Ctrl on Win/Linux
+      // Platform-aware modifier: Cmd on macOS, Ctrl elsewhere. Using ctrlKey
+      // on macOS would hijack native text-editing shortcuts (Ctrl+W = delete
+      // word backward, Ctrl+A = start of line, etc).
+      const mod = isMac ? e.metaKey : e.ctrlKey;
 
       if (!mod) return;
 
@@ -130,7 +134,22 @@ export function useHotkeys() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+
+    // Also listen for menu-driven actions from the macOS app menu. The
+    // menu routes Cmd+W to "menu:close-pane" so the OS default "Close
+    // Window" never fires.
+    const unsubMenu = window.api.onMenuAction((action) => {
+      if (action === "new-tab") {
+        useWorkspaceStore.getState().addTab();
+      } else if (action === "close-pane") {
+        cleanupAndCloseFocusedPane();
+      }
+    });
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      unsubMenu();
+    };
   }, [toggleSidebar, setActiveView]);
 }
 

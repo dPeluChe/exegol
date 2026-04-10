@@ -7,6 +7,7 @@ import {
   Equal,
   Globe,
   MoveRight,
+  PictureInPicture2,
   Rows,
   Trash2,
   X,
@@ -29,6 +30,8 @@ interface PaneContextMenuProps {
   onExtractToTab: () => void;
   onEqualize: () => void;
   onClose: () => void;
+  /** Only wired for terminal/browser panes — undefined hides the menu entry */
+  onFloat?: () => void;
   onCopy?: () => void;
   onPaste?: () => void;
   onClear?: () => void;
@@ -75,6 +78,7 @@ export function PaneContextMenu({
   onExtractToTab,
   onEqualize,
   onClose,
+  onFloat,
   onCopy,
   onPaste,
   onClear,
@@ -143,6 +147,7 @@ export function PaneContextMenu({
       },
       { label: "Split Vertically", icon: Rows, shortcut: "⌘⇧D", action: () => onSplit("vertical") },
       { label: "Split with Browser", icon: Globe, action: () => onSplit("horizontal", "browser") },
+      ...(onFloat ? [{ label: "Float to Window", icon: PictureInPicture2, action: onFloat }] : []),
       ...(isSplitPane
         ? [
             { label: "Equalize Splits", icon: Equal, shortcut: "⌘⇧0", action: onEqualize },

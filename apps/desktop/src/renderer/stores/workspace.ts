@@ -1,6 +1,14 @@
 import { nanoid } from "nanoid";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import {
+  type CustomLayoutPreset,
+  computeCustomPresetTransformation,
+  computePresetTransformation,
+  getLayoutPreset,
+  type LayoutPresetId,
+  templateFromLayout,
+} from "../lib/layout-presets";
 import { useAppStore } from "./app";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -60,6 +68,13 @@ interface WorkspaceStore {
   _activeProjectId: string | null;
   /** Focused pane (global — only one pane focused at a time) */
   focusedPaneId: string | null;
+  /** User-saved layout templates — global, not per-project */
+  customLayouts: CustomLayoutPreset[];
+  /**
+   * Panes currently displayed in a floating (always-on-top) window.
+   * In-memory only — resets on reload. Keyed by paneId.
+   */
+  floatingPanes: Record<string, { type: "terminal" | "browser"; openedAt: number }>;
 
   // Tab actions
   addTab: (label?: string) => string;
@@ -97,6 +112,22 @@ interface WorkspaceStore {
   invalidatePane: (paneId: string, reason: string) => void;
   /** Reset all split sizes in the active tab to equal proportions */
   equalizeSplits: (tabId: string) => void;
+  /**
+   * Replace the tab layout with a built-in preset, reusing existing panes.
+   * Returns the IDs of any new panes that were created as terminal slots,
+   * so the caller can spawn shell agents for them.
+   */
+  applyLayoutPreset: (tabId: string, presetId: LayoutPresetId) => { terminalsToSpawn: string[] };
+  /** Apply a user-saved custom layout template to a tab */
+  applyCustomLayout: (tabId: string, customId: string) => void;
+  /** Save the current tab layout as a named custom preset */
+  saveCustomLayout: (tabId: string, name: string) => string | null;
+  /** Delete a user-saved custom preset */
+  deleteCustomLayout: (customId: string) => void;
+  /** Mark a pane as currently shown in a floating window */
+  markPaneFloating: (paneId: string, type: "terminal" | "browser") => void;
+  /** Remove the floating marker (used when the floating window closes) */
+  unmarkPaneFloating: (paneId: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -214,6 +245,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       projectWorkspaces: {},
       _activeProjectId: useAppStore.getState().activeProjectId,
       focusedPaneId: null,
+      customLayouts: [],
+      floatingPanes: {},
 
       addTab: (label) => {
         const pane = createEmptyPane();
@@ -496,6 +529,89 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           });
         }),
 
+      applyLayoutPreset: (tabId, presetId) => {
+        const state = get();
+        const pw = getPw(state);
+        const tab = pw.tabs.find((t) => t.id === tabId);
+        const preset = getLayoutPreset(presetId);
+        if (!tab || !preset) return { terminalsToSpawn: [] };
+
+        const existingIds = collectPaneIds(tab.layout);
+        const { layout, newPanes, terminalsToSpawn } = computePresetTransformation(
+          preset,
+          existingIds,
+        );
+
+        const panesRecord: Record<string, Pane> = { ...pw.panes };
+        for (const p of newPanes) panesRecord[p.id] = p;
+
+        set((s) =>
+          setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
+            panes: panesRecord,
+          }),
+        );
+        return { terminalsToSpawn };
+      },
+
+      applyCustomLayout: (tabId, customId) =>
+        set((s) => {
+          const pw = getPw(s);
+          const tab = pw.tabs.find((t) => t.id === tabId);
+          const custom = s.customLayouts.find((c) => c.id === customId);
+          if (!tab || !custom) return s;
+
+          const existingIds = collectPaneIds(tab.layout);
+          const { layout, newPanes } = computeCustomPresetTransformation(custom, existingIds);
+
+          const panesRecord: Record<string, Pane> = { ...pw.panes };
+          for (const p of newPanes) panesRecord[p.id] = p;
+
+          return setPw(s, {
+            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
+            panes: panesRecord,
+          });
+        }),
+
+      saveCustomLayout: (tabId, name) => {
+        const state = get();
+        const pw = getPw(state);
+        const tab = pw.tabs.find((t) => t.id === tabId);
+        if (!tab) return null;
+        const trimmed = name.trim();
+        if (!trimmed) return null;
+
+        const { template, slots, slotTypes } = templateFromLayout(tab.layout, pw.panes);
+        const custom: CustomLayoutPreset = {
+          id: nanoid(8),
+          name: trimmed,
+          template,
+          slots,
+          slotTypes,
+          createdAt: Date.now(),
+        };
+        set((s) => ({ customLayouts: [...s.customLayouts, custom] }));
+        return custom.id;
+      },
+
+      deleteCustomLayout: (customId) =>
+        set((s) => ({
+          customLayouts: s.customLayouts.filter((c) => c.id !== customId),
+        })),
+
+      markPaneFloating: (paneId, type) =>
+        set((s) => ({
+          floatingPanes: { ...s.floatingPanes, [paneId]: { type, openedAt: Date.now() } },
+        })),
+
+      unmarkPaneFloating: (paneId) =>
+        set((s) => {
+          if (!s.floatingPanes[paneId]) return s;
+          const next = { ...s.floatingPanes };
+          delete next[paneId];
+          return { floatingPanes: next };
+        }),
+
       invalidatePane: (paneId, reason) =>
         set((s) => {
           const pw = getPw(s);
@@ -513,6 +629,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       name: "exegol-workspace",
       partialize: (state) => ({
         projectWorkspaces: state.projectWorkspaces,
+        customLayouts: state.customLayouts,
       }),
       // Bump version when schema changes to trigger migration
       version: 1,

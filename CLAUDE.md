@@ -31,10 +31,39 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 
 ### Pane types
 - `terminal` — agent CLI or plain `$SHELL`
-- `browser` — Electron webview with URL bar
+- `browser` — Electron webview with URL bar + back/forward/reload
 - `files` — FileExplorer + Monaco code viewer
-- `git` — Diff (changes) + Oplog (agent operations with undo)
+- `git` — Changes (with Smart Git Button) + Diff + Oplog (agent operations with undo)
 - `empty` — responsive agent launcher grid (3 breakpoints)
+
+### Layouts (T85, v0.3.0)
+- **6 built-in presets**: Single, Split Horizontal, Split Vertical, Three Columns, Bottom Terminal (70/30 with auto-spawned shell), 2×2 Grid
+- **Custom saved layouts**: capture the current tab as a reusable template with per-slot type + url + filePath, persisted in the workspace store
+- **Equalize splits** action via pane context menu
+- **Pure-function helpers** in `lib/layout-presets.ts` (`computePresetTransformation`, `templateFromLayout`) so the store just applies the result
+
+### Picture-in-Picture (T84, v0.3.0)
+- Any terminal or browser pane can detach into a frameless always-on-top BrowserWindow
+- Main process manages `floatingWindows: Map<paneId, BrowserWindow>` in `main/windows/floating.ts`
+- Renderer routes on `?floatingPane=...` query: main window mounts `<App/>`, floating windows lazy-load `<FloatingPaneRoot/>`
+- Terminal float shares the PTY via ring buffer + snapshot replay — only one xterm instance attached at a time (original pane shows a "Floating" placeholder)
+- Browser float has its own back/forward/reload + DevTools toggle (drops alwaysOnTop while DevTools is open so the detached window is visible)
+- IPC round-trip: `floating:open`, `floating:close`, `floating:self-close`, `floating:self-devtools`, `floating:closed` (notification back to main window)
+
+### Smart Git Button (T83, v0.3.0)
+Context-aware git action button in GitPane with 11 states:
+- conflicts → Resolve (disabled, hint)
+- dirty + no message → Commit N files (disabled, hint to write message)
+- dirty + message → Commit N files
+- clean + ahead → Push N
+- clean + no upstream → Push New Branch
+- clean + no PR + gh installed → Create PR
+- clean + PR open + mergeable → Merge PR (success color)
+- clean + PR not mergeable → View PR on GitHub (warn)
+- clean + PR merged/closed → terminal state (muted)
+- clean + no PR + no gh → Install gh CLI (opens cli.github.com)
+Commit input has a Sparkles button that generates a conventional-commit
+message from the current diff via Claude Haiku (reuses Anthropic API key).
 
 ### PTY Sidecar Architecture
 - **Sidecar process**: standalone detached Node.js process (`pty-sidecar-entry.ts`), survives window reload/crash
@@ -69,9 +98,12 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 ### Key patterns
 - **tRPC over IPC**: 21 routers in main process, renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
-- **Crash recovery**: sidecar reattach first → `recoverStaleAgents()` for remaining → mark "crashed", scrollback preserved
+- **Crash recovery**: `session.listInfo` RPC returns `{ id, alive, exitCode, signal }` — only ALIVE ids go to `reattachSidecarAgents()`, dead ones (in the sidecar's 60s grace period) fall through to `recoverStaleAgents()` and get marked as "crashed" with scrollback preserved (v0.3.0 fix: previously dead sessions were stuck as "running" with no PTY)
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Auto-save**: Settings tabs save independently (General/Terminal auto-save on change, CLIs save per field)
+- **Startup instrumentation**: `[Startup] dbInit`, `criticalPath`, `windowCreated`, `firstPaint` log lines (single-log guarded); `[Reattach]` + `[Recovery]` per-agent decisions for diagnosing recovery issues
+- **Bundle splits**: workspace sections, xterm+addons, SettingsPanel, ProjectList, CommandPalette, FloatingPaneRoot are all lazy chunks — initial `index.js` ~1,026 KB
+- **Bundled Nerd Fonts**: 3 fonts (MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono) shipped inside the renderer assets, loaded via `@font-face` in `styles/fonts.css`, lazy-fetched from disk only when referenced
 
 ### Rust native module (`packages/core-rust`)
 - `processing/strip_ansi.rs` — ANSI stripper with memchr fast path
@@ -95,27 +127,40 @@ apps/desktop/src/
     security/       keystore (safeStorage)
     system/         resources (metrics collector), ports (lsof + config)
     ide/            opener (vscode, cursor, zed, windsurf, custom)
+    windows/        floating (T84 PiP BrowserWindows), app-menu (macOS custom menu)
   renderer/
     components/
       workspace/    WorkspaceView, WorkspaceTabs (3 main + sub-tabs), WorkspacePane (5 types),
-                    WorkspaceTabBar (quick launch from registry), WorkspaceLayout, GitPane,
-                    sections/ (16 section components + pipeline/), diff/
+                    WorkspaceTabBar (quick launch + LayoutPresets dropdown), WorkspaceLayout,
+                    GitPane (with SmartGitAction), LayoutPresets, SmartGitAction,
+                    PaneContextMenu, sections/ (16 section components + pipeline/), diff/
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,
-                    YOLO/Active toggles), TerminalSettings (font detection), ApiKeysSettings
-      terminal/     TerminalPanel (live/read-only/crashed), TerminalInstance (xterm.js + WebGL + Serialize)
+                    YOLO/Active toggles), TerminalSettings (bundled fonts, per-card preview,
+                    family chain badges, promote-on-click), ApiKeysSettings
+      terminal/     TerminalPanel (live/read-only/crashed, snapshot probe on reattach),
+                    TerminalInstance (xterm.js + WebGL + Serialize)
       common/       AgentIcon (glob *.{svg,png}, dark/light), EmptyState, StatusDot, CronBuilder
       agents/       AgentLauncher (portal dropdown from registry)
       layout/       Sidebar, ProjectsSection, StatusBar, TitleBar
-    hooks/          use-hotkeys, use-theme (useThemeValue), use-trpc (barrel + 9 domain files)
-    stores/         app, agents (push events, shell auto-cleanup), terminals, workspace (5 pane types, recovery)
-    assets/icons/   26 SVG/PNG icons (agents, IDEs, providers)
-  preload/          contextBridge: trpc, terminal, dialog, push events
+    FloatingPaneRoot.tsx  (T84 — top-level renderer for floating PiP windows)
+    hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
+                    use-floating-pane-sync (unmark panes when floating window closes)
+    stores/         app, agents (push events, shell auto-cleanup), terminals,
+                    workspace (5 pane types, recovery, custom layouts, floatingPanes)
+    lib/            layout-presets (pure transformation helpers), trpc-client,
+                    dispatch-refit, semantic-colors
+    assets/
+      fonts/        MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono (~6.8 MB, bundled)
+      icons/        26 SVG/PNG icons (agents, IDEs, providers)
+    styles/         globals.css, fonts.css (@font-face for bundled fonts)
+  preload/          contextBridge: trpc, terminal, dialog, push events, floating, menu
 packages/
   shared/           types (20+), schemas (zod)
   ui/               Radix primitives, cn()
   core-rust/        napi-rs: git2 + processing pipeline
 docs/
-  UI_RESTRUCTURE.md, TASK_TODO.md (V1 done), TASK_TODO_V2.md (V2), agent_prompts/, applied/
+  TASK_TODO.md (V1-V3 done + v0.3.0 wave), BENCHMARKS.md, CHANGELOG.md,
+  RELEASE.md, UI_RESTRUCTURE.md, agent_prompts/, applied/, tasks_completed/
 ```
 
 ## Database

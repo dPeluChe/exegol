@@ -19,7 +19,10 @@ import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../termina
 import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
-import { reattachSidecarAgents as reattachSidecarAgentsImpl } from "./reattach-sidecar-agents";
+import {
+  type ReattachResult,
+  reattachSidecarAgents as reattachSidecarAgentsImpl,
+} from "./reattach-sidecar-agents";
 import { getProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
 import {
@@ -335,9 +338,14 @@ export class AgentManager {
 
   /**
    * Reattach to agents that survived in the sidecar after app restart.
-   * Rebuilds output processors + callbacks so they continue working as if freshly spawned.
+   * Rebuilds output processors + callbacks so they continue working as if
+   * freshly spawned. Returns a detailed result with alive/dead/failed sets
+   * so the caller can mark dead/failed agents as crashed.
    */
-  async reattachSidecarAgents(db: Database.Database, sidecarSessionIds: string[]): Promise<number> {
+  async reattachSidecarAgents(
+    db: Database.Database,
+    sidecarSessionIds: string[],
+  ): Promise<ReattachResult> {
     return reattachSidecarAgentsImpl(
       db,
       sidecarSessionIds,

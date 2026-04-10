@@ -89,6 +89,19 @@ export class PtyHost {
     return this.sidecarClient.listSessions();
   }
 
+  /**
+   * List sessions with alive flag + exit info.
+   * Use this over listSidecarSessions() for crash recovery, because the
+   * sidecar keeps dead sessions in its map for 60s (snapshot grace period).
+   * Treating them as alive leaves agents stuck in "running" with no PTY.
+   */
+  async listSidecarSessionsInfo(): Promise<
+    Array<{ id: string; alive: boolean; exitCode: number | null; signal: string | null }>
+  > {
+    if (!this.sidecarClient?.isConnected()) return [];
+    return this.sidecarClient.listSessionsInfo();
+  }
+
   /** Reattach to a session that survived in the sidecar after app restart */
   async reattachSession(
     id: string,

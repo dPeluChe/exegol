@@ -27,8 +27,30 @@ import { destroyTray, initTray } from "./system/tray";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureSidecar } from "./terminal/pty-sidecar-discovery";
 import { ensureShellWrappers } from "./terminal/shell-wrappers";
+import { installAppMenu } from "./windows/app-menu";
+import {
+  closeAllFloatingPanes,
+  registerFloatingIpcHandlers,
+  registerMainWindow,
+} from "./windows/floating";
 
 let mainWindow: BrowserWindow | null = null;
+
+// Startup timing: measure from app ready to first paint.
+// Logged once on ready-to-show to give us real numbers vs. competitors' claims.
+const startupTimings: Record<string, number> = {};
+const startupLogged = new Set<string>();
+const startMark = (label: string) => {
+  startupTimings[label] = Date.now();
+};
+const endMark = (label: string, from = "appReady") => {
+  if (startupLogged.has(label)) return; // only log once per app lifetime
+  const start = startupTimings[from];
+  if (start) {
+    startupLogged.add(label);
+    logger.info(`[Startup] ${label}: ${Date.now() - start}ms`);
+  }
+};
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -51,7 +73,10 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
+    endMark("firstPaint");
   });
+
+  if (mainWindow) registerMainWindow(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
@@ -102,7 +127,6 @@ function registerIpcHandlers(): void {
 
   // Terminal snapshot: replay ring buffer content for late-mounting terminals
   ipcMain.handle("terminal:get-snapshot", (_event, agentId: string) => {
-    const { getPtyHost } = require("./terminal/pty-host");
     return getPtyHost().getSnapshot(agentId);
   });
 
@@ -155,96 +179,193 @@ function registerIpcHandlers(): void {
 }
 
 app.whenReady().then(async () => {
+  startMark("appReady");
+  // ─── Critical path: everything the window needs before first paint ──
   await initializeDatabase();
-  // Recovery is done in two phases:
-  // Phase 1: Connect to sidecar (done later, after wrappers)
-  // Phase 2: For agents NOT in sidecar, mark as "crashed"
-  // This is deferred until after sidecar connection to allow reattach
-  // Clean up stale agents:
-  // - Shell terminals (always, no value)
-  // - Crashed older than 1h (recent crashes kept for re-launch)
-  // - Completed/failed/stopped older than 24h (recent ones stay for Recent Sessions)
-  try {
-    const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
-    const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
-    const staleCleanup = getDb()
-      .prepare(
-        `DELETE FROM agents WHERE
-          cli_type = 'shell'
-          OR (status = 'crashed' AND stopped_at < ?)
-          OR (status IN ('completed', 'failed', 'stopped') AND stopped_at < ?)`,
-      )
-      .run(oneHourAgo, oneDayAgo);
-    if (staleCleanup.changes > 0) {
-      logger.info(`[Startup] Cleaned ${staleCleanup.changes} stale agent(s)`);
-    }
-  } catch {
-    /* table may not exist */
-  }
-  // Clean up contaminated memories (ANSI codes, CLI install output, raw terminal noise)
-  try {
-    const cleaned = getDb()
-      .prepare(
-        `DELETE FROM memories WHERE
-          content LIKE '%' || X'1B' || '%'
-          OR content LIKE '%' || X'0D' || '%'
-          OR content LIKE '%bun install%'
-          OR content LIKE '%npm install%'
-          OR content LIKE '%yarn add%'
-          OR content LIKE '%pip install%'
-          OR content LIKE '%packages installed%'
-          OR content LIKE '%Update now%'
-          OR content LIKE '%Skip until next%'`,
-      )
-      .run();
-    if (cleaned.changes > 0) {
-      logger.info(`[Startup] Cleaned ${cleaned.changes} ANSI-contaminated memories`);
-    }
-  } catch {
-    // Table may not exist yet
-  }
+  endMark("dbInit");
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();
+  registerFloatingIpcHandlers();
   registerGlobalHotkey();
-  // Filesystem initialization (all synchronous, no await needed)
-  ensureCanonicalPaths();
-  ensureDefaultSkills();
-  ensureShellWrappers();
-  ensureAgentWrappers();
+  installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
+  ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
+  endMark("criticalPath");
+  // ────────────────────────────────────────────────────────────────────
 
-  // Show window FIRST (fast TTI), then connect sidecar + recover in background
+  // Show window FIRST (fast TTI), then everything else in background
   createWindow();
+  endMark("windowCreated");
   initTray();
+
+  // Background: non-blocking filesystem init (skills + wrappers)
+  (() => {
+    try {
+      ensureDefaultSkills();
+      ensureShellWrappers();
+      ensureAgentWrappers();
+    } catch (err) {
+      logger.error("[Startup] FS init failed (non-fatal):", err);
+    }
+  })();
+
+  // Background: stale data cleanup (not needed before first paint)
+  (() => {
+    try {
+      const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
+      const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
+      const staleCleanup = getDb()
+        .prepare(
+          `DELETE FROM agents WHERE
+            cli_type = 'shell'
+            OR (status = 'crashed' AND stopped_at < ?)
+            OR (status IN ('completed', 'failed', 'stopped') AND stopped_at < ?)`,
+        )
+        .run(oneHourAgo, oneDayAgo);
+      if (staleCleanup.changes > 0) {
+        logger.info(`[Startup] Cleaned ${staleCleanup.changes} stale agent(s)`);
+      }
+    } catch {
+      /* table may not exist */
+    }
+    try {
+      const cleaned = getDb()
+        .prepare(
+          `DELETE FROM memories WHERE
+            content LIKE '%' || X'1B' || '%'
+            OR content LIKE '%' || X'0D' || '%'
+            OR content LIKE '%bun install%'
+            OR content LIKE '%npm install%'
+            OR content LIKE '%yarn add%'
+            OR content LIKE '%pip install%'
+            OR content LIKE '%packages installed%'
+            OR content LIKE '%Update now%'
+            OR content LIKE '%Skip until next%'`,
+        )
+        .run();
+      if (cleaned.changes > 0) {
+        logger.info(`[Startup] Cleaned ${cleaned.changes} ANSI-contaminated memories`);
+      }
+    } catch {
+      /* table may not exist yet */
+    }
+  })();
 
   // Background: sidecar connection + agent recovery (non-blocking)
   (async () => {
-    let sidecarSessionIds: string[] = [];
+    // Snapshot of DB agents at startup — helps diagnose recovery issues
+    try {
+      const db = getDb();
+      const preRecoveryStats = db
+        .prepare("SELECT status, COUNT(*) as count FROM agents GROUP BY status")
+        .all() as Array<{ status: string; count: number }>;
+      if (preRecoveryStats.length > 0) {
+        logger.info(
+          `[Startup] DB agent counts pre-recovery: ${preRecoveryStats
+            .map((r) => `${r.status}=${r.count}`)
+            .join(", ")}`,
+        );
+      }
+    } catch (err) {
+      logger.warn("[Startup] Could not snapshot DB agents:", err);
+    }
+
+    let aliveSessionIds: string[] = [];
+    let sidecarConnected = false;
     try {
       const sidecarClient = await ensureSidecar();
       getPtyHost().connectToSidecar(sidecarClient);
-      sidecarSessionIds = await getPtyHost().listSidecarSessions();
-      logger.info(
-        `[Startup] Connected to PTY sidecar (${sidecarSessionIds.length} live session(s))`,
-      );
+      sidecarConnected = true;
     } catch (err) {
       logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);
     }
-    try {
-      if (sidecarSessionIds.length > 0) {
-        const reattached = await getAgentManager().reattachSidecarAgents(
-          getDb(),
-          sidecarSessionIds,
+
+    // Query sessions AFTER connection succeeded, with a separate try/catch so
+    // a listInfo failure (e.g., older sidecar missing the RPC) doesn't cause
+    // us to abandon the connected sidecar and fall back to legacy subprocess.
+    if (sidecarConnected) {
+      try {
+        const sessionInfo = await getPtyHost().listSidecarSessionsInfo();
+        aliveSessionIds = sessionInfo.filter((s) => s.alive).map((s) => s.id);
+        const deadInfo = sessionInfo.filter((s) => !s.alive);
+        logger.info(
+          `[Startup] Sidecar connected — ${sessionInfo.length} total, ${aliveSessionIds.length} alive, ${deadInfo.length} dead`,
         );
-        if (reattached > 0) {
-          logger.info(`[Startup] Reattached ${reattached} agent(s) from sidecar`);
+        if (aliveSessionIds.length > 0) {
+          logger.info(`[Startup] Alive sidecar sessions: ${aliveSessionIds.join(", ")}`);
+        }
+        if (deadInfo.length > 0) {
+          logger.warn(
+            `[Startup] Dead sidecar sessions (in 60s grace period): ${deadInfo
+              .map((s) => `${s.id}(exit=${s.exitCode ?? "?"}/sig=${s.signal ?? "?"})`)
+              .join(", ")}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("Unknown method")) {
+          // Running against an older sidecar that doesn't have session.listInfo.
+          // Fall back to session.list and treat all returned ids as alive.
+          // Dead-session detection is lost for this run, but the sidecar stays
+          // connected and new spawns work normally. The next restart will
+          // reuse the new sidecar (version bump in pty-sidecar-protocol.ts
+          // triggers a shutdown + respawn via ensureSidecar).
+          logger.warn(
+            "[Startup] Old sidecar detected (no session.listInfo). Dead-session detection disabled for this run — restart the app to auto-upgrade.",
+          );
+          try {
+            aliveSessionIds = await getPtyHost().listSidecarSessions();
+            logger.info(
+              `[Startup] Fallback sidecar list — ${aliveSessionIds.length} session(s): ${aliveSessionIds.join(", ")}`,
+            );
+          } catch (fallbackErr) {
+            logger.error("[Startup] Sidecar fallback listing failed:", fallbackErr);
+          }
+        } else {
+          logger.error("[Startup] Sidecar listInfo failed:", err);
         }
       }
-      const recovery = recoverStaleAgents(getDb(), new Set(sidecarSessionIds));
-      if (recovery.crashed > 0) {
+    }
+    try {
+      // Only agents that are ACTUALLY alive get skipped from the crash sweep.
+      // Dead sidecar sessions (session map still populated during grace period
+      // but PTY exited) fall through to recoverStaleAgents so they're marked
+      // as crashed instead of sitting in DB as "running" with no live process.
+      let aliveSkipIds = new Set<string>();
+      if (aliveSessionIds.length > 0) {
+        const result = await getAgentManager().reattachSidecarAgents(getDb(), aliveSessionIds);
+        aliveSkipIds = result.aliveIds;
         logger.info(
-          `[Startup] Marked ${recovery.crashed} agent(s) as crashed (no sidecar session)`,
+          `[Startup] Reattach result: alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size}`,
         );
+        if (result.deadIds.size > 0) {
+          logger.warn(
+            `[Startup] Dead sidecar sessions (will be marked crashed): ${Array.from(result.deadIds).join(", ")}`,
+          );
+        }
+        if (result.failedIds.size > 0) {
+          logger.warn(
+            `[Startup] Failed reattach attempts (will be marked crashed): ${Array.from(result.failedIds).join(", ")}`,
+          );
+        }
+      }
+      const recovery = recoverStaleAgents(getDb(), aliveSkipIds);
+      logger.info(
+        `[Startup] Crash sweep: marked ${recovery.crashed} agent(s) as crashed (${recovery.alive} alive)`,
+      );
+
+      // Final snapshot after recovery — verify nothing is stuck
+      try {
+        const postStats = getDb()
+          .prepare("SELECT status, COUNT(*) as count FROM agents GROUP BY status")
+          .all() as Array<{ status: string; count: number }>;
+        logger.info(
+          `[Startup] DB agent counts post-recovery: ${postStats
+            .map((r) => `${r.status}=${r.count}`)
+            .join(", ")}`,
+        );
+      } catch {
+        /* non-fatal */
       }
     } catch (err) {
       logger.error("[Startup] Agent recovery failed (non-fatal):", err);
@@ -281,6 +402,8 @@ process.on("uncaughtException", (err) => {
 app.on("will-quit", () => {
   markShutdown();
   globalShortcut.unregisterAll();
+
+  closeAllFloatingPanes();
 
   // Sidecar mode: disconnect (sessions survive for reconnect on next launch)
   // Legacy mode: kill all subprocess PTY sessions
