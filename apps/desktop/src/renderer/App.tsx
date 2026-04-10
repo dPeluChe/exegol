@@ -10,6 +10,7 @@ import { ProjectList } from "./components/projects/ProjectList";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
+import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
@@ -41,6 +42,7 @@ export default function App() {
   useHotkeys();
   useToastEvents();
   useTheme();
+  useAutoSelectProject();
 
   const showSidebar = activeView === "workspace";
 
