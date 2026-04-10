@@ -4,6 +4,14 @@ import { Check, Download, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 // ─── Recommended fonts with install URLs ────────────────────────────────────
+//
+// Nerd Fonts are listed first and labeled so users with oh-my-zsh /
+// powerlevel10k themes get their icons rendering in xterm.js. Family
+// names must match EXACTLY what the OS reports (check with
+// `system_profiler SPFontsDataType` on macOS or `fc-list` on Linux).
+//
+// Mono variants are preferred over proportional for terminals because
+// xterm.js assumes fixed-width cells.
 
 const RECOMMENDED_FONTS: {
   name: string;
@@ -12,6 +20,7 @@ const RECOMMENDED_FONTS: {
   url: string;
   nerdFont: boolean;
 }[] = [
+  // ── Nerd Fonts (icons + glyphs) ────────────────────────────────────────
   {
     name: "MesloLGS NF",
     family: "MesloLGS NF",
@@ -22,14 +31,58 @@ const RECOMMENDED_FONTS: {
   {
     name: "FiraCode Nerd Font",
     family: "FiraCode Nerd Font Mono",
-    description: "Ligatures + Nerd Font icons",
-    url: "https://github.com/ryanoasis/nerd-fonts/releases/latest",
+    description: "Ligatures + Nerd Font icons (very popular for dev)",
+    url: "https://www.nerdfonts.com/font-downloads",
     nerdFont: true,
   },
   {
+    name: "JetBrainsMono Nerd Font",
+    family: "JetBrainsMono Nerd Font Mono",
+    description: "JetBrains Mono with Nerd Font icons",
+    url: "https://www.nerdfonts.com/font-downloads",
+    nerdFont: true,
+  },
+  {
+    name: "Hack Nerd Font",
+    family: "Hack Nerd Font Mono",
+    description: "Hack with Nerd Font icons",
+    url: "https://www.nerdfonts.com/font-downloads",
+    nerdFont: true,
+  },
+  {
+    name: "CaskaydiaCove Nerd Font",
+    family: "CaskaydiaCove Nerd Font Mono",
+    description: "Microsoft Cascadia Code with Nerd Font icons",
+    url: "https://www.nerdfonts.com/font-downloads",
+    nerdFont: true,
+  },
+  {
+    name: "Iosevka Nerd Font",
+    family: "Iosevka Nerd Font Mono",
+    description: "Narrow, tall, modular — popular with tiling WMs",
+    url: "https://www.nerdfonts.com/font-downloads",
+    nerdFont: true,
+  },
+  {
+    name: "SauceCodePro Nerd Font",
+    family: "SauceCodePro Nerd Font Mono",
+    description: "Source Code Pro with Nerd Font icons",
+    url: "https://www.nerdfonts.com/font-downloads",
+    nerdFont: true,
+  },
+  // ── Powerline fonts (subset of Nerd Fonts — only powerline glyphs) ────
+  {
+    name: "Meslo LG M for Powerline",
+    family: "Meslo LG M for Powerline",
+    description: "oh-my-zsh agnoster/powerline themes",
+    url: "https://github.com/powerline/fonts",
+    nerdFont: true,
+  },
+  // ── Plain monospace (no icons) ────────────────────────────────────────
+  {
     name: "JetBrains Mono",
     family: "JetBrains Mono",
-    description: "Popular dev font by JetBrains",
+    description: "Popular dev font by JetBrains (no icons)",
     url: "https://www.jetbrains.com/lp/mono/",
     nerdFont: false,
   },
@@ -38,6 +91,13 @@ const RECOMMENDED_FONTS: {
     family: "Hack",
     description: "Clean monospace for terminals",
     url: "https://sourcefoundry.org/hack/",
+    nerdFont: false,
+  },
+  {
+    name: "SF Mono",
+    family: "SF Mono",
+    description: "Apple's system mono — install via Terminal.app preferences",
+    url: "",
     nerdFont: false,
   },
   {
