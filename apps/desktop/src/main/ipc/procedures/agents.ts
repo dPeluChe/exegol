@@ -126,8 +126,10 @@ export const agentRouter = router({
     return listAgents(ctx.db, input.projectId);
   }),
 
+  // Returns null (not undefined) for consistency with TanStack Query v5,
+  // which treats undefined from queryFn as a protocol error.
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    return getAgent(ctx.db, input.id);
+    return getAgent(ctx.db, input.id) ?? null;
   }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {
@@ -154,15 +156,14 @@ export const agentRouter = router({
     return spawned;
   }),
 
+  // Idempotent: if the agent is already gone (race with a concurrent close),
+  // return success instead of NOT_FOUND so the renderer's double-call
+  // cleanup pattern (stop + delete) doesn't spam the console.
   stop: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);
-    if (!agent) {
-      throw new TRPCError({ code: "NOT_FOUND", message: `Agent ${input.id} not found` });
-    }
-
+    if (!agent) return null;
     const manager = getAgentManager();
     await manager.stop(ctx.db, input.id);
-    // Agent may have been deleted by a concurrent cleanup — return whatever we have
     return getAgent(ctx.db, input.id) ?? agent;
   }),
 
@@ -171,17 +172,19 @@ export const agentRouter = router({
     return { success: true };
   }),
 
+  // Returns null instead of throwing: stale pane references to deleted
+  // agents are a recoverable state, not an error.
   getStatus: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);
-    if (!agent) {
-      throw new TRPCError({ code: "NOT_FOUND", message: `Agent ${input.id} not found` });
-    }
+    if (!agent) return null;
     return {
       status: agent.status,
       currentStep: agent.currentStep,
     };
   }),
 
+  // No-ops silently if the agent was deleted mid-update (e.g., user closed
+  // the pane while a push event was in flight).
   updateStatus: publicProcedure
     .input(
       z.object({
@@ -192,18 +195,9 @@ export const agentRouter = router({
     )
     .mutation(({ ctx, input }) => {
       const agent = getAgent(ctx.db, input.id);
-      if (!agent) {
-        throw new TRPCError({ code: "NOT_FOUND", message: `Agent ${input.id} not found` });
-      }
+      if (!agent) return null;
       updateAgentStatus(ctx.db, input.id, input.status, input.currentStep);
-      const updated = getAgent(ctx.db, input.id);
-      if (!updated) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: `Agent ${input.id} not found after update`,
-        });
-      }
-      return updated;
+      return getAgent(ctx.db, input.id) ?? null;
     }),
 
   // ─── Handoff ────────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@
 
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
-import { BrowserWindow, ipcMain } from "electron";
+import { BrowserWindow, ipcMain, webContents } from "electron";
 
 export interface FloatingPaneConfig {
   /** Stable id used by the renderer workspace store */
@@ -130,15 +130,31 @@ export function registerFloatingIpcHandlers(): void {
   ipcMain.on("floating:self-close", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
   });
-  // DevTools toggle for floating browser panes
+  // DevTools toggle for floating browser panes. We must target the embedded
+  // <webview>'s webContents (not the host React shell) and work around two
+  // Electron quirks:
+  //   1. A detached DevTools window is NOT always-on-top, so it gets hidden
+  //      behind the floating window. We temporarily drop the floating
+  //      window's always-on-top flag while DevTools is open, then restore
+  //      it via the `devtools-closed` event.
+  //   2. The webview's webContents is not directly reachable from the host
+  //      window; we find it via `hostWebContents === event.sender`.
   ipcMain.on("floating:self-devtools", (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    if (win) {
-      if (win.webContents.isDevToolsOpened()) {
-        win.webContents.closeDevTools();
-      } else {
-        win.webContents.openDevTools({ mode: "detach" });
-      }
+    const hostWin = BrowserWindow.fromWebContents(event.sender);
+    if (!hostWin) return;
+    const webviewContents = webContents
+      .getAllWebContents()
+      .find((wc) => wc.getType() === "webview" && wc.hostWebContents === event.sender);
+    const target = webviewContents ?? event.sender;
+    if (target.isDevToolsOpened()) {
+      target.closeDevTools();
+      return;
     }
+    target.openDevTools({ mode: "detach" });
+    hostWin.setAlwaysOnTop(false);
+    const restore = () => {
+      if (!hostWin.isDestroyed()) hostWin.setAlwaysOnTop(true, "floating");
+    };
+    target.once("devtools-closed", restore);
   });
 }

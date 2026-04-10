@@ -101,34 +101,93 @@ function FloatingBrowser({ url }: { url: string }) {
   const webviewRef = useRef<HTMLElement | null>(null);
   const [currentUrl, setCurrentUrl] = useState(url);
   const [loading, setLoading] = useState(true);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
 
   useEffect(() => {
-    const webview = webviewRef.current;
+    const webview = webviewRef.current as unknown as {
+      addEventListener: (e: string, fn: (ev: Event) => void) => void;
+      removeEventListener: (e: string, fn: (ev: Event) => void) => void;
+      canGoBack: () => boolean;
+      canGoForward: () => boolean;
+    } | null;
     if (!webview) return;
     const onStart = () => setLoading(true);
-    const onStop = () => setLoading(false);
+    const onStop = () => {
+      setLoading(false);
+      try {
+        setCanGoBack(webview.canGoBack());
+        setCanGoForward(webview.canGoForward());
+      } catch {
+        /* not ready */
+      }
+    };
     const onNav = (e: Event) => {
-      // webview navigation event carries the new URL on e.url
-      const url = (e as unknown as { url?: string }).url;
-      if (url) setCurrentUrl(url);
+      const u = (e as unknown as { url?: string }).url;
+      if (u) setCurrentUrl(u);
+      try {
+        setCanGoBack(webview.canGoBack());
+        setCanGoForward(webview.canGoForward());
+      } catch {
+        /* not ready */
+      }
     };
     webview.addEventListener("did-start-loading", onStart);
     webview.addEventListener("did-stop-loading", onStop);
-    webview.addEventListener("did-navigate", onNav as EventListener);
-    webview.addEventListener("did-navigate-in-page", onNav as EventListener);
+    webview.addEventListener("did-navigate", onNav);
+    webview.addEventListener("did-navigate-in-page", onNav);
     return () => {
       webview.removeEventListener("did-start-loading", onStart);
       webview.removeEventListener("did-stop-loading", onStop);
-      webview.removeEventListener("did-navigate", onNav as EventListener);
-      webview.removeEventListener("did-navigate-in-page", onNav as EventListener);
+      webview.removeEventListener("did-navigate", onNav);
+      webview.removeEventListener("did-navigate-in-page", onNav);
     };
   }, []);
 
+  const handleBack = () => {
+    const wv = webviewRef.current as unknown as { goBack?: () => void } | null;
+    wv?.goBack?.();
+  };
+  const handleForward = () => {
+    const wv = webviewRef.current as unknown as { goForward?: () => void } | null;
+    wv?.goForward?.();
+  };
+  const handleReload = () => {
+    const wv = webviewRef.current as unknown as { reload?: () => void } | null;
+    wv?.reload?.();
+  };
+
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-6 shrink-0 items-center gap-1 border-b border-border/50 bg-bg-secondary/50 px-2">
-        {loading && <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}
-        <div className="flex-1 truncate text-[9px] text-text-muted">{currentUrl}</div>
+      <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border/50 bg-bg-secondary/50 px-1.5">
+        <button
+          type="button"
+          onClick={handleBack}
+          disabled={!canGoBack}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
+          title="Back"
+        >
+          ‹
+        </button>
+        <button
+          type="button"
+          onClick={handleForward}
+          disabled={!canGoForward}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
+          title="Forward"
+        >
+          ›
+        </button>
+        <button
+          type="button"
+          onClick={handleReload}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+          title="Reload"
+        >
+          ↻
+        </button>
+        {loading && <div className="ml-1 h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}
+        <div className="flex-1 truncate px-1 text-[9px] text-text-muted">{currentUrl}</div>
       </div>
       <div className="flex-1 overflow-hidden bg-white">
         <webview

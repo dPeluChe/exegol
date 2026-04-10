@@ -37,6 +37,18 @@ export interface LayoutPreset {
   build: (paneIds: string[]) => LayoutNode;
 }
 
+/** Metadata captured per slot when a custom layout is saved. */
+export interface CustomLayoutSlot {
+  /** Type the pane had at save time. Used when the destination tab has
+   *  fewer panes than slots and we need to create new ones. */
+  type: PaneType;
+  url?: string;
+  filePath?: string;
+  // agentId is intentionally NOT saved: agents are session-specific, and
+  // a recreated terminal slot should show the launcher so the user picks
+  // a fresh agent.
+}
+
 /** User-saved layout snapshot. Template uses indexed slot placeholders. */
 export interface CustomLayoutPreset {
   id: string;
@@ -44,6 +56,8 @@ export interface CustomLayoutPreset {
   /** Layout tree where each leaf paneId is a slot placeholder like "__slot_0__". */
   template: LayoutNode;
   slots: number;
+  /** Per-slot metadata in slot-index order. Added in T85 follow-up. */
+  slotTypes?: CustomLayoutSlot[];
   createdAt: number;
 }
 
@@ -223,15 +237,28 @@ const SLOT_PREFIX = "__slot_";
 /**
  * Convert a live layout tree into a reusable template by replacing each
  * pane id with an indexed slot placeholder. The order of slots matches the
- * left-to-right, depth-first traversal of the tree.
+ * left-to-right, depth-first traversal of the tree. Captures per-slot
+ * metadata (type, url, filePath) from the source panes so the custom
+ * preset can recreate equivalent panes when applied to a different tab.
  */
-export function templateFromLayout(layout: LayoutNode): {
+export function templateFromLayout(
+  layout: LayoutNode,
+  sourcePanes: Record<string, Pane>,
+): {
   template: LayoutNode;
   slots: number;
+  slotTypes: CustomLayoutSlot[];
 } {
   let slotCounter = 0;
+  const slotTypes: CustomLayoutSlot[] = [];
   const walk = (node: LayoutNode): LayoutNode => {
     if (node.type === "pane") {
+      const original = sourcePanes[node.paneId];
+      slotTypes.push({
+        type: original?.type ?? "empty",
+        url: original?.url,
+        filePath: original?.filePath,
+      });
       const placeholder = `${SLOT_PREFIX}${slotCounter}__`;
       slotCounter++;
       return { type: "pane", paneId: placeholder };
@@ -239,13 +266,15 @@ export function templateFromLayout(layout: LayoutNode): {
     return { ...node, children: node.children.map(walk) };
   };
   const template = walk(layout);
-  return { template, slots: slotCounter };
+  return { template, slots: slotCounter, slotTypes };
 }
 
 /**
  * Apply a custom layout preset: walk the template and replace each slot
- * placeholder with a real pane id in order. New empty panes are created for
- * any slot that runs out of existing panes.
+ * placeholder with a real pane id in order. When a slot has no existing
+ * pane AND the template captured a slot type, a new typed pane is created
+ * (with the saved url/filePath metadata) so applying a template on a
+ * fresh tab recreates the original shape instead of showing empty panes.
  */
 export function computeCustomPresetTransformation(
   custom: CustomLayoutPreset,
@@ -254,7 +283,16 @@ export function computeCustomPresetTransformation(
   const newPanes: Pane[] = [];
   const paddedIds: string[] = [...existingPaneIds];
   while (paddedIds.length < custom.slots) {
-    const pane: Pane = { id: nanoid(8), type: "empty" };
+    const slotIndex = paddedIds.length;
+    const hint = custom.slotTypes?.[slotIndex];
+    // Recreate the original pane type when available; fall back to empty
+    // for pre-migration custom layouts that didn't capture slot metadata.
+    const pane: Pane = {
+      id: nanoid(8),
+      type: hint?.type ?? "empty",
+      url: hint?.url,
+      filePath: hint?.filePath,
+    };
     newPanes.push(pane);
     paddedIds.push(pane.id);
   }

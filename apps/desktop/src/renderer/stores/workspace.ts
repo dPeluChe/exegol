@@ -581,12 +581,13 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         const trimmed = name.trim();
         if (!trimmed) return null;
 
-        const { template, slots } = templateFromLayout(tab.layout);
+        const { template, slots, slotTypes } = templateFromLayout(tab.layout, pw.panes);
         const custom: CustomLayoutPreset = {
           id: nanoid(8),
           name: trimmed,
           template,
           slots,
+          slotTypes,
           createdAt: Date.now(),
         };
         set((s) => ({ customLayouts: [...s.customLayouts, custom] }));
