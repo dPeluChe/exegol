@@ -251,32 +251,86 @@ app.whenReady().then(async () => {
 
   // Background: sidecar connection + agent recovery (non-blocking)
   (async () => {
-    let sidecarSessionIds: string[] = [];
+    // Snapshot of DB agents at startup — helps diagnose recovery issues
+    try {
+      const db = getDb();
+      const preRecoveryStats = db
+        .prepare("SELECT status, COUNT(*) as count FROM agents GROUP BY status")
+        .all() as Array<{ status: string; count: number }>;
+      if (preRecoveryStats.length > 0) {
+        logger.info(
+          `[Startup] DB agent counts pre-recovery: ${preRecoveryStats
+            .map((r) => `${r.status}=${r.count}`)
+            .join(", ")}`,
+        );
+      }
+    } catch (err) {
+      logger.warn("[Startup] Could not snapshot DB agents:", err);
+    }
+
+    let aliveSessionIds: string[] = [];
     try {
       const sidecarClient = await ensureSidecar();
       getPtyHost().connectToSidecar(sidecarClient);
-      sidecarSessionIds = await getPtyHost().listSidecarSessions();
+      const sessionInfo = await getPtyHost().listSidecarSessionsInfo();
+      aliveSessionIds = sessionInfo.filter((s) => s.alive).map((s) => s.id);
+      const deadInfo = sessionInfo.filter((s) => !s.alive);
       logger.info(
-        `[Startup] Connected to PTY sidecar (${sidecarSessionIds.length} live session(s))`,
+        `[Startup] Sidecar connected — ${sessionInfo.length} total, ${aliveSessionIds.length} alive, ${deadInfo.length} dead`,
       );
+      if (aliveSessionIds.length > 0) {
+        logger.info(`[Startup] Alive sidecar sessions: ${aliveSessionIds.join(", ")}`);
+      }
+      if (deadInfo.length > 0) {
+        logger.warn(
+          `[Startup] Dead sidecar sessions (in 60s grace period): ${deadInfo
+            .map((s) => `${s.id}(exit=${s.exitCode ?? "?"}/sig=${s.signal ?? "?"})`)
+            .join(", ")}`,
+        );
+      }
     } catch (err) {
       logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);
     }
     try {
-      if (sidecarSessionIds.length > 0) {
-        const reattached = await getAgentManager().reattachSidecarAgents(
-          getDb(),
-          sidecarSessionIds,
+      // Only agents that are ACTUALLY alive get skipped from the crash sweep.
+      // Dead sidecar sessions (session map still populated during grace period
+      // but PTY exited) fall through to recoverStaleAgents so they're marked
+      // as crashed instead of sitting in DB as "running" with no live process.
+      let aliveSkipIds = new Set<string>();
+      if (aliveSessionIds.length > 0) {
+        const result = await getAgentManager().reattachSidecarAgents(getDb(), aliveSessionIds);
+        aliveSkipIds = result.aliveIds;
+        logger.info(
+          `[Startup] Reattach result: alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size}`,
         );
-        if (reattached > 0) {
-          logger.info(`[Startup] Reattached ${reattached} agent(s) from sidecar`);
+        if (result.deadIds.size > 0) {
+          logger.warn(
+            `[Startup] Dead sidecar sessions (will be marked crashed): ${Array.from(result.deadIds).join(", ")}`,
+          );
+        }
+        if (result.failedIds.size > 0) {
+          logger.warn(
+            `[Startup] Failed reattach attempts (will be marked crashed): ${Array.from(result.failedIds).join(", ")}`,
+          );
         }
       }
-      const recovery = recoverStaleAgents(getDb(), new Set(sidecarSessionIds));
-      if (recovery.crashed > 0) {
+      const recovery = recoverStaleAgents(getDb(), aliveSkipIds);
+      logger.info(
+        `[Startup] Crash sweep: marked ${recovery.crashed} agent(s) as crashed (${recovery.alive} alive)`,
+      );
+
+      // Final snapshot after recovery — verify nothing is stuck
+      try {
+        const postStats = getDb()
+          .prepare("SELECT status, COUNT(*) as count FROM agents GROUP BY status")
+          .all() as Array<{ status: string; count: number }>;
         logger.info(
-          `[Startup] Marked ${recovery.crashed} agent(s) as crashed (no sidecar session)`,
+          `[Startup] DB agent counts post-recovery: ${postStats
+            .map((r) => `${r.status}=${r.count}`)
+            .join(", ")}`,
         );
+      } catch {
+        /* non-fatal */
       }
     } catch (err) {
       logger.error("[Startup] Agent recovery failed (non-fatal):", err);

@@ -12,6 +12,8 @@ import {
   type SessionDataNotification,
   type SessionErrorNotification,
   type SessionExitNotification,
+  type SessionInfo,
+  type SessionListInfoResult,
   type SessionListResult,
   type SessionSnapshotResult,
 } from "./pty-sidecar-protocol";
@@ -131,6 +133,12 @@ export class SidecarClient {
 
   async listSessions(): Promise<string[]> {
     const result = (await this.call("session.list")) as SessionListResult;
+    return result.sessions;
+  }
+
+  /** Returns sessions with their alive flag + exit info (for crash recovery) */
+  async listSessionsInfo(): Promise<SessionInfo[]> {
+    const result = (await this.call("session.listInfo")) as SessionListInfoResult;
     return result.sessions;
   }
 

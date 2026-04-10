@@ -242,19 +242,34 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
   // Agent not found — convert pane to empty (agent was deleted)
   useEffect(() => {
     if (isError) {
+      console.log(
+        `[PaneRecovery] Agent ${agentId} errored (not in DB) — converting pane ${paneId} to empty`,
+      );
       updatePane(paneId, { type: "empty", agentId: undefined });
     }
-  }, [isError, paneId, updatePane]);
+  }, [isError, paneId, agentId, updatePane]);
 
   // Agent in terminal state with no live store entry — stale pane from previous session
   // (store only has agents that were spawned or reattached in this session)
   const isStaleFromPreviousSession = agent && TERMINAL_STATUSES.has(agent.status) && !storeAgent;
 
   useEffect(() => {
-    if (isStaleFromPreviousSession) {
+    if (isStaleFromPreviousSession && agent) {
+      console.log(
+        `[PaneRecovery] Stale agent ${agentId} (status=${agent.status}, notInStore) — converting pane ${paneId} to empty`,
+      );
       updatePane(paneId, { type: "empty", agentId: undefined });
     }
-  }, [isStaleFromPreviousSession, paneId, updatePane]);
+  }, [isStaleFromPreviousSession, agent, agentId, paneId, updatePane]);
+
+  // Log unexpected state: agent exists in DB but not in store (no callbacks wired)
+  useEffect(() => {
+    if (agent && !storeAgent && !TERMINAL_STATUSES.has(agent.status) && agent.status !== "idle") {
+      console.warn(
+        `[PaneRecovery] Agent ${agentId} is status=${agent.status} in DB but NOT in store — this pane will render but the terminal will likely be broken (no callbacks wired). Check main process [Reattach] logs.`,
+      );
+    }
+  }, [agent, storeAgent, agentId]);
 
   if (isError || isStaleFromPreviousSession) return null;
 

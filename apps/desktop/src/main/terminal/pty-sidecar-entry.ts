@@ -33,6 +33,8 @@ interface SidecarSession {
   ringBuffer: RingBuffer;
   pid: number;
   alive: boolean;
+  exitCode: number | null;
+  signal: string | null;
 }
 
 const sessions = new Map<string, SidecarSession>();
@@ -104,6 +106,8 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           ringBuffer,
           pid: proc.pid,
           alive: true,
+          exitCode: null,
+          signal: null,
         };
         sessions.set(p.id, session);
 
@@ -115,6 +119,8 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
 
         proc.onExit(({ exitCode, signal }) => {
           session.alive = false;
+          session.exitCode = exitCode ?? null;
+          session.signal = signal != null ? String(signal) : null;
           broadcast(makeNotification("session.exit", { id: p.id, exitCode, signal }));
           // Keep session in map for snapshot retrieval — cleanup after grace period
           setTimeout(() => {
@@ -197,6 +203,17 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
 
       case "session.list": {
         client.write(makeResponse(req.id, { sessions: Array.from(sessions.keys()) }));
+        break;
+      }
+
+      case "session.listInfo": {
+        const info = Array.from(sessions.values()).map((s) => ({
+          id: s.id,
+          alive: s.alive,
+          exitCode: s.exitCode,
+          signal: s.signal,
+        }));
+        client.write(makeResponse(req.id, { sessions: info }));
         break;
       }
 

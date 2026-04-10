@@ -89,6 +89,22 @@ export interface SessionListResult {
   sessions: string[];
 }
 
+/**
+ * Richer session listing that distinguishes live PTYs from exited-but-still-buffered
+ * sessions (inside the sidecar's 60s grace period for scrollback retrieval).
+ * Used by startup recovery so dead sessions aren't re-marked as running.
+ */
+export interface SessionInfo {
+  id: string;
+  alive: boolean;
+  exitCode: number | null;
+  signal: string | null;
+}
+
+export interface SessionListInfoResult {
+  sessions: SessionInfo[];
+}
+
 export interface PingResult {
   version: string;
   uptime: number;
