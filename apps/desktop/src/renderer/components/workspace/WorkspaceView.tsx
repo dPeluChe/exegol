@@ -1,15 +1,35 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { LoadingSpinner } from "../common";
 import { AgentsSection } from "./sections/AgentsSection";
-import { MemorySection } from "./sections/MemorySection";
-import { PipelineSection } from "./sections/PipelineSection";
-import { PromptsSkillsSection } from "./sections/PromptsSkillsSection";
-import { ResourcesTokensSection } from "./sections/ResourcesTokensSection";
-import { ScoringSection } from "./sections/ScoringSection";
-import { TasksSection } from "./sections/TasksSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
+
+// Lazy: non-default sections are only rendered on user demand.
+// Each section bundles its own deps (PipelineSection pulls xterm via PipelineRunView).
+const TasksSection = lazy(() =>
+  import("./sections/TasksSection").then((m) => ({ default: m.TasksSection })),
+);
+const PromptsSkillsSection = lazy(() =>
+  import("./sections/PromptsSkillsSection").then((m) => ({ default: m.PromptsSkillsSection })),
+);
+const MemorySection = lazy(() =>
+  import("./sections/MemorySection").then((m) => ({ default: m.MemorySection })),
+);
+const PipelineSection = lazy(() =>
+  import("./sections/PipelineSection").then((m) => ({ default: m.PipelineSection })),
+);
+const ResourcesTokensSection = lazy(() =>
+  import("./sections/ResourcesTokensSection").then((m) => ({ default: m.ResourcesTokensSection })),
+);
+const ScoringSection = lazy(() =>
+  import("./sections/ScoringSection").then((m) => ({ default: m.ScoringSection })),
+);
+
+function SectionFallback() {
+  return <LoadingSpinner className="h-full" />;
+}
 
 export function WorkspaceView() {
   const { projectId } = useProjectContext();
@@ -54,13 +74,17 @@ export function WorkspaceView() {
           <AgentsSection />
         </div>
 
-        {/* Other sections: conditionally rendered (no terminal state to preserve) */}
-        {activeSection === "tasks" && <TasksSection />}
-        {activeSection === "prompts-skills" && <PromptsSkillsSection />}
-        {activeSection === "memory" && <MemorySection />}
-        {activeSection === "pipelines" && <PipelineSection />}
-        {activeSection === "resources-tokens" && <ResourcesTokensSection />}
-        {activeSection === "scoring" && <ScoringSection />}
+        {/* Other sections: conditionally rendered + lazy loaded (no terminal state to preserve) */}
+        {activeSection !== "agents" && (
+          <Suspense fallback={<SectionFallback />}>
+            {activeSection === "tasks" && <TasksSection />}
+            {activeSection === "prompts-skills" && <PromptsSkillsSection />}
+            {activeSection === "memory" && <MemorySection />}
+            {activeSection === "pipelines" && <PipelineSection />}
+            {activeSection === "resources-tokens" && <ResourcesTokensSection />}
+            {activeSection === "scoring" && <ScoringSection />}
+          </Suspense>
+        )}
       </div>
     </div>
   );

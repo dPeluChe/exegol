@@ -30,6 +30,19 @@ import { ensureShellWrappers } from "./terminal/shell-wrappers";
 
 let mainWindow: BrowserWindow | null = null;
 
+// Startup timing: measure from app ready to first paint.
+// Logged once on ready-to-show to give us real numbers vs. competitors' claims.
+const startupTimings: Record<string, number> = {};
+const startMark = (label: string) => {
+  startupTimings[label] = Date.now();
+};
+const endMark = (label: string, from = "appReady") => {
+  const start = startupTimings[from];
+  if (start) {
+    logger.info(`[Startup] ${label}: ${Date.now() - start}ms`);
+  }
+};
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -51,6 +64,7 @@ function createWindow(): void {
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
+    endMark("firstPaint");
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -155,67 +169,75 @@ function registerIpcHandlers(): void {
 }
 
 app.whenReady().then(async () => {
+  startMark("appReady");
+  // ─── Critical path: everything the window needs before first paint ──
   await initializeDatabase();
-  // Recovery is done in two phases:
-  // Phase 1: Connect to sidecar (done later, after wrappers)
-  // Phase 2: For agents NOT in sidecar, mark as "crashed"
-  // This is deferred until after sidecar connection to allow reattach
-  // Clean up stale agents:
-  // - Shell terminals (always, no value)
-  // - Crashed older than 1h (recent crashes kept for re-launch)
-  // - Completed/failed/stopped older than 24h (recent ones stay for Recent Sessions)
-  try {
-    const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
-    const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
-    const staleCleanup = getDb()
-      .prepare(
-        `DELETE FROM agents WHERE
-          cli_type = 'shell'
-          OR (status = 'crashed' AND stopped_at < ?)
-          OR (status IN ('completed', 'failed', 'stopped') AND stopped_at < ?)`,
-      )
-      .run(oneHourAgo, oneDayAgo);
-    if (staleCleanup.changes > 0) {
-      logger.info(`[Startup] Cleaned ${staleCleanup.changes} stale agent(s)`);
-    }
-  } catch {
-    /* table may not exist */
-  }
-  // Clean up contaminated memories (ANSI codes, CLI install output, raw terminal noise)
-  try {
-    const cleaned = getDb()
-      .prepare(
-        `DELETE FROM memories WHERE
-          content LIKE '%' || X'1B' || '%'
-          OR content LIKE '%' || X'0D' || '%'
-          OR content LIKE '%bun install%'
-          OR content LIKE '%npm install%'
-          OR content LIKE '%yarn add%'
-          OR content LIKE '%pip install%'
-          OR content LIKE '%packages installed%'
-          OR content LIKE '%Update now%'
-          OR content LIKE '%Skip until next%'`,
-      )
-      .run();
-    if (cleaned.changes > 0) {
-      logger.info(`[Startup] Cleaned ${cleaned.changes} ANSI-contaminated memories`);
-    }
-  } catch {
-    // Table may not exist yet
-  }
+  endMark("dbInit");
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerGlobalHotkey();
-  // Filesystem initialization (all synchronous, no await needed)
-  ensureCanonicalPaths();
-  ensureDefaultSkills();
-  ensureShellWrappers();
-  ensureAgentWrappers();
+  ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
+  endMark("criticalPath");
+  // ────────────────────────────────────────────────────────────────────
 
-  // Show window FIRST (fast TTI), then connect sidecar + recover in background
+  // Show window FIRST (fast TTI), then everything else in background
   createWindow();
+  endMark("windowCreated");
   initTray();
+
+  // Background: non-blocking filesystem init (skills + wrappers)
+  (() => {
+    try {
+      ensureDefaultSkills();
+      ensureShellWrappers();
+      ensureAgentWrappers();
+    } catch (err) {
+      logger.error("[Startup] FS init failed (non-fatal):", err);
+    }
+  })();
+
+  // Background: stale data cleanup (not needed before first paint)
+  (() => {
+    try {
+      const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
+      const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
+      const staleCleanup = getDb()
+        .prepare(
+          `DELETE FROM agents WHERE
+            cli_type = 'shell'
+            OR (status = 'crashed' AND stopped_at < ?)
+            OR (status IN ('completed', 'failed', 'stopped') AND stopped_at < ?)`,
+        )
+        .run(oneHourAgo, oneDayAgo);
+      if (staleCleanup.changes > 0) {
+        logger.info(`[Startup] Cleaned ${staleCleanup.changes} stale agent(s)`);
+      }
+    } catch {
+      /* table may not exist */
+    }
+    try {
+      const cleaned = getDb()
+        .prepare(
+          `DELETE FROM memories WHERE
+            content LIKE '%' || X'1B' || '%'
+            OR content LIKE '%' || X'0D' || '%'
+            OR content LIKE '%bun install%'
+            OR content LIKE '%npm install%'
+            OR content LIKE '%yarn add%'
+            OR content LIKE '%pip install%'
+            OR content LIKE '%packages installed%'
+            OR content LIKE '%Update now%'
+            OR content LIKE '%Skip until next%'`,
+        )
+        .run();
+      if (cleaned.changes > 0) {
+        logger.info(`[Startup] Cleaned ${cleaned.changes} ANSI-contaminated memories`);
+      }
+    } catch {
+      /* table may not exist yet */
+    }
+  })();
 
   // Background: sidecar connection + agent recovery (non-blocking)
   (async () => {

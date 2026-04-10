@@ -1,6 +1,6 @@
 import { cn } from "@exegol/ui";
 import { AlertTriangle, ArrowUpRight, Code2, Columns, GripVertical, Rows, X } from "lucide-react";
-import { type DragEvent, useCallback, useEffect, useState } from "react";
+import { type DragEvent, lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
@@ -9,12 +9,16 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { collectPaneIds, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
-import { TerminalPanel } from "../terminal/TerminalPanel";
 import { FileExplorer } from "../workspace/FileExplorer";
 import { GitPane } from "../workspace/GitPane";
 import { BrowserPane } from "./BrowserPaneContent";
 import { EmptyPane } from "./EmptyPaneContent";
 import { PaneContextMenu } from "./PaneContextMenu";
+
+// Lazy: xterm + addons (~470KB) only load when a terminal pane mounts
+const TerminalPanel = lazy(() =>
+  import("../terminal/TerminalPanel").then((m) => ({ default: m.TerminalPanel })),
+);
 
 // ─── Pane Toolbar ───────────────────────────────────────────────────────────
 
@@ -185,7 +189,11 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
     return <LoadingSpinner label="Loading agent..." className="h-full" />;
   }
 
-  return <TerminalPanel agentId={agentId} paneId={paneId} />;
+  return (
+    <Suspense fallback={<LoadingSpinner label="Loading terminal..." className="h-full" />}>
+      <TerminalPanel agentId={agentId} paneId={paneId} />
+    </Suspense>
+  );
 }
 
 // ─── Files Pane ─────────────────────────────────────────────────────────

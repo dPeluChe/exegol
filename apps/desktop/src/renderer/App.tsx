@@ -1,13 +1,12 @@
 import { TooltipProvider } from "@exegol/ui";
+import { lazy, Suspense } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
-import { CommandPalette } from "./components/CommandPalette";
+import { LoadingSpinner } from "./components/common";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
 import { Sidebar } from "./components/layout/Sidebar";
 import { StatusBar } from "./components/layout/StatusBar";
 import { TitleBar } from "./components/layout/TitleBar";
-import { ProjectList } from "./components/projects/ProjectList";
-import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
@@ -16,12 +15,30 @@ import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
 import { useAppStore } from "./stores/app";
 
+// Lazy: rarely-used surfaces are not needed on first paint.
+// ProjectList: only when there are no projects or user clicks "Add project".
+// SettingsPanel: only when user opens settings (Radix dropdowns, form libs).
+// CommandPalette: only opens on ⌘K.
+const ProjectList = lazy(() =>
+  import("./components/projects/ProjectList").then((m) => ({ default: m.ProjectList })),
+);
+const SettingsPanel = lazy(() =>
+  import("./components/settings/SettingsPanel").then((m) => ({ default: m.SettingsPanel })),
+);
+const CommandPalette = lazy(() =>
+  import("./components/CommandPalette").then((m) => ({ default: m.CommandPalette })),
+);
+
 function MainContent() {
   const activeView = useAppStore((s) => s.activeView);
 
   switch (activeView) {
     case "projects":
-      return <ProjectList />;
+      return (
+        <Suspense fallback={<LoadingSpinner className="h-full" />}>
+          <ProjectList />
+        </Suspense>
+      );
     case "workspace":
       return (
         <ProjectProvider>
@@ -29,9 +46,17 @@ function MainContent() {
         </ProjectProvider>
       );
     case "settings":
-      return <SettingsPanel />;
+      return (
+        <Suspense fallback={<LoadingSpinner className="h-full" />}>
+          <SettingsPanel />
+        </Suspense>
+      );
     default:
-      return <ProjectList />;
+      return (
+        <Suspense fallback={<LoadingSpinner className="h-full" />}>
+          <ProjectList />
+        </Suspense>
+      );
   }
 }
 
@@ -74,7 +99,9 @@ export default function App() {
 
         <StatusBar />
         <ToastStack />
-        <CommandPalette />
+        <Suspense fallback={null}>
+          <CommandPalette />
+        </Suspense>
       </div>
     </TooltipProvider>
   );
