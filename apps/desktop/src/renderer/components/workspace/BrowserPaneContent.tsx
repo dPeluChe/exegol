@@ -41,12 +41,14 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const webviewRef = useRef<HTMLElement | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
+  const [loadError, setLoadError] = useState<{ code: number; desc: string } | null>(null);
 
-  // Track navigation history availability on the webview
+  // Track navigation history availability + load-failure state on the webview
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes
   useEffect(() => {
     const webview = webviewRef.current as unknown as {
-      addEventListener: (e: string, fn: () => void) => void;
-      removeEventListener: (e: string, fn: () => void) => void;
+      addEventListener: (e: string, fn: (ev: Event) => void) => void;
+      removeEventListener: (e: string, fn: (ev: Event) => void) => void;
       canGoBack: () => boolean;
       canGoForward: () => boolean;
     } | null;
@@ -59,15 +61,30 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         /* webview not ready */
       }
     };
-    webview.addEventListener("did-navigate", update);
-    webview.addEventListener("did-navigate-in-page", update);
-    webview.addEventListener("did-finish-load", update);
-    return () => {
-      webview.removeEventListener("did-navigate", update);
-      webview.removeEventListener("did-navigate-in-page", update);
-      webview.removeEventListener("did-finish-load", update);
+    const onFailLoad = (ev: Event) => {
+      const e = ev as unknown as {
+        errorCode: number;
+        errorDescription: string;
+        isMainFrame: boolean;
+      };
+      if (e.isMainFrame) {
+        setLoadError({ code: e.errorCode, desc: e.errorDescription });
+      }
     };
-  }, []);
+    const onStartLoad = () => setLoadError(null);
+    webview.addEventListener("did-navigate", update as (ev: Event) => void);
+    webview.addEventListener("did-navigate-in-page", update as (ev: Event) => void);
+    webview.addEventListener("did-finish-load", update as (ev: Event) => void);
+    webview.addEventListener("did-fail-load", onFailLoad);
+    webview.addEventListener("did-start-loading", onStartLoad);
+    return () => {
+      webview.removeEventListener("did-navigate", update as (ev: Event) => void);
+      webview.removeEventListener("did-navigate-in-page", update as (ev: Event) => void);
+      webview.removeEventListener("did-finish-load", update as (ev: Event) => void);
+      webview.removeEventListener("did-fail-load", onFailLoad);
+      webview.removeEventListener("did-start-loading", onStartLoad);
+    };
+  }, [currentUrl]);
 
   const handleBack = useCallback(() => {
     const wv = webviewRef.current as unknown as { goBack?: () => void } | null;
@@ -222,6 +239,35 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           /* @ts-expect-error Electron webview attributes */
           allowpopups="true"
         />
+        {loadError && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-bg-primary/95 p-4 text-center">
+            <Globe className="h-8 w-8 text-text-muted/60" />
+            <div className="space-y-0.5">
+              <div className="text-xs font-medium text-text-primary">
+                Can't reach {new URL(currentUrl).host}
+              </div>
+              <div className="max-w-sm text-[10px] text-text-muted">
+                {loadError.desc} ({loadError.code}). Is your dev server running? Try starting it and
+                click Retry, or enter a different URL above.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleReload}
+                className="flex items-center gap-1 rounded border border-border bg-bg-secondary px-2.5 py-1 text-[10px] text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+              >
+                <RotateCw className="h-3 w-3" />
+                Retry
+              </button>
+              {uniquePorts.length > 0 && (
+                <span className="text-[10px] text-text-muted">
+                  Or pick a port from the bar above
+                </span>
+              )}
+            </div>
+          </div>
+        )}
         {!isFocused && (
           <div
             role="none"
