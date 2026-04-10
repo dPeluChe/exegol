@@ -12,62 +12,36 @@
 
 ## Priority Order
 
-### P0 — Pre-launch polish wave ✅ COMPLETED (v0.3.0)
-> Goal: ship a tight, fast, delightful V1 before tackling any new feature surface.
-- ~~**Smart git button** (T83)~~ ✅ — context-aware button with 11 states + AI commit messages
-- ~~**Picture-in-Picture pane float** (T84)~~ ✅ — terminal + browser floating windows
-- ~~**Layout presets** (T85)~~ ✅ — 6 built-in + custom saved + Bottom Terminal w/ shell
-- ~~**First paint optimization** (T86)~~ ✅ — 4-12ms criticalPath, ~280ms firstPaint dev
-- ~~**Renderer bundle audit** (T87)~~ ✅ — 1,987 KB → 1,026 KB (−48%) via lazy chunks
-
-Bonus wins in the same wave (not in the original T83-T87 scope):
-- Sidecar version protocol + auto-upgrade (session.listInfo)
-- Real dead-session recovery (no more stuck-as-running agents)
-- 3 Nerd Fonts bundled (MesloLGS NF, FiraCode NF, JetBrainsMono NF) — 6.8 MB
-- Font settings UX: grouped list, per-card preview, promote on click
-- Cmd+W closes pane (not window) via custom macOS app menu
-- Workspace as default view + stale project auto-recovery
-- Browser pane back/forward/reload + empty state
-- Terminal "Starting..." overlay no longer stuck on reattach
+> Only pending work. Completed tasks live in `docs/tasks_completed/` and
+> release-level summaries in `docs/CHANGELOG.md`.
 
 ### P0 — Must land before broad release push
-- ~~Worktrees real por agente~~ ✅ T61
-- Inbox de revisión y atención (T57)
-- ~~Review flow con resumen de riesgo~~ ✅ T62
-- ~~Performance stabilization pass~~ ✅ T63
-- ~~Command Palette~~ ✅ T64
-- Multi-agent paralelo sobre worktrees (T65)
-- ~~**Test coverage (T74)**~~ ✅
-- ~~**Monolith decomposition (T75)**~~ ✅
+- **Review Inbox / Attention Center** (T57)
+- **Parallel Multi-Agent on Worktrees** (T65)
 
 ### P1 — Strong differentiation right after P0
-- ~~Session resume determinístico~~ ✅ T66
-- ~~Agent hook system con eventos estructurados~~ ✅ T67
-- Repo map + semantic search (T68)
-- ~~**Tier 3 scoring via SDK (T76)**~~ ✅
-- **DB validation layer (T77)** — Zod schemas for DB rows
+- **Repo Map + Semantic Search** (T68)
+- **DB validation layer** (T77) — Zod schemas for DB rows
 
 ### P2 — Valuable follow-ups once the core is stable
-- Diff line comments
-- Activity classification
-- **Pipeline state machine (T78)** — explicit transitions
-- ~~**MCP reconnection (T79)**~~ ✅
-- **Structured error handling (T80)** — transient vs permanent classification
-- **DI for singletons (T81)** — testability improvement
-- **Shared package enrichment (T82)** — more Zod schemas for IPC/DB payloads
+- Diff line comments (T69)
+- Activity classification (T70)
+- Issue tracker expansion (T71)
+- **Pipeline state machine** (T78) — explicit transitions
+- **Structured error handling** (T80) — transient vs permanent classification
+- **DI for singletons** (T81) — testability improvement
+- **Shared package enrichment** (T82) — more Zod schemas for IPC/DB payloads
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 - **Exegol CLI** (T89) — headless client over sidecar socket
 - **Terminal ↔ Chat dual view** (T90) — same session, two presentations
 - **Lifecycle scripts per repo** (T91) — setup/run/teardown in git
-- Issue tracker expansion
-- ~~Dark-black theme~~ ✅ T72
 
 ### P3 — Strategic bets / larger scope
-- SSH remote development
-- CI/CD release pipeline
-- Canary channel
+- **SSH Remote Development** (T73)
+- **CI/CD release pipeline** (T45) — activate when repo goes public
+- **Canary channel** (T46)
 - **Cross-repo workspaces** (T92) — front + back in one workspace
-- **Mobile companion** (T93) — monitor agents from phone via daemon
+- **Mobile companion app** (T93) — monitor agents from phone via daemon
 - **Headless daemon mode** (T94) — remote WebSocket for cloud/server deploys
 
 ---
@@ -431,20 +405,6 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 
 ---
 
-## Pre-launch Polish Wave ✅ COMPLETED (v0.3.0)
-
-Shipped April 10, 2026. Full details in
-[`docs/tasks_completed/2026_04.md`](./tasks_completed/2026_04.md#2026-04-10-pre-launch-polish-wave-v030)
-and [`docs/CHANGELOG.md`](./CHANGELOG.md#030--2026-04-10).
-
-Completed in this wave: T83 Smart Git Button, T84 Picture-in-Picture,
-T85 Layout Presets + custom saved, T86 First Paint Optimization,
-T87 Renderer Bundle Audit, plus sidecar recovery fix, bundled Nerd Fonts,
-Cmd+W pane close, workspace as default view, browser pane navigation, and
-the terminal font settings rewrite.
-
----
-
 ## Post-launch Backlog — Inspired by Competitors
 
 ### T88 — Ralph Loops in Pipelines
@@ -777,10 +737,10 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ---
 
-## Completed
+## History
 
-- V1-V3 + performance pass (69+ tasks): see `docs/tasks_completed/2026_03.md`.
-- April 2026 quickwins + quality foundation: see `docs/tasks_completed/2026_04.md`.
-- **v0.3.0 pre-launch polish wave** (T83-T87 + PiP + recovery + fonts):
-  see `docs/tasks_completed/2026_04.md#2026-04-10-pre-launch-polish-wave-v030`
-  and the v0.3.0 entry in `docs/CHANGELOG.md`.
+Completed work has moved out of this file. See:
+- `docs/CHANGELOG.md` — release-level summaries (what users see per version)
+- `docs/tasks_completed/2026_03.md` — V1-V3 foundation + performance pass
+- `docs/tasks_completed/2026_04.md` — April quickwins, quality foundation, and
+  the v0.3.0 pre-launch polish wave (T83-T87 + PiP + recovery + fonts)
