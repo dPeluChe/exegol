@@ -74,25 +74,6 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 
 ## Active Backlog
 
-### T56 — Agent Status via Terminal Title ✅ COMPLETED
-**Priority**: High | **Effort**: Low | **Source**: Orca
-
-**Why**
-- Complement the current Rust stdout/status parsing with title escape sequence signals.
-- Reduces parser brittleness for providers that already expose state in terminal title.
-
-**Scope**
-- Read terminal title escape sequences (`\033]0;...\007`) in PTY flow
-- Detect: idle, working, permission-needed, waiting-input
-- Update agent badge/state without extra renderer polling
-
-**Likely files**
-- `apps/desktop/src/main/terminal/*`
-- `apps/desktop/src/main/agents/title-status.ts`
-- `apps/desktop/src/renderer/stores/agents.ts`
-
----
-
 ### T57 — Review Inbox / Attention Center
 **Priority**: P0 | **Effort**: Medium | **Source**: cmux + Orca + Exegol analysis
 
@@ -181,106 +162,6 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 
 ---
 
-### T61 — Real Worktree Isolation per Agent ✅ COMPLETED (PR #13)
-**Priority**: P0 | **Effort**: High | **Source**: Codex + Superset + Exegol analysis
-
-**Why**
-- Biggest trust gap today: agents still run in the project root instead of isolated worktrees.
-- This is the main operational-confidence feature for release.
-
-**Scope**
-- Wire the existing Rust git2 scaffold into agent spawn flow
-- Create one worktree per agent with deterministic branch naming
-- Persist worktree metadata and auto-cleanup policy
-- Allow handoff/continue to reuse or branch from prior worktree when appropriate
-- Surface current worktree path and branch in UI
-
-**Acceptance**
-- New agent spawns into its own worktree, not the root project
-- Two agents can modify the same repo in parallel without touching each other
-- Worktree cleanup is explicit, safe, and logged
-
-**Likely files**
-- `packages/core-rust/src/git/*`
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/db/*`
-- `apps/desktop/src/main/ipc/procedures/agents.ts`
-- `packages/shared/*`
-
----
-
-### T62 — Review Readiness + Risk Summary ✅ COMPLETED (PR #11)
-**Priority**: P0 | **Effort**: Medium | **Source**: Exegol analysis
-
-**Why**
-- Diff alone is not enough; the review bottleneck is reading and reconstructing risk manually.
-
-**Scope**
-- Create a “ready for review” summary per agent/session
-- Include: files touched, commands run, tests detected, open ports, dependency file changes, binary changes, and failure signals
-- Add a compact reviewer summary card before full diff
-- Make review state visible from sidebar and diff workspace
-
-**Acceptance**
-- Reviewer can understand blast radius without opening every file hunk
-- High-risk changes are highlighted first
-
-**Likely files**
-- `apps/desktop/src/main/ipc/procedures/diff.ts`
-- `apps/desktop/src/main/agents/scoring.ts`
-- `apps/desktop/src/main/system/ports.ts`
-- `apps/desktop/src/renderer/components/workspace/sections/DiffSection.tsx`
-- `apps/desktop/src/renderer/components/workspace/GitPane.tsx`
-
----
-
-### T63 — Desktop Performance Stabilization Pass ✅ COMPLETED (PR #12)
-**Priority**: P0 | **Effort**: Medium | **Source**: Exegol analysis
-
-**Why**
-- The current product has several hotspots that will get worse as more features land.
-- This should happen before adding more constant polling and heavy summaries.
-
-**Scope**
-- Replace scattered polling with centralized push-first refresh where possible
-- Reduce or cache heavy resource calls (`du`, `git worktree`, `pgrep`, `ps`)
-- Stop reparsing full diffs when only status metadata changed
-- Move sync file I/O in the main process to async where it affects user flows
-- Centralize refetch constants and stop duplicate intervals
-
-**Hotspots already identified**
-- `apps/desktop/src/renderer/hooks/use-trpc.ts`
-- `apps/desktop/src/renderer/hooks/use-trpc-resources.ts`
-- `apps/desktop/src/main/system/resources.ts`
-- `apps/desktop/src/main/ipc/procedures/files.ts`
-- `apps/desktop/src/renderer/components/workspace/FileExplorer.tsx`
-
-**Acceptance**
-- Fewer background intervals
-- Lower CPU wakeups while idle
-- Large repos remain responsive while resources/diff/task panes are open
-
----
-
-### T64 — Command Palette ✅ COMPLETED
-**Priority**: P0 | **Effort**: Low | **Source**: Emdash
-
-**Why**
-- High UX value for relatively small effort.
-- Gives one entry point for projects, agents, panes, settings, search, and commands.
-
-**Scope**
-- `Cmd+Shift+P` global palette
-- Search projects, agents, tabs, settings, scheduler actions, prompts, and common commands
-- Fuzzy search with keyboard-only navigation
-
-**Likely files**
-- `apps/desktop/src/renderer/components/*`
-- `apps/desktop/src/renderer/hooks/use-hotkeys.ts`
-- `apps/desktop/src/renderer/stores/app.ts`
-
----
-
 ### T65 — Parallel Multi-Agent on Worktrees
 **Priority**: P0 | **Effort**: Medium | **Source**: Emdash + Codex + Exegol analysis
 
@@ -302,51 +183,6 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 - `apps/desktop/src/main/agents/*`
 - `apps/desktop/src/renderer/components/workspace/sections/PipelineSection.tsx`
 - `apps/desktop/src/renderer/hooks/use-trpc-pipeline.ts`
-
----
-
-### T66 — Session Isolation & Deterministic Resume ✅ COMPLETED
-**Priority**: P1 | **Effort**: Medium | **Source**: Emdash
-
-**Why**
-- Users expect “continue where it left off” after app close/crash.
-- Exegol already has PTY sidecar and scrollback persistence, so this is a natural next step.
-
-**Scope**
-- Deterministic `session-id` mapping per provider where supported
-- Persist PTY session map and agent-to-session relationship
-- Discover resumable sessions on startup
-- Resume with explicit user action and safety checks
-
-**Depends on**
-- T61 recommended
-
-**Likely files**
-- `apps/desktop/src/main/terminal/*`
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/db/*`
-- `apps/desktop/src/renderer/components/terminal/*`
-
----
-
-### T67 — Agent Hook Event System ✅ COMPLETED
-**Priority**: P1 | **Effort**: Medium | **Source**: Emdash + Codex direction
-
-**Why**
-- Output parsing alone is fragile.
-- Structured agent-originated events enable better review, inbox, scheduler, and automations.
-
-**Scope**
-- Local callback endpoint or secure IPC bridge for agent-emitted events
-- Supported events: task complete, permission needed, test result, PR opened, review ready
-- Per-agent token/secret for event auth
-- Native hook support for providers that expose it; wrapper fallback for others
-
-**Likely files**
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/terminal/shell-wrappers.ts`
-- `apps/desktop/src/main/hooks/*`
-- `apps/desktop/src/main/ipc/*`
 
 ---
 
@@ -437,23 +273,6 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 
 ---
 
-### T72 — Dark-Black Theme ✅ COMPLETED
-**Priority**: P2 | **Effort**: Low | **Source**: Emdash
-
-**Why**
-- Quick UX win, especially for OLED-heavy users.
-
-**Scope**
-- Add `dark-black` variant to current theme system
-- Keep xterm and chrome aligned
-
-**Likely files**
-- `apps/desktop/src/renderer/styles/globals.css`
-- `apps/desktop/src/renderer/hooks/use-theme.ts`
-- `apps/desktop/src/renderer/components/settings/GeneralSettings.tsx`
-
----
-
 ### T73 — SSH Remote Development
 **Priority**: P3 | **Effort**: High | **Source**: Emdash
 
@@ -479,101 +298,6 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 
 > These tasks surfaced from a comprehensive codebase audit (April 2026).
 > They address technical debt, testability, and robustness gaps that will compound if left unattended.
-
-### T74 — Test Coverage Foundation ✅ COMPLETED (PR #14)
-**Priority**: P0 | **Effort**: High | **Source**: Deep codebase analysis
-
-**Why**
-- The project has **zero TypeScript/JavaScript tests**. With ~32K LOC and complex business logic
-  (pipeline state machine, scoring heuristics, memory extraction, handoff generation, ring buffer),
-  this is the single highest technical risk. A bug in the pipeline state machine or scoring formula
-  can silently corrupt data with no safety net.
-
-**Scope**
-- Add Vitest (preferred) or Jest as test runner
-- Priority 1: Unit tests for pure functions:
-  - `agents/scoring.ts` — scoring formula, Tier 1 regex patterns, composite score calculation
-  - `agents/handoff.ts` — token limit detection patterns, scrollback summary generation
-  - `memory/extractor.ts` — extraction rules, deduplication logic, similarity scoring
-  - `memory/store.ts` — relevance scoring formula, token budget enforcement
-  - `pipeline/context.ts` — prompt template interpolation (`{{task}}`, `{{diff}}`, `{{previousOutput}}`)
-  - `terminal/ring-buffer.ts` — write, wrap, snapshot correctness
-- Priority 2: Integration tests:
-  - Pipeline state transitions (pending → running → paused → completed → cancelled)
-  - Queue executor dispatch with dependency resolution
-  - Agent spawn lifecycle with worktree creation/cleanup
-- Priority 3: Component tests for critical UI:
-  - WorkspacePane pane type rendering
-  - Agent store push event handling
-- Target: ≥60% coverage on main process business logic
-
-**Likely files**
-- New: `apps/desktop/src/main/__tests__/*`
-- New: `apps/desktop/src/renderer/__tests__/*`
-- `package.json` (add test runner dependency + script)
-- `apps/desktop/package.json` or `apps/desktop/vitest.config.ts`
-
----
-
-### T75 — Monolith File Decomposition ✅ COMPLETED (PR #14)
-**Priority**: P0 | **Effort**: Medium | **Source**: Deep codebase analysis
-
-**Why**
-- Four files significantly exceed the 400-500 LOC quality gate:
-  - `manager.ts` (~682 LOC): AgentManager handles spawn, reattach, stop, worktree cleanup,
-    output processing, scrollback buffering, completion callbacks, title tracking
-  - `WorkspacePane.tsx` (~800 LOC / 28KB): single component renders 5 pane types
-  - `executor.ts` (~550 LOC / 19KB): PipelineExecutor with complex state machine
-  - `pty-host.ts` (~630 LOC / 21KB): PtyHost handles legacy + sidecar + shell gating + scrollback
-
-**Scope**
-- `manager.ts` → split into:
-  - `agent-spawner.ts` (spawn logic, worktree setup, env building)
-  - `agent-output-processor.ts` (output parsing, scrollback buffering, token limit detection)
-  - `agent-lifecycle.ts` (stop, cleanup, reattach, completion callbacks)
-  - `agent-manager.ts` (thin orchestrator, public API)
-- `WorkspacePane.tsx` → extract each pane type into its own component:
-  - `TerminalPaneContent.tsx`, `BrowserPaneContent.tsx`, `FilesPaneContent.tsx`,
-  - `GitPaneContent.tsx`, `EmptyPaneContent.tsx`
-- `executor.ts` → split into:
-  - `pipeline-state-machine.ts` (transition logic, validation)
-  - `pipeline-agent-spawner.ts` (step execution, YOLO flag injection)
-  - `pipeline-executor.ts` (orchestrator, public API)
-- `pty-host.ts` → split into:
-  - `pty-session-manager.ts` (session lifecycle, cleanup)
-  - `pty-shell-gating.ts` (shell readiness marker logic)
-  - `pty-scrollback.ts` (scrollback flush, throttle)
-  - `pty-host.ts` (thin facade)
-
-**Acceptance**
-- No file exceeds 400 LOC (excluding type-only files)
-- All existing behavior preserved (no functional changes)
-- Quality gate passes after refactor
-
----
-
-### T76 — Replace curl with SDK in Tier 3 Scoring ✅ COMPLETED
-**Priority**: P1 | **Effort**: Low | **Source**: Deep codebase analysis
-
-**Why**
-- Tier 3 LLM-as-judge scoring calls the Anthropic API via `execFile("curl", ...)`:
-  - API key travels as a CLI argument (visible in `ps aux`)
-  - No retry logic on transient failures
-  - Manual JSON parsing from stdout is fragile
-  - 30s timeout doesn't cover all edge cases
-
-**Scope**
-- Replace `execFileAsync("curl", ...)` with either:
-  - The `@anthropic-ai/sdk` package (preferred, already exists in the ecosystem)
-  - Or `fetch()` with proper headers (lighter alternative)
-- Add structured error handling (rate limit, timeout, auth error)
-- Ensure API key is never passed as CLI argument
-- Keep the non-fatal pattern (scoring never blocks agent completion)
-
-**Likely files**
-- `apps/desktop/src/main/agents/scoring.ts` — `evaluateTier3()` function
-
----
 
 ### T77 — DB Row Validation with Zod Schemas
 **Priority**: P1 | **Effort**: Medium | **Source**: Deep codebase analysis
@@ -623,28 +347,6 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 **Likely files**
 - `apps/desktop/src/main/pipeline/executor.ts`
 - New: `apps/desktop/src/main/pipeline/state-machine.ts`
-
----
-
-### T79 — MCP Host Auto-Reconnection ✅ COMPLETED
-**Priority**: P2 | **Effort**: Low | **Source**: Deep codebase analysis
-
-**Why**
-- The MCP host connects via stdio or HTTP but has no reconnection logic. If an MCP server
-  crashes or restarts, it stays in "error" state until the user reconnects manually.
-  This is especially painful for stdio-based servers that may crash on large inputs.
-
-**Scope**
-- Add exponential backoff reconnection for disconnected servers
-- Track last-known config in `McpHost.servers` for reconnection
-- Limit retries (max 5 attempts, then mark as "failed")
-- Add manual reconnect button in UI (or auto-reconnect on next tool call)
-- Emit IPC event on reconnection status change
-
-**Likely files**
-- `apps/desktop/src/main/mcp/host.ts`
-- `apps/desktop/src/main/ipc/procedures/mcp.ts`
-- `apps/desktop/src/renderer/hooks/use-trpc-mcp.ts`
 
 ---
 
@@ -729,222 +431,17 @@ Bonus wins in the same wave (not in the original T83-T87 scope):
 
 ---
 
-## Pre-launch Polish Wave
+## Pre-launch Polish Wave ✅ COMPLETED (v0.3.0)
 
-### T83 — Smart Git Button in GitPane ✅ COMPLETED (v0.3.0)
-**Priority**: P0 | **Effort**: Low (1 day) | **Source**: Superconductor inspiration
+Shipped April 10, 2026. Full details in
+[`docs/tasks_completed/2026_04.md`](./tasks_completed/2026_04.md#2026-04-10-pre-launch-polish-wave-v030)
+and [`docs/CHANGELOG.md`](./CHANGELOG.md#030--2026-04-10).
 
-**Shipped**
-- `diff.gitState` / `createPullRequest` / `mergePullRequest` /
-  `suggestCommitMessage` tRPC procedures.
-- `SmartGitAction` component with 11 states: conflicts, commit (N files),
-  push, push-new-branch, create-PR, merge-PR, view-PR, pr-merged,
-  pr-closed, install-gh, up-to-date.
-- gh CLI detection cached on first use.
-- Sparkles button on the commit input runs Claude Haiku on the diff to
-  generate a conventional-commit-style message (gated on Anthropic API
-  key).
-
-**Why**
-- GitPane currently shows diff + oplog but commit/push/PR flow requires multiple
-  manual steps. A single context-aware button that knows what comes next (stage →
-  commit → push → PR → merge → resolve conflicts) is one of the highest-value UX
-  wins for non-power-git-users working alongside agents.
-- Reduces switching to terminal for routine git operations.
-
-**Scope**
-- Add a `SmartGitAction` component in GitPane that computes the next action based
-  on git state:
-  - Dirty working tree → "Commit changes"
-  - Committed + no upstream → "Push branch"
-  - Pushed + no PR → "Create PR" (via `gh pr create`)
-  - PR exists + mergeable → "Merge PR"
-  - Conflicts → "Resolve conflicts" (open conflict view)
-- Show a preview label with the next-state badge
-- Commit message picker: auto-generated from diff (reuse scoring SDK path) or manual
-- Customizable action chain per project (store in settings)
-- All actions surface result via existing toast stack
-
-**Likely files**
-- `apps/desktop/src/renderer/components/workspace/GitPane.tsx`
-- New: `apps/desktop/src/renderer/components/workspace/SmartGitAction.tsx`
-- `apps/desktop/src/main/ipc/procedures/git.ts` (new commit/push/pr helpers)
-- `packages/core-rust/src/git/*` (porcelain state detection)
-
----
-
-### T84 — Picture-in-Picture Pane Float ✅ COMPLETED (v0.3.0)
-**Priority**: P0 | **Effort**: Low (half day) | **Source**: Superconductor inspiration
-
-**Shipped**
-- `apps/desktop/src/main/windows/floating.ts` manages per-paneId
-  BrowserWindows (frameless, alwaysOnTop: "floating").
-- Renderer routes on `?floatingPane=...` query string: main window
-  mounts `<App/>`, floating windows lazy-load `<FloatingPaneRoot/>`.
-- Terminal float shares the PTY via ring buffer + getSnapshot replay.
-  Main pane shows a "Floating — Return to pane" placeholder so only
-  one xterm instance is ever attached to the PTY at a time.
-- Browser float has full back/forward/reload + DevTools toggle.
-  DevTools opens on the webview's webContents (not the React shell)
-  and temporarily drops alwaysOnTop so the detached DevTools window
-  is visible.
-- `use-floating-pane-sync` hook auto-unfloats when the floating
-  window closes via traffic light.
-
-**Why**
-- Ability to float any pane (terminal, browser, files) into a detached always-on-top
-  window is a huge productivity multiplier for monitoring long-running agents while
-  working in another pane or app.
-- Directly addresses "I want to see the agent working while I write code elsewhere".
-
-**Scope**
-- Add "Pop out to floating window" action in pane context menu (already has "Pop
-  out to new tab" — add PiP as sibling)
-- Main process: create a frameless `BrowserWindow` with `alwaysOnTop: true`,
-  transparent titlebar, load the same renderer with a `?pane=<id>` route
-- Lightweight IPC coordination: original pane shows placeholder "Floating", floating
-  window shows the pane content
-- On floating window close → re-attach to original tab
-- Persist PiP state across app reloads if feasible (optional v1.1)
-
-**Likely files**
-- New: `apps/desktop/src/main/windows/floating.ts`
-- `apps/desktop/src/main/index.ts` (register floating window handler)
-- `apps/desktop/src/renderer/components/workspace/PaneContextMenu.tsx`
-- `apps/desktop/src/renderer/components/workspace/WorkspacePane.tsx`
-- `apps/desktop/src/renderer/stores/workspace.ts` (floating state)
-
----
-
-### T85 — Layout Presets ✅ COMPLETED (v0.3.0)
-**Priority**: P0 | **Effort**: Low (half day) | **Source**: Superconductor inspiration
-
-**Shipped**
-- 6 built-in presets: Single, Split Horizontal, Split Vertical,
-  Three Columns, Bottom Terminal (70/30), 2×2 Grid.
-- `apps/desktop/src/renderer/lib/layout-presets.ts` exports
-  pure-function helpers: `computePresetTransformation`,
-  `computeCustomPresetTransformation`, `templateFromLayout`.
-- `LayoutPresets` dropdown in the tab bar with live SVG glyph previews.
-- Preset slots accept `slotTypes` hints — Bottom Terminal creates a
-  real terminal with a shell agent spawned on apply, not an empty pane.
-- **Save current layout** as a named custom preset (persisted in
-  workspace store). Custom layouts capture per-slot type + url +
-  filePath so applying them to a fresh tab recreates equivalent
-  panes.
-- Extras preservation: if the destination tab has more panes than
-  the preset has slots, the overflow is stuffed into the last slot
-  as a nested vertical split so no pane is ever lost.
-
-**Why**
-- Users often want a quick switch between canonical layouts without manually
-  splitting panes: "all terminals stacked", "code + terminal at bottom",
-  "two side-by-side". Our split system is more flexible but costs more clicks.
-- Presets complement (don't replace) the free-form split system already in place.
-
-**Scope**
-- Define preset layouts as `LayoutNode` templates:
-  - **Stacked**: vertical splits, all same type
-  - **Split horizontal**: 50/50 left/right
-  - **Bottom terminal**: 70/30 top code + bottom terminal
-  - **Three columns**: 33/33/33
-- Add a "Layouts" dropdown in tab bar (next to the `+` tab button)
-- Selecting a preset: transform the current tab's layout to match, preserving
-  pane contents by round-robin assignment
-- Let users save custom layouts as named presets (store in workspace store)
-
-**Likely files**
-- New: `apps/desktop/src/renderer/components/workspace/LayoutPresets.tsx`
-- `apps/desktop/src/renderer/components/workspace/WorkspaceTabBar.tsx`
-- `apps/desktop/src/renderer/stores/workspace.ts` (applyLayoutPreset action)
-- New: `apps/desktop/src/renderer/lib/layout-presets.ts` (templates)
-
----
-
-### T86 — First Paint Optimization ✅ COMPLETED (v0.3.0)
-**Priority**: P0 | **Effort**: Medium | **Source**: Superconductor benchmark
-("<50ms startup")
-
-**Shipped — measured on M1 Pro, dev mode**
-```
-[Startup] dbInit:        2-9ms
-[Startup] criticalPath:  4-12ms
-[Startup] windowCreated: 80-102ms
-[Startup] firstPaint:    277-391ms  (target was <1.5s)
-```
-
-- Deferred ensureDefaultSkills/ShellWrappers/AgentWrappers to a
-  background IIFE after window creation.
-- Deferred stale agents + memories cleanup to background.
-- Added startMark/endMark instrumentation with a single-log guard
-  (firstPaint no longer re-logs on window reactivation).
-- Lazy-loaded all non-default workspace sections, xterm + addons,
-  SettingsPanel, ProjectList, CommandPalette, and FloatingPaneRoot.
-- See `docs/BENCHMARKS.md` for the full before/after breakdown.
-
-**Why**
-- Electron cold start is our biggest measurable weakness vs. native competitors.
-  Superconductor markets <50ms; we're likely around 1-2s. Most of it is loading
-  21 tRPC routers + main-process subsystems before the window shows anything.
-- Reducing first paint is the single biggest perceived-quality upgrade we can
-  ship before launch.
-
-**Scope**
-- Measure current baseline (main process boot time, first renderer paint, first
-  interactive) and publish as benchmark doc
-- Move non-critical main subsystems to lazy init: scheduler, pipeline executor,
-  queue, MCP host start on first use — not on app ready
-- Split tRPC router registration: only `projects`, `agents`, `workspace` needed
-  before first paint; everything else register lazily on first call
-- Renderer: defer queries that aren't visible on initial view (recent sessions,
-  activity feed, token usage)
-- Preload script: audit and trim what gets exposed on window.api
-- Target: first interactive in < 800ms on M1
-
-**Likely files**
-- `apps/desktop/src/main/index.ts` (defer subsystem init)
-- `apps/desktop/src/main/ipc/router.ts` (lazy router registration)
-- `apps/desktop/src/main/agents/manager.ts` (lazy getters)
-- `apps/desktop/src/main/pipeline/executor.ts` (lazy singleton)
-- `apps/desktop/src/renderer/App.tsx` (defer non-critical queries)
-- New: `docs/BENCHMARKS.md`
-
----
-
-### T87 — Renderer Bundle Audit ✅ COMPLETED (v0.3.0)
-**Priority**: P0 | **Effort**: Low | **Source**: T86 companion
-
-**Shipped**
-- Added `rollup-plugin-visualizer` + `ANALYZE=1 bun run build:analyze`
-  script producing `apps/desktop/dist/bundle-stats.html` treemap.
-- `index.js` initial chunk: **1,987 KB → 1,026 KB** (−48%).
-- Lazy chunks produced for: TerminalInstance (595 KB), Zod schemas
-  (113 KB), all 6 non-default workspace sections (31-53 KB each),
-  SettingsPanel (51 KB), ProjectList, CommandPalette, FloatingPaneRoot.
-- Remaining weight in `index.js` documented in `docs/BENCHMARKS.md`
-  (react-dom, react-resizable-panels, tailwind-merge, Radix primitives).
-
-**Why**
-- Bundle size directly impacts first paint and memory footprint. We haven't
-  audited what ships in the initial chunk since project start.
-- Monaco editor, xterm WebGL, Radix, lucide icons: all candidates for code split
-  or tree shaking.
-
-**Scope**
-- Run `vite build --mode production` and inspect output bundle (rollup-plugin-visualizer)
-- Identify heavy dependencies in the initial chunk:
-  - Monaco: already lazy? verify
-  - xterm + addons: required on first paint?
-  - lucide-react: tree-shake unused icons
-  - Radix: individual imports not barrel
-- Set a bundle budget: initial chunk < 500KB gzipped
-- Add CI check (when CI lands) to fail PRs that blow the budget
-- Convert any dynamic components to React.lazy + Suspense
-
-**Likely files**
-- `apps/desktop/vite.config.ts` (add visualizer plugin, bundle budget)
-- Multiple renderer components (lazy imports)
-- `apps/desktop/src/renderer/App.tsx` (Suspense boundaries)
+Completed in this wave: T83 Smart Git Button, T84 Picture-in-Picture,
+T85 Layout Presets + custom saved, T86 First Paint Optimization,
+T87 Renderer Bundle Audit, plus sidecar recovery fix, bundled Nerd Fonts,
+Cmd+W pane close, workspace as default view, browser pane navigation, and
+the terminal font settings rewrite.
 
 ---
 
@@ -1245,26 +742,28 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ---
 
-## Suggested Order
+## Suggested Order (pending only — completed tasks moved to tasks_completed/)
 
-1. T61 — Real Worktree Isolation per Agent
-2. T75 — Monolith File Decomposition (prerequisite for testability)
-3. T74 — Test Coverage Foundation (highest risk mitigation)
-4. T63 — Desktop Performance Stabilization Pass
-5. T57 — Review Inbox / Attention Center
-6. T62 — Review Readiness + Risk Summary
-7. T64 — Command Palette
-8. T65 — Parallel Multi-Agent on Worktrees
-9. T76 — Replace curl with SDK in Tier 3 Scoring (quick security win)
-10. T77 — DB Row Validation with Zod Schemas
-11. T66 — Session Isolation & Deterministic Resume
-12. T67 — Agent Hook Event System
-13. T68 — Repo Map + Semantic Search
-14. T78 — Explicit Pipeline State Machine
-15. T79 — MCP Host Auto-Reconnection
-16. T80 — Structured Error Classification
-17. T81 — Dependency Injection for Singletons
-18. T82 — Shared Package Schema Enrichment
+### Next wave (P0 + P1)
+1. **T57** — Review Inbox / Attention Center
+2. **T65** — Parallel Multi-Agent on Worktrees
+3. **T68** — Repo Map + Semantic Search
+4. **T77** — DB Row Validation with Zod Schemas
+
+### Stabilization & quality (P2 — do in any order)
+5. T78 — Explicit Pipeline State Machine
+6. T80 — Structured Error Classification
+7. T81 — Dependency Injection for Singletons
+8. T82 — Shared Package Schema Enrichment
+
+### Competitor-inspired backlog (P2-P3)
+9. **T88** — Ralph Loops in Pipelines (evaluator step)
+10. **T89** — Exegol CLI (sidecar client)
+11. **T90** — Terminal ↔ Chat dual view
+12. **T91** — Lifecycle scripts per repo
+13. **T92** — Cross-repo workspaces
+14. **T93** — Mobile companion app
+15. **T94** — Headless daemon mode
 
 ---
 
@@ -1280,5 +779,8 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ## Completed
 
-V1-V3 + performance pass: 69+ tasks complete.
-See `docs/tasks_completed/2026_03.md` for the full log.
+- V1-V3 + performance pass (69+ tasks): see `docs/tasks_completed/2026_03.md`.
+- April 2026 quickwins + quality foundation: see `docs/tasks_completed/2026_04.md`.
+- **v0.3.0 pre-launch polish wave** (T83-T87 + PiP + recovery + fonts):
+  see `docs/tasks_completed/2026_04.md#2026-04-10-pre-launch-polish-wave-v030`
+  and the v0.3.0 entry in `docs/CHANGELOG.md`.
