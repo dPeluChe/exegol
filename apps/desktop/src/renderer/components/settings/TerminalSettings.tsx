@@ -196,32 +196,81 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
   const NERD_PREVIEW = "\ue7c5 \ue7a8 \uf013 \uf1d3 \ue0b0 \ue0b2  == => !=";
   const PLAIN_PREVIEW = "$ echo hello   == => != <$>";
 
+  // Parse the comma-separated font family chain into individual families
+  // for the badge UI. Handles quoted entries ("My Font") and trims quotes.
+  const familyChain = settings.terminalFontFamily
+    .split(",")
+    .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+
   return (
     <div className="space-y-5">
-      {/* Font size + family */}
-      <div className="space-y-4 rounded-lg border border-border bg-bg-secondary p-4">
-        <div className="space-y-1.5">
-          <FieldLabel>Font Size</FieldLabel>
-          <Input
-            type="number"
-            min={8}
-            max={32}
-            value={settings.terminalFontSize}
-            onChange={(e) => onChange({ terminalFontSize: Number(e.target.value) })}
-            className="w-24 border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-          />
+      {/* Top card: Size + Family chain as badges + live preview */}
+      <div className="space-y-3 rounded-lg border border-border bg-bg-secondary p-4">
+        <div className="flex items-start gap-4">
+          {/* Font Size */}
+          <div className="shrink-0 space-y-1.5">
+            <FieldLabel>Font Size</FieldLabel>
+            <Input
+              type="number"
+              min={8}
+              max={32}
+              value={settings.terminalFontSize}
+              onChange={(e) => onChange({ terminalFontSize: Number(e.target.value) })}
+              className="w-20 border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
+            />
+          </div>
+
+          {/* Font Family chain as badges */}
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <FieldLabel>Font Family (fallback chain)</FieldLabel>
+              <button
+                type="button"
+                onClick={detectFonts}
+                className="flex items-center gap-1 text-[9px] text-text-muted hover:text-text-secondary"
+                title="Re-detect installed fonts"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Detect
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--bg-tertiary)] p-1.5 min-h-[30px]">
+              {familyChain.length === 0 ? (
+                <span className="px-1 text-[10px] text-text-muted">No fonts selected</span>
+              ) : (
+                familyChain.map((family, index) => (
+                  <FamilyBadge
+                    key={family}
+                    family={family}
+                    isPrimary={index === 0}
+                    onRemove={() => handleDeselectFont(family)}
+                  />
+                ))
+              )}
+            </div>
+            <p className="text-[9px] text-text-muted">
+              First badge is primary. Remove with <kbd>×</kbd>, add with Use below.
+            </p>
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <FieldLabel>Font Family</FieldLabel>
-          <Input
-            value={settings.terminalFontFamily}
-            onChange={(e) => onChange({ terminalFontFamily: e.target.value })}
-            placeholder="Menlo, Monaco, monospace"
-            className="border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
-          />
-          <p className="text-[9px] text-text-muted">
-            Click a font below to set it as primary. Fallback fonts are kept.
-          </p>
+
+        {/* Preview rendered with the current chain */}
+        <div className="rounded-md border border-[var(--border)] bg-[var(--bg-tertiary)] p-2.5">
+          <p className="mb-1 text-[9px] uppercase tracking-wider text-text-muted">Preview</p>
+          <pre
+            className="overflow-x-auto text-sm text-text-primary leading-relaxed"
+            style={{
+              fontFamily: settings.terminalFontFamily,
+              fontSize: `${settings.terminalFontSize}px`,
+            }}
+          >
+            {'$ echo "Hello from Exegol"'}
+            {"\n"}
+            {NERD_PREVIEW}
+            {"\n"}
+            {"\ue627 node  \ue61e python  \ue7a8 rust  \ue738 java  \ue781 swift"}
+          </pre>
         </div>
       </div>
 
@@ -237,17 +286,6 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
           plainPreview={PLAIN_PREVIEW}
           onSelect={handleSelectFont}
           onDeselect={handleDeselectFont}
-          trailing={
-            <button
-              type="button"
-              onClick={detectFonts}
-              className="flex items-center gap-1 text-[9px] text-text-muted hover:text-text-secondary"
-              title="Re-detect installed fonts"
-            >
-              <RefreshCw className="h-3 w-3" />
-              Detect
-            </button>
-          }
         />
         <FontGroup
           title="External fonts"
@@ -261,22 +299,47 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
           onDeselect={handleDeselectFont}
         />
       </div>
-
-      {/* Live preview of the current fallback chain */}
-      <div className="rounded-lg border border-border bg-bg-tertiary p-3">
-        <p className="mb-1 text-[9px] text-text-muted">Preview (current font chain)</p>
-        <pre
-          className="text-sm text-text-primary leading-relaxed"
-          style={{ fontFamily: settings.terminalFontFamily }}
-        >
-          {'$ echo "Hello from Exegol"'}
-          {"\n"}
-          {NERD_PREVIEW}
-          {"\n"}
-          {"\ue627 node  \ue61e python  \ue7a8 rust  \ue738 java  \ue781 swift"}
-        </pre>
-      </div>
     </div>
+  );
+}
+
+// ─── FamilyBadge ────────────────────────────────────────────────────────────
+
+function FamilyBadge({
+  family,
+  isPrimary,
+  onRemove,
+}: {
+  family: string;
+  isPrimary: boolean;
+  onRemove: () => void;
+}) {
+  // "monospace" and generic keywords shouldn't be removable — they're CSS
+  // fallbacks, not real font choices. Show them muted and without the X.
+  const isGeneric = ["monospace", "sans-serif", "serif"].includes(family.toLowerCase());
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium",
+        isPrimary
+          ? "bg-accent/15 text-accent border border-accent/30"
+          : "bg-white/5 text-text-secondary border border-transparent",
+      )}
+      style={{ fontFamily: isGeneric ? undefined : `"${family}", monospace` }}
+      title={isPrimary ? "Primary font (used first)" : "Fallback font"}
+    >
+      {family}
+      {!isGeneric && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex h-3 w-3 items-center justify-center rounded-full text-text-muted hover:bg-red-400/80 hover:text-white"
+          title="Remove from chain"
+        >
+          <X className="h-2 w-2" />
+        </button>
+      )}
+    </span>
   );
 }
 
