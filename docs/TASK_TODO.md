@@ -12,6 +12,14 @@
 
 ## Priority Order
 
+### P0 — Pre-launch polish wave (current focus)
+> Goal: ship a tight, fast, delightful V1 before tackling any new feature surface.
+- **Smart git button** (T83) — one-button commit/push/PR/merge flow in GitPane
+- **Picture-in-Picture pane float** (T84) — detach any pane to a floating window
+- **Layout presets** (T85) — stacked / horizontal / bottom-terminal quick switches
+- **First paint optimization** (T86) — lazy tRPC routers, startup time < 1s
+- **Renderer bundle audit** (T87) — trim initial bundle, measure what loads
+
 ### P0 — Must land before broad release push
 - ~~Worktrees real por agente~~ ✅ T61
 - Inbox de revisión y atención (T57)
@@ -37,7 +45,10 @@
 - **Structured error handling (T80)** — transient vs permanent classification
 - **DI for singletons (T81)** — testability improvement
 - **Shared package enrichment (T82)** — more Zod schemas for IPC/DB payloads
-- Lifecycle scripts por proyecto
+- **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
+- **Exegol CLI** (T89) — headless client over sidecar socket
+- **Terminal ↔ Chat dual view** (T90) — same session, two presentations
+- **Lifecycle scripts per repo** (T91) — setup/run/teardown in git
 - Issue tracker expansion
 - ~~Dark-black theme~~ ✅ T72
 
@@ -45,6 +56,9 @@
 - SSH remote development
 - CI/CD release pipeline
 - Canary channel
+- **Cross-repo workspaces** (T92) — front + back in one workspace
+- **Mobile companion** (T93) — monitor agents from phone via daemon
+- **Headless daemon mode** (T94) — remote WebSocket for cloud/server deploys
 
 ---
 
@@ -702,6 +716,345 @@
 **Likely files**
 - `packages/shared/src/schemas/*` (new and existing)
 - `packages/shared/src/types/*` (keep types, add corresponding schemas)
+
+---
+
+## Pre-launch Polish Wave
+
+### T83 — Smart Git Button in GitPane
+**Priority**: P0 | **Effort**: Low (1 day) | **Source**: Superconductor inspiration
+
+**Why**
+- GitPane currently shows diff + oplog but commit/push/PR flow requires multiple
+  manual steps. A single context-aware button that knows what comes next (stage →
+  commit → push → PR → merge → resolve conflicts) is one of the highest-value UX
+  wins for non-power-git-users working alongside agents.
+- Reduces switching to terminal for routine git operations.
+
+**Scope**
+- Add a `SmartGitAction` component in GitPane that computes the next action based
+  on git state:
+  - Dirty working tree → "Commit changes"
+  - Committed + no upstream → "Push branch"
+  - Pushed + no PR → "Create PR" (via `gh pr create`)
+  - PR exists + mergeable → "Merge PR"
+  - Conflicts → "Resolve conflicts" (open conflict view)
+- Show a preview label with the next-state badge
+- Commit message picker: auto-generated from diff (reuse scoring SDK path) or manual
+- Customizable action chain per project (store in settings)
+- All actions surface result via existing toast stack
+
+**Likely files**
+- `apps/desktop/src/renderer/components/workspace/GitPane.tsx`
+- New: `apps/desktop/src/renderer/components/workspace/SmartGitAction.tsx`
+- `apps/desktop/src/main/ipc/procedures/git.ts` (new commit/push/pr helpers)
+- `packages/core-rust/src/git/*` (porcelain state detection)
+
+---
+
+### T84 — Picture-in-Picture Pane Float
+**Priority**: P0 | **Effort**: Low (half day) | **Source**: Superconductor inspiration
+
+**Why**
+- Ability to float any pane (terminal, browser, files) into a detached always-on-top
+  window is a huge productivity multiplier for monitoring long-running agents while
+  working in another pane or app.
+- Directly addresses "I want to see the agent working while I write code elsewhere".
+
+**Scope**
+- Add "Pop out to floating window" action in pane context menu (already has "Pop
+  out to new tab" — add PiP as sibling)
+- Main process: create a frameless `BrowserWindow` with `alwaysOnTop: true`,
+  transparent titlebar, load the same renderer with a `?pane=<id>` route
+- Lightweight IPC coordination: original pane shows placeholder "Floating", floating
+  window shows the pane content
+- On floating window close → re-attach to original tab
+- Persist PiP state across app reloads if feasible (optional v1.1)
+
+**Likely files**
+- New: `apps/desktop/src/main/windows/floating.ts`
+- `apps/desktop/src/main/index.ts` (register floating window handler)
+- `apps/desktop/src/renderer/components/workspace/PaneContextMenu.tsx`
+- `apps/desktop/src/renderer/components/workspace/WorkspacePane.tsx`
+- `apps/desktop/src/renderer/stores/workspace.ts` (floating state)
+
+---
+
+### T85 — Layout Presets
+**Priority**: P0 | **Effort**: Low (half day) | **Source**: Superconductor inspiration
+
+**Why**
+- Users often want a quick switch between canonical layouts without manually
+  splitting panes: "all terminals stacked", "code + terminal at bottom",
+  "two side-by-side". Our split system is more flexible but costs more clicks.
+- Presets complement (don't replace) the free-form split system already in place.
+
+**Scope**
+- Define preset layouts as `LayoutNode` templates:
+  - **Stacked**: vertical splits, all same type
+  - **Split horizontal**: 50/50 left/right
+  - **Bottom terminal**: 70/30 top code + bottom terminal
+  - **Three columns**: 33/33/33
+- Add a "Layouts" dropdown in tab bar (next to the `+` tab button)
+- Selecting a preset: transform the current tab's layout to match, preserving
+  pane contents by round-robin assignment
+- Let users save custom layouts as named presets (store in workspace store)
+
+**Likely files**
+- New: `apps/desktop/src/renderer/components/workspace/LayoutPresets.tsx`
+- `apps/desktop/src/renderer/components/workspace/WorkspaceTabBar.tsx`
+- `apps/desktop/src/renderer/stores/workspace.ts` (applyLayoutPreset action)
+- New: `apps/desktop/src/renderer/lib/layout-presets.ts` (templates)
+
+---
+
+### T86 — First Paint Optimization
+**Priority**: P0 | **Effort**: Medium | **Source**: Superconductor benchmark
+("<50ms startup")
+
+**Why**
+- Electron cold start is our biggest measurable weakness vs. native competitors.
+  Superconductor markets <50ms; we're likely around 1-2s. Most of it is loading
+  21 tRPC routers + main-process subsystems before the window shows anything.
+- Reducing first paint is the single biggest perceived-quality upgrade we can
+  ship before launch.
+
+**Scope**
+- Measure current baseline (main process boot time, first renderer paint, first
+  interactive) and publish as benchmark doc
+- Move non-critical main subsystems to lazy init: scheduler, pipeline executor,
+  queue, MCP host start on first use — not on app ready
+- Split tRPC router registration: only `projects`, `agents`, `workspace` needed
+  before first paint; everything else register lazily on first call
+- Renderer: defer queries that aren't visible on initial view (recent sessions,
+  activity feed, token usage)
+- Preload script: audit and trim what gets exposed on window.api
+- Target: first interactive in < 800ms on M1
+
+**Likely files**
+- `apps/desktop/src/main/index.ts` (defer subsystem init)
+- `apps/desktop/src/main/ipc/router.ts` (lazy router registration)
+- `apps/desktop/src/main/agents/manager.ts` (lazy getters)
+- `apps/desktop/src/main/pipeline/executor.ts` (lazy singleton)
+- `apps/desktop/src/renderer/App.tsx` (defer non-critical queries)
+- New: `docs/BENCHMARKS.md`
+
+---
+
+### T87 — Renderer Bundle Audit
+**Priority**: P0 | **Effort**: Low | **Source**: T86 companion
+
+**Why**
+- Bundle size directly impacts first paint and memory footprint. We haven't
+  audited what ships in the initial chunk since project start.
+- Monaco editor, xterm WebGL, Radix, lucide icons: all candidates for code split
+  or tree shaking.
+
+**Scope**
+- Run `vite build --mode production` and inspect output bundle (rollup-plugin-visualizer)
+- Identify heavy dependencies in the initial chunk:
+  - Monaco: already lazy? verify
+  - xterm + addons: required on first paint?
+  - lucide-react: tree-shake unused icons
+  - Radix: individual imports not barrel
+- Set a bundle budget: initial chunk < 500KB gzipped
+- Add CI check (when CI lands) to fail PRs that blow the budget
+- Convert any dynamic components to React.lazy + Suspense
+
+**Likely files**
+- `apps/desktop/vite.config.ts` (add visualizer plugin, bundle budget)
+- Multiple renderer components (lazy imports)
+- `apps/desktop/src/renderer/App.tsx` (Suspense boundaries)
+
+---
+
+## Post-launch Backlog — Inspired by Competitors
+
+### T88 — Ralph Loops in Pipelines
+**Priority**: P2 | **Effort**: Medium | **Source**: Paseo orchestration skills
+
+**Why**
+- Current pipeline loop mechanism (`loopBackTo` + maxIterations) is static. Paseo's
+  "Ralph" pattern runs a lightweight evaluator between steps that decides whether
+  the previous step met the acceptance criteria. This turns pipelines from scripts
+  into goal-seeking workflows.
+
+**Scope**
+- New step type: `evaluator` with fields `acceptanceCriteria` (prompt),
+  `onPassNext` (step id), `onFailNext` (step id, usually a loop-back), `maxLoops`
+- PipelineExecutor: when the evaluator step runs, it spawns a small agent with
+  `{{previousOutput}}` + `{{diff}}` + criteria, parses response as `PASS` or
+  `RETRY: <feedback>`, and routes accordingly
+- Retry path injects the `<feedback>` into the next step's prompt as
+  `{{retryFeedback}}`
+- UI: distinct icon in PipelineEditor, visual loop arrow when editing
+- Safety: hard max (e.g., 10 iterations) even if maxLoops is higher
+
+**Likely files**
+- `packages/shared/src/types/pipeline.ts` (new step type)
+- `apps/desktop/src/main/pipeline/executor.ts` (evaluator routing)
+- `apps/desktop/src/main/pipeline/context.ts` (retryFeedback variable)
+- `apps/desktop/src/renderer/components/workspace/sections/pipeline/PipelineEditor.tsx`
+
+---
+
+### T89 — Exegol CLI (sidecar client)
+**Priority**: P2 | **Effort**: Medium | **Source**: Paseo multi-client architecture
+
+**Why**
+- Having a CLI that talks to the running sidecar unlocks: CI automation, scripting,
+  headless usage on servers, and parity with Paseo's workflow. It also doubles as
+  a test harness for the sidecar itself.
+
+**Scope**
+- New package: `packages/cli/` — Bun/Node CLI, published as `exegol` binary
+- Connects to `~/.exegol/pty-sidecar.sock` using the existing JSON-RPC protocol
+- Commands (v1):
+  - `exegol status` — list agents + pipeline runs
+  - `exegol run <pipeline-name> [--project <id>] [--watch]`
+  - `exegol logs <agent-id> [--follow]` — stream ring buffer
+  - `exegol projects` — list projects
+  - `exegol providers` — list available providers
+- Commands (v1.1):
+  - `exegol spawn <provider> --prompt "..."` — one-off agent
+  - `exegol stop <agent-id>`
+  - `exegol export <run-id>` — dump pipeline run as JSON
+- Reuses shared types from `@exegol/shared` (no duplication)
+
+**Likely files**
+- New: `packages/cli/src/index.ts`
+- New: `packages/cli/src/sidecar-client.ts`
+- New: `packages/cli/src/commands/*.ts`
+- `packages/shared/src/types/sidecar-protocol.ts` (may need to export)
+
+---
+
+### T90 — Terminal ↔ Chat Dual View
+**Priority**: P2 | **Effort**: Medium | **Source**: Superconductor
+
+**Why**
+- Non-technical users (PMs, designers watching a demo) benefit from a conversational
+  view of an agent session without the ANSI noise. Toggling lets you get CLI depth
+  when debugging and clean reading when reviewing.
+
+**Scope**
+- Parse the existing scrollback buffer into conversational turns: detect user
+  prompts (input echoes) vs agent output (post-prompt blocks)
+- Provider-specific parsers for Claude Code, Codex, Aider (they have distinct
+  output patterns); fallback to generic "alternate lines"
+- Toggle button in terminal pane header: Terminal / Chat
+- Chat view is read-only, reuses DarkReader-style clean rendering
+- Do NOT touch the underlying PTY — this is a pure render layer
+
+**Likely files**
+- New: `apps/desktop/src/renderer/components/terminal/ChatView.tsx`
+- New: `apps/desktop/src/renderer/lib/terminal-to-chat.ts` (parsers)
+- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (toggle state)
+
+---
+
+### T91 — Lifecycle Scripts per Repo
+**Priority**: P2 | **Effort**: Low | **Source**: Superconductor + our own T60
+
+**Why**
+- Power users want deterministic environment setup per repo: "before spawning any
+  agent, run `npm install`", "after commit, run tests". Shareable via git.
+- Supersedes T60's project-hook idea with a simpler concrete format.
+
+**Scope**
+- Define `.exegol/lifecycle.yaml` format:
+  ```yaml
+  setup: npm install && bun run build:rust
+  beforeAgent: source .env.local
+  afterCommit: bun test
+  teardown: rm -rf dist
+  ```
+- Loaded on project detect, cached in settings
+- Run setup on first agent spawn (show progress in status bar)
+- Run beforeAgent per agent spawn (inject into PTY env)
+- Run afterCommit from smart git button (T83)
+- Teardown on worktree cleanup
+- UI: Settings tab showing the loaded script with edit button
+
+**Likely files**
+- New: `apps/desktop/src/main/lifecycle/loader.ts`
+- `apps/desktop/src/main/agents/manager.ts` (run beforeAgent)
+- `apps/desktop/src/main/agents/worktrees.ts` (run teardown)
+- `apps/desktop/src/renderer/components/workspace/sections/SettingsSection.tsx`
+
+---
+
+### T92 — Cross-repo Workspaces
+**Priority**: P3 | **Effort**: Large | **Source**: Superconductor
+
+**Why**
+- Multi-repo projects (frontend + backend + infra) are extremely common. Users
+  today open 3 Exegol windows or switch projects constantly. Sharing a workspace
+  across repos with coordinated branches would be a significant differentiator.
+
+**Scope**
+- Allow a workspace tab to bind to N projects instead of 1
+- Branch coordination: when creating a branch in repo A, offer to create the same
+  named branch in repo B, C
+- Shared agent context: an agent spawned in this workspace can have working paths
+  in all bound repos
+- Cross-repo diff view: single diff screen showing changes across repos
+- Requires significant refactor of workspace store + ProjectContext
+
+**Likely files**
+- `apps/desktop/src/renderer/stores/workspace.ts` (multi-project binding)
+- `apps/desktop/src/renderer/contexts/ProjectContext.tsx`
+- `apps/desktop/src/main/agents/manager.ts` (multi-cwd agent)
+- `apps/desktop/src/renderer/components/workspace/GitPane.tsx` (cross-repo diff)
+
+---
+
+### T93 — Mobile Companion App
+**Priority**: P3 | **Effort**: Very large | **Source**: Paseo Expo client
+
+**Why**
+- Long-running agents benefit enormously from remote monitoring: get notified on
+  the phone when an agent enters `waiting_input`, approve/deny, read scrollback.
+  This is Paseo's killer differentiator.
+- Requires T94 (daemon mode) as prerequisite.
+
+**Scope**
+- New Expo/React Native app in `apps/mobile/`
+- Connects to daemon via WebSocket + auth token (QR code pairing)
+- v1: read-only — list agents, status, read ring buffer, push notifications
+- v1.1: approve waiting_input, send one-line prompts, kill agents
+- v2: full terminal view via a terminal emulator library
+
+**Likely files**
+- New: `apps/mobile/` (entire new Expo app)
+- `apps/desktop/src/main/daemon/ws-server.ts` (WebSocket transport for mobile)
+- `apps/desktop/src/main/security/pairing.ts` (QR token exchange)
+
+---
+
+### T94 — Headless Daemon Mode
+**Priority**: P3 | **Effort**: Large | **Source**: Paseo daemon architecture
+
+**Why**
+- Prerequisite for T93 (mobile) and a valuable standalone feature: run Exegol
+  on a server/VPS and connect from anywhere. Enables CI-style agent pipelines
+  without keeping the desktop app open.
+
+**Scope**
+- Extract the sidecar + DB + agent manager into a standalone daemon that runs
+  without Electron (pure Node)
+- Expose the existing tRPC router over WebSocket in addition to IPC
+- Auth: token-based, stored in OS keychain for desktop client, in user file for
+  mobile/CLI
+- Desktop app becomes "a thin client to the daemon" by default, can still run
+  embedded daemon for local use
+- CLI (T89) also benefits from remote connection mode
+
+**Likely files**
+- New: `apps/daemon/` (standalone daemon bundle)
+- `apps/desktop/src/main/ipc/router.ts` (WebSocket transport)
+- `apps/desktop/src/main/security/keystore.ts` (daemon tokens)
+- `packages/shared/src/transport/*` (shared ws protocol)
 
 ---
 
