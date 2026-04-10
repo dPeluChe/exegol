@@ -27,6 +27,7 @@ import { destroyTray, initTray } from "./system/tray";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureSidecar } from "./terminal/pty-sidecar-discovery";
 import { ensureShellWrappers } from "./terminal/shell-wrappers";
+import { installAppMenu } from "./windows/app-menu";
 import {
   closeAllFloatingPanes,
   registerFloatingIpcHandlers,
@@ -187,6 +188,7 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   registerFloatingIpcHandlers();
   registerGlobalHotkey();
+  installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
   endMark("criticalPath");
   // ────────────────────────────────────────────────────────────────────
@@ -269,27 +271,60 @@ app.whenReady().then(async () => {
     }
 
     let aliveSessionIds: string[] = [];
+    let sidecarConnected = false;
     try {
       const sidecarClient = await ensureSidecar();
       getPtyHost().connectToSidecar(sidecarClient);
-      const sessionInfo = await getPtyHost().listSidecarSessionsInfo();
-      aliveSessionIds = sessionInfo.filter((s) => s.alive).map((s) => s.id);
-      const deadInfo = sessionInfo.filter((s) => !s.alive);
-      logger.info(
-        `[Startup] Sidecar connected — ${sessionInfo.length} total, ${aliveSessionIds.length} alive, ${deadInfo.length} dead`,
-      );
-      if (aliveSessionIds.length > 0) {
-        logger.info(`[Startup] Alive sidecar sessions: ${aliveSessionIds.join(", ")}`);
-      }
-      if (deadInfo.length > 0) {
-        logger.warn(
-          `[Startup] Dead sidecar sessions (in 60s grace period): ${deadInfo
-            .map((s) => `${s.id}(exit=${s.exitCode ?? "?"}/sig=${s.signal ?? "?"})`)
-            .join(", ")}`,
-        );
-      }
+      sidecarConnected = true;
     } catch (err) {
       logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);
+    }
+
+    // Query sessions AFTER connection succeeded, with a separate try/catch so
+    // a listInfo failure (e.g., older sidecar missing the RPC) doesn't cause
+    // us to abandon the connected sidecar and fall back to legacy subprocess.
+    if (sidecarConnected) {
+      try {
+        const sessionInfo = await getPtyHost().listSidecarSessionsInfo();
+        aliveSessionIds = sessionInfo.filter((s) => s.alive).map((s) => s.id);
+        const deadInfo = sessionInfo.filter((s) => !s.alive);
+        logger.info(
+          `[Startup] Sidecar connected — ${sessionInfo.length} total, ${aliveSessionIds.length} alive, ${deadInfo.length} dead`,
+        );
+        if (aliveSessionIds.length > 0) {
+          logger.info(`[Startup] Alive sidecar sessions: ${aliveSessionIds.join(", ")}`);
+        }
+        if (deadInfo.length > 0) {
+          logger.warn(
+            `[Startup] Dead sidecar sessions (in 60s grace period): ${deadInfo
+              .map((s) => `${s.id}(exit=${s.exitCode ?? "?"}/sig=${s.signal ?? "?"})`)
+              .join(", ")}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes("Unknown method")) {
+          // Running against an older sidecar that doesn't have session.listInfo.
+          // Fall back to session.list and treat all returned ids as alive.
+          // Dead-session detection is lost for this run, but the sidecar stays
+          // connected and new spawns work normally. The next restart will
+          // reuse the new sidecar (version bump in pty-sidecar-protocol.ts
+          // triggers a shutdown + respawn via ensureSidecar).
+          logger.warn(
+            "[Startup] Old sidecar detected (no session.listInfo). Dead-session detection disabled for this run — restart the app to auto-upgrade.",
+          );
+          try {
+            aliveSessionIds = await getPtyHost().listSidecarSessions();
+            logger.info(
+              `[Startup] Fallback sidecar list — ${aliveSessionIds.length} session(s): ${aliveSessionIds.join(", ")}`,
+            );
+          } catch (fallbackErr) {
+            logger.error("[Startup] Sidecar fallback listing failed:", fallbackErr);
+          }
+        } else {
+          logger.error("[Startup] Sidecar listInfo failed:", err);
+        }
+      }
     }
     try {
       // Only agents that are ACTUALLY alive get skipped from the crash sweep.

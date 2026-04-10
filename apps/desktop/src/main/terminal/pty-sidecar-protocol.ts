@@ -9,7 +9,10 @@ import { join } from "node:path";
 export const EXEGOL_DIR = join(homedir(), ".exegol");
 export const SIDECAR_SOCK_PATH = join(EXEGOL_DIR, "pty-sidecar.sock");
 export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
-export const SIDECAR_VERSION = "1.0.0";
+// Bumped to 1.1.0 when session.listInfo was added. Older running sidecars
+// are auto-upgraded by main/index.ts on startup when safe.
+export const SIDECAR_VERSION = "1.1.0";
+export const SIDECAR_MIN_COMPATIBLE_VERSION = "1.1.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 

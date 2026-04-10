@@ -28,6 +28,18 @@ contextBridge.exposeInMainWorld("api", {
     getVersion: () => ipcRenderer.invoke("app:version"),
     getPlatform: () => process.platform,
   },
+  // Menu-driven actions (macOS app menu routes accelerators via IPC so the
+  // renderer can close panes/tabs instead of the whole window on Cmd+W).
+  onMenuAction: (callback: (action: "new-tab" | "close-pane") => void) => {
+    const onNewTab = () => callback("new-tab");
+    const onClosePane = () => callback("close-pane");
+    ipcRenderer.on("menu:new-tab", onNewTab);
+    ipcRenderer.on("menu:close-pane", onClosePane);
+    return () => {
+      ipcRenderer.removeListener("menu:new-tab", onNewTab);
+      ipcRenderer.removeListener("menu:close-pane", onClosePane);
+    };
+  },
   onAgentHandoff: (callback: (agentId: string, handoffId: string) => void) => {
     const handler = (
       _event: Electron.IpcRendererEvent,
