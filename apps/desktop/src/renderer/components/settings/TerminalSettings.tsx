@@ -162,18 +162,27 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
     detectFonts();
   }, [detectFonts]);
 
+  // Normalize a family name for comparison: strip surrounding quotes,
+  // trim whitespace, lowercase (CSS font-family is case-insensitive).
+  // This lets us compare "MesloLGS NF", "meslolgs nf", and MesloLGS NF
+  // as the same family regardless of how they're stored in the chain.
+  const normalizeFamily = (s: string): string =>
+    s
+      .trim()
+      .replace(/^["']|["']$/g, "")
+      .toLowerCase();
+
   const handleSelectFont = (family: string) => {
-    // Prepend selected font to existing fallback chain, keep monospace at end
-    const current = settings.terminalFontFamily;
-    const parts = current
+    const target = normalizeFamily(family);
+    const parts = settings.terminalFontFamily
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-
-    // Remove if already in list
-    const filtered = parts.filter((p) => p !== family && p !== `"${family}"`);
-    // Prepend
-    const newFamily = [family, ...filtered].join(", ");
+    // Remove any existing entry for this family (in any quoting/case)
+    const filtered = parts.filter((p) => normalizeFamily(p) !== target);
+    // Prepend — quote multi-word families so CSS parses them unambiguously
+    const quoted = family.includes(" ") ? `"${family}"` : family;
+    const newFamily = [quoted, ...filtered].join(", ");
     onChange({ terminalFontFamily: newFamily });
   };
 
@@ -181,11 +190,12 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
     // Remove this family from the fallback chain. If nothing sensible is
     // left, reset to the system default so the terminal never ends up
     // with an empty font stack.
+    const target = normalizeFamily(family);
     const parts = settings.terminalFontFamily
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
-    const filtered = parts.filter((p) => p !== family && p !== `"${family}"`);
+    const filtered = parts.filter((p) => normalizeFamily(p) !== target);
     const next = filtered.length > 0 ? filtered.join(", ") : "Menlo, Monaco, monospace";
     onChange({ terminalFontFamily: next });
   };
@@ -383,21 +393,37 @@ function FontGroup({
         {trailing}
       </div>
       <div className="space-y-1">
-        {fonts.map((font) => (
-          <FontCard
-            key={font.family}
-            font={font}
-            installed={fontStatus[font.family] ?? false}
-            isActive={activeFamily
-              .split(",")
-              .map((s) => s.trim())
-              .some((s) => s === font.family || s === `"${font.family}"`)}
-            nerdPreview={nerdPreview}
-            plainPreview={plainPreview}
-            onSelect={onSelect}
-            onDeselect={onDeselect}
-          />
-        ))}
+        {fonts.map((font) => {
+          // Normalize both sides of the comparison so quoted, unquoted,
+          // and differently-cased entries all match. Must match
+          // normalizeFamily in the parent component.
+          const targetKey = font.family
+            .trim()
+            .replace(/^["']|["']$/g, "")
+            .toLowerCase();
+          const chain = activeFamily
+            .split(",")
+            .map((s) =>
+              s
+                .trim()
+                .replace(/^["']|["']$/g, "")
+                .toLowerCase(),
+            )
+            .filter(Boolean);
+          const isActive = chain.includes(targetKey);
+          return (
+            <FontCard
+              key={font.family}
+              font={font}
+              installed={fontStatus[font.family] ?? false}
+              isActive={isActive}
+              nerdPreview={nerdPreview}
+              plainPreview={plainPreview}
+              onSelect={onSelect}
+              onDeselect={onDeselect}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -478,21 +504,29 @@ function FontCard({
         )}
       </div>
 
-      {/* Actions */}
+      {/* Actions — Remove takes priority over Install, so fonts that are
+          in the chain but not installed (e.g., SF Mono on a machine
+          that doesn't have it) can still be removed from the card.
+          Previously only installed fonts got a button, leaving the user
+          stuck scrolling up to the top-card badge × to remove them. */}
       <div className="flex items-center gap-1">
-        {installed ? (
+        {isActive ? (
           <button
             type="button"
-            onClick={() => (isActive ? onDeselect(font.family) : onSelect(font.family))}
-            className={cn(
-              "rounded-md px-2 py-1 text-[9px] font-medium transition-all",
-              isActive
-                ? "bg-accent/15 text-accent hover:bg-accent/25"
-                : "bg-white/5 text-text-muted hover:bg-white/10 hover:text-text-primary",
-            )}
-            title={isActive ? "Click to deselect" : "Click to use this font"}
+            onClick={() => onDeselect(font.family)}
+            className="rounded-md bg-accent/15 px-2 py-1 text-[9px] font-medium text-accent transition-all hover:bg-accent/25"
+            title="Click to remove from the font chain"
           >
-            {isActive ? "Remove" : "Use"}
+            Remove
+          </button>
+        ) : installed ? (
+          <button
+            type="button"
+            onClick={() => onSelect(font.family)}
+            className="rounded-md bg-white/5 px-2 py-1 text-[9px] font-medium text-text-muted transition-all hover:bg-white/10 hover:text-text-primary"
+            title="Click to use this font as primary"
+          >
+            Use
           </button>
         ) : font.url ? (
           <a
