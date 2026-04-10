@@ -281,7 +281,8 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
             {"\n"}
             {NERD_PREVIEW}
             {"\n"}
-            {"\ue627 node  \ue61e python  \ue7a8 rust  \ue738 java  \ue781 swift"}
+            {/* Nerd Font dev icons — nf-dev-* codepoints from nerdfonts.com */}
+            {"\ue718 node  \ue73c python  \ue7a8 rust  \ue738 java  \ue755 swift"}
           </pre>
         </div>
       </div>
