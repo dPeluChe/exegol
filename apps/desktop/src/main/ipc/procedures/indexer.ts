@@ -6,6 +6,7 @@ import { z } from "zod";
 import { DEFAULT_EXCLUDE_PATTERNS } from "../../indexer/chunker";
 import { checkOllamaStatus, type OllamaConfig } from "../../indexer/ollama-client";
 import { indexProject } from "../../indexer/project-indexer";
+import { semanticSearch } from "../../indexer/search";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
 
@@ -102,5 +103,24 @@ export const indexerRouter = router({
       );
 
       return { success: true };
+    }),
+
+  /** T68: Semantic search over the project's indexed codebase */
+  search: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        query: z.string().min(1),
+        topK: z.number().int().min(1).max(20).default(5),
+        ollamaUrl: z.string().default("http://localhost:11434"),
+        ollamaModel: z.string().default("nomic-embed-text"),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const config: OllamaConfig = {
+        url: input.ollamaUrl,
+        model: input.ollamaModel,
+      };
+      return semanticSearch(ctx.db, input.projectId, input.query, config, input.topK);
     }),
 });
