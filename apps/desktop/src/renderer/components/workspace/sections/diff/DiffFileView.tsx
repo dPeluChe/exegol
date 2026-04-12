@@ -1,7 +1,13 @@
 import type { DiffComment } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, FilePlus, FileX, MessageSquare, Pencil } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import {
+  useAddDiffComment,
+  useDeleteDiffComment,
+  useDiffComments,
+  useToggleResolveDiffComment,
+} from "../../../../hooks/use-trpc-diff-comments";
 import { DiffHunkView } from "./DiffHunkView";
 import type { DiffFile } from "./diff-parser";
 
@@ -43,11 +49,7 @@ interface DiffFileViewProps {
   viewMode: "unified" | "split";
   collapsed: boolean;
   onToggle: () => void;
-  /** All comments for this file */
-  comments?: DiffComment[];
-  onAddComment?: (lineNumber: number, content: string) => void;
-  onDeleteComment?: (id: string) => void;
-  onToggleResolve?: (id: string) => void;
+  projectId: string | null;
 }
 
 export function DiffFileView({
@@ -55,11 +57,26 @@ export function DiffFileView({
   viewMode,
   collapsed,
   onToggle,
-  comments,
-  onAddComment,
-  onDeleteComment,
-  onToggleResolve,
+  projectId,
 }: DiffFileViewProps) {
+  // Fetch comments only when expanded (per-file, avoids bulk fetch)
+  const { data: comments } = useDiffComments(!collapsed ? projectId : null, file.newPath);
+  const addComment = useAddDiffComment();
+  const deleteComment = useDeleteDiffComment();
+  const toggleResolve = useToggleResolveDiffComment();
+
+  const handleAddComment = useCallback(
+    (lineNumber: number, content: string) => {
+      if (!projectId) return;
+      addComment.mutate({ projectId, filePath: file.newPath, lineNumber, content });
+    },
+    [projectId, file.newPath, addComment],
+  );
+  const handleDelete = useCallback((id: string) => deleteComment.mutate(id), [deleteComment]);
+  const handleToggleResolve = useCallback(
+    (id: string) => toggleResolve.mutate(id),
+    [toggleResolve],
+  );
   const additionCount = file.hunks.reduce(
     (sum, h) => sum + h.lines.filter((l) => l.type === "addition").length,
     0,
@@ -139,9 +156,9 @@ export function DiffFileView({
                 hunk={hunk}
                 viewMode={viewMode}
                 commentsByLine={commentsByLine}
-                onAddComment={onAddComment}
-                onDeleteComment={onDeleteComment}
-                onToggleResolve={onToggleResolve}
+                onAddComment={projectId ? handleAddComment : undefined}
+                onDeleteComment={handleDelete}
+                onToggleResolve={handleToggleResolve}
               />
             ))}
           </div>

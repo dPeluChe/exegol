@@ -12,6 +12,7 @@ import { useTerminalStore } from "../../stores/terminals";
 import {
   collectPaneIds,
   findFirstPaneId,
+  getFocusedOrFirstPaneId,
   getProjectState,
   type Pane,
   selectActiveTabId,
@@ -178,22 +179,17 @@ export function WorkspaceTabBar() {
   const handleNewTerminal = useCallback(async () => {
     if (!projectId) return;
     try {
-      // T95: If there's a focused empty pane in the active tab, reuse it
+      // T95: Reuse focused empty pane, otherwise create a new tab
       const freshPw = getProjectState();
       const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
-      const focusedId = useWorkspaceStore.getState().focusedPaneId;
+      const focusedId = activeTab ? getFocusedOrFirstPaneId(activeTab) : null;
       const focusedPane = focusedId ? freshPw.panes[focusedId] : null;
-      const focusedInActiveTab =
-        focusedId && activeTab ? collectPaneIds(activeTab.layout).includes(focusedId) : false;
-      const canReuseFocused = focusedInActiveTab && focusedPane?.type === "empty";
 
       let targetPaneId: string | null = null;
 
-      if (canReuseFocused && focusedId) {
-        // Reuse the focused empty pane — no need for a new tab
+      if (focusedPane?.type === "empty" && focusedId) {
         targetPaneId = focusedId;
       } else {
-        // Create a new tab and find its empty pane
         const newTabId = addTab("Terminal");
         const tab = getProjectState().tabs.find((t) => t.id === newTabId);
         targetPaneId = tab ? findFirstPaneId(tab.layout) : null;
@@ -404,12 +400,7 @@ function QuickLaunchBar() {
         const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
         if (activeTab) {
           // T95: Prefer focused pane over first pane when targeting
-          const focusedId = useWorkspaceStore.getState().focusedPaneId;
-          const tabPaneIds = collectPaneIds(activeTab.layout);
-          const targetPaneId =
-            focusedId && tabPaneIds.includes(focusedId)
-              ? focusedId
-              : findFirstPaneId(activeTab.layout);
+          const targetPaneId = getFocusedOrFirstPaneId(activeTab);
           const targetPane = targetPaneId ? freshPw.panes[targetPaneId] : null;
 
           // Only replace empty panes or terminals with stopped/no agent

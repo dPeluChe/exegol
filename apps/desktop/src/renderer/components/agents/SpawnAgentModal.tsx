@@ -7,8 +7,8 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import {
-  collectPaneIds,
   findFirstPaneId,
+  getFocusedOrFirstPaneId,
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
@@ -99,17 +99,14 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
       window.dispatchEvent(
         new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
       );
-      // T95: If there's a focused empty pane in the active tab, reuse it;
-      // otherwise create a new tab
+      // T95: Reuse focused empty pane, otherwise create a new tab
       const store = useWorkspaceStore.getState();
       const freshPw = getProjectState();
       const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
-      const focusedId = store.focusedPaneId;
+      const focusedId = activeTab ? getFocusedOrFirstPaneId(activeTab) : null;
       const focusedPane = focusedId ? freshPw.panes[focusedId] : null;
-      const focusedInActiveTab =
-        focusedId && activeTab ? collectPaneIds(activeTab.layout).includes(focusedId) : false;
 
-      if (focusedInActiveTab && focusedPane?.type === "empty" && focusedId) {
+      if (focusedPane?.type === "empty" && focusedId) {
         store.updatePane(focusedId, { type: "terminal", agentId: agent.id });
       } else {
         const newTabId = store.addTab(agent.cliType);

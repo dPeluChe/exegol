@@ -18,12 +18,8 @@ import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   type ReviewSignal,
   type ReviewSummary,
-  useAddDiffComment,
-  useDeleteDiffComment,
   useDiff,
-  useDiffComments,
   useReviewSummary,
-  useToggleResolveDiffComment,
 } from "../../../hooks/use-trpc";
 import { EmptyState } from "../../common/EmptyState";
 import { DiffFileView } from "./diff/DiffFileView";
@@ -161,25 +157,6 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
 
   const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode, overridePath);
   const { data: reviewSummary } = useReviewSummary(projectId, overridePath, diffMode === "staged");
-  const { data: allComments } = useDiffComments(projectId);
-  const addComment = useAddDiffComment();
-  const deleteComment = useDeleteDiffComment();
-  const toggleResolve = useToggleResolveDiffComment();
-
-  // Group comments by file path
-  const commentsByFile = useMemo(() => {
-    if (!allComments?.length) return {};
-    const map: Record<string, typeof allComments> = {};
-    for (const c of allComments) {
-      const arr = map[c.filePath];
-      if (arr) {
-        arr.push(c);
-      } else {
-        map[c.filePath] = [c];
-      }
-    }
-    return map;
-  }, [allComments]);
 
   // Track collapsed state per file (all collapsed by default)
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
@@ -381,20 +358,7 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
                 viewMode={viewMode}
                 collapsed={!expandedFiles.has(file.newPath)}
                 onToggle={() => toggleFile(file.newPath)}
-                comments={commentsByFile[file.newPath]}
-                onAddComment={
-                  projectId
-                    ? (lineNumber, content) =>
-                        addComment.mutate({
-                          projectId,
-                          filePath: file.newPath,
-                          lineNumber,
-                          content,
-                        })
-                    : undefined
-                }
-                onDeleteComment={(id) => deleteComment.mutate(id)}
-                onToggleResolve={(id) => toggleResolve.mutate(id)}
+                projectId={projectId}
               />
             ))}
           </div>

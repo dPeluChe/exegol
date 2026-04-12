@@ -701,4 +701,16 @@ export function getProjectState(): ProjectWorkspace {
   return getPw(useWorkspaceStore.getState());
 }
 
+/**
+ * Returns the focused pane ID if it belongs to the given tab's layout,
+ * otherwise falls back to the first pane in the layout.
+ */
+export function getFocusedOrFirstPaneId(tab: WorkspaceTab): string | null {
+  const { focusedPaneId } = useWorkspaceStore.getState();
+  if (focusedPaneId && collectPaneIds(tab.layout).includes(focusedPaneId)) {
+    return focusedPaneId;
+  }
+  return findFirstPaneId(tab.layout);
+}
+
 export { collectPaneIds, findFirstPaneId };

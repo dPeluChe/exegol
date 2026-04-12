@@ -1,7 +1,7 @@
 import type { DiffComment } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { MessageSquarePlus } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { CommentCard, CommentInput } from "./DiffLineComment";
 import type { DiffHunk, DiffLine } from "./diff-parser";
 
@@ -77,7 +77,7 @@ function UnifiedView({
 
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: diff lines lack stable unique id
-          <LineWithComments key={idx}>
+          <div key={idx}>
             <div
               className={cn(
                 "group/line flex",
@@ -140,7 +140,7 @@ function UnifiedView({
                 onCancel={() => setCommentingLine(null)}
               />
             )}
-          </LineWithComments>
+          </div>
         );
       })}
     </div>
@@ -210,7 +210,7 @@ function SplitView({
 
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: split view rows lack stable unique id
-          <LineWithComments key={idx}>
+          <div key={idx}>
             <div className="group/line flex">
               {/* Gutter for adding comments */}
               {hasCommentUI && (
@@ -252,7 +252,7 @@ function SplitView({
                 onCancel={() => setCommentingLine(null)}
               />
             )}
-          </LineWithComments>
+          </div>
         );
       })}
     </div>
@@ -287,10 +287,6 @@ function SplitSide({ line, side }: { line: DiffLine | null; side: "old" | "new" 
       </span>
     </div>
   );
-}
-
-function LineWithComments({ children }: { children: ReactNode }) {
-  return <div>{children}</div>;
 }
 
 function noop() {}
