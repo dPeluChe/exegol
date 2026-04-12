@@ -31,11 +31,12 @@ export function getAgent(db: Database.Database, id: string): Agent | null {
 export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   const id = nanoid();
   const now = Math.floor(Date.now() / 1000);
+  const accessMode = data.accessMode ?? "write";
 
   db.prepare(
-    `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at)
-     VALUES (?, ?, ?, 'spawning', ?, ?)`,
-  ).run(id, data.projectId, data.cliType, data.taskDescription, now);
+    `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, access_mode)
+     VALUES (?, ?, ?, 'spawning', ?, ?, ?)`,
+  ).run(id, data.projectId, data.cliType, data.taskDescription, now, accessMode);
 
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getAgent(db, id)!;

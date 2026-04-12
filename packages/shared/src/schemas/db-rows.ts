@@ -13,7 +13,7 @@
  */
 
 import { z } from "zod";
-import { AGENT_CLI_TYPES, AGENT_STATUSES } from "../types/agent";
+import { AGENT_ACCESS_MODES, AGENT_CLI_TYPES, AGENT_STATUSES } from "../types/agent";
 import { PROMPT_CATEGORIES } from "../types/prompt";
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -54,6 +54,7 @@ export const agentRowSchema = z.object({
   pid: optNum,
   started_at: optNum,
   stopped_at: optNum,
+  access_mode: z.enum(AGENT_ACCESS_MODES).catch("write"),
 });
 
 export const worktreeRowSchema = z.object({

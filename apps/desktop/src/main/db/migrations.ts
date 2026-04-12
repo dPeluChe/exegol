@@ -440,6 +440,10 @@ const migrations: Migration[] = [
     id: "028_projects_sort_order",
     sql: `ALTER TABLE projects ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;`,
   },
+  {
+    id: "029_agents_access_mode",
+    sql: `ALTER TABLE agents ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'write';`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

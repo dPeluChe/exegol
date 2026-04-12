@@ -71,6 +71,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     pid: r.pid,
     startedAt: r.started_at,
     stoppedAt: r.stopped_at,
+    accessMode: r.access_mode,
   };
 }
 
