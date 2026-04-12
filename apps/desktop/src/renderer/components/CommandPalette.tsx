@@ -322,10 +322,17 @@ export function CommandPalette() {
             });
           }
         }
-        // Inject the command into the shell after a brief delay
-        setTimeout(() => {
+        // Wait for shell prompt (first PTY output = shell ready), then inject.
+        // 2s fallback for shells that don't emit a prompt quickly.
+        let injected = false;
+        const inject = () => {
+          if (injected) return;
+          injected = true;
+          unsub();
           window.api.terminal.write(agent.id, `${cmd}\n`);
-        }, 500);
+        };
+        const unsub = window.api.terminal.onData(agent.id, inject);
+        setTimeout(inject, 2000);
       } catch (err) {
         console.error("[BangCommand] Failed:", err);
       }

@@ -14,7 +14,6 @@ import {
   RefreshCw,
   Sun,
 } from "lucide-react";
-import { useState } from "react";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 
@@ -257,8 +256,8 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </div>
       </div>
 
-      {/* T100: Ollama / Project Indexing status */}
-      <OllamaStatusSection />
+      {/* Ollama / Project Indexing status */}
+      <OllamaStatusSection settings={settings} onChange={onChange} />
 
       {/* Keyboard shortcuts reference — same as before */}
       <div>
@@ -300,9 +299,15 @@ interface OllamaStatus {
   error?: string;
 }
 
-function OllamaStatusSection() {
-  const [ollamaUrl, setOllamaUrl] = useState("http://localhost:11434");
-  const [model, setModel] = useState("nomic-embed-text");
+function OllamaStatusSection({
+  settings,
+  onChange,
+}: {
+  settings: Pick<Settings, "ollamaUrl" | "ollamaModel">;
+  onChange: (updates: Partial<Settings>) => void;
+}) {
+  const ollamaUrl = settings.ollamaUrl;
+  const model = settings.ollamaModel;
 
   const {
     data: status,
@@ -340,7 +345,7 @@ function OllamaStatusSection() {
           <Input
             id="ollama-url"
             value={ollamaUrl}
-            onChange={(e) => setOllamaUrl(e.target.value)}
+            onChange={(e) => onChange({ ollamaUrl: e.target.value })}
             className="h-7 flex-1 border-[var(--border)] bg-[var(--bg-tertiary)] text-[10px] text-[var(--text-primary)]"
           />
         </div>
@@ -356,7 +361,7 @@ function OllamaStatusSection() {
           <Input
             id="ollama-model"
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) => onChange({ ollamaModel: e.target.value })}
             className="h-7 flex-1 border-[var(--border)] bg-[var(--bg-tertiary)] text-[10px] text-[var(--text-primary)]"
           />
         </div>
