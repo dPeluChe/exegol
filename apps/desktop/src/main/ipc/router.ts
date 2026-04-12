@@ -2,6 +2,7 @@ import { activitiesRouter } from "./procedures/activities";
 import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { diffRouter } from "./procedures/diff";
+import { diffCommentsRouter } from "./procedures/diff-comments";
 import { filesRouter } from "./procedures/files";
 import { githubRouter } from "./procedures/github";
 import { indexerRouter } from "./procedures/indexer";
@@ -35,6 +36,7 @@ export const appRouter = router({
   files: filesRouter,
   prompts: promptsRouter,
   diff: diffRouter,
+  diffComments: diffCommentsRouter,
   scrollback: scrollbackRouter,
   scoring: scoringRouter,
   oplog: oplogRouter,

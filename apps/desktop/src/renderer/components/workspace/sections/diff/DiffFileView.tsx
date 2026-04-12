@@ -1,5 +1,7 @@
+import type { DiffComment } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { ChevronDown, ChevronRight, FilePlus, FileX, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus, FileX, MessageSquare, Pencil } from "lucide-react";
+import { useMemo } from "react";
 import { DiffHunkView } from "./DiffHunkView";
 import type { DiffFile } from "./diff-parser";
 
@@ -41,9 +43,23 @@ interface DiffFileViewProps {
   viewMode: "unified" | "split";
   collapsed: boolean;
   onToggle: () => void;
+  /** All comments for this file */
+  comments?: DiffComment[];
+  onAddComment?: (lineNumber: number, content: string) => void;
+  onDeleteComment?: (id: string) => void;
+  onToggleResolve?: (id: string) => void;
 }
 
-export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileViewProps) {
+export function DiffFileView({
+  file,
+  viewMode,
+  collapsed,
+  onToggle,
+  comments,
+  onAddComment,
+  onDeleteComment,
+  onToggleResolve,
+}: DiffFileViewProps) {
   const additionCount = file.hunks.reduce(
     (sum, h) => sum + h.lines.filter((l) => l.type === "addition").length,
     0,
@@ -52,6 +68,23 @@ export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileVi
     (sum, h) => sum + h.lines.filter((l) => l.type === "deletion").length,
     0,
   );
+
+  // Group comments by line number for efficient lookup
+  const commentsByLine = useMemo(() => {
+    if (!comments?.length) return undefined;
+    const map: Record<number, DiffComment[]> = {};
+    for (const c of comments) {
+      const arr = map[c.lineNumber];
+      if (arr) {
+        arr.push(c);
+      } else {
+        map[c.lineNumber] = [c];
+      }
+    }
+    return map;
+  }, [comments]);
+
+  const commentCount = comments?.length ?? 0;
 
   return (
     <div className="overflow-hidden rounded border border-border/50">
@@ -83,6 +116,12 @@ export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileVi
         </span>
 
         <span className="flex shrink-0 gap-2 text-[11px]">
+          {commentCount > 0 && (
+            <span className="flex items-center gap-0.5 text-yellow-400">
+              <MessageSquare className="h-3 w-3" />
+              {commentCount}
+            </span>
+          )}
           {additionCount > 0 && <span className="text-green-400">+{additionCount}</span>}
           {deletionCount > 0 && <span className="text-red-400">-{deletionCount}</span>}
         </span>
@@ -95,7 +134,15 @@ export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileVi
         ) : (
           <div className="overflow-x-auto">
             {file.hunks.map((hunk) => (
-              <DiffHunkView key={hunk.header} hunk={hunk} viewMode={viewMode} />
+              <DiffHunkView
+                key={hunk.header}
+                hunk={hunk}
+                viewMode={viewMode}
+                commentsByLine={commentsByLine}
+                onAddComment={onAddComment}
+                onDeleteComment={onDeleteComment}
+                onToggleResolve={onToggleResolve}
+              />
             ))}
           </div>
         ))}
