@@ -7,6 +7,67 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-04-12 — Infrastructure wave
+
+This release builds the intelligence layer: project indexing with local
+Ollama embeddings, semantic search CLI, agent attention monitoring, DB
+validation, and several productivity quick wins.
+
+### Added
+
+- **Review Inbox / Agent Monitor** (T57). Sidebar shows running agents
+  grouped by project with unique animated spinners per agent (10 preset
+  animations — braille wave, moon phases, heartbeat, etc). Below the
+  running agents, an "attention" section shows agents that need review:
+  crashed, waiting input, completed. Cards support mark-read, pin,
+  dismiss, and navigate-to-pane.
+- **Project Indexing** (T100). Background indexer scans project files,
+  chunks them (500-line overlap), generates embeddings via local Ollama
+  (`nomic-embed-text`), and stores in SQLite. Incremental: only
+  re-indexes files whose SHA-256 hash changed. Fully async FS.
+- **Semantic Search** (T68). `exegol search <query>` CLI command +
+  `indexer.search` tRPC procedure. Brute-force cosine similarity over
+  stored embeddings. CLI resolves project from CWD, prints top-5
+  results with file path, line range, score, and preview.
+- **Exegol CLI** (T89). New `packages/cli/` package. Commands:
+  `exegol status` (active agents), `exegol projects` (all projects),
+  `exegol search <query>` (semantic search). Reads the Electron DB
+  directly (read-only).
+- **Bang commands** (T96). Type `!command` in the Command Palette
+  (Cmd+K) to run a shell command in a new terminal tab. Waits for
+  shell-ready signal (first PTY data event) before injecting.
+- **Agent access modes** (T99). `accessMode: "read" | "write"` field
+  on agents. Read mode is for explore-only sessions (no git writes).
+  DB migration 029.
+- **Ollama Settings validation**. Settings → General shows Ollama URL
+  + model inputs with a "Verify Connection" button that checks
+  availability + model installed. Green/amber/red indicators with
+  install instructions. Persisted in Settings (survives restart).
+
+### Changed
+
+- **DB row validation** (T77). 14 Zod schemas for all DB row types.
+  `parseRow()` helper validates at the query boundary with graceful
+  degradation (logs on failure, doesn't crash). All 7 mapper functions
+  rewritten.
+- Agent store: `unreadAgents` map removed — unread state derived from
+  `attentionItems`. `unreadAttentionCount` cached as O(1) field.
+  `getSortedAttention()` moved from store getter to `useMemo` in
+  component to avoid new-reference-on-every-render.
+- Project indexer uses async `fs/promises` instead of sync
+  `readdirSync/readFileSync` to avoid blocking the main process.
+- `cosineSimilarity` extracted to `packages/shared/src/lib/cosine.ts`
+  (shared between main process and CLI).
+
+### Fixed
+
+- Bang command `setTimeout(500ms)` replaced with shell-ready detection
+  (listens for first PTY data event + 2s fallback with guard).
+- Ollama URL + model were local `useState` (lost on settings close).
+  Now persisted in the Settings type with auto-save.
+
+---
+
 ## [0.3.0] — 2026-04-10 — Pre-launch polish wave
 
 This release finishes the T83-T87 pre-launch polish tasks plus a wide set

@@ -13,13 +13,7 @@
 ## Priority Order
 
 ### P0 — Must land before broad release push
-- **Review Inbox / Attention Center** (T57)
 - **Parallel Multi-Agent on Worktrees** (T65)
-
-### P1 — Strong differentiation right after P0
-- **Project Indexing with Ollama + sqlite-vec** (T100) — foundation for T68
-- **Repo Map + Semantic Search** (T68) — vector search + agent skill + MCP tool
-- **DB validation layer** (T77) — Zod schemas for DB rows
 
 ### P2 — Valuable follow-ups once the core is stable
 - Diff line comments (T69)
@@ -30,12 +24,9 @@
 - **DI for singletons** (T81) — testability improvement
 - **Shared package enrichment** (T82) — more Zod schemas for IPC/DB payloads
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
-- **Exegol CLI** (T89) — headless client over sidecar socket
 - **Terminal ↔ Chat dual view** (T90) — same session, two presentations
 - **Lifecycle scripts per repo** (T91) — setup/run/teardown in git
-- **Agent access modes** (T99) — read/write per session + session metadata
 - **Focus-aware panel targeting** (T95) — new panes open next to focused pane
-- **Bang commands** (T96) — `!command` in Command Palette for quick shell runs
 
 ### P3 — Strategic bets / larger scope
 - **SSH Remote Development** (T73)
@@ -49,34 +40,6 @@
 ---
 
 ## Active Backlog
-
-### T57 — Review Inbox / Attention Center
-**Priority**: P0 | **Effort**: Medium | **Source**: cmux + Orca + Exegol analysis
-
-**Why**
-- Exegol needs a single place to see which agent needs attention right now.
-- This directly attacks supervision fatigue in multi-agent workflows.
-
-**Scope**
-- Replace simple unread/star markers with a real inbox model
-- Track attention states: `needs_input`, `review_ready`, `completed_unread`, `failed`, `permission_needed`
-- Show unread badge, last meaningful status text, branch, listening port, and latest test signal
-- Persist per-agent attention state across app restarts
-- Add sidebar surface plus workspace section for triage
-
-**Acceptance**
-- A stopped or waiting agent is visible in one triage surface without opening its pane
-- User can mark items as read / starred / pinned
-- Attention state survives restart
-
-**Likely files**
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/system/ports.ts`
-- `apps/desktop/src/renderer/components/layout/*`
-- `apps/desktop/src/renderer/components/workspace/sections/AgentsSection.tsx`
-- `apps/desktop/src/renderer/stores/agents.ts`
-
----
 
 ### T58 — Runtime Permission Modes
 **Priority**: High | **Effort**: Medium | **Source**: Anvil
@@ -159,47 +122,6 @@
 - `apps/desktop/src/main/agents/*`
 - `apps/desktop/src/renderer/components/workspace/sections/PipelineSection.tsx`
 - `apps/desktop/src/renderer/hooks/use-trpc-pipeline.ts`
-
----
-
-### T68 — Repo Map + Semantic Search (via Vector Index)
-**Priority**: P1 | **Effort**: High | **Source**: Aider + Continue.dev + opencode-codebase-index
-
-**Why**
-- This is one of the clearest ways to improve agent performance on large repos.
-- Strong differentiator when combined with handoff, skills, and pipelines.
-- Research shows AST-aware chunking (Tree-sitter) achieves **70% Recall@5** vs
-  42% for naive fixed-size chunks — the quality gap is enormous.
-
-**Depends on**
-- T100 (Project Indexing) — provides the indexed embeddings + sqlite-vec storage.
-  T68 is the search/retrieval layer that consumers (agents, UI, PR review) use.
-
-**Scope**
-- **Query interface**: `exegol search <query>` CLI command (connects to sidecar
-  socket → queries sqlite-vec) + tRPC procedure `search.semantic(query, topK)`
-- **Agent skill**: auto-injected skill explaining `exegol search` so CLI agents
-  can discover and use it mid-task without pre-injection (avoids extra token cost)
-- **MCP tool** (Claude Code only): `search_project` tool exposed via local MCP
-  server so Claude Code auto-discovers it natively
-- **UI surface**: SearchSection in workspace with semantic search input → results
-  with file path, line range, relevance score, and code preview
-- **Hybrid retrieval**: combine sqlite-vec cosine similarity + SQLite FTS5 keyword
-  match, fused with Reciprocal Rank Fusion (RRF) for best results
-- Definition/reference graph ranking (future v2 — requires full AST analysis)
-
-**Acceptance**
-- Agents can query the project index via CLI command or MCP tool during execution
-- Search answers semantic intent ("how does auth work") not just string match
-- Results return in <50ms for repos up to 10K files
-
-**Likely files**
-- `apps/desktop/src/main/ipc/procedures/search.ts` (semantic query endpoint)
-- `apps/desktop/src/main/indexer/search.ts` (new — hybrid retrieval logic)
-- `packages/cli/src/commands/search.ts` (new — CLI entry point, T89 companion)
-- `apps/desktop/src/main/mcp/tools/search-project.ts` (new — MCP tool)
-- `apps/desktop/src/main/skills/defaults.ts` (auto-inject search skill)
-- `apps/desktop/src/renderer/components/workspace/sections/SearchSection.tsx`
 
 ---
 
@@ -289,29 +211,6 @@
 
 > These tasks surfaced from a comprehensive codebase audit (April 2026).
 > They address technical debt, testability, and robustness gaps that will compound if left unattended.
-
-### T77 — DB Row Validation with Zod Schemas
-**Priority**: P1 | **Effort**: Medium | **Source**: Deep codebase analysis
-
-**Why**
-- DB rows are cast with `as Record<string, unknown>` and mapped manually
-  (`row.id as string`, `row.status as AgentStatus`). No validation layer exists between
-  SQLite and business logic. A schema mismatch or migration gap can cause silent type corruption.
-
-**Scope**
-- Add Zod schemas for all DB row types in `packages/shared/src/schemas/`:
-  - `agent-row.ts`, `project-row.ts`, `worktree-row.ts`, `pipeline-row.ts`
-  - `memory-row.ts`, `score-row.ts`, `activity-row.ts`, etc.
-- Validate rows at the query boundary (in `db/queries/*.ts`)
-- Use `schema.parse(row)` or `schema.safeParse(row)` with logging on failure
-- Keep performance in mind: parse on read, not on every intermediate operation
-
-**Likely files**
-- `packages/shared/src/schemas/*` (new schemas)
-- `apps/desktop/src/main/db/queries/*.ts` (add validation)
-- `apps/desktop/src/main/db/migrations.ts` (ensure new columns have schemas)
-
----
 
 ### T78 — Explicit Pipeline State Machine
 **Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
@@ -449,37 +348,6 @@
 - `apps/desktop/src/main/pipeline/executor.ts` (evaluator routing)
 - `apps/desktop/src/main/pipeline/context.ts` (retryFeedback variable)
 - `apps/desktop/src/renderer/components/workspace/sections/pipeline/PipelineEditor.tsx`
-
----
-
-### T89 — Exegol CLI (sidecar client)
-**Priority**: P2 | **Effort**: Medium | **Source**: Paseo multi-client architecture
-
-**Why**
-- Having a CLI that talks to the running sidecar unlocks: CI automation, scripting,
-  headless usage on servers, and parity with Paseo's workflow. It also doubles as
-  a test harness for the sidecar itself.
-
-**Scope**
-- New package: `packages/cli/` — Bun/Node CLI, published as `exegol` binary
-- Connects to `~/.exegol/pty-sidecar.sock` using the existing JSON-RPC protocol
-- Commands (v1):
-  - `exegol status` — list agents + pipeline runs
-  - `exegol run <pipeline-name> [--project <id>] [--watch]`
-  - `exegol logs <agent-id> [--follow]` — stream ring buffer
-  - `exegol projects` — list projects
-  - `exegol providers` — list available providers
-- Commands (v1.1):
-  - `exegol spawn <provider> --prompt "..."` — one-off agent
-  - `exegol stop <agent-id>`
-  - `exegol export <run-id>` — dump pipeline run as JSON
-- Reuses shared types from `@exegol/shared` (no duplication)
-
-**Likely files**
-- New: `packages/cli/src/index.ts`
-- New: `packages/cli/src/sidecar-client.ts`
-- New: `packages/cli/src/commands/*.ts`
-- `packages/shared/src/types/sidecar-protocol.ts` (may need to export)
 
 ---
 
@@ -639,35 +507,6 @@
 
 ---
 
-### T96 — Bang Commands in Command Palette
-**Priority**: P2 | **Effort**: Low (1 day) | **Source**: kcosr/assistant
-
-**Why**
-- kcosr/assistant lets users type `!ls -la` in the chat to run a shell command
-  inline with streaming output. This bridges the gap between "open a terminal" and
-  "just run one quick command" — useful for checking git status, running tests, or
-  verifying a build without leaving the workspace context.
-- Our Command Palette (Cmd+K) is already the power-user entry point. Adding a `!`
-  prefix for shell execution makes it a true Swiss-army surface.
-
-**Scope**
-- Detect `!` prefix in Command Palette input → intercept, strip prefix
-- Spawn a one-shot shell session (via PTY sidecar, same as quick-terminal) in a
-  temporary or ephemeral pane
-- Stream output back into either:
-  - A toast/popover that auto-dismisses after command completes (for short commands)
-  - A new terminal tab (for long-running commands)
-- Show exit code indicator (success/failure)
-- Optional: history of recent bang commands for re-run (store in agent_events or
-  in-memory)
-
-**Likely files**
-- `apps/desktop/src/renderer/components/CommandPalette.tsx` (detect `!` prefix)
-- `apps/desktop/src/main/agents/manager.ts` (one-shot shell spawn)
-- `apps/desktop/src/renderer/components/common/ToastStack.tsx` (streaming toast)
-
----
-
 ### T97 — Panel Plugin SDK
 **Priority**: P3 | **Effort**: Very large (2-4 weeks) | **Source**: kcosr/assistant
 
@@ -717,144 +556,6 @@
 - New: `apps/desktop/src/renderer/lib/plugin-loader.ts` (dynamic panel loading)
 - Modified: `apps/desktop/src/renderer/components/workspace/WorkspaceView.tsx`
   (render plugin panels alongside built-in sections)
-
----
-
-### T99 — Agent Access Modes + Session Metadata
-**Priority**: P2 | **Effort**: Low (1 day) | **Source**: Nora (withnora.run)
-
-**Why**
-- Nora enforces explicit read/write mode per agent session. A "read-only" agent
-  can explore the repo, read files, and reason about architecture without the
-  risk of accidental writes, commits, or destructive operations. This is
-  valuable for review, exploration, and onboarding scenarios.
-- Session metadata tracking (tool, agent name, task text, access mode, launch
-  target, branch, workspace path, status) is richer than what we currently
-  store. More metadata = better Recent Sessions display, better scoring
-  context, and better recovery diagnostics.
-
-**Scope**
-- Add `accessMode: "read" | "write"` field to `AgentCreate` schema (default:
-  "write" for backward compat)
-- Read mode enforcement: when spawning in read mode, use a worktree checkout
-  with `--detach` (no branch to commit to) and strip write-related environment
-  variables (GIT_AUTHOR_*, EXEGOL_ALLOW_COMMIT, etc.)
-- UI: toggle in SpawnAgentModal and the quick-launch bar
-- Session metadata: extend `agents` DB table with `access_mode TEXT`,
-  `launch_target TEXT` (pane id or "new-tab"), `resolved_model TEXT`
-- Surface in Recent Sessions sidebar: show access mode badge + model used
-
-**Likely files**
-- `packages/shared/src/schemas/agent.ts` (schema update)
-- `apps/desktop/src/main/agents/manager.ts` (spawn env for read mode)
-- `apps/desktop/src/main/agents/spawn-env.ts` (strip write env vars)
-- `apps/desktop/src/main/db/migrations.ts` (new columns)
-- `apps/desktop/src/renderer/components/agents/SpawnAgentModal.tsx` (toggle)
-- `apps/desktop/src/renderer/components/layout/RecentSessions.tsx` (metadata)
-
----
-
-### T100 — Project Indexing with Ollama Embeddings + sqlite-vec
-**Priority**: P1 | **Effort**: Large (1-2 weeks) | **Source**: ai-code-review-system
-  + opencode-codebase-index + Continue.dev + supermemory/code-chunk
-
-**Why**
-- Foundation for T68 (semantic search), T98 (AI PR review), and agent context
-  injection. Without a local vector index of the project, agents start blind
-  and waste tokens exploring. With it, Exegol can instantly surface the 5 most
-  relevant code sections for any query — whether from a user search, an agent
-  tool call, or a PR review.
-- Research shows AST-aware chunking via Tree-sitter achieves **70% Recall@5**
-  vs 42% for naive line-based chunks (supermemory/code-chunk benchmarks). The
-  quality difference is the difference between useful and useless retrieval.
-
-**Architecture (all local, no cloud services)**
-```
-Ollama (localhost:11434)         ← embedding model (nomic-embed-text)
-  ↓
-Tree-sitter (core-rust)          ← AST-aware chunking (functions, classes, etc.)
-  ↓
-sqlite-vec (libSQL extension)    ← vector storage + cosine similarity search
-  + SQLite FTS5                  ← keyword index for hybrid retrieval
-  ↓
-Reciprocal Rank Fusion           ← merge vector + keyword results
-```
-
-**Scope**
-- **Settings UI**: enable indexing toggle, Ollama URL + model picker with
-  auto-detect (`ollama list`), pull-if-missing button, exclude patterns
-  (node_modules, dist, .git, *.lock, binaries)
-- **Indexer (main process background worker)**:
-  - On project open: scan repo files, SHA-256 hash per file, skip unchanged
-  - Tree-sitter parsing in `core-rust`: extract functions, classes, interfaces,
-    type definitions as discrete chunks with docstrings + scope chain (follow
-    supermemory/code-chunk approach for 70% recall)
-  - Fallback: for non-parseable files, 500-line overlap chunking
-  - Batch embedding via Ollama API (`/api/embed`), 50 chunks per batch
-  - Store in DB: `file_index` (project_id, path, hash, language, indexed_at),
-    `file_chunks` (file_id, content, embedding BLOB, start_line, end_line)
-  - sqlite-vec virtual table for ANN queries (`vec_search`)
-  - SQLite FTS5 index on chunk content for keyword fallback
-  - Branch-aware catalog (from opencode-codebase-index): hash-deduplicated
-    embeddings + branch membership table. Branch switch = catalog update,
-    not re-embedding
-- **Incremental updates**:
-  - Watch for git changes (post-commit hook or file watcher)
-  - Only re-index files whose SHA-256 changed
-  - Delete removed files' chunks + vectors
-  - Force push / first commit → full re-index fallback
-- **Status surface**: indexing progress in StatusBar (X/Y files, estimated time)
-- **Performance targets** (based on codesearch/flupkede benchmarks):
-  - Initial index (10K files): <5 min
-  - Incremental (1% changes): <30s
-  - Query (top-5 chunks): <50ms
-
-**DB schema (new tables)**
-```sql
-CREATE TABLE file_index (
-  id TEXT PRIMARY KEY,
-  project_id TEXT NOT NULL REFERENCES projects(id),
-  path TEXT NOT NULL,
-  hash TEXT NOT NULL,          -- SHA-256 of file content
-  language TEXT,
-  chunk_count INTEGER DEFAULT 0,
-  indexed_at INTEGER,
-  UNIQUE(project_id, path)
-);
-
-CREATE TABLE file_chunks (
-  id TEXT PRIMARY KEY,
-  file_id TEXT NOT NULL REFERENCES file_index(id) ON DELETE CASCADE,
-  content TEXT NOT NULL,
-  embedding BLOB,              -- float32[768] for nomic-embed-text
-  start_line INTEGER,
-  end_line INTEGER,
-  chunk_type TEXT DEFAULT 'function'  -- function, class, block, fallback
-);
-
--- sqlite-vec virtual table for cosine similarity search
-CREATE VIRTUAL TABLE file_chunks_vec USING vec0(
-  chunk_id TEXT,
-  embedding float[768]
-);
-
--- FTS5 for hybrid keyword search
-CREATE VIRTUAL TABLE file_chunks_fts USING fts5(
-  content, file_path,
-  content='file_chunks'
-);
-```
-
-**Likely files (new)**
-- New: `apps/desktop/src/main/indexer/project-indexer.ts` (background worker)
-- New: `apps/desktop/src/main/indexer/chunker.ts` (Tree-sitter + fallback)
-- New: `apps/desktop/src/main/indexer/embedder.ts` (Ollama API client)
-- New: `apps/desktop/src/main/indexer/search.ts` (hybrid retrieval + RRF)
-- New: `packages/core-rust/src/chunker/` (Tree-sitter AST parsing for chunks)
-- `apps/desktop/src/main/db/migrations.ts` (file_index + file_chunks tables)
-- `apps/desktop/src/main/db/queries/indexer.ts` (CRUD for chunks)
-- `apps/desktop/src/renderer/components/settings/GeneralSettings.tsx` (indexing config)
-- `apps/desktop/src/renderer/components/layout/StatusBar.tsx` (indexing progress)
 
 ---
 
@@ -967,30 +668,24 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ## Suggested Order
 
-### Next wave (P0 + P1)
-1. **T57** — Review Inbox / Attention Center
-2. **T65** — Parallel Multi-Agent on Worktrees
-3. **T68** — Repo Map + Semantic Search
-4. **T77** — DB Row Validation with Zod Schemas
+### Next wave (P0)
+1. **T65** — Parallel Multi-Agent on Worktrees
 
-### Stabilization & quality (P2 — do in any order)
-5. T78 — Explicit Pipeline State Machine
-6. T80 — Structured Error Classification
-7. T81 — Dependency Injection for Singletons
-8. T82 — Shared Package Schema Enrichment
+### Stabilization & quality (P2)
+2. T78 — Explicit Pipeline State Machine
+3. T80 — Structured Error Classification
+4. T81 — Dependency Injection for Singletons
+5. T82 — Shared Package Schema Enrichment
 
 ### Competitor-inspired backlog (P2-P3)
-9. **T88** — Ralph Loops in Pipelines (evaluator step)
-10. **T89** — Exegol CLI (sidecar client)
-11. **T90** — Terminal ↔ Chat dual view
-12. **T91** — Lifecycle scripts per repo
-13. **T95** — Focus-aware panel targeting (quick win)
-14. **T96** — Bang commands in Command Palette (quick win)
-15. **T99** — Agent access modes read/write + session metadata
-16. **T92** — Cross-repo workspaces
-17. **T93** — Mobile companion app
-18. **T94** — Headless daemon mode
-19. **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
+6. **T88** — Ralph Loops in Pipelines (evaluator step)
+7. **T90** — Terminal ↔ Chat dual view
+8. **T91** — Lifecycle scripts per repo
+9. **T95** — Focus-aware panel targeting (quick win)
+10. **T92** — Cross-repo workspaces
+11. **T93** — Mobile companion app
+12. **T94** — Headless daemon mode
+13. **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
 
 ---
 
