@@ -1,6 +1,45 @@
 import type { Agent, AgentCliType, AgentStatus } from "@exegol/shared";
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import { getProjectState, useWorkspaceStore } from "./workspace";
+
+// ─── Attention model (T57) ────────────────────────────────────────────────
+
+export type AttentionLevel = "critical" | "action_needed" | "info";
+
+export interface AttentionItem {
+  agentId: string;
+  projectId: string;
+  cliType: string;
+  taskDescription: string;
+  level: AttentionLevel;
+  reason: string;
+  timestamp: number;
+  read: boolean;
+  pinned: boolean;
+}
+
+function statusToAttention(
+  status: string,
+  cliType: string,
+): { level: AttentionLevel; reason: string } | null {
+  // Shells never generate attention items
+  if (cliType === "shell") return null;
+  switch (status) {
+    case "crashed":
+      return { level: "critical", reason: "Agent crashed" };
+    case "failed":
+      return { level: "critical", reason: "Agent failed" };
+    case "waiting_input":
+      return { level: "action_needed", reason: "Waiting for input" };
+    case "completed":
+      return { level: "info", reason: "Task completed" };
+    case "stopped":
+      return { level: "info", reason: "Agent stopped" };
+    default:
+      return null;
+  }
+}
 
 // ─── Push event subscription (T17) ──────────────────────────────────────
 
@@ -34,9 +73,9 @@ export function startAgentStatusPush(): void {
         currentStep: event.currentStep,
       });
 
-      // T57: Mark as unread when agent finishes (working → completed/failed/idle)
+      // Add to attention inbox (markUnread is now derived from this)
       if (isFinalStatus || event.status === "waiting_input") {
-        store.markUnread(event.agentId);
+        store.addAttentionItem(event.agentId);
       }
     }
   });
@@ -89,106 +128,216 @@ interface AgentStore {
   /** Get a single agent by ID */
   getAgent: (id: string) => AgentState | undefined;
 
-  /** Unread agent IDs — agents that completed while not focused (T57) */
-  unreadAgents: Record<string, boolean>;
+  /**
+   * Whether an agent is "unread" — derived from attentionItems.
+   * An agent is unread if it has an attention item that hasn't been read.
+   */
+  isUnread: (id: string) => boolean;
   markUnread: (id: string) => void;
   markRead: (id: string) => void;
+
+  /** Attention inbox — agents needing user attention, persisted across restarts */
+  attentionItems: Record<string, AttentionItem>;
+  addAttentionItem: (agentId: string) => void;
+  markAttentionRead: (agentId: string) => void;
+  dismissAttention: (agentId: string) => void;
+  toggleAttentionPin: (agentId: string) => void;
+  clearReadAttention: () => void;
+  /** Count of unread attention items (cached for badge rendering) */
+  unreadAttentionCount: number;
 }
 
-export const useAgentStore = create<AgentStore>((set, get) => ({
-  agents: {},
-  focusedAgentId: null,
-  unreadAgents: {},
+const ATTENTION_LEVEL_ORDER: Record<AttentionLevel, number> = {
+  critical: 0,
+  action_needed: 1,
+  info: 2,
+};
 
-  setFocusedAgent: (id) => {
-    if (id) {
-      set((s) => {
-        const { [id]: _, ...rest } = s.unreadAgents;
-        return { focusedAgentId: id, unreadAgents: rest };
-      });
-    } else {
-      set({ focusedAgentId: id });
-    }
-  },
+export const useAgentStore = create<AgentStore>()(
+  persist(
+    (set, get) => ({
+      agents: {},
+      focusedAgentId: null,
+      attentionItems: {},
+      unreadAttentionCount: 0,
 
-  markUnread: (id) =>
-    set((s) => {
-      if (s.focusedAgentId === id) return s;
-      if (s.unreadAgents[id]) return s; // Already unread
-      return { unreadAgents: { ...s.unreadAgents, [id]: true } };
-    }),
-
-  markRead: (id) =>
-    set((s) => {
-      if (!s.unreadAgents[id]) return s;
-      const { [id]: _, ...rest } = s.unreadAgents;
-      return { unreadAgents: rest };
-    }),
-
-  updateAgent: (id, update) =>
-    set((state) => {
-      const existing = state.agents[id];
-      if (!existing) return state;
-      return { agents: { ...state.agents, [id]: { ...existing, ...update } } };
-    }),
-
-  addAgent: (agent) =>
-    set((state) => ({
-      agents: { ...state.agents, [agent.id]: agent },
-    })),
-
-  removeAgent: (id) =>
-    set((state) => {
-      const { [id]: _, ...rest } = state.agents;
-      const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
-      return { agents: rest, focusedAgentId };
-    }),
-
-  clearAgents: () => set({ agents: {}, focusedAgentId: null }),
-
-  syncFromDb: (_projectId, dbAgents) =>
-    set((state) => {
-      const updated = { ...state.agents };
-      let added = 0;
-      let merged = 0;
-
-      for (const dbAgent of dbAgents) {
-        const existing = updated[dbAgent.id];
-        if (existing) {
-          merged++;
-          // Merge: keep live runtime state (currentStep from parser), update DB state
-          updated[dbAgent.id] = {
-            ...existing,
-            status: dbAgent.status as AgentStatus,
-            branchName: dbAgent.branchName ?? existing.branchName ?? null,
-            currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
-          };
+      setFocusedAgent: (id) => {
+        if (id) {
+          // Auto-mark as read when focused
+          const s = get();
+          const item = s.attentionItems[id];
+          if (item && !item.read) {
+            set({
+              focusedAgentId: id,
+              attentionItems: { ...s.attentionItems, [id]: { ...item, read: true } },
+              unreadAttentionCount: Math.max(0, s.unreadAttentionCount - 1),
+            });
+          } else {
+            set({ focusedAgentId: id });
+          }
         } else {
-          added++;
-          // New from DB — agent we don't have in memory yet
-          updated[dbAgent.id] = {
-            id: dbAgent.id,
-            projectId: dbAgent.projectId,
-            cliType: dbAgent.cliType as AgentCliType,
-            status: dbAgent.status as AgentStatus,
-            currentStep: dbAgent.currentStep ?? null,
-            taskDescription: dbAgent.taskDescription,
-            branchName: dbAgent.branchName ?? null,
-            tokenUsage: { input: 0, output: 0, cost: 0 },
-            startedAt: dbAgent.startedAt,
-          };
+          set({ focusedAgentId: id });
         }
-      }
+      },
 
-      if (added > 0 || merged > 0) {
-        console.log(
-          `[AgentStore] syncFromDb: ${added} added, ${merged} merged, total=${Object.keys(updated).length}`,
-        );
-      }
-      return { agents: updated };
+      isUnread: (id) => {
+        const item = get().attentionItems[id];
+        return !!item && !item.read;
+      },
+
+      // markUnread/markRead delegate to attentionItems — kept for backward compat
+      // with AgentMiniCard and other consumers that check unread state.
+      markUnread: (id) => get().addAttentionItem(id),
+
+      markRead: (id) => get().markAttentionRead(id),
+
+      updateAgent: (id, update) =>
+        set((state) => {
+          const existing = state.agents[id];
+          if (!existing) return state;
+          return { agents: { ...state.agents, [id]: { ...existing, ...update } } };
+        }),
+
+      addAgent: (agent) =>
+        set((state) => ({
+          agents: { ...state.agents, [agent.id]: agent },
+        })),
+
+      removeAgent: (id) =>
+        set((state) => {
+          const { [id]: _, ...rest } = state.agents;
+          const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
+          return { agents: rest, focusedAgentId };
+        }),
+
+      clearAgents: () => set({ agents: {}, focusedAgentId: null }),
+
+      syncFromDb: (_projectId, dbAgents) =>
+        set((state) => {
+          const updated = { ...state.agents };
+          let added = 0;
+          let merged = 0;
+
+          for (const dbAgent of dbAgents) {
+            const existing = updated[dbAgent.id];
+            if (existing) {
+              merged++;
+              // Merge: keep live runtime state (currentStep from parser), update DB state
+              updated[dbAgent.id] = {
+                ...existing,
+                status: dbAgent.status as AgentStatus,
+                branchName: dbAgent.branchName ?? existing.branchName ?? null,
+                currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
+              };
+            } else {
+              added++;
+              // New from DB — agent we don't have in memory yet
+              updated[dbAgent.id] = {
+                id: dbAgent.id,
+                projectId: dbAgent.projectId,
+                cliType: dbAgent.cliType as AgentCliType,
+                status: dbAgent.status as AgentStatus,
+                currentStep: dbAgent.currentStep ?? null,
+                taskDescription: dbAgent.taskDescription,
+                branchName: dbAgent.branchName ?? null,
+                tokenUsage: { input: 0, output: 0, cost: 0 },
+                startedAt: dbAgent.startedAt,
+              };
+            }
+          }
+
+          if (added > 0 || merged > 0) {
+            console.log(
+              `[AgentStore] syncFromDb: ${added} added, ${merged} merged, total=${Object.keys(updated).length}`,
+            );
+          }
+          return { agents: updated };
+        }),
+
+      getAgentList: () => Object.values(get().agents),
+
+      getAgent: (id) => get().agents[id],
+
+      // ─── T57: Attention inbox ──────────────────────────────────────────────
+
+      addAttentionItem: (agentId) =>
+        set((s) => {
+          const agent = s.agents[agentId];
+          if (!agent) return s;
+          const att = statusToAttention(agent.status, agent.cliType);
+          if (!att) return s;
+          const existing = s.attentionItems[agentId];
+          if (
+            existing?.pinned &&
+            ATTENTION_LEVEL_ORDER[att.level] > ATTENTION_LEVEL_ORDER[existing.level]
+          ) {
+            return s;
+          }
+          const isRead = s.focusedAgentId === agentId;
+          const wasUnread = existing && !existing.read;
+          const item: AttentionItem = {
+            agentId,
+            projectId: agent.projectId,
+            cliType: agent.cliType,
+            taskDescription: agent.taskDescription,
+            level: att.level,
+            reason: att.reason,
+            timestamp: Date.now(),
+            read: isRead,
+            pinned: existing?.pinned ?? false,
+          };
+          const countDelta = isRead ? 0 : wasUnread ? 0 : 1;
+          return {
+            attentionItems: { ...s.attentionItems, [agentId]: item },
+            unreadAttentionCount: s.unreadAttentionCount + countDelta,
+          };
+        }),
+
+      markAttentionRead: (agentId) =>
+        set((s) => {
+          const item = s.attentionItems[agentId];
+          if (!item || item.read) return s;
+          return {
+            attentionItems: { ...s.attentionItems, [agentId]: { ...item, read: true } },
+            unreadAttentionCount: Math.max(0, s.unreadAttentionCount - 1),
+          };
+        }),
+
+      dismissAttention: (agentId) =>
+        set((s) => {
+          const item = s.attentionItems[agentId];
+          if (!item) return s;
+          const { [agentId]: _, ...rest } = s.attentionItems;
+          const countDelta = item.read ? 0 : -1;
+          return {
+            attentionItems: rest,
+            unreadAttentionCount: Math.max(0, s.unreadAttentionCount + countDelta),
+          };
+        }),
+
+      toggleAttentionPin: (agentId) =>
+        set((s) => {
+          const item = s.attentionItems[agentId];
+          if (!item) return s;
+          return {
+            attentionItems: { ...s.attentionItems, [agentId]: { ...item, pinned: !item.pinned } },
+          };
+        }),
+
+      clearReadAttention: () =>
+        set((s) => {
+          const kept: Record<string, AttentionItem> = {};
+          for (const [id, item] of Object.entries(s.attentionItems)) {
+            if (!item.read || item.pinned) kept[id] = item;
+          }
+          return { attentionItems: kept };
+        }),
     }),
-
-  getAgentList: () => Object.values(get().agents),
-
-  getAgent: (id) => get().agents[id],
-}));
+    {
+      name: "exegol-agent-attention",
+      partialize: (state) => ({
+        attentionItems: state.attentionItems,
+      }),
+    },
+  ),
+);

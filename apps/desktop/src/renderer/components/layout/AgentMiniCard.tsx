@@ -33,7 +33,10 @@ export function navigateToAgent(agentId: string): void {
 export function AgentMiniCard({ agent }: { agent: AgentState }) {
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
   const isFocused = useAgentStore((s) => s.focusedAgentId === agent.id);
-  const isUnread = useAgentStore((s) => !!s.unreadAgents[agent.id]);
+  const isUnread = useAgentStore((s) => {
+    const item = s.attentionItems[agent.id];
+    return !!item && !item.read;
+  });
   const deleteAgent = useDeleteAgent();
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
   const isCrashed = agent.status === "crashed";

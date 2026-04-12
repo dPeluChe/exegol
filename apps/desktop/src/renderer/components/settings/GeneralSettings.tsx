@@ -1,6 +1,20 @@
 import type { IdeType, Settings } from "@exegol/shared";
 import { cn, Input } from "@exegol/ui";
-import { Bell, MessageSquare, Monitor, Moon, Palette, Sun } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  AlertCircle,
+  Bell,
+  Check,
+  Database,
+  Loader2,
+  MessageSquare,
+  Monitor,
+  Moon,
+  Palette,
+  RefreshCw,
+  Sun,
+} from "lucide-react";
+import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 
 // ─── IDE options with icon metadata ─────────────────────────────────────────
@@ -242,7 +256,10 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </div>
       </div>
 
-      {/* Keyboard shortcuts reference */}
+      {/* Ollama / Project Indexing status */}
+      <OllamaStatusSection settings={settings} onChange={onChange} />
+
+      {/* Keyboard shortcuts reference — same as before */}
       <div>
         <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
           Quick Reference
@@ -268,6 +285,154 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── T100: Ollama Status Section ────────────────────────────────────────
+
+interface OllamaStatus {
+  available: boolean;
+  modelInstalled: boolean;
+  version?: string;
+  error?: string;
+}
+
+function OllamaStatusSection({
+  settings,
+  onChange,
+}: {
+  settings: Pick<Settings, "ollamaUrl" | "ollamaModel">;
+  onChange: (updates: Partial<Settings>) => void;
+}) {
+  const ollamaUrl = settings.ollamaUrl;
+  const model = settings.ollamaModel;
+
+  const {
+    data: status,
+    isLoading,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ["ollamaStatus", ollamaUrl, model],
+    queryFn: () => trpcInvoke<OllamaStatus>("indexer.ollamaStatus", { url: ollamaUrl, model }),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const isOk = status?.available && status.modelInstalled;
+
+  return (
+    <div>
+      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+        Project Indexing (Ollama)
+      </h3>
+      <div className="space-y-3 rounded-xl border border-border bg-bg-secondary p-4">
+        <p className="text-[10px] text-text-muted">
+          Exegol can index your project files using local embeddings via Ollama. This enables
+          semantic search for agents and PR review.
+        </p>
+
+        {/* Ollama URL */}
+        <div className="flex items-center gap-3">
+          <label
+            className="shrink-0 text-[10px] font-medium text-text-secondary"
+            htmlFor="ollama-url"
+          >
+            Ollama URL
+          </label>
+          <Input
+            id="ollama-url"
+            value={ollamaUrl}
+            onChange={(e) => onChange({ ollamaUrl: e.target.value })}
+            className="h-7 flex-1 border-[var(--border)] bg-[var(--bg-tertiary)] text-[10px] text-[var(--text-primary)]"
+          />
+        </div>
+
+        {/* Model */}
+        <div className="flex items-center gap-3">
+          <label
+            className="shrink-0 text-[10px] font-medium text-text-secondary"
+            htmlFor="ollama-model"
+          >
+            Model
+          </label>
+          <Input
+            id="ollama-model"
+            value={model}
+            onChange={(e) => onChange({ ollamaModel: e.target.value })}
+            className="h-7 flex-1 border-[var(--border)] bg-[var(--bg-tertiary)] text-[10px] text-[var(--text-primary)]"
+          />
+        </div>
+
+        {/* Status indicator */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="flex h-7 items-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 text-[10px] font-medium text-text-secondary transition-colors hover:bg-white/5 disabled:opacity-50"
+          >
+            {isFetching ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            {isLoading ? "Checking..." : "Verify Connection"}
+          </button>
+
+          {status && !isFetching && (
+            <div className="flex items-center gap-1.5">
+              {isOk ? (
+                <>
+                  <Check className="h-3.5 w-3.5 text-green-400" />
+                  <span className="text-[10px] text-green-400">
+                    Connected (v{status.version}) — {model} ready
+                  </span>
+                </>
+              ) : status.available ? (
+                <>
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                  <span className="text-[10px] text-amber-400">{status.error}</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-3.5 w-3.5 text-red-400" />
+                  <span className="text-[10px] text-red-400">{status.error}</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Install hint */}
+        {status && !status.available && (
+          <div className="rounded-md border border-border/50 bg-bg-tertiary p-2.5 text-[10px] text-text-muted">
+            <p className="font-medium text-text-secondary">Install Ollama:</p>
+            <p className="mt-1">
+              <code className="rounded bg-white/5 px-1 py-0.5">brew install ollama</code> or
+              download from{" "}
+              <button
+                type="button"
+                onClick={() => window.open("https://ollama.ai", "_blank")}
+                className="text-accent underline"
+              >
+                ollama.ai
+              </button>
+            </p>
+            <p className="mt-1">
+              Then run: <code className="rounded bg-white/5 px-1 py-0.5">ollama pull {model}</code>
+            </p>
+          </div>
+        )}
+
+        {status?.available && !status.modelInstalled && (
+          <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5 text-[10px] text-amber-300">
+            Run: <code className="rounded bg-white/5 px-1 py-0.5">ollama pull {model}</code> to
+            install the embedding model.
+          </div>
+        )}
       </div>
     </div>
   );

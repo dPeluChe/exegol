@@ -4,6 +4,7 @@ import { apiKeysRouter } from "./procedures/apikeys";
 import { diffRouter } from "./procedures/diff";
 import { filesRouter } from "./procedures/files";
 import { githubRouter } from "./procedures/github";
+import { indexerRouter } from "./procedures/indexer";
 import { mcpRouter } from "./procedures/mcp";
 import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
@@ -47,6 +48,7 @@ export const appRouter = router({
   activities: activitiesRouter,
   search: searchRouter,
   github: githubRouter,
+  indexer: indexerRouter,
 });
 
 export type AppRouter = typeof appRouter;

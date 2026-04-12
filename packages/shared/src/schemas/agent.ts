@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { AGENT_CLI_TYPES, AGENT_STATUSES } from "../types/agent";
+import { AGENT_ACCESS_MODES, AGENT_CLI_TYPES, AGENT_STATUSES } from "../types/agent";
 
 export const agentCliTypeSchema = z.enum(AGENT_CLI_TYPES);
 export const agentStatusSchema = z.enum(AGENT_STATUSES);
+export const agentAccessModeSchema = z.enum(AGENT_ACCESS_MODES);
 
 export const agentSchema = z.object({
   id: z.string().min(1),
@@ -16,6 +17,7 @@ export const agentSchema = z.object({
   pid: z.number().int().positive().nullable(),
   startedAt: z.number().nullable(),
   stoppedAt: z.number().nullable(),
+  accessMode: agentAccessModeSchema.optional(),
 });
 
 export const agentCreateSchema = z.object({
@@ -28,6 +30,8 @@ export const agentCreateSchema = z.object({
   cwdOverride: z.string().optional(),
   /** T66: Resume a previous session (appends provider's resumeFlag to command) */
   resumeSession: z.boolean().optional(),
+  /** T99: read = explore-only, write = full access (default) */
+  accessMode: agentAccessModeSchema.optional(),
 });
 
 export type AgentSchema = z.infer<typeof agentSchema>;

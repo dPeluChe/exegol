@@ -28,6 +28,9 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+export const AGENT_ACCESS_MODES = ["read", "write"] as const;
+export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
+
 export type Agent = {
   id: string;
   projectId: string;
@@ -40,6 +43,8 @@ export type Agent = {
   pid: number | null;
   startedAt: number | null;
   stoppedAt: number | null;
+  /** T99: read = explore-only (no git writes), write = full access (default) */
+  accessMode?: AgentAccessMode;
 };
 
 export type AgentCreate = {
@@ -53,6 +58,8 @@ export type AgentCreate = {
   cwdOverride?: string;
   /** T66: Resume a previous session (appends provider's resumeFlag to command) */
   resumeSession?: boolean;
+  /** T99: access mode — "read" for explore-only, "write" for full access (default) */
+  accessMode?: AgentAccessMode;
 };
 
 // ─── Provider Registry ──────────────────────────────────────────────────────

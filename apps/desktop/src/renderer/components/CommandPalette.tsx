@@ -1,3 +1,4 @@
+import type { AgentCliType } from "@exegol/shared";
 import { Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -12,12 +13,14 @@ import {
   Settings,
   Split,
   Square,
+  Terminal,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { trpcInvoke } from "../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
+import { useTerminalStore } from "../stores/terminals";
 import { getProjectState, useWorkspaceStore } from "../stores/workspace";
 
 // ─── Types ────────���─────────────────────────────────────────────────────────
@@ -279,6 +282,66 @@ export function CommandPalette() {
     if (selected) selected.scrollIntoView({ block: "nearest" });
   }, [selectedIndex]);
 
+  // T96: Bang command — execute shell command when query starts with "!"
+  const executeBangCommand = useCallback(
+    async (cmd: string) => {
+      const projectId = useAppStore.getState().activeProjectId;
+      if (!projectId) return;
+      close();
+      try {
+        // Spawn a one-shot shell agent with the command as task description
+        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+        const agent = await trpcMutate<any>("agents.spawn", {
+          projectId,
+          cliType: "shell" as AgentCliType,
+          taskDescription: `! ${cmd}`,
+        });
+        // Add to store + create terminal
+        useAgentStore.getState().addAgent({
+          id: agent.id,
+          projectId,
+          cliType: agent.cliType,
+          status: agent.status,
+          currentStep: null,
+          taskDescription: `! ${cmd}`,
+          branchName: null,
+          tokenUsage: { input: 0, output: 0, cost: 0 },
+          startedAt: agent.startedAt,
+        });
+        useTerminalStore.getState().createTerminal(agent.id);
+        // Create a new tab with the terminal
+        const tabId = useWorkspaceStore.getState().addTab(`! ${cmd.slice(0, 30)}`);
+        const tab = getProjectState().tabs.find((t) => t.id === tabId);
+        if (tab) {
+          const { findFirstPaneId } = await import("../stores/workspace");
+          const paneId = findFirstPaneId(tab.layout);
+          if (paneId) {
+            useWorkspaceStore.getState().updatePane(paneId, {
+              type: "terminal",
+              agentId: agent.id,
+            });
+          }
+        }
+        // Wait for shell prompt (first PTY output = shell ready), then inject.
+        // 2s fallback for shells that don't emit a prompt quickly.
+        let injected = false;
+        const inject = () => {
+          if (injected) return;
+          injected = true;
+          unsub();
+          window.api.terminal.write(agent.id, `${cmd}\n`);
+        };
+        const unsub = window.api.terminal.onData(agent.id, inject);
+        setTimeout(inject, 2000);
+      } catch (err) {
+        console.error("[BangCommand] Failed:", err);
+      }
+    },
+    [close],
+  );
+
+  const isBangCommand = query.startsWith("!");
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "ArrowDown") {
@@ -289,10 +352,15 @@ export function CommandPalette() {
         setSelectedIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        filtered[selectedIndex]?.action();
+        // T96: Bang command — ! prefix executes as shell
+        if (isBangCommand && query.length > 1) {
+          executeBangCommand(query.slice(1).trim());
+        } else {
+          filtered[selectedIndex]?.action();
+        }
       }
     },
-    [filtered, selectedIndex],
+    [filtered, selectedIndex, isBangCommand, query, executeBangCommand],
   );
 
   return (
@@ -318,21 +386,39 @@ export function CommandPalette() {
             className="flex items-center gap-2 border-b px-3"
             style={{ borderColor: "var(--border)" }}
           >
-            <Search className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted)" }} />
+            {isBangCommand ? (
+              <Terminal className="h-4 w-4 shrink-0 text-accent" />
+            ) : (
+              <Search className="h-4 w-4 shrink-0" style={{ color: "var(--text-muted)" }} />
+            )}
             <Input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Type a command or search..."
+              placeholder="Type a command, search, or !shell-command..."
               className="h-11 border-0 bg-transparent text-sm shadow-none outline-none focus-visible:ring-0"
               style={{ color: "var(--text-primary)" }}
               autoFocus
             />
           </div>
 
+          {/* T96: Bang command hint */}
+          {isBangCommand && (
+            <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2 text-[11px] text-accent">
+              <Terminal className="h-3.5 w-3.5" />
+              <span>
+                Press{" "}
+                <kbd className="rounded border border-border bg-bg-tertiary px-1 text-[10px]">
+                  Enter
+                </kbd>{" "}
+                to run in a new terminal tab
+              </span>
+            </div>
+          )}
+
           {/* Results */}
           <div ref={listRef} className="max-h-72 overflow-y-auto p-1">
-            {filtered.length === 0 && (
+            {filtered.length === 0 && !isBangCommand && (
               <div className="px-3 py-6 text-center text-sm" style={{ color: "var(--text-muted)" }}>
                 No results found
               </div>
