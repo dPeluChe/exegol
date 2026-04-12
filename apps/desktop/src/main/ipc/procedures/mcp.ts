@@ -1,18 +1,8 @@
+import { mcpServerConfigSchema } from "@exegol/shared";
 import { z } from "zod";
 import { getMcpHost } from "../../mcp/host";
 import type { McpServerConfig, McpServerState, McpTool } from "../../mcp/registry";
 import { publicProcedure, router } from "../trpc";
-
-const mcpServerConfigSchema = z.object({
-  id: z.string(),
-  name: z.string().min(1),
-  transport: z.enum(["stdio", "http"]),
-  command: z.string().optional(),
-  args: z.array(z.string()).optional(),
-  url: z.string().optional(),
-  headers: z.record(z.string()).optional(),
-  enabled: z.boolean(),
-});
 
 export const mcpRouter = router({
   /**

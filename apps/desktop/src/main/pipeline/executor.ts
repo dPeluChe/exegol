@@ -22,13 +22,13 @@ import { runSetupHook } from "../hooks/project-hooks";
 import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput } from "./context";
 import { broadcastPipelineStatus, captureGitDiff, now, YOLO_FLAGS } from "./pipeline-helpers";
-import { assertTransition } from "./state-machine";
 import {
   handleStepComplete,
   type StepHandlerDeps,
   startIdleMonitor,
 } from "./pipeline-step-handler";
 import { cleanupPipelineWorktree } from "./pipeline-worktree";
+import { assertTransition } from "./state-machine";
 
 export { checkGitSync, type GitSyncStatus } from "./pipeline-helpers";
 
