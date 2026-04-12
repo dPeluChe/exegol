@@ -444,6 +444,34 @@ const migrations: Migration[] = [
     id: "029_agents_access_mode",
     sql: `ALTER TABLE agents ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'write';`,
   },
+  {
+    id: "030_project_indexing",
+    sql: `
+      CREATE TABLE IF NOT EXISTS file_index (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        hash TEXT NOT NULL,
+        language TEXT,
+        chunk_count INTEGER DEFAULT 0,
+        indexed_at INTEGER,
+        UNIQUE(project_id, path)
+      );
+
+      CREATE TABLE IF NOT EXISTS file_chunks (
+        id TEXT PRIMARY KEY,
+        file_id TEXT NOT NULL REFERENCES file_index(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        embedding BLOB,
+        start_line INTEGER,
+        end_line INTEGER,
+        chunk_type TEXT DEFAULT 'block'
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_file_index_project ON file_index(project_id);
+      CREATE INDEX IF NOT EXISTS idx_file_chunks_file ON file_chunks(file_id);
+    `,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {
