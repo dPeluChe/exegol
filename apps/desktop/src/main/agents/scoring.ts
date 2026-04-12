@@ -11,6 +11,7 @@
 
 import type { ExitReason } from "@exegol/shared";
 import type Database from "libsql";
+import { TransientError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
 import { stripAnsi } from "./status-parser";
@@ -251,8 +252,7 @@ Respond with ONLY a JSON object: {"clarity":N,"completeness":N,"correctness":N}`
     });
 
     if (!res.ok) {
-      logger.warn("[Scoring] Tier 3 API error:", res.status, res.statusText);
-      return;
+      throw new TransientError(`Tier 3 API error: ${res.status} ${res.statusText}`, "SCORING_API");
     }
 
     const response = (await res.json()) as { content?: Array<{ text?: string }> };
