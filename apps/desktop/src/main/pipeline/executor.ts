@@ -22,6 +22,7 @@ import { runSetupHook } from "../hooks/project-hooks";
 import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput } from "./context";
 import { broadcastPipelineStatus, captureGitDiff, now, YOLO_FLAGS } from "./pipeline-helpers";
+import { assertTransition } from "./state-machine";
 import {
   handleStepComplete,
   type StepHandlerDeps,
@@ -121,6 +122,7 @@ export class PipelineExecutor {
     }
 
     const startedAt = run.startedAt ?? now();
+    if (!assertTransition(run.status, "running")) return;
     updatePipelineRun(db, runId, {
       status: "running",
       currentStepIndex: stepIndex,
@@ -208,6 +210,7 @@ export class PipelineExecutor {
   }
 
   private completeRun(db: Database.Database, run: PipelineRun): void {
+    if (!assertTransition(run.status, "completed")) return;
     updatePipelineRun(db, run.id, {
       status: "completed",
       completedAt: now(),
@@ -238,6 +241,7 @@ export class PipelineExecutor {
       this.activeAgents.delete(runId);
     }
 
+    if (!assertTransition(run.status, "paused")) return;
     updatePipelineRun(db, runId, { status: "paused" });
 
     broadcastPipelineStatus({
@@ -274,6 +278,8 @@ export class PipelineExecutor {
       await manager.stop(db, activeAgentId);
       this.activeAgents.delete(runId);
     }
+
+    if (!assertTransition(run.status, "cancelled")) return;
 
     const updatedResults = run.stepResults.map((r) =>
       r.status === "pending" || r.status === "running"
