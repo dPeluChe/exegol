@@ -6,7 +6,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
-import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
+import {
+  collectPaneIds,
+  findFirstPaneId,
+  getProjectState,
+  useWorkspaceStore,
+} from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
 function slugify(text: string): string {
@@ -94,14 +99,26 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
       window.dispatchEvent(
         new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
       );
-      // Create a new tab for this agent (don't replace existing pane)
+      // T95: If there's a focused empty pane in the active tab, reuse it;
+      // otherwise create a new tab
       const store = useWorkspaceStore.getState();
-      const newTabId = store.addTab(agent.cliType);
-      const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
-      if (newTab) {
-        const paneId = findFirstPaneId(newTab.layout);
-        if (paneId) {
-          store.updatePane(paneId, { type: "terminal", agentId: agent.id });
+      const freshPw = getProjectState();
+      const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
+      const focusedId = store.focusedPaneId;
+      const focusedPane = focusedId ? freshPw.panes[focusedId] : null;
+      const focusedInActiveTab =
+        focusedId && activeTab ? collectPaneIds(activeTab.layout).includes(focusedId) : false;
+
+      if (focusedInActiveTab && focusedPane?.type === "empty" && focusedId) {
+        store.updatePane(focusedId, { type: "terminal", agentId: agent.id });
+      } else {
+        const newTabId = store.addTab(agent.cliType);
+        const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
+        if (newTab) {
+          const paneId = findFirstPaneId(newTab.layout);
+          if (paneId) {
+            store.updatePane(paneId, { type: "terminal", agentId: agent.id });
+          }
         }
       }
       onClose();

@@ -94,7 +94,7 @@ interface WorkspaceStore {
   removePane: (tabId: string, paneId: string) => void;
   splitPane: (
     tabId: string,
-    paneId: string,
+    paneId: string | null,
     direction: "horizontal" | "vertical",
     newPaneType: PaneType,
     config?: { agentId?: string; url?: string },
@@ -353,10 +353,15 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           const tab = pw.tabs.find((t) => t.id === tabId);
           if (!tab) return s;
 
-          const firstPaneId = findFirstPaneId(tab.layout);
-          if (!firstPaneId) return s;
+          // T95: Use focused pane as split target when it belongs to this tab
+          const tabPaneIds = collectPaneIds(tab.layout);
+          const targetPaneId =
+            s.focusedPaneId && tabPaneIds.includes(s.focusedPaneId)
+              ? s.focusedPaneId
+              : findFirstPaneId(tab.layout);
+          if (!targetPaneId) return s;
 
-          const newLayout = splitNodeByPaneId(tab.layout, firstPaneId, "horizontal", pane.id);
+          const newLayout = splitNodeByPaneId(tab.layout, targetPaneId, "horizontal", pane.id);
 
           return setPw(s, {
             tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
@@ -399,6 +404,10 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           const tab = pw.tabs.find((t) => t.id === tabId);
           if (!tab) return s;
 
+          // T95: Fall back to focusedPaneId, then first pane in layout
+          const targetId = paneId || s.focusedPaneId || findFirstPaneId(tab.layout);
+          if (!targetId) return s;
+
           const newPane: Pane = {
             id: nanoid(8),
             type: newPaneType,
@@ -406,7 +415,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
             url: config?.url,
           };
 
-          const newLayout = splitNodeByPaneId(tab.layout, paneId, direction, newPane.id);
+          const newLayout = splitNodeByPaneId(tab.layout, targetId, direction, newPane.id);
 
           return setPw(s, {
             tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),

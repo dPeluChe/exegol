@@ -178,11 +178,26 @@ export function WorkspaceTabBar() {
   const handleNewTerminal = useCallback(async () => {
     if (!projectId) return;
     try {
-      // Create a new tab first
-      const newTabId = addTab("Terminal");
-      // Find its empty pane
-      const tab = getProjectState().tabs.find((t) => t.id === newTabId);
-      const firstPaneId = tab ? findFirstPaneId(tab.layout) : null;
+      // T95: If there's a focused empty pane in the active tab, reuse it
+      const freshPw = getProjectState();
+      const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
+      const focusedId = useWorkspaceStore.getState().focusedPaneId;
+      const focusedPane = focusedId ? freshPw.panes[focusedId] : null;
+      const focusedInActiveTab =
+        focusedId && activeTab ? collectPaneIds(activeTab.layout).includes(focusedId) : false;
+      const canReuseFocused = focusedInActiveTab && focusedPane?.type === "empty";
+
+      let targetPaneId: string | null = null;
+
+      if (canReuseFocused && focusedId) {
+        // Reuse the focused empty pane — no need for a new tab
+        targetPaneId = focusedId;
+      } else {
+        // Create a new tab and find its empty pane
+        const newTabId = addTab("Terminal");
+        const tab = getProjectState().tabs.find((t) => t.id === newTabId);
+        targetPaneId = tab ? findFirstPaneId(tab.layout) : null;
+      }
 
       // Spawn a shell agent
       // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
@@ -204,9 +219,9 @@ export function WorkspaceTabBar() {
       });
       createTerminal(agent.id);
 
-      // Convert the empty pane to terminal
-      if (firstPaneId) {
-        updatePane(firstPaneId, { type: "terminal", agentId: agent.id });
+      // Convert the target pane to terminal
+      if (targetPaneId) {
+        updatePane(targetPaneId, { type: "terminal", agentId: agent.id });
       }
     } catch {
       // Spawn failed — tab stays with empty pane
@@ -388,23 +403,29 @@ function QuickLaunchBar() {
         const freshPw = getProjectState();
         const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
         if (activeTab) {
-          const firstPaneId = findFirstPaneId(activeTab.layout);
-          const firstPane = firstPaneId ? freshPw.panes[firstPaneId] : null;
+          // T95: Prefer focused pane over first pane when targeting
+          const focusedId = useWorkspaceStore.getState().focusedPaneId;
+          const tabPaneIds = collectPaneIds(activeTab.layout);
+          const targetPaneId =
+            focusedId && tabPaneIds.includes(focusedId)
+              ? focusedId
+              : findFirstPaneId(activeTab.layout);
+          const targetPane = targetPaneId ? freshPw.panes[targetPaneId] : null;
 
           // Only replace empty panes or terminals with stopped/no agent
           // NEVER replace a pane with a running agent — that orphans the session
-          const agentState = firstPane?.agentId
-            ? useAgentStore.getState().agents[firstPane.agentId]
+          const agentState = targetPane?.agentId
+            ? useAgentStore.getState().agents[targetPane.agentId]
             : null;
           const isRunningAgent =
             agentState &&
             ["running", "spawning", "waiting_input", "paused"].includes(agentState.status);
           const canReplace =
-            firstPane?.type === "empty" || (firstPane?.type === "terminal" && !isRunningAgent);
+            targetPane?.type === "empty" || (targetPane?.type === "terminal" && !isRunningAgent);
 
-          if (canReplace && firstPaneId) {
+          if (canReplace && targetPaneId) {
             // Replace empty/stopped pane with new agent terminal
-            updatePane(firstPaneId, {
+            updatePane(targetPaneId, {
               type: "terminal",
               agentId: agent.id,
             });
