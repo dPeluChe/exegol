@@ -1,4 +1,5 @@
-import { Coins, Cpu, GitBranch } from "lucide-react";
+import { cn } from "@exegol/ui";
+import { Bell, Coins, Cpu, GitBranch } from "lucide-react";
 import { useProject, useTokenUsageSummary } from "../../hooks/use-trpc";
 import { formatCost, formatTokens } from "../../lib/format";
 import { useAgentStore } from "../../stores/agents";
@@ -13,6 +14,7 @@ export function StatusBar() {
       Object.values(s.agents).filter((a) => a.status === "running" || a.status === "spawning")
         .length,
   );
+  const attentionCount = useAgentStore((s) => s.getAttentionCount());
 
   const platform = window.api?.app?.getPlatform?.() ?? "unknown";
 
@@ -33,12 +35,22 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Center: running agents */}
-      <div className="flex items-center gap-1">
-        <Cpu className="h-3 w-3" />
-        <span>
-          {runningCount} agent{runningCount !== 1 ? "s" : ""} running
-        </span>
+      {/* Center: running agents + attention */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <Cpu className="h-3 w-3" />
+          <span>
+            {runningCount} agent{runningCount !== 1 ? "s" : ""} running
+          </span>
+        </div>
+        {attentionCount > 0 && (
+          <div className={cn("flex items-center gap-1", attentionCount > 0 && "text-amber-400")}>
+            <Bell className="h-3 w-3" />
+            <span>
+              {attentionCount} need{attentionCount !== 1 ? "" : "s"} attention
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Right: token usage + platform */}
