@@ -32,6 +32,8 @@
 - **Exegol CLI** (T89) — headless client over sidecar socket
 - **Terminal ↔ Chat dual view** (T90) — same session, two presentations
 - **Lifecycle scripts per repo** (T91) — setup/run/teardown in git
+- **Focus-aware panel targeting** (T95) — new panes open next to focused pane
+- **Bang commands** (T96) — `!command` in Command Palette for quick shell runs
 
 ### P3 — Strategic bets / larger scope
 - **SSH Remote Development** (T73)
@@ -40,6 +42,7 @@
 - **Cross-repo workspaces** (T92) — front + back in one workspace
 - **Mobile companion app** (T93) — monitor agents from phone via daemon
 - **Headless daemon mode** (T94) — remote WebSocket for cloud/server deploys
+- **Panel Plugin SDK** (T97) — extensible panel system, community plugins, v1.0 architecture
 
 ---
 
@@ -592,6 +595,114 @@
 
 ---
 
+### T95 — Focus-Aware Panel Targeting
+**Priority**: P2 | **Effort**: Low (half day) | **Source**: kcosr/assistant
+
+**Why**
+- When an agent or a handler calls `addPane` / `splitPane`, the new pane currently
+  goes to a deterministic-but-arbitrary slot. kcosr/assistant tracks the "focused
+  pane" and opens new panels next to where the user is looking. This small polish
+  makes multi-pane workflows feel natural instead of requiring manual rearrangement
+  after every spawn.
+- We already have `focusedPaneId` in the workspace store — it just isn't used as
+  the default target for new content.
+
+**Scope**
+- Modify `addPane` / `splitPane` / agent-spawn pane placement to prefer
+  `focusedPaneId` as the insertion target when the caller doesn't specify a slot
+- If `focusedPaneId` is inside a split, the new pane splits relative to it
+- If `focusedPaneId` is null (nothing focused), fall back to current behavior
+- Optional: PaneContextMenu action "Open agent here" that uses the right-clicked
+  pane as the target
+
+**Likely files**
+- `apps/desktop/src/renderer/stores/workspace.ts` (addPane, splitPane)
+- `apps/desktop/src/renderer/components/workspace/EmptyPaneContent.tsx`
+- `apps/desktop/src/renderer/components/agents/AgentLauncher.tsx`
+
+---
+
+### T96 — Bang Commands in Command Palette
+**Priority**: P2 | **Effort**: Low (1 day) | **Source**: kcosr/assistant
+
+**Why**
+- kcosr/assistant lets users type `!ls -la` in the chat to run a shell command
+  inline with streaming output. This bridges the gap between "open a terminal" and
+  "just run one quick command" — useful for checking git status, running tests, or
+  verifying a build without leaving the workspace context.
+- Our Command Palette (Cmd+K) is already the power-user entry point. Adding a `!`
+  prefix for shell execution makes it a true Swiss-army surface.
+
+**Scope**
+- Detect `!` prefix in Command Palette input → intercept, strip prefix
+- Spawn a one-shot shell session (via PTY sidecar, same as quick-terminal) in a
+  temporary or ephemeral pane
+- Stream output back into either:
+  - A toast/popover that auto-dismisses after command completes (for short commands)
+  - A new terminal tab (for long-running commands)
+- Show exit code indicator (success/failure)
+- Optional: history of recent bang commands for re-run (store in agent_events or
+  in-memory)
+
+**Likely files**
+- `apps/desktop/src/renderer/components/CommandPalette.tsx` (detect `!` prefix)
+- `apps/desktop/src/main/agents/manager.ts` (one-shot shell spawn)
+- `apps/desktop/src/renderer/components/common/ToastStack.tsx` (streaming toast)
+
+---
+
+### T97 — Panel Plugin SDK
+**Priority**: P3 | **Effort**: Very large (2-4 weeks) | **Source**: kcosr/assistant
+
+**Why**
+- This is the single biggest architectural evolution Exegol could make for community
+  growth. Today every workspace section (Tasks, Prompts, Memory, Pipelines,
+  Resources, Scoring) is a hardcoded React component. Adding a new panel requires
+  editing core code. kcosr/assistant proves the plugin model works: a manifest.json
+  + server.js + bundle.js + auto-generated CLI — drop it in a directory and the app
+  discovers it at runtime.
+- Exegol becomes a **platform** instead of a **product**: community members build
+  panels for Jira integration, Notion sync, custom dashboards, etc. without PRs.
+- Pairs naturally with T89 (CLI): each plugin's operations become CLI commands
+  automatically, just like kcosr/assistant's SKILL.md + bin/<plugin>-cli pattern.
+
+**Scope (exploratory — needs a design spike first)**
+- Define a `PluginManifest` JSON schema:
+  - `id`, `name`, `version`, `description`
+  - `panels`: list of `{ id, label, icon, bundlePath }`
+  - `operations`: list of tool/HTTP/CLI operations the plugin exposes
+  - `serverModule`: optional Node.js entry point for backend logic
+  - `permissions`: what IPC/tRPC procedures the plugin can call
+- Plugin discovery at startup: scan `~/.exegol/plugins/` + bundled official plugins
+- **Backend host**: load server modules into sandboxed contexts in the main process,
+  expose their operations as tRPC sub-routers
+- **Frontend loader**: dynamic `<script>` loader + global panel registry API
+  (similar to kcosr's `registerPanel()`)
+- **Panel chrome**: iframe or React lazy + dynamic import per panel, with a host
+  API object (state persistence, IPC to backend, session context)
+- **Official plugins migration**: gradually extract Tasks, Prompts, Memory, etc. into
+  `packages/plugins/official/` following the same contract, so they serve as
+  reference implementations
+- **CLI generation**: for each plugin operation, emit a CLI binding in `packages/cli/`
+  (if T89 lands first) or a generated standalone script
+
+**Design constraints**
+- Security: plugins must not access the full main process — sandboxed IPC only
+- Bundle impact: panel bundles loaded on demand (lazy), not in the initial chunk
+- Backward compat: existing users who never install plugins see zero difference
+- DX: `exegol plugin create <name>` scaffolds a hello-world plugin with manifest +
+  server + panel
+
+**Likely files (new)**
+- New: `packages/plugin-sdk/` (manifest schema, host API types, panel protocol)
+- New: `apps/desktop/src/main/plugins/host.ts` (discovery, loader, sandbox)
+- New: `apps/desktop/src/main/plugins/registry.ts` (operation → tRPC bridge)
+- New: `apps/desktop/src/renderer/lib/plugin-loader.ts` (dynamic panel loading)
+- Modified: `apps/desktop/src/renderer/components/workspace/WorkspaceView.tsx`
+  (render plugin panels alongside built-in sections)
+
+---
+
 ## Execution Lanes for Parallel Work
 
 Use these lanes only if multiple agents are working concurrently. The goal is disjoint write sets.
@@ -718,9 +829,12 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 10. **T89** — Exegol CLI (sidecar client)
 11. **T90** — Terminal ↔ Chat dual view
 12. **T91** — Lifecycle scripts per repo
-13. **T92** — Cross-repo workspaces
-14. **T93** — Mobile companion app
-15. **T94** — Headless daemon mode
+13. **T95** — Focus-aware panel targeting (quick win)
+14. **T96** — Bang commands in Command Palette (quick win)
+15. **T92** — Cross-repo workspaces
+16. **T93** — Mobile companion app
+17. **T94** — Headless daemon mode
+18. **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
 
 ---
 
