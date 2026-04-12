@@ -9,12 +9,12 @@ import { logger } from "./logger";
 
 // ─── Error Hierarchy ───────────────────────────────────────────────────────
 
-/** Base error class for all Exegol errors. Adds a machine-readable `code`. */
+/** Base error class for all Exegol errors. Adds a machine-readable `code` and preserves `cause`. */
 export class ExegolError extends Error {
   readonly code: string;
 
-  constructor(message: string, code: string) {
-    super(message);
+  constructor(message: string, code: string, cause?: unknown) {
+    super(message, { cause });
     this.name = "ExegolError";
     this.code = code;
   }
@@ -22,24 +22,24 @@ export class ExegolError extends Error {
 
 /** Transient (retryable) errors — network hiccups, timeouts, rate limits. */
 export class TransientError extends ExegolError {
-  constructor(message: string, code = "TRANSIENT") {
-    super(message, code);
+  constructor(message: string, code = "TRANSIENT", cause?: unknown) {
+    super(message, code, cause);
     this.name = "TransientError";
   }
 }
 
 /** Permanent (fatal) errors — invalid config, missing resources, auth failures. */
 export class PermanentError extends ExegolError {
-  constructor(message: string, code = "PERMANENT") {
-    super(message, code);
+  constructor(message: string, code = "PERMANENT", cause?: unknown) {
+    super(message, code, cause);
     this.name = "PermanentError";
   }
 }
 
 /** Timeout errors — a specific kind of transient failure. */
 export class TimeoutError extends TransientError {
-  constructor(message: string) {
-    super(message, "TIMEOUT");
+  constructor(message: string, cause?: unknown) {
+    super(message, "TIMEOUT", cause);
     this.name = "TimeoutError";
   }
 }

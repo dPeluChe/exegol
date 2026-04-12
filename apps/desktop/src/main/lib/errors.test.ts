@@ -58,6 +58,23 @@ describe("Error hierarchy", () => {
     const err = new TransientError("retry me");
     expect(err).not.toBeInstanceOf(PermanentError);
   });
+
+  it("preserves cause through the hierarchy", () => {
+    const original = new TypeError("connection reset");
+    const transient = new TransientError("fetch failed", "NET", original);
+    expect(transient.cause).toBe(original);
+
+    const timeout = new TimeoutError("30s exceeded", original);
+    expect(timeout.cause).toBe(original);
+
+    const permanent = new PermanentError("bad config", "CFG", original);
+    expect(permanent.cause).toBe(original);
+  });
+
+  it("cause is undefined when not provided", () => {
+    const err = new ExegolError("test", "X");
+    expect(err.cause).toBeUndefined();
+  });
 });
 
 // ─── Type Guards ───────────────────────────────────────────────────────────

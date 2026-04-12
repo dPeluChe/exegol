@@ -38,11 +38,11 @@ export function hydrateTrackedWorktree(
   });
 }
 
-export function cleanupWorktree(
+export async function cleanupWorktree(
   db: Database.Database,
   agentId: string,
   worktrees: Map<string, WorktreeRecord>,
-): void {
+): Promise<void> {
   hydrateTrackedWorktree(db, agentId, worktrees);
   const wt = worktrees.get(agentId);
   if (!wt || !coreRust) return;
@@ -56,7 +56,11 @@ export function cleanupWorktree(
       // Lifecycle: run teardown script before removing worktree (T91)
       const lifecycle = loadLifecycleConfig(wt.repoPath);
       if (lifecycle?.teardown) {
-        runLifecycleScript(lifecycle.teardown, wt.worktreePath, "teardown").catch(() => {});
+        try {
+          await runLifecycleScript(lifecycle.teardown, wt.worktreePath, "teardown");
+        } catch {
+          /* Non-fatal: proceed with cleanup even if teardown fails */
+        }
       }
 
       removeManagedWorktree(wt.repoPath, wt.worktreeName, wt.worktreePath, false);

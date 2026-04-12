@@ -51,14 +51,19 @@ export function markSetupRan(projectPath: string): void {
  * Returns null if the file doesn't exist or has no valid keys.
  */
 export function loadLifecycleConfig(projectPath: string): LifecycleConfig | null {
-  const yamlPath = join(projectPath, ".exegol", "lifecycle.yaml");
-  if (!existsSync(yamlPath)) return null;
+  const dir = join(projectPath, ".exegol");
+  const yamlPath = existsSync(join(dir, "lifecycle.yaml"))
+    ? join(dir, "lifecycle.yaml")
+    : existsSync(join(dir, "lifecycle.yml"))
+      ? join(dir, "lifecycle.yml")
+      : null;
+  if (!yamlPath) return null;
 
   try {
     const content = readFileSync(yamlPath, "utf-8");
     return parseLifecycleYaml(content);
   } catch (err) {
-    logger.warn("[Lifecycle] Failed to read lifecycle.yaml:", err);
+    logger.warn("[Lifecycle] Failed to read lifecycle config:", err);
     return null;
   }
 }
