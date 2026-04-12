@@ -233,6 +233,7 @@ export class PipelineExecutor {
   pauseRun(db: Database.Database, runId: string, reason?: string): void {
     const run = getPipelineRun(db, runId);
     if (!run) return;
+    if (!assertTransition(run.status, "paused")) return;
 
     const activeAgentId = this.activeAgents.get(runId);
     if (activeAgentId) {
@@ -241,7 +242,6 @@ export class PipelineExecutor {
       this.activeAgents.delete(runId);
     }
 
-    if (!assertTransition(run.status, "paused")) return;
     updatePipelineRun(db, runId, { status: "paused" });
 
     broadcastPipelineStatus({
@@ -271,6 +271,7 @@ export class PipelineExecutor {
   async cancelRun(db: Database.Database, runId: string): Promise<void> {
     const run = getPipelineRun(db, runId);
     if (!run) return;
+    if (!assertTransition(run.status, "cancelled")) return;
 
     const activeAgentId = this.activeAgents.get(runId);
     if (activeAgentId) {
@@ -278,8 +279,6 @@ export class PipelineExecutor {
       await manager.stop(db, activeAgentId);
       this.activeAgents.delete(runId);
     }
-
-    if (!assertTransition(run.status, "cancelled")) return;
 
     const updatedResults = run.stepResults.map((r) =>
       r.status === "pending" || r.status === "running"
