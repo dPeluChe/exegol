@@ -9,7 +9,7 @@
  * chunking via core-rust for significantly better retrieval quality.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type Database from "libsql";
 import { nanoid } from "nanoid";
@@ -30,14 +30,14 @@ export interface IndexingProgress {
 
 type ProgressCallback = (progress: IndexingProgress) => void;
 
-/** Walk a directory recursively, yielding relative file paths */
-function walkDir(rootPath: string, excludePatterns: string[]): string[] {
+/** Walk a directory recursively, yielding relative file paths (async to avoid blocking main) */
+async function walkDir(rootPath: string, excludePatterns: string[]): Promise<string[]> {
   const files: string[] = [];
 
-  function walk(dir: string): void {
+  async function walk(dir: string): Promise<void> {
     let entries: string[];
     try {
-      entries = readdirSync(dir);
+      entries = await readdir(dir);
     } catch {
       return; // permission denied or similar
     }
@@ -48,10 +48,10 @@ function walkDir(rootPath: string, excludePatterns: string[]): string[] {
       if (shouldExclude(relPath, excludePatterns)) continue;
 
       try {
-        const stat = statSync(fullPath);
-        if (stat.isDirectory()) {
-          walk(fullPath);
-        } else if (stat.isFile() && stat.size <= MAX_FILE_SIZE) {
+        const s = await stat(fullPath);
+        if (s.isDirectory()) {
+          await walk(fullPath);
+        } else if (s.isFile() && s.size <= MAX_FILE_SIZE) {
           files.push(relPath);
         }
       } catch {
@@ -60,7 +60,7 @@ function walkDir(rootPath: string, excludePatterns: string[]): string[] {
     }
   }
 
-  walk(rootPath);
+  await walk(rootPath);
   return files;
 }
 
@@ -88,8 +88,8 @@ export async function indexProject(
   try {
     onProgress?.(progress);
 
-    // Step 1: Scan project files
-    const files = walkDir(projectPath, excludePatterns);
+    // Step 1: Scan project files (async to avoid blocking main process)
+    const files = await walkDir(projectPath, excludePatterns);
     progress.totalFiles = files.length;
     logger.info(`[Indexer] Scanning ${projectPath}: ${files.length} files`);
 
@@ -118,7 +118,7 @@ export async function indexProject(
       const fullPath = join(projectPath, filePath);
       let content: string;
       try {
-        content = readFileSync(fullPath, "utf-8");
+        content = await readFile(fullPath, "utf-8");
       } catch {
         progress.skippedFiles++;
         continue;

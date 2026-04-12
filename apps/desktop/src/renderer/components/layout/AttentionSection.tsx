@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import {
   type AgentState,
@@ -23,6 +23,12 @@ import { collectPaneIds, selectPanes, selectTabs, useWorkspaceStore } from "../.
 import { AgentIcon } from "../common/AgentIcon";
 
 // ─── Level config ────────────────────────────────────────────────────────
+
+const ATTENTION_LEVEL_ORDER: Record<AttentionLevel, number> = {
+  critical: 0,
+  action_needed: 1,
+  info: 2,
+};
 
 const LEVEL_CONFIG: Record<
   AttentionLevel,
@@ -129,11 +135,22 @@ const ACTIVE_STATUSES = new Set(["running", "spawning", "waiting_input"]);
 
 export function AttentionSection() {
   const agents = useAgentStore((s) => s.agents);
-  const attentionItems = useAgentStore((s) => s.getSortedAttention());
+  const rawItems = useAgentStore((s) => s.attentionItems);
   const dismiss = useAgentStore((s) => s.dismissAttention);
   const togglePin = useAgentStore((s) => s.toggleAttentionPin);
   const clearRead = useAgentStore((s) => s.clearReadAttention);
   const markRead = useAgentStore((s) => s.markAttentionRead);
+
+  // Memoize sorted items to avoid re-sorting on every render
+  const attentionItems = useMemo(() => {
+    const items = Object.values(rawItems);
+    return items.sort((a, b) => {
+      if (a.read !== b.read) return a.read ? 1 : -1;
+      const ld = ATTENTION_LEVEL_ORDER[a.level] - ATTENTION_LEVEL_ORDER[b.level];
+      if (ld !== 0) return ld;
+      return b.timestamp - a.timestamp;
+    });
+  }, [rawItems]);
 
   // Force re-render every 10s for elapsed time updates
   const [, setTick] = useState(0);
@@ -154,8 +171,6 @@ export function AttentionSection() {
   const navigateToAgent = useCallback(
     (agentId: string, projectId: string) => {
       markRead(agentId);
-      useAgentStore.getState().markRead(agentId);
-      useAgentStore.getState().markAttentionRead(agentId);
 
       const app = useAppStore.getState();
       if (app.activeProjectId !== projectId) {

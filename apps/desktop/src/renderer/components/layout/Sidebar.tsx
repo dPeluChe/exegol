@@ -14,7 +14,7 @@ import { SidebarSection } from "./SidebarSection";
 export function Sidebar() {
   const { data: projects } = useProjects();
   const projectCount = projects?.length ?? 0;
-  const attentionCount = useAgentStore((s) => s.getAttentionCount());
+  const attentionCount = useAgentStore((s) => s.unreadAttentionCount);
   const runningCount = useAgentStore(
     (s) =>
       Object.values(s.agents).filter(

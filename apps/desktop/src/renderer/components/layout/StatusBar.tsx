@@ -14,7 +14,7 @@ export function StatusBar() {
       Object.values(s.agents).filter((a) => a.status === "running" || a.status === "spawning")
         .length,
   );
-  const attentionCount = useAgentStore((s) => s.getAttentionCount());
+  const attentionCount = useAgentStore((s) => s.unreadAttentionCount);
 
   const platform = window.api?.app?.getPlatform?.() ?? "unknown";
 

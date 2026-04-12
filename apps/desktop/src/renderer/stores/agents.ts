@@ -73,9 +73,8 @@ export function startAgentStatusPush(): void {
         currentStep: event.currentStep,
       });
 
-      // T57: Mark as unread + add to attention inbox
+      // Add to attention inbox (markUnread is now derived from this)
       if (isFinalStatus || event.status === "waiting_input") {
-        store.markUnread(event.agentId);
         store.addAttentionItem(event.agentId);
       }
     }
@@ -129,27 +128,23 @@ interface AgentStore {
   /** Get a single agent by ID */
   getAgent: (id: string) => AgentState | undefined;
 
-  /** Unread agent IDs — agents that completed while not focused */
-  unreadAgents: Record<string, boolean>;
+  /**
+   * Whether an agent is "unread" — derived from attentionItems.
+   * An agent is unread if it has an attention item that hasn't been read.
+   */
+  isUnread: (id: string) => boolean;
   markUnread: (id: string) => void;
   markRead: (id: string) => void;
 
-  /** T57: Attention inbox — agents that need user attention, persisted across restarts */
+  /** Attention inbox — agents needing user attention, persisted across restarts */
   attentionItems: Record<string, AttentionItem>;
-  /** Push an attention item (called from status push handler) */
   addAttentionItem: (agentId: string) => void;
-  /** Mark an item as read (e.g., user clicked on it) */
   markAttentionRead: (agentId: string) => void;
-  /** Dismiss an item entirely */
   dismissAttention: (agentId: string) => void;
-  /** Toggle pin on an item */
   toggleAttentionPin: (agentId: string) => void;
-  /** Dismiss all read + unpinned items */
   clearReadAttention: () => void;
-  /** Get attention items sorted by priority */
-  getSortedAttention: () => AttentionItem[];
-  /** Count of unread attention items */
-  getAttentionCount: () => number;
+  /** Count of unread attention items (cached for badge rendering) */
+  unreadAttentionCount: number;
 }
 
 const ATTENTION_LEVEL_ORDER: Record<AttentionLevel, number> = {
@@ -163,33 +158,38 @@ export const useAgentStore = create<AgentStore>()(
     (set, get) => ({
       agents: {},
       focusedAgentId: null,
-      unreadAgents: {},
       attentionItems: {},
+      unreadAttentionCount: 0,
 
       setFocusedAgent: (id) => {
         if (id) {
-          set((s) => {
-            const { [id]: _, ...rest } = s.unreadAgents;
-            return { focusedAgentId: id, unreadAgents: rest };
-          });
+          // Auto-mark as read when focused
+          const s = get();
+          const item = s.attentionItems[id];
+          if (item && !item.read) {
+            set({
+              focusedAgentId: id,
+              attentionItems: { ...s.attentionItems, [id]: { ...item, read: true } },
+              unreadAttentionCount: Math.max(0, s.unreadAttentionCount - 1),
+            });
+          } else {
+            set({ focusedAgentId: id });
+          }
         } else {
           set({ focusedAgentId: id });
         }
       },
 
-      markUnread: (id) =>
-        set((s) => {
-          if (s.focusedAgentId === id) return s;
-          if (s.unreadAgents[id]) return s; // Already unread
-          return { unreadAgents: { ...s.unreadAgents, [id]: true } };
-        }),
+      isUnread: (id) => {
+        const item = get().attentionItems[id];
+        return !!item && !item.read;
+      },
 
-      markRead: (id) =>
-        set((s) => {
-          if (!s.unreadAgents[id]) return s;
-          const { [id]: _, ...rest } = s.unreadAgents;
-          return { unreadAgents: rest };
-        }),
+      // markUnread/markRead delegate to attentionItems — kept for backward compat
+      // with AgentMiniCard and other consumers that check unread state.
+      markUnread: (id) => get().addAttentionItem(id),
+
+      markRead: (id) => get().markAttentionRead(id),
 
       updateAgent: (id, update) =>
         set((state) => {
@@ -266,7 +266,6 @@ export const useAgentStore = create<AgentStore>()(
           if (!agent) return s;
           const att = statusToAttention(agent.status, agent.cliType);
           if (!att) return s;
-          // Don't overwrite a pinned item with a lower-priority one
           const existing = s.attentionItems[agentId];
           if (
             existing?.pinned &&
@@ -274,6 +273,8 @@ export const useAgentStore = create<AgentStore>()(
           ) {
             return s;
           }
+          const isRead = s.focusedAgentId === agentId;
+          const wasUnread = existing && !existing.read;
           const item: AttentionItem = {
             agentId,
             projectId: agent.projectId,
@@ -282,10 +283,14 @@ export const useAgentStore = create<AgentStore>()(
             level: att.level,
             reason: att.reason,
             timestamp: Date.now(),
-            read: s.focusedAgentId === agentId, // auto-read if focused
+            read: isRead,
             pinned: existing?.pinned ?? false,
           };
-          return { attentionItems: { ...s.attentionItems, [agentId]: item } };
+          const countDelta = isRead ? 0 : wasUnread ? 0 : 1;
+          return {
+            attentionItems: { ...s.attentionItems, [agentId]: item },
+            unreadAttentionCount: s.unreadAttentionCount + countDelta,
+          };
         }),
 
       markAttentionRead: (agentId) =>
@@ -294,14 +299,20 @@ export const useAgentStore = create<AgentStore>()(
           if (!item || item.read) return s;
           return {
             attentionItems: { ...s.attentionItems, [agentId]: { ...item, read: true } },
+            unreadAttentionCount: Math.max(0, s.unreadAttentionCount - 1),
           };
         }),
 
       dismissAttention: (agentId) =>
         set((s) => {
-          if (!s.attentionItems[agentId]) return s;
+          const item = s.attentionItems[agentId];
+          if (!item) return s;
           const { [agentId]: _, ...rest } = s.attentionItems;
-          return { attentionItems: rest };
+          const countDelta = item.read ? 0 : -1;
+          return {
+            attentionItems: rest,
+            unreadAttentionCount: Math.max(0, s.unreadAttentionCount + countDelta),
+          };
         }),
 
       toggleAttentionPin: (agentId) =>
@@ -309,10 +320,7 @@ export const useAgentStore = create<AgentStore>()(
           const item = s.attentionItems[agentId];
           if (!item) return s;
           return {
-            attentionItems: {
-              ...s.attentionItems,
-              [agentId]: { ...item, pinned: !item.pinned },
-            },
+            attentionItems: { ...s.attentionItems, [agentId]: { ...item, pinned: !item.pinned } },
           };
         }),
 
@@ -324,21 +332,6 @@ export const useAgentStore = create<AgentStore>()(
           }
           return { attentionItems: kept };
         }),
-
-      getSortedAttention: () => {
-        const items = Object.values(get().attentionItems);
-        return items.sort((a, b) => {
-          // Unread first
-          if (a.read !== b.read) return a.read ? 1 : -1;
-          // Then by level priority
-          const levelDiff = ATTENTION_LEVEL_ORDER[a.level] - ATTENTION_LEVEL_ORDER[b.level];
-          if (levelDiff !== 0) return levelDiff;
-          // Then newest first
-          return b.timestamp - a.timestamp;
-        });
-      },
-
-      getAttentionCount: () => Object.values(get().attentionItems).filter((i) => !i.read).length,
     }),
     {
       name: "exegol-agent-attention",

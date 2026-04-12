@@ -9,8 +9,8 @@
  * merge vector + keyword results.
  */
 
+import { cosineSimilarity } from "@exegol/shared";
 import type Database from "libsql";
-import { logger } from "../lib/logger";
 import { generateEmbedding, type OllamaConfig } from "./ollama-client";
 
 export interface SearchResult {
@@ -21,23 +21,6 @@ export interface SearchResult {
   score: number;
   language: string;
   chunkType: string;
-}
-
-/** Cosine similarity between two float32 arrays */
-function cosineSimilarity(a: number[], b: Float32Array): number {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  const len = Math.min(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const ai = a[i] ?? 0;
-    const bi = b[i] ?? 0;
-    dot += ai * bi;
-    normA += ai * ai;
-    normB += bi * bi;
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
 }
 
 /** Search the indexed codebase semantically */
@@ -51,7 +34,6 @@ export async function semanticSearch(
   // Step 1: Embed the query
   const queryEmbedding = await generateEmbedding(query, ollamaConfig);
   if (!queryEmbedding) {
-    logger.warn("[Search] Could not generate query embedding");
     return [];
   }
 
