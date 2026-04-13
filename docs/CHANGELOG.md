@@ -7,6 +7,25 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-04-13 — Renderer UX wave
+
+### Added
+
+- **Focus-Aware Panel Targeting** (T95). New panes open next to the
+  currently focused pane instead of an arbitrary first slot. `addPane`
+  and `splitPane` in the workspace store use `focusedPaneId` as the
+  default split target; QuickLaunchBar, handleNewTerminal, and
+  SpawnAgentModal all respect focus. Falls back to first-pane behavior
+  when nothing is focused. Extracted `getFocusedOrFirstPaneId()` helper
+  to eliminate three duplicated patterns.
+- **Diff Review with Line Comments** (T69). Inline review comments on
+  specific lines in the diff view, persisted in DB. Clickable gutter
+  icon on each diff line opens a comment input; existing comments render
+  as cards with resolve/delete actions. Per-file lazy fetching (only
+  when the file is expanded) and optimistic updates for instant UI
+  feedback. DB migration 031, `diffComments` tRPC router (add, list,
+  delete, toggleResolve), shared `DiffComment` type with Zod schema.
+
 ## [0.4.0] — 2026-04-12 — Infrastructure wave
 
 This release builds the intelligence layer: project indexing with local

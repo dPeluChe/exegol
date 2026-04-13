@@ -33,7 +33,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 - `terminal` — agent CLI or plain `$SHELL`
 - `browser` — Electron webview with URL bar + back/forward/reload
 - `files` — FileExplorer + Monaco code viewer
-- `git` — Changes (with Smart Git Button) + Diff + Oplog (agent operations with undo)
+- `git` — Changes (with Smart Git Button) + Diff (with inline line comments, T69) + Oplog (agent operations with undo)
 - `empty` — responsive agent launcher grid (3 breakpoints)
 
 ### Layouts (T85, v0.3.0)
@@ -117,8 +117,8 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 apps/desktop/src/
   main/
     agents/         manager, spawn-env, spawn-context, registry, handoff, scoring, queue, status-parser
-    db/             client, migrations (24), queries/ (13 domain modules)
-    ipc/            router, procedures/ (21 modules)
+    db/             client, migrations (25), queries/ (14 domain modules incl. diff-comments)
+    ipc/            router, procedures/ (22 modules incl. diff-comments)
     pipeline/       executor (singleton, event-driven), context (prompt builder), defaults (presets)
     mcp/            host (stdio/HTTP), registry
     memory/         extractor (ANSI-stripped), store (relevance scoring)
@@ -133,7 +133,8 @@ apps/desktop/src/
       workspace/    WorkspaceView, WorkspaceTabs (3 main + sub-tabs), WorkspacePane (5 types),
                     WorkspaceTabBar (quick launch + LayoutPresets dropdown), WorkspaceLayout,
                     GitPane (with SmartGitAction), LayoutPresets, SmartGitAction,
-                    PaneContextMenu, sections/ (16 section components + pipeline/), diff/
+                    PaneContextMenu, sections/ (16 section components + pipeline/),
+                    diff/ (DiffFileView, DiffHunkView, DiffLineComment, diff-parser)
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,
                     YOLO/Active toggles), TerminalSettings (bundled fonts, per-card preview,
                     family chain badges, promote-on-click), ApiKeysSettings
@@ -143,10 +144,12 @@ apps/desktop/src/
       agents/       AgentLauncher (portal dropdown from registry)
       layout/       Sidebar, ProjectsSection, StatusBar, TitleBar
     FloatingPaneRoot.tsx  (T84 — top-level renderer for floating PiP windows)
-    hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
+    hooks/          use-hotkeys, use-theme, use-trpc, use-trpc-diff-comments,
+                    use-auto-select-project,
                     use-floating-pane-sync (unmark panes when floating window closes)
     stores/         app, agents (push events, shell auto-cleanup), terminals,
-                    workspace (5 pane types, recovery, custom layouts, floatingPanes)
+                    workspace (5 pane types, recovery, custom layouts, floatingPanes,
+                    getFocusedOrFirstPaneId helper for T95 focus targeting)
     lib/            layout-presets (pure transformation helpers), trpc-client,
                     dispatch-refit, semantic-colors
     assets/
@@ -165,7 +168,7 @@ docs/
 
 ## Database
 
-24 migrations · 22 tables: projects, agents, worktrees, activities, search_index (FTS5), handoffs, messages, scheduled_tasks/results, task_queue, token_usage, settings, prompts, skills_state, memories, agent_scores, oplog, pipeline_templates, pipeline_runs
+25 migrations · 23 tables: projects, agents, worktrees, activities, search_index (FTS5), handoffs, messages, scheduled_tasks/results, task_queue, token_usage, settings, prompts, skills_state, memories, agent_scores, oplog, pipeline_templates, pipeline_runs, diff_comments
 
 Agent status: `idle | spawning | running | waiting_input | paused | completed | failed | stopped | crashed`
 
