@@ -16,13 +16,11 @@
 - **Parallel Multi-Agent on Worktrees** (T65)
 
 ### P2 — Valuable follow-ups once the core is stable
-- Diff line comments (T69)
 - Activity classification (T70)
 - Issue tracker expansion (T71)
 - **DI for singletons** (T81) — testability improvement
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 - **Terminal ↔ Chat dual view** (T90) — same session, two presentations
-- **Focus-aware panel targeting** (T95) — new panes open next to focused pane
 
 ### P3 — Strategic bets / larger scope
 - **SSH Remote Development** (T73)
@@ -121,27 +119,6 @@
 
 ---
 
-### T69 — Diff Review with Line Comments
-**Priority**: P2 | **Effort**: Medium | **Source**: Emdash
-
-**Why**
-- Good next step after T62, but not as urgent as solving review readiness first.
-
-**Scope**
-- Persist inline review comments per file/hunk/line
-- Add comment threads in unified/split diff
-- Optional “merge/review complete” workflow state
-
-**Depends on**
-- T62 preferred
-
-**Likely files**
-- `apps/desktop/src/main/ipc/procedures/diff.ts`
-- `apps/desktop/src/main/db/*`
-- `apps/desktop/src/renderer/components/workspace/sections/diff/*`
-
----
-
 ### T70 — Activity Classification (Busy / Idle / Neutral)
 **Priority**: P2 | **Effort**: Low | **Source**: Emdash
 
@@ -208,59 +185,6 @@
 > These tasks surfaced from a comprehensive codebase audit (April 2026).
 > They address technical debt, testability, and robustness gaps that will compound if left unattended.
 
-### T78 — Explicit Pipeline State Machine
-**Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
-
-**Why**
-- Pipeline state transitions (pending → running → paused → completed → cancelled) are handled
-  via direct DB updates + callbacks without explicit transition validation. Invalid transitions
-  (e.g., cancelling a completed pipeline, advancing a cancelled one) are not guarded.
-
-**Scope**
-- Define allowed transitions as a map:
-  ```
-  pending  → running
-  running  → paused, completed, failed, cancelled
-  paused   → running, cancelled
-  completed → (terminal)
-  failed   → (terminal)
-  cancelled → (terminal)
-  ```
-- Add transition guard in `PipelineExecutor` methods
-- Log invalid transition attempts as warnings
-- Optionally: use a lightweight FSM library (xstate/fsm) or just a transition table
-
-**Likely files**
-- `apps/desktop/src/main/pipeline/executor.ts`
-- New: `apps/desktop/src/main/pipeline/state-machine.ts`
-
----
-
-### T80 — Structured Error Classification
-**Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
-
-**Why**
-- Error handling is inconsistent: some operations are "non-fatal, try/catch" (scoring, memory,
-  worktree cleanup), others propagate errors. There's no classification between transient
-  (retryable) and permanent (fatal) errors. This makes debugging harder and prevents intelligent
-  retry logic.
-
-**Scope**
-- Define error classes: `TransientError`, `PermanentError`, `TimeoutError`
-- Classify known failure modes:
-  - Transient: DB locked, socket ECONNREFUSED, API rate limit
-  - Permanent: file not found, invalid config, auth failure
-  - Timeout: PTY spawn, API call, git operation
-- Add retry helper for transient errors (max 3, exponential backoff)
-- Standardize logger calls with error classification metadata
-
-**Likely files**
-- New: `apps/desktop/src/main/lib/errors.ts`
-- `apps/desktop/src/main/lib/logger.ts` (enrich with error type)
-- All main process modules (gradual adoption)
-
----
-
 ### T81 — Dependency Injection for Singletons
 **Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
 
@@ -290,30 +214,6 @@
 **Likely files**
 - New: `apps/desktop/src/main/app-context.ts`
 - All singleton modules (gradual migration)
-
----
-
-### T82 — Shared Package Schema Enrichment
-**Priority**: P2 | **Effort**: Low | **Source**: Deep codebase analysis
-
-**Why**
-- `@exegol/shared` has 18 type files but only 5 Zod schemas. IPC payloads and DB rows
-  lack runtime validation. Adding schemas would catch contract violations at the boundary
-  between main/renderer processes.
-
-**Scope**
-- Add Zod schemas for:
-  - IPC request/response payloads (tRPC procedure inputs)
-  - DB write operations (AgentCreate, ProjectCreate, etc.)
-  - MCP tool call results
-  - Pipeline step definitions and run states
-  - Scheduler task definitions
-- Export from `packages/shared/src/schemas/index.ts`
-- Use in tRPC procedure validators (`.input(schema)`)
-
-**Likely files**
-- `packages/shared/src/schemas/*` (new and existing)
-- `packages/shared/src/types/*` (keep types, add corresponding schemas)
 
 ---
 
@@ -368,37 +268,6 @@
 - New: `apps/desktop/src/renderer/components/terminal/ChatView.tsx`
 - New: `apps/desktop/src/renderer/lib/terminal-to-chat.ts` (parsers)
 - `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (toggle state)
-
----
-
-### T91 — Lifecycle Scripts per Repo
-**Priority**: P2 | **Effort**: Low | **Source**: Superconductor + our own T60
-
-**Why**
-- Power users want deterministic environment setup per repo: "before spawning any
-  agent, run `npm install`", "after commit, run tests". Shareable via git.
-- Supersedes T60's project-hook idea with a simpler concrete format.
-
-**Scope**
-- Define `.exegol/lifecycle.yaml` format:
-  ```yaml
-  setup: npm install && bun run build:rust
-  beforeAgent: source .env.local
-  afterCommit: bun test
-  teardown: rm -rf dist
-  ```
-- Loaded on project detect, cached in settings
-- Run setup on first agent spawn (show progress in status bar)
-- Run beforeAgent per agent spawn (inject into PTY env)
-- Run afterCommit from smart git button (T83)
-- Teardown on worktree cleanup
-- UI: Settings tab showing the loaded script with edit button
-
-**Likely files**
-- New: `apps/desktop/src/main/lifecycle/loader.ts`
-- `apps/desktop/src/main/agents/manager.ts` (run beforeAgent)
-- `apps/desktop/src/main/agents/worktrees.ts` (run teardown)
-- `apps/desktop/src/renderer/components/workspace/sections/SettingsSection.tsx`
 
 ---
 
@@ -473,33 +342,6 @@
 - `apps/desktop/src/main/ipc/router.ts` (WebSocket transport)
 - `apps/desktop/src/main/security/keystore.ts` (daemon tokens)
 - `packages/shared/src/transport/*` (shared ws protocol)
-
----
-
-### T95 — Focus-Aware Panel Targeting
-**Priority**: P2 | **Effort**: Low (half day) | **Source**: kcosr/assistant
-
-**Why**
-- When an agent or a handler calls `addPane` / `splitPane`, the new pane currently
-  goes to a deterministic-but-arbitrary slot. kcosr/assistant tracks the "focused
-  pane" and opens new panels next to where the user is looking. This small polish
-  makes multi-pane workflows feel natural instead of requiring manual rearrangement
-  after every spawn.
-- We already have `focusedPaneId` in the workspace store — it just isn't used as
-  the default target for new content.
-
-**Scope**
-- Modify `addPane` / `splitPane` / agent-spawn pane placement to prefer
-  `focusedPaneId` as the insertion target when the caller doesn't specify a slot
-- If `focusedPaneId` is inside a split, the new pane splits relative to it
-- If `focusedPaneId` is null (nothing focused), fall back to current behavior
-- Optional: PaneContextMenu action "Open agent here" that uses the right-clicked
-  pane as the target
-
-**Likely files**
-- `apps/desktop/src/renderer/stores/workspace.ts` (addPane, splitPane)
-- `apps/desktop/src/renderer/components/workspace/EmptyPaneContent.tsx`
-- `apps/desktop/src/renderer/components/agents/AgentLauncher.tsx`
 
 ---
 
@@ -668,20 +510,15 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 1. **T65** — Parallel Multi-Agent on Worktrees
 
 ### Stabilization & quality (P2)
-2. T78 — Explicit Pipeline State Machine
-3. T80 — Structured Error Classification
-4. T81 — Dependency Injection for Singletons
-5. T82 — Shared Package Schema Enrichment
+2. T81 — Dependency Injection for Singletons
 
 ### Competitor-inspired backlog (P2-P3)
-6. **T88** — Ralph Loops in Pipelines (evaluator step)
-7. **T90** — Terminal ↔ Chat dual view
-8. **T91** — Lifecycle scripts per repo
-9. **T95** — Focus-aware panel targeting (quick win)
-10. **T92** — Cross-repo workspaces
-11. **T93** — Mobile companion app
-12. **T94** — Headless daemon mode
-13. **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
+3. **T88** — Ralph Loops in Pipelines (evaluator step)
+4. **T90** — Terminal ↔ Chat dual view
+5. **T92** — Cross-repo workspaces
+6. **T93** — Mobile companion app
+7. **T94** — Headless daemon mode
+8. **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
 
 ---
 

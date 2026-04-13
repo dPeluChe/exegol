@@ -7,8 +7,7 @@
     "exegol": "./dist/index.js"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:better-sqlite3 --external:libsql --banner:js=\"#!/usr/bin/env node\"",
-    "dev": "tsx src/index.ts"
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:better-sqlite3 --external:libsql --banner:js=\"#!/usr/bin/env node\""
   },
   "dependencies": {
     "libsql": "^0.5.0"
