@@ -5,6 +5,7 @@ import {
   getWorktreeByAgentId,
 } from "../db/queries";
 import { logger } from "../lib/logger";
+import { loadLifecycleConfig, runLifecycleScript } from "../lifecycle/loader";
 import { coreRust } from "./spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "./worktrees";
 
@@ -37,11 +38,11 @@ export function hydrateTrackedWorktree(
   });
 }
 
-export function cleanupWorktree(
+export async function cleanupWorktree(
   db: Database.Database,
   agentId: string,
   worktrees: Map<string, WorktreeRecord>,
-): void {
+): Promise<void> {
   hydrateTrackedWorktree(db, agentId, worktrees);
   const wt = worktrees.get(agentId);
   if (!wt || !coreRust) return;
@@ -52,6 +53,16 @@ export function cleanupWorktree(
         `[AgentManager] Worktree '${wt.worktreeName}' has changes — keeping at ${wt.worktreePath}`,
       );
     } else {
+      // Lifecycle: run teardown script before removing worktree (T91)
+      const lifecycle = loadLifecycleConfig(wt.repoPath);
+      if (lifecycle?.teardown) {
+        try {
+          await runLifecycleScript(lifecycle.teardown, wt.worktreePath, "teardown");
+        } catch {
+          /* Non-fatal: proceed with cleanup even if teardown fails */
+        }
+      }
+
       removeManagedWorktree(wt.repoPath, wt.worktreeName, wt.worktreePath, false);
       dbRemoveWorktree(db, wt.dbId);
       clearAgentWorktree(db, agentId);

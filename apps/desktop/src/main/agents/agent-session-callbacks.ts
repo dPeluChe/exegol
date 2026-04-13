@@ -27,7 +27,7 @@ export function createSpawnCallbacks(
   db: Database.Database,
   agent: AgentContext,
   maps: SessionMaps,
-  onCleanupWorktree: (db: Database.Database, agentId: string) => void,
+  onCleanupWorktree: (db: Database.Database, agentId: string) => void | Promise<void>,
   maxScrollbackBytes: number,
 ) {
   return {

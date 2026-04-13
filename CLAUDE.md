@@ -99,6 +99,8 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 ### Key patterns
 - **tRPC over IPC**: 21 routers in main process, renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
+- **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
+- **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
 - **Crash recovery**: `session.listInfo` RPC returns `{ id, alive, exitCode, signal }` — only ALIVE ids go to `reattachSidecarAgents()`, dead ones (in the sidecar's 60s grace period) fall through to `recoverStaleAgents()` and get marked as "crashed" with scrollback preserved (v0.3.0 fix: previously dead sessions were stuck as "running" with no PTY)
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Auto-save**: Settings tabs save independently (General/Terminal auto-save on change, CLIs save per field)
@@ -123,6 +125,8 @@ apps/desktop/src/
     pipeline/       executor (singleton, event-driven), context (prompt builder), defaults (presets), state-machine (T78 transition guards)
     mcp/            host (stdio/HTTP), registry
     memory/         extractor (ANSI-stripped), store (relevance scoring)
+    lifecycle/      loader (T91: .exegol/lifecycle.yaml parser + runner)
+    lib/            logger, errors (T80: ExegolError hierarchy + withRetry)
     skills/         loader, discovery, defaults (5 personas)
     scheduler/      engine (cron + dependency-aware)
     security/       keystore (safeStorage)
