@@ -7,22 +7,32 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [0.5.0] — 2026-04-13 — Main process infra
+## [0.4.1] — 2026-04-12 — Parallel agent wave
+
+Six tasks completed by 3 parallel Claude Code agents running in Exegol.
+Test count: 142 → 210 (+68 new tests).
 
 ### Added
 
-- **Structured error classification** (T80). `ExegolError` base class with
-  `TransientError`, `PermanentError`, and `TimeoutError` subclasses. Error
-  `cause` chain preserved. `isTransient()`/`isPermanent()` type guards.
-  `withRetry()` helper with exponential backoff (1s base, max 3 retries) that
-  only retries on transient errors. MCP disconnect and scoring API errors
-  classified as transient. 19 tests.
-- **Lifecycle scripts per repo** (T91). `.exegol/lifecycle.yaml` (or `.yml`)
-  support with four hooks: `setup`, `beforeAgent`, `afterCommit`, `teardown`.
-  Simple line-based YAML parser with snake_case alias support (no library).
-  Setup runs once per session per project on first agent spawn. `beforeAgent`
-  prepended to shell command. `teardown` awaited before worktree deletion.
-  12 tests for the YAML parser.
+- **Pipeline State Machine** (T78). Typed transition map with terminal
+  states. `assertTransition()` guards in executor log warnings on
+  invalid transitions without crashing. 32 new tests.
+- **Shared Schema Enrichment** (T82). Zod schemas for MCP tool calls,
+  scheduler create/update, token usage summaries, pipeline transitions.
+  Inline duplicates in tRPC procedures replaced with shared imports.
+- **Structured Error Classification** (T80). `ExegolError` hierarchy:
+  `TransientError`, `PermanentError`, `TimeoutError` with cause chain.
+  `withRetry()` with exponential backoff. 19 tests.
+- **Lifecycle Scripts per Repo** (T91). `.exegol/lifecycle.yaml` for
+  `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Wired into
+  agent spawn + worktree cleanup. 17 tests.
+- **Focus-Aware Panel Targeting** (T95). New panes open next to the
+  focused pane. Falls back to first pane when nothing is focused.
+- **Diff Review with Line Comments** (T69). Inline comments on diff
+  lines. DB-persisted with add/delete/resolve toggle. Per-file lazy
+  fetch + optimistic updates.
+
+---
 
 ## [0.4.0] — 2026-04-12 — Infrastructure wave
 
@@ -32,16 +42,6 @@ validation, and several productivity quick wins.
 
 ### Added
 
-- **Explicit Pipeline State Machine** (T78). Typed transition map for
-  pipeline run statuses (`pending → running → paused/completed/failed/cancelled`).
-  Guards in `PipelineExecutor` reject invalid transitions with a warning
-  log instead of silently corrupting state. 32 tests covering all valid
-  and terminal-state transitions.
-- **Shared Package Schema Enrichment** (T82). New Zod schemas for MCP
-  server config, MCP tool call results, scheduler task create/update,
-  scheduled result status, token usage summaries, and pipeline run
-  transitions. Replaces duplicated inline schemas in MCP and scheduler
-  tRPC procedures with shared imports.
 - **Review Inbox / Agent Monitor** (T57). Sidebar shows running agents
   grouped by project with unique animated spinners per agent (10 preset
   animations — braille wave, moon phases, heartbeat, etc). Below the
