@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentStatus,
+  DiffComment,
   Project,
   Prompt,
   ScheduledResult,
@@ -10,6 +11,7 @@ import type {
 } from "@exegol/shared";
 import {
   agentRowSchema,
+  diffCommentRowSchema,
   parseRow,
   projectRowSchema,
   promptRowSchema,
@@ -131,5 +133,20 @@ export function mapTokenUsageRow(row: Record<string, unknown>): TokenUsage {
     estimatedCostUsd: r.estimated_cost_usd,
     toolCallCount: r.tool_call_count,
     recordedAt: r.recorded_at,
+  };
+}
+
+export function mapDiffCommentRow(row: Record<string, unknown>): DiffComment {
+  const r = parseRow(diffCommentRowSchema, row, "diffComment");
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    agentId: r.agent_id,
+    filePath: r.file_path,
+    lineNumber: r.line_number,
+    hunkIndex: r.hunk_index,
+    content: r.content,
+    resolved: r.resolved,
+    createdAt: r.created_at,
   };
 }

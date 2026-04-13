@@ -157,6 +157,7 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
 
   const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode, overridePath);
   const { data: reviewSummary } = useReviewSummary(projectId, overridePath, diffMode === "staged");
+
   // Track collapsed state per file (all collapsed by default)
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
@@ -357,6 +358,7 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
                 viewMode={viewMode}
                 collapsed={!expandedFiles.has(file.newPath)}
                 onToggle={() => toggleFile(file.newPath)}
+                projectId={projectId}
               />
             ))}
           </div>

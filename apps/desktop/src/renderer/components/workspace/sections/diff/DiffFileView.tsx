@@ -1,5 +1,13 @@
+import type { DiffComment } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { ChevronDown, ChevronRight, FilePlus, FileX, Pencil } from "lucide-react";
+import { ChevronDown, ChevronRight, FilePlus, FileX, MessageSquare, Pencil } from "lucide-react";
+import { useCallback, useMemo } from "react";
+import {
+  useAddDiffComment,
+  useDeleteDiffComment,
+  useDiffComments,
+  useToggleResolveDiffComment,
+} from "../../../../hooks/use-trpc-diff-comments";
 import { DiffHunkView } from "./DiffHunkView";
 import type { DiffFile } from "./diff-parser";
 
@@ -41,9 +49,34 @@ interface DiffFileViewProps {
   viewMode: "unified" | "split";
   collapsed: boolean;
   onToggle: () => void;
+  projectId: string | null;
 }
 
-export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileViewProps) {
+export function DiffFileView({
+  file,
+  viewMode,
+  collapsed,
+  onToggle,
+  projectId,
+}: DiffFileViewProps) {
+  // Fetch comments only when expanded (per-file, avoids bulk fetch)
+  const { data: comments } = useDiffComments(!collapsed ? projectId : null, file.newPath);
+  const addComment = useAddDiffComment();
+  const deleteComment = useDeleteDiffComment();
+  const toggleResolve = useToggleResolveDiffComment();
+
+  const handleAddComment = useCallback(
+    (lineNumber: number, content: string) => {
+      if (!projectId) return;
+      addComment.mutate({ projectId, filePath: file.newPath, lineNumber, content });
+    },
+    [projectId, file.newPath, addComment],
+  );
+  const handleDelete = useCallback((id: string) => deleteComment.mutate(id), [deleteComment]);
+  const handleToggleResolve = useCallback(
+    (id: string) => toggleResolve.mutate(id),
+    [toggleResolve],
+  );
   const additionCount = file.hunks.reduce(
     (sum, h) => sum + h.lines.filter((l) => l.type === "addition").length,
     0,
@@ -52,6 +85,23 @@ export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileVi
     (sum, h) => sum + h.lines.filter((l) => l.type === "deletion").length,
     0,
   );
+
+  // Group comments by line number for efficient lookup
+  const commentsByLine = useMemo(() => {
+    if (!comments?.length) return undefined;
+    const map: Record<number, DiffComment[]> = {};
+    for (const c of comments) {
+      const arr = map[c.lineNumber];
+      if (arr) {
+        arr.push(c);
+      } else {
+        map[c.lineNumber] = [c];
+      }
+    }
+    return map;
+  }, [comments]);
+
+  const commentCount = comments?.length ?? 0;
 
   return (
     <div className="overflow-hidden rounded border border-border/50">
@@ -83,6 +133,12 @@ export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileVi
         </span>
 
         <span className="flex shrink-0 gap-2 text-[11px]">
+          {commentCount > 0 && (
+            <span className="flex items-center gap-0.5 text-yellow-400">
+              <MessageSquare className="h-3 w-3" />
+              {commentCount}
+            </span>
+          )}
           {additionCount > 0 && <span className="text-green-400">+{additionCount}</span>}
           {deletionCount > 0 && <span className="text-red-400">-{deletionCount}</span>}
         </span>
@@ -95,7 +151,15 @@ export function DiffFileView({ file, viewMode, collapsed, onToggle }: DiffFileVi
         ) : (
           <div className="overflow-x-auto">
             {file.hunks.map((hunk) => (
-              <DiffHunkView key={hunk.header} hunk={hunk} viewMode={viewMode} />
+              <DiffHunkView
+                key={hunk.header}
+                hunk={hunk}
+                viewMode={viewMode}
+                commentsByLine={commentsByLine}
+                onAddComment={projectId ? handleAddComment : undefined}
+                onDeleteComment={handleDelete}
+                onToggleResolve={handleToggleResolve}
+              />
             ))}
           </div>
         ))}

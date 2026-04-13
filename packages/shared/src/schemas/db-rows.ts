@@ -192,6 +192,18 @@ export const skillStateRowSchema = z.object({
   updated_at: z.number(),
 });
 
+export const diffCommentRowSchema = z.object({
+  id: z.string(),
+  project_id: z.string(),
+  agent_id: optStr,
+  file_path: z.string(),
+  line_number: z.number(),
+  hunk_index: optNum,
+  content: z.string(),
+  resolved: sqlBool,
+  created_at: z.number(),
+});
+
 // ─── Parse helper ───────────────────────────────────────────────────────
 
 /**

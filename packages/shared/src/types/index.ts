@@ -1,6 +1,7 @@
 export * from "./activity";
 export * from "./agent";
 export * from "./dashboard";
+export * from "./diff-comment";
 export * from "./github-issue";
 export * from "./mcp";
 export * from "./memory";
