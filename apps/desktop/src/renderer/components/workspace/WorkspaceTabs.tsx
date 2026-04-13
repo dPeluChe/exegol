@@ -14,7 +14,7 @@ const MAIN_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
 // ─── Sub-tabs per main tab ──────────────────────────────────────────────────
 
 export type ProjectSubTab = "tasks" | "prompts-skills" | "memory" | "pipelines";
-export type MonitorSubTab = "resources-tokens" | "scoring";
+export type MonitorSubTab = "agent-dashboard" | "resources-tokens" | "scoring";
 
 export type WorkspaceSection =
   | "agents"
@@ -22,6 +22,7 @@ export type WorkspaceSection =
   | "prompts-skills"
   | "memory"
   | "pipelines"
+  | "agent-dashboard"
   | "resources-tokens"
   | "scoring";
 
@@ -33,6 +34,7 @@ const PROJECT_SUBS: { id: ProjectSubTab; label: string }[] = [
 ];
 
 const MONITOR_SUBS: { id: MonitorSubTab; label: string }[] = [
+  { id: "agent-dashboard", label: "Agent Dashboard" },
   { id: "resources-tokens", label: "Resources & Tokens" },
   { id: "scoring", label: "Scoring" },
 ];

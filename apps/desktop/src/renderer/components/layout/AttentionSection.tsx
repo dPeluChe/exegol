@@ -172,24 +172,33 @@ export function AttentionSection() {
     (agentId: string, projectId: string) => {
       markRead(agentId);
 
-      const app = useAppStore.getState();
-      if (app.activeProjectId !== projectId) {
-        app.setActiveProject(projectId);
-      }
-
-      const ws = useWorkspaceStore.getState();
-      const tabs = selectTabs(ws);
-      const panes = selectPanes(ws);
-      for (const tab of tabs) {
-        for (const paneId of collectPaneIds(tab.layout)) {
-          const pane = panes[paneId];
-          if (pane?.type === "terminal" && pane.agentId === agentId) {
-            ws.setActiveTab(tab.id);
-            ws.setFocusedPane(paneId);
-            useAgentStore.getState().setFocusedAgent(agentId);
-            return;
+      // Helper: find and focus the agent's pane in the current workspace
+      const focusAgentPane = () => {
+        const ws = useWorkspaceStore.getState();
+        const tabs = selectTabs(ws);
+        const panes = selectPanes(ws);
+        for (const tab of tabs) {
+          for (const paneId of collectPaneIds(tab.layout)) {
+            const pane = panes[paneId];
+            if (pane?.type === "terminal" && pane.agentId === agentId) {
+              ws.setActiveTab(tab.id);
+              ws.setFocusedPane(paneId);
+              useAgentStore.getState().setFocusedAgent(agentId);
+              return;
+            }
           }
         }
+      };
+
+      const app = useAppStore.getState();
+      if (app.activeProjectId !== projectId) {
+        // Switching projects causes ProjectProvider to re-render. Defer
+        // pane-finding to the next frame so the new workspace state has
+        // settled and we read the correct tabs/panes for the new project.
+        app.setActiveProject(projectId);
+        requestAnimationFrame(focusAgentPane);
+      } else {
+        focusAgentPane();
       }
     },
     [markRead],
