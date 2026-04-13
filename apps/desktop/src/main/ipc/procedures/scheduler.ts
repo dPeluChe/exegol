@@ -1,3 +1,4 @@
+import { scheduledTaskCreateSchema, scheduledTaskUpdateSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { Cron } from "croner";
 import { z } from "zod";
@@ -35,111 +36,87 @@ export const schedulerRouter = router({
     return task;
   }),
 
-  create: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        prompt: z.string().min(1),
-        cronExpression: z.string(),
-        cliAgent: z.string(),
-        skillName: z.string().optional(),
-        maxTokenBudget: z.number().int().positive().optional(),
-        dependsOn: z.string().optional(),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      // Validate cron expression by attempting to construct
-      let job: Cron;
+  create: publicProcedure.input(scheduledTaskCreateSchema).mutation(({ ctx, input }) => {
+    // Validate cron expression by attempting to construct
+    let job: Cron;
+    try {
+      job = new Cron(input.cronExpression);
+    } catch {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `Invalid cron expression: "${input.cronExpression}"`,
+      });
+    }
+
+    // Compute next_run_at
+    const nextRun = job.nextRun();
+    const nextRunAt = nextRun ? Math.floor(nextRun.getTime() / 1000) : null;
+    job.stop();
+
+    // Verify all dependency IDs exist
+    if (input.dependsOn) {
+      const depIds = parseDependsOnInput(input.dependsOn);
+      for (const depId of depIds) {
+        const dep = getScheduledTask(ctx.db, depId);
+        if (!dep) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Dependency task "${depId}" not found`,
+          });
+        }
+      }
+    }
+
+    const task = createScheduledTask(ctx.db, input, nextRunAt);
+
+    // Register with scheduler engine
+    const engine = getSchedulerEngine();
+    engine.addTask(task.id, task.cronExpression);
+
+    return task;
+  }),
+
+  update: publicProcedure.input(scheduledTaskUpdateSchema).mutation(({ ctx, input }) => {
+    const { id, ...data } = input;
+    const existing = getScheduledTask(ctx.db, id);
+    if (!existing) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Scheduled task not found" });
+    }
+
+    // Cycle detection for dependency updates
+    if (data.dependsOn) {
+      const depIds = parseDependsOnInput(data.dependsOn);
+      const engine = getSchedulerEngine();
+      if (engine.detectCycle(ctx.db, id, depIds)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Adding this dependency would create a circular dependency",
+        });
+      }
+    }
+
+    if (data.cronExpression) {
       try {
-        job = new Cron(input.cronExpression);
+        new Cron(data.cronExpression).stop();
       } catch {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Invalid cron expression: "${input.cronExpression}"`,
+          message: `Invalid cron expression: "${data.cronExpression}"`,
         });
       }
+    }
 
-      // Compute next_run_at
-      const nextRun = job.nextRun();
-      const nextRunAt = nextRun ? Math.floor(nextRun.getTime() / 1000) : null;
-      job.stop();
+    updateScheduledTask(ctx.db, id, data);
 
-      // Verify all dependency IDs exist
-      if (input.dependsOn) {
-        const depIds = parseDependsOnInput(input.dependsOn);
-        for (const depId of depIds) {
-          const dep = getScheduledTask(ctx.db, depId);
-          if (!dep) {
-            throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: `Dependency task "${depId}" not found`,
-            });
-          }
-        }
-      }
-
-      const task = createScheduledTask(ctx.db, input, nextRunAt);
-
-      // Register with scheduler engine
+    // Re-register cron job if expression changed
+    if (data.cronExpression && existing.enabled) {
       const engine = getSchedulerEngine();
-      engine.addTask(task.id, task.cronExpression);
+      engine.removeTask(id);
+      engine.addTask(id, data.cronExpression);
+    }
 
-      return task;
-    }),
-
-  update: publicProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        prompt: z.string().min(1).optional(),
-        cronExpression: z.string().optional(),
-        cliAgent: z.string().optional(),
-        skillName: z.string().nullable().optional(),
-        maxTokenBudget: z.number().int().positive().nullable().optional(),
-        dependsOn: z.string().nullable().optional(),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      const { id, ...data } = input;
-      const existing = getScheduledTask(ctx.db, id);
-      if (!existing) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Scheduled task not found" });
-      }
-
-      // Cycle detection for dependency updates
-      if (data.dependsOn) {
-        const depIds = parseDependsOnInput(data.dependsOn);
-        const engine = getSchedulerEngine();
-        if (engine.detectCycle(ctx.db, id, depIds)) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Adding this dependency would create a circular dependency",
-          });
-        }
-      }
-
-      if (data.cronExpression) {
-        try {
-          new Cron(data.cronExpression).stop();
-        } catch {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Invalid cron expression: "${data.cronExpression}"`,
-          });
-        }
-      }
-
-      updateScheduledTask(ctx.db, id, data);
-
-      // Re-register cron job if expression changed
-      if (data.cronExpression && existing.enabled) {
-        const engine = getSchedulerEngine();
-        engine.removeTask(id);
-        engine.addTask(id, data.cronExpression);
-      }
-
-      return getScheduledTask(ctx.db, id);
-    }),
+    return getScheduledTask(ctx.db, id);
+  }),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     const engine = getSchedulerEngine();

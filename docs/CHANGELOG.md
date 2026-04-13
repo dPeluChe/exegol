@@ -15,6 +15,16 @@ validation, and several productivity quick wins.
 
 ### Added
 
+- **Explicit Pipeline State Machine** (T78). Typed transition map for
+  pipeline run statuses (`pending → running → paused/completed/failed/cancelled`).
+  Guards in `PipelineExecutor` reject invalid transitions with a warning
+  log instead of silently corrupting state. 32 tests covering all valid
+  and terminal-state transitions.
+- **Shared Package Schema Enrichment** (T82). New Zod schemas for MCP
+  server config, MCP tool call results, scheduler task create/update,
+  scheduled result status, token usage summaries, and pipeline run
+  transitions. Replaces duplicated inline schemas in MCP and scheduler
+  tRPC procedures with shared imports.
 - **Review Inbox / Agent Monitor** (T57). Sidebar shows running agents
   grouped by project with unique animated spinners per agent (10 preset
   animations — braille wave, moon phases, heartbeat, etc). Below the
