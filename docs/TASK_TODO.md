@@ -20,12 +20,12 @@
 - Activity classification (T70)
 - Issue tracker expansion (T71)
 - **Pipeline state machine** (T78) — explicit transitions
-- **Structured error handling** (T80) — transient vs permanent classification
+- ~~**Structured error handling** (T80)~~ ✅ — `ExegolError` hierarchy + `withRetry`
 - **DI for singletons** (T81) — testability improvement
 - **Shared package enrichment** (T82) — more Zod schemas for IPC/DB payloads
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 - **Terminal ↔ Chat dual view** (T90) — same session, two presentations
-- **Lifecycle scripts per repo** (T91) — setup/run/teardown in git
+- ~~**Lifecycle scripts per repo** (T91)~~ ✅ — `.exegol/lifecycle.yaml` hooks
 - **Focus-aware panel targeting** (T95) — new panes open next to focused pane
 
 ### P3 — Strategic bets / larger scope

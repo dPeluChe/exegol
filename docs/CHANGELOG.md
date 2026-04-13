@@ -7,6 +7,23 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-04-13 — Main process infra
+
+### Added
+
+- **Structured error classification** (T80). `ExegolError` base class with
+  `TransientError`, `PermanentError`, and `TimeoutError` subclasses. Error
+  `cause` chain preserved. `isTransient()`/`isPermanent()` type guards.
+  `withRetry()` helper with exponential backoff (1s base, max 3 retries) that
+  only retries on transient errors. MCP disconnect and scoring API errors
+  classified as transient. 19 tests.
+- **Lifecycle scripts per repo** (T91). `.exegol/lifecycle.yaml` (or `.yml`)
+  support with four hooks: `setup`, `beforeAgent`, `afterCommit`, `teardown`.
+  Simple line-based YAML parser with snake_case alias support (no library).
+  Setup runs once per session per project on first agent spawn. `beforeAgent`
+  prepended to shell command. `teardown` awaited before worktree deletion.
+  12 tests for the YAML parser.
+
 ## [0.4.0] — 2026-04-12 — Infrastructure wave
 
 This release builds the intelligence layer: project indexing with local
