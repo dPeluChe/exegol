@@ -91,6 +91,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 5. Loop mechanism: review→fix cycle with `loopBackTo` + max iterations guard
 6. On complete/cancel: cleanup worktree if clean, preserve if dirty
 7. Crash recovery: `recoverStalePipelineRuns()` marks running pipelines as paused on startup
+8. **State machine** (T78): `state-machine.ts` defines `PIPELINE_TRANSITIONS` map, `canTransition()`, `assertTransition()` — guards in executor reject invalid transitions with warning log
 
 ### Provider registry
 11 built-in providers (Claude Code, Codex, Gemini, Aider, Goose, OpenCode, Amp, Kiro, KiloCode, Crush, Shell) + custom. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. Interactive CLIs (Gemini, OpenCode, Kiro) launch without prompt injection.
@@ -121,7 +122,7 @@ apps/desktop/src/
     agents/         manager, spawn-env, spawn-context, registry, handoff, scoring, queue, status-parser
     db/             client, migrations (24), queries/ (13 domain modules)
     ipc/            router, procedures/ (21 modules)
-    pipeline/       executor (singleton, event-driven), context (prompt builder), defaults (presets)
+    pipeline/       executor (singleton, event-driven), context (prompt builder), defaults (presets), state-machine (T78 transition guards)
     mcp/            host (stdio/HTTP), registry
     memory/         extractor (ANSI-stripped), store (relevance scoring)
     lifecycle/      loader (T91: .exegol/lifecycle.yaml parser + runner)
@@ -159,7 +160,7 @@ apps/desktop/src/
     styles/         globals.css, fonts.css (@font-face for bundled fonts)
   preload/          contextBridge: trpc, terminal, dialog, push events, floating, menu
 packages/
-  shared/           types (20+), schemas (zod)
+  shared/           types (20+), schemas (zod: agent, db-rows, mcp, pipeline, project, scheduler, settings, token-usage)
   ui/               Radix primitives, cn()
   core-rust/        napi-rs: git2 + processing pipeline
 docs/

@@ -28,6 +28,7 @@ import {
   startIdleMonitor,
 } from "./pipeline-step-handler";
 import { cleanupPipelineWorktree } from "./pipeline-worktree";
+import { assertTransition } from "./state-machine";
 
 export { checkGitSync, type GitSyncStatus } from "./pipeline-helpers";
 
@@ -121,6 +122,7 @@ export class PipelineExecutor {
     }
 
     const startedAt = run.startedAt ?? now();
+    if (!assertTransition(run.status, "running")) return;
     updatePipelineRun(db, runId, {
       status: "running",
       currentStepIndex: stepIndex,
@@ -208,6 +210,7 @@ export class PipelineExecutor {
   }
 
   private completeRun(db: Database.Database, run: PipelineRun): void {
+    if (!assertTransition(run.status, "completed")) return;
     updatePipelineRun(db, run.id, {
       status: "completed",
       completedAt: now(),
@@ -230,6 +233,7 @@ export class PipelineExecutor {
   pauseRun(db: Database.Database, runId: string, reason?: string): void {
     const run = getPipelineRun(db, runId);
     if (!run) return;
+    if (!assertTransition(run.status, "paused")) return;
 
     const activeAgentId = this.activeAgents.get(runId);
     if (activeAgentId) {
@@ -267,6 +271,7 @@ export class PipelineExecutor {
   async cancelRun(db: Database.Database, runId: string): Promise<void> {
     const run = getPipelineRun(db, runId);
     if (!run) return;
+    if (!assertTransition(run.status, "cancelled")) return;
 
     const activeAgentId = this.activeAgents.get(runId);
     if (activeAgentId) {
