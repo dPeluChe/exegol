@@ -14,6 +14,7 @@ import {
 import { runSetupHook } from "../hooks/project-hooks";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
+import { loadLifecycleConfig, runSetupIfNeeded } from "../lifecycle/loader";
 import { getPtyHost } from "../terminal/pty-host";
 import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../terminal/shell-wrappers";
 import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
@@ -96,6 +97,9 @@ export class AgentManager {
     }
 
     let cwd = project.path;
+
+    // ── Lifecycle: run setup once per session per project (T91) ────────
+    runSetupIfNeeded(project.path).catch(() => {});
 
     // ── cwdOverride (e.g. pipeline shared worktree) — skip worktree creation
     if (config.cwdOverride) {
@@ -216,6 +220,12 @@ export class AgentManager {
         } catch {
           /* Non-fatal */
         }
+      }
+
+      // ── Lifecycle: prepend beforeAgent script if configured (T91) ──────
+      const lifecycle = loadLifecycleConfig(project.path);
+      if (lifecycle?.beforeAgent) {
+        fullCommand = `${lifecycle.beforeAgent} && ${fullCommand}`;
       }
 
       // Interactive CLIs (no prompt arg support) need a persistent shell

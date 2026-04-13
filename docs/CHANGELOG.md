@@ -7,24 +7,22 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [0.5.0] — 2026-04-13 — Renderer UX wave
+## [0.5.0] — 2026-04-13 — Main process infra
 
 ### Added
 
-- **Focus-Aware Panel Targeting** (T95). New panes open next to the
-  currently focused pane instead of an arbitrary first slot. `addPane`
-  and `splitPane` in the workspace store use `focusedPaneId` as the
-  default split target; QuickLaunchBar, handleNewTerminal, and
-  SpawnAgentModal all respect focus. Falls back to first-pane behavior
-  when nothing is focused. Extracted `getFocusedOrFirstPaneId()` helper
-  to eliminate three duplicated patterns.
-- **Diff Review with Line Comments** (T69). Inline review comments on
-  specific lines in the diff view, persisted in DB. Clickable gutter
-  icon on each diff line opens a comment input; existing comments render
-  as cards with resolve/delete actions. Per-file lazy fetching (only
-  when the file is expanded) and optimistic updates for instant UI
-  feedback. DB migration 031, `diffComments` tRPC router (add, list,
-  delete, toggleResolve), shared `DiffComment` type with Zod schema.
+- **Structured error classification** (T80). `ExegolError` base class with
+  `TransientError`, `PermanentError`, and `TimeoutError` subclasses. Error
+  `cause` chain preserved. `isTransient()`/`isPermanent()` type guards.
+  `withRetry()` helper with exponential backoff (1s base, max 3 retries) that
+  only retries on transient errors. MCP disconnect and scoring API errors
+  classified as transient. 19 tests.
+- **Lifecycle scripts per repo** (T91). `.exegol/lifecycle.yaml` (or `.yml`)
+  support with four hooks: `setup`, `beforeAgent`, `afterCommit`, `teardown`.
+  Simple line-based YAML parser with snake_case alias support (no library).
+  Setup runs once per session per project on first agent spawn. `beforeAgent`
+  prepended to shell command. `teardown` awaited before worktree deletion.
+  12 tests for the YAML parser.
 
 ## [0.4.0] — 2026-04-12 — Infrastructure wave
 
@@ -34,6 +32,16 @@ validation, and several productivity quick wins.
 
 ### Added
 
+- **Explicit Pipeline State Machine** (T78). Typed transition map for
+  pipeline run statuses (`pending → running → paused/completed/failed/cancelled`).
+  Guards in `PipelineExecutor` reject invalid transitions with a warning
+  log instead of silently corrupting state. 32 tests covering all valid
+  and terminal-state transitions.
+- **Shared Package Schema Enrichment** (T82). New Zod schemas for MCP
+  server config, MCP tool call results, scheduler task create/update,
+  scheduled result status, token usage summaries, and pipeline run
+  transitions. Replaces duplicated inline schemas in MCP and scheduler
+  tRPC procedures with shared imports.
 - **Review Inbox / Agent Monitor** (T57). Sidebar shows running agents
   grouped by project with unique animated spinners per agent (10 preset
   animations — braille wave, moon phases, heartbeat, etc). Below the

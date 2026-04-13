@@ -50,3 +50,8 @@ export const pipelineRunCreateSchema = z.object({
   maxIterations: z.number().int().min(1).max(20).optional(),
   useWorktree: z.boolean().optional(),
 });
+
+export const pipelineRunTransitionSchema = z.object({
+  from: pipelineRunStatusSchema,
+  to: pipelineRunStatusSchema,
+});

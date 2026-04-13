@@ -8,6 +8,7 @@
 
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
+import { TransientError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import type { McpServerConfig, McpServerState, McpTool } from "./registry";
 
@@ -70,7 +71,7 @@ class StdioTransport {
 
     this.process.on("exit", (code) => {
       logger.info("[MCP] Process exited:", code);
-      const err = new Error(`MCP server exited with code ${code}`);
+      const err = new TransientError(`MCP server exited with code ${code}`, "MCP_DISCONNECT");
       for (const pending of this.pendingRequests.values()) {
         pending.reject(err);
       }

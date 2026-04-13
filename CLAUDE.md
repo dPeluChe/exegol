@@ -33,7 +33,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 - `terminal` — agent CLI or plain `$SHELL`
 - `browser` — Electron webview with URL bar + back/forward/reload
 - `files` — FileExplorer + Monaco code viewer
-- `git` — Changes (with Smart Git Button) + Diff (with inline line comments, T69) + Oplog (agent operations with undo)
+- `git` — Changes (with Smart Git Button) + Diff + Oplog (agent operations with undo)
 - `empty` — responsive agent launcher grid (3 breakpoints)
 
 ### Layouts (T85, v0.3.0)
@@ -91,6 +91,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 5. Loop mechanism: review→fix cycle with `loopBackTo` + max iterations guard
 6. On complete/cancel: cleanup worktree if clean, preserve if dirty
 7. Crash recovery: `recoverStalePipelineRuns()` marks running pipelines as paused on startup
+8. **State machine** (T78): `state-machine.ts` defines `PIPELINE_TRANSITIONS` map, `canTransition()`, `assertTransition()` — guards in executor reject invalid transitions with warning log
 
 ### Provider registry
 11 built-in providers (Claude Code, Codex, Gemini, Aider, Goose, OpenCode, Amp, Kiro, KiloCode, Crush, Shell) + custom. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. Interactive CLIs (Gemini, OpenCode, Kiro) launch without prompt injection.
@@ -98,6 +99,8 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 ### Key patterns
 - **tRPC over IPC**: 21 routers in main process, renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
+- **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
+- **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
 - **Crash recovery**: `session.listInfo` RPC returns `{ id, alive, exitCode, signal }` — only ALIVE ids go to `reattachSidecarAgents()`, dead ones (in the sidecar's 60s grace period) fall through to `recoverStaleAgents()` and get marked as "crashed" with scrollback preserved (v0.3.0 fix: previously dead sessions were stuck as "running" with no PTY)
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Auto-save**: Settings tabs save independently (General/Terminal auto-save on change, CLIs save per field)
@@ -117,11 +120,13 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 apps/desktop/src/
   main/
     agents/         manager, spawn-env, spawn-context, registry, handoff, scoring, queue, status-parser
-    db/             client, migrations (25), queries/ (14 domain modules incl. diff-comments)
-    ipc/            router, procedures/ (22 modules incl. diff-comments)
-    pipeline/       executor (singleton, event-driven), context (prompt builder), defaults (presets)
+    db/             client, migrations (24), queries/ (13 domain modules)
+    ipc/            router, procedures/ (21 modules)
+    pipeline/       executor (singleton, event-driven), context (prompt builder), defaults (presets), state-machine (T78 transition guards)
     mcp/            host (stdio/HTTP), registry
     memory/         extractor (ANSI-stripped), store (relevance scoring)
+    lifecycle/      loader (T91: .exegol/lifecycle.yaml parser + runner)
+    lib/            logger, errors (T80: ExegolError hierarchy + withRetry)
     skills/         loader, discovery, defaults (5 personas)
     scheduler/      engine (cron + dependency-aware)
     security/       keystore (safeStorage)
@@ -133,8 +138,7 @@ apps/desktop/src/
       workspace/    WorkspaceView, WorkspaceTabs (3 main + sub-tabs), WorkspacePane (5 types),
                     WorkspaceTabBar (quick launch + LayoutPresets dropdown), WorkspaceLayout,
                     GitPane (with SmartGitAction), LayoutPresets, SmartGitAction,
-                    PaneContextMenu, sections/ (16 section components + pipeline/),
-                    diff/ (DiffFileView, DiffHunkView, DiffLineComment, diff-parser)
+                    PaneContextMenu, sections/ (16 section components + pipeline/), diff/
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,
                     YOLO/Active toggles), TerminalSettings (bundled fonts, per-card preview,
                     family chain badges, promote-on-click), ApiKeysSettings
@@ -144,12 +148,10 @@ apps/desktop/src/
       agents/       AgentLauncher (portal dropdown from registry)
       layout/       Sidebar, ProjectsSection, StatusBar, TitleBar
     FloatingPaneRoot.tsx  (T84 — top-level renderer for floating PiP windows)
-    hooks/          use-hotkeys, use-theme, use-trpc, use-trpc-diff-comments,
-                    use-auto-select-project,
+    hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
                     use-floating-pane-sync (unmark panes when floating window closes)
     stores/         app, agents (push events, shell auto-cleanup), terminals,
-                    workspace (5 pane types, recovery, custom layouts, floatingPanes,
-                    getFocusedOrFirstPaneId helper for T95 focus targeting)
+                    workspace (5 pane types, recovery, custom layouts, floatingPanes)
     lib/            layout-presets (pure transformation helpers), trpc-client,
                     dispatch-refit, semantic-colors
     assets/
@@ -158,7 +160,7 @@ apps/desktop/src/
     styles/         globals.css, fonts.css (@font-face for bundled fonts)
   preload/          contextBridge: trpc, terminal, dialog, push events, floating, menu
 packages/
-  shared/           types (20+), schemas (zod)
+  shared/           types (20+), schemas (zod: agent, db-rows, mcp, pipeline, project, scheduler, settings, token-usage)
   ui/               Radix primitives, cn()
   core-rust/        napi-rs: git2 + processing pipeline
 docs/
@@ -168,7 +170,7 @@ docs/
 
 ## Database
 
-25 migrations · 23 tables: projects, agents, worktrees, activities, search_index (FTS5), handoffs, messages, scheduled_tasks/results, task_queue, token_usage, settings, prompts, skills_state, memories, agent_scores, oplog, pipeline_templates, pipeline_runs, diff_comments
+24 migrations · 22 tables: projects, agents, worktrees, activities, search_index (FTS5), handoffs, messages, scheduled_tasks/results, task_queue, token_usage, settings, prompts, skills_state, memories, agent_scores, oplog, pipeline_templates, pipeline_runs
 
 Agent status: `idle | spawning | running | waiting_input | paused | completed | failed | stopped | crashed`
 
