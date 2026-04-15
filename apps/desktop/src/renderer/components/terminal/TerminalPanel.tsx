@@ -174,6 +174,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         branchName: successor.branchName ?? null,
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: successor.startedAt,
+        accessMode: successor.accessMode ?? null,
       });
       createTerminal(successor.id);
       setFocusedAgent(successor.id);
@@ -240,6 +241,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                           branchName: newAgent.branchName ?? null,
                           tokenUsage: { input: 0, output: 0, cost: 0 },
                           startedAt: newAgent.startedAt,
+                          accessMode: newAgent.accessMode ?? null,
                         });
                         createTerminal(newAgent.id);
                         useWorkspaceStore.getState().updatePane(paneId, {

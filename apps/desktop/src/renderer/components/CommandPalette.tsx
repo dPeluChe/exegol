@@ -307,6 +307,7 @@ export function CommandPalette() {
           branchName: null,
           tokenUsage: { input: 0, output: 0, cost: 0 },
           startedAt: agent.startedAt,
+          accessMode: agent.accessMode ?? null,
         });
         useTerminalStore.getState().createTerminal(agent.id);
         // Create a new tab with the terminal

@@ -67,6 +67,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           branchName: agent.branchName ?? null,
           tokenUsage: { input: 0, output: 0, cost: 0 },
           startedAt: agent.startedAt,
+          accessMode: agent.accessMode ?? null,
         });
         createTerminal(agent.id);
 
@@ -131,6 +132,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         branchName: agent.branchName ?? null,
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: agent.startedAt,
+        accessMode: agent.accessMode ?? null,
       });
       createTerminal(agent.id);
       updatePane(paneId, { type: "terminal", agentId: agent.id });
@@ -162,6 +164,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           branchName: agent.branchName ?? null,
           tokenUsage: { input: 0, output: 0, cost: 0 },
           startedAt: agent.startedAt,
+          accessMode: agent.accessMode ?? null,
         });
         createTerminal(agent.id);
         updatePane(paneId, { type: "terminal", agentId: agent.id });

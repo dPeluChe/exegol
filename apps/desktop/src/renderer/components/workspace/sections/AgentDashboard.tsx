@@ -14,7 +14,7 @@
 import type { Agent } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, CheckCircle, Clock, Cpu, Square, XCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle, Clock, Coins, Cpu, Eye, Square, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
@@ -303,11 +303,28 @@ function AgentCard({ agent, onClick }: { agent: AgentState; onClick: () => void 
             {agent.currentStep}
           </p>
         )}
-        <div className="mt-1.5 flex items-center gap-3 text-[10px] text-text-muted">
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
           {agent.startedAt && (
             <span className="flex items-center gap-0.5">
               <Clock className="h-2.5 w-2.5" />
               {elapsedStr(agent.startedAt)}
+            </span>
+          )}
+          {(agent.tokenUsage.input > 0 || agent.tokenUsage.output > 0) && (
+            <span className="flex items-center gap-0.5">
+              <Coins className="h-2.5 w-2.5" />
+              {((agent.tokenUsage.input + agent.tokenUsage.output) / 1000).toFixed(1)}k
+              {agent.tokenUsage.cost > 0 && (
+                <span className="ml-0.5 text-text-muted/60">
+                  ${agent.tokenUsage.cost.toFixed(3)}
+                </span>
+              )}
+            </span>
+          )}
+          {agent.accessMode === "read" && (
+            <span className="flex items-center gap-0.5 text-sky-400/80">
+              <Eye className="h-2.5 w-2.5" />
+              read-only
             </span>
           )}
           {agent.branchName && (
@@ -315,6 +332,9 @@ function AgentCard({ agent, onClick }: { agent: AgentState; onClick: () => void 
               {agent.branchName}
             </span>
           )}
+          <span className="ml-auto font-mono text-[9px] text-text-muted/40">
+            {agent.id.slice(0, 8)}
+          </span>
         </div>
       </div>
     </div>

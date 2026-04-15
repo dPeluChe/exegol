@@ -1,4 +1,4 @@
-import type { Agent, AgentCliType, AgentStatus } from "@exegol/shared";
+import type { Agent, AgentAccessMode, AgentCliType, AgentStatus } from "@exegol/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getProjectState, useWorkspaceStore } from "./workspace";
@@ -97,6 +97,7 @@ export interface AgentState {
   branchName: string | null;
   tokenUsage: { input: number; output: number; cost: number };
   startedAt: number | null;
+  accessMode: AgentAccessMode | null;
 }
 
 interface AgentStore {
@@ -242,6 +243,7 @@ export const useAgentStore = create<AgentStore>()(
                 branchName: dbAgent.branchName ?? null,
                 tokenUsage: { input: 0, output: 0, cost: 0 },
                 startedAt: dbAgent.startedAt,
+                accessMode: dbAgent.accessMode ?? null,
               };
             }
           }
