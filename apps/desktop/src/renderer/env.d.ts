@@ -7,6 +7,8 @@ interface AgentStatusEvent {
   currentStep: string | null;
   cliType: string;
   timestamp: number;
+  /** T101: Claude session ID, set once when first parsed from startup output. */
+  claudeSessionId?: string;
 }
 
 interface SystemMetricsEvent {

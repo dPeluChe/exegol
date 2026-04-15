@@ -332,8 +332,11 @@ function AgentCard({ agent, onClick }: { agent: AgentState; onClick: () => void 
               {agent.branchName}
             </span>
           )}
-          <span className="ml-auto font-mono text-[9px] text-text-muted/40">
-            {agent.id.slice(0, 8)}
+          <span
+            className="ml-auto font-mono text-[9px] text-text-muted/40"
+            title={agent.claudeSessionId ?? agent.id}
+          >
+            {(agent.claudeSessionId ?? agent.id).slice(0, 8)}
           </span>
         </div>
       </div>

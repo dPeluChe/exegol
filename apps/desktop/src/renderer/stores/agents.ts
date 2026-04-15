@@ -68,10 +68,12 @@ export function startAgentStatusPush(): void {
         return;
       }
 
-      store.updateAgent(event.agentId, {
+      const update: Partial<AgentState> = {
         status: event.status as AgentStatus,
         currentStep: event.currentStep,
-      });
+      };
+      if (event.claudeSessionId) update.claudeSessionId = event.claudeSessionId;
+      store.updateAgent(event.agentId, update);
 
       // Add to attention inbox (markUnread is now derived from this)
       if (isFinalStatus || event.status === "waiting_input") {
@@ -98,6 +100,8 @@ export interface AgentState {
   tokenUsage: { input: number; output: number; cost: number };
   startedAt: number | null;
   accessMode: AgentAccessMode | null;
+  /** Claude session ID captured from startup output — used for --resume on re-spawn (T101). */
+  claudeSessionId: string | null;
 }
 
 interface AgentStore {
@@ -244,6 +248,7 @@ export const useAgentStore = create<AgentStore>()(
                 tokenUsage: { input: 0, output: 0, cost: 0 },
                 startedAt: dbAgent.startedAt,
                 accessMode: dbAgent.accessMode ?? null,
+                claudeSessionId: null,
               };
             }
           }

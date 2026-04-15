@@ -175,6 +175,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: successor.startedAt,
         accessMode: successor.accessMode ?? null,
+        claudeSessionId: null,
       });
       createTerminal(successor.id);
       setFocusedAgent(successor.id);
@@ -225,6 +226,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                         useWorktree: !!agent.branchName,
                         branchName: agent.branchName ?? undefined,
                         resumeSession: canResume,
+                        // T101: pass crashed agent's ID so main process can look up claude_session_id
+                        resumeFromAgentId: canResume ? agent.id : undefined,
                       });
 
                       if (paneId && newAgent?.id) {
@@ -242,6 +245,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                           tokenUsage: { input: 0, output: 0, cost: 0 },
                           startedAt: newAgent.startedAt,
                           accessMode: newAgent.accessMode ?? null,
+                          claudeSessionId: null,
                         });
                         createTerminal(newAgent.id);
                         useWorkspaceStore.getState().updatePane(paneId, {

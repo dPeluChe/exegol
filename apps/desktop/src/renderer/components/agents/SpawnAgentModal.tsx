@@ -93,6 +93,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,
+        claudeSessionId: null,
       });
       createTerminal(agent.id);
       setFocusedAgent(agent.id);

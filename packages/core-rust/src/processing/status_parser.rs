@@ -26,6 +26,8 @@ pub struct ProcessedOutput {
     pub current_step: Option<String>,
     /// Whether a token limit warning was detected.
     pub token_limit_warning: bool,
+    /// Claude session ID parsed from startup output (T101).
+    pub session_id: Option<String>,
 }
 
 /// Persistent state for an agent's output stream.
@@ -71,6 +73,7 @@ impl AgentOutputStream {
         let mut status: Option<String> = None;
         let mut current_step: Option<String> = None;
         let mut token_limit_warning = false;
+        let mut session_id: Option<String> = None;
 
         // Process complete lines (keep last incomplete line in buffer)
         let last_newline = self.buffer.rfind('\n');
@@ -89,6 +92,13 @@ impl AgentOutputStream {
                     token_limit_warning = true;
                 }
 
+                // Parse session ID (T101) — only for claude-code
+                if session_id.is_none() && self.cli_type == "claude-code" {
+                    if let Some(id) = parse_session_id(trimmed) {
+                        session_id = Some(id);
+                    }
+                }
+
                 // Parse status based on CLI type
                 if let Some((s, step)) = parse_line(&self.cli_type, trimmed) {
                     status = s;
@@ -102,6 +112,7 @@ impl AgentOutputStream {
             status,
             current_step,
             token_limit_warning,
+            session_id,
         })
     }
 
@@ -134,6 +145,29 @@ fn starts_with_ci(haystack: &str, needle: &str) -> bool {
 fn ends_with_ci(haystack: &str, needle: &str) -> bool {
     haystack.len() >= needle.len()
         && haystack.as_bytes()[haystack.len() - needle.len()..].eq_ignore_ascii_case(needle.as_bytes())
+}
+
+/// Extract a Claude session ID from a startup line (T101).
+/// Claude Code prints lines like:
+///   "Session ID: abc123def456..."
+///   "│ Session ID: abc123..."   (inside a box-drawing border)
+/// Returns the session ID string if found (alphanumeric + hyphens, ≥8 chars).
+fn parse_session_id(line: &str) -> Option<String> {
+    // Case-insensitive search for "session id:"
+    let lower = line.to_ascii_lowercase();
+    let marker = "session id:";
+    let pos = lower.find(marker)?;
+    let after = line[pos + marker.len()..].trim();
+    // Extract contiguous alphanumeric+hyphen token
+    let id: String = after
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .collect();
+    if id.len() >= 8 {
+        Some(id)
+    } else {
+        None
+    }
 }
 
 /// Check if a line indicates a token limit warning.
@@ -369,5 +403,39 @@ mod tests {
         let mut stream = AgentOutputStream::new("claude-code".into());
         let result = stream.process_chunk("\x1B[32mRead(file.ts)\x1B[0m\n".into()).unwrap();
         assert_eq!(result.current_step.as_deref(), Some("Tool: Read"));
+    }
+
+    #[test]
+    fn test_session_id_plain() {
+        let mut stream = AgentOutputStream::new("claude-code".into());
+        let result = stream.process_chunk("Session ID: abc123def456\n".into()).unwrap();
+        assert_eq!(result.session_id.as_deref(), Some("abc123def456"));
+    }
+
+    #[test]
+    fn test_session_id_boxed() {
+        let mut stream = AgentOutputStream::new("claude-code".into());
+        // Box-drawing style like Claude Code UI startup
+        let result = stream.process_chunk("│ Session ID: a1b2c3d4e5f6 │\n".into()).unwrap();
+        assert_eq!(result.session_id.as_deref(), Some("a1b2c3d4e5f6"));
+    }
+
+    #[test]
+    fn test_session_id_uuid() {
+        let mut stream = AgentOutputStream::new("claude-code".into());
+        let result = stream
+            .process_chunk("Session ID: 550e8400-e29b-41d4-a716-446655440000\n".into())
+            .unwrap();
+        assert_eq!(
+            result.session_id.as_deref(),
+            Some("550e8400-e29b-41d4-a716-446655440000")
+        );
+    }
+
+    #[test]
+    fn test_session_id_not_captured_for_other_clis() {
+        let mut stream = AgentOutputStream::new("codex".into());
+        let result = stream.process_chunk("Session ID: abc123def456\n".into()).unwrap();
+        assert!(result.session_id.is_none());
     }
 }

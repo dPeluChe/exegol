@@ -5,6 +5,7 @@ type StatusUpdate = {
   status?: AgentStatus;
   currentStep?: string;
   tokenLimitWarning?: boolean;
+  sessionId?: string;
 };
 
 /**
@@ -52,6 +53,14 @@ export class AgentStatusParser {
       // Check for token limit warnings across all CLI types
       if (detectTokenLimitWarning(cleaned)) {
         lastUpdate = { ...lastUpdate, tokenLimitWarning: true };
+      }
+
+      // Parse session ID for claude-code (T101)
+      if (this.cliType === "claude-code" && !lastUpdate?.sessionId) {
+        const sessionId = parseSessionId(cleaned);
+        if (sessionId) {
+          lastUpdate = { ...lastUpdate, sessionId };
+        }
       }
     }
 
@@ -234,6 +243,15 @@ export class AgentStatusParser {
 
     return null;
   }
+}
+
+/**
+ * Parse a Claude session ID from a startup output line (T101).
+ * Handles formats: "Session ID: abc123" and "│ Session ID: abc123 │"
+ */
+export function parseSessionId(line: string): string | null {
+  const match = line.match(/session\s+id:\s*([a-zA-Z0-9_-]{8,})/i);
+  return match?.[1] ?? null;
 }
 
 /**

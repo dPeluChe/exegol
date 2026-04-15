@@ -25,6 +25,8 @@ export interface AgentStatusEvent {
   currentStep: string | null;
   cliType: string;
   timestamp: number;
+  /** Claude session ID, set once when first parsed from startup output (T101). */
+  claudeSessionId?: string;
 }
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */

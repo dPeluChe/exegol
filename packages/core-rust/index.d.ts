@@ -101,6 +101,8 @@ export interface ProcessedOutput {
   currentStep?: string
   /** Whether a token limit warning was detected. */
   tokenLimitWarning: boolean
+  /** Claude session ID parsed from startup output (T101). */
+  sessionId?: string
 }
 
 /** Remove a git worktree. If `force` is true, removes even with uncommitted changes. */

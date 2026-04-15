@@ -473,6 +473,10 @@ const migrations: Migration[] = [
     `,
   },
   {
+    id: "032_agents_claude_session_id",
+    sql: `ALTER TABLE agents ADD COLUMN claude_session_id TEXT;`,
+  },
+  {
     id: "031_diff_comments",
     sql: `
       CREATE TABLE IF NOT EXISTS diff_comments (

@@ -58,6 +58,8 @@ export type AgentCreate = {
   cwdOverride?: string;
   /** T66: Resume a previous session (appends provider's resumeFlag to command) */
   resumeSession?: boolean;
+  /** T101: ID of the agent whose claude_session_id should be used for --resume */
+  resumeFromAgentId?: string;
   /** T99: access mode — "read" for explore-only, "write" for full access (default) */
   accessMode?: AgentAccessMode;
 };

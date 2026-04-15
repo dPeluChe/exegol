@@ -21,6 +21,8 @@ export interface SessionMaps {
   completionCallbacks: Map<string, (exitCode: number) => void>;
   initialSnapshots: Map<string, { headSha: string; cwd: string; projectId: string }>;
   dataCallbacks: Map<string, (data: string) => void>;
+  /** Agents whose Claude session ID has already been captured + stored (T101). */
+  sessionIdsCaptured: Set<string>;
 }
 
 export function createSpawnCallbacks(
@@ -53,6 +55,30 @@ export function createSpawnCallbacks(
       const processor = maps.outputProcessors.get(agent.id);
       if (!processor) return;
       const result = processor.process(data);
+
+      // T101: store Claude session ID on first parse, broadcast to renderer
+      if (result.sessionId && !maps.sessionIdsCaptured.has(agent.id)) {
+        maps.sessionIdsCaptured.add(agent.id);
+        try {
+          db.prepare("UPDATE agents SET claude_session_id = ? WHERE id = ?").run(
+            result.sessionId,
+            agent.id,
+          );
+          logger.info(`[AgentCallback] Captured Claude session ID for ${agent.id}: ${result.sessionId}`);
+        } catch (err) {
+          logger.warn(`[AgentCallback] Failed to store Claude session ID for ${agent.id}:`, err);
+        }
+        broadcastAgentStatus({
+          agentId: agent.id,
+          projectId: agent.projectId,
+          status: "running",
+          currentStep: result.currentStep ?? null,
+          cliType: agent.cliType,
+          timestamp: Date.now(),
+          claudeSessionId: result.sessionId,
+        });
+      }
+
       if (result.status || result.currentStep) {
         if (result.status) {
           logger.info(
@@ -108,6 +134,7 @@ export function createSpawnCallbacks(
       maps.outputProcessors.delete(agent.id);
       maps.titleTrackers.delete(agent.id);
       maps.tokenLimitDetected.delete(agent.id);
+      maps.sessionIdsCaptured.delete(agent.id);
       maps.scrollbackBuffers.delete(agent.id);
       maps.scrollbackSizes.delete(agent.id);
 

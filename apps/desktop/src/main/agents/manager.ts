@@ -68,6 +68,8 @@ export class AgentManager {
   private titleTrackers: Map<string, (data: string) => void> = new Map();
   /** Register a one-shot or persistent data callback for an agent (pipeline idle monitoring) */
   private dataCallbacks: Map<string, (data: string) => void> = new Map();
+  /** Agents whose Claude session ID has already been stored (T101). */
+  private sessionIdsCaptured: Set<string> = new Set();
 
   private getSessionMaps(): SessionMaps {
     return {
@@ -79,6 +81,7 @@ export class AgentManager {
       completionCallbacks: this.completionCallbacks,
       initialSnapshots: this.initialSnapshots,
       dataCallbacks: this.dataCallbacks,
+      sessionIdsCaptured: this.sessionIdsCaptured,
     };
   }
 
@@ -200,11 +203,27 @@ export class AgentManager {
       let fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
 
       // Resume: replace prompt with provider's resume flag (e.g. claude --continue)
+      // T101: for claude-code, prefer --resume <session_id> over --continue
       if (config.resumeSession) {
         const provider = registry.get(agent.cliType);
         const resumeFlag = provider?.capabilities?.resumeFlag;
         if (resumeFlag) {
-          fullCommand = `${cliConfig.command} ${resumeFlag}`;
+          if (agent.cliType === "claude-code") {
+            const row = db
+              .prepare("SELECT claude_session_id FROM agents WHERE id = ?")
+              .get(config.resumeFromAgentId ?? agent.id) as
+              | { claude_session_id: string | null }
+              | undefined;
+            const claudeSessionId = row?.claude_session_id;
+            if (claudeSessionId) {
+              fullCommand = `${cliConfig.command} --resume ${claudeSessionId}`;
+              logger.info(`[AgentManager] Resuming Claude session ${claudeSessionId} for agent ${agent.id}`);
+            } else {
+              fullCommand = `${cliConfig.command} ${resumeFlag}`;
+            }
+          } else {
+            fullCommand = `${cliConfig.command} ${resumeFlag}`;
+          }
         }
       }
       const apiKeyEnv = buildApiKeyEnv(db);
