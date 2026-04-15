@@ -26,8 +26,12 @@ pub struct ProcessedOutput {
     pub current_step: Option<String>,
     /// Whether a token limit warning was detected.
     pub token_limit_warning: bool,
-    /// Claude session ID parsed from startup output (T101).
+    /// Claude session ID parsed from startup output (T101, kept for backwards compat).
     pub session_id: Option<String>,
+    /// Full resume command extracted from agent shutdown output (T101).
+    /// e.g. "claude --resume <id>", "gemini --resume <id>", "opencode -s <id>",
+    ///      "codex resume <id>", "droid --resume <id>"
+    pub resume_command: Option<String>,
 }
 
 /// Persistent state for an agent's output stream.
@@ -74,6 +78,7 @@ impl AgentOutputStream {
         let mut current_step: Option<String> = None;
         let mut token_limit_warning = false;
         let mut session_id: Option<String> = None;
+        let mut resume_command: Option<String> = None;
 
         // Process complete lines (keep last incomplete line in buffer)
         let last_newline = self.buffer.rfind('\n');
@@ -92,10 +97,17 @@ impl AgentOutputStream {
                     token_limit_warning = true;
                 }
 
-                // Parse session ID (T101) — only for claude-code
+                // Parse session ID from startup (claude-code only, kept for backwards compat)
                 if session_id.is_none() && self.cli_type == "claude-code" {
                     if let Some(id) = parse_session_id(trimmed) {
                         session_id = Some(id);
+                    }
+                }
+
+                // Parse resume command from shutdown output (T101, all CLIs)
+                if resume_command.is_none() {
+                    if let Some(cmd) = parse_resume_command(&self.cli_type, trimmed) {
+                        resume_command = Some(cmd);
                     }
                 }
 
@@ -113,6 +125,7 @@ impl AgentOutputStream {
             current_step,
             token_limit_warning,
             session_id,
+            resume_command,
         })
     }
 
@@ -168,6 +181,73 @@ fn parse_session_id(line: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Extract the full resume command from an agent's shutdown output (T101).
+///
+/// Each CLI prints a different shutdown message. We match the specific pattern
+/// for each CLI type and return the command verbatim so the caller can store
+/// and re-run it on crash recovery.
+///
+/// Supported formats (from real CLI output):
+///   claude-code : "claude --resume <uuid>"  (in "Resume this session with: …")
+///   gemini      : "gemini --resume <uuid>"  (in "To resume this session: …")
+///   codex       : "codex resume <uuid>"     (in "To continue this session, run codex resume …")
+///   droid       : "droid --resume <uuid>"   (in "To resume this session, run: …")
+///   opencode    : "opencode -s <ses_id>"    (in "Continue  opencode -s …")
+fn parse_resume_command(cli_type: &str, line: &str) -> Option<String> {
+    let lower = line.to_ascii_lowercase();
+
+    match cli_type {
+        "claude-code" => {
+            // "Resume this session with:\nclaude --resume <id>"
+            // or on the same line: "…claude --resume <id>"
+            if let Some(pos) = lower.find("claude --resume ") {
+                let cmd = line[pos..].trim();
+                let end = cmd.find(|c: char| c == '\n' || c == '│' || c == '|').unwrap_or(cmd.len());
+                let result = cmd[..end].trim().to_string();
+                if result.len() > 20 { return Some(result); }
+            }
+        }
+        "gemini" => {
+            // "To resume this session: gemini --resume <id>"
+            if let Some(pos) = lower.find("gemini --resume ") {
+                let cmd = line[pos..].trim();
+                let end = cmd.find(|c: char| c == '\n' || c == '│' || c == '|').unwrap_or(cmd.len());
+                let result = cmd[..end].trim().to_string();
+                if result.len() > 20 { return Some(result); }
+            }
+        }
+        "codex" => {
+            // "To continue this session, run codex resume <id>"
+            if let Some(pos) = lower.find("codex resume ") {
+                let cmd = line[pos..].trim();
+                let end = cmd.find(|c: char| c == '\n' || c == '│' || c == '|').unwrap_or(cmd.len());
+                let result = cmd[..end].trim().to_string();
+                if result.len() > 18 { return Some(result); }
+            }
+        }
+        "droid" => {
+            // "To resume this session, run: droid --resume <id>"
+            if let Some(pos) = lower.find("droid --resume ") {
+                let cmd = line[pos..].trim();
+                let end = cmd.find(|c: char| c == '\n' || c == '│' || c == '|').unwrap_or(cmd.len());
+                let result = cmd[..end].trim().to_string();
+                if result.len() > 20 { return Some(result); }
+            }
+        }
+        "opencode" => {
+            // "Continue  opencode -s ses_<id>"
+            if let Some(pos) = lower.find("opencode -s ") {
+                let cmd = line[pos..].trim();
+                let end = cmd.find(|c: char| c == '\n' || c == '│' || c == '|').unwrap_or(cmd.len());
+                let result = cmd[..end].trim().to_string();
+                if result.len() > 16 { return Some(result); }
+            }
+        }
+        _ => {}
+    }
+    None
 }
 
 /// Check if a line indicates a token limit warning.
@@ -437,5 +517,77 @@ mod tests {
         let mut stream = AgentOutputStream::new("codex".into());
         let result = stream.process_chunk("Session ID: abc123def456\n".into()).unwrap();
         assert!(result.session_id.is_none());
+    }
+
+    // ─── Resume command parsing ─────────────────────────────────────────
+
+    #[test]
+    fn test_resume_claude() {
+        let mut stream = AgentOutputStream::new("claude-code".into());
+        let result = stream
+            .process_chunk("Resume this session with:\nclaude --resume b916619f-7df7-47eb-96c5-1ddd53b11050\n".into())
+            .unwrap();
+        assert_eq!(
+            result.resume_command.as_deref(),
+            Some("claude --resume b916619f-7df7-47eb-96c5-1ddd53b11050")
+        );
+    }
+
+    #[test]
+    fn test_resume_gemini() {
+        let mut stream = AgentOutputStream::new("gemini".into());
+        let result = stream
+            .process_chunk("To resume this session: gemini --resume 32400961-7efd-4ab4-8401-0d38e8be269b\n".into())
+            .unwrap();
+        assert_eq!(
+            result.resume_command.as_deref(),
+            Some("gemini --resume 32400961-7efd-4ab4-8401-0d38e8be269b")
+        );
+    }
+
+    #[test]
+    fn test_resume_codex() {
+        let mut stream = AgentOutputStream::new("codex".into());
+        let result = stream
+            .process_chunk("To continue this session, run codex resume 019d9315-be7b-7680-91c0-490ce93e636c\n".into())
+            .unwrap();
+        assert_eq!(
+            result.resume_command.as_deref(),
+            Some("codex resume 019d9315-be7b-7680-91c0-490ce93e636c")
+        );
+    }
+
+    #[test]
+    fn test_resume_droid() {
+        let mut stream = AgentOutputStream::new("droid".into());
+        let result = stream
+            .process_chunk("To resume this session, run: droid --resume 1c26e630-bc6e-4b5b-8c59-76ec2ea5c81d\n".into())
+            .unwrap();
+        assert_eq!(
+            result.resume_command.as_deref(),
+            Some("droid --resume 1c26e630-bc6e-4b5b-8c59-76ec2ea5c81d")
+        );
+    }
+
+    #[test]
+    fn test_resume_opencode() {
+        let mut stream = AgentOutputStream::new("opencode".into());
+        let result = stream
+            .process_chunk("Continue  opencode -s ses_26ceba925ffeES3avgJv1KYLWX\n".into())
+            .unwrap();
+        assert_eq!(
+            result.resume_command.as_deref(),
+            Some("opencode -s ses_26ceba925ffeES3avgJv1KYLWX")
+        );
+    }
+
+    #[test]
+    fn test_resume_not_captured_for_wrong_cli() {
+        // gemini output should not be captured for a codex stream
+        let mut stream = AgentOutputStream::new("codex".into());
+        let result = stream
+            .process_chunk("To resume this session: gemini --resume 32400961-abc\n".into())
+            .unwrap();
+        assert!(result.resume_command.is_none());
     }
 }

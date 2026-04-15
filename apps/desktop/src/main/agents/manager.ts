@@ -202,26 +202,29 @@ export class AgentManager {
       const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
       let fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
 
-      // Resume: replace prompt with provider's resume flag (e.g. claude --continue)
-      // T101: for claude-code, prefer --resume <session_id> over --continue
+      // T101: Resume — prefer stored resume_command (exact command printed at shutdown),
+      // fall back to provider's resumeFlag (e.g. --continue for most CLIs).
       if (config.resumeSession) {
-        const provider = registry.get(agent.cliType);
-        const resumeFlag = provider?.capabilities?.resumeFlag;
-        if (resumeFlag) {
-          if (agent.cliType === "claude-code") {
-            const row = db
-              .prepare("SELECT claude_session_id FROM agents WHERE id = ?")
-              .get(config.resumeFromAgentId ?? agent.id) as
-              | { claude_session_id: string | null }
-              | undefined;
-            const claudeSessionId = row?.claude_session_id;
-            if (claudeSessionId) {
-              fullCommand = `${cliConfig.command} --resume ${claudeSessionId}`;
-              logger.info(`[AgentManager] Resuming Claude session ${claudeSessionId} for agent ${agent.id}`);
-            } else {
-              fullCommand = `${cliConfig.command} ${resumeFlag}`;
-            }
-          } else {
+        const sourceAgentId = config.resumeFromAgentId ?? agent.id;
+        const row = db
+          .prepare("SELECT resume_command, claude_session_id FROM agents WHERE id = ?")
+          .get(sourceAgentId) as
+          | { resume_command: string | null; claude_session_id: string | null }
+          | undefined;
+
+        if (row?.resume_command) {
+          // Best path: use the exact command the agent printed at shutdown
+          fullCommand = row.resume_command;
+          logger.info(`[AgentManager] Resuming ${agent.cliType} with stored command: ${row.resume_command}`);
+        } else if (row?.claude_session_id && agent.cliType === "claude-code") {
+          // Backwards compat: old claude session ID captured at startup
+          fullCommand = `${cliConfig.command} --resume ${row.claude_session_id}`;
+          logger.info(`[AgentManager] Resuming Claude via session ID ${row.claude_session_id}`);
+        } else {
+          // Fallback: static resumeFlag from provider config (e.g. --continue)
+          const provider = registry.get(agent.cliType);
+          const resumeFlag = provider?.capabilities?.resumeFlag;
+          if (resumeFlag) {
             fullCommand = `${cliConfig.command} ${resumeFlag}`;
           }
         }

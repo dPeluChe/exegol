@@ -56,17 +56,27 @@ export function createSpawnCallbacks(
       if (!processor) return;
       const result = processor.process(data);
 
-      // T101: store Claude session ID on first parse, broadcast to renderer
-      if (result.sessionId && !maps.sessionIdsCaptured.has(agent.id)) {
+      // T101: store session ID (claude startup) or resume command (all CLIs shutdown)
+      // Both use sessionIdsCaptured to avoid redundant DB writes per agent.
+      const sessionPayload = result.resumeCommand ?? result.sessionId;
+      if (sessionPayload && !maps.sessionIdsCaptured.has(agent.id)) {
         maps.sessionIdsCaptured.add(agent.id);
         try {
-          db.prepare("UPDATE agents SET claude_session_id = ? WHERE id = ?").run(
-            result.sessionId,
-            agent.id,
-          );
-          logger.info(`[AgentCallback] Captured Claude session ID for ${agent.id}: ${result.sessionId}`);
+          if (result.resumeCommand) {
+            db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?").run(
+              result.resumeCommand,
+              agent.id,
+            );
+            logger.info(`[AgentCallback] Captured resume command for ${agent.id}: ${result.resumeCommand}`);
+          } else if (result.sessionId) {
+            db.prepare("UPDATE agents SET claude_session_id = ? WHERE id = ?").run(
+              result.sessionId,
+              agent.id,
+            );
+            logger.info(`[AgentCallback] Captured Claude session ID for ${agent.id}: ${result.sessionId}`);
+          }
         } catch (err) {
-          logger.warn(`[AgentCallback] Failed to store Claude session ID for ${agent.id}:`, err);
+          logger.warn(`[AgentCallback] Failed to store session info for ${agent.id}:`, err);
         }
         broadcastAgentStatus({
           agentId: agent.id,

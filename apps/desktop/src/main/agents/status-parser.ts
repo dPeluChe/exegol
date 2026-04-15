@@ -6,6 +6,7 @@ type StatusUpdate = {
   currentStep?: string;
   tokenLimitWarning?: boolean;
   sessionId?: string;
+  resumeCommand?: string;
 };
 
 /**
@@ -55,12 +56,16 @@ export class AgentStatusParser {
         lastUpdate = { ...lastUpdate, tokenLimitWarning: true };
       }
 
-      // Parse session ID for claude-code (T101)
+      // Parse session ID for claude-code (T101, startup)
       if (this.cliType === "claude-code" && !lastUpdate?.sessionId) {
         const sessionId = parseSessionId(cleaned);
-        if (sessionId) {
-          lastUpdate = { ...lastUpdate, sessionId };
-        }
+        if (sessionId) lastUpdate = { ...lastUpdate, sessionId };
+      }
+
+      // Parse resume command from shutdown output (T101, all CLIs)
+      if (!lastUpdate?.resumeCommand) {
+        const resumeCommand = parseResumeCommand(this.cliType, cleaned);
+        if (resumeCommand) lastUpdate = { ...lastUpdate, resumeCommand };
       }
     }
 
@@ -252,6 +257,24 @@ export class AgentStatusParser {
 export function parseSessionId(line: string): string | null {
   const match = line.match(/session\s+id:\s*([a-zA-Z0-9_-]{8,})/i);
   return match?.[1] ?? null;
+}
+
+/**
+ * Extract the full resume command from an agent's shutdown output (T101).
+ * Mirrors the Rust `parse_resume_command` function.
+ */
+export function parseResumeCommand(cliType: string, line: string): string | null {
+  const patterns: Record<string, RegExp> = {
+    "claude-code": /claude\s+--resume\s+[\w-]{8,}/i,
+    gemini: /gemini\s+--resume\s+[\w-]{8,}/i,
+    codex: /codex\s+resume\s+[\w-]{8,}/i,
+    droid: /droid\s+--resume\s+[\w-]{8,}/i,
+    opencode: /opencode\s+-s\s+[\w-]{8,}/i,
+  };
+  const pattern = patterns[cliType];
+  if (!pattern) return null;
+  const match = line.match(pattern);
+  return match?.[0]?.trim() ?? null;
 }
 
 /**

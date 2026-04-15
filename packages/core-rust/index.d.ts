@@ -101,8 +101,14 @@ export interface ProcessedOutput {
   currentStep?: string
   /** Whether a token limit warning was detected. */
   tokenLimitWarning: boolean
-  /** Claude session ID parsed from startup output (T101). */
+  /** Claude session ID parsed from startup output (T101, kept for backwards compat). */
   sessionId?: string
+  /**
+   * Full resume command extracted from agent shutdown output (T101).
+   * e.g. "claude --resume <id>", "gemini --resume <id>", "opencode -s <id>",
+   *      "codex resume <id>", "droid --resume <id>"
+   */
+  resumeCommand?: string
 }
 
 /** Remove a git worktree. If `force` is true, removes even with uncommitted changes. */

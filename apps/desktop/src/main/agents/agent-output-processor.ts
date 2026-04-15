@@ -10,6 +10,7 @@ export type ProcessResult = {
   currentStep?: string;
   tokenLimitWarning: boolean;
   sessionId?: string;
+  resumeCommand?: string;
 };
 
 export type OutputProcessor = { process(data: string): ProcessResult };
@@ -40,6 +41,7 @@ export function createOutputProcessor(_agentId: string, cliType: AgentCliType): 
             currentStep: r.currentStep ?? undefined,
             tokenLimitWarning: r.tokenLimitWarning,
             sessionId: r.sessionId ?? undefined,
+            resumeCommand: r.resumeCommand ?? undefined,
           };
         },
       };
