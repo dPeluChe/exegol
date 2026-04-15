@@ -5,8 +5,12 @@
  * Holds the incomplete line buffer between chunks.
  */
 export declare class AgentOutputStream {
-  /** Create a new output stream for an agent. */
-  constructor(cliType: string)
+  /**
+   * Create a new output stream for an agent.
+   * `resume_command_pattern`: substring prefix from provider config (e.g. "claude --resume ").
+   * Pass empty string when the provider has no resume support.
+   */
+  constructor(cliType: string, resumeCommandPattern: string)
   /**
    * Process a chunk of raw PTY output.
    * Returns cleaned text + optional status update.

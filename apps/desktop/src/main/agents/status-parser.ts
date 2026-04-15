@@ -16,10 +16,12 @@ type StatusUpdate = {
 export class AgentStatusParser {
   private static readonly MAX_BUFFER = 10240;
   private cliType: AgentCliType;
+  private resumePattern: string;
   private buffer: string = "";
 
-  constructor(_agentId: string, cliType: AgentCliType) {
+  constructor(_agentId: string, cliType: AgentCliType, resumePattern?: string) {
     this.cliType = cliType;
+    this.resumePattern = resumePattern ?? "";
   }
 
   /**
@@ -63,8 +65,8 @@ export class AgentStatusParser {
       }
 
       // Parse resume command from shutdown output (T101, all CLIs)
-      if (!lastUpdate?.resumeCommand) {
-        const resumeCommand = parseResumeCommand(this.cliType, cleaned);
+      if (!lastUpdate?.resumeCommand && this.resumePattern) {
+        const resumeCommand = parseResumeCommandFromPattern(this.resumePattern, cleaned);
         if (resumeCommand) lastUpdate = { ...lastUpdate, resumeCommand };
       }
     }
@@ -261,20 +263,20 @@ export function parseSessionId(line: string): string | null {
 
 /**
  * Extract the full resume command from an agent's shutdown output (T101).
- * Mirrors the Rust `parse_resume_command` function.
+ * Generic pattern-based matcher — mirrors the Rust `parse_resume_command_pattern` function.
+ * @param pattern - provider's `resumeCommandPattern` capability (e.g. "claude --resume ")
+ * @param line - cleaned output line to search
  */
-export function parseResumeCommand(cliType: string, line: string): string | null {
-  const patterns: Record<string, RegExp> = {
-    "claude-code": /claude\s+--resume\s+[\w-]{8,}/i,
-    gemini: /gemini\s+--resume\s+[\w-]{8,}/i,
-    codex: /codex\s+resume\s+[\w-]{8,}/i,
-    droid: /droid\s+--resume\s+[\w-]{8,}/i,
-    opencode: /opencode\s+-s\s+[\w-]{8,}/i,
-  };
-  const pattern = patterns[cliType];
+export function parseResumeCommandFromPattern(pattern: string, line: string): string | null {
   if (!pattern) return null;
-  const match = line.match(pattern);
-  return match?.[0]?.trim() ?? null;
+  const idx = line.toLowerCase().indexOf(pattern.toLowerCase());
+  if (idx === -1) return null;
+  const fromMatch = line.slice(idx);
+  // Stop at newline or box-drawing characters
+  const end = fromMatch.search(/[\n│|]/);
+  const result = (end === -1 ? fromMatch : fromMatch.slice(0, end)).trim();
+  // Must be longer than just the pattern itself (i.e. includes a session ID)
+  return result.length > pattern.trimEnd().length ? result : null;
 }
 
 /**

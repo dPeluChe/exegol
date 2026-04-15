@@ -71,6 +71,21 @@ export type AgentProviderCapabilities = {
   supportsResume: boolean;
   /** Flag to resume the last session (e.g. `--continue`, `--resume`). Empty = no resume. */
   resumeFlag: string;
+  /**
+   * Substring prefix the CLI prints in its shutdown output that identifies the
+   * resume command to run next time (T101). The parser extracts from this prefix
+   * to end-of-line and stores the full command verbatim.
+   *
+   * Examples:
+   *   claude-code  → "claude --resume "
+   *   gemini       → "gemini --resume "
+   *   codex        → "codex resume "
+   *   droid        → "droid --resume "
+   *   opencode     → "opencode -s "
+   *
+   * Leave empty or omit when the CLI has no session resume support.
+   */
+  resumeCommandPattern?: string;
   supportsRPC: boolean;
   supportsVision: boolean;
   /** CLI accepts a prompt/task as a positional argument (e.g. `claude 'task'`) */

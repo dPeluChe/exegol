@@ -294,7 +294,8 @@ export class AgentManager {
 
     // ── Output processing setup (non-shell agents only) ─────────────────
     if (!isPlainShell) {
-      this.outputProcessors.set(agent.id, createOutputProcessor(agent.id, agent.cliType));
+      const resumePattern = registry.get(agent.cliType)?.capabilities?.resumeCommandPattern;
+      this.outputProcessors.set(agent.id, createOutputProcessor(agent.id, agent.cliType, resumePattern));
       // Title-based status detection (T56) — only for CLIs that set terminal titles
       if (["claude-code", "gemini", "codex", "crush"].includes(agent.cliType)) {
         this.titleTrackers.set(

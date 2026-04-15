@@ -27,12 +27,17 @@ if (useRustProcessor) {
 /**
  * Create an output processor for an agent session.
  * Uses Rust AgentOutputStream if available, JS fallback otherwise.
+ * @param resumePattern - provider's `resumeCommandPattern` capability (empty = no resume detection)
  */
-export function createOutputProcessor(_agentId: string, cliType: AgentCliType): OutputProcessor {
+export function createOutputProcessor(
+  _agentId: string,
+  cliType: AgentCliType,
+  resumePattern?: string,
+): OutputProcessor {
   if (useRustProcessor) {
     try {
       // biome-ignore lint/style/noNonNullAssertion: guarded by useRustProcessor check above
-      const stream = new coreRust!.AgentOutputStream(cliType);
+      const stream = new coreRust!.AgentOutputStream(cliType, resumePattern ?? "");
       return {
         process(data: string) {
           const r = stream.processChunk(data);
@@ -50,7 +55,7 @@ export function createOutputProcessor(_agentId: string, cliType: AgentCliType): 
     }
   }
 
-  const parser = new AgentStatusParser(_agentId, cliType);
+  const parser = new AgentStatusParser(_agentId, cliType, resumePattern);
   return {
     process(data: string) {
       const u = parser.parse(data);
@@ -58,6 +63,8 @@ export function createOutputProcessor(_agentId: string, cliType: AgentCliType): 
         status: u?.status,
         currentStep: u?.currentStep,
         tokenLimitWarning: u?.tokenLimitWarning ?? false,
+        sessionId: u?.sessionId,
+        resumeCommand: u?.resumeCommand,
       };
     },
   };

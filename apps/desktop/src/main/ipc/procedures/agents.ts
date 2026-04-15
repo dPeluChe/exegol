@@ -46,6 +46,7 @@ export const agentRouter = router({
             supportsWorktree: z.boolean().default(false),
             supportsResume: z.boolean().default(false),
             resumeFlag: z.string().default(""),
+            resumeCommandPattern: z.string().optional(),
             supportsRPC: z.boolean().default(false),
             supportsVision: z.boolean().default(false),
             supportsPromptArg: z.boolean().default(false),
