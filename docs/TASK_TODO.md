@@ -249,6 +249,14 @@
 - `apps/desktop/src/renderer/stores/agents.ts` (add `claudeSessionId` to AgentState)
 - `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (pass real session ID on resume)
 
+**Note — resumeCommandPattern user override (evaluate)**
+Currently `resumeCommandPattern` in `AgentProviderCapabilities` lives only in code (`BUILTIN_PROVIDERS`
+constant) and is not persisted to DB. This is correct because it reflects how the CLI itself prints its
+shutdown output, not a user preference. However, if a CLI changes its format between versions (or a user
+runs a fork/custom build that prints differently), there is no way to override it without updating the app.
+Evaluate whether `resumeCommandPattern` should be included in the `provider_overrides` DB key alongside
+`args` and `enabled`, making it overridable per-installation from Settings → CLI card advanced options.
+
 ---
 
 ### T88 — Ralph Loops in Pipelines
