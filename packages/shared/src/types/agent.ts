@@ -28,6 +28,41 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+// ─── Activity Classification (T70) ─────────────────────────────────────────
+
+export const AGENT_ACTIVITY_LEVELS = ["busy", "idle", "neutral"] as const;
+export type AgentActivityLevel = (typeof AGENT_ACTIVITY_LEVELS)[number];
+
+/**
+ * Derive a coarse activity level from agent status + optional current step.
+ * This is a pure function — no side effects, no debounce. Callers handle timing.
+ *
+ * - **busy**: agent is actively doing work (running with a tool/thinking step)
+ * - **idle**: agent is alive but not doing anything (waiting for input, paused)
+ * - **neutral**: terminal state or not enough info to classify
+ */
+export function classifyActivity(status: AgentStatus, currentStep?: string | null): AgentActivityLevel {
+  switch (status) {
+    case "running":
+    case "spawning":
+      // If we have a step signal, it's definitely busy
+      if (currentStep && currentStep !== "") return "busy";
+      // Running but no step detected yet — still busy (just started)
+      return "busy";
+    case "waiting_input":
+    case "paused":
+      return "idle";
+    case "completed":
+    case "failed":
+    case "stopped":
+    case "crashed":
+    case "idle":
+      return "neutral";
+    default:
+      return "neutral";
+  }
+}
+
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 

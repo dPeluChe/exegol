@@ -309,6 +309,7 @@ export function CommandPalette() {
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,
           claudeSessionId: null,
+          activityLevel: "busy",
         });
         useTerminalStore.getState().createTerminal(agent.id);
         // Create a new tab with the terminal

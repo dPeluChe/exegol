@@ -96,6 +96,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(agent.id);
       setFocusedAgent(agent.id);

@@ -69,6 +69,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,
           claudeSessionId: null,
+          activityLevel: "busy",
         });
         createTerminal(agent.id);
 
@@ -135,6 +136,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(agent.id);
       updatePane(paneId, { type: "terminal", agentId: agent.id });
@@ -168,6 +170,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,
           claudeSessionId: null,
+          activityLevel: "busy",
         });
         createTerminal(agent.id);
         updatePane(paneId, { type: "terminal", agentId: agent.id });

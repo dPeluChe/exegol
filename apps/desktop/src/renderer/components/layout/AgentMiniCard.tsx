@@ -107,7 +107,8 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
               className={cn(
                 "h-1.5 w-1.5 shrink-0 rounded-full",
                 STATUS_DOT_COLORS[agent.status] ?? "bg-zinc-500",
-                isActive && "animate-status-pulse",
+                agent.activityLevel === "busy" && "animate-status-pulse",
+                agent.activityLevel === "idle" && isActive && "opacity-60",
               )}
             />
             <span className="flex-1 truncate text-[10px] font-medium">{displayName}</span>

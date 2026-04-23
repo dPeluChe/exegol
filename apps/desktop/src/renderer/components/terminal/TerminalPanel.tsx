@@ -176,6 +176,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         startedAt: successor.startedAt,
         accessMode: successor.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(successor.id);
       setFocusedAgent(successor.id);
@@ -246,6 +247,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                           startedAt: newAgent.startedAt,
                           accessMode: newAgent.accessMode ?? null,
                           claudeSessionId: null,
+        activityLevel: "busy",
                         });
                         createTerminal(newAgent.id);
                         useWorkspaceStore.getState().updatePane(paneId, {

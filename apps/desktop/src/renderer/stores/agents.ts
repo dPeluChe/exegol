@@ -1,4 +1,4 @@
-import type { Agent, AgentAccessMode, AgentCliType, AgentStatus } from "@exegol/shared";
+import { type Agent, type AgentAccessMode, type AgentActivityLevel, type AgentCliType, type AgentStatus, classifyActivity } from "@exegol/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getProjectState, useWorkspaceStore } from "./workspace";
@@ -68,9 +68,11 @@ export function startAgentStatusPush(): void {
         return;
       }
 
+      const newStatus = event.status as AgentStatus;
       const update: Partial<AgentState> = {
-        status: event.status as AgentStatus,
+        status: newStatus,
         currentStep: event.currentStep,
+        activityLevel: classifyActivity(newStatus, event.currentStep),
       };
       if (event.claudeSessionId) update.claudeSessionId = event.claudeSessionId;
       store.updateAgent(event.agentId, update);
@@ -102,6 +104,8 @@ export interface AgentState {
   accessMode: AgentAccessMode | null;
   /** Claude session ID captured from startup output — used for --resume on re-spawn (T101). */
   claudeSessionId: string | null;
+  /** T70: Derived activity level — busy/idle/neutral. Updated on every status change. */
+  activityLevel: AgentActivityLevel;
 }
 
 interface AgentStore {
@@ -237,11 +241,12 @@ export const useAgentStore = create<AgentStore>()(
             } else {
               added++;
               // New from DB — agent we don't have in memory yet
+              const dbStatus = dbAgent.status as AgentStatus;
               updated[dbAgent.id] = {
                 id: dbAgent.id,
                 projectId: dbAgent.projectId,
                 cliType: dbAgent.cliType as AgentCliType,
-                status: dbAgent.status as AgentStatus,
+                status: dbStatus,
                 currentStep: dbAgent.currentStep ?? null,
                 taskDescription: dbAgent.taskDescription,
                 branchName: dbAgent.branchName ?? null,
@@ -249,6 +254,7 @@ export const useAgentStore = create<AgentStore>()(
                 startedAt: dbAgent.startedAt,
                 accessMode: dbAgent.accessMode ?? null,
                 claudeSessionId: null,
+                activityLevel: classifyActivity(dbStatus, dbAgent.currentStep),
               };
             }
           }

@@ -214,6 +214,7 @@ export function WorkspaceTabBar() {
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(agent.id);
 
@@ -396,6 +397,7 @@ function QuickLaunchBar() {
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,
           claudeSessionId: null,
+        activityLevel: "busy",
         });
         createTerminal(agent.id);
 
