@@ -1,4 +1,4 @@
-import type { AgentProvider, HandoffSummary } from "@exegol/shared";
+import type { AgentAccessMode, AgentProvider, HandoffSummary } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -378,7 +378,10 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         </div>
       )}
       {hasData && (
-        <div className="flex shrink-0 justify-end border-b border-border/40 px-2 py-0.5">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border/40 px-2 py-0.5">
+          {agent?.accessMode && agent.accessMode !== "write" && (
+            <AccessModeBadge mode={agent.accessMode} />
+          )}
           <TerminalViewToggle viewMode={viewMode} onToggle={handleToggleLiveView} />
         </div>
       )}
@@ -442,6 +445,29 @@ function TerminalViewToggle({
         </>
       )}
     </button>
+  );
+}
+
+// ─── T58: Access mode badge ──────────────────────────────────────────────────
+
+const ACCESS_MODE_LABEL: Record<string, { label: string; className: string }> = {
+  read: { label: "read-only", className: "bg-blue-500/20 text-blue-400" },
+  plan: { label: "plan-only", className: "bg-purple-500/20 text-purple-400" },
+};
+
+function AccessModeBadge({ mode }: { mode: AgentAccessMode }) {
+  const config = ACCESS_MODE_LABEL[mode];
+  if (!config) return null;
+  return (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+        config.className,
+      )}
+      title={`Agent running in ${config.label} mode`}
+    >
+      {config.label}
+    </span>
   );
 }
 

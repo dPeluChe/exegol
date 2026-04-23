@@ -16,7 +16,6 @@
 - **Parallel Multi-Agent on Worktrees** (T65)
 
 ### P2 — Valuable follow-ups once the core is stable
-- Activity classification (T70)
 - Issue tracker expansion (T71)
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 
@@ -40,11 +39,16 @@
 - Creates clearer runtime control for risky or high-cost agent sessions.
 - Useful foundation for scheduler, hooks, and later automations.
 
-**Scope**
-- Modes: `implement`, `plan`, `approve`
-- Configurable at spawn time
-- Runtime mode switching via toolbar or agent controls
-- Propagate mode into pipeline steps and scheduler runs
+**Done (v0.4.3)**
+- Types: `AgentAccessMode` (`read`, `write`, `plan`) + DB migration
+- Spawn-time injection (prompt prefix + `EXEGOL_ACCESS_MODE` env var)
+- SpawnAgentModal mode selector (Full Access / Plan Only / Read Only)
+- Access mode badge in live terminal toolbar
+- Pipeline step `accessMode` field + executor propagation + editor UI
+
+**Remaining**
+- Runtime mode switching (change mode while agent is running)
+- Scheduler task `accessMode` propagation
 
 **Likely files**
 - `apps/desktop/src/main/agents/*`
@@ -97,28 +101,6 @@
 - `apps/desktop/src/main/agents/*`
 - `apps/desktop/src/renderer/components/workspace/sections/PipelineSection.tsx`
 - `apps/desktop/src/renderer/hooks/use-trpc-pipeline.ts`
-
----
-
-### T70 — Activity Classification (Busy / Idle / Neutral)
-**Priority**: P2 | **Effort**: Low | **Source**: Emdash
-
-**Why**
-- Adds a finer-grained signal than raw status parsing.
-- Useful for T57 attention routing.
-
-**Scope**
-- Real-time classification per provider
-- Debounced busy/idle transitions
-- Visual language in sidebar and terminal tab chrome
-
-**Depends on**
-- T56 is complementary but not required
-
-**Likely files**
-- `apps/desktop/src/main/agents/status-parser.ts`
-- `apps/desktop/src/main/agents/title-status.ts`
-- `apps/desktop/src/renderer/components/layout/*`
 
 ---
 

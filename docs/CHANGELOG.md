@@ -7,6 +7,27 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.3] — 2026-04-23 — Activity tab chrome, access mode badge, pipeline mode propagation
+
+### Added
+
+- **Activity dot in tab chrome** (T70). `WorkspaceTabBar` now shows a 1.5px
+  colored dot after the tab label when the primary pane hosts a running agent.
+  `busy` = pulsing green, `idle` = amber, `neutral` hidden. Dot uses
+  `activityLevel` from the agent store (derived by `classifyActivity` on every
+  push event). Zero re-fetch — pure store subscription.
+- **Access mode badge in terminal toolbar** (T58). When an agent was spawned
+  with `read` or `plan` access mode, a colored pill ("read-only" / "plan-only")
+  appears in the live terminal toolbar alongside the chat-toggle button.
+  `write` mode (default) shows nothing — no noise for the common case.
+- **Pipeline step access mode** (T58). `PipelineStepDef` gains an optional
+  `accessMode` field. The pipeline executor passes it through `createAgent` +
+  `manager.spawn` so plan-step or read-step agents get their mode injected into
+  the prompt prefix automatically. `PipelineTemplateEditor` exposes a per-step
+  mode selector ("write" / "read" / "plan").
+
+---
+
 ## [0.4.2] — 2026-04-23 — QA automation, DI context, chat view, virtual scrolling
 
 ### Added

@@ -1,4 +1,4 @@
-import type { AgentCliType, AgentProvider } from "@exegol/shared";
+import type { AgentActivityLevel, AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { FolderTree, GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
@@ -22,6 +22,14 @@ import {
 } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import { LayoutPresets } from "./LayoutPresets";
+
+// ─── T70: Activity dot for tab chrome ───────────────────────────────────────
+
+const ACTIVITY_DOT_CLASS: Record<AgentActivityLevel, string> = {
+  busy: "bg-success animate-status-pulse",
+  idle: "bg-warning",
+  neutral: "bg-text-muted",
+};
 
 // ─── Tab auto-naming helpers ────────────────────────────────────────────────
 
@@ -277,6 +285,15 @@ export function WorkspaceTabBar() {
             const isEditing = editingTabId === tab.id;
             const { displayName, Icon: TabIcon } = getTabMeta(tab.label, tab.layout, panes, agents);
 
+            // T70: derive activity level from the first terminal agent in this tab
+            const firstPaneId = findFirstPaneId(tab.layout);
+            const firstPane = firstPaneId ? panes[firstPaneId] : null;
+            const tabAgent =
+              firstPane?.type === "terminal" && firstPane.agentId
+                ? agents[firstPane.agentId]
+                : null;
+            const tabActivity = tabAgent?.activityLevel;
+
             return (
               // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
               <div
@@ -320,6 +337,15 @@ export function WorkspaceTabBar() {
                   <>
                     {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
                     <span className="max-w-[140px] truncate">{displayName}</span>
+                    {tabActivity && tabActivity !== "neutral" && (
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 shrink-0 rounded-full",
+                          ACTIVITY_DOT_CLASS[tabActivity],
+                        )}
+                        aria-hidden="true"
+                      />
+                    )}
                   </>
                 )}
                 <button
