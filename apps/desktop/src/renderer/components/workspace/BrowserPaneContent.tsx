@@ -1,4 +1,5 @@
 import { cn } from "@exegol/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowRight,
@@ -48,6 +49,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const setPreferred = useSetPreferredPort();
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
+  const queryClient = useQueryClient();
 
   // Deduplicate ports, prefer runtime over config
   const uniquePorts = useMemo(() => {
@@ -258,6 +260,9 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
               consoleErrors: JSON.stringify(result.consoleErrors),
               durationMs: result.totalDurationMs,
             });
+            // Refresh QA Tests panel so lastStatus updates immediately
+            queryClient.invalidateQueries({ queryKey: ["qaTests"] });
+            queryClient.invalidateQueries({ queryKey: ["qaLatestRun", testId] });
           } catch (err) {
             console.warn("[BrowserPane] Failed to persist run:", err);
           }
@@ -269,7 +274,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         setReplayStep(-1);
       }
     },
-    [qaRecording, replaying, safeExecJs, stopOnFail, savedTestId],
+    [qaRecording, replaying, safeExecJs, stopOnFail, savedTestId, queryClient],
   );
 
   const cancelReplay = useCallback(() => {
@@ -277,10 +282,13 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   }, []);
 
   // Listen for run-test events dispatched by QaTestsSection
+  // Only the focused pane responds — prevents multiple panes from running simultaneously
   useEffect(() => {
     const handler = async (e: Event) => {
       const { testId, startUrl, actions } = (e as CustomEvent).detail ?? {};
       if (!testId || !actions) return;
+      const focusedId = useWorkspaceStore.getState().focusedPaneId;
+      if (focusedId !== paneId) return;
       setUrlInput(startUrl);
       setCurrentUrl(startUrl);
       updatePane(pane.id, { url: startUrl });
@@ -291,7 +299,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     };
     window.addEventListener("exegol:qa-run-test", handler);
     return () => window.removeEventListener("exegol:qa-run-test", handler);
-  }, [handleReplay, pane.id, updatePane]);
+  }, [handleReplay, pane.id, paneId, updatePane]);
 
   // Track navigation history availability + load-failure state on the webview
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes

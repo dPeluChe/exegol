@@ -151,6 +151,7 @@ function TestCard({
 export function QaTestsSection() {
   const { project } = useProjectContext();
   const projectId = project?.id;
+  const [runError, setRunError] = useState<string | null>(null);
 
   const {
     data: tests = [],
@@ -164,10 +165,16 @@ export function QaTestsSection() {
   });
 
   const handleRun = (test: QaTest) => {
+    setRunError(null);
     let actions: unknown[] = [];
     try {
       actions = JSON.parse(test.actions);
     } catch {
+      setRunError(`"${test.name}" has corrupted action data and can't be run.`);
+      return;
+    }
+    if (!actions.length) {
+      setRunError(`"${test.name}" has no recorded actions.`);
       return;
     }
     window.dispatchEvent(
@@ -175,7 +182,6 @@ export function QaTestsSection() {
         detail: { testId: test.id, startUrl: test.startUrl, actions },
       }),
     );
-    // Switch to agents view so the user sees the browser pane run
     window.dispatchEvent(
       new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
     );
@@ -209,6 +215,20 @@ export function QaTestsSection() {
         </div>
         <p className="text-[10px] text-text-muted">Record in Browser pane → Save Test</p>
       </div>
+
+      {/* Run error banner */}
+      {runError && (
+        <div className="flex shrink-0 items-center justify-between border-b border-red-500/30 bg-red-500/5 px-4 py-1.5">
+          <p className="text-[10px] text-red-400">{runError}</p>
+          <button
+            type="button"
+            onClick={() => setRunError(null)}
+            className="text-[9px] text-text-muted hover:text-text-primary"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* List */}
       <ScrollArea className="flex-1">
