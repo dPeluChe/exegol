@@ -72,6 +72,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const [scrollAtBottom, setScrollAtBottom] = useState(true);
   const [showSendTo, setShowSendTo] = useState(false);
   const [viewMode, setViewMode] = useState<"terminal" | "chat">("terminal");
+  const [liveSnapshot, setLiveSnapshot] = useState("");
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
@@ -190,6 +191,17 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       setHandoffLoading(false);
     }
   }, [agent, handoffLoading, addAgent, createTerminal, setFocusedAgent]);
+
+  const handleToggleLiveView = useCallback(() => {
+    setViewMode((v) => {
+      if (v === "terminal") {
+        const snapshot = terminalRef.current?.serialize() ?? "";
+        setLiveSnapshot(snapshot);
+        return "chat";
+      }
+      return "terminal";
+    });
+  }, []);
 
   // If agent is stopped and has scrollback, show read-only terminal
   if (isStopped && scrollbackContent) {
@@ -379,24 +391,51 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           </Button>
         </div>
       )}
+      {/* T90: live chat toggle toolbar */}
+      {hasData && (
+        <div className="flex shrink-0 justify-end border-b border-border/40 px-2 py-0.5">
+          <button
+            type="button"
+            onClick={handleToggleLiveView}
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-white/10 hover:text-text-secondary"
+            title={viewMode === "terminal" ? "Switch to chat view" : "Switch to terminal view"}
+          >
+            {viewMode === "terminal" ? (
+              <>
+                <MessageSquare className="h-3 w-3" /> Chat
+              </>
+            ) : (
+              <>
+                <TerminalSquare className="h-3 w-3" /> Terminal
+              </>
+            )}
+          </button>
+        </div>
+      )}
       <div className="relative flex-1">
-        <TerminalInstance
-          ref={terminalRef}
-          key={agentId}
-          agentId={agentId}
-          cliType={agent?.cliType}
-          onReady={onReady}
-          onScrollPosition={handleScrollPosition}
-        />
-        <TerminalFloatingButtons
-          terminalRef={terminalRef}
-          scrollAtTop={scrollAtTop}
-          scrollAtBottom={scrollAtBottom}
-          sendTargets={sendTargets}
-          showSendTo={showSendTo}
-          setShowSendTo={setShowSendTo}
-          onSendTo={handleSendTo}
-        />
+        {viewMode === "chat" ? (
+          <ChatView scrollback={liveSnapshot} cliType={agent?.cliType} />
+        ) : (
+          <>
+            <TerminalInstance
+              ref={terminalRef}
+              key={agentId}
+              agentId={agentId}
+              cliType={agent?.cliType}
+              onReady={onReady}
+              onScrollPosition={handleScrollPosition}
+            />
+            <TerminalFloatingButtons
+              terminalRef={terminalRef}
+              scrollAtTop={scrollAtTop}
+              scrollAtBottom={scrollAtBottom}
+              sendTargets={sendTargets}
+              showSendTo={showSendTo}
+              setShowSendTo={setShowSendTo}
+              onSendTo={handleSendTo}
+            />
+          </>
+        )}
       </div>
     </div>
   );

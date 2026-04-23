@@ -1,8 +1,9 @@
 import type { MemoryEntry } from "@exegol/shared";
-import { Badge, Button, cn, ScrollArea } from "@exegol/ui";
+import { Badge, Button, cn } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Brain, Plus, Search, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   useCreateMemory,
@@ -41,6 +42,7 @@ export function MemorySection() {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const categoryParam = filterCategory === "all" ? undefined : filterCategory;
   const { data: memories } = useMemories(projectId, categoryParam);
@@ -50,6 +52,15 @@ export function MemorySection() {
   );
 
   const displayMemories = searchQuery.length >= 2 ? searchResults : memories;
+  const items = displayMemories ?? [];
+
+  const virtualizer = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 72,
+    overscan: 5,
+    measureElement: (el) => el.getBoundingClientRect().height,
+  });
 
   return (
     <div className="flex h-full flex-col">
@@ -118,13 +129,29 @@ export function MemorySection() {
           />
         </div>
       ) : (
-        <ScrollArea className="flex-1">
-          <div className="space-y-1.5 p-3">
-            {displayMemories.map((mem) => (
-              <MemoryCard key={mem.id} memory={mem} />
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          <div
+            style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
+            className="p-3"
+          >
+            {virtualizer.getVirtualItems().map((vItem) => (
+              <div
+                key={vItem.key}
+                data-index={vItem.index}
+                ref={virtualizer.measureElement}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  transform: `translateY(${vItem.start}px)`,
+                  width: "calc(100% - 1.5rem)",
+                  paddingBottom: "0.375rem",
+                }}
+              >
+                {items[vItem.index] && <MemoryCard memory={items[vItem.index] as MemoryEntry} />}
+              </div>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       )}
 
       {/* Create dialog */}

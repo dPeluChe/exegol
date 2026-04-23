@@ -22,14 +22,15 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.24",
     "@trpc/server": "^11.0.0",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
-    "libsql": "^0.5.0",
-    "node-pty": "^1.0.0",
-    "nanoid": "^5.0.0",
     "croner": "^9.0.0",
     "electron-updater": "^6.0.0",
+    "libsql": "^0.5.0",
+    "nanoid": "^5.0.0",
+    "node-pty": "^1.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
