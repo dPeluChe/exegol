@@ -53,6 +53,9 @@ const ScoringSection = lazy(() =>
 const AgentDashboard = lazy(() =>
   import("./sections/AgentDashboard").then((m) => ({ default: m.AgentDashboard })),
 );
+const QaTestsSection = lazy(() =>
+  import("./sections/QaTestsSection").then((m) => ({ default: m.QaTestsSection })),
+);
 
 function SectionFallback() {
   return <LoadingSpinner className="h-full" />;
@@ -132,6 +135,7 @@ export function WorkspaceView() {
             {activeSection === "prompts-skills" && <PromptsSkillsSection />}
             {activeSection === "memory" && <MemorySection />}
             {activeSection === "pipelines" && <PipelineSection />}
+            {activeSection === "qa-tests" && <QaTestsSection />}
             {activeSection === "agent-dashboard" && <AgentDashboard />}
             {activeSection === "resources-tokens" && <ResourcesTokensSection />}
             {activeSection === "scoring" && <ScoringSection />}

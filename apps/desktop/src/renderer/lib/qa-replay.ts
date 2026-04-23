@@ -36,6 +36,11 @@ export interface QaReplayCallbacks {
   onComplete?: (result: QaReplayResult) => void;
 }
 
+export interface QaReplayOptions {
+  /** Stop executing further steps on the first failure. Default: false. */
+  stopOnFail?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -194,6 +199,14 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Race a promise against a timeout; resolves to null on timeout. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 /**
  * Replay a sequence of recorded QA actions against a webview.
  *
@@ -210,6 +223,7 @@ export async function replayQaTest(
   executeJs: (code: string) => Promise<unknown>,
   captureScreenshot: () => Promise<string | null>,
   callbacks?: QaReplayCallbacks,
+  options?: QaReplayOptions,
 ): Promise<QaReplayResult> {
   const totalStart = Date.now();
   const stepResults: QaStepResult[] = [];
@@ -241,12 +255,12 @@ export async function replayQaTest(
     // Wait for DOM to settle before capturing screenshot / next step.
     await delay(INTER_STEP_DELAY_MS);
 
-    // Capture screenshot (best-effort, don't fail the step if this errors).
+    // Capture screenshot with 3s timeout — best-effort, non-critical.
     try {
-      const shot = await captureScreenshot();
+      const shot = await withTimeout(captureScreenshot(), 3_000);
       if (shot) screenshotBase64 = shot;
     } catch {
-      // Screenshot capture is non-critical.
+      // ignore
     }
 
     const result: QaStepResult = {
@@ -260,6 +274,8 @@ export async function replayQaTest(
 
     stepResults.push(result);
     callbacks?.onStepComplete?.(result);
+
+    if (!passed && options?.stopOnFail) break;
   }
 
   // 3. Collect console errors captured during replay.
