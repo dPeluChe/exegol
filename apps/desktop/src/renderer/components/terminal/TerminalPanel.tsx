@@ -7,9 +7,11 @@ import {
   ArrowRight,
   ArrowUpToLine,
   Loader2,
+  MessageSquare,
   Play,
   RotateCcw,
   Send,
+  TerminalSquare,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
@@ -18,6 +20,7 @@ import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
+import { ChatView } from "./ChatView";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
 /** Hook: set of CLI types that support session resume (from provider registry) */
@@ -68,6 +71,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const [scrollAtTop, setScrollAtTop] = useState(true);
   const [scrollAtBottom, setScrollAtBottom] = useState(true);
   const [showSendTo, setShowSendTo] = useState(false);
+  const [viewMode, setViewMode] = useState<"terminal" | "chat">("terminal");
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
@@ -275,6 +279,19 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               </Button>
             )}
           </div>
+          {/* T90: Terminal/Chat toggle */}
+          <button
+            type="button"
+            onClick={() => setViewMode((v) => (v === "terminal" ? "chat" : "terminal"))}
+            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-white/10 hover:text-text-secondary"
+            title={viewMode === "terminal" ? "Switch to chat view" : "Switch to terminal view"}
+          >
+            {viewMode === "terminal" ? (
+              <><MessageSquare className="h-3 w-3" /> Chat</>
+            ) : (
+              <><TerminalSquare className="h-3 w-3" /> Terminal</>
+            )}
+          </button>
         </div>
         {/* Handoff summary banner */}
         {resolvedHandoff && (
@@ -287,24 +304,30 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           </div>
         )}
         <div className="relative flex-1">
-          <TerminalInstance
-            ref={terminalRef}
-            key={`scrollback-${agentId}`}
-            agentId={agentId}
-            cliType={agent?.cliType}
-            readOnly
-            initialContent={scrollbackContent}
-            onScrollPosition={handleScrollPosition}
-          />
-          <TerminalFloatingButtons
-            terminalRef={terminalRef}
-            scrollAtTop={scrollAtTop}
-            scrollAtBottom={scrollAtBottom}
-            sendTargets={sendTargets}
-            showSendTo={showSendTo}
-            setShowSendTo={setShowSendTo}
-            onSendTo={handleSendTo}
-          />
+          {viewMode === "chat" ? (
+            <ChatView scrollback={scrollbackContent} cliType={agent?.cliType} />
+          ) : (
+            <>
+              <TerminalInstance
+                ref={terminalRef}
+                key={`scrollback-${agentId}`}
+                agentId={agentId}
+                cliType={agent?.cliType}
+                readOnly
+                initialContent={scrollbackContent}
+                onScrollPosition={handleScrollPosition}
+              />
+              <TerminalFloatingButtons
+                terminalRef={terminalRef}
+                scrollAtTop={scrollAtTop}
+                scrollAtBottom={scrollAtBottom}
+                sendTargets={sendTargets}
+                showSendTo={showSendTo}
+                setShowSendTo={setShowSendTo}
+                onSendTo={handleSendTo}
+              />
+            </>
+          )}
         </div>
       </div>
     );
