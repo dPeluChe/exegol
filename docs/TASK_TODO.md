@@ -21,6 +21,7 @@
 - **DI for singletons** (T81) — testability improvement
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 - **Terminal ↔ Chat dual view** (T90) — same session, two presentations
+- **Design Mode + QA Test Mode** (T102) — browser pane as design capture + test automation tool
 
 ### P3 — Strategic bets / larger scope
 - **SSH Remote Development** (T73)
@@ -160,10 +161,11 @@
 ---
 
 ### T73 — SSH Remote Development
-**Priority**: P3 | **Effort**: High | **Source**: Emdash
+**Priority**: P3 | **Effort**: High | **Source**: Emdash + Orca (stablyai/orca)
 
 **Why**
 - High upside, but too large to mix into the current release-critical wave.
+- Orca already ships SSH with a clean provider dispatch pattern worth following.
 
 **Scope**
 - Remote project registration via SSH
@@ -171,12 +173,77 @@
 - Remote git/worktree operations
 - Credentials in OS keychain
 
+**Architecture reference — Orca's provider dispatch pattern**
+Orca (stablyai/orca) implements SSH via parallel provider pairs in `src/main/providers/`:
+```
+local-pty-provider.ts    ←→  ssh-pty-provider.ts
+(local git via runner.ts) ←→  ssh-git-provider.ts
+(local fs)                ←→  ssh-filesystem-provider.ts
+```
+Each operation (spawn PTY, run git command, read/write files) has a local and SSH variant
+behind a dispatch layer (`provider-dispatch.ts`). The dispatch routes based on project
+location (local path vs ssh://host). Key files to study:
+- `ssh-pty-provider.ts` — PTY sessions over SSH with shell-ready detection
+- `ssh-git-provider.ts` — git commands tunneled through SSH
+- `ssh-filesystem-dispatch.ts` — file read/write routing
+
+**Recommended approach for Exegol:**
+1. Create `apps/desktop/src/main/providers/` with `types.ts` defining `PtyProvider`, `GitProvider`, `FsProvider` interfaces
+2. Extract current local implementations as `local-pty-provider.ts`, `local-git-provider.ts`
+3. Add SSH variants that implement the same interfaces
+4. Dispatch layer reads project config (`project.remote?: { host, user, path }`)
+5. Agent spawn flow calls provider.createPty() instead of hardcoded local PTY
+
 **Likely files**
-- New remote subsystem in `apps/desktop/src/main/*`
-- Agent spawn flow
-- Project model and settings
+- New: `apps/desktop/src/main/providers/*` (dispatch + local/SSH provider pairs)
+- `apps/desktop/src/main/agents/manager.ts` (spawn via provider dispatch)
+- `apps/desktop/src/main/terminal/pty-sidecar-client.ts` (local PTY → provider interface)
+- `packages/core-rust/src/git/` (local git → provider interface)
+- Project model and settings (remote SSH config)
 
 ---
+
+### T102 — Design Mode + QA Test Mode (Browser Pane Extension)
+**Priority**: P2 | **Effort**: Medium | **Source**: stablyai/orca Design Mode + internal analysis
+
+**Why**
+- Exegol already has a full browser pane (Electron webview with URL bar + back/forward/reload).
+  Today it's a passive viewer. Extending it to capture UI elements and automate tests turns the
+  browser pane from "nice to have" into a core workflow tool.
+- Orca ships "Design Mode" (click UI elements → drop into agent chat as context). We can go
+  further by adding QA test automation directly in the browser pane.
+
+**Scope — Design Mode**
+- Toggle button in browser pane toolbar: "Design Mode" (crosshair icon)
+- When active, clicking any element in the webview captures:
+  - Screenshot of the element (bounding box crop)
+  - CSS selector path
+  - Computed styles (size, colors, fonts)
+  - Surrounding HTML snippet
+- Captured context is formatted and can be:
+  - Sent directly to the focused agent's stdin ("Fix this component: [screenshot + selector + styles]")
+  - Copied to clipboard as structured context
+  - Saved as a design reference in project memory
+
+**Scope — QA Test Mode**
+- Toggle button: "QA Mode" (bug icon)
+- When active, user clicks through a flow recording interactions:
+  - Click coordinates + selectors
+  - Text inputs
+  - Navigation events
+  - Console errors captured during flow
+- Recorded flow can be:
+  - Exported as a Playwright/Puppeteer test script (agent generates the test)
+  - Replayed to verify agent changes didn't break the flow
+  - Attached to a pipeline verify step (Pattern 5 from the multi-agent article)
+- Screenshots at each step for visual regression comparison
+
+**Likely files**
+- `apps/desktop/src/renderer/components/workspace/BrowserPaneContent.tsx` (toolbar toggles)
+- New: `apps/desktop/src/renderer/lib/design-capture.ts` (element capture logic via webview executeJavaScript)
+- New: `apps/desktop/src/renderer/lib/qa-recorder.ts` (interaction recording)
+- `apps/desktop/src/main/ipc/procedures/browser.ts` (new — webview IPC for capture/replay)
+- Integration with agent stdin for context injection
 
 ---
 
