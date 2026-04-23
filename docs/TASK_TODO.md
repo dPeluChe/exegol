@@ -18,10 +18,7 @@
 ### P2 — Valuable follow-ups once the core is stable
 - Activity classification (T70)
 - Issue tracker expansion (T71)
-- **DI for singletons** (T81) — testability improvement
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
-- **Terminal ↔ Chat dual view** (T90) — same session, two presentations
-- **Design Mode + QA Test Mode** (T102) — browser pane as design capture + test automation tool
 
 ### P3 — Strategic bets / larger scope
 - **SSH Remote Development** (T73)
@@ -54,23 +51,6 @@
 - `apps/desktop/src/main/pipeline/*`
 - `apps/desktop/src/renderer/components/agents/SpawnAgentModal.tsx`
 - `apps/desktop/src/renderer/components/terminal/*`
-
----
-
-### T59 — Virtual Scrolling for Large Lists
-**Priority**: Medium | **Effort**: Low | **Source**: Anvil
-
-**Why**
-- Cheap performance win for large projects and long-running sessions.
-
-**Scope**
-- Add virtualization to agent lists, memory lists, and file explorer
-- Prefer small dependency footprint and avoid rewriting list behavior
-
-**Likely files**
-- `apps/desktop/src/renderer/components/layout/*`
-- `apps/desktop/src/renderer/components/workspace/FileExplorer.tsx`
-- `apps/desktop/src/renderer/components/workspace/sections/MemorySection.tsx`
 
 ---
 
@@ -203,86 +183,10 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T102 — Design Mode + QA Test Mode (Browser Pane Extension)
-**Priority**: P2 | **Effort**: Medium | **Source**: stablyai/orca Design Mode + internal analysis
-
-**Why**
-- Exegol already has a full browser pane (Electron webview with URL bar + back/forward/reload).
-  Today it's a passive viewer. Extending it to capture UI elements and automate tests turns the
-  browser pane from "nice to have" into a core workflow tool.
-- Orca ships "Design Mode" (click UI elements → drop into agent chat as context). We can go
-  further by adding QA test automation directly in the browser pane.
-
-**Scope — Design Mode**
-- Toggle button in browser pane toolbar: "Design Mode" (crosshair icon)
-- When active, clicking any element in the webview captures:
-  - Screenshot of the element (bounding box crop)
-  - CSS selector path
-  - Computed styles (size, colors, fonts)
-  - Surrounding HTML snippet
-- Captured context is formatted and can be:
-  - Sent directly to the focused agent's stdin ("Fix this component: [screenshot + selector + styles]")
-  - Copied to clipboard as structured context
-  - Saved as a design reference in project memory
-
-**Scope — QA Test Mode**
-- Toggle button: "QA Mode" (bug icon)
-- When active, user clicks through a flow recording interactions:
-  - Click coordinates + selectors
-  - Text inputs
-  - Navigation events
-  - Console errors captured during flow
-- Recorded flow can be:
-  - Exported as a Playwright/Puppeteer test script (agent generates the test)
-  - Replayed to verify agent changes didn't break the flow
-  - Attached to a pipeline verify step (Pattern 5 from the multi-agent article)
-- Screenshots at each step for visual regression comparison
-
-**Likely files**
-- `apps/desktop/src/renderer/components/workspace/BrowserPaneContent.tsx` (toolbar toggles)
-- New: `apps/desktop/src/renderer/lib/design-capture.ts` (element capture logic via webview executeJavaScript)
-- New: `apps/desktop/src/renderer/lib/qa-recorder.ts` (interaction recording)
-- `apps/desktop/src/main/ipc/procedures/browser.ts` (new — webview IPC for capture/replay)
-- Integration with agent stdin for context injection
-
----
-
 ## Codebase Quality & Health (from deep analysis)
 
 > These tasks surfaced from a comprehensive codebase audit (April 2026).
 > They address technical debt, testability, and robustness gaps that will compound if left unattended.
-
-### T81 — Dependency Injection for Singletons
-**Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
-
-**Why**
-- Six core subsystems use global singletons: `getAgentManager()`, `getPtyHost()`,
-  `getPipelineExecutor()`, `getSchedulerEngine()`, `getProviderRegistry()`, `getMcpHost()`.
-  This makes unit testing nearly impossible (can't inject mocks), prevents parallel test execution,
-  and makes reasoning about state harder.
-
-**Scope**
-- Introduce a lightweight AppContext or ServiceContainer:
-  ```ts
-  interface AppContext {
-    db: Database;
-    agentManager: AgentManager;
-    ptyHost: PtyHost;
-    pipelineExecutor: PipelineExecutor;
-    scheduler: SchedulerEngine;
-    registry: AgentProviderRegistry;
-    mcpHost: McpHost;
-  }
-  ```
-- Pass context via constructor injection (not global accessors)
-- Keep singletons as a thin facade for backward compat during migration
-- Enable test contexts with mock implementations
-
-**Likely files**
-- New: `apps/desktop/src/main/app-context.ts`
-- All singleton modules (gradual migration)
-
----
 
 ## Post-launch Backlog — Inspired by Competitors
 
@@ -311,30 +215,6 @@ location (local path vs ssh://host). Key files to study:
 - `apps/desktop/src/main/pipeline/executor.ts` (evaluator routing)
 - `apps/desktop/src/main/pipeline/context.ts` (retryFeedback variable)
 - `apps/desktop/src/renderer/components/workspace/sections/pipeline/PipelineEditor.tsx`
-
----
-
-### T90 — Terminal ↔ Chat Dual View
-**Priority**: P2 | **Effort**: Medium | **Source**: Superconductor
-
-**Why**
-- Non-technical users (PMs, designers watching a demo) benefit from a conversational
-  view of an agent session without the ANSI noise. Toggling lets you get CLI depth
-  when debugging and clean reading when reviewing.
-
-**Scope**
-- Parse the existing scrollback buffer into conversational turns: detect user
-  prompts (input echoes) vs agent output (post-prompt blocks)
-- Provider-specific parsers for Claude Code, Codex, Aider (they have distinct
-  output patterns); fallback to generic "alternate lines"
-- Toggle button in terminal pane header: Terminal / Chat
-- Chat view is read-only, reuses DarkReader-style clean rendering
-- Do NOT touch the underlying PTY — this is a pure render layer
-
-**Likely files**
-- New: `apps/desktop/src/renderer/components/terminal/ChatView.tsx`
-- New: `apps/desktop/src/renderer/lib/terminal-to-chat.ts` (parsers)
-- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (toggle state)
 
 ---
 

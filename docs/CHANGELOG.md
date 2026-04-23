@@ -7,6 +7,39 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.2] — 2026-04-23 — QA automation, DI context, chat view, virtual scrolling
+
+### Added
+
+- **Design Mode + QA Test Automation** (T102). Browser pane extended with two
+  new modes. Design Mode (crosshair icon) clicks any element in the webview and
+  captures its selector, computed styles, and surrounding HTML — formatted for
+  injection into agent context. QA Test Mode (bug icon) records click/input/
+  keypress/navigate flows, replays them step-by-step with screenshot capture,
+  persists results to DB, and shows pass/fail per step. `stopOnFail` toggle.
+  `QaTestsSection` in the Project tab lists saved tests with run history.
+- **Terminal ↔ Chat Dual View** (T90). Toggle button on both live and stopped
+  terminal panes switches between raw terminal output and a clean conversational
+  view. Live sessions serialize xterm content on toggle; stopped sessions read
+  from DB scrollback. Provider-aware parser detects user prompts, agent output,
+  and system messages.
+- **Virtual Scrolling for Memory List** (T59). `MemorySection` uses
+  `@tanstack/react-virtual` with `measureElement` for variable-height cards.
+  Renders only visible rows; handles large memory stores without layout jank.
+
+### Changed
+
+- **DI for tRPC singletons** (T81). `createContext()` now injects
+  `agentManager`, `providerRegistry`, `pipelineExecutor`, `schedulerEngine`,
+  and `mcpHost` into the tRPC context. All five procedure files (`agents`,
+  `scheduler`, `pipeline`, `resources`, `mcp`) use `ctx.X` instead of calling
+  global getters, making procedures testable with injected mocks.
+- **Magic number extraction** in `BrowserPaneContent`. Three inline literals
+  promoted to named module constants: `DESIGN_POLL_INTERVAL_MS = 300`,
+  `DESIGN_AUTO_STOP_MS = 60_000`, `QA_NAV_DELAY_MS = 800`.
+
+---
+
 ## [0.4.1] — 2026-04-12 — Parallel agent wave
 
 Six tasks completed by 3 parallel Claude Code agents running in Exegol.
