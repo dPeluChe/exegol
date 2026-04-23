@@ -195,9 +195,7 @@ describe("parseResumeCommandFromPattern", () => {
   });
 
   it("should return null for non-matching line", () => {
-    expect(
-      parseResumeCommandFromPattern("claude --resume ", "some unrelated output"),
-    ).toBeNull();
+    expect(parseResumeCommandFromPattern("claude --resume ", "some unrelated output")).toBeNull();
   });
 
   it("should return null when pattern is longer than content", () => {
@@ -205,10 +203,7 @@ describe("parseResumeCommandFromPattern", () => {
   });
 
   it("should truncate at box-drawing character │", () => {
-    const result = parseResumeCommandFromPattern(
-      "claude --resume ",
-      "│ claude --resume abc123 │",
-    );
+    const result = parseResumeCommandFromPattern("claude --resume ", "│ claude --resume abc123 │");
     expect(result).toBe("claude --resume abc123");
   });
 });

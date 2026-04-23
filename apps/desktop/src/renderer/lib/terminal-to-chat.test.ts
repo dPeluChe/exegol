@@ -152,10 +152,7 @@ describe("parseTerminalToChat", () => {
     });
 
     it("merges consecutive system lines into one turn", () => {
-      const input = [
-        "───────────────────",
-        "Session ID: xyz789",
-      ].join("\n");
+      const input = ["───────────────────", "Session ID: xyz789"].join("\n");
 
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(1);
@@ -167,11 +164,9 @@ describe("parseTerminalToChat", () => {
 
   describe("empty lines within a turn", () => {
     it("preserves empty lines within an agent turn", () => {
-      const input = [
-        "First paragraph of response.",
-        "",
-        "Second paragraph after blank line.",
-      ].join("\n");
+      const input = ["First paragraph of response.", "", "Second paragraph after blank line."].join(
+        "\n",
+      );
 
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(1);
