@@ -41,7 +41,10 @@ export type AgentActivityLevel = (typeof AGENT_ACTIVITY_LEVELS)[number];
  * - **idle**: agent is alive but not doing anything (waiting for input, paused)
  * - **neutral**: terminal state or not enough info to classify
  */
-export function classifyActivity(status: AgentStatus, currentStep?: string | null): AgentActivityLevel {
+export function classifyActivity(
+  status: AgentStatus,
+  currentStep?: string | null,
+): AgentActivityLevel {
   switch (status) {
     case "running":
     case "spawning":

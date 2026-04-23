@@ -1,5 +1,5 @@
-import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import type { AgentCliType } from "@exegol/shared";
+import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -339,9 +339,7 @@ export const agentRouter = router({
 
       // Link agents to the parallel run
       for (const agentId of agentIds) {
-        ctx.db
-          .prepare("UPDATE agents SET parallel_run_id = ? WHERE id = ?")
-          .run(run.id, agentId);
+        ctx.db.prepare("UPDATE agents SET parallel_run_id = ? WHERE id = ?").run(run.id, agentId);
       }
 
       return { run, agentIds, errors };
@@ -353,11 +351,9 @@ export const agentRouter = router({
       return listParallelRuns(ctx.db, input.projectId);
     }),
 
-  getParallelRun: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .query(({ ctx, input }) => {
-      return getParallelRun(ctx.db, input.id) ?? null;
-    }),
+  getParallelRun: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
+    return getParallelRun(ctx.db, input.id) ?? null;
+  }),
 
   promoteParallelAgent: publicProcedure
     .input(z.object({ runId: z.string(), agentId: z.string() }))

@@ -14,7 +14,18 @@
 import type { Agent } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, CheckCircle, Clock, Coins, Cpu, Eye, Map as MapIcon, Square, XCircle } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  Coins,
+  Cpu,
+  Eye,
+  Map as MapIcon,
+  Square,
+  XCircle,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";

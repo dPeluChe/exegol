@@ -65,13 +65,17 @@ export function createSpawnCallbacks(
               result.resumeCommand,
               agent.id,
             );
-            logger.info(`[AgentCallback] Captured resume command for ${agent.id}: ${result.resumeCommand}`);
+            logger.info(
+              `[AgentCallback] Captured resume command for ${agent.id}: ${result.resumeCommand}`,
+            );
           } else if (result.sessionId) {
             db.prepare("UPDATE agents SET claude_session_id = ? WHERE id = ?").run(
               result.sessionId,
               agent.id,
             );
-            logger.info(`[AgentCallback] Captured Claude session ID for ${agent.id}: ${result.sessionId}`);
+            logger.info(
+              `[AgentCallback] Captured Claude session ID for ${agent.id}: ${result.sessionId}`,
+            );
           }
         } catch (err) {
           logger.warn(`[AgentCallback] Failed to store session info for ${agent.id}:`, err);

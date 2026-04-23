@@ -28,7 +28,13 @@ const SIZE_CLASSES = {
   lg: "h-3.5 w-3.5",
 } as const;
 
-export function StatusDot({ status, activityLevel, size = "md", pulse, className }: StatusDotProps) {
+export function StatusDot({
+  status,
+  activityLevel,
+  size = "md",
+  pulse,
+  className,
+}: StatusDotProps) {
   const config = STATUS_COLORS[status] ?? STATUS_COLORS.idle;
   // T70: Activity-aware pulse — busy always pulses, idle slows/stops
   const shouldPulse = pulse ?? (activityLevel === "idle" ? false : config.defaultPulse);

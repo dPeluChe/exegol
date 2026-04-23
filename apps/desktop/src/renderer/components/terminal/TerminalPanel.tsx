@@ -251,7 +251,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                           startedAt: newAgent.startedAt,
                           accessMode: newAgent.accessMode ?? null,
                           claudeSessionId: null,
-        activityLevel: "busy",
+                          activityLevel: "busy",
                         });
                         createTerminal(newAgent.id);
                         useWorkspaceStore.getState().updatePane(paneId, {
@@ -287,9 +287,13 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
             title={viewMode === "terminal" ? "Switch to chat view" : "Switch to terminal view"}
           >
             {viewMode === "terminal" ? (
-              <><MessageSquare className="h-3 w-3" /> Chat</>
+              <>
+                <MessageSquare className="h-3 w-3" /> Chat
+              </>
             ) : (
-              <><TerminalSquare className="h-3 w-3" /> Terminal</>
+              <>
+                <TerminalSquare className="h-3 w-3" /> Terminal
+              </>
             )}
           </button>
         </div>

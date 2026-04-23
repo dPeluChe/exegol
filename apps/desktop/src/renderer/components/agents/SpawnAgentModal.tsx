@@ -221,11 +221,21 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium text-text-muted">Mode</label>
             <div className="flex gap-1.5">
-              {([
-                { mode: "write" as const, label: "Full Access", icon: FileEdit, hint: "Read + write files" },
-                { mode: "plan" as const, label: "Plan Only", icon: MapIcon, hint: "Analyze, no writes" },
+              {[
+                {
+                  mode: "write" as const,
+                  label: "Full Access",
+                  icon: FileEdit,
+                  hint: "Read + write files",
+                },
+                {
+                  mode: "plan" as const,
+                  label: "Plan Only",
+                  icon: MapIcon,
+                  hint: "Analyze, no writes",
+                },
                 { mode: "read" as const, label: "Read Only", icon: Eye, hint: "Explore codebase" },
-              ]).map(({ mode, label, icon: Icon, hint }) => (
+              ].map(({ mode, label, icon: Icon, hint }) => (
                 <button
                   key={mode}
                   type="button"

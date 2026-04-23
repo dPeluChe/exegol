@@ -200,7 +200,13 @@ export class AgentManager {
       } as Record<string, string>;
     } else {
       const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
-      let fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix, config.accessMode);
+      let fullCommand = buildShellCommand(
+        registry,
+        agent,
+        cliConfig,
+        contextPrefix,
+        config.accessMode,
+      );
 
       // T101: Resume — prefer stored resume_command (exact command printed at shutdown),
       // fall back to provider's resumeFlag (e.g. --continue for most CLIs).
@@ -215,7 +221,9 @@ export class AgentManager {
         if (row?.resume_command) {
           // Best path: use the exact command the agent printed at shutdown
           fullCommand = row.resume_command;
-          logger.info(`[AgentManager] Resuming ${agent.cliType} with stored command: ${row.resume_command}`);
+          logger.info(
+            `[AgentManager] Resuming ${agent.cliType} with stored command: ${row.resume_command}`,
+          );
         } else if (row?.claude_session_id && agent.cliType === "claude-code") {
           // Backwards compat: old claude session ID captured at startup
           fullCommand = `${cliConfig.command} --resume ${row.claude_session_id}`;
@@ -296,7 +304,10 @@ export class AgentManager {
     // ── Output processing setup (non-shell agents only) ─────────────────
     if (!isPlainShell) {
       const resumePattern = registry.get(agent.cliType)?.capabilities?.resumeCommandPattern;
-      this.outputProcessors.set(agent.id, createOutputProcessor(agent.id, agent.cliType, resumePattern));
+      this.outputProcessors.set(
+        agent.id,
+        createOutputProcessor(agent.id, agent.cliType, resumePattern),
+      );
       // Title-based status detection (T56) — only for CLIs that set terminal titles
       if (["claude-code", "gemini", "codex", "crush"].includes(agent.cliType)) {
         this.titleTrackers.set(
