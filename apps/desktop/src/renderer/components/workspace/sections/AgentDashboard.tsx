@@ -11,7 +11,6 @@
  * gives each agent enough room to be scanned at a glance.
  */
 
-import type { Agent } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -106,7 +105,7 @@ const SPINNER_SETS = [
 function getSpinnerSet(id: string): string[] {
   let hash = 0;
   for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return SPINNER_SETS[Math.abs(hash) % SPINNER_SETS.length] ?? SPINNER_SETS[0]!;
+  return SPINNER_SETS[Math.abs(hash) % SPINNER_SETS.length] ?? ["⠋", "⠙", "⠹", "⠸"];
 }
 
 function Spinner({ agentId }: { agentId: string }) {

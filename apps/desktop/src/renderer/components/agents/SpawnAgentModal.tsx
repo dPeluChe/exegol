@@ -219,7 +219,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
 
           {/* Access mode selector (T58) */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium text-text-muted">Mode</label>
+            <span className="text-[11px] font-medium text-text-muted">Mode</span>
             <div className="flex gap-1.5">
               {[
                 {
