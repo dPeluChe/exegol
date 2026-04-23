@@ -33,7 +33,7 @@ import {
   QA_MODE_INJECTION_SCRIPT,
   type QaRecording,
 } from "../../lib/qa-recorder";
-import { type QaReplayResult, replayQaTest } from "../../lib/qa-replay";
+import { type QaReplayResult, type QaStepResult, replayQaTest } from "../../lib/qa-replay";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
@@ -79,6 +79,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [replayStep, setReplayStep] = useState<number>(-1);
   const [savingTest, setSavingTest] = useState(false);
   const [testName, setTestName] = useState("");
+  const [savedTestId, setSavedTestId] = useState<string | null>(null);
+  const [stopOnFail, setStopOnFail] = useState(true);
   const [qaActionCount, setQaActionCount] = useState(0);
   const designPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const replayCancelledRef = useRef(false);
@@ -193,13 +195,14 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     if (!qaRecording || !projectId || !testName.trim()) return;
     setSavingTest(true);
     try {
-      await trpcMutate("qaTests.save", {
+      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+      const saved = await trpcMutate<any>("qaTests.save", {
         projectId,
         name: testName.trim(),
         startUrl: qaRecording.startUrl,
         actions: JSON.stringify(qaRecording.actions),
       });
-      setQaRecording(null);
+      setSavedTestId(saved?.id ?? null);
       setTestName("");
     } catch (err) {
       console.error("[BrowserPane] Save test failed:", err);
@@ -208,41 +211,87 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     }
   }, [qaRecording, projectId, testName]);
 
-  // T102: Replay a QA recording against the webview (with cancel + stop-on-fail)
-  const handleReplay = useCallback(async () => {
-    if (!qaRecording || replaying) return;
-    setReplaying(true);
-    setReplayResult(null);
-    setReplayStep(-1);
-    replayCancelledRef.current = false;
-    try {
-      const executeJs = async (code: string) => {
-        if (replayCancelledRef.current) throw new Error("Replay cancelled");
-        return await safeExecJs(code);
-      };
-      const captureScreenshot = async () => {
-        try {
-          return (await window.api.browser?.captureScreenshot()) ?? null;
-        } catch {
-          return null;
-        }
-      };
-      const result = await replayQaTest(qaRecording.actions, executeJs, captureScreenshot, {
-        onStepStart: (index) => setReplayStep(index),
-        onStepComplete: () => {},
-      });
-      setReplayResult(result);
-    } catch (err) {
-      console.error("[BrowserPane] Replay failed:", err);
-    } finally {
-      setReplaying(false);
+  // T102: Replay a QA recording against the webview (with cancel + stop-on-fail + persist)
+  const handleReplay = useCallback(
+    async (overrideActions?: QaRecording["actions"], overrideTestId?: string) => {
+      const actions = overrideActions ?? qaRecording?.actions;
+      if (!actions || replaying) return;
+      setReplaying(true);
+      setReplayResult(null);
       setReplayStep(-1);
-    }
-  }, [qaRecording, replaying, safeExecJs]);
+      replayCancelledRef.current = false;
+      try {
+        const executeJs = async (code: string) => {
+          if (replayCancelledRef.current) throw new Error("Replay cancelled");
+          return await safeExecJs(code);
+        };
+        const captureScreenshot = async () => {
+          try {
+            return (await window.api.browser?.captureScreenshot()) ?? null;
+          } catch {
+            return null;
+          }
+        };
+        const result = await replayQaTest(
+          actions,
+          executeJs,
+          captureScreenshot,
+          { onStepStart: (index) => setReplayStep(index), onStepComplete: () => {} },
+          { stopOnFail },
+        );
+        setReplayResult(result);
+        // Persist run to DB if we have a saved test ID
+        const testId = overrideTestId ?? savedTestId;
+        if (testId) {
+          try {
+            await trpcMutate("qaTests.saveRun", {
+              testId,
+              passed: result.passed,
+              stepResults: JSON.stringify(
+                result.stepResults.map((s: QaStepResult) => ({
+                  actionIndex: s.actionIndex,
+                  passed: s.passed,
+                  error: s.error,
+                  durationMs: s.durationMs,
+                })),
+              ),
+              consoleErrors: JSON.stringify(result.consoleErrors),
+              durationMs: result.totalDurationMs,
+            });
+          } catch (err) {
+            console.warn("[BrowserPane] Failed to persist run:", err);
+          }
+        }
+      } catch (err) {
+        console.error("[BrowserPane] Replay failed:", err);
+      } finally {
+        setReplaying(false);
+        setReplayStep(-1);
+      }
+    },
+    [qaRecording, replaying, safeExecJs, stopOnFail, savedTestId],
+  );
 
   const cancelReplay = useCallback(() => {
     replayCancelledRef.current = true;
   }, []);
+
+  // Listen for run-test events dispatched by QaTestsSection
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const { testId, startUrl, actions } = (e as CustomEvent).detail ?? {};
+      if (!testId || !actions) return;
+      setUrlInput(startUrl);
+      setCurrentUrl(startUrl);
+      updatePane(pane.id, { url: startUrl });
+      await new Promise((r) => setTimeout(r, 800));
+      setQaRecording({ startUrl, startedAt: Date.now(), actions, consoleErrors: [] });
+      setSavedTestId(testId);
+      handleReplay(actions, testId);
+    };
+    window.addEventListener("exegol:qa-run-test", handler);
+    return () => window.removeEventListener("exegol:qa-run-test", handler);
+  }, [handleReplay, pane.id, updatePane]);
 
   // Track navigation history availability + load-failure state on the webview
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes
@@ -569,7 +618,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={handleReplay}
+                onClick={() => handleReplay()}
                 disabled={replaying}
                 className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-green-300 hover:bg-green-500/10 disabled:opacity-50"
                 title="Replay this recording in the browser"
@@ -610,6 +659,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
                 onClick={() => {
                   setQaRecording(null);
                   setReplayResult(null);
+                  setSavedTestId(null);
                 }}
                 className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
               >
@@ -617,9 +667,21 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
               </button>
             </div>
           </div>
+          {/* Stop-on-fail toggle */}
+          <div className="mt-1 flex items-center gap-1.5">
+            <label className="flex cursor-pointer items-center gap-1 text-[9px] text-text-muted">
+              <input
+                type="checkbox"
+                checked={stopOnFail}
+                onChange={(e) => setStopOnFail(e.target.checked)}
+                className="h-2.5 w-2.5 accent-accent"
+              />
+              Stop on fail
+            </label>
+          </div>
           {/* Save test row */}
           {projectId && (
-            <div className="mt-1.5 flex items-center gap-1.5">
+            <div className="mt-1 flex items-center gap-1.5">
               <input
                 type="text"
                 value={testName}

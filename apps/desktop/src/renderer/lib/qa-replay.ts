@@ -36,6 +36,11 @@ export interface QaReplayCallbacks {
   onComplete?: (result: QaReplayResult) => void;
 }
 
+export interface QaReplayOptions {
+  /** Stop executing further steps on the first failure. Default: false. */
+  stopOnFail?: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -210,6 +215,7 @@ export async function replayQaTest(
   executeJs: (code: string) => Promise<unknown>,
   captureScreenshot: () => Promise<string | null>,
   callbacks?: QaReplayCallbacks,
+  options?: QaReplayOptions,
 ): Promise<QaReplayResult> {
   const totalStart = Date.now();
   const stepResults: QaStepResult[] = [];
@@ -260,6 +266,8 @@ export async function replayQaTest(
 
     stepResults.push(result);
     callbacks?.onStepComplete?.(result);
+
+    if (!passed && options?.stopOnFail) break;
   }
 
   // 3. Collect console errors captured during replay.
