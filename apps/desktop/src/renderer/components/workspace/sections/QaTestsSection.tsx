@@ -13,6 +13,7 @@ import {
 import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
+import { selectPanes, useWorkspaceStore } from "../../../stores/workspace";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -91,6 +92,7 @@ function TestCard({
   onDelete: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div className="rounded-lg border border-border bg-bg-secondary">
@@ -116,23 +118,45 @@ function TestCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onRun(test)}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-green-400 hover:bg-green-500/10"
-            title="Run test in active browser pane"
-          >
-            <Play className="h-2.5 w-2.5" />
-            Run
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(test.id)}
-            className="rounded p-0.5 text-text-muted/50 hover:bg-red-500/10 hover:text-red-400"
-            title="Delete test"
-          >
-            <Trash2 className="h-3 w-3" />
-          </button>
+          {confirmDelete ? (
+            <>
+              <span className="text-[9px] text-red-400">Delete?</span>
+              <button
+                type="button"
+                onClick={() => onDelete(test.id)}
+                className="rounded px-1.5 py-0.5 text-[9px] text-red-400 hover:bg-red-500/10"
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                No
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onRun(test)}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-green-400 hover:bg-green-500/10"
+                title="Run test in active browser pane"
+              >
+                <Play className="h-2.5 w-2.5" />
+                Run
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(true)}
+                className="rounded p-0.5 text-text-muted/50 hover:bg-red-500/10 hover:text-red-400"
+                title="Delete test"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -175,6 +199,14 @@ export function QaTestsSection() {
     }
     if (!actions.length) {
       setRunError(`"${test.name}" has no recorded actions.`);
+      return;
+    }
+    // Check that a browser pane exists before switching away
+    const ws = useWorkspaceStore.getState();
+    const panes = selectPanes(ws);
+    const hasBrowserPane = Object.values(panes).some((p) => p?.type === "browser");
+    if (!hasBrowserPane) {
+      setRunError("No Browser pane open. Add one from the workspace layout, then try again.");
       return;
     }
     window.dispatchEvent(

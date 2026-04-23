@@ -179,6 +179,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       await safeExecJs(QA_MODE_INJECTION_SCRIPT);
       setQaMode(true);
       setQaRecording(null);
+      setSavedTestId(null);
     }
   }, [qaMode, designMode, currentUrl, safeExecJs]);
 
@@ -205,6 +206,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         actions: JSON.stringify(qaRecording.actions),
       });
       setSavedTestId(saved?.id ?? null);
+      setQaRecording(null);
+      setReplayResult(null);
       setTestName("");
     } catch (err) {
       console.error("[BrowserPane] Save test failed:", err);
