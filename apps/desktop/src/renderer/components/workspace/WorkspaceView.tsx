@@ -1,11 +1,34 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { ParallelSpawnModal } from "../agents/ParallelSpawnModal";
 import { SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { LoadingSpinner } from "../common";
 import { AgentsSection } from "./sections/AgentsSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
+
+// ─── Shortcuts for the help overlay (Cmd+/) ────────────────────────────────
+
+const SHORTCUTS: { key: string; label: string }[] = [
+  { key: "Cmd+B", label: "Toggle Sidebar" },
+  { key: "Cmd+T", label: "New Tab" },
+  { key: "Cmd+W", label: "Close Pane / Tab" },
+  { key: "Cmd+D", label: "Split Horizontal" },
+  { key: "Cmd+Shift+D", label: "Split Vertical" },
+  { key: "Cmd+,", label: "Settings" },
+  { key: "Cmd+K", label: "Command Palette" },
+  { key: "Cmd+Shift+P", label: "Command Palette (alt)" },
+  { key: "Cmd+N", label: "New Agent" },
+  { key: "Cmd+Shift+N", label: "Parallel Spawn" },
+  { key: "Cmd+.", label: "Stop Focused Agent" },
+  { key: "Cmd+1-9", label: "Switch Tab by Number" },
+  { key: "Cmd+]", label: "Next Tab" },
+  { key: "Cmd+[", label: "Previous Tab" },
+  { key: "Ctrl+Tab", label: "Cycle Tabs Forward" },
+  { key: "Ctrl+Shift+Tab", label: "Cycle Tabs Backward" },
+  { key: "Cmd+/", label: "Show This Help" },
+];
 
 // Lazy: non-default sections are only rendered on user demand.
 // Each section bundles its own deps (PipelineSection pulls xterm via PipelineRunView).
@@ -39,6 +62,8 @@ export function WorkspaceView() {
   const { projectId } = useProjectContext();
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
   const [showSpawnModal, setShowSpawnModal] = useState(false);
+  const [showParallelModal, setShowParallelModal] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const isAgents = activeSection === "agents";
   const prevIsAgents = useRef(isAgents);
 
@@ -57,6 +82,20 @@ export function WorkspaceView() {
     const handler = () => setShowSpawnModal(true);
     window.addEventListener("exegol:spawn-agent", handler);
     return () => window.removeEventListener("exegol:spawn-agent", handler);
+  });
+
+  // Listen for Cmd+Shift+N parallel-spawn hotkey (Rule 4: mount effect for event listener)
+  useMountEffect(() => {
+    const handler = () => setShowParallelModal(true);
+    window.addEventListener("exegol:spawn-parallel", handler);
+    return () => window.removeEventListener("exegol:spawn-parallel", handler);
+  });
+
+  // Listen for Cmd+/ shortcut help overlay (Rule 4: mount effect for event listener)
+  useMountEffect(() => {
+    const handler = () => setShowShortcuts((prev) => !prev);
+    window.addEventListener("exegol:show-shortcuts", handler);
+    return () => window.removeEventListener("exegol:show-shortcuts", handler);
   });
 
   // Force xterm.js terminals to re-fit when switching back to Agents tab
@@ -102,6 +141,38 @@ export function WorkspaceView() {
 
       {showSpawnModal && projectId && (
         <SpawnAgentModal projectId={projectId} onClose={() => setShowSpawnModal(false)} />
+      )}
+
+      {showParallelModal && projectId && (
+        <ParallelSpawnModal projectId={projectId} onClose={() => setShowParallelModal(false)} />
+      )}
+
+      {showShortcuts && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowShortcuts(false)}
+            role="none"
+          />
+          <div className="relative z-10 w-[400px] rounded-xl border border-border bg-bg-primary p-4 shadow-2xl">
+            <h2 className="mb-3 text-sm font-semibold text-text-primary">Keyboard Shortcuts</h2>
+            <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
+              {SHORTCUTS.map((s) => (
+                <React.Fragment key={s.key}>
+                  <span className="text-text-muted">{s.label}</span>
+                  <kbd className="text-right font-mono text-text-secondary">{s.key}</kbd>
+                </React.Fragment>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowShortcuts(false)}
+              className="mt-3 w-full rounded-lg bg-bg-secondary py-1.5 text-[11px] text-text-muted hover:bg-white/5"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

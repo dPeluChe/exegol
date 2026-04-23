@@ -1,7 +1,16 @@
-import type { AgentCliType, AgentProvider } from "@exegol/shared";
+import type { AgentAccessMode, AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Cpu, FolderTree, GitBranch, Globe, Terminal } from "lucide-react";
+import {
+  Cpu,
+  Eye,
+  FileEdit,
+  FolderTree,
+  GitBranch,
+  Globe,
+  Map as MapIcon,
+  Terminal,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { type PortInfo, useProjectScripts } from "../../hooks/use-trpc-scheduler";
@@ -18,6 +27,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const { data: scripts } = useProjectScripts(project?.path ?? null);
   const [launching, setLaunching] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
@@ -63,6 +73,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           projectId,
           cliType: cli.id as AgentCliType,
           taskDescription: cli.name,
+          accessMode,
         });
 
         addAgent({
@@ -89,7 +100,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         setLaunching(null);
       }
     },
-    [projectId, paneId, addAgent, createTerminal, updatePane],
+    [projectId, paneId, accessMode, addAgent, createTerminal, updatePane],
   );
 
   const handleBrowser = useCallback(async () => {
@@ -271,6 +282,34 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           </button>
         ))}
       </div>
+
+      {/* Access mode toggle — hidden in mini */}
+      {!isMini && (
+        <div className="flex items-center justify-center gap-1 mt-1.5 mb-1">
+          {(
+            [
+              { mode: "write" as const, icon: FileEdit, title: "Write — full code edits" },
+              { mode: "plan" as const, icon: MapIcon, title: "Plan — suggest changes only" },
+              { mode: "read" as const, icon: Eye, title: "Read — no file writes" },
+            ] as const
+          ).map(({ mode, icon: ModeIcon, title }) => (
+            <button
+              key={mode}
+              type="button"
+              title={title}
+              onClick={() => setAccessMode(mode)}
+              className={cn(
+                "flex items-center justify-center rounded-md border p-1 transition-all",
+                accessMode === mode
+                  ? "bg-accent/10 text-accent border-accent/50"
+                  : "border-border bg-bg-secondary text-text-muted hover:border-accent/30",
+              )}
+            >
+              <ModeIcon className="h-3 w-3" />
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Dev scripts quick-launch */}
       {scripts && scripts.length > 0 && (
