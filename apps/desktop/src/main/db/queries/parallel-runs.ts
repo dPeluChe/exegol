@@ -16,7 +16,14 @@ export function createParallelRun(
   db.prepare(
     `INSERT INTO parallel_runs (id, project_id, task_description, cli_types, agent_ids, status, created_at)
      VALUES (?, ?, ?, ?, ?, 'running', ?)`,
-  ).run(id, data.projectId, data.taskDescription, JSON.stringify(data.cliTypes), JSON.stringify(data.agentIds), now);
+  ).run(
+    id,
+    data.projectId,
+    data.taskDescription,
+    JSON.stringify(data.cliTypes),
+    JSON.stringify(data.agentIds),
+    now,
+  );
 
   return {
     id,
@@ -32,7 +39,9 @@ export function createParallelRun(
 }
 
 export function getParallelRun(db: Database.Database, id: string): ParallelRun | null {
-  const row = db.prepare("SELECT * FROM parallel_runs WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+  const row = db.prepare("SELECT * FROM parallel_runs WHERE id = ?").get(id) as
+    | Record<string, unknown>
+    | undefined;
   if (!row) return null;
   return mapParallelRunRow(row);
 }
@@ -64,10 +73,9 @@ export function promoteParallelRunAgent(
   runId: string,
   agentId: string,
 ): void {
-  db.prepare("UPDATE parallel_runs SET promoted_agent_id = ?, status = 'completed' WHERE id = ?").run(
-    agentId,
-    runId,
-  );
+  db.prepare(
+    "UPDATE parallel_runs SET promoted_agent_id = ?, status = 'completed' WHERE id = ?",
+  ).run(agentId, runId);
 }
 
 function mapParallelRunRow(row: Record<string, unknown>): ParallelRun {

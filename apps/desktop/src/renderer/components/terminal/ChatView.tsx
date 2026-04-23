@@ -13,10 +13,18 @@ interface ChatViewProps {
   cliType?: string;
 }
 
-const ROLE_CONFIG: Record<ChatRole, { icon: typeof User; label: string; bgClass: string; textClass: string }> = {
+const ROLE_CONFIG: Record<
+  ChatRole,
+  { icon: typeof User; label: string; bgClass: string; textClass: string }
+> = {
   user: { icon: User, label: "You", bgClass: "bg-accent/10", textClass: "text-accent" },
   agent: { icon: Bot, label: "Agent", bgClass: "bg-white/5", textClass: "text-text-secondary" },
-  system: { icon: Terminal, label: "System", bgClass: "bg-white/[0.02]", textClass: "text-text-muted" },
+  system: {
+    icon: Terminal,
+    label: "System",
+    bgClass: "bg-white/[0.02]",
+    textClass: "text-text-muted",
+  },
 };
 
 function ChatBubble({ turn }: { turn: ChatTurn }) {
@@ -25,11 +33,18 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
 
   return (
     <div className={cn("flex gap-2.5 px-4 py-3", config.bgClass)}>
-      <div className={cn("mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full", config.bgClass)}>
+      <div
+        className={cn(
+          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full",
+          config.bgClass,
+        )}
+      >
         <Icon className={cn("h-3 w-3", config.textClass)} />
       </div>
       <div className="min-w-0 flex-1">
-        <span className={cn("text-[10px] font-semibold uppercase tracking-wider", config.textClass)}>
+        <span
+          className={cn("text-[10px] font-semibold uppercase tracking-wider", config.textClass)}
+        >
           {config.label}
         </span>
         <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text-primary">
@@ -59,8 +74,8 @@ export function ChatView({ scrollback, cliType }: ChatViewProps) {
             {cliType} session — {turns.length} turns
           </div>
         )}
-        {turns.map((turn, i) => (
-          <ChatBubble key={`${turn.lineIndex}-${i}`} turn={turn} />
+        {turns.map((turn) => (
+          <ChatBubble key={`${turn.role}-${turn.lineIndex}`} turn={turn} />
         ))}
       </div>
     </ScrollArea>

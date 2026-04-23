@@ -17,20 +17,20 @@ export interface ChatTurn {
 
 // Prompt patterns that indicate user input
 const USER_PROMPT_PATTERNS = [
-  /^>\s/,                      // Aider prompt
-  /^❯\s/,                     // Gemini prompt
-  /^\$\s/,                     // Shell prompt
-  /^Human:\s/i,                // Claude format
-  /^User:\s/i,                 // Generic
-  /^you:\s/i,                  // Informal
-  /^Question:\s/i,             // Q&A format
+  /^>\s/, // Aider prompt
+  /^❯\s/, // Gemini prompt
+  /^\$\s/, // Shell prompt
+  /^Human:\s/i, // Claude format
+  /^User:\s/i, // Generic
+  /^you:\s/i, // Informal
+  /^Question:\s/i, // Q&A format
 ];
 
 // System/status patterns
 const SYSTEM_PATTERNS = [
-  /^─{3,}/,                    // Separator lines
-  /^={3,}/,                    // Separator lines
-  /^Session ID:/i,             // Startup banner
+  /^─{3,}/, // Separator lines
+  /^={3,}/, // Separator lines
+  /^Session ID:/i, // Startup banner
   /^Tips for getting started/i,
   /^Type \/help/i,
   /^Resume this session/i,
