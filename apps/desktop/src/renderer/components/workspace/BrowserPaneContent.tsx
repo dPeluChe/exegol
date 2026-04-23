@@ -34,7 +34,7 @@ import {
   type QaRecording,
 } from "../../lib/qa-recorder";
 import { type QaReplayResult, replayQaTest } from "../../lib/qa-replay";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -79,39 +79,85 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [replayStep, setReplayStep] = useState<number>(-1);
   const [savingTest, setSavingTest] = useState(false);
   const [testName, setTestName] = useState("");
+  const [qaActionCount, setQaActionCount] = useState(0);
+  const designPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const replayCancelledRef = useRef(false);
+
+  // Cleanup design mode poll on unmount
+  useEffect(() => {
+    return () => {
+      if (designPollRef.current) clearInterval(designPollRef.current);
+    };
+  }, []);
+
+  // T102: Safe executeJs wrapper — catches CSP blocks and webview errors
+  const safeExecJs = useCallback(async (code: string): Promise<unknown> => {
+    try {
+      return (await window.api.browser?.executeJs(code)) ?? null;
+    } catch (err) {
+      console.warn("[BrowserPane] executeJs failed:", err);
+      return null;
+    }
+  }, []);
 
   // T102: Toggle Design Mode — inject/remove selection overlay in webview
   const toggleDesignMode = useCallback(async () => {
     if (designMode) {
-      await window.api.browser?.executeJs("window.__exegolDesignDisable?.()");
+      await safeExecJs("window.__exegolDesignDisable?.()");
       setDesignMode(false);
+      if (designPollRef.current) {
+        clearInterval(designPollRef.current);
+        designPollRef.current = null;
+      }
     } else {
       if (qaMode) {
-        await window.api.browser?.executeJs("window.__exegolQaDisable?.()");
+        await safeExecJs("window.__exegolQaDisable?.()");
         setQaMode(false);
       }
-      await window.api.browser?.executeJs(DESIGN_MODE_INJECTION_SCRIPT);
+      await safeExecJs(DESIGN_MODE_INJECTION_SCRIPT);
       setDesignMode(true);
       setCapturedElement(null);
-      // Poll for captured element
-      const poll = setInterval(async () => {
-        const result = await window.api.browser?.executeJs("window.__exegolDesignCapture");
+      // Poll for captured element with proper cleanup
+      if (designPollRef.current) clearInterval(designPollRef.current);
+      designPollRef.current = setInterval(async () => {
+        const result = await safeExecJs("window.__exegolDesignCapture");
         if (result) {
           setCapturedElement(result as CapturedElement);
-          clearInterval(poll);
+          if (designPollRef.current) {
+            clearInterval(designPollRef.current);
+            designPollRef.current = null;
+          }
         }
       }, 300);
-      // Stop polling after 60s
-      setTimeout(() => clearInterval(poll), 60_000);
+      // Auto-stop after 60s
+      setTimeout(() => {
+        if (designPollRef.current) {
+          clearInterval(designPollRef.current);
+          designPollRef.current = null;
+        }
+      }, 60_000);
     }
-  }, [designMode, qaMode]);
+  }, [designMode, qaMode, safeExecJs]);
+
+  // T102: Poll QA action count while recording
+  useEffect(() => {
+    if (!qaMode) {
+      setQaActionCount(0);
+      return;
+    }
+    const poll = setInterval(async () => {
+      const count = await safeExecJs("window.__exegolQaActions?.length ?? 0");
+      if (typeof count === "number") setQaActionCount(count);
+    }, 500);
+    return () => clearInterval(poll);
+  }, [qaMode, safeExecJs]);
 
   // T102: Toggle QA Mode — inject/remove interaction recorder in webview
   const toggleQaMode = useCallback(async () => {
     if (qaMode) {
-      const actions = await window.api.browser?.executeJs("window.__exegolQaActions");
-      const errors = await window.api.browser?.executeJs("window.__exegolQaConsoleErrors");
-      await window.api.browser?.executeJs("window.__exegolQaDisable?.()");
+      const actions = await safeExecJs("window.__exegolQaActions");
+      const errors = await safeExecJs("window.__exegolQaConsoleErrors");
+      await safeExecJs("window.__exegolQaDisable?.()");
       setQaMode(false);
       if (Array.isArray(actions) && actions.length > 0) {
         setQaRecording({
@@ -123,14 +169,14 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       }
     } else {
       if (designMode) {
-        await window.api.browser?.executeJs("window.__exegolDesignDisable?.()");
+        await safeExecJs("window.__exegolDesignDisable?.()");
         setDesignMode(false);
       }
-      await window.api.browser?.executeJs(QA_MODE_INJECTION_SCRIPT);
+      await safeExecJs(QA_MODE_INJECTION_SCRIPT);
       setQaMode(true);
       setQaRecording(null);
     }
-  }, [qaMode, designMode, currentUrl]);
+  }, [qaMode, designMode, currentUrl, safeExecJs]);
 
   // T102: Send captured context to focused agent
   const sendToAgent = useCallback((text: string) => {
@@ -162,17 +208,25 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     }
   }, [qaRecording, projectId, testName]);
 
-  // T102: Replay a QA recording against the webview
+  // T102: Replay a QA recording against the webview (with cancel + stop-on-fail)
   const handleReplay = useCallback(async () => {
     if (!qaRecording || replaying) return;
     setReplaying(true);
     setReplayResult(null);
     setReplayStep(-1);
+    replayCancelledRef.current = false;
     try {
-      const executeJs = (code: string) =>
-        window.api.browser?.executeJs(code) ?? Promise.resolve(null);
-      const captureScreenshot = () =>
-        window.api.browser?.captureScreenshot() ?? Promise.resolve(null);
+      const executeJs = async (code: string) => {
+        if (replayCancelledRef.current) throw new Error("Replay cancelled");
+        return await safeExecJs(code);
+      };
+      const captureScreenshot = async () => {
+        try {
+          return (await window.api.browser?.captureScreenshot()) ?? null;
+        } catch {
+          return null;
+        }
+      };
       const result = await replayQaTest(qaRecording.actions, executeJs, captureScreenshot, {
         onStepStart: (index) => setReplayStep(index),
         onStepComplete: () => {},
@@ -184,7 +238,11 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       setReplaying(false);
       setReplayStep(-1);
     }
-  }, [qaRecording, replaying]);
+  }, [qaRecording, replaying, safeExecJs]);
+
+  const cancelReplay = useCallback(() => {
+    replayCancelledRef.current = true;
+  }, []);
 
   // Track navigation history availability + load-failure state on the webview
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes
@@ -338,6 +396,13 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         >
           <Bug className="h-3 w-3" />
         </button>
+        {/* Live indicators for active modes */}
+        {designMode && <span className="text-[8px] font-medium text-blue-400">DESIGN</span>}
+        {qaMode && (
+          <span className="text-[8px] font-medium tabular-nums text-red-400">
+            REC {qaActionCount > 0 ? `(${qaActionCount})` : ""}
+          </span>
+        )}
         <div className="mx-0.5 h-3.5 w-px bg-border" />
         <Globe className="h-3 w-3 shrink-0 text-text-muted" />
         {uniquePorts.length > 0 && (
@@ -516,6 +581,15 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
                 )}
                 {replaying ? "Running..." : "Run"}
               </button>
+              {replaying && (
+                <button
+                  type="button"
+                  onClick={cancelReplay}
+                  className="rounded px-1.5 py-0.5 text-[9px] text-amber-300 hover:bg-amber-500/10"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => sendToAgent(formatRecordingForAgent(qaRecording))}
