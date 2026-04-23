@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, webContents } from "electron";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
@@ -175,6 +175,58 @@ function registerIpcHandlers(): void {
   });
   ipcMain.on("window:close", () => {
     mainWindow?.close();
+  });
+
+  // ── T102: Design Mode + QA — browser pane IPC ──────────────────────
+
+  /** Find the first <webview> webContents hosted by the sender window. */
+  const findWebview = (sender: Electron.WebContents) =>
+    webContents
+      .getAllWebContents()
+      .find((wc) => wc.getType() === "webview" && wc.hostWebContents === sender);
+
+  // Inject JS into the webview and return the result
+  ipcMain.handle("browser:execute-js", async (_event, { code }: { code: string }) => {
+    const wv = findWebview(_event.sender);
+    if (!wv) return null;
+    return wv.executeJavaScript(code);
+  });
+
+  // Capture the webview as a base64 PNG screenshot
+  ipcMain.handle("browser:capture-screenshot", async (_event) => {
+    const wv = findWebview(_event.sender);
+    if (!wv) return null;
+    const image = await wv.capturePage();
+    return image.toPNG().toString("base64");
+  });
+
+  // Capture a specific element's geometry + computed styles
+  ipcMain.handle("browser:capture-element", async (_event, { selector }: { selector: string }) => {
+    const wv = findWebview(_event.sender);
+    if (!wv) return null;
+    return wv.executeJavaScript(`
+      (() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        const styles = getComputedStyle(el);
+        return {
+          selector: ${JSON.stringify(selector)},
+          tagName: el.tagName.toLowerCase(),
+          text: el.textContent?.slice(0, 200) ?? "",
+          html: el.outerHTML.slice(0, 1000),
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          styles: {
+            color: styles.color,
+            backgroundColor: styles.backgroundColor,
+            fontSize: styles.fontSize,
+            fontFamily: styles.fontFamily,
+            padding: styles.padding,
+            margin: styles.margin,
+          },
+        };
+      })()
+    `);
   });
 }
 

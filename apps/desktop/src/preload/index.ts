@@ -104,6 +104,13 @@ contextBridge.exposeInMainWorld("api", {
       };
     },
   },
+  // T102: Design Mode + QA — browser pane inspection
+  browser: {
+    executeJs: (code: string) => ipcRenderer.invoke("browser:execute-js", { code }),
+    captureScreenshot: () => ipcRenderer.invoke("browser:capture-screenshot"),
+    captureElement: (selector: string) =>
+      ipcRenderer.invoke("browser:capture-element", { selector }),
+  },
   // T84: Picture-in-Picture pane floating windows
   floating: {
     /** Open a floating pane window from the main window */

@@ -1,5 +1,14 @@
 import { cn } from "@exegol/ui";
-import { ArrowLeft, ArrowRight, Globe, RefreshCw, RotateCw } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bug,
+  Crosshair,
+  Globe,
+  RefreshCw,
+  RotateCw,
+  Send,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import {
@@ -8,6 +17,18 @@ import {
   useProjectPorts,
   useSetPreferredPort,
 } from "../../hooks/use-trpc-scheduler";
+import {
+  type CapturedElement,
+  DESIGN_MODE_INJECTION_SCRIPT,
+  formatElementForAgent,
+} from "../../lib/design-capture";
+import {
+  exportToPlaywright,
+  formatRecordingForAgent,
+  QA_MODE_INJECTION_SCRIPT,
+  type QaRecording,
+} from "../../lib/qa-recorder";
+import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
 
@@ -42,6 +63,72 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [loadError, setLoadError] = useState<{ code: number; desc: string } | null>(null);
+  const [designMode, setDesignMode] = useState(false);
+  const [qaMode, setQaMode] = useState(false);
+  const [capturedElement, setCapturedElement] = useState<CapturedElement | null>(null);
+  const [qaRecording, setQaRecording] = useState<QaRecording | null>(null);
+
+  // T102: Toggle Design Mode — inject/remove selection overlay in webview
+  const toggleDesignMode = useCallback(async () => {
+    if (designMode) {
+      await window.api.browser?.executeJs("window.__exegolDesignDisable?.()");
+      setDesignMode(false);
+    } else {
+      if (qaMode) {
+        await window.api.browser?.executeJs("window.__exegolQaDisable?.()");
+        setQaMode(false);
+      }
+      await window.api.browser?.executeJs(DESIGN_MODE_INJECTION_SCRIPT);
+      setDesignMode(true);
+      setCapturedElement(null);
+      // Poll for captured element
+      const poll = setInterval(async () => {
+        const result = await window.api.browser?.executeJs("window.__exegolDesignCapture");
+        if (result) {
+          setCapturedElement(result as CapturedElement);
+          clearInterval(poll);
+        }
+      }, 300);
+      // Stop polling after 60s
+      setTimeout(() => clearInterval(poll), 60_000);
+    }
+  }, [designMode, qaMode]);
+
+  // T102: Toggle QA Mode — inject/remove interaction recorder in webview
+  const toggleQaMode = useCallback(async () => {
+    if (qaMode) {
+      const actions = await window.api.browser?.executeJs("window.__exegolQaActions");
+      const errors = await window.api.browser?.executeJs("window.__exegolQaConsoleErrors");
+      await window.api.browser?.executeJs("window.__exegolQaDisable?.()");
+      setQaMode(false);
+      if (Array.isArray(actions) && actions.length > 0) {
+        setQaRecording({
+          startUrl: currentUrl,
+          startedAt: Date.now(),
+          actions: actions as QaRecording["actions"],
+          consoleErrors: (errors as string[]) ?? [],
+        });
+      }
+    } else {
+      if (designMode) {
+        await window.api.browser?.executeJs("window.__exegolDesignDisable?.()");
+        setDesignMode(false);
+      }
+      await window.api.browser?.executeJs(QA_MODE_INJECTION_SCRIPT);
+      setQaMode(true);
+      setQaRecording(null);
+    }
+  }, [qaMode, designMode, currentUrl]);
+
+  // T102: Send captured context to focused agent
+  const sendToAgent = useCallback((text: string) => {
+    const { focusedAgentId } = useAgentStore.getState();
+    if (focusedAgentId) {
+      window.api.terminal.write(focusedAgentId, `${text}\n`);
+    } else {
+      navigator.clipboard.writeText(text);
+    }
+  }, []);
 
   // Track navigation history availability + load-failure state on the webview
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes
@@ -167,6 +254,35 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         >
           <RotateCw className="h-3 w-3" />
         </button>
+        {/* T102: Design Mode + QA Mode toggles */}
+        <div className="mx-0.5 h-3.5 w-px bg-border" />
+        <button
+          type="button"
+          onClick={toggleDesignMode}
+          className={cn(
+            "flex h-5 w-5 items-center justify-center rounded transition-colors",
+            designMode
+              ? "bg-blue-500/20 text-blue-400"
+              : "text-text-muted hover:bg-white/10 hover:text-text-primary",
+          )}
+          title={designMode ? "Exit Design Mode" : "Design Mode — capture UI elements"}
+        >
+          <Crosshair className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={toggleQaMode}
+          className={cn(
+            "flex h-5 w-5 items-center justify-center rounded transition-colors",
+            qaMode
+              ? "bg-red-500/20 text-red-400"
+              : "text-text-muted hover:bg-white/10 hover:text-text-primary",
+          )}
+          title={qaMode ? "Stop Recording — save QA flow" : "QA Mode — record interactions"}
+        >
+          <Bug className="h-3 w-3" />
+        </button>
+        <div className="mx-0.5 h-3.5 w-px bg-border" />
         <Globe className="h-3 w-3 shrink-0 text-text-muted" />
         {uniquePorts.length > 0 && (
           <div className="flex shrink-0 items-center gap-0.5">
@@ -276,6 +392,88 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           />
         )}
       </div>
+
+      {/* T102: Design Mode capture result */}
+      {capturedElement && (
+        <div className="shrink-0 border-t border-border bg-blue-500/5 px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium text-blue-300">
+              Captured: &lt;{capturedElement.tagName}&gt; {capturedElement.rect.width}x
+              {capturedElement.rect.height}px
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => sendToAgent(formatElementForAgent(capturedElement))}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-blue-300 hover:bg-blue-500/10"
+                title="Send to focused agent"
+              >
+                <Send className="h-2.5 w-2.5" /> Send to Agent
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(formatElementForAgent(capturedElement));
+                  setCapturedElement(null);
+                }}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                Copy
+              </button>
+              <button
+                type="button"
+                onClick={() => setCapturedElement(null)}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+          <p className="mt-0.5 truncate font-mono text-[9px] text-text-muted">
+            {capturedElement.selector}
+          </p>
+        </div>
+      )}
+
+      {/* T102: QA Recording result */}
+      {qaRecording && (
+        <div className="shrink-0 border-t border-border bg-red-500/5 px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium text-red-300">
+              Recorded: {qaRecording.actions.length} actions
+              {qaRecording.consoleErrors.length > 0 &&
+                ` · ${qaRecording.consoleErrors.length} errors`}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => sendToAgent(formatRecordingForAgent(qaRecording))}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/10"
+                title="Send to focused agent"
+              >
+                <Send className="h-2.5 w-2.5" /> Send to Agent
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(exportToPlaywright(qaRecording));
+                  setQaRecording(null);
+                }}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                Copy Playwright
+              </button>
+              <button
+                type="button"
+                onClick={() => setQaRecording(null)}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

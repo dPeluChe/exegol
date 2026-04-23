@@ -1,4 +1,4 @@
-import type { AgentProvider } from "@exegol/shared";
+import type { AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, X } from "lucide-react";
@@ -76,7 +76,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
       for (let i = 0; i < agentIds.length; i++) {
         const agentId = agentIds[i];
         if (!agentId) continue;
-        const cliType = cliTypes[i] ?? "unknown";
+        const cliType = (cliTypes[i] ?? "custom") as AgentCliType;
 
         addAgent({
           id: agentId,
@@ -87,7 +87,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
           taskDescription: task.trim(),
           branchName: branchPrefix ? `${branchPrefix}-v${i + 1}` : `exegol/parallel-v${i + 1}`,
           tokenUsage: { input: 0, output: 0, cost: 0 },
-          startedAt: new Date().toISOString(),
+          startedAt: Math.floor(Date.now() / 1000),
           accessMode: null,
           claudeSessionId: null,
           activityLevel: "busy",
