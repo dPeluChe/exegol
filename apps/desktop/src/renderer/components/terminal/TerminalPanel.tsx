@@ -450,7 +450,7 @@ function TerminalViewToggle({
 
 // ─── T58: Access mode badge ──────────────────────────────────────────────────
 
-const ACCESS_MODE_LABEL: Record<string, { label: string; className: string }> = {
+const ACCESS_MODE_LABEL: Partial<Record<AgentAccessMode, { label: string; className: string }>> = {
   read: { label: "read-only", className: "bg-blue-500/20 text-blue-400" },
   plan: { label: "plan-only", className: "bg-purple-500/20 text-purple-400" },
 };
