@@ -23,10 +23,10 @@ describe("parseTerminalToChat", () => {
       const input = "I found the issue in the code.\nThe bug is on line 42.";
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("agent");
-      expect(result[0].content).toContain("I found the issue");
-      expect(result[0].content).toContain("line 42");
-      expect(result[0].lineIndex).toBe(0);
+      expect(result[0]!.role).toBe("agent");
+      expect(result[0]!.content).toContain("I found the issue");
+      expect(result[0]!.content).toContain("line 42");
+      expect(result[0]!.lineIndex).toBe(0);
     });
   });
 
@@ -36,29 +36,29 @@ describe("parseTerminalToChat", () => {
     it("detects Aider prompt (> text)", () => {
       const result = parseTerminalToChat("> fix the bug in main.ts");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("user");
-      expect(result[0].content).toContain("fix the bug");
+      expect(result[0]!.role).toBe("user");
+      expect(result[0]!.content).toContain("fix the bug");
     });
 
     it("detects Gemini prompt (❯ text)", () => {
       const result = parseTerminalToChat("❯ refactor this function");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("user");
-      expect(result[0].content).toContain("refactor this function");
+      expect(result[0]!.role).toBe("user");
+      expect(result[0]!.content).toContain("refactor this function");
     });
 
     it("detects shell prompt ($ command)", () => {
       const result = parseTerminalToChat("$ npm run test");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("user");
-      expect(result[0].content).toContain("npm run test");
+      expect(result[0]!.role).toBe("user");
+      expect(result[0]!.content).toContain("npm run test");
     });
 
     it("detects Claude format (Human: text)", () => {
       const result = parseTerminalToChat("Human: explain this code");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("user");
-      expect(result[0].content).toContain("explain this code");
+      expect(result[0]!.role).toBe("user");
+      expect(result[0]!.content).toContain("explain this code");
     });
   });
 
@@ -68,20 +68,20 @@ describe("parseTerminalToChat", () => {
     it("detects separator lines as system", () => {
       const result = parseTerminalToChat("───────────────────");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("system");
+      expect(result[0]!.role).toBe("system");
     });
 
     it("detects Session ID banner as system", () => {
       const result = parseTerminalToChat("Session ID: abc123");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("system");
-      expect(result[0].content).toContain("abc123");
+      expect(result[0]!.role).toBe("system");
+      expect(result[0]!.content).toContain("abc123");
     });
 
     it("detects Tips for getting started as system", () => {
       const result = parseTerminalToChat("Tips for getting started with Claude Code");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("system");
+      expect(result[0]!.role).toBe("system");
     });
   });
 
@@ -99,14 +99,14 @@ describe("parseTerminalToChat", () => {
 
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(4);
-      expect(result[0].role).toBe("user");
-      expect(result[0].content).toContain("fix the login bug");
-      expect(result[1].role).toBe("agent");
-      expect(result[1].content).toContain("auth.ts line 15");
-      expect(result[2].role).toBe("user");
-      expect(result[2].content).toContain("now add tests");
-      expect(result[3].role).toBe("agent");
-      expect(result[3].content).toContain("test file");
+      expect(result[0]!.role).toBe("user");
+      expect(result[0]!.content).toContain("fix the login bug");
+      expect(result[1]!.role).toBe("agent");
+      expect(result[1]!.content).toContain("auth.ts line 15");
+      expect(result[2]!.role).toBe("user");
+      expect(result[2]!.content).toContain("now add tests");
+      expect(result[3]!.role).toBe("agent");
+      expect(result[3]!.content).toContain("test file");
     });
   });
 
@@ -117,20 +117,20 @@ describe("parseTerminalToChat", () => {
       const input = "Read(file.ts)\nContents of the file...";
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("agent");
-      expect(result[0].content).toContain("Read(file.ts)");
+      expect(result[0]!.role).toBe("agent");
+      expect(result[0]!.content).toContain("Read(file.ts)");
     });
 
     it("detects Thinking... as agent output", () => {
       const result = parseTerminalToChat("Thinking...");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("agent");
+      expect(result[0]!.role).toBe("agent");
     });
 
     it("detects I'll analyze as agent output", () => {
       const result = parseTerminalToChat("I'll analyze the codebase structure.");
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("agent");
+      expect(result[0]!.role).toBe("agent");
     });
   });
 
@@ -146,9 +146,9 @@ describe("parseTerminalToChat", () => {
 
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("agent");
-      expect(result[0].content).toContain("First line");
-      expect(result[0].content).toContain("Third line");
+      expect(result[0]!.role).toBe("agent");
+      expect(result[0]!.content).toContain("First line");
+      expect(result[0]!.content).toContain("Third line");
     });
 
     it("merges consecutive system lines into one turn", () => {
@@ -159,7 +159,7 @@ describe("parseTerminalToChat", () => {
 
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("system");
+      expect(result[0]!.role).toBe("system");
     });
   });
 
@@ -175,10 +175,10 @@ describe("parseTerminalToChat", () => {
 
       const result = parseTerminalToChat(input);
       expect(result).toHaveLength(1);
-      expect(result[0].role).toBe("agent");
-      expect(result[0].content).toContain("First paragraph");
-      expect(result[0].content).toContain("\n\n");
-      expect(result[0].content).toContain("Second paragraph");
+      expect(result[0]!.role).toBe("agent");
+      expect(result[0]!.content).toContain("First paragraph");
+      expect(result[0]!.content).toContain("\n\n");
+      expect(result[0]!.content).toContain("Second paragraph");
     });
   });
 });

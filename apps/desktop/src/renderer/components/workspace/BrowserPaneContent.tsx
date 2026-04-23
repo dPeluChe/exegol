@@ -40,6 +40,12 @@ import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
 
+// ─── Constants ─────────────────────────────────────────────────────────────
+
+const DESIGN_POLL_INTERVAL_MS = 300;
+const DESIGN_AUTO_STOP_MS = 60_000;
+const QA_NAV_DELAY_MS = 800;
+
 // ─── Browser Pane ──────────────────────────────────────────────────────────
 
 export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
@@ -132,14 +138,14 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
             designPollRef.current = null;
           }
         }
-      }, 300);
+      }, DESIGN_POLL_INTERVAL_MS);
       // Auto-stop after 60s
       setTimeout(() => {
         if (designPollRef.current) {
           clearInterval(designPollRef.current);
           designPollRef.current = null;
         }
-      }, 60_000);
+      }, DESIGN_AUTO_STOP_MS);
     }
   }, [designMode, qaMode, safeExecJs]);
 
@@ -295,7 +301,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       setUrlInput(startUrl);
       setCurrentUrl(startUrl);
       updatePane(pane.id, { url: startUrl });
-      await new Promise((r) => setTimeout(r, 800));
+      await new Promise((r) => setTimeout(r, QA_NAV_DELAY_MS));
       setQaRecording({ startUrl, startedAt: Date.now(), actions, consoleErrors: [] });
       setSavedTestId(testId);
       handleReplay(actions, testId);
