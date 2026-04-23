@@ -28,7 +28,7 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
-export const AGENT_ACCESS_MODES = ["read", "write"] as const;
+export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 
 export type Agent = {
@@ -43,7 +43,7 @@ export type Agent = {
   pid: number | null;
   startedAt: number | null;
   stoppedAt: number | null;
-  /** T99: read = explore-only (no git writes), write = full access (default) */
+  /** T58: read = explore-only, write = full access (default), plan = analysis-only (no file writes) */
   accessMode?: AgentAccessMode;
 };
 
@@ -60,7 +60,7 @@ export type AgentCreate = {
   resumeSession?: boolean;
   /** T101: ID of the agent whose claude_session_id should be used for --resume */
   resumeFromAgentId?: string;
-  /** T99: access mode — "read" for explore-only, "write" for full access (default) */
+  /** T58: access mode — "read" for explore-only, "write" for full access (default), "plan" for analysis-only */
   accessMode?: AgentAccessMode;
 };
 

@@ -19,7 +19,6 @@
 - Activity classification (T70)
 - Issue tracker expansion (T71)
 - **DI for singletons** (T81) — testability improvement
-- **Agent Session Resume** (T101) — store Claude session ID, true crash recovery
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 - **Terminal ↔ Chat dual view** (T90) — same session, two presentations
 
@@ -219,45 +218,6 @@
 ---
 
 ## Post-launch Backlog — Inspired by Competitors
-
-### T101 — Agent Session Resume
-**Priority**: P2 | **Effort**: Low | **Source**: multica-ai/multica
-
-**Why**
-- When Claude Code crashes or fails, the user loses the conversation context and tool call history.
-  Multica stores a `PriorSessionID` and on re-spawn attempts to resume the original Claude session,
-  merging token usage across both attempts. Claude Code already supports `--resume <session-id>`.
-- Exegol currently marks crashed agents as "crashed" and offers "Re-launch" (T66 `resumeSession` flag),
-  but does NOT store the actual Claude session ID — so the resume is always from the agent's DB ID,
-  not the real Claude session. Storing the Claude session ID would allow true conversation continuation.
-
-**Scope**
-- DB migration: add `claude_session_id TEXT` column to agents table (migration 027)
-- On agent spawn: capture the Claude session ID from the provider's first output line
-  (Claude Code prints `Session ID: <id>` in its startup banner — parse it in `AgentOutputStream`)
-- Store it via IPC update: `agents.updateSessionId` procedure or extend the status push event
-- Re-launch flow: when re-spawning a crashed/failed agent with `resumeSession: true`, pass
-  `--resume <claude_session_id>` instead of `--resume <agent.id>`
-- Token usage: merge `tokenUsage` from the old agent into the new one so totals are continuous
-- AgentDashboard: show session ID (truncated) in the agent card footer (already shows `agent.id.slice(0,8)`)
-
-**Likely files**
-- `apps/desktop/src/main/db/migrations.ts` (migration 027)
-- `apps/desktop/src/main/agents/manager.ts` (session ID capture + update)
-- `packages/core-rust/src/processing/status_parser.rs` (parse session ID from startup banner)
-- `apps/desktop/src/main/ipc/procedures/agents.ts` (updateSessionId or extend push event)
-- `apps/desktop/src/renderer/stores/agents.ts` (add `claudeSessionId` to AgentState)
-- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (pass real session ID on resume)
-
-**Note — resumeCommandPattern user override (evaluate)**
-Currently `resumeCommandPattern` in `AgentProviderCapabilities` lives only in code (`BUILTIN_PROVIDERS`
-constant) and is not persisted to DB. This is correct because it reflects how the CLI itself prints its
-shutdown output, not a user preference. However, if a CLI changes its format between versions (or a user
-runs a fork/custom build that prints differently), there is no way to override it without updating the app.
-Evaluate whether `resumeCommandPattern` should be included in the `provider_overrides` DB key alongside
-`args` and `enabled`, making it overridable per-installation from Settings → CLI card advanced options.
-
----
 
 ### T88 — Ralph Loops in Pipelines
 **Priority**: P2 | **Effort**: Medium | **Source**: Paseo orchestration skills
@@ -551,7 +511,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ### Stabilization & quality (P2)
 2. T81 — Dependency Injection for Singletons
-3. **T101** — Agent Session Resume (store Claude session ID, true crash recovery)
 
 ### Competitor-inspired backlog (P2-P3)
 4. **T88** — Ralph Loops in Pipelines (evaluator step)

@@ -14,7 +14,7 @@
 import type { Agent } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, AlertTriangle, CheckCircle, Clock, Coins, Cpu, Eye, Square, XCircle } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle, Clock, Coins, Cpu, Eye, Map as MapIcon, Square, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
@@ -325,6 +325,12 @@ function AgentCard({ agent, onClick }: { agent: AgentState; onClick: () => void 
             <span className="flex items-center gap-0.5 text-sky-400/80">
               <Eye className="h-2.5 w-2.5" />
               read-only
+            </span>
+          )}
+          {agent.accessMode === "plan" && (
+            <span className="flex items-center gap-0.5 text-amber-400/80">
+              <MapIcon className="h-2.5 w-2.5" />
+              plan
             </span>
           )}
           {agent.branchName && (

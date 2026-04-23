@@ -200,7 +200,7 @@ export class AgentManager {
       } as Record<string, string>;
     } else {
       const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
-      let fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
+      let fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix, config.accessMode);
 
       // T101: Resume — prefer stored resume_command (exact command printed at shutdown),
       // fall back to provider's resumeFlag (e.g. --continue for most CLIs).
@@ -277,6 +277,7 @@ export class AgentManager {
         ...cliConfig.env,
         TERM: "xterm-256color",
         EXEGOL_AGENT_ID: agent.id,
+        EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
       } as Record<string, string>;
     }
 
