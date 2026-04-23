@@ -221,6 +221,39 @@ export type ParallelRun = {
   completedAt: number | null;
 };
 
+// ─── QA Tests (T102) ───────────────────────────────────────────────────────
+
+export const QA_TEST_STATUSES = ["saved", "running", "passed", "failed"] as const;
+export type QaTestStatus = (typeof QA_TEST_STATUSES)[number];
+
+export type QaTest = {
+  id: string;
+  projectId: string;
+  name: string;
+  /** The starting URL for the test */
+  startUrl: string;
+  /** JSON-serialized QaAction[] */
+  actions: string;
+  /** Number of actions in the test */
+  actionCount: number;
+  createdAt: number;
+  lastRunAt: number | null;
+  lastStatus: QaTestStatus;
+};
+
+export type QaTestRun = {
+  id: string;
+  testId: string;
+  status: QaTestStatus;
+  /** JSON-serialized array of step results: { actionIndex, passed, screenshotBase64?, error? } */
+  stepResults: string;
+  /** JSON-serialized string[] of console errors captured during run */
+  consoleErrors: string;
+  /** Total duration in ms */
+  durationMs: number;
+  createdAt: number;
+};
+
 // ─── Sessions ───────────────────────────────────────────────────────────────
 
 export type RecentSession = {

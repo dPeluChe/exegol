@@ -3,11 +3,16 @@ import {
   ArrowLeft,
   ArrowRight,
   Bug,
+  CheckCircle,
   Crosshair,
   Globe,
+  Loader2,
+  Play,
   RefreshCw,
   RotateCw,
+  Save,
   Send,
+  XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
@@ -28,6 +33,8 @@ import {
   QA_MODE_INJECTION_SCRIPT,
   type QaRecording,
 } from "../../lib/qa-recorder";
+import { type QaReplayResult, replayQaTest } from "../../lib/qa-replay";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -67,6 +74,11 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [qaMode, setQaMode] = useState(false);
   const [capturedElement, setCapturedElement] = useState<CapturedElement | null>(null);
   const [qaRecording, setQaRecording] = useState<QaRecording | null>(null);
+  const [replayResult, setReplayResult] = useState<QaReplayResult | null>(null);
+  const [replaying, setReplaying] = useState(false);
+  const [replayStep, setReplayStep] = useState<number>(-1);
+  const [savingTest, setSavingTest] = useState(false);
+  const [testName, setTestName] = useState("");
 
   // T102: Toggle Design Mode — inject/remove selection overlay in webview
   const toggleDesignMode = useCallback(async () => {
@@ -129,6 +141,50 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       navigator.clipboard.writeText(text);
     }
   }, []);
+
+  // T102: Save QA recording as a reusable test
+  const handleSaveTest = useCallback(async () => {
+    if (!qaRecording || !projectId || !testName.trim()) return;
+    setSavingTest(true);
+    try {
+      await trpcMutate("qaTests.save", {
+        projectId,
+        name: testName.trim(),
+        startUrl: qaRecording.startUrl,
+        actions: JSON.stringify(qaRecording.actions),
+      });
+      setQaRecording(null);
+      setTestName("");
+    } catch (err) {
+      console.error("[BrowserPane] Save test failed:", err);
+    } finally {
+      setSavingTest(false);
+    }
+  }, [qaRecording, projectId, testName]);
+
+  // T102: Replay a QA recording against the webview
+  const handleReplay = useCallback(async () => {
+    if (!qaRecording || replaying) return;
+    setReplaying(true);
+    setReplayResult(null);
+    setReplayStep(-1);
+    try {
+      const executeJs = (code: string) =>
+        window.api.browser?.executeJs(code) ?? Promise.resolve(null);
+      const captureScreenshot = () =>
+        window.api.browser?.captureScreenshot() ?? Promise.resolve(null);
+      const result = await replayQaTest(qaRecording.actions, executeJs, captureScreenshot, {
+        onStepStart: (index) => setReplayStep(index),
+        onStepComplete: () => {},
+      });
+      setReplayResult(result);
+    } catch (err) {
+      console.error("[BrowserPane] Replay failed:", err);
+    } finally {
+      setReplaying(false);
+      setReplayStep(-1);
+    }
+  }, [qaRecording, replaying]);
 
   // Track navigation history availability + load-failure state on the webview
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes
@@ -435,7 +491,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         </div>
       )}
 
-      {/* T102: QA Recording result */}
+      {/* T102: QA Recording result + save/replay */}
       {qaRecording && (
         <div className="shrink-0 border-t border-border bg-red-500/5 px-3 py-2">
           <div className="flex items-center justify-between">
@@ -443,35 +499,126 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
               Recorded: {qaRecording.actions.length} actions
               {qaRecording.consoleErrors.length > 0 &&
                 ` · ${qaRecording.consoleErrors.length} errors`}
+              {replaying && ` · Replaying step ${replayStep + 1}/${qaRecording.actions.length}...`}
             </span>
             <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleReplay}
+                disabled={replaying}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-green-300 hover:bg-green-500/10 disabled:opacity-50"
+                title="Replay this recording in the browser"
+              >
+                {replaying ? (
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                ) : (
+                  <Play className="h-2.5 w-2.5" />
+                )}
+                {replaying ? "Running..." : "Run"}
+              </button>
               <button
                 type="button"
                 onClick={() => sendToAgent(formatRecordingForAgent(qaRecording))}
                 className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/10"
                 title="Send to focused agent"
               >
-                <Send className="h-2.5 w-2.5" /> Send to Agent
+                <Send className="h-2.5 w-2.5" /> Agent
+              </button>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(exportToPlaywright(qaRecording))}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                Playwright
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(exportToPlaywright(qaRecording));
                   setQaRecording(null);
+                  setReplayResult(null);
                 }}
-                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
-              >
-                Copy Playwright
-              </button>
-              <button
-                type="button"
-                onClick={() => setQaRecording(null)}
                 className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
               >
                 Dismiss
               </button>
             </div>
           </div>
+          {/* Save test row */}
+          {projectId && (
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <input
+                type="text"
+                value={testName}
+                onChange={(e) => setTestName(e.target.value)}
+                placeholder="Test name..."
+                className="flex-1 rounded border border-border bg-bg-secondary px-2 py-0.5 text-[10px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveTest();
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSaveTest}
+                disabled={!testName.trim() || savingTest}
+                className="flex items-center gap-1 rounded bg-accent/10 px-2 py-0.5 text-[9px] text-accent hover:bg-accent/20 disabled:opacity-50"
+              >
+                <Save className="h-2.5 w-2.5" />
+                {savingTest ? "Saving..." : "Save Test"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* T102: Replay result summary */}
+      {replayResult && (
+        <div
+          className={cn(
+            "shrink-0 border-t border-border px-3 py-2",
+            replayResult.passed ? "bg-green-500/5" : "bg-red-500/5",
+          )}
+        >
+          <div className="flex items-center justify-between">
+            <span
+              className={cn(
+                "flex items-center gap-1 text-[10px] font-medium",
+                replayResult.passed ? "text-green-300" : "text-red-300",
+              )}
+            >
+              {replayResult.passed ? (
+                <CheckCircle className="h-3 w-3" />
+              ) : (
+                <XCircle className="h-3 w-3" />
+              )}
+              {replayResult.passed
+                ? "All steps passed"
+                : `${replayResult.stepResults.filter((s) => !s.passed).length} step(s) failed`}
+              <span className="text-text-muted">· {replayResult.totalDurationMs}ms</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setReplayResult(null)}
+              className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+            >
+              Dismiss
+            </button>
+          </div>
+          {replayResult.stepResults.some((s) => !s.passed) && (
+            <div className="mt-1 space-y-0.5">
+              {replayResult.stepResults
+                .filter((s) => !s.passed)
+                .map((s) => (
+                  <p key={s.actionIndex} className="truncate text-[9px] text-red-400">
+                    Step {s.actionIndex + 1}: {s.error}
+                  </p>
+                ))}
+            </div>
+          )}
+          {replayResult.consoleErrors.length > 0 && (
+            <p className="mt-1 text-[9px] text-amber-400">
+              {replayResult.consoleErrors.length} console error(s) during replay
+            </p>
+          )}
         </div>
       )}
     </div>

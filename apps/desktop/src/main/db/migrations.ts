@@ -502,6 +502,36 @@ const migrations: Migration[] = [
     `,
   },
   {
+    id: "035_qa_tests",
+    sql: `
+      CREATE TABLE IF NOT EXISTS qa_tests (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        start_url TEXT NOT NULL,
+        actions TEXT NOT NULL DEFAULT '[]',
+        action_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        last_run_at INTEGER,
+        last_status TEXT NOT NULL DEFAULT 'saved'
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_qa_tests_project ON qa_tests(project_id);
+
+      CREATE TABLE IF NOT EXISTS qa_test_runs (
+        id TEXT PRIMARY KEY,
+        test_id TEXT NOT NULL REFERENCES qa_tests(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'running',
+        step_results TEXT NOT NULL DEFAULT '[]',
+        console_errors TEXT NOT NULL DEFAULT '[]',
+        duration_ms INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_qa_test_runs_test ON qa_test_runs(test_id);
+    `,
+  },
+  {
     id: "031_diff_comments",
     sql: `
       CREATE TABLE IF NOT EXISTS diff_comments (
