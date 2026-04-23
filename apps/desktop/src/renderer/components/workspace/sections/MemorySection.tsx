@@ -129,27 +129,27 @@ export function MemorySection() {
           />
         </div>
       ) : (
-        <div ref={scrollRef} className="flex-1 overflow-y-auto">
-          <div
-            style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}
-            className="p-3"
-          >
-            {virtualizer.getVirtualItems().map((vItem) => (
-              <div
-                key={vItem.key}
-                data-index={vItem.index}
-                ref={virtualizer.measureElement}
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  transform: `translateY(${vItem.start}px)`,
-                  width: "calc(100% - 1.5rem)",
-                  paddingBottom: "0.375rem",
-                }}
-              >
-                {items[vItem.index] && <MemoryCard memory={items[vItem.index] as MemoryEntry} />}
-              </div>
-            ))}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-3">
+          <div style={{ height: `${virtualizer.getTotalSize()}px`, position: "relative" }}>
+            {virtualizer.getVirtualItems().map((vItem) => {
+              const mem = items[vItem.index];
+              return (
+                <div
+                  key={vItem.key}
+                  data-index={vItem.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    transform: `translateY(${vItem.start}px)`,
+                    width: "100%",
+                    paddingBottom: "0.375rem",
+                  }}
+                >
+                  {mem && <MemoryCard memory={mem} />}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

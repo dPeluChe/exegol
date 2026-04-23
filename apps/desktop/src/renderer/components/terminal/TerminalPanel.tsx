@@ -193,15 +193,13 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   }, [agent, handoffLoading, addAgent, createTerminal, setFocusedAgent]);
 
   const handleToggleLiveView = useCallback(() => {
-    setViewMode((v) => {
-      if (v === "terminal") {
-        const snapshot = terminalRef.current?.serialize() ?? "";
-        setLiveSnapshot(snapshot);
-        return "chat";
-      }
-      return "terminal";
-    });
-  }, []);
+    if (viewMode === "terminal") {
+      setLiveSnapshot(terminalRef.current?.serialize() ?? "");
+      setViewMode("chat");
+    } else {
+      setViewMode("terminal");
+    }
+  }, [viewMode]);
 
   // If agent is stopped and has scrollback, show read-only terminal
   if (isStopped && scrollbackContent) {
@@ -291,23 +289,11 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               </Button>
             )}
           </div>
-          {/* T90: Terminal/Chat toggle */}
-          <button
-            type="button"
-            onClick={() => setViewMode((v) => (v === "terminal" ? "chat" : "terminal"))}
-            className="ml-auto flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-white/10 hover:text-text-secondary"
-            title={viewMode === "terminal" ? "Switch to chat view" : "Switch to terminal view"}
-          >
-            {viewMode === "terminal" ? (
-              <>
-                <MessageSquare className="h-3 w-3" /> Chat
-              </>
-            ) : (
-              <>
-                <TerminalSquare className="h-3 w-3" /> Terminal
-              </>
-            )}
-          </button>
+          <TerminalViewToggle
+            viewMode={viewMode}
+            onToggle={() => setViewMode((v) => (v === "terminal" ? "chat" : "terminal"))}
+            className="ml-auto"
+          />
         </div>
         {/* Handoff summary banner */}
         {resolvedHandoff && (
@@ -391,25 +377,9 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           </Button>
         </div>
       )}
-      {/* T90: live chat toggle toolbar */}
       {hasData && (
         <div className="flex shrink-0 justify-end border-b border-border/40 px-2 py-0.5">
-          <button
-            type="button"
-            onClick={handleToggleLiveView}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-white/10 hover:text-text-secondary"
-            title={viewMode === "terminal" ? "Switch to chat view" : "Switch to terminal view"}
-          >
-            {viewMode === "terminal" ? (
-              <>
-                <MessageSquare className="h-3 w-3" /> Chat
-              </>
-            ) : (
-              <>
-                <TerminalSquare className="h-3 w-3" /> Terminal
-              </>
-            )}
-          </button>
+          <TerminalViewToggle viewMode={viewMode} onToggle={handleToggleLiveView} />
         </div>
       )}
       <div className="relative flex-1">
@@ -438,6 +408,40 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Terminal/Chat view toggle button ───────────────────────────────────────
+
+function TerminalViewToggle({
+  viewMode,
+  onToggle,
+  className,
+}: {
+  viewMode: "terminal" | "chat";
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-white/10 hover:text-text-secondary",
+        className,
+      )}
+      title={viewMode === "terminal" ? "Switch to chat view" : "Switch to terminal view"}
+    >
+      {viewMode === "terminal" ? (
+        <>
+          <MessageSquare className="h-3 w-3" /> Chat
+        </>
+      ) : (
+        <>
+          <TerminalSquare className="h-3 w-3" /> Terminal
+        </>
+      )}
+    </button>
   );
 }
 
