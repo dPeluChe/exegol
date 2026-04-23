@@ -17,6 +17,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const { projectId, project } = useProjectContext();
   const { data: scripts } = useProjectScripts(project?.path ?? null);
   const [launching, setLaunching] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
@@ -28,6 +29,13 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     staleTime: 30_000,
   });
   const cliOptions = providers ?? [];
+  const filteredOptions = search
+    ? cliOptions.filter(
+        (cli) =>
+          cli.name.toLowerCase().includes(search.toLowerCase()) ||
+          cli.id.toLowerCase().includes(search.toLowerCase()),
+      )
+    : cliOptions;
 
   // Observe pane size for responsive layout
   useEffect(() => {
@@ -219,9 +227,20 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         </div>
       )}
 
+      {/* Search filter — only shown when enough agents */}
+      {!isMini && cliOptions.length > 6 && (
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search agents..."
+          className="mb-2 w-full max-w-sm rounded-lg border border-border bg-bg-secondary px-3 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
+        />
+      )}
+
       {/* Agent grid — responsive columns and sizes */}
       <div className={cn("grid w-full gap-1.5", gridCols, isMini ? "max-w-xs" : "max-w-sm")}>
-        {cliOptions.map((cli) => (
+        {filteredOptions.map((cli) => (
           <button
             key={cli.id}
             type="button"

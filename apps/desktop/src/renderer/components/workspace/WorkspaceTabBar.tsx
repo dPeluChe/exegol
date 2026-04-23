@@ -77,14 +77,32 @@ export function WorkspaceTabBar() {
   const agents = useAgentStore((s) => s.agents);
   const { projectId } = useProjectContext();
 
-  /** Close a tab and stop all its terminal agents */
+  /** Close a tab — confirm first if it has running agents */
   const handleCloseTab = useCallback(
     (tabId: string) => {
-      // Read fresh state to avoid stale closure
       const pw = getProjectState();
       const tab = pw.tabs.find((t) => t.id === tabId);
       if (tab) {
         const paneIds = collectPaneIds(tab.layout);
+        const runningAgentIds: string[] = [];
+        for (const pid of paneIds) {
+          const pane = pw.panes[pid];
+          if (pane?.type === "terminal" && pane.agentId) {
+            const agent = useAgentStore.getState().agents[pane.agentId];
+            if (agent && ["running", "spawning", "waiting_input"].includes(agent.status)) {
+              runningAgentIds.push(pane.agentId);
+            }
+          }
+        }
+        // Confirm before killing running agents
+        if (runningAgentIds.length > 0) {
+          const count = runningAgentIds.length;
+          const ok = window.confirm(
+            `This tab has ${count} running agent${count > 1 ? "s" : ""}. Close and stop ${count > 1 ? "them" : "it"}?`,
+          );
+          if (!ok) return;
+        }
+        // Stop + cleanup all terminal agents in the tab
         for (const pid of paneIds) {
           const pane = pw.panes[pid];
           if (pane?.type === "terminal" && pane.agentId) {
@@ -397,7 +415,7 @@ function QuickLaunchBar() {
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,
           claudeSessionId: null,
-        activityLevel: "busy",
+          activityLevel: "busy",
         });
         createTerminal(agent.id);
 

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { LoadingSpinner } from "../common";
 import { AgentsSection } from "./sections/AgentsSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
@@ -37,6 +38,7 @@ function SectionFallback() {
 export function WorkspaceView() {
   const { projectId } = useProjectContext();
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
+  const [showSpawnModal, setShowSpawnModal] = useState(false);
   const isAgents = activeSection === "agents";
   const prevIsAgents = useRef(isAgents);
 
@@ -48,6 +50,13 @@ export function WorkspaceView() {
     };
     window.addEventListener("exegol:switch-section", handler);
     return () => window.removeEventListener("exegol:switch-section", handler);
+  });
+
+  // Listen for Cmd+N spawn-agent hotkey (Rule 4: mount effect for event listener)
+  useMountEffect(() => {
+    const handler = () => setShowSpawnModal(true);
+    window.addEventListener("exegol:spawn-agent", handler);
+    return () => window.removeEventListener("exegol:spawn-agent", handler);
   });
 
   // Force xterm.js terminals to re-fit when switching back to Agents tab
@@ -90,6 +99,10 @@ export function WorkspaceView() {
           </Suspense>
         )}
       </div>
+
+      {showSpawnModal && projectId && (
+        <SpawnAgentModal projectId={projectId} onClose={() => setShowSpawnModal(false)} />
+      )}
     </div>
   );
 }

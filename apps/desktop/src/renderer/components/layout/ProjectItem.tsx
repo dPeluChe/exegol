@@ -1,10 +1,22 @@
 import type { Project } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Code2, Cuboid, GitBranch, Globe, Layers } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Code2,
+  Cuboid,
+  ExternalLink,
+  GitBranch,
+  Globe,
+  Layers,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type PortInfo,
+  useDeleteProject,
   useOpenInIde,
   useProjectPorts,
   useSettings,
@@ -131,11 +143,35 @@ export function ProjectItem({
   const [editName, setEditName] = useState(project.name);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const { data: settings } = useSettings();
+  const openInIde = useOpenInIde();
+  const deleteProject = useDeleteProject();
+
   const { data: worktrees = [] } = useWorktrees(project.id, isExpanded);
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
   }, [editing]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [contextMenu]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   const submitRename = useCallback(() => {
     const trimmed = editName.trim();
@@ -162,6 +198,7 @@ export function ProjectItem({
           setEditName(project.name);
           setEditing(true);
         }}
+        onContextMenu={handleContextMenu}
         className={cn(
           "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
           isSelected ? "bg-white/10 text-text-primary" : "text-text-secondary hover:bg-white/5",
@@ -212,6 +249,58 @@ export function ProjectItem({
           </span>
         )}
       </button>
+
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 min-w-[160px] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
+              setEditName(project.name);
+              setEditing(true);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+          >
+            <Pencil className="h-3 w-3" />
+            Rename
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
+              openInIde.mutate(
+                {
+                  projectId: project.id,
+                  ide: settings?.defaultIde,
+                  customPath: settings?.customIdePath ?? undefined,
+                },
+                { onError: (err) => console.error("[IDE] Open failed:", err) },
+              );
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open in IDE
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
+              deleteProject.mutate(project.id, {
+                onError: (err) => console.error("[Project] Delete failed:", err),
+              });
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-red-400 transition-colors hover:bg-white/10"
+          >
+            <Trash2 className="h-3 w-3" />
+            Delete
+          </button>
+        </div>
+      )}
 
       {isExpanded && (
         <div className="ml-5 border-l border-border/50 pl-2">
