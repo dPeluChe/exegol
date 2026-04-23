@@ -26,6 +26,15 @@ const USER_PROMPT_PATTERNS = [
   /^Question:\s/i, // Q&A format
 ];
 
+// Claude Code-specific patterns: tool calls indicate agent output
+const AGENT_TOOL_PATTERNS = [
+  /^\s*\b(Read|Edit|Write|Bash|Agent|Glob|Grep|WebFetch|WebSearch|TodoWrite)\s*\(/i,
+  /^Thinking\.\.\./i,
+  /^I'll\s/i, // Common Claude phrasing
+  /^Let me\s/i,
+  /^Here's\s/i,
+];
+
 // System/status patterns
 const SYSTEM_PATTERNS = [
   /^─{3,}/, // Separator lines
@@ -66,6 +75,8 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
       detectedRole = "system";
     } else if (USER_PROMPT_PATTERNS.some((p) => p.test(trimmed))) {
       detectedRole = "user";
+    } else if (AGENT_TOOL_PATTERNS.some((p) => p.test(trimmed))) {
+      detectedRole = "agent"; // Explicit — reinforces tool calls as agent output
     }
 
     // Role change → flush current turn

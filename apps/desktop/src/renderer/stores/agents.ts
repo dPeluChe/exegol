@@ -1,4 +1,11 @@
-import { type Agent, type AgentAccessMode, type AgentActivityLevel, type AgentCliType, type AgentStatus, classifyActivity } from "@exegol/shared";
+import {
+  type Agent,
+  type AgentAccessMode,
+  type AgentActivityLevel,
+  type AgentCliType,
+  type AgentStatus,
+  classifyActivity,
+} from "@exegol/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { getProjectState, useWorkspaceStore } from "./workspace";
@@ -204,7 +211,12 @@ export const useAgentStore = create<AgentStore>()(
         set((state) => {
           const existing = state.agents[id];
           if (!existing) return state;
-          return { agents: { ...state.agents, [id]: { ...existing, ...update } } };
+          // T70: Auto-recompute activityLevel when status changes
+          const merged = { ...existing, ...update };
+          if (update.status && !update.activityLevel) {
+            merged.activityLevel = classifyActivity(merged.status, merged.currentStep);
+          }
+          return { agents: { ...state.agents, [id]: merged } };
         }),
 
       addAgent: (agent) =>
