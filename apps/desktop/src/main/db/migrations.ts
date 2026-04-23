@@ -481,6 +481,27 @@ const migrations: Migration[] = [
     sql: `ALTER TABLE agents ADD COLUMN resume_command TEXT;`,
   },
   {
+    id: "034_parallel_runs",
+    sql: `
+      CREATE TABLE IF NOT EXISTS parallel_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        task_description TEXT NOT NULL,
+        cli_types TEXT NOT NULL DEFAULT '[]',
+        agent_ids TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'running',
+        promoted_agent_id TEXT,
+        created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        completed_at INTEGER
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_parallel_runs_project
+        ON parallel_runs(project_id);
+
+      ALTER TABLE agents ADD COLUMN parallel_run_id TEXT;
+    `,
+  },
+  {
     id: "031_diff_comments",
     sql: `
       CREATE TABLE IF NOT EXISTS diff_comments (

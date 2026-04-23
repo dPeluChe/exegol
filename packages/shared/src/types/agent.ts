@@ -201,6 +201,26 @@ export type QueueTask = {
   completedAt: number | null;
 };
 
+// ─── Parallel Runs (T65) ───────────────────────────────────────────────────
+
+export const PARALLEL_RUN_STATUSES = ["running", "completed", "failed", "cancelled"] as const;
+export type ParallelRunStatus = (typeof PARALLEL_RUN_STATUSES)[number];
+
+export type ParallelRun = {
+  id: string;
+  projectId: string;
+  taskDescription: string;
+  /** CLI types for each variant (could be the same or different providers) */
+  cliTypes: string[];
+  /** Agent IDs spawned for this run — length matches cliTypes */
+  agentIds: string[];
+  status: ParallelRunStatus;
+  /** Agent ID that was promoted as the winner (null until user chooses) */
+  promotedAgentId: string | null;
+  createdAt: number;
+  completedAt: number | null;
+};
+
 // ─── Sessions ───────────────────────────────────────────────────────────────
 
 export type RecentSession = {
