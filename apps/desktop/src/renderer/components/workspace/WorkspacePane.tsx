@@ -74,7 +74,7 @@ function PaneToolbar({
         projectId: projectId ?? undefined,
       });
     }
-  }, [panes, paneId, markPaneFloating]);
+  }, [panes, paneId, markPaneFloating, projectId]);
 
   const handleOpenInIde = useCallback(() => {
     if (!projectId) return;

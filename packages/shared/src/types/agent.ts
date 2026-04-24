@@ -28,6 +28,9 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
+export const RUNNING_STATUSES = new Set<AgentStatus>(["running", "waiting_input"]);
+export const ACTIVE_STATUSES = new Set<AgentStatus>(["running", "spawning", "waiting_input"]);
+
 // ─── Activity Classification (T70) ─────────────────────────────────────────
 
 export const AGENT_ACTIVITY_LEVELS = ["busy", "idle", "neutral"] as const;

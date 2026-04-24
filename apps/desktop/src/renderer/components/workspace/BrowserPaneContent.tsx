@@ -1,3 +1,4 @@
+import { RUNNING_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,7 +16,7 @@ import {
   Send,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import {
   type PortInfo,
@@ -27,7 +28,6 @@ import {
   buildDesignIssue,
   type CapturedElement,
   DESIGN_MODE_INJECTION_SCRIPT,
-  formatElementForAgent,
 } from "../../lib/design-capture";
 import {
   exportToPlaywright,
@@ -37,118 +37,16 @@ import {
 } from "../../lib/qa-recorder";
 import { type QaReplayResult, type QaStepResult, replayQaTest } from "../../lib/qa-replay";
 import { trpcMutate } from "../../lib/trpc-client";
-import { type AgentState, useAgentStore } from "../../stores/agents";
+import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
-
-const RUNNING = new Set(["running", "waiting_input"]);
+import { IssueBubble } from "../common/IssueBubble";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
 const DESIGN_POLL_INTERVAL_MS = 300;
 const DESIGN_AUTO_STOP_MS = 60_000;
 const QA_NAV_DELAY_MS = 800;
-
-// ─── IssueBubble ───────────────────────────────────────────────────────────
-
-interface IssueBubbleProps {
-  element: CapturedElement;
-  message: string;
-  onMessageChange: (v: string) => void;
-  agents: Array<Pick<AgentState, "id" | "cliType">>;
-  onSend: (agentId: string) => void;
-  onCopy: () => void;
-  onDismiss: () => void;
-}
-
-function IssueBubble({
-  element,
-  message,
-  onMessageChange,
-  agents,
-  onSend,
-  onCopy,
-  onDismiss,
-}: IssueBubbleProps) {
-  const { rect } = element;
-  const cx = rect.x + rect.width / 2;
-  // Prefer above the element; fall back to below when too close to top
-  const above = rect.y > 180;
-
-  return (
-    <div
-      className="absolute z-30 w-72 overflow-hidden rounded-xl border border-blue-500/30 bg-bg-secondary/95 shadow-2xl backdrop-blur-sm"
-      style={{
-        left: `clamp(8px, ${Math.round(cx - 144)}px, calc(100% - 296px))`,
-        ...(above
-          ? { bottom: `calc(100% - ${rect.y - 10}px)` }
-          : { top: `${rect.y + rect.height + 10}px` }),
-      }}
-    >
-      {/* Arrow */}
-      <div
-        className="absolute left-1/2 h-2.5 w-2.5 -translate-x-1/2 border-blue-500/30 bg-bg-secondary/95"
-        style={
-          above
-            ? {
-                bottom: -6,
-                borderRightWidth: 1,
-                borderBottomWidth: 1,
-                transform: "translateX(-50%) rotate(45deg)",
-              }
-            : {
-                top: -6,
-                borderLeftWidth: 1,
-                borderTopWidth: 1,
-                transform: "translateX(-50%) rotate(45deg)",
-              }
-        }
-      />
-      <div className="p-3">
-        {/* Header */}
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-medium text-blue-300">
-            &lt;{element.tagName}&gt; {rect.width}×{rect.height}px
-          </span>
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="text-[10px] leading-none text-text-muted hover:text-text-primary"
-          >
-            ×
-          </button>
-        </div>
-        <p className="mb-2 truncate font-mono text-[9px] text-text-muted">{element.selector}</p>
-        <textarea
-          value={message}
-          onChange={(e) => onMessageChange(e.target.value)}
-          placeholder="Describe what needs to change (optional)..."
-          className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-primary placeholder:text-text-muted/50 focus:border-blue-500/50 focus:outline-none"
-          rows={2}
-        />
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {agents.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => onSend(a.id)}
-              className="flex items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-[9px] text-blue-300 hover:bg-blue-500/20"
-            >
-              <Send className="h-2.5 w-2.5" /> {a.cliType}
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={onCopy}
-            className="rounded px-2 py-1 text-[9px] text-text-muted hover:bg-white/5"
-          >
-            Copy
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── Browser Pane ──────────────────────────────────────────────────────────
 
@@ -198,16 +96,20 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const allAgents = useAgentStore((s) => s.agents);
   const runningAgents = useMemo(
     () =>
-      Object.values(allAgents).filter((a) => a.projectId === projectId && RUNNING.has(a.status)),
+      Object.values(allAgents).filter(
+        (a) => a.projectId === projectId && RUNNING_STATUSES.has(a.status),
+      ),
     [allAgents, projectId],
   );
   const designPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const designAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const replayCancelledRef = useRef(false);
 
-  // Cleanup design mode poll on unmount
+  // Cleanup design mode poll and auto-stop timeout on unmount
   useEffect(() => {
     return () => {
       if (designPollRef.current) clearInterval(designPollRef.current);
+      if (designAutoStopRef.current) clearTimeout(designAutoStopRef.current);
     };
   }, []);
 
@@ -229,6 +131,10 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       if (designPollRef.current) {
         clearInterval(designPollRef.current);
         designPollRef.current = null;
+      }
+      if (designAutoStopRef.current) {
+        clearTimeout(designAutoStopRef.current);
+        designAutoStopRef.current = null;
       }
     } else {
       if (qaMode) {
@@ -252,12 +158,13 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           setCapturedElement(result as CapturedElement);
         }
       }, DESIGN_POLL_INTERVAL_MS);
-      // Auto-stop after 60s
-      setTimeout(() => {
+      if (designAutoStopRef.current) clearTimeout(designAutoStopRef.current);
+      designAutoStopRef.current = setTimeout(() => {
         if (designPollRef.current) {
           clearInterval(designPollRef.current);
           designPollRef.current = null;
         }
+        designAutoStopRef.current = null;
       }, DESIGN_AUTO_STOP_MS);
     }
   }, [designMode, qaMode, safeExecJs]);
@@ -270,7 +177,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     }
     const poll = setInterval(async () => {
       const count = await safeExecJs("window.__exegolQaActions?.length ?? 0");
-      if (typeof count === "number") setQaActionCount(count);
+      if (typeof count === "number") setQaActionCount((prev) => (prev === count ? prev : count));
     }, 500);
     return () => clearInterval(poll);
   }, [qaMode, safeExecJs]);
@@ -354,7 +261,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           actions,
           executeJs,
           captureScreenshot,
-          { onStepStart: (index) => setReplayStep(index), onStepComplete: () => {} },
+          { onStepStart: (index) => setReplayStep(index) },
           { stopOnFail },
         );
         setReplayResult(result);
@@ -858,21 +765,32 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
               Dismiss
             </button>
           </div>
-          {replayResult.stepResults.some((s) => !s.passed) && (
-            <div className="mt-1 space-y-0.5">
+          {replayResult.stepResults.some(
+            (s) => !s.passed || s.alertsDetected?.length || s.newConsoleErrors?.length,
+          ) && (
+            <div className="mt-1 space-y-1">
               {replayResult.stepResults
-                .filter((s) => !s.passed)
+                .filter((s) => !s.passed || s.alertsDetected?.length || s.newConsoleErrors?.length)
                 .map((s) => (
-                  <p key={s.actionIndex} className="truncate text-[9px] text-red-400">
-                    Step {s.actionIndex + 1}: {s.error}
-                  </p>
+                  <div key={s.actionIndex} className="space-y-0.5">
+                    {!s.passed && (
+                      <p className="truncate text-[9px] text-red-400">
+                        Step {s.actionIndex + 1}: {s.error}
+                      </p>
+                    )}
+                    {s.alertsDetected?.map((t) => (
+                      <p key={t} className="truncate text-[9px] text-amber-300" title={t}>
+                        Step {s.actionIndex + 1} alert: {t}
+                      </p>
+                    ))}
+                    {s.newConsoleErrors?.map((e) => (
+                      <p key={e} className="truncate text-[9px] text-amber-400/70" title={e}>
+                        Step {s.actionIndex + 1} console.error: {e}
+                      </p>
+                    ))}
+                  </div>
                 ))}
             </div>
-          )}
-          {replayResult.consoleErrors.length > 0 && (
-            <p className="mt-1 text-[9px] text-amber-400">
-              {replayResult.consoleErrors.length} console error(s) during replay
-            </p>
           )}
         </div>
       )}

@@ -131,10 +131,20 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   }, [agentId, isStopped, hasData]);
 
   // If the loading overlay is still showing after 8s, surface a dismiss button.
+  const startTimerRef = useRef<number | null>(null);
   useEffect(() => {
-    if (hasData || isStopped) return;
-    const timer = window.setTimeout(() => setStartTimedOut(true), 8_000);
-    return () => window.clearTimeout(timer);
+    if (hasData || isStopped) {
+      if (startTimerRef.current) {
+        window.clearTimeout(startTimerRef.current);
+        startTimerRef.current = null;
+      }
+      return;
+    }
+    if (startTimerRef.current) return;
+    startTimerRef.current = window.setTimeout(() => {
+      startTimerRef.current = null;
+      setStartTimedOut(true);
+    }, 8_000);
   }, [hasData, isStopped]);
 
   // Listen for real-time handoff notifications on live agents (external system sync — rule #4)
