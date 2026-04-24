@@ -1,0 +1,468 @@
+import { type Agent, RUNNING_STATUSES } from "@exegol/shared";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, ArrowRight, Bug, Crosshair, Loader2, Play, RotateCw, Send } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { IssueBubble } from "./components/common";
+import {
+  buildDesignIssue,
+  type CapturedElement,
+  DESIGN_MODE_INJECTION_SCRIPT,
+} from "./lib/design-capture";
+import {
+  exportToPlaywright,
+  formatRecordingForAgent,
+  QA_MODE_INJECTION_SCRIPT,
+  type QaRecording,
+} from "./lib/qa-recorder";
+import { type QaReplayResult, replayQaTest } from "./lib/qa-replay";
+import { trpcInvoke } from "./lib/trpc-client";
+
+const DESIGN_POLL_MS = 300;
+const DESIGN_AUTO_STOP_MS = 60_000;
+
+export function FloatingBrowser({ url, projectId }: { url: string; projectId?: string }) {
+  const webviewRef = useRef<HTMLElement | null>(null);
+  const [currentUrl, setCurrentUrl] = useState(url);
+  const [loading, setLoading] = useState(true);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
+
+  // QA / Design mode state
+  const [designMode, setDesignMode] = useState(false);
+  const [qaMode, setQaMode] = useState(false);
+  const [capturedElement, setCapturedElement] = useState<CapturedElement | null>(null);
+  const [issueMessage, setIssueMessage] = useState("");
+  const [qaRecording, setQaRecording] = useState<QaRecording | null>(null);
+  const [qaActionCount, setQaActionCount] = useState(0);
+  const [replaying, setReplaying] = useState(false);
+  const [replayStep, setReplayStep] = useState(-1);
+  const [replayResult, setReplayResult] = useState<QaReplayResult | null>(null);
+  const designPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const designAutoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const replayCancelRef = useRef(false);
+
+  // Running agents for the project (used for send-to-agent)
+  const { data: projectAgents } = useQuery({
+    queryKey: ["agents", projectId],
+    queryFn: () => trpcInvoke<Agent[]>("agents.list", { projectId }),
+    enabled: !!projectId,
+    refetchInterval: 5_000,
+    staleTime: 3_000,
+  });
+  const runningAgents = useMemo(
+    () => (projectAgents ?? []).filter((a) => RUNNING_STATUSES.has(a.status)),
+    [projectAgents],
+  );
+
+  const safeExecJs = useCallback(async (code: string): Promise<unknown> => {
+    try {
+      return (await window.api.browser?.executeJs(code)) ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // QA action count polling
+  useEffect(() => {
+    if (!qaMode) {
+      setQaActionCount(0);
+      return;
+    }
+    const poll = setInterval(async () => {
+      const count = await safeExecJs("window.__exegolQaActions?.length ?? 0");
+      if (typeof count === "number") setQaActionCount((prev) => (prev === count ? prev : count));
+    }, 500);
+    return () => clearInterval(poll);
+  }, [qaMode, safeExecJs]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (designPollRef.current) clearInterval(designPollRef.current);
+      if (designAutoStopRef.current) clearTimeout(designAutoStopRef.current);
+    };
+  }, []);
+
+  const toggleDesignMode = useCallback(async () => {
+    if (designMode) {
+      await safeExecJs("window.__exegolDesignDisable?.()");
+      setDesignMode(false);
+      if (designPollRef.current) {
+        clearInterval(designPollRef.current);
+        designPollRef.current = null;
+      }
+      if (designAutoStopRef.current) {
+        clearTimeout(designAutoStopRef.current);
+        designAutoStopRef.current = null;
+      }
+    } else {
+      if (qaMode) {
+        await safeExecJs("window.__exegolQaDisable?.()");
+        setQaMode(false);
+      }
+      await safeExecJs(DESIGN_MODE_INJECTION_SCRIPT);
+      setDesignMode(true);
+      setCapturedElement(null);
+      if (designPollRef.current) clearInterval(designPollRef.current);
+      designPollRef.current = setInterval(async () => {
+        const result = await safeExecJs("window.__exegolDesignCapture");
+        if (result) {
+          if (designPollRef.current) {
+            clearInterval(designPollRef.current);
+            designPollRef.current = null;
+          }
+          await safeExecJs("window.__exegolDesignDisable?.()");
+          setDesignMode(false);
+          setCapturedElement(result as CapturedElement);
+        }
+      }, DESIGN_POLL_MS);
+      if (designAutoStopRef.current) clearTimeout(designAutoStopRef.current);
+      designAutoStopRef.current = setTimeout(() => {
+        if (designPollRef.current) {
+          clearInterval(designPollRef.current);
+          designPollRef.current = null;
+        }
+        designAutoStopRef.current = null;
+      }, DESIGN_AUTO_STOP_MS);
+    }
+  }, [designMode, qaMode, safeExecJs]);
+
+  const toggleQaMode = useCallback(async () => {
+    if (qaMode) {
+      const actions = await safeExecJs("window.__exegolQaActions");
+      const errors = await safeExecJs("window.__exegolQaConsoleErrors");
+      await safeExecJs("window.__exegolQaDisable?.()");
+      setQaMode(false);
+      if (Array.isArray(actions) && actions.length > 0) {
+        setQaRecording({
+          startUrl: currentUrl,
+          startedAt: Date.now(),
+          actions: actions as QaRecording["actions"],
+          consoleErrors: (errors as string[]) ?? [],
+        });
+      }
+    } else {
+      if (designMode) {
+        await safeExecJs("window.__exegolDesignDisable?.()");
+        setDesignMode(false);
+      }
+      await safeExecJs(QA_MODE_INJECTION_SCRIPT);
+      setQaMode(true);
+      setQaRecording(null);
+    }
+  }, [qaMode, designMode, currentUrl, safeExecJs]);
+
+  const handleReplay = useCallback(async () => {
+    if (!qaRecording || replaying) return;
+    setReplaying(true);
+    setReplayResult(null);
+    setReplayStep(-1);
+    replayCancelRef.current = false;
+    try {
+      const result = await replayQaTest(
+        qaRecording.actions,
+        async (code) => {
+          if (replayCancelRef.current) throw new Error("Replay cancelled");
+          return safeExecJs(code);
+        },
+        async () => null,
+        { onStepStart: (i) => setReplayStep(i) },
+        { stopOnFail: true },
+      );
+      setReplayResult(result);
+    } catch {
+      /* cancelled or error */
+    } finally {
+      setReplaying(false);
+      setReplayStep(-1);
+    }
+  }, [qaRecording, replaying, safeExecJs]);
+
+  const sendToAgent = useCallback((agentId: string, text: string) => {
+    window.api.terminal.write(agentId, `${text}\n`);
+  }, []);
+
+  // Webview navigation events
+  useEffect(() => {
+    const webview = webviewRef.current as unknown as {
+      addEventListener: (e: string, fn: (ev: Event) => void) => void;
+      removeEventListener: (e: string, fn: (ev: Event) => void) => void;
+      canGoBack: () => boolean;
+      canGoForward: () => boolean;
+    } | null;
+    if (!webview) return;
+    const onStart = () => setLoading(true);
+    const onStop = () => {
+      setLoading(false);
+      try {
+        setCanGoBack(webview.canGoBack());
+        setCanGoForward(webview.canGoForward());
+      } catch {
+        /* not ready */
+      }
+    };
+    const onNav = (e: Event) => {
+      const u = (e as unknown as { url?: string }).url;
+      if (u) setCurrentUrl(u);
+      try {
+        setCanGoBack(webview.canGoBack());
+        setCanGoForward(webview.canGoForward());
+      } catch {
+        /* not ready */
+      }
+    };
+    webview.addEventListener("did-start-loading", onStart);
+    webview.addEventListener("did-stop-loading", onStop);
+    webview.addEventListener("did-navigate", onNav);
+    webview.addEventListener("did-navigate-in-page", onNav);
+    return () => {
+      webview.removeEventListener("did-start-loading", onStart);
+      webview.removeEventListener("did-stop-loading", onStop);
+      webview.removeEventListener("did-navigate", onNav);
+      webview.removeEventListener("did-navigate-in-page", onNav);
+    };
+  }, []);
+
+  const handleBack = () => {
+    const wv = webviewRef.current as unknown as { goBack?: () => void } | null;
+    wv?.goBack?.();
+  };
+  const handleForward = () => {
+    const wv = webviewRef.current as unknown as { goForward?: () => void } | null;
+    wv?.goForward?.();
+  };
+  const handleReload = () => {
+    const wv = webviewRef.current as unknown as { reload?: () => void } | null;
+    wv?.reload?.();
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Toolbar */}
+      <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border/50 bg-bg-secondary/50 px-1.5">
+        <button
+          type="button"
+          onClick={handleBack}
+          disabled={!canGoBack}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
+          title="Back"
+        >
+          <ArrowLeft className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={handleForward}
+          disabled={!canGoForward}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
+          title="Forward"
+        >
+          <ArrowRight className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={handleReload}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+          title="Reload"
+        >
+          <RotateCw className="h-3 w-3" />
+        </button>
+        <div className="mx-0.5 h-3.5 w-px bg-border" />
+        {/* Design mode */}
+        <button
+          type="button"
+          onClick={toggleDesignMode}
+          className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+            designMode
+              ? "bg-blue-500/20 text-blue-400"
+              : "text-text-muted hover:bg-white/10 hover:text-text-primary"
+          }`}
+          title={designMode ? "Exit Design Mode" : "Design Mode — capture UI elements"}
+        >
+          <Crosshair className="h-3 w-3" />
+        </button>
+        {/* QA mode */}
+        <button
+          type="button"
+          onClick={toggleQaMode}
+          className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+            qaMode
+              ? "bg-red-500/20 text-red-400"
+              : "text-text-muted hover:bg-white/10 hover:text-text-primary"
+          }`}
+          title={qaMode ? "Stop Recording" : "QA Mode — record interactions"}
+        >
+          <Bug className="h-3 w-3" />
+        </button>
+        {designMode && <span className="text-[8px] font-medium text-blue-400">DESIGN</span>}
+        {qaMode && (
+          <span className="text-[8px] font-medium tabular-nums text-red-400">
+            REC {qaActionCount > 0 ? `(${qaActionCount})` : ""}
+          </span>
+        )}
+        <div className="mx-0.5 h-3.5 w-px bg-border" />
+        {loading && <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}
+        <div className="flex-1 truncate px-1 text-[9px] text-text-muted">{currentUrl}</div>
+      </div>
+
+      {/* Webview + floating bubble */}
+      <div className="relative flex-1 overflow-hidden bg-white">
+        <webview
+          // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
+          ref={webviewRef as React.Ref<any>}
+          src={url}
+          className="h-full w-full"
+          {...({ allowpopups: "true" } as Record<string, string>)}
+        />
+
+        {/* Design capture — floating issue reporter bubble */}
+        {capturedElement && (
+          <IssueBubble
+            element={capturedElement}
+            message={issueMessage}
+            onMessageChange={setIssueMessage}
+            agents={runningAgents}
+            onSend={(agentId) => {
+              sendToAgent(agentId, buildDesignIssue(capturedElement, issueMessage));
+              setCapturedElement(null);
+              setIssueMessage("");
+            }}
+            onCopy={() => {
+              navigator.clipboard.writeText(buildDesignIssue(capturedElement, issueMessage));
+              setCapturedElement(null);
+              setIssueMessage("");
+            }}
+            onDismiss={() => {
+              setCapturedElement(null);
+              setIssueMessage("");
+            }}
+          />
+        )}
+      </div>
+
+      {/* QA recording result */}
+      {qaRecording && (
+        <div className="shrink-0 border-t border-border bg-red-500/5 px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-medium text-red-300">
+              Recorded: {qaRecording.actions.length} actions
+              {replaying && ` · step ${replayStep + 1}/${qaRecording.actions.length}`}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={handleReplay}
+                disabled={replaying}
+                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-green-300 hover:bg-green-500/10 disabled:opacity-50"
+              >
+                {replaying ? (
+                  <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                ) : (
+                  <Play className="h-2.5 w-2.5" />
+                )}
+                {replaying ? "Running..." : "Run"}
+              </button>
+              {replaying && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    replayCancelRef.current = true;
+                  }}
+                  className="rounded px-1.5 py-0.5 text-[9px] text-amber-300 hover:bg-amber-500/10"
+                >
+                  Cancel
+                </button>
+              )}
+              {runningAgents.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => sendToAgent(a.id, formatRecordingForAgent(qaRecording))}
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/10"
+                >
+                  <Send className="h-2.5 w-2.5" /> {a.cliType}
+                </button>
+              ))}
+              {runningAgents.length === 0 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard.writeText(formatRecordingForAgent(qaRecording))
+                  }
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+                >
+                  <Send className="h-2.5 w-2.5" /> Copy
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => navigator.clipboard.writeText(exportToPlaywright(qaRecording))}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                Playwright
+              </button>
+              <button
+                type="button"
+                onClick={() => setQaRecording(null)}
+                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Replay result */}
+      {replayResult && (
+        <div
+          className={`shrink-0 border-t border-border px-3 py-2 ${replayResult.passed ? "bg-green-500/5" : "bg-red-500/5"}`}
+        >
+          <div className="flex items-center justify-between">
+            <span
+              className={`text-[10px] font-medium ${replayResult.passed ? "text-green-300" : "text-red-300"}`}
+            >
+              {replayResult.passed
+                ? `✓ All ${replayResult.stepResults.length} steps passed`
+                : `✗ ${replayResult.stepResults.filter((s) => !s.passed).length} step(s) failed`}
+              <span className="ml-1 text-text-muted">· {replayResult.totalDurationMs}ms</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setReplayResult(null)}
+              className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+            >
+              ×
+            </button>
+          </div>
+          {replayResult.stepResults.some(
+            (s) => !s.passed || s.alertsDetected?.length || s.newConsoleErrors?.length,
+          ) && (
+            <div className="mt-1 space-y-0.5">
+              {replayResult.stepResults
+                .filter((s) => !s.passed || s.alertsDetected?.length || s.newConsoleErrors?.length)
+                .map((s) => (
+                  <Fragment key={s.actionIndex}>
+                    {!s.passed && (
+                      <p className="truncate text-[9px] text-red-400" title={s.error}>
+                        Step {s.actionIndex + 1}: {s.error}
+                      </p>
+                    )}
+                    {s.alertsDetected?.map((t) => (
+                      <p key={t} className="truncate text-[9px] text-amber-300" title={t}>
+                        Step {s.actionIndex + 1} alert: {t}
+                      </p>
+                    ))}
+                    {s.newConsoleErrors?.map((e) => (
+                      <p key={e} className="truncate text-[9px] text-amber-400/70" title={e}>
+                        Step {s.actionIndex + 1} console.error: {e}
+                      </p>
+                    ))}
+                  </Fragment>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
