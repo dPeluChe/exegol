@@ -7,6 +7,56 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.4] — 2026-04-24 — QA hardening, FloatingBrowser extraction, spawn perf
+
+### Added
+
+- **QA `assert` action type**. Replay steps can now include DOM assertion checks;
+  pass/fail is recorded per-step without triggering navigation.
+- **Per-step alert + console error collection**. Each QA replay step now captures
+  `alertsDetected` and `newConsoleErrors` independently — surfaced in step detail
+  in the browser pane and QA Tests section.
+- **`RUNNING_STATUSES` / `ACTIVE_STATUSES` shared constants** in
+  `packages/shared/src/types/agent.ts`. Replaces scattered inline
+  `new Set(["running", "waiting_input"])` literals across the renderer.
+
+### Changed
+
+- **FloatingBrowser extracted** from `FloatingPaneRoot.tsx` (517 → 103 lines).
+  `IssueBubble` is now a shared sub-component used by both `BrowserPaneContent`
+  and `FloatingBrowser`, accepting a minimal duck-typed `AgentRef { id, cliType }`.
+- **QA replay post-step now concurrent**. `Promise.allSettled` runs DOM alert query,
+  console error delta, and screenshot capture in parallel (was sequential).
+- **Scroll steps skip post-step work**. Pure scroll actions bypass the 500ms delay
+  and 3 IPC calls — no alert/error/screenshot collection needed for no-op scroll.
+- **`scrollIntoView` before every click**. Ensures element is visible in the
+  viewport before the replay driver clicks it.
+- **`activateAgent` replaces 3 post-spawn DB writes**. Single
+  `UPDATE agents SET pid=?, session_id=?, status='running'` issued after PTY spawn
+  instead of three separate round-trips.
+- **Login shell flag removed from agent spawn**. `_getFullPath()` already captures
+  full PATH at startup; `PATH` is now injected explicitly in the agent env, making
+  the `-l` flag redundant. Saves ~100-150ms dotfile load per agent spawn.
+
+### Fixed
+
+- `designAutoStopRef` / `startTimerRef` timer leaks in `BrowserPaneContent` on
+  unmount.
+- `WorkspacePane` stale-closure: event listener now uses a ref-stable callback.
+- `noArrayIndexKey` biome errors in alert/console-error step-detail lists.
+
+### Internal
+
+- API key cache (`Map<string, string | null>`) in `security/keystore.ts` —
+  `safeStorage.decryptString` runs once per session per provider.
+- Lifecycle config cache (`Map<string, LifecycleConfig | null>`) in
+  `lifecycle/loader.ts` — eliminates duplicate file reads on repeated spawns.
+- `INTERACTIVE_TAGS` / `INTERACTIVE_ROLES` RegExp hoisted to IIFE scope in
+  `qa-recorder.ts` — no re-compilation per click event.
+- 64 new unit tests (T58/T70/T90/T101/T102); biome + typecheck + build clean.
+
+---
+
 ## [0.4.3] — 2026-04-23 — Activity tab chrome, access mode badge, pipeline mode propagation
 
 ### Added
