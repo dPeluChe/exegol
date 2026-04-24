@@ -1,3 +1,5 @@
+import type { AgentAccessMode } from "./agent";
+
 // ─── Pipeline Status ───────────────────────────────────────────────────────
 
 export const PIPELINE_RUN_STATUSES = [
@@ -33,6 +35,8 @@ export type PipelineStepDef = {
   allowFailure?: boolean;
   /** Step index to jump to on failure (-1 or undefined = no loop) */
   loopBackTo?: number;
+  /** T58: Override access mode for this step (default: "write") */
+  accessMode?: AgentAccessMode;
 };
 
 // ─── Pipeline Step Result (stored in run JSON) ─────────────────────────────

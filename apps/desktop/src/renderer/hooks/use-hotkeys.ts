@@ -80,6 +80,13 @@ export function useHotkeys() {
         return;
       }
 
+      // Cmd+Shift+N: Parallel spawn dialog (T65)
+      if (e.shiftKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("exegol:spawn-parallel"));
+        return;
+      }
+
       // Cmd+N: New Agent (open spawn dialog)
       if (e.key === "n") {
         e.preventDefault();
@@ -114,6 +121,13 @@ export function useHotkeys() {
       if (e.shiftKey && e.key === "[") {
         e.preventDefault();
         navigateWorkspaceTab("prev");
+        return;
+      }
+
+      // Cmd+/ (Cmd+?): Show keyboard shortcuts overlay
+      if (e.key === "/") {
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent("exegol:show-shortcuts"));
         return;
       }
 

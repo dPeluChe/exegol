@@ -16,12 +16,8 @@
 - **Parallel Multi-Agent on Worktrees** (T65)
 
 ### P2 — Valuable follow-ups once the core is stable
-- Activity classification (T70)
 - Issue tracker expansion (T71)
-- **DI for singletons** (T81) — testability improvement
-- **Agent Session Resume** (T101) — store Claude session ID, true crash recovery
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
-- **Terminal ↔ Chat dual view** (T90) — same session, two presentations
 
 ### P3 — Strategic bets / larger scope
 - **SSH Remote Development** (T73)
@@ -43,34 +39,22 @@
 - Creates clearer runtime control for risky or high-cost agent sessions.
 - Useful foundation for scheduler, hooks, and later automations.
 
-**Scope**
-- Modes: `implement`, `plan`, `approve`
-- Configurable at spawn time
-- Runtime mode switching via toolbar or agent controls
-- Propagate mode into pipeline steps and scheduler runs
+**Done (v0.4.3)**
+- Types: `AgentAccessMode` (`read`, `write`, `plan`) + DB migration
+- Spawn-time injection (prompt prefix + `EXEGOL_ACCESS_MODE` env var)
+- SpawnAgentModal mode selector (Full Access / Plan Only / Read Only)
+- Access mode badge in live terminal toolbar
+- Pipeline step `accessMode` field + executor propagation + editor UI
+
+**Remaining**
+- Runtime mode switching (change mode while agent is running)
+- Scheduler task `accessMode` propagation
 
 **Likely files**
 - `apps/desktop/src/main/agents/*`
 - `apps/desktop/src/main/pipeline/*`
 - `apps/desktop/src/renderer/components/agents/SpawnAgentModal.tsx`
 - `apps/desktop/src/renderer/components/terminal/*`
-
----
-
-### T59 — Virtual Scrolling for Large Lists
-**Priority**: Medium | **Effort**: Low | **Source**: Anvil
-
-**Why**
-- Cheap performance win for large projects and long-running sessions.
-
-**Scope**
-- Add virtualization to agent lists, memory lists, and file explorer
-- Prefer small dependency footprint and avoid rewriting list behavior
-
-**Likely files**
-- `apps/desktop/src/renderer/components/layout/*`
-- `apps/desktop/src/renderer/components/workspace/FileExplorer.tsx`
-- `apps/desktop/src/renderer/components/workspace/sections/MemorySection.tsx`
 
 ---
 
@@ -120,28 +104,6 @@
 
 ---
 
-### T70 — Activity Classification (Busy / Idle / Neutral)
-**Priority**: P2 | **Effort**: Low | **Source**: Emdash
-
-**Why**
-- Adds a finer-grained signal than raw status parsing.
-- Useful for T57 attention routing.
-
-**Scope**
-- Real-time classification per provider
-- Debounced busy/idle transitions
-- Visual language in sidebar and terminal tab chrome
-
-**Depends on**
-- T56 is complementary but not required
-
-**Likely files**
-- `apps/desktop/src/main/agents/status-parser.ts`
-- `apps/desktop/src/main/agents/title-status.ts`
-- `apps/desktop/src/renderer/components/layout/*`
-
----
-
 ### T71 — Issue Tracker Expansion (Linear / Jira)
 **Priority**: P2 | **Effort**: Medium | **Source**: Emdash
 
@@ -161,10 +123,11 @@
 ---
 
 ### T73 — SSH Remote Development
-**Priority**: P3 | **Effort**: High | **Source**: Emdash
+**Priority**: P3 | **Effort**: High | **Source**: Emdash + Orca (stablyai/orca)
 
 **Why**
 - High upside, but too large to mix into the current release-critical wave.
+- Orca already ships SSH with a clean provider dispatch pattern worth following.
 
 **Scope**
 - Remote project registration via SSH
@@ -172,12 +135,33 @@
 - Remote git/worktree operations
 - Credentials in OS keychain
 
-**Likely files**
-- New remote subsystem in `apps/desktop/src/main/*`
-- Agent spawn flow
-- Project model and settings
+**Architecture reference — Orca's provider dispatch pattern**
+Orca (stablyai/orca) implements SSH via parallel provider pairs in `src/main/providers/`:
+```
+local-pty-provider.ts    ←→  ssh-pty-provider.ts
+(local git via runner.ts) ←→  ssh-git-provider.ts
+(local fs)                ←→  ssh-filesystem-provider.ts
+```
+Each operation (spawn PTY, run git command, read/write files) has a local and SSH variant
+behind a dispatch layer (`provider-dispatch.ts`). The dispatch routes based on project
+location (local path vs ssh://host). Key files to study:
+- `ssh-pty-provider.ts` — PTY sessions over SSH with shell-ready detection
+- `ssh-git-provider.ts` — git commands tunneled through SSH
+- `ssh-filesystem-dispatch.ts` — file read/write routing
 
----
+**Recommended approach for Exegol:**
+1. Create `apps/desktop/src/main/providers/` with `types.ts` defining `PtyProvider`, `GitProvider`, `FsProvider` interfaces
+2. Extract current local implementations as `local-pty-provider.ts`, `local-git-provider.ts`
+3. Add SSH variants that implement the same interfaces
+4. Dispatch layer reads project config (`project.remote?: { host, user, path }`)
+5. Agent spawn flow calls provider.createPty() instead of hardcoded local PTY
+
+**Likely files**
+- New: `apps/desktop/src/main/providers/*` (dispatch + local/SSH provider pairs)
+- `apps/desktop/src/main/agents/manager.ts` (spawn via provider dispatch)
+- `apps/desktop/src/main/terminal/pty-sidecar-client.ts` (local PTY → provider interface)
+- `packages/core-rust/src/git/` (local git → provider interface)
+- Project model and settings (remote SSH config)
 
 ---
 
@@ -186,78 +170,7 @@
 > These tasks surfaced from a comprehensive codebase audit (April 2026).
 > They address technical debt, testability, and robustness gaps that will compound if left unattended.
 
-### T81 — Dependency Injection for Singletons
-**Priority**: P2 | **Effort**: Medium | **Source**: Deep codebase analysis
-
-**Why**
-- Six core subsystems use global singletons: `getAgentManager()`, `getPtyHost()`,
-  `getPipelineExecutor()`, `getSchedulerEngine()`, `getProviderRegistry()`, `getMcpHost()`.
-  This makes unit testing nearly impossible (can't inject mocks), prevents parallel test execution,
-  and makes reasoning about state harder.
-
-**Scope**
-- Introduce a lightweight AppContext or ServiceContainer:
-  ```ts
-  interface AppContext {
-    db: Database;
-    agentManager: AgentManager;
-    ptyHost: PtyHost;
-    pipelineExecutor: PipelineExecutor;
-    scheduler: SchedulerEngine;
-    registry: AgentProviderRegistry;
-    mcpHost: McpHost;
-  }
-  ```
-- Pass context via constructor injection (not global accessors)
-- Keep singletons as a thin facade for backward compat during migration
-- Enable test contexts with mock implementations
-
-**Likely files**
-- New: `apps/desktop/src/main/app-context.ts`
-- All singleton modules (gradual migration)
-
----
-
 ## Post-launch Backlog — Inspired by Competitors
-
-### T101 — Agent Session Resume
-**Priority**: P2 | **Effort**: Low | **Source**: multica-ai/multica
-
-**Why**
-- When Claude Code crashes or fails, the user loses the conversation context and tool call history.
-  Multica stores a `PriorSessionID` and on re-spawn attempts to resume the original Claude session,
-  merging token usage across both attempts. Claude Code already supports `--resume <session-id>`.
-- Exegol currently marks crashed agents as "crashed" and offers "Re-launch" (T66 `resumeSession` flag),
-  but does NOT store the actual Claude session ID — so the resume is always from the agent's DB ID,
-  not the real Claude session. Storing the Claude session ID would allow true conversation continuation.
-
-**Scope**
-- DB migration: add `claude_session_id TEXT` column to agents table (migration 027)
-- On agent spawn: capture the Claude session ID from the provider's first output line
-  (Claude Code prints `Session ID: <id>` in its startup banner — parse it in `AgentOutputStream`)
-- Store it via IPC update: `agents.updateSessionId` procedure or extend the status push event
-- Re-launch flow: when re-spawning a crashed/failed agent with `resumeSession: true`, pass
-  `--resume <claude_session_id>` instead of `--resume <agent.id>`
-- Token usage: merge `tokenUsage` from the old agent into the new one so totals are continuous
-- AgentDashboard: show session ID (truncated) in the agent card footer (already shows `agent.id.slice(0,8)`)
-
-**Likely files**
-- `apps/desktop/src/main/db/migrations.ts` (migration 027)
-- `apps/desktop/src/main/agents/manager.ts` (session ID capture + update)
-- `packages/core-rust/src/processing/status_parser.rs` (parse session ID from startup banner)
-- `apps/desktop/src/main/ipc/procedures/agents.ts` (updateSessionId or extend push event)
-- `apps/desktop/src/renderer/stores/agents.ts` (add `claudeSessionId` to AgentState)
-- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (pass real session ID on resume)
-
-**Note — resumeCommandPattern user override (evaluate)**
-Currently `resumeCommandPattern` in `AgentProviderCapabilities` lives only in code (`BUILTIN_PROVIDERS`
-constant) and is not persisted to DB. This is correct because it reflects how the CLI itself prints its
-shutdown output, not a user preference. However, if a CLI changes its format between versions (or a user
-runs a fork/custom build that prints differently), there is no way to override it without updating the app.
-Evaluate whether `resumeCommandPattern` should be included in the `provider_overrides` DB key alongside
-`args` and `enabled`, making it overridable per-installation from Settings → CLI card advanced options.
-
----
 
 ### T88 — Ralph Loops in Pipelines
 **Priority**: P2 | **Effort**: Medium | **Source**: Paseo orchestration skills
@@ -284,30 +197,6 @@ Evaluate whether `resumeCommandPattern` should be included in the `provider_over
 - `apps/desktop/src/main/pipeline/executor.ts` (evaluator routing)
 - `apps/desktop/src/main/pipeline/context.ts` (retryFeedback variable)
 - `apps/desktop/src/renderer/components/workspace/sections/pipeline/PipelineEditor.tsx`
-
----
-
-### T90 — Terminal ↔ Chat Dual View
-**Priority**: P2 | **Effort**: Medium | **Source**: Superconductor
-
-**Why**
-- Non-technical users (PMs, designers watching a demo) benefit from a conversational
-  view of an agent session without the ANSI noise. Toggling lets you get CLI depth
-  when debugging and clean reading when reviewing.
-
-**Scope**
-- Parse the existing scrollback buffer into conversational turns: detect user
-  prompts (input echoes) vs agent output (post-prompt blocks)
-- Provider-specific parsers for Claude Code, Codex, Aider (they have distinct
-  output patterns); fallback to generic "alternate lines"
-- Toggle button in terminal pane header: Terminal / Chat
-- Chat view is read-only, reuses DarkReader-style clean rendering
-- Do NOT touch the underlying PTY — this is a pure render layer
-
-**Likely files**
-- New: `apps/desktop/src/renderer/components/terminal/ChatView.tsx`
-- New: `apps/desktop/src/renderer/lib/terminal-to-chat.ts` (parsers)
-- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx` (toggle state)
 
 ---
 
@@ -551,7 +440,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ### Stabilization & quality (P2)
 2. T81 — Dependency Injection for Singletons
-3. **T101** — Agent Session Resume (store Claude session ID, true crash recovery)
 
 ### Competitor-inspired backlog (P2-P3)
 4. **T88** — Ralph Loops in Pipelines (evaluator step)

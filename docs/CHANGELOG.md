@@ -7,6 +7,110 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.4] — 2026-04-24 — QA hardening, FloatingBrowser extraction, spawn perf
+
+### Added
+
+- **QA `assert` action type**. Replay steps can now include DOM assertion checks;
+  pass/fail is recorded per-step without triggering navigation.
+- **Per-step alert + console error collection**. Each QA replay step now captures
+  `alertsDetected` and `newConsoleErrors` independently — surfaced in step detail
+  in the browser pane and QA Tests section.
+- **`RUNNING_STATUSES` / `ACTIVE_STATUSES` shared constants** in
+  `packages/shared/src/types/agent.ts`. Replaces scattered inline
+  `new Set(["running", "waiting_input"])` literals across the renderer.
+
+### Changed
+
+- **FloatingBrowser extracted** from `FloatingPaneRoot.tsx` (517 → 103 lines).
+  `IssueBubble` is now a shared sub-component used by both `BrowserPaneContent`
+  and `FloatingBrowser`, accepting a minimal duck-typed `AgentRef { id, cliType }`.
+- **QA replay post-step now concurrent**. `Promise.allSettled` runs DOM alert query,
+  console error delta, and screenshot capture in parallel (was sequential).
+- **Scroll steps skip post-step work**. Pure scroll actions bypass the 500ms delay
+  and 3 IPC calls — no alert/error/screenshot collection needed for no-op scroll.
+- **`scrollIntoView` before every click**. Ensures element is visible in the
+  viewport before the replay driver clicks it.
+- **`activateAgent` replaces 3 post-spawn DB writes**. Single
+  `UPDATE agents SET pid=?, session_id=?, status='running'` issued after PTY spawn
+  instead of three separate round-trips.
+- **Login shell flag removed from agent spawn**. `_getFullPath()` already captures
+  full PATH at startup; `PATH` is now injected explicitly in the agent env, making
+  the `-l` flag redundant. Saves ~100-150ms dotfile load per agent spawn.
+
+### Fixed
+
+- `designAutoStopRef` / `startTimerRef` timer leaks in `BrowserPaneContent` on
+  unmount.
+- `WorkspacePane` stale-closure: event listener now uses a ref-stable callback.
+- `noArrayIndexKey` biome errors in alert/console-error step-detail lists.
+
+### Internal
+
+- API key cache (`Map<string, string | null>`) in `security/keystore.ts` —
+  `safeStorage.decryptString` runs once per session per provider.
+- Lifecycle config cache (`Map<string, LifecycleConfig | null>`) in
+  `lifecycle/loader.ts` — eliminates duplicate file reads on repeated spawns.
+- `INTERACTIVE_TAGS` / `INTERACTIVE_ROLES` RegExp hoisted to IIFE scope in
+  `qa-recorder.ts` — no re-compilation per click event.
+- 64 new unit tests (T58/T70/T90/T101/T102); biome + typecheck + build clean.
+
+---
+
+## [0.4.3] — 2026-04-23 — Activity tab chrome, access mode badge, pipeline mode propagation
+
+### Added
+
+- **Activity dot in tab chrome** (T70). `WorkspaceTabBar` now shows a 1.5px
+  colored dot after the tab label when the primary pane hosts a running agent.
+  `busy` = pulsing green, `idle` = amber, `neutral` hidden. Dot uses
+  `activityLevel` from the agent store (derived by `classifyActivity` on every
+  push event). Zero re-fetch — pure store subscription.
+- **Access mode badge in terminal toolbar** (T58). When an agent was spawned
+  with `read` or `plan` access mode, a colored pill ("read-only" / "plan-only")
+  appears in the live terminal toolbar alongside the chat-toggle button.
+  `write` mode (default) shows nothing — no noise for the common case.
+- **Pipeline step access mode** (T58). `PipelineStepDef` gains an optional
+  `accessMode` field. The pipeline executor passes it through `createAgent` +
+  `manager.spawn` so plan-step or read-step agents get their mode injected into
+  the prompt prefix automatically. `PipelineTemplateEditor` exposes a per-step
+  mode selector ("write" / "read" / "plan").
+
+---
+
+## [0.4.2] — 2026-04-23 — QA automation, DI context, chat view, virtual scrolling
+
+### Added
+
+- **Design Mode + QA Test Automation** (T102). Browser pane extended with two
+  new modes. Design Mode (crosshair icon) clicks any element in the webview and
+  captures its selector, computed styles, and surrounding HTML — formatted for
+  injection into agent context. QA Test Mode (bug icon) records click/input/
+  keypress/navigate flows, replays them step-by-step with screenshot capture,
+  persists results to DB, and shows pass/fail per step. `stopOnFail` toggle.
+  `QaTestsSection` in the Project tab lists saved tests with run history.
+- **Terminal ↔ Chat Dual View** (T90). Toggle button on both live and stopped
+  terminal panes switches between raw terminal output and a clean conversational
+  view. Live sessions serialize xterm content on toggle; stopped sessions read
+  from DB scrollback. Provider-aware parser detects user prompts, agent output,
+  and system messages.
+- **Virtual Scrolling for Memory List** (T59). `MemorySection` uses
+  `@tanstack/react-virtual` with `measureElement` for variable-height cards.
+  Renders only visible rows; handles large memory stores without layout jank.
+
+### Changed
+
+- **DI for tRPC singletons** (T81). `createContext()` now injects
+  `agentManager`, `providerRegistry`, `pipelineExecutor`, `schedulerEngine`,
+  and `mcpHost` into the tRPC context. All five procedure files (`agents`,
+  `scheduler`, `pipeline`, `resources`, `mcp`) use `ctx.X` instead of calling
+  global getters, making procedures testable with injected mocks.
+- **Magic number extraction** in `BrowserPaneContent`. Three inline literals
+  promoted to named module constants: `DESIGN_POLL_INTERVAL_MS = 300`,
+  `DESIGN_AUTO_STOP_MS = 60_000`, `QA_NAV_DELAY_MS = 800`.
+
+---
+
 ## [0.4.1] — 2026-04-12 — Parallel agent wave
 
 Six tasks completed by 3 parallel Claude Code agents running in Exegol.

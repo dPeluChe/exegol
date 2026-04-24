@@ -80,6 +80,7 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(agent.id);
       updatePane(paneId, { type: "terminal", agentId: agent.id });

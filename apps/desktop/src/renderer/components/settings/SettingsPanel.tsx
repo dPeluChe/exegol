@@ -2,7 +2,7 @@ import type { Settings } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
 import { ArrowLeft, Key, Keyboard, Monitor, Settings2, Terminal } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 import { ApiKeysSettings } from "./ApiKeysSettings";
@@ -29,6 +29,16 @@ export function SettingsPanel() {
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
 
+  // ── Auto-save feedback indicator ──────────────────────────────────────
+  const [showSaved, setShowSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const flashSaved = useCallback(() => {
+    setShowSaved(true);
+    clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setShowSaved(false), 1500);
+  }, []);
+
   // Derive initial form state from settings (Rule 1: derive, don't sync)
   const [form, setForm] = useState<Settings | null>(() => settings ?? null);
 
@@ -51,6 +61,7 @@ export function SettingsPanel() {
       if (!prev) return prev;
       const updated = { ...prev, ...updates };
       updateSettings.mutate(updated, {
+        onSuccess: () => flashSaved(),
         onError: (err) => console.error("[Settings] Auto-save failed:", err),
       });
       return updated;
@@ -69,6 +80,7 @@ export function SettingsPanel() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h1 className="text-base font-semibold text-text-primary">Settings</h1>
+        {showSaved && <span className="animate-fade-in text-[10px] text-green-400">Saved</span>}
       </div>
 
       {/* Body: vertical tabs on left + content on right */}

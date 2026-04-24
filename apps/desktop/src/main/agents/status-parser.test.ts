@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { AgentStatusParser, stripAnsi } from "./status-parser";
+import {
+  AgentStatusParser,
+  parseResumeCommandFromPattern,
+  parseSessionId,
+  stripAnsi,
+} from "./status-parser";
 
 // ─── stripAnsi ──────────────────────────────────────────────────────────
 
@@ -147,5 +152,91 @@ describe("AgentStatusParser — generic", () => {
     const parser = new AgentStatusParser("test", "goose" as never);
     const result = parser.parse("Tests passed: 42 suites\n");
     expect(result?.currentStep).toContain("Tests passed");
+  });
+});
+
+// ─── parseResumeCommandFromPattern ─────────────────────────────────────
+
+describe("parseResumeCommandFromPattern", () => {
+  it("should return null for empty pattern", () => {
+    expect(parseResumeCommandFromPattern("", "claude --resume abc123")).toBeNull();
+  });
+
+  it("should extract claude resume command", () => {
+    const result = parseResumeCommandFromPattern(
+      "claude --resume ",
+      "To resume this session: claude --resume abc123def456",
+    );
+    expect(result).toBe("claude --resume abc123def456");
+  });
+
+  it("should extract gemini resume command", () => {
+    const result = parseResumeCommandFromPattern(
+      "gemini --resume ",
+      "Run: gemini --resume session-xyz-789",
+    );
+    expect(result).toBe("gemini --resume session-xyz-789");
+  });
+
+  it("should extract codex resume command", () => {
+    const result = parseResumeCommandFromPattern(
+      "codex resume ",
+      "Continue with: codex resume my-session-id-42",
+    );
+    expect(result).toBe("codex resume my-session-id-42");
+  });
+
+  it("should extract opencode resume command", () => {
+    const result = parseResumeCommandFromPattern(
+      "opencode -s ",
+      "Resume: opencode -s sess_abc123xyz",
+    );
+    expect(result).toBe("opencode -s sess_abc123xyz");
+  });
+
+  it("should return null for non-matching line", () => {
+    expect(parseResumeCommandFromPattern("claude --resume ", "some unrelated output")).toBeNull();
+  });
+
+  it("should return null when pattern is longer than content", () => {
+    expect(parseResumeCommandFromPattern("claude --resume ", "short")).toBeNull();
+  });
+
+  it("should truncate at box-drawing character │", () => {
+    const result = parseResumeCommandFromPattern("claude --resume ", "│ claude --resume abc123 │");
+    expect(result).toBe("claude --resume abc123");
+  });
+});
+
+// ─── parseSessionId ────────────────────────────────────────────────────
+
+describe("parseSessionId", () => {
+  it("should extract session ID from plain line", () => {
+    expect(parseSessionId("Session ID: abc123def456")).toBe("abc123def456");
+  });
+
+  it("should extract session ID from box-drawn line", () => {
+    expect(parseSessionId("│ Session ID: a1b2c3d4e5f6 │")).toBe("a1b2c3d4e5f6");
+  });
+
+  it("should capture full UUID format", () => {
+    const uuid = "550e8400-e29b-41d4-a716-446655440000";
+    expect(parseSessionId(`Session ID: ${uuid}`)).toBe(uuid);
+  });
+
+  it("should return null for short ID (< 8 chars)", () => {
+    expect(parseSessionId("Session ID: abc")).toBeNull();
+  });
+
+  it("should return null when no match", () => {
+    expect(parseSessionId("some random output")).toBeNull();
+  });
+});
+
+// ─── stripAnsi (additional coverage) ───────────────────────────────────
+
+describe("stripAnsi — additional", () => {
+  it("should strip cursor movement sequences", () => {
+    expect(stripAnsi("\x1B[2Jhello\x1B[H")).toBe("hello");
   });
 });

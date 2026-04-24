@@ -22,6 +22,8 @@ export interface FloatingPaneConfig {
   agentId?: string;
   /** For browser: the URL to load inside the webview */
   url?: string;
+  /** For browser: project id used to look up running agents for send-to-agent */
+  projectId?: string;
 }
 
 const floatingWindows = new Map<string, BrowserWindow>();
@@ -58,6 +60,7 @@ function buildUrl(config: FloatingPaneConfig): string {
   });
   if (config.agentId) params.set("floatingAgentId", config.agentId);
   if (config.url) params.set("floatingUrl", config.url);
+  if (config.projectId) params.set("floatingProjectId", config.projectId);
   const query = params.toString();
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     return `${process.env.ELECTRON_RENDERER_URL}?${query}`;

@@ -157,6 +157,7 @@ export class PipelineExecutor {
       cliType: stepDef.cliType as AgentCliType,
       taskDescription: prompt,
       cwdOverride: run.worktreePath ?? undefined,
+      accessMode: stepDef.accessMode,
     });
 
     stepResult.agentId = agent.id;
@@ -193,6 +194,7 @@ export class PipelineExecutor {
         cliType: stepDef.cliType as AgentCliType,
         taskDescription: prompt,
         cwdOverride: run.worktreePath ?? undefined,
+        accessMode: stepDef.accessMode,
       });
     } catch (err) {
       logger.error("[Pipeline] Failed to spawn agent for step:", err);

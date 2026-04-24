@@ -16,7 +16,7 @@ import {
   listPipelineTemplates,
   updatePipelineTemplate,
 } from "../../db/queries";
-import { checkGitSync, getPipelineExecutor } from "../../pipeline/executor";
+import { checkGitSync } from "../../pipeline/executor";
 import { publicProcedure, router } from "../trpc";
 
 export const pipelineRouter = router({
@@ -65,7 +65,7 @@ export const pipelineRouter = router({
   }),
 
   startRun: publicProcedure.input(pipelineRunCreateSchema).mutation(async ({ ctx, input }) => {
-    const executor = getPipelineExecutor();
+    const executor = ctx.pipelineExecutor;
     return executor.startRun(
       ctx.db,
       input.templateId,
@@ -77,7 +77,7 @@ export const pipelineRouter = router({
   }),
 
   pauseRun: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    const executor = getPipelineExecutor();
+    const executor = ctx.pipelineExecutor;
     executor.pauseRun(ctx.db, input.id);
     return { success: true };
   }),
@@ -85,7 +85,7 @@ export const pipelineRouter = router({
   resumeRun: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const executor = getPipelineExecutor();
+      const executor = ctx.pipelineExecutor;
       await executor.resumeRun(ctx.db, input.id);
       return { success: true };
     }),
@@ -93,7 +93,7 @@ export const pipelineRouter = router({
   cancelRun: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const executor = getPipelineExecutor();
+      const executor = ctx.pipelineExecutor;
       await executor.cancelRun(ctx.db, input.id);
       return { success: true };
     }),

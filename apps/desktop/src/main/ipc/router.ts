@@ -13,6 +13,7 @@ import { oplogRouter } from "./procedures/oplog";
 import { pipelineRouter } from "./procedures/pipeline";
 import { projectRouter } from "./procedures/projects";
 import { promptsRouter } from "./procedures/prompts";
+import { qaTestRouter } from "./procedures/qa-tests";
 import { queueRouter } from "./procedures/queue";
 import { resourcesRouter } from "./procedures/resources";
 import { schedulerRouter } from "./procedures/scheduler";
@@ -47,6 +48,7 @@ export const appRouter = router({
   memory: memoryRouter,
   messages: messagesRouter,
   queue: queueRouter,
+  qaTests: qaTestRouter,
   activities: activitiesRouter,
   search: searchRouter,
   github: githubRouter,

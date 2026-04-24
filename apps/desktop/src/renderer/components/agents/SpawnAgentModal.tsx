@@ -1,7 +1,7 @@
-import type { AgentCliType, AgentProvider } from "@exegol/shared";
+import type { AgentAccessMode, AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { GitBranch, Layers, X } from "lucide-react";
+import { Eye, FileEdit, GitBranch, Layers, Map as MapIcon, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -33,6 +33,7 @@ interface SpawnAgentModalProps {
 export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAgentModalProps) {
   const [task, setTask] = useState("");
   const [selectedProviderId, setSelectedProviderId] = useState(initialProvider?.id ?? "");
+  const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const [useWorktree, setUseWorktree] = useState(true);
   const [branchName, setBranchName] = useState("");
   const [branchEdited, setBranchEdited] = useState(false);
@@ -81,6 +82,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
         taskDescription: task.trim(),
         useWorktree,
         branchName: useWorktree && branchName ? branchName : undefined,
+        accessMode,
       });
       addAgent({
         id: agent.id,
@@ -94,6 +96,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(agent.id);
       setFocusedAgent(agent.id);
@@ -129,6 +132,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
   }, [
     task,
     selectedProviderId,
+    accessMode,
     useWorktree,
     branchName,
     projectId,
@@ -213,6 +217,44 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
             </div>
           </div>
 
+          {/* Access mode selector (T58) */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-text-muted">Mode</span>
+            <div className="flex gap-1.5">
+              {[
+                {
+                  mode: "write" as const,
+                  label: "Full Access",
+                  icon: FileEdit,
+                  hint: "Read + write files",
+                },
+                {
+                  mode: "plan" as const,
+                  label: "Plan Only",
+                  icon: MapIcon,
+                  hint: "Analyze, no writes",
+                },
+                { mode: "read" as const, label: "Read Only", icon: Eye, hint: "Explore codebase" },
+              ].map(({ mode, label, icon: Icon, hint }) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setAccessMode(mode)}
+                  title={hint}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
+                    accessMode === mode
+                      ? "border-accent/50 bg-accent/10 text-accent"
+                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                  )}
+                >
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Worktree toggle + branch name */}
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 cursor-pointer" htmlFor="use-worktree">
@@ -252,6 +294,7 @@ export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAg
           <span className="text-[10px] text-text-muted">
             {selectedProvider ? `${selectedProvider.name}` : "Select an agent"}
             {useWorktree ? " · worktree" : " · main repo"}
+            {accessMode !== "write" ? ` · ${accessMode}` : ""}
           </span>
           <div className="flex items-center gap-2">
             <button

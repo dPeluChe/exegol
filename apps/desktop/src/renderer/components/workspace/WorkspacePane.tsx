@@ -71,9 +71,10 @@ function PaneToolbar({
         type: "browser",
         title: "Browser",
         url: pane.url,
+        projectId: projectId ?? undefined,
       });
     }
-  }, [panes, paneId, markPaneFloating]);
+  }, [panes, paneId, markPaneFloating, projectId]);
 
   const handleOpenInIde = useCallback(() => {
     if (!projectId) return;

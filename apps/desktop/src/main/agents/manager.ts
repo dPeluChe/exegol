@@ -1,12 +1,12 @@
 import type { Agent, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
 import {
+  activateAgent,
   createOplogEntry,
   createWorktree as dbCreateWorktree,
   getAgent,
   insertActivity,
   listWorktrees,
-  setAgentPid,
   setAgentWorktree,
   stopAgent,
   updateAgentStatus,
@@ -27,6 +27,7 @@ import {
 import { getProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
 import {
+  _getFullPath,
   broadcastAgentStatus,
   buildApiKeyEnv,
   coreRust,
@@ -200,7 +201,13 @@ export class AgentManager {
       } as Record<string, string>;
     } else {
       const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
-      let fullCommand = buildShellCommand(registry, agent, cliConfig, contextPrefix);
+      let fullCommand = buildShellCommand(
+        registry,
+        agent,
+        cliConfig,
+        contextPrefix,
+        config.accessMode,
+      );
 
       // T101: Resume — prefer stored resume_command (exact command printed at shutdown),
       // fall back to provider's resumeFlag (e.g. --continue for most CLIs).
@@ -215,7 +222,9 @@ export class AgentManager {
         if (row?.resume_command) {
           // Best path: use the exact command the agent printed at shutdown
           fullCommand = row.resume_command;
-          logger.info(`[AgentManager] Resuming ${agent.cliType} with stored command: ${row.resume_command}`);
+          logger.info(
+            `[AgentManager] Resuming ${agent.cliType} with stored command: ${row.resume_command}`,
+          );
         } else if (row?.claude_session_id && agent.cliType === "claude-code") {
           // Backwards compat: old claude session ID captured at startup
           fullCommand = `${cliConfig.command} --resume ${row.claude_session_id}`;
@@ -266,17 +275,22 @@ export class AgentManager {
 
       shell = userShell;
       if (isInteractiveCli) {
-        args = ["-il"];
+        args = ["-i"];
         stdinCommand = fullCommand;
       } else {
-        args = ["-ilc", fullCommand];
+        args = ["-ic", fullCommand];
       }
       env = {
         ...process.env,
         ...apiKeyEnv,
         ...cliConfig.env,
+        // Inject the resolved shell PATH so the -l (login) flag is not needed.
+        // Without -l, .zprofile/.profile are skipped — saves 50-200ms per spawn.
+        // .zshrc still loads via -i so NVM, pyenv, etc. remain available.
+        PATH: _getFullPath(),
         TERM: "xterm-256color",
         EXEGOL_AGENT_ID: agent.id,
+        EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
       } as Record<string, string>;
     }
 
@@ -295,7 +309,10 @@ export class AgentManager {
     // ── Output processing setup (non-shell agents only) ─────────────────
     if (!isPlainShell) {
       const resumePattern = registry.get(agent.cliType)?.capabilities?.resumeCommandPattern;
-      this.outputProcessors.set(agent.id, createOutputProcessor(agent.id, agent.cliType, resumePattern));
+      this.outputProcessors.set(
+        agent.id,
+        createOutputProcessor(agent.id, agent.cliType, resumePattern),
+      );
       // Title-based status detection (T56) — only for CLIs that set terminal titles
       if (["claude-code", "gemini", "codex", "crush"].includes(agent.cliType)) {
         this.titleTrackers.set(
@@ -335,9 +352,8 @@ export class AgentManager {
       { scrollbackPath, shellReadyGating: enableMarker },
     );
 
-    setAgentPid(db, agent.id, pid);
-    // Session ID = agent ID (PTY sessions are keyed by agent.id)
-    db.prepare("UPDATE agents SET session_id = ? WHERE id = ?").run(agent.id, agent.id);
+    // Single round-trip: pid + session_id + status = 'running'
+    activateAgent(db, agent.id, pid);
 
     // Interactive CLIs: inject the command after shell initializes
     if (stdinCommand) {
@@ -346,7 +362,6 @@ export class AgentManager {
       }, 500);
     }
 
-    updateAgentStatus(db, agent.id, "running");
     broadcastAgentStatus({
       agentId: agent.id,
       projectId: agent.projectId,

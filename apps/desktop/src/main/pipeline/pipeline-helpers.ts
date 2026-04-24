@@ -1,9 +1,9 @@
 import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import type { PipelineStatusEvent } from "@exegol/shared";
-import { BrowserWindow } from "electron";
 import { stripAnsi } from "../agents/status-parser";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
+import { broadcast } from "../lib/event-bus";
 
 export const YOLO_FLAGS: Record<string, string> = {
   "claude-code": "--dangerously-skip-permissions",
@@ -14,9 +14,7 @@ export const YOLO_FLAGS: Record<string, string> = {
 };
 
 export function broadcastPipelineStatus(event: PipelineStatusEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send("pipeline:status-changed", event);
-  }
+  broadcast("pipeline:status-changed", event);
 }
 
 export async function captureGitDiff(worktreePath: string): Promise<string> {

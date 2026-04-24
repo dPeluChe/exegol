@@ -1,4 +1,4 @@
-import type { AgentCliType, AgentProvider } from "@exegol/shared";
+import type { AgentActivityLevel, AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { FolderTree, GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
@@ -23,6 +23,13 @@ import {
 import { AgentIcon } from "../common/AgentIcon";
 import { LayoutPresets } from "./LayoutPresets";
 
+// ─── T70: Activity dot for tab chrome ───────────────────────────────────────
+
+const ACTIVITY_DOT_CLASS: Partial<Record<AgentActivityLevel, string>> = {
+  busy: "bg-success animate-status-pulse",
+  idle: "bg-warning",
+};
+
 // ─── Tab auto-naming helpers ────────────────────────────────────────────────
 
 const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -32,13 +39,17 @@ const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }
   git: GitBranch,
 };
 
-/** Derive display name + icon from the tab's primary pane */
+/** Derive display name, icon, and primary agent ID from the tab's primary pane */
 function getTabMeta(
   tabLabel: string,
   tabLayout: import("../../stores/workspace").LayoutNode,
   panes: Record<string, Pane>,
   agents: Record<string, { cliType: string; taskDescription: string }>,
-): { displayName: string; Icon: React.ComponentType<{ className?: string }> | null } {
+): {
+  displayName: string;
+  Icon: React.ComponentType<{ className?: string }> | null;
+  primaryAgentId: string | null;
+} {
   // If user explicitly renamed the tab (not a default name), respect it
   const isDefault =
     tabLabel.startsWith("Tab ") || tabLabel === "Workspace" || tabLabel === "Terminal";
@@ -46,18 +57,20 @@ function getTabMeta(
   const firstPaneId = findFirstPaneId(tabLayout);
   const firstPane = firstPaneId ? panes[firstPaneId] : null;
   const Icon = firstPane ? (PANE_TYPE_ICONS[firstPane.type] ?? null) : null;
+  const primaryAgentId = firstPane?.type === "terminal" ? (firstPane.agentId ?? null) : null;
 
-  if (!isDefault) return { displayName: tabLabel, Icon };
+  if (!isDefault) return { displayName: tabLabel, Icon, primaryAgentId };
 
   if (firstPane?.type === "terminal" && firstPane.agentId) {
     const agent = agents[firstPane.agentId];
-    if (agent) return { displayName: agent.cliType, Icon: Terminal };
+    if (agent) return { displayName: agent.cliType, Icon: Terminal, primaryAgentId };
   }
-  if (firstPane?.type === "browser") return { displayName: "Browser", Icon: Globe };
-  if (firstPane?.type === "git") return { displayName: "Git", Icon: GitBranch };
-  if (firstPane?.type === "files") return { displayName: "Files", Icon: FolderTree };
+  if (firstPane?.type === "browser") return { displayName: "Browser", Icon: Globe, primaryAgentId };
+  if (firstPane?.type === "git") return { displayName: "Git", Icon: GitBranch, primaryAgentId };
+  if (firstPane?.type === "files")
+    return { displayName: "Files", Icon: FolderTree, primaryAgentId };
 
-  return { displayName: tabLabel, Icon };
+  return { displayName: tabLabel, Icon, primaryAgentId };
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -77,14 +90,32 @@ export function WorkspaceTabBar() {
   const agents = useAgentStore((s) => s.agents);
   const { projectId } = useProjectContext();
 
-  /** Close a tab and stop all its terminal agents */
+  /** Close a tab — confirm first if it has running agents */
   const handleCloseTab = useCallback(
     (tabId: string) => {
-      // Read fresh state to avoid stale closure
       const pw = getProjectState();
       const tab = pw.tabs.find((t) => t.id === tabId);
       if (tab) {
         const paneIds = collectPaneIds(tab.layout);
+        const runningAgentIds: string[] = [];
+        for (const pid of paneIds) {
+          const pane = pw.panes[pid];
+          if (pane?.type === "terminal" && pane.agentId) {
+            const agent = useAgentStore.getState().agents[pane.agentId];
+            if (agent && ["running", "spawning", "waiting_input"].includes(agent.status)) {
+              runningAgentIds.push(pane.agentId);
+            }
+          }
+        }
+        // Confirm before killing running agents
+        if (runningAgentIds.length > 0) {
+          const count = runningAgentIds.length;
+          const ok = window.confirm(
+            `This tab has ${count} running agent${count > 1 ? "s" : ""}. Close and stop ${count > 1 ? "them" : "it"}?`,
+          );
+          if (!ok) return;
+        }
+        // Stop + cleanup all terminal agents in the tab
         for (const pid of paneIds) {
           const pane = pw.panes[pid];
           if (pane?.type === "terminal" && pane.agentId) {
@@ -214,6 +245,7 @@ export function WorkspaceTabBar() {
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(agent.id);
 
@@ -256,7 +288,12 @@ export function WorkspaceTabBar() {
           {tabs.map((tab) => {
             const isActive = tab.id === activeTabId;
             const isEditing = editingTabId === tab.id;
-            const { displayName, Icon: TabIcon } = getTabMeta(tab.label, tab.layout, panes, agents);
+            const {
+              displayName,
+              Icon: TabIcon,
+              primaryAgentId,
+            } = getTabMeta(tab.label, tab.layout, panes, agents);
+            const tabActivity = primaryAgentId ? agents[primaryAgentId]?.activityLevel : undefined;
 
             return (
               // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
@@ -301,6 +338,15 @@ export function WorkspaceTabBar() {
                   <>
                     {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
                     <span className="max-w-[140px] truncate">{displayName}</span>
+                    {tabActivity && ACTIVITY_DOT_CLASS[tabActivity] && (
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 shrink-0 rounded-full",
+                          ACTIVITY_DOT_CLASS[tabActivity],
+                        )}
+                        aria-hidden="true"
+                      />
+                    )}
                   </>
                 )}
                 <button
@@ -396,6 +442,7 @@ function QuickLaunchBar() {
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,
           claudeSessionId: null,
+          activityLevel: "busy",
         });
         createTerminal(agent.id);
 

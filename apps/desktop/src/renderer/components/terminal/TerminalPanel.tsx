@@ -1,4 +1,4 @@
-import type { AgentProvider, HandoffSummary } from "@exegol/shared";
+import type { AgentAccessMode, AgentProvider, HandoffSummary } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -7,17 +7,20 @@ import {
   ArrowRight,
   ArrowUpToLine,
   Loader2,
+  MessageSquare,
   Play,
   RotateCcw,
   Send,
+  TerminalSquare,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
+import { useAgent, useScrollback, useSpawnAgent, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
+import { ChatView } from "./ChatView";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 
 /** Hook: set of CLI types that support session resume (from provider registry) */
@@ -68,6 +71,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const [scrollAtTop, setScrollAtTop] = useState(true);
   const [scrollAtBottom, setScrollAtBottom] = useState(true);
   const [showSendTo, setShowSendTo] = useState(false);
+  const [viewMode, setViewMode] = useState<"terminal" | "chat">("terminal");
+  const [liveSnapshot, setLiveSnapshot] = useState("");
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
@@ -77,6 +82,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const [hasData, setHasData] = useState(false);
   const hasEverHadDataRef = useRef(false);
   if (hasData) hasEverHadDataRef.current = true;
+  const [startTimedOut, setStartTimedOut] = useState(false);
+  const stopAgent = useStopAgent();
 
   // Don't show "Ended" UI until we've received at least one data chunk,
   // OR until scrollback is available in DB (reattach/reload scenario)
@@ -122,6 +129,23 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     });
     return unsub;
   }, [agentId, isStopped, hasData]);
+
+  // If the loading overlay is still showing after 8s, surface a dismiss button.
+  const startTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (hasData || isStopped) {
+      if (startTimerRef.current) {
+        window.clearTimeout(startTimerRef.current);
+        startTimerRef.current = null;
+      }
+      return;
+    }
+    if (startTimerRef.current) return;
+    startTimerRef.current = window.setTimeout(() => {
+      startTimerRef.current = null;
+      setStartTimedOut(true);
+    }, 8_000);
+  }, [hasData, isStopped]);
 
   // Listen for real-time handoff notifications on live agents (external system sync — rule #4)
   useEffect(() => {
@@ -176,6 +200,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         startedAt: successor.startedAt,
         accessMode: successor.accessMode ?? null,
         claudeSessionId: null,
+        activityLevel: "busy",
       });
       createTerminal(successor.id);
       setFocusedAgent(successor.id);
@@ -185,6 +210,15 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       setHandoffLoading(false);
     }
   }, [agent, handoffLoading, addAgent, createTerminal, setFocusedAgent]);
+
+  const handleToggleLiveView = useCallback(() => {
+    if (viewMode === "terminal") {
+      setLiveSnapshot(terminalRef.current?.serialize() ?? "");
+      setViewMode("chat");
+    } else {
+      setViewMode("terminal");
+    }
+  }, [viewMode]);
 
   // If agent is stopped and has scrollback, show read-only terminal
   if (isStopped && scrollbackContent) {
@@ -246,6 +280,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                           startedAt: newAgent.startedAt,
                           accessMode: newAgent.accessMode ?? null,
                           claudeSessionId: null,
+                          activityLevel: "busy",
                         });
                         createTerminal(newAgent.id);
                         useWorkspaceStore.getState().updatePane(paneId, {
@@ -273,6 +308,11 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               </Button>
             )}
           </div>
+          <TerminalViewToggle
+            viewMode={viewMode}
+            onToggle={() => setViewMode((v) => (v === "terminal" ? "chat" : "terminal"))}
+            className="ml-auto"
+          />
         </div>
         {/* Handoff summary banner */}
         {resolvedHandoff && (
@@ -285,24 +325,30 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           </div>
         )}
         <div className="relative flex-1">
-          <TerminalInstance
-            ref={terminalRef}
-            key={`scrollback-${agentId}`}
-            agentId={agentId}
-            cliType={agent?.cliType}
-            readOnly
-            initialContent={scrollbackContent}
-            onScrollPosition={handleScrollPosition}
-          />
-          <TerminalFloatingButtons
-            terminalRef={terminalRef}
-            scrollAtTop={scrollAtTop}
-            scrollAtBottom={scrollAtBottom}
-            sendTargets={sendTargets}
-            showSendTo={showSendTo}
-            setShowSendTo={setShowSendTo}
-            onSendTo={handleSendTo}
-          />
+          {viewMode === "chat" ? (
+            <ChatView scrollback={scrollbackContent} cliType={agent?.cliType} />
+          ) : (
+            <>
+              <TerminalInstance
+                ref={terminalRef}
+                key={`scrollback-${agentId}`}
+                agentId={agentId}
+                cliType={agent?.cliType}
+                readOnly
+                initialContent={scrollbackContent}
+                onScrollPosition={handleScrollPosition}
+              />
+              <TerminalFloatingButtons
+                terminalRef={terminalRef}
+                scrollAtTop={scrollAtTop}
+                scrollAtBottom={scrollAtBottom}
+                sendTargets={sendTargets}
+                showSendTo={showSendTo}
+                setShowSendTo={setShowSendTo}
+                onSendTo={handleSendTo}
+              />
+            </>
+          )}
         </div>
       </div>
     );
@@ -328,10 +374,26 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     <div className="relative flex h-full flex-col">
       {!hasData && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg-primary transition-opacity">
-          <Loader2 className="h-5 w-5 animate-spin text-accent" />
-          <span className="text-[11px] text-text-muted">
-            Starting {agent?.cliType ?? "agent"}...
-          </span>
+          {startTimedOut ? (
+            <>
+              <AlertCircle className="h-5 w-5 text-text-muted" />
+              <span className="text-[11px] text-text-muted">Failed to start</span>
+              <button
+                type="button"
+                onClick={() => stopAgent.mutate(agentId)}
+                className="rounded px-3 py-1 text-[11px] text-error hover:bg-error/10"
+              >
+                Dismiss
+              </button>
+            </>
+          ) : (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin text-accent" />
+              <span className="text-[11px] text-text-muted">
+                Starting {agent?.cliType ?? "agent"}...
+              </span>
+            </>
+          )}
         </div>
       )}
       {resolvedHandoff && (
@@ -350,26 +412,97 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           </Button>
         </div>
       )}
+      {hasData && (
+        <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border/40 px-2 py-0.5">
+          {agent?.accessMode && agent.accessMode !== "write" && (
+            <AccessModeBadge mode={agent.accessMode} />
+          )}
+          <TerminalViewToggle viewMode={viewMode} onToggle={handleToggleLiveView} />
+        </div>
+      )}
       <div className="relative flex-1">
-        <TerminalInstance
-          ref={terminalRef}
-          key={agentId}
-          agentId={agentId}
-          cliType={agent?.cliType}
-          onReady={onReady}
-          onScrollPosition={handleScrollPosition}
-        />
-        <TerminalFloatingButtons
-          terminalRef={terminalRef}
-          scrollAtTop={scrollAtTop}
-          scrollAtBottom={scrollAtBottom}
-          sendTargets={sendTargets}
-          showSendTo={showSendTo}
-          setShowSendTo={setShowSendTo}
-          onSendTo={handleSendTo}
-        />
+        {viewMode === "chat" ? (
+          <ChatView scrollback={liveSnapshot} cliType={agent?.cliType} />
+        ) : (
+          <>
+            <TerminalInstance
+              ref={terminalRef}
+              key={agentId}
+              agentId={agentId}
+              cliType={agent?.cliType}
+              onReady={onReady}
+              onScrollPosition={handleScrollPosition}
+            />
+            <TerminalFloatingButtons
+              terminalRef={terminalRef}
+              scrollAtTop={scrollAtTop}
+              scrollAtBottom={scrollAtBottom}
+              sendTargets={sendTargets}
+              showSendTo={showSendTo}
+              setShowSendTo={setShowSendTo}
+              onSendTo={handleSendTo}
+            />
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+// ─── Terminal/Chat view toggle button ───────────────────────────────────────
+
+function TerminalViewToggle({
+  viewMode,
+  onToggle,
+  className,
+}: {
+  viewMode: "terminal" | "chat";
+  onToggle: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted transition-colors hover:bg-white/10 hover:text-text-secondary",
+        className,
+      )}
+      title={viewMode === "terminal" ? "Switch to chat view" : "Switch to terminal view"}
+    >
+      {viewMode === "terminal" ? (
+        <>
+          <MessageSquare className="h-3 w-3" /> Chat
+        </>
+      ) : (
+        <>
+          <TerminalSquare className="h-3 w-3" /> Terminal
+        </>
+      )}
+    </button>
+  );
+}
+
+// ─── T58: Access mode badge ──────────────────────────────────────────────────
+
+const ACCESS_MODE_LABEL: Partial<Record<AgentAccessMode, { label: string; className: string }>> = {
+  read: { label: "read-only", className: "bg-blue-500/20 text-blue-400" },
+  plan: { label: "plan-only", className: "bg-purple-500/20 text-purple-400" },
+};
+
+function AccessModeBadge({ mode }: { mode: AgentAccessMode }) {
+  const config = ACCESS_MODE_LABEL[mode];
+  if (!config) return null;
+  return (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+        config.className,
+      )}
+      title={`Agent running in ${config.label} mode`}
+    >
+      {config.label}
+    </span>
   );
 }
 

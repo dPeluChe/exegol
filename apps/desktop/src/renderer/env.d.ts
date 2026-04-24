@@ -27,6 +27,22 @@ interface PipelineStatusEvent {
   timestamp: number;
 }
 
+interface BrowserElementInfo {
+  selector: string;
+  tagName: string;
+  text: string;
+  html: string;
+  rect: { x: number; y: number; width: number; height: number };
+  styles: {
+    color: string;
+    backgroundColor: string;
+    fontSize: string;
+    fontFamily: string;
+    padding: string;
+    margin: string;
+  };
+}
+
 interface Window {
   api: {
     trpc: {
@@ -64,6 +80,12 @@ interface Window {
       install: () => Promise<void>;
       onStatus: (callback: (status: unknown) => void) => () => void;
     };
+    // T102: Design Mode + QA — browser pane inspection
+    browser: {
+      executeJs: (code: string) => Promise<unknown>;
+      captureScreenshot: () => Promise<string | null>;
+      captureElement: (selector: string) => Promise<BrowserElementInfo | null>;
+    };
     floating: {
       open: (config: {
         paneId: string;
@@ -71,6 +93,7 @@ interface Window {
         title: string;
         agentId?: string;
         url?: string;
+        projectId?: string;
       }) => Promise<void>;
       close: (paneId: string) => Promise<void>;
       selfClose: () => void;

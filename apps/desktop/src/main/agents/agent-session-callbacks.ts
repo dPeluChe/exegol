@@ -1,7 +1,7 @@
 import type { AgentStatus } from "@exegol/shared";
-import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import type { OutputProcessor } from "./agent-output-processor";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
@@ -34,9 +34,7 @@ export function createSpawnCallbacks(
 ) {
   return {
     onData: (data: string) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("terminal:data", agent.id, data);
-      }
+      broadcast("terminal:data", agent.id, data);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
@@ -67,13 +65,17 @@ export function createSpawnCallbacks(
               result.resumeCommand,
               agent.id,
             );
-            logger.info(`[AgentCallback] Captured resume command for ${agent.id}: ${result.resumeCommand}`);
+            logger.info(
+              `[AgentCallback] Captured resume command for ${agent.id}: ${result.resumeCommand}`,
+            );
           } else if (result.sessionId) {
             db.prepare("UPDATE agents SET claude_session_id = ? WHERE id = ?").run(
               result.sessionId,
               agent.id,
             );
-            logger.info(`[AgentCallback] Captured Claude session ID for ${agent.id}: ${result.sessionId}`);
+            logger.info(
+              `[AgentCallback] Captured Claude session ID for ${agent.id}: ${result.sessionId}`,
+            );
           }
         } catch (err) {
           logger.warn(`[AgentCallback] Failed to store session info for ${agent.id}:`, err);
@@ -122,9 +124,7 @@ export function createSpawnCallbacks(
           const scrollback = maps.scrollbackBuffers.get(agent.id)?.join("") ?? "";
           const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
           const handoff = createHandoff(db, { agentId: agent.id, ...summary });
-          for (const win of BrowserWindow.getAllWindows()) {
-            win.webContents.send("agent:handoff-ready", agent.id, handoff.id);
-          }
+          broadcast("agent:handoff-ready", agent.id, handoff.id);
           logger.info(
             `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
           );

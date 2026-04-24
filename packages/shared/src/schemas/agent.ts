@@ -32,7 +32,7 @@ export const agentCreateSchema = z.object({
   resumeSession: z.boolean().optional(),
   /** T101: ID of the agent whose claude_session_id should be used for --resume */
   resumeFromAgentId: z.string().optional(),
-  /** T99: read = explore-only, write = full access (default) */
+  /** T58: read = explore-only, write = full access (default), plan = analysis-only */
   accessMode: agentAccessModeSchema.optional(),
 });
 

@@ -1,7 +1,12 @@
 import { safeStorage } from "electron";
 import type Database from "libsql";
 
+// Session-level cache — decryptString is crypto-expensive and keys don't
+// change at runtime except through the Settings UI (store/delete clear it).
+const apiKeyCache = new Map<string, string | null>();
+
 export function storeApiKey(db: Database.Database, provider: string, key: string): void {
+  apiKeyCache.delete(provider);
   if (!safeStorage.isEncryptionAvailable()) {
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
       `apikey_${provider}`,
@@ -18,20 +23,29 @@ export function storeApiKey(db: Database.Database, provider: string, key: string
 }
 
 export function getApiKey(db: Database.Database, provider: string): string | null {
+  if (apiKeyCache.has(provider)) return apiKeyCache.get(provider) ?? null;
   const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(`apikey_${provider}`) as
     | { value: string }
     | undefined;
-  if (!row) return null;
+  if (!row) {
+    apiKeyCache.set(provider, null);
+    return null;
+  }
   const value = row.value;
+  let result: string;
   if (value.startsWith("encrypted:") && safeStorage.isEncryptionAvailable()) {
     const base64 = value.slice("encrypted:".length);
     const buffer = Buffer.from(base64, "base64");
-    return safeStorage.decryptString(buffer);
+    result = safeStorage.decryptString(buffer);
+  } else {
+    result = value;
   }
-  return value;
+  apiKeyCache.set(provider, result);
+  return result;
 }
 
 export function deleteApiKey(db: Database.Database, provider: string): void {
+  apiKeyCache.delete(provider);
   db.prepare("DELETE FROM settings WHERE key = ?").run(`apikey_${provider}`);
 }
 

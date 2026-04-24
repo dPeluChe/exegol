@@ -1,6 +1,5 @@
 import { mcpServerConfigSchema } from "@exegol/shared";
 import { z } from "zod";
-import { getMcpHost } from "../../mcp/host";
 import type { McpServerConfig, McpServerState, McpTool } from "../../mcp/registry";
 import { publicProcedure, router } from "../trpc";
 
@@ -8,8 +7,8 @@ export const mcpRouter = router({
   /**
    * List all MCP server states (connected + tools discovered).
    */
-  listServers: publicProcedure.query((): McpServerState[] => {
-    return getMcpHost().listServers();
+  listServers: publicProcedure.query(({ ctx }): McpServerState[] => {
+    return ctx.mcpHost.listServers();
   }),
 
   /**
@@ -17,23 +16,25 @@ export const mcpRouter = router({
    */
   connect: publicProcedure
     .input(mcpServerConfigSchema)
-    .mutation(async ({ input }): Promise<McpServerState> => {
-      return getMcpHost().connect(input as McpServerConfig);
+    .mutation(async ({ ctx, input }): Promise<McpServerState> => {
+      return ctx.mcpHost.connect(input as McpServerConfig);
     }),
 
   /**
    * Disconnect from an MCP server.
    */
-  disconnect: publicProcedure.input(z.object({ serverId: z.string() })).mutation(({ input }) => {
-    getMcpHost().disconnect(input.serverId);
-    return { success: true };
-  }),
+  disconnect: publicProcedure
+    .input(z.object({ serverId: z.string() }))
+    .mutation(({ ctx, input }) => {
+      ctx.mcpHost.disconnect(input.serverId);
+      return { success: true };
+    }),
 
   /**
    * List all tools from all connected servers.
    */
-  listTools: publicProcedure.query((): McpTool[] => {
-    return getMcpHost().listAllTools();
+  listTools: publicProcedure.query(({ ctx }): McpTool[] => {
+    return ctx.mcpHost.listAllTools();
   }),
 
   /**
@@ -47,8 +48,8 @@ export const mcpRouter = router({
         args: z.record(z.unknown()),
       }),
     )
-    .mutation(async ({ input }) => {
-      return getMcpHost().callTool(input.serverId, input.toolName, input.args);
+    .mutation(async ({ ctx, input }) => {
+      return ctx.mcpHost.callTool(input.serverId, input.toolName, input.args);
     }),
 
   /**

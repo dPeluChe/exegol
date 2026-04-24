@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { getAgentManager } from "../../agents/manager";
 import { listAgents } from "../../db/queries";
 import { detectPortConflicts, getProjectPorts } from "../../system/ports";
 import { getMetricsHistory, getProjectMetrics, getSystemMetrics } from "../../system/resources";
@@ -42,7 +41,7 @@ export const resourcesRouter = router({
     )
     .query(async ({ ctx, input }) => {
       // Collect PIDs of running agents for this project
-      const manager = getAgentManager();
+      const manager = ctx.agentManager;
       const runningIds = manager.listRunning();
       const agents = listAgents(ctx.db, input.projectId);
       const pids: number[] = [];

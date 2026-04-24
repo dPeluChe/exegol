@@ -5,7 +5,6 @@ import {
   AlertCircle,
   Bell,
   Check,
-  Database,
   Loader2,
   MessageSquare,
   Monitor,

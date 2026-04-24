@@ -104,6 +104,13 @@ contextBridge.exposeInMainWorld("api", {
       };
     },
   },
+  // T102: Design Mode + QA — browser pane inspection
+  browser: {
+    executeJs: (code: string) => ipcRenderer.invoke("browser:execute-js", { code }),
+    captureScreenshot: () => ipcRenderer.invoke("browser:capture-screenshot"),
+    captureElement: (selector: string) =>
+      ipcRenderer.invoke("browser:capture-element", { selector }),
+  },
   // T84: Picture-in-Picture pane floating windows
   floating: {
     /** Open a floating pane window from the main window */
@@ -113,6 +120,7 @@ contextBridge.exposeInMainWorld("api", {
       title: string;
       agentId?: string;
       url?: string;
+      projectId?: string;
     }) => ipcRenderer.invoke("floating:open", config),
     /** Close a specific floating pane window by paneId (from main window) */
     close: (paneId: string) => ipcRenderer.invoke("floating:close", paneId),

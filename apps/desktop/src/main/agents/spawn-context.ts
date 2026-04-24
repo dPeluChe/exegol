@@ -1,7 +1,14 @@
 import { randomBytes } from "node:crypto";
-import type { Agent, AgentCreate } from "@exegol/shared";
+import type { Agent, AgentAccessMode, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
 import type { AgentProviderRegistry } from "./registry";
+
+// ─── T58: Access mode system prompts ──────────────────────────────────────
+
+const ACCESS_MODE_PREFIXES: Record<string, string> = {
+  read: "[IMPORTANT: READ-ONLY MODE] You are running in explore-only mode. Do NOT write, edit, or create any files. Only read, search, and analyze the codebase. Report your findings but make no changes.\n\n",
+  plan: "[IMPORTANT: PLAN-ONLY MODE] You are running in plan mode. Analyze the codebase and produce a detailed implementation plan, but do NOT write, edit, or create any files. Output your plan as structured text.\n\n",
+};
 
 interface SpawnContextResult {
   memoryContext: string;
@@ -38,6 +45,7 @@ export function buildShellCommand(
   agent: Agent,
   cliConfig: { command: string; args: string[] },
   contextPrefix: string,
+  accessMode?: AgentAccessMode,
 ): string {
   const provider = registry.get(agent.cliType);
   const caps = provider?.capabilities;
@@ -46,11 +54,12 @@ export function buildShellCommand(
   const isQuickLaunch = registry.isQuickLaunchLabel(agent.taskDescription);
   const hasTask = agent.taskDescription && !isQuickLaunch;
 
+  // T58: Prepend access mode instruction to prompt
+  const modePrefix = accessMode ? (ACCESS_MODE_PREFIXES[accessMode] ?? "") : "";
+
   const fullPrompt = hasTask
-    ? contextPrefix
-      ? `${contextPrefix}# Task\n\n${agent.taskDescription}`
-      : agent.taskDescription
-    : "";
+    ? `${modePrefix}${contextPrefix ? `${contextPrefix}# Task\n\n` : ""}${agent.taskDescription}`
+    : modePrefix || "";
 
   if (!fullPrompt) {
     return cmdParts.join(" ");

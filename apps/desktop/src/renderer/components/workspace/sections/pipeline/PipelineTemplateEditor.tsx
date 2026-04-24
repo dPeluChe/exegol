@@ -1,5 +1,5 @@
 import type { AgentProvider } from "@exegol/shared";
-import { PIPELINE_STEP_ROLES, type PipelineStepDef } from "@exegol/shared";
+import { AGENT_ACCESS_MODES, PIPELINE_STEP_ROLES, type PipelineStepDef } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { GripVertical, Plus, Trash2, X } from "lucide-react";
@@ -196,6 +196,24 @@ export function PipelineTemplateEditor({
                       className="h-3 w-3 rounded"
                     />
                     Allow failure
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
+                    Mode:
+                    <select
+                      value={step.accessMode ?? "write"}
+                      onChange={(e) =>
+                        updateStep(i, {
+                          accessMode: e.target.value as PipelineStepDef["accessMode"],
+                        })
+                      }
+                      className="rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none"
+                    >
+                      {AGENT_ACCESS_MODES.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
                     Loop back to:

@@ -1,8 +1,8 @@
 import { execSync } from "node:child_process";
 import type { AgentCliType, AgentStatus } from "@exegol/shared";
-import { BrowserWindow } from "electron";
 import type Database from "libsql";
 import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
 import { showAgentNotification } from "../system/notifications";
@@ -31,9 +31,7 @@ export interface AgentStatusEvent {
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
 export function broadcastAgentStatus(event: AgentStatusEvent): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send("agent:status-changed", event);
-  }
+  broadcast("agent:status-changed", event);
   refreshTray();
 }
 

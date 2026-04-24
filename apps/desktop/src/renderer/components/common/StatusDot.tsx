@@ -1,8 +1,10 @@
-import type { AgentStatus } from "@exegol/shared";
+import type { AgentActivityLevel, AgentStatus } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 
 interface StatusDotProps {
   status: AgentStatus;
+  /** T70: Optional activity level for richer visual feedback */
+  activityLevel?: AgentActivityLevel;
   size?: "sm" | "md" | "lg";
   pulse?: boolean;
   className?: string;
@@ -26,9 +28,16 @@ const SIZE_CLASSES = {
   lg: "h-3.5 w-3.5",
 } as const;
 
-export function StatusDot({ status, size = "md", pulse, className }: StatusDotProps) {
+export function StatusDot({
+  status,
+  activityLevel,
+  size = "md",
+  pulse,
+  className,
+}: StatusDotProps) {
   const config = STATUS_COLORS[status] ?? STATUS_COLORS.idle;
-  const shouldPulse = pulse ?? config.defaultPulse;
+  // T70: Activity-aware pulse — busy always pulses, idle slows/stops
+  const shouldPulse = pulse ?? (activityLevel === "idle" ? false : config.defaultPulse);
 
   return (
     <span

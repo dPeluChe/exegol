@@ -28,7 +28,48 @@ export const AGENT_STATUSES = [
 ] as const;
 export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
-export const AGENT_ACCESS_MODES = ["read", "write"] as const;
+export const RUNNING_STATUSES = new Set<AgentStatus>(["running", "waiting_input"]);
+export const ACTIVE_STATUSES = new Set<AgentStatus>(["running", "spawning", "waiting_input"]);
+
+// ─── Activity Classification (T70) ─────────────────────────────────────────
+
+export const AGENT_ACTIVITY_LEVELS = ["busy", "idle", "neutral"] as const;
+export type AgentActivityLevel = (typeof AGENT_ACTIVITY_LEVELS)[number];
+
+/**
+ * Derive a coarse activity level from agent status + optional current step.
+ * This is a pure function — no side effects, no debounce. Callers handle timing.
+ *
+ * - **busy**: agent is actively doing work (running with a tool/thinking step)
+ * - **idle**: agent is alive but not doing anything (waiting for input, paused)
+ * - **neutral**: terminal state or not enough info to classify
+ */
+export function classifyActivity(
+  status: AgentStatus,
+  currentStep?: string | null,
+): AgentActivityLevel {
+  switch (status) {
+    case "running":
+    case "spawning":
+      // If we have a step signal, it's definitely busy
+      if (currentStep && currentStep !== "") return "busy";
+      // Running but no step detected yet — still busy (just started)
+      return "busy";
+    case "waiting_input":
+    case "paused":
+      return "idle";
+    case "completed":
+    case "failed":
+    case "stopped":
+    case "crashed":
+    case "idle":
+      return "neutral";
+    default:
+      return "neutral";
+  }
+}
+
+export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 
 export type Agent = {
@@ -43,7 +84,7 @@ export type Agent = {
   pid: number | null;
   startedAt: number | null;
   stoppedAt: number | null;
-  /** T99: read = explore-only (no git writes), write = full access (default) */
+  /** T58: read = explore-only, write = full access (default), plan = analysis-only (no file writes) */
   accessMode?: AgentAccessMode;
 };
 
@@ -60,7 +101,7 @@ export type AgentCreate = {
   resumeSession?: boolean;
   /** T101: ID of the agent whose claude_session_id should be used for --resume */
   resumeFromAgentId?: string;
-  /** T99: access mode — "read" for explore-only, "write" for full access (default) */
+  /** T58: access mode — "read" for explore-only, "write" for full access (default), "plan" for analysis-only */
   accessMode?: AgentAccessMode;
 };
 
@@ -164,6 +205,59 @@ export type QueueTask = {
   createdAt: number;
   startedAt: number | null;
   completedAt: number | null;
+};
+
+// ─── Parallel Runs (T65) ───────────────────────────────────────────────────
+
+export const PARALLEL_RUN_STATUSES = ["running", "completed", "failed", "cancelled"] as const;
+export type ParallelRunStatus = (typeof PARALLEL_RUN_STATUSES)[number];
+
+export type ParallelRun = {
+  id: string;
+  projectId: string;
+  taskDescription: string;
+  /** CLI types for each variant (could be the same or different providers) */
+  cliTypes: string[];
+  /** Agent IDs spawned for this run — length matches cliTypes */
+  agentIds: string[];
+  status: ParallelRunStatus;
+  /** Agent ID that was promoted as the winner (null until user chooses) */
+  promotedAgentId: string | null;
+  createdAt: number;
+  completedAt: number | null;
+};
+
+// ─── QA Tests (T102) ───────────────────────────────────────────────────────
+
+export const QA_TEST_STATUSES = ["saved", "running", "passed", "failed"] as const;
+export type QaTestStatus = (typeof QA_TEST_STATUSES)[number];
+
+export type QaTest = {
+  id: string;
+  projectId: string;
+  name: string;
+  /** The starting URL for the test */
+  startUrl: string;
+  /** JSON-serialized QaAction[] */
+  actions: string;
+  /** Number of actions in the test */
+  actionCount: number;
+  createdAt: number;
+  lastRunAt: number | null;
+  lastStatus: QaTestStatus;
+};
+
+export type QaTestRun = {
+  id: string;
+  testId: string;
+  status: QaTestStatus;
+  /** JSON-serialized array of step results: { actionIndex, passed, screenshotBase64?, error? } */
+  stepResults: string;
+  /** JSON-serialized string[] of console errors captured during run */
+  consoleErrors: string;
+  /** Total duration in ms */
+  durationMs: number;
+  createdAt: number;
 };
 
 // ─── Sessions ───────────────────────────────────────────────────────────────

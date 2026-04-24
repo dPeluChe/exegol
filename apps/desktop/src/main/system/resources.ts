@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import * as os from "node:os";
 import { promisify } from "node:util";
 import type { MetricsSnapshot } from "@exegol/shared";
-import { BrowserWindow } from "electron";
+import { broadcast } from "../lib/event-bus";
 
 const execFileAsync = promisify(execFile);
 
@@ -61,11 +61,9 @@ export function getMetricsHistory(): MetricsSnapshot[] {
   return metricsHistory;
 }
 
-/** Broadcast metrics to all renderer windows */
+/** Broadcast metrics to all connected clients */
 function broadcastMetrics(metrics: SystemMetrics): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send("metrics:update", metrics);
-  }
+  broadcast("metrics:update", metrics);
 }
 
 function cpuSnapshot() {
