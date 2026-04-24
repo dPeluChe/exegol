@@ -14,7 +14,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAgent, useScrollback, useSpawnAgent } from "../../hooks/use-trpc";
+import { useAgent, useScrollback, useSpawnAgent, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -82,6 +82,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const [hasData, setHasData] = useState(false);
   const hasEverHadDataRef = useRef(false);
   if (hasData) hasEverHadDataRef.current = true;
+  const [startTimedOut, setStartTimedOut] = useState(false);
+  const stopAgent = useStopAgent();
 
   // Don't show "Ended" UI until we've received at least one data chunk,
   // OR until scrollback is available in DB (reattach/reload scenario)
@@ -127,6 +129,13 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     });
     return unsub;
   }, [agentId, isStopped, hasData]);
+
+  // If the loading overlay is still showing after 8s, surface a dismiss button.
+  useEffect(() => {
+    if (hasData || isStopped) return;
+    const timer = window.setTimeout(() => setStartTimedOut(true), 8_000);
+    return () => window.clearTimeout(timer);
+  }, [hasData, isStopped]);
 
   // Listen for real-time handoff notifications on live agents (external system sync — rule #4)
   useEffect(() => {
@@ -355,10 +364,26 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     <div className="relative flex h-full flex-col">
       {!hasData && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg-primary transition-opacity">
-          <Loader2 className="h-5 w-5 animate-spin text-accent" />
-          <span className="text-[11px] text-text-muted">
-            Starting {agent?.cliType ?? "agent"}...
-          </span>
+          {startTimedOut ? (
+            <>
+              <AlertCircle className="h-5 w-5 text-text-muted" />
+              <span className="text-[11px] text-text-muted">Failed to start</span>
+              <button
+                type="button"
+                onClick={() => stopAgent.mutate(agentId)}
+                className="rounded px-3 py-1 text-[11px] text-error hover:bg-error/10"
+              >
+                Dismiss
+              </button>
+            </>
+          ) : (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin text-accent" />
+              <span className="text-[11px] text-text-muted">
+                Starting {agent?.cliType ?? "agent"}...
+              </span>
+            </>
+          )}
         </div>
       )}
       {resolvedHandoff && (

@@ -474,41 +474,39 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         {uniquePorts.length > 0 && (
           <div className="flex shrink-0 items-center gap-0.5">
             {uniquePorts.map((p) => (
-              <button
-                key={p.port}
-                type="button"
-                onClick={() => navigateToPort(p.port)}
-                className={cn(
-                  "flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] transition-colors",
-                  currentUrl.includes(`:${p.port}`)
-                    ? "bg-accent/20 text-accent"
-                    : "text-text-muted hover:bg-white/10 hover:text-text-primary",
-                )}
-              >
-                <span
+              <div key={p.port} className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => navigateToPort(p.port)}
                   className={cn(
-                    "inline-block h-1.5 w-1.5 rounded-full",
-                    p.source === "runtime" ? "bg-green-500" : "bg-zinc-500",
+                    "flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] transition-colors",
+                    currentUrl.includes(`:${p.port}`)
+                      ? "bg-accent/20 text-accent"
+                      : "text-text-muted hover:bg-white/10 hover:text-text-primary",
                   )}
-                />
-                {p.port}
+                >
+                  <span
+                    className={cn(
+                      "inline-block h-1.5 w-1.5 rounded-full",
+                      p.source === "runtime" ? "bg-green-500" : "bg-zinc-500",
+                    )}
+                  />
+                  {p.port}
+                </button>
                 {projectId && (
                   <button
                     type="button"
                     className={cn(
-                      "ml-0.5 cursor-pointer text-[8px]",
+                      "cursor-pointer text-[8px]",
                       preferredPort === p.port ? "text-amber-400" : "text-text-muted/40",
                     )}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPreferred.mutate({ projectId, port: p.port });
-                    }}
+                    onClick={() => setPreferred.mutate({ projectId, port: p.port })}
                     title={preferredPort === p.port ? "Preferred port" : "Set as preferred"}
                   >
                     &#9733;
                   </button>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         )}
