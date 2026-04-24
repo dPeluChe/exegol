@@ -21,6 +21,10 @@ export interface QaStepResult {
   error?: string;
   screenshotBase64?: string;
   durationMs: number;
+  /** Texts from [role="alert"] and aria-invalid described-by elements detected after this step. */
+  alertsDetected?: string[];
+  /** console.error calls that occurred during this specific step. */
+  newConsoleErrors?: string[];
 }
 
 export interface QaReplayResult {
@@ -99,10 +103,12 @@ export const QA_REPLAY_INJECTION_SCRIPT = `(function() {
 
   // --- Replay functions ---
 
-  window.__exegolQaReplayClick = function(selector, x, y) {
+  window.__exegolQaReplayClick = function(selector) {
     return waitForSelector(selector, TIMEOUT).then(function(found) {
       if (!found) throw new Error("Element not found: " + selector);
       var el = document.querySelector(selector);
+      // Scroll into view first so off-screen elements are reachable
+      el.scrollIntoView({ block: 'nearest', behavior: 'instant' });
       var rect = el.getBoundingClientRect();
       // Always use element's current center — stored coords are viewport-specific
       var clientX = Math.round(rect.left + rect.width / 2);
@@ -163,6 +169,55 @@ export const QA_REPLAY_INJECTION_SCRIPT = `(function() {
   window.__exegolQaReplayGetErrors = function() {
     return __replayErrors.slice();
   };
+
+  // Returns count of console errors captured so far (for per-step delta)
+  window.__exegolQaReplayGetErrorCount = function() {
+    return __replayErrors.length;
+  };
+
+  // Returns console errors captured since index idx
+  window.__exegolQaReplayGetErrorsSince = function(idx) {
+    return __replayErrors.slice(idx);
+  };
+
+  // Collect visible alert/error texts from the DOM
+  window.__exegolQaGetAlerts = function() {
+    var texts = [];
+    // Standard ARIA alerts and assertive live regions
+    document.querySelectorAll('[role="alert"], [aria-live="assertive"]').forEach(function(el) {
+      var t = el.textContent && el.textContent.trim();
+      if (t) texts.push(t);
+    });
+    // Fields marked invalid — resolve their aria-describedby error message
+    document.querySelectorAll('[aria-invalid="true"]').forEach(function(el) {
+      var descId = el.getAttribute('aria-describedby');
+      if (descId) {
+        descId.split(/\\s+/).forEach(function(id) {
+          var desc = document.getElementById(id);
+          var t = desc && desc.textContent && desc.textContent.trim();
+          if (t) texts.push(t);
+        });
+      }
+    });
+    // Deduplicate
+    return texts.filter(function(t, i, a) { return a.indexOf(t) === i; });
+  };
+
+  // Assert an element exists, optionally containing specific text
+  window.__exegolQaReplayAssert = function(selector, expectedText) {
+    var el = document.querySelector(selector);
+    if (!el) throw new Error('Assert failed — element not found: ' + selector);
+    if (expectedText !== undefined) {
+      var text = (el.textContent || '').trim();
+      if (text.indexOf(expectedText) === -1) {
+        throw new Error(
+          'Assert failed — expected "' + expectedText + '" in <' +
+          el.tagName.toLowerCase() + '>, got: "' + text.slice(0, 120) + '"'
+        );
+      }
+    }
+    return true;
+  };
 })();`;
 
 // ---------------------------------------------------------------------------
@@ -182,11 +237,8 @@ function escapeJs(s: string): string {
 /** Build the JS expression to execute in the webview for a given action. */
 function buildStepExpression(action: QaAction): string {
   switch (action.type) {
-    case "click": {
-      const x = action.coordinates?.x ?? "undefined";
-      const y = action.coordinates?.y ?? "undefined";
-      return `window.__exegolQaReplayClick('${escapeJs(action.selector)}', ${x}, ${y})`;
-    }
+    case "click":
+      return `window.__exegolQaReplayClick('${escapeJs(action.selector)}')`;
 
     case "input":
       return `window.__exegolQaReplayFill('${escapeJs(action.selector)}', '${escapeJs(action.value ?? "")}')`;
@@ -196,6 +248,11 @@ function buildStepExpression(action: QaAction): string {
 
     case "navigate":
       return `window.__exegolQaReplayNavigate('${escapeJs(action.url ?? "")}')`;
+
+    case "assert": {
+      const text = action.value ? `, '${escapeJs(action.value)}'` : "";
+      return `window.__exegolQaReplayAssert('${escapeJs(action.selector)}'${text})`;
+    }
 
     case "scroll":
       // Scroll actions are informational during recording; skip during replay.
@@ -251,6 +308,21 @@ export async function replayQaTest(
     let passed = false;
     let error: string | undefined;
     let screenshotBase64: string | undefined;
+    let alertsDetected: string[] | undefined;
+    let newConsoleErrors: string[] | undefined;
+
+    const isNoOp = action.type === "scroll";
+
+    // Snapshot error count before the step to compute per-step delta after.
+    let errorCountBefore = 0;
+    if (!isNoOp) {
+      try {
+        const n = await executeJs("window.__exegolQaReplayGetErrorCount()");
+        if (typeof n === "number") errorCountBefore = n;
+      } catch {
+        // ignore — may not be injected yet on first step
+      }
+    }
 
     try {
       const expression = buildStepExpression(action);
@@ -261,15 +333,33 @@ export async function replayQaTest(
       error = err instanceof Error ? err.message : String(err);
     }
 
-    // Wait for DOM to settle before capturing screenshot / next step.
-    await delay(INTER_STEP_DELAY_MS);
+    if (!isNoOp) {
+      // Wait for DOM to settle (react to state changes, animations, etc.)
+      await delay(INTER_STEP_DELAY_MS);
 
-    // Capture screenshot with 3s timeout — best-effort, non-critical.
-    try {
-      const shot = await withTimeout(captureScreenshot(), 3_000);
-      if (shot) screenshotBase64 = shot;
-    } catch {
-      // ignore
+      // Capture alerts, console errors, and screenshot concurrently.
+      const [alertsResult, errorsResult, shotResult] = await Promise.allSettled([
+        executeJs("window.__exegolQaGetAlerts()"),
+        executeJs(`window.__exegolQaReplayGetErrorsSince(${errorCountBefore})`),
+        withTimeout(captureScreenshot(), 3_000),
+      ]);
+      if (
+        alertsResult.status === "fulfilled" &&
+        Array.isArray(alertsResult.value) &&
+        alertsResult.value.length > 0
+      ) {
+        alertsDetected = alertsResult.value as string[];
+      }
+      if (
+        errorsResult.status === "fulfilled" &&
+        Array.isArray(errorsResult.value) &&
+        errorsResult.value.length > 0
+      ) {
+        newConsoleErrors = errorsResult.value as string[];
+      }
+      if (shotResult.status === "fulfilled" && shotResult.value) {
+        screenshotBase64 = shotResult.value;
+      }
     }
 
     const result: QaStepResult = {
@@ -279,6 +369,8 @@ export async function replayQaTest(
       error,
       screenshotBase64,
       durationMs: Date.now() - stepStart,
+      alertsDetected,
+      newConsoleErrors,
     };
 
     stepResults.push(result);

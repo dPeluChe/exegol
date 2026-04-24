@@ -12,7 +12,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type QaActionType = "click" | "input" | "navigate" | "scroll" | "keypress";
+export type QaActionType = "click" | "input" | "navigate" | "scroll" | "keypress" | "assert";
 
 export interface QaAction {
   type: QaActionType;
@@ -120,9 +120,24 @@ export const QA_MODE_INJECTION_SCRIPT = `(function() {
 
   ${buildSelectorSource()}
 
+  var INTERACTIVE_TAGS = /^(a|button|input|select|textarea|label)$/i;
+  var INTERACTIVE_ROLES = /^(button|link|checkbox|radio|menuitem|tab|option)$/i;
+
+  // Walk up to nearest interactive ancestor so we record <a>/<button> not inner <span>/<svg>
+  function __exegolInteractiveAncestor(el) {
+    var node = el;
+    while (node && node !== document.body) {
+      if (INTERACTIVE_TAGS.test(node.tagName)) return node;
+      var role = node.getAttribute && node.getAttribute("role");
+      if (role && INTERACTIVE_ROLES.test(role)) return node;
+      node = node.parentElement;
+    }
+    return el;
+  }
+
   // --- Click handler ---
   function onClickCapture(e) {
-    var target = e.target;
+    var target = __exegolInteractiveAncestor(e.target);
     if (!target || !target.tagName) return;
     actions.push({
       type: "click",
@@ -209,6 +224,18 @@ export const QA_MODE_INJECTION_SCRIPT = `(function() {
   window.addEventListener("popstate", onNavEvent);
   window.addEventListener("hashchange", onNavEvent);
 
+  // --- Manual assert recording ---
+  window.__exegolQaAddAssert = function(selector, text) {
+    if (!document.querySelector(selector)) return false;
+    actions.push({
+      type: "assert",
+      timestamp: Date.now(),
+      selector: selector,
+      value: text || undefined
+    });
+    return true;
+  };
+
   // --- Disable / cleanup ---
   window.__exegolQaDisable = function() {
     document.removeEventListener("click", onClickCapture, true);
@@ -275,6 +302,20 @@ export function exportToPlaywright(recording: QaRecording): string {
         }
         break;
 
+      case "assert":
+        if (action.selector) {
+          if (action.value) {
+            lines.push(
+              `  await expect(page.locator('${escapeJsString(action.selector)}')).toContainText('${escapeJsString(action.value)}');`,
+            );
+          } else {
+            lines.push(
+              `  await expect(page.locator('${escapeJsString(action.selector)}')).toBeVisible();`,
+            );
+          }
+        }
+        break;
+
       case "scroll":
         // Scroll actions are informational — no direct Playwright mapping
         lines.push(`  // scroll at ${action.selector}`);
@@ -303,6 +344,8 @@ function actionLabel(type: QaActionType): string {
       return "SCROLL";
     case "keypress":
       return "KEYPRESS";
+    case "assert":
+      return "ASSERT";
   }
 }
 
@@ -326,6 +369,10 @@ function formatAction(action: QaAction, index: number): string {
       return `${num} ${label} ${action.selector} → [${action.value ?? ""}]`;
     case "scroll":
       return `${num} ${label} ${action.selector}`;
+    case "assert":
+      return action.value
+        ? `${num} ${label} ${action.selector} contains "${action.value}"`
+        : `${num} ${label} ${action.selector} is visible`;
   }
 }
 
