@@ -104,8 +104,17 @@ export const QA_REPLAY_INJECTION_SCRIPT = `(function() {
       if (!found) throw new Error("Element not found: " + selector);
       var el = document.querySelector(selector);
       var rect = el.getBoundingClientRect();
-      var clientX = typeof x === "number" ? x : Math.round(rect.left + rect.width / 2);
-      var clientY = typeof y === "number" ? y : Math.round(rect.top + rect.height / 2);
+      // Always use element's current center — stored coords are viewport-specific
+      var clientX = Math.round(rect.left + rect.width / 2);
+      var clientY = Math.round(rect.top + rect.height / 2);
+
+      // Visual cursor dot so the user can see where each click lands
+      var dot = document.createElement('div');
+      dot.style.cssText = 'position:fixed;z-index:2147483647;width:18px;height:18px;border-radius:50%;background:rgba(239,68,68,0.75);border:2px solid rgba(255,255,255,0.9);box-shadow:0 0 0 4px rgba(239,68,68,0.25);transform:translate(-50%,-50%);pointer-events:none;transition:opacity 0.35s ease-out;left:' + clientX + 'px;top:' + clientY + 'px';
+      document.documentElement.appendChild(dot);
+      setTimeout(function() { dot.style.opacity = '0'; }, 350);
+      setTimeout(function() { if (dot.parentNode) dot.parentNode.removeChild(dot); }, 700);
+
       el.dispatchEvent(new MouseEvent("click", {
         bubbles: true, cancelable: true, view: window,
         clientX: clientX, clientY: clientY

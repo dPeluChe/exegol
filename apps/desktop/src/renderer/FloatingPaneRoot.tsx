@@ -123,6 +123,107 @@ function FloatingTitleBar({ title, type }: { title: string; type: "terminal" | "
   );
 }
 
+// ─── FloatIssueBubble ────────────────────────────────────────────────────────
+
+interface FloatIssueBubbleProps {
+  element: CapturedElement;
+  message: string;
+  onMessageChange: (v: string) => void;
+  agents: Agent[];
+  onSend: (agentId: string) => void;
+  onCopy: () => void;
+  onDismiss: () => void;
+}
+
+function FloatIssueBubble({
+  element,
+  message,
+  onMessageChange,
+  agents,
+  onSend,
+  onCopy,
+  onDismiss,
+}: FloatIssueBubbleProps) {
+  const { rect } = element;
+  const cx = rect.x + rect.width / 2;
+  const above = rect.y > 180;
+
+  return (
+    <div
+      className="absolute z-30 w-72 overflow-hidden rounded-xl border border-blue-500/30 bg-bg-secondary/95 shadow-2xl backdrop-blur-sm"
+      style={{
+        left: `clamp(8px, ${Math.round(cx - 144)}px, calc(100% - 296px))`,
+        ...(above
+          ? { bottom: `calc(100% - ${rect.y - 10}px)` }
+          : { top: `${rect.y + rect.height + 10}px` }),
+      }}
+    >
+      {/* Arrow */}
+      <div
+        className="absolute left-1/2 h-2.5 w-2.5 border-blue-500/30 bg-bg-secondary/95"
+        style={
+          above
+            ? {
+                bottom: -6,
+                borderRightWidth: 1,
+                borderBottomWidth: 1,
+                transform: "translateX(-50%) rotate(45deg)",
+              }
+            : {
+                top: -6,
+                borderLeftWidth: 1,
+                borderTopWidth: 1,
+                transform: "translateX(-50%) rotate(45deg)",
+              }
+        }
+      />
+      <div className="p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-medium text-blue-300">
+            &lt;{element.tagName}&gt; {rect.width}×{rect.height}px
+          </span>
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="text-[10px] leading-none text-text-muted hover:text-text-primary"
+          >
+            ×
+          </button>
+        </div>
+        <p className="mb-2 truncate font-mono text-[9px] text-text-muted">{element.selector}</p>
+        <textarea
+          value={message}
+          onChange={(e) => onMessageChange(e.target.value)}
+          placeholder="Describe what needs to change (optional)..."
+          className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-primary placeholder:text-text-muted/50 focus:border-blue-500/50 focus:outline-none"
+          rows={2}
+        />
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {agents.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onSend(a.id)}
+              className="flex items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-[9px] text-blue-300 hover:bg-blue-500/20"
+            >
+              <Send className="h-2.5 w-2.5" /> {a.cliType}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={onCopy}
+            className="rounded px-2 py-1 text-[9px] text-text-muted hover:bg-white/5"
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── FloatingBrowser ─────────────────────────────────────────────────────────
+
 function FloatingBrowser({ url, projectId }: { url: string; projectId?: string }) {
   const webviewRef = useRef<HTMLElement | null>(null);
   const [currentUrl, setCurrentUrl] = useState(url);
@@ -395,8 +496,8 @@ function FloatingBrowser({ url, projectId }: { url: string; projectId?: string }
         <div className="flex-1 truncate px-1 text-[9px] text-text-muted">{currentUrl}</div>
       </div>
 
-      {/* Webview */}
-      <div className="flex-1 overflow-hidden bg-white">
+      {/* Webview + floating bubble */}
+      <div className="relative flex-1 overflow-hidden bg-white">
         <webview
           // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
           ref={webviewRef as React.Ref<any>}
@@ -404,66 +505,31 @@ function FloatingBrowser({ url, projectId }: { url: string; projectId?: string }
           className="h-full w-full"
           {...({ allowpopups: "true" } as Record<string, string>)}
         />
-      </div>
 
-      {/* Design capture — issue reporter */}
-      {capturedElement && (
-        <div className="shrink-0 border-t border-blue-500/20 bg-blue-500/5 px-3 py-2">
-          <div className="mb-1 flex items-center justify-between">
-            <span className="text-[10px] font-medium text-blue-300">
-              &lt;{capturedElement.tagName}&gt; {capturedElement.rect.width}×
-              {capturedElement.rect.height}px
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setCapturedElement(null);
-                setIssueMessage("");
-              }}
-              className="text-[10px] text-text-muted hover:text-text-primary"
-            >
-              ×
-            </button>
-          </div>
-          <p className="mb-1.5 truncate font-mono text-[9px] text-text-muted">
-            {capturedElement.selector}
-          </p>
-          <textarea
-            value={issueMessage}
-            onChange={(e) => setIssueMessage(e.target.value)}
-            placeholder="Describe what needs to change (optional)..."
-            className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-primary placeholder:text-text-muted/50 focus:border-blue-500/50 focus:outline-none"
-            rows={2}
+        {/* Design capture — floating issue reporter bubble */}
+        {capturedElement && (
+          <FloatIssueBubble
+            element={capturedElement}
+            message={issueMessage}
+            onMessageChange={setIssueMessage}
+            agents={runningAgents}
+            onSend={(agentId) => {
+              sendToAgent(agentId, buildDesignIssue(capturedElement, issueMessage));
+              setCapturedElement(null);
+              setIssueMessage("");
+            }}
+            onCopy={() => {
+              navigator.clipboard.writeText(buildDesignIssue(capturedElement, issueMessage));
+              setCapturedElement(null);
+              setIssueMessage("");
+            }}
+            onDismiss={() => {
+              setCapturedElement(null);
+              setIssueMessage("");
+            }}
           />
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            {runningAgents.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => {
-                  sendToAgent(a.id, buildDesignIssue(capturedElement, issueMessage));
-                  setCapturedElement(null);
-                  setIssueMessage("");
-                }}
-                className="flex items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-[9px] text-blue-300 hover:bg-blue-500/20"
-              >
-                <Send className="h-2.5 w-2.5" /> {a.cliType}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(buildDesignIssue(capturedElement, issueMessage));
-                setCapturedElement(null);
-                setIssueMessage("");
-              }}
-              className="rounded px-2 py-1 text-[9px] text-text-muted hover:bg-white/5"
-            >
-              Copy
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* QA recording result */}
       {qaRecording && (
