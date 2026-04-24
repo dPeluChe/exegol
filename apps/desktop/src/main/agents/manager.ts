@@ -27,6 +27,7 @@ import {
 import { getProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
 import {
+  _getFullPath,
   broadcastAgentStatus,
   buildApiKeyEnv,
   coreRust,
@@ -274,15 +275,19 @@ export class AgentManager {
 
       shell = userShell;
       if (isInteractiveCli) {
-        args = ["-il"];
+        args = ["-i"];
         stdinCommand = fullCommand;
       } else {
-        args = ["-ilc", fullCommand];
+        args = ["-ic", fullCommand];
       }
       env = {
         ...process.env,
         ...apiKeyEnv,
         ...cliConfig.env,
+        // Inject the resolved shell PATH so the -l (login) flag is not needed.
+        // Without -l, .zprofile/.profile are skipped — saves 50-200ms per spawn.
+        // .zshrc still loads via -i so NVM, pyenv, etc. remain available.
+        PATH: _getFullPath(),
         TERM: "xterm-256color",
         EXEGOL_AGENT_ID: agent.id,
         EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
