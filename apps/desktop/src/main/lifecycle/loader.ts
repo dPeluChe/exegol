@@ -32,6 +32,12 @@ const KEY_ALIASES: Record<string, keyof LifecycleConfig> = {
 
 const HOOK_TIMEOUT_MS = 120_000; // 2 minutes
 
+// ─── Per-path lifecycle config cache (session-scoped) ──────────────────────
+// lifecycle.yaml is read twice per spawn (runSetupIfNeeded + manager explicit call).
+// Cache eliminates the duplicate existsSync+readFileSync on subsequent calls.
+
+const lifecycleConfigCache = new Map<string, LifecycleConfig | null>();
+
 // ─── Track which projects have had setup run this session ──────────────────
 
 const setupRanThisSession = new Set<string>();
@@ -49,23 +55,32 @@ export function markSetupRan(projectPath: string): void {
 /**
  * Load .exegol/lifecycle.yaml from the given project path.
  * Returns null if the file doesn't exist or has no valid keys.
+ * Result is cached for the session lifetime (file rarely changes at runtime).
  */
 export function loadLifecycleConfig(projectPath: string): LifecycleConfig | null {
+  if (lifecycleConfigCache.has(projectPath)) {
+    return lifecycleConfigCache.get(projectPath) ?? null;
+  }
   const dir = join(projectPath, ".exegol");
   const yamlPath = existsSync(join(dir, "lifecycle.yaml"))
     ? join(dir, "lifecycle.yaml")
     : existsSync(join(dir, "lifecycle.yml"))
       ? join(dir, "lifecycle.yml")
       : null;
-  if (!yamlPath) return null;
-
-  try {
-    const content = readFileSync(yamlPath, "utf-8");
-    return parseLifecycleYaml(content);
-  } catch (err) {
-    logger.warn("[Lifecycle] Failed to read lifecycle config:", err);
+  if (!yamlPath) {
+    lifecycleConfigCache.set(projectPath, null);
     return null;
   }
+
+  let result: LifecycleConfig | null = null;
+  try {
+    const content = readFileSync(yamlPath, "utf-8");
+    result = parseLifecycleYaml(content);
+  } catch (err) {
+    logger.warn("[Lifecycle] Failed to read lifecycle config:", err);
+  }
+  lifecycleConfigCache.set(projectPath, result);
+  return result;
 }
 
 /**

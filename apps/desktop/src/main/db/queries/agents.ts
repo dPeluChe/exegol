@@ -82,6 +82,19 @@ export function setAgentPid(db: Database.Database, agentId: string, pid: number)
   db.prepare("UPDATE agents SET pid = ? WHERE id = ?").run(pid, agentId);
 }
 
+/**
+ * Single-query post-spawn activation: sets pid, session_id, and status = "running"
+ * in one round-trip, replacing the three separate UPDATEs previously issued after
+ * ptyHost.createSession() resolves.
+ */
+export function activateAgent(db: Database.Database, agentId: string, pid: number): void {
+  db.prepare("UPDATE agents SET pid = ?, session_id = ?, status = 'running' WHERE id = ?").run(
+    pid,
+    agentId,
+    agentId,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Recent Sessions
 // ---------------------------------------------------------------------------

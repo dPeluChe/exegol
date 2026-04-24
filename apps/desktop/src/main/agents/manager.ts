@@ -1,12 +1,12 @@
 import type { Agent, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
 import {
+  activateAgent,
   createOplogEntry,
   createWorktree as dbCreateWorktree,
   getAgent,
   insertActivity,
   listWorktrees,
-  setAgentPid,
   setAgentWorktree,
   stopAgent,
   updateAgentStatus,
@@ -347,9 +347,8 @@ export class AgentManager {
       { scrollbackPath, shellReadyGating: enableMarker },
     );
 
-    setAgentPid(db, agent.id, pid);
-    // Session ID = agent ID (PTY sessions are keyed by agent.id)
-    db.prepare("UPDATE agents SET session_id = ? WHERE id = ?").run(agent.id, agent.id);
+    // Single round-trip: pid + session_id + status = 'running'
+    activateAgent(db, agent.id, pid);
 
     // Interactive CLIs: inject the command after shell initializes
     if (stdinCommand) {
@@ -358,7 +357,6 @@ export class AgentManager {
       }, 500);
     }
 
-    updateAgentStatus(db, agent.id, "running");
     broadcastAgentStatus({
       agentId: agent.id,
       projectId: agent.projectId,
