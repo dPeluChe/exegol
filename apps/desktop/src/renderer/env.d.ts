@@ -93,6 +93,7 @@ interface Window {
         title: string;
         agentId?: string;
         url?: string;
+        projectId?: string;
       }) => Promise<void>;
       close: (paneId: string) => Promise<void>;
       selfClose: () => void;

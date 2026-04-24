@@ -24,6 +24,7 @@ import {
   useSetPreferredPort,
 } from "../../hooks/use-trpc-scheduler";
 import {
+  buildDesignIssue,
   type CapturedElement,
   DESIGN_MODE_INJECTION_SCRIPT,
   formatElementForAgent,
@@ -39,6 +40,8 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
+
+const RUNNING = new Set(["running", "waiting_input"]);
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -81,6 +84,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [designMode, setDesignMode] = useState(false);
   const [qaMode, setQaMode] = useState(false);
   const [capturedElement, setCapturedElement] = useState<CapturedElement | null>(null);
+  const [issueMessage, setIssueMessage] = useState("");
   const [qaRecording, setQaRecording] = useState<QaRecording | null>(null);
   const [replayResult, setReplayResult] = useState<QaReplayResult | null>(null);
   const [replaying, setReplaying] = useState(false);
@@ -90,6 +94,12 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [savedTestId, setSavedTestId] = useState<string | null>(null);
   const [stopOnFail, setStopOnFail] = useState(true);
   const [qaActionCount, setQaActionCount] = useState(0);
+  const allAgents = useAgentStore((s) => s.agents);
+  const runningAgents = useMemo(
+    () =>
+      Object.values(allAgents).filter((a) => a.projectId === projectId && RUNNING.has(a.status)),
+    [allAgents, projectId],
+  );
   const designPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const replayCancelledRef = useRef(false);
 
@@ -132,11 +142,13 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       designPollRef.current = setInterval(async () => {
         const result = await safeExecJs("window.__exegolDesignCapture");
         if (result) {
-          setCapturedElement(result as CapturedElement);
           if (designPollRef.current) {
             clearInterval(designPollRef.current);
             designPollRef.current = null;
           }
+          await safeExecJs("window.__exegolDesignDisable?.()");
+          setDesignMode(false);
+          setCapturedElement(result as CapturedElement);
         }
       }, DESIGN_POLL_INTERVAL_MS);
       // Auto-stop after 60s
@@ -189,14 +201,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     }
   }, [qaMode, designMode, currentUrl, safeExecJs]);
 
-  // T102: Send captured context to focused agent
-  const sendToAgent = useCallback((text: string) => {
-    const { focusedAgentId } = useAgentStore.getState();
-    if (focusedAgentId) {
-      window.api.terminal.write(focusedAgentId, `${text}\n`);
-    } else {
-      navigator.clipboard.writeText(text);
-    }
+  const sendToAgent = useCallback((agentId: string, text: string) => {
+    window.api.terminal.write(agentId, `${text}\n`);
   }, []);
 
   // T102: Save QA recording as a reusable test
@@ -578,45 +584,64 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         )}
       </div>
 
-      {/* T102: Design Mode capture result */}
+      {/* T102: Design Mode — issue reporter */}
       {capturedElement && (
-        <div className="shrink-0 border-t border-border bg-blue-500/5 px-3 py-2">
-          <div className="flex items-center justify-between">
+        <div className="shrink-0 border-t border-blue-500/20 bg-blue-500/5 px-3 py-2">
+          <div className="mb-1 flex items-center justify-between">
             <span className="text-[10px] font-medium text-blue-300">
-              Captured: &lt;{capturedElement.tagName}&gt; {capturedElement.rect.width}x
+              &lt;{capturedElement.tagName}&gt; {capturedElement.rect.width}×
               {capturedElement.rect.height}px
             </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => sendToAgent(formatElementForAgent(capturedElement))}
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-blue-300 hover:bg-blue-500/10"
-                title="Send to focused agent"
-              >
-                <Send className="h-2.5 w-2.5" /> Send to Agent
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(formatElementForAgent(capturedElement));
-                  setCapturedElement(null);
-                }}
-                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                onClick={() => setCapturedElement(null)}
-                className="rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
-              >
-                Dismiss
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCapturedElement(null);
+                setIssueMessage("");
+              }}
+              className="text-[10px] text-text-muted hover:text-text-primary"
+            >
+              ×
+            </button>
           </div>
-          <p className="mt-0.5 truncate font-mono text-[9px] text-text-muted">
+          <p className="mb-1.5 truncate font-mono text-[9px] text-text-muted">
             {capturedElement.selector}
           </p>
+          <textarea
+            value={issueMessage}
+            onChange={(e) => setIssueMessage(e.target.value)}
+            placeholder="Describe what needs to change (optional)..."
+            className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-primary placeholder:text-text-muted/50 focus:border-blue-500/50 focus:outline-none"
+            rows={2}
+          />
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {runningAgents.length > 0
+              ? runningAgents.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => {
+                      sendToAgent(a.id, buildDesignIssue(capturedElement, issueMessage));
+                      setCapturedElement(null);
+                      setIssueMessage("");
+                    }}
+                    className="flex items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-[9px] text-blue-300 hover:bg-blue-500/20"
+                  >
+                    <Send className="h-2.5 w-2.5" /> {a.cliType}
+                  </button>
+                ))
+              : null}
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(buildDesignIssue(capturedElement, issueMessage));
+                setCapturedElement(null);
+                setIssueMessage("");
+              }}
+              className="rounded px-2 py-1 text-[9px] text-text-muted hover:bg-white/5"
+            >
+              Copy
+            </button>
+          </div>
         </div>
       )}
 
@@ -654,14 +679,29 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
                   Cancel
                 </button>
               )}
-              <button
-                type="button"
-                onClick={() => sendToAgent(formatRecordingForAgent(qaRecording))}
-                className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/10"
-                title="Send to focused agent"
-              >
-                <Send className="h-2.5 w-2.5" /> Agent
-              </button>
+              {runningAgents.length > 0 ? (
+                runningAgents.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => sendToAgent(a.id, formatRecordingForAgent(qaRecording))}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/10"
+                    title={`Send to ${a.cliType}`}
+                  >
+                    <Send className="h-2.5 w-2.5" /> {a.cliType}
+                  </button>
+                ))
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard.writeText(formatRecordingForAgent(qaRecording))
+                  }
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-text-muted hover:bg-white/5"
+                >
+                  <Send className="h-2.5 w-2.5" /> Copy
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => navigator.clipboard.writeText(exportToPlaywright(qaRecording))}

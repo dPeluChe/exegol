@@ -71,6 +71,7 @@ function PaneToolbar({
         type: "browser",
         title: "Browser",
         url: pane.url,
+        projectId: projectId ?? undefined,
       });
     }
   }, [panes, paneId, markPaneFloating]);

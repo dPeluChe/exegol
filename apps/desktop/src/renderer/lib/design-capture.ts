@@ -81,6 +81,16 @@ export function getCssSelector(el: Element): string {
 // ─── Context Formatter ─────────────────────────────────────────────────────
 
 /**
+ * Combine captured element info with an optional issue description into a
+ * prompt-ready string. Falls back to formatElementForAgent when message is empty.
+ */
+export function buildDesignIssue(element: CapturedElement, message: string): string {
+  const base = formatElementForAgent(element);
+  const trimmed = message.trim();
+  return trimmed ? `${base}\n\nIssue: ${trimmed}` : base;
+}
+
+/**
  * Format a CapturedElement into a prompt-ready string suitable for
  * injecting into an agent's stdin.
  */

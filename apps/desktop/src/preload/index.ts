@@ -120,6 +120,7 @@ contextBridge.exposeInMainWorld("api", {
       title: string;
       agentId?: string;
       url?: string;
+      projectId?: string;
     }) => ipcRenderer.invoke("floating:open", config),
     /** Close a specific floating pane window by paneId (from main window) */
     close: (paneId: string) => ipcRenderer.invoke("floating:close", paneId),
