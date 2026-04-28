@@ -1,641 +1,387 @@
 # System Architecture
 
-## High-Level Architecture
+## High-Level Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                     Electron Main Process                         │
-│                                                                   │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
-│  │ AgentManager  │  │  Resources   │  │  Global Hotkey       │   │
-│  │ (node-pty     │  │  Collector   │  │  (Cmd+Shift+E)       │   │
-│  │  + status     │  │  (10s bg)    │  │                      │   │
-│  │  parser)      │  │  CPU/RAM/Disk│  │                      │   │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────────────┘   │
-│         │                  │                                      │
-│  ┌──────┴──────────────────┴──────────────────────────────────┐  │
-│  │        tRPC Router (createCaller proxy traversal)           │  │
-│  │  projects | agents | settings | tokenUsage | resources      │  │
-│  └──────┬──────────────────────────────────────────────┬──────┘  │
-│         │                                              │         │
-│  ┌──────┴──────┐  ┌──────────┐  ┌──────────────────┐  │         │
-│  │   libSQL    │  │ node-pty │  │  IPC handlers     │  │         │
-│  │  (11 tables │  │ (agents) │  │  terminal:write   │  │         │
-│  │  12 migr.)  │  │          │  │  terminal:resize  │  │         │
-│  └─────────────┘  └──────────┘  │  dialog, window   │  │         │
-│                                  └──────────────────┘  │         │
-│                                                         │         │
-│  ┌──────────────────────────────────────────────────────┘         │
-│  │         Rust Native (napi-rs) — scaffold only                  │
-│  │  ┌────────┐                                                    │
-│  │  │  git2  │  (worktree ops — not yet wired to agent spawn)     │
-│  │  └────────┘                                                    │
-│  └────────────────────────────────────────────────────────────┘   │
-│                                                                    │
-│  PLANNED (not yet implemented):                                    │
-│  Hook Engine, Skill Loader, Plan FSM, MCP Host, Memory System,    │
-│  Worktree Manager, Repo Map Generator                              │
-└──────────────────────┬─────────────────────────────────────────────┘
-                       │ IPC (tRPC via createCaller, raw ipcMain)
-┌──────────────────────┴─────────────────────────────────────────────┐
-│                    Electron Renderer                                │
+┌────────────────────────────────────────────────────────────────────┐
+│                        Electron Main Process                        │
 │                                                                     │
-│  ┌───────────────────────────────────────────────────────────────┐ │
-│  │                React 18 + Zustand (persist) + TailwindCSS 4   │ │
-│  │                                                                │ │
-│  │  ┌──────────────┐  ┌───────────────────┐  ┌───────────────┐  │ │
-│  │  │  TitleBar     │  │ Sidebar            │  │ StatusBar     │  │ │
-│  │  │  (hidden      │  │  SidebarSection    │  │               │  │ │
-│  │  │   titlebar)   │  │  ProjectsSection   │  │               │  │ │
-│  │  └──────────────┘  │  RecentSessions    │  └───────────────┘  │ │
-│  │                     │  AgentLauncher     │                     │ │
-│  │                     │  SidebarFooter:    │                     │ │
-│  │                     │   Schedulers       │                     │ │
-│  │                     │   Resources        │                     │ │
-│  │                     └───────────────────┘                     │ │
-│  │                                                                │ │
-│  │  ┌────────────────────────────────────────────────────────┐   │ │
-│  │  │  WorkspaceView + WorkspaceTabBar (multi-tab workspace)   │   │ │
-│  │  │  ┌──────────────────────────────────────────────────┐   │   │ │
-│  │  │  │  WorkspaceLayout (recursive split pane tree)      │   │   │ │
-│  │  │  │  ┌────────────┐ ┌──────────┐ ┌───────────────┐  │   │   │ │
-│  │  │  │  │ Terminal   │ │ Browser  │ │ FileExplorer  │  │   │   │ │
-│  │  │  │  │ (xterm.js) │ │ (webview)│ │ (Monaco view) │  │   │   │ │
-│  │  │  │  └────────────┘ └──────────┘ └───────────────┘  │   │   │ │
-│  │  │  └──────────────────────────────────────────────────┘   │   │ │
-│  │  │  Sections: Tasks | Prompts | Diff | Scheduler | Tokens │   │ │
-│  │  └────────────────────────────────────────────────────────┘   │ │
-│  │                                                                │ │
-│  │  ┌────────────────┐  ┌─────────────────┐  ┌──────────────┐   │ │
-│  │  │ TerminalPanel  │  │ AgentLauncher    │  │ SettingsPanel│   │ │
-│  │  │ (xterm.js+WebGL│  │ (portal dropdown │  │ 5 tabs:      │   │ │
-│  │  │  CodeViewer/   │  │  colored icons)  │  │ General,CLIs │   │ │
-│  │  │  Monaco)       │  │                  │  │ Terminal,     │   │ │
-│  │  └────────────────┘  └─────────────────┘  │ Shortcuts,Keys│   │ │
-│  │                                            └──────────────┘   │ │
-│  │  Stores: useAppStore, useAgentStore, useTerminalStore,         │ │
-│  │          useWorkspaceStore (all persisted via Zustand)          │ │
-│  │  Context: ProjectProvider (syncs DB agents → Zustand)          │ │
-│  │  Hooks: useHotkeys, use-trpc, use-theme                       │ │
-│  └───────────────────────────────────────────────────────────────┘ │
+│  ┌──────────────┐  ┌────────────────────┐  ┌────────────────────┐  │
+│  │ AgentManager │  │  PipelineExecutor  │  │   SchedulerEngine  │  │
+│  │ (sidecar +   │  │  (singleton, event │  │   (croner, dep-    │  │
+│  │  PTY/JSON-RPC│  │   driven, FSM)     │  │    aware)          │  │
+│  └──────┬───────┘  └────────┬───────────┘  └────────┬───────────┘  │
+│         │                   │                        │              │
+│  ┌──────┴───────────────────┴────────────────────────┴──────────┐   │
+│  │                  tRPC Router (21 sub-routers)                 │   │
+│  │  projects|agents|settings|apiKeys|tokenUsage|resources|       │   │
+│  │  scheduler|files|prompts|diff|scrollback|pipeline|mcp|        │   │
+│  │  memory|skills|worktrees|oplog|qa|search|parallel             │   │
+│  └──────┬─────────────────────────────────────────────┬──────────┘   │
+│         │                                             │              │
+│  ┌──────┴──────┐  ┌───────────────┐  ┌──────────────┴──────────┐   │
+│  │   libSQL    │  │  PTY Sidecar  │  │  Rust Native (napi-rs)  │   │
+│  │ (29 tables, │  │  (Unix socket,│  │  git2 + memchr:         │   │
+│  │  35 migr.)  │  │   ring buffer)│  │  strip_ansi, status_    │   │
+│  └─────────────┘  └───────────────┘  │  parser, worktree, diff │   │
+│                                       └─────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │  Supporting modules: MCP host · memory · skills · lifecycle  │   │
+│  │  keystore · system/resources · ide/opener · windows/floating │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────┬──────────────────────────────────────┘
+                              │ IPC (tRPC via ipcMain.handle + push events)
+┌─────────────────────────────┴──────────────────────────────────────┐
+│                        Electron Renderer                            │
+│                                                                     │
+│  React 18 · Zustand 5 · TailwindCSS 4 · TanStack Query             │
+│                                                                     │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │  WorkspaceView (3 main tabs: Agents | Project | Monitor)      │  │
+│  │  ┌─────────────────────────────────────────────────────────┐  │  │
+│  │  │  WorkspaceLayout (recursive split-pane tree)            │  │  │
+│  │  │  Pane types: terminal · browser · files · git · empty   │  │  │
+│  │  └─────────────────────────────────────────────────────────┘  │  │
+│  │  WorkspaceTabBar: layout presets · custom layouts · PiP        │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  Stores: app · agents · terminals · workspace                       │
+│  Hooks: use-hotkeys · use-theme · use-trpc · use-floating-pane-sync │
+│  Preload: contextBridge (trpc · terminal · dialog · push · floating)│
 └────────────────────────────────────────────────────────────────────┘
+
+Floating windows (PiP):
+  BrowserWindow (frameless, always-on-top) per detached terminal/browser pane
+  Renderer routes on ?floatingPane=<id> → <FloatingPaneRoot/>
 ```
 
-## Module Architecture
-
-### Agent Manager (Implemented)
-
-Responsible for the full lifecycle of CLI agent processes. Located at `apps/desktop/src/main/agents/manager.ts`.
-
-```
-AgentManager (singleton via getAgentManager())
-├── spawn(db, agent, config) → void
-│   ├── Resolve CLI config from DEFAULT_SETTINGS (cliType → command + args)
-│   ├── Look up project path from DB
-│   ├── Build command string with shell-escaped task description
-│   ├── Spawn through user's login shell: pty.spawn($SHELL, ["-ilc", fullCommand])
-│   │   └── Resolves PATH via getShellPath() (runs $SHELL -ilc 'echo $PATH' once)
-│   ├── Update DB: set PID, status → "running"
-│   ├── Create AgentStatusParser for live step extraction
-│   ├── proc.onData → forward to all renderer windows via terminal:data IPC
-│   │   └── Also parse for status updates (currentStep, status changes)
-│   └── proc.onExit → cleanup: remove from map, set final status (completed/failed)
-│       └── Fire completionCallbacks (used by scheduler for event-based completion)
-├── stop(db, agentId) → void
-│   ├── Send SIGTERM via proc.kill()
-│   ├── Wait up to 5s for exit, then SIGKILL
-│   └── DB updated by onExit handler
-├── onAgentComplete(agentId, callback) → void  # Register one-shot completion callback
-├── getProcess(agentId) → IPty | undefined
-├── listRunning() → string[]
-├── write(agentId, data) → void       # Terminal input forwarding
-└── resize(agentId, cols, rows) → void # Terminal resize
-```
-
-**Supported CLI agents** (configured in DEFAULT_SETTINGS.agentClis):
-- Claude Code (`claude`)
-- OpenAI Codex CLI (`codex`)
-- Gemini CLI (`gemini`)
-- Aider (`aider`)
-- Any custom CLI can be added via Settings > Agent CLIs
-
-**Key implementation detail**: Agents are spawned through the user's login shell (`$SHELL -ilc "command"`) because Electron does not inherit the full PATH on macOS/Linux. This ensures nvm, homebrew, and other shell-configured tools are available.
-
-### Background Metrics Collector (Implemented)
-
-Located at `apps/desktop/src/main/system/resources.ts`. Runs in the main process, non-blocking.
-
-```
-MetricsCollector
-├── startMetricsCollector() → void     # Called on app.whenReady()
-│   ├── First collection immediately
-│   └── setInterval every 10s
-├── collectMetrics() → void (async, non-blocking)
-│   ├── CPU: delta-based from os.cpus() (no sleep/delay)
-│   ├── Memory: vm_stat on macOS (free + inactive + purgeable + speculative)
-│   │   └── Fallback to os.freemem() on Linux/Windows
-│   ├── Disk: df -k / (async execFile)
-│   └── Cache result in module-level variable
-├── getSystemMetrics() → SystemMetrics  # Synchronous, returns cached
-├── getProjectMetrics(path, id, name)   # Async: du -sk + git worktree list
-└── stopMetricsCollector() → void       # Called on will-quit
-```
-
-### Worktree Manager (Scaffold Only)
-
-Rust `git2` bindings exist in `packages/core-rust/` but are **not yet wired** into the agent spawn flow. Agents currently run in the project's root directory, not in isolated worktrees.
-
-**Planned design**: Follow Codex pattern -- worktrees share `.git` directory, saving disk space vs full clones. Auto-cleanup (from Claude Code's `--worktree` behavior) prevents worktree accumulation.
-
-### Agent Status Parser
-
-Parses agent stdout in real-time to extract what the agent is currently working on.
-
-```
-AgentStatusParser
-├── attach(pty: NodePty) → void
-│   └── Stream stdout through pattern matchers
-├── patterns (per CLI type):
-│   ├── Claude Code:
-│   │   ├── "Read(file_path)" → "Reading {file_path}"
-│   │   ├── "Edit(file_path)" → "Editing {file_path}"
-│   │   ├── "Bash(command)" → "Running: {command}"
-│   │   ├── "Write(file_path)" → "Writing {file_path}"
-│   │   └── "Agent(description)" → "Subagent: {description}"
-│   ├── Codex CLI:
-│   │   ├── tool call patterns → status text
-│   │   └── thinking indicators → "Thinking..."
-│   ├── Aider:
-│   │   ├── "Editing file..." → "Editing {file}"
-│   │   └── "Applied edit to..." → "Applied edit: {file}"
-│   └── Generic:
-│       ├── "error" / "Error" / "FAIL" → status: failed
-│       ├── "waiting" / "?" / "y/n" → status: waiting_input
-│       └── test runners (jest, pytest, vitest) → "Running tests..."
-├── updateStatus(agentId, status, currentStep) → void
-│   └── Write to SQLite agents table + emit tRPC event to renderer
-└── getStatus(agentId) → { status, currentStep, updatedAt }
-```
-
-### Internal Scheduler (Implemented)
-
-`SchedulerEngine` singleton manages cron jobs via croner. Located at `apps/desktop/src/main/scheduler/engine.ts`.
-
-```
-SchedulerEngine (singleton via getSchedulerEngine())
-├── start(db) → void                  # Load enabled tasks from DB, register cron jobs
-├── stop() → void                     # Cancel all cron jobs
-├── addTask(task) → void              # Register cron job via croner
-├── removeTask(taskId) → void         # Cancel cron job
-├── pauseTask(taskId) → void          # Unregister cron job, keep in DB
-├── resumeTask(taskId) → void         # Re-register cron job
-├── runNow(taskId) → void             # Immediate execution (bypasses cron schedule)
-└── onCronFire(task) → void (internal)
-    ├── Concurrent execution guard (runningTasks Set prevents duplicates)
-    ├── Create agent via DB insert
-    ├── Spawn via AgentManager
-    ├── Await completion via event-based onAgentComplete callback (10-min timeout)
-    ├── Record result in scheduled_results
-    └── Update last_run_at, next_run_at, last_result_status
-```
-
-**Key design**: The scheduler uses event-based completion via `AgentManager.onAgentComplete()` callbacks instead of polling. This eliminates the overhead of periodic status checks and reacts immediately when an agent process exits.
-
-### Hook Engine (Not Yet Implemented)
-
-Deterministic control points around probabilistic AI behavior. Modeled after Claude Code's hook system.
-
-```
-HookEngine
-├── register(event, handler) → void
-├── trigger(event, context) → HookResult
-│   ├── Execute shell command / HTTP call
-│   ├── Parse exit code:
-│   │   ├── 0 → success (process JSON output)
-│   │   ├── 2 → block (deny tool call / reject prompt)
-│   │   └── other → non-blocking warning
-│   └── Return {action: allow|deny|ask, context?, updatedInput?}
-└── events:
-    ├── PreToolUse      # Before agent executes a tool
-    ├── PostToolUse     # After tool execution completes
-    ├── AgentSpawn      # Before agent process starts
-    ├── AgentStop       # After agent process ends
-    ├── WorktreeCreate  # After worktree is created
-    ├── WorktreeRemove  # Before worktree cleanup
-    ├── PlanStepStart   # Before plan.md step execution
-    ├── PlanStepComplete# After plan.md step marked done
-    └── BudgetExceeded  # Token budget circuit breaker triggered
-```
-
-### Skill System (Progressive Disclosure)
-
-Minimizes context window pollution by loading skill content on-demand.
-
-```
-Phase 1: SCAN
-  └── Read skills/ directories
-  └── Parse YAML frontmatter only (name, description)
-  └── Store metadata in memory (~100 tokens per skill)
-
-Phase 2: MATCH
-  └── On user request or agent inference
-  └── Compare request semantics against skill descriptions
-  └── Explicit: user types /skill-name or $skill-name
-  └── Implicit: agent auto-matches based on description
-
-Phase 3: LOAD
-  └── Read full SKILL.md content
-  └── Inject instructions + scripts into active context
-  └── Budget: max 2% of context window per skill (from Claude Code)
-```
-
-**SKILL.md format**:
-```yaml
----
-name: review-pr
-description: Reviews a pull request for bugs, security issues, and style
-allowed-tools: Read, Grep, Glob, Bash
-context: fork          # run in subagent (isolated context)
-model: sonnet          # optional model override
-argument-hint: "[PR number or URL]"
 ---
 
-Instructions for the skill...
-```
+## Main Process Modules
 
-### MCP Host
+### `agents/`
+- `manager.ts` — AgentManager singleton: spawn, stop, write, resize, onAgentComplete callbacks
+- `spawn-env.ts` — shell PATH resolution, environment construction, `EXEGOL_ACCESS_MODE`
+- `spawn-context.ts` — assembles memory + MCP + skills context before spawn
+- `registry.ts` — 11 built-in providers + custom; `supportsPromptArg`, `promptFlag`, `enabled`
+- `handoff.ts` — agent-to-agent context transfer
+- `scoring.ts` — post-exit quality scoring (files changed, compile, tests, task complete)
+- `queue.ts` — task queue execution
+- `status-parser.ts` — JS fallback ANSI status parser (used when Rust module unavailable)
 
-Connects to external tools/data via Model Context Protocol. Implemented in Rust (rmcp).
+### `db/`
+- `client.ts` — libSQL init, WAL mode
+- `migrations.ts` — 35 migrations (001–035)
+- `queries/` — 18 domain modules (projects, agents, worktrees, token-usage, scheduler, prompts, memories, skills-state, oplog, pipeline, qa, parallel-runs, …)
 
-```
-MCPHost
-├── loadConfig(path: .mcp.json) → ServerDefinition[]
-├── connect(serverDef) → MCPClientSession
-│   ├── Spawn subprocess (stdio) or HTTP connection
-│   ├── Send initialize with capabilities
-│   ├── Receive server capabilities (tools, resources, prompts)
-│   └── Register in tool/resource/prompt registries
-├── disconnect(serverId) → void
-├── toolRegistry → aggregated tools from all servers
-├── callTool(serverName, toolName, args) → ToolResult
-├── getResource(serverName, uri) → ResourceContent
-└── listPrompts() → Prompt[] (across all servers)
-```
+### `ipc/`
+- `router.ts` — appRouter (21 sub-routers)
+- `trpc-ipc.ts` — `ipcMain.handle('trpc', ...)` using `appRouter.createCaller(ctx)` with dot-path traversal
+- `procedures/` — 21 modules, one per router namespace
 
-**.mcp.json format** (compatible with Claude Code / VS Code):
-```json
-{
-  "mcpServers": {
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path"]
-    },
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": { "GITHUB_TOKEN": "${env:GITHUB_TOKEN}" }
-    },
-    "remote-api": {
-      "type": "http",
-      "url": "https://api.example.com/mcp"
-    }
-  }
-}
-```
+### `pipeline/`
+- `executor.ts` — singleton; `startRun()` → `advanceStep()` → `onAgentComplete` callback loop
+- `context.ts` — prompt builder (`{{task}}`, `{{diff}}`, `{{previousOutput}}` interpolation)
+- `defaults.ts` — built-in pipeline presets
+- `state-machine.ts` — `PIPELINE_TRANSITIONS` map; `canTransition()` / `assertTransition()` guards
 
-### Repo Map Generator (Rust)
+### `mcp/`
+- `host.ts` — MCP host supporting stdio subprocess and HTTP transports; connects on project open
+- `registry.ts` — aggregates tools/resources/prompts across connected servers
 
-Based on Aider's proven approach but implemented natively in Rust for performance.
+### `memory/`
+- `extractor.ts` — post-agent ANSI-stripped scrollback → structured memory items
+- `store.ts` — relevance scoring, category-aware retrieval
 
-```
-RepoMapGenerator
-├── parse(projectPath) → AST forest
-│   └── Tree-sitter: parse all source files (165+ languages)
-├── extract(asts) → SymbolGraph
-│   ├── Definitions: function signatures, class/interface defs, type aliases
-│   ├── References: where each symbol is used
-│   └── Build directed graph (files as nodes, deps as edges)
-├── rank(graph, chatFiles) → RankedSymbols
-│   ├── PageRank with personalization toward active files
-│   └── Binary search for max symbols within token budget
-├── format(ranked) → CompactRepoMap (string)
-│   └── Output: file paths + signatures only (no implementations)
-└── config:
-    ├── maxTokens: 1024 (default, configurable)
-    └── languages: auto-detect from project
-```
+### `lifecycle/`
+- `loader.ts` — parses `.exegol/lifecycle.yaml` (or `.yml`) per repo; runs `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks; setup is once-per-session
 
-**Why Rust**: Tree-sitter has first-party Rust bindings (774K downloads/mo). Parsing is CPU-intensive — native speed matters for large repos. Aider's Python implementation works but is slower.
+### `lib/`
+- `logger.ts` — structured logger with startup instrumentation (`[Startup]`, `[Reattach]`, `[Recovery]`)
+- `errors.ts` — `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy; `withRetry()` (exponential backoff, transient-only, max 3)
 
-### Plan FSM
+### `skills/`
+- `loader.ts` — discovers SKILL.md files; parses YAML frontmatter (name, description, allowed-tools)
+- `discovery.ts` — matches agent requests against skill descriptions
+- `defaults/` — 5 built-in persona skills
 
-Structured workflow execution inspired by Conductor Gemini CLI.
+### `scheduler/`
+- `engine.ts` — SchedulerEngine singleton; croner-based; dependency-aware execution; event-based completion via `AgentManager.onAgentComplete()`
 
-```
-State Machine:
-  DRAFT → SPECIFYING → PLANNING → APPROVED → IMPLEMENTING → COMPLETE
-                                     ↑              │
-                                     └──── PAUSED ←──┘
+### `security/`
+- `keystore.ts` — Electron `safeStorage` encryption for API keys
 
-Files generated:
-  .exegol/tracks/{track-id}/
-  ├── spec.md       # Requirements and acceptance criteria
-  └── plan.md       # Hierarchical task list with checkboxes
+### `system/`
+- `resources.ts` — background metrics collector (10s interval): CPU (delta-based), memory (`vm_stat` on macOS), disk (`df -k`), per-project `du` + `git worktree list`
+- `ports.ts` — lsof + config-parsed port detection
 
-plan.md format:
-  ## Phase 1: Setup
-  - [x] Create database schema
-  - [x] Add migration scripts
-  - [ ] Seed test data          ← current step
+### `ide/`
+- `opener.ts` — opens project in VS Code, Cursor, Zed, Windsurf, or custom IDE
 
-  ## Phase 2: API
-  - [ ] Implement REST endpoints
-  - [ ] Add authentication middleware
+### `windows/`
+- `floating.ts` — manages `floatingWindows: Map<paneId, BrowserWindow>` for PiP detached panes
+- `app-menu.ts` — macOS custom application menu
 
-Resumability:
-  - State persisted in file (checkboxes)
-  - Agent reads plan.md, finds first unchecked item, continues
-  - Survives: app restart, network interruption, context compaction
-```
+---
 
-### Memory System (Layered)
+## PTY Sidecar Architecture
 
-Following Claude Code's proven hierarchy with path-scoped rules.
+The sidecar is a standalone detached Node.js process that owns all PTY sessions. It survives window reload and app crash.
 
 ```
-Priority (highest → lowest):
-1. Managed policy    /Library/Application Support/Exegol/CLAUDE.md
-2. Project root      ./.exegol/CLAUDE.md
-3. Project rules     ./.exegol/rules/*.md  (with glob path scopes)
-4. User global       ~/.exegol/CLAUDE.md
-5. Auto-memory       ~/.exegol/projects/{project}/memory/MEMORY.md
-
-Loading behavior:
-- Walk up directory tree from cwd, load all found CLAUDE.md files
-- Subdirectory CLAUDE.md loaded on-demand when agent reads files there
-- MEMORY.md: first 200 lines loaded at session start
-- Total memory budget: ≤10,000 tokens
-- Rule adherence: 92% under 200 lines, degrades to 71% past 400 lines
-
-Auto-compaction:
-- Triggers at ~83.5% of context window
-- Summarizes old conversation, preserves CLAUDE.md (re-read from disk)
-- Skills survive compaction (re-loaded from disk)
+Main process                      PTY Sidecar (~/.exegol/pty-sidecar.sock)
+     │                                        │
+     │── JSON-RPC: session.spawn ────────────▶│── node-pty.spawn()
+     │── JSON-RPC: session.write ────────────▶│── pty.write()
+     │◀─ JSON-RPC notification: data ─────────│── ring buffer (8MB/session)
+     │── JSON-RPC: session.listInfo ─────────▶│── { id, alive, exitCode }
+     │                                        │
+     │  On app restart:                       │
+     │── listInfo → filter alive IDs          │
+     │── reattachSidecarAgents() → replay     │── snapshot from ring buffer
+     │   dead IDs → recoverStaleAgents()      │   (60s grace window)
 ```
 
-### Token Budget System
+- Discovery: PID file at `~/.exegol/pty-sidecar.pid`; reuse or spawn new
+- Fallback: if sidecar fails, falls back to legacy per-session subprocess mode
+- Terminal PiP: only one xterm instance attached per session at a time; original pane shows "Floating" placeholder during float
 
-No competitor exposes this as a user-facing feature.
+---
 
-```
-TokenBudget
-├── track(agentId, usage) → void
-│   ├── Input tokens consumed
-│   ├── Output tokens generated
-│   ├── Tool call count
-│   └── Estimated cost (model-specific pricing)
-├── checkBudget(agentId) → BudgetStatus
-│   ├── remaining tokens vs configured limit
-│   ├── remaining cost vs configured limit
-│   └── loop iteration count vs max iterations
-├── circuitBreaker(agentId) → void
-│   ├── Gracefully stop agent execution
-│   ├── Emit BudgetExceeded hook event
-│   ├── Notify user with summary
-│   └── Preserve agent state for manual resume
-└── config (per agent):
-    ├── maxTokens: number
-    ├── maxCost: number (USD)
-    ├── maxIterations: number
-    └── warningThreshold: 0.8 (80% of limit)
-```
-
-### Keyboard Shortcuts (Implemented)
-
-Located at `apps/desktop/src/renderer/hooks/use-hotkeys.ts`. Registered as a React hook in `App.tsx`.
+## Agent Lifecycle
 
 ```
-useHotkeys()
-├── Cmd+B        → Toggle sidebar
-├── Cmd+,        → Open Settings
-├── Cmd+Shift+P  → Go to Projects (clear active project)
-├── Cmd+N        → New Agent (dispatch exegol:spawn-agent event)
-├── Cmd+.        → Stop focused agent (dispatch exegol:stop-agent event)
-├── Cmd+T        → New workspace tab
-├── Cmd+W        → Close focused pane
-├── Cmd+D        → Split pane horizontal
-├── Cmd+Shift+D  → Split pane vertical
-├── Cmd+]        → Next agent tab
-├── Cmd+[        → Previous agent tab
-└── Cmd+1-9      → Switch to agent by index
+1. User clicks agent in launcher / empty pane grid / quick-bar
+2. AgentManager.spawn()
+   ├── resolves provider from registry
+   ├── builds context: memory relevance query + MCP tool list + active skills
+   ├── runs lifecycle beforeAgent hook (prepended to shell command)
+   ├── sets EXEGOL_ACCESS_MODE env var (read | write | plan)
+   └── spawns PTY via sidecar JSON-RPC
+3. PTY output → sidecar ring buffer
+              → JSON-RPC notification → main process
+              → Rust AgentOutputStream (ANSI strip + status parse)
+                 or JS fallback status-parser
+4. Status broadcast: broadcastAgentStatus() IPC push → Zustand agents store → UI
+   classifyActivity() → activityLevel (busy | idle | neutral) → tab dot pulse
+5. On exit (non-shell agents):
+   ├── memory extraction from scrollback
+   ├── quality scoring → agent_scores table
+   ├── oplog entry
+   └── worktree cleanup (if clean)
+6. Close pane / Cmd+W → stop agent + delete from DB + remove from store
+7. Window reload → sidecar keeps PTY alive → reattach on next start
 ```
 
-### ProjectContext (Implemented)
+Shells skip: scoring, memory extraction, scrollback buffering, status parsing.
 
-Located at `apps/desktop/src/renderer/contexts/ProjectContext.tsx`. Wraps the WorkspaceView.
+---
 
-```
-ProjectProvider
-├── Reads activeProjectId from useAppStore
-├── Fetches project + agents from DB via tRPC
-├── Syncs DB agents into useAgentStore (Zustand)
-├── Provides: project, projectId, isLoading, agents[], runningAgentCount
-└── Used by WorkspaceView and child components
-```
+## Multi-Agent Pipelines
 
-### SidebarSection (Implemented)
-
-Reusable collapsible section component at `apps/desktop/src/renderer/components/layout/SidebarSection.tsx`.
-Used for: Projects, Recent Sessions, Schedulers, Resources.
-
-### tRPC Router (Implemented)
-
-Located at `apps/desktop/src/main/ipc/router.ts`. Eleven sub-routers:
+Sequential agent orchestration in shared git worktrees. Exegol controls sequencing; agents do not launch each other.
 
 ```
-appRouter
-├── projects   → list, get, create, update, delete
-├── agents     → list (by project), get, create (spawn), stop, delete, recentSessions
-├── settings   → get, update (persisted to settings table as JSON)
-├── apiKeys    → list, set, delete, test (encrypted via safeStorage)
-├── tokenUsage → list (by agent), scan (JSONL import), history
-├── resources  → getSystem (cached metrics), getProject (async disk/worktree/ports)
-├── scheduler  → list, get, create, update, delete, toggle, results, runNow
-├── files      → readFile, writeFile, pickFile, listDirectory (path-guarded)
-├── prompts    → list, create, update, delete, togglePin
-├── diff       → projectDiff, stagedDiff
-└── scrollback → get, exists
+Pipeline state machine (state-machine.ts):
+  pending → running → paused ⇄ running → completed
+                    ↘ failed / cancelled
+
+PipelineExecutor.startRun()
+  ├── creates shared worktree under ~/.exegol/pipelines/<run-id>
+  └── advanceStep(0)
+        ├── build prompt: {{task}}, {{diff}}, {{previousOutput}}
+        ├── spawn agent with cwdOverride + per-step accessMode
+        └── onAgentComplete:
+              ├── capture git diff + scrollback
+              ├── evaluate result → advance / loopBack / pause
+              └── loop guard: loopBackTo + maxIterations
+  On complete/cancel: cleanup worktree if clean, preserve if dirty
+  On startup: recoverStalePipelineRuns() marks running → paused
 ```
 
-**IPC Bridge**: `trpc-ipc.ts` registers `ipcMain.handle('trpc', ...)` which uses `appRouter.createCaller(ctx)` and navigates the proxy via dot-separated path segments. The renderer calls via `window.api.trpc.invoke(path, input)`.
+---
 
-## Data Flow: Agent Execution (Current Implementation)
+## Provider Registry
+
+11 built-in providers: Claude Code, Codex, Gemini, Aider, Goose, OpenCode, Amp, Kiro, KiloCode, Crush, Shell. Each entry carries `supportsPromptArg`, `promptFlag`, `enabled`.
+
+Interactive CLIs (Gemini, OpenCode, Kiro) launch without prompt injection. Shell provider bypasses agent post-processing.
+
+---
+
+## Access Modes (T58)
+
+Agents spawn with `accessMode: read | write | plan`. `buildShellCommand` prepends a system instruction scoped to the mode. `EXEGOL_ACCESS_MODE` env var is set for the agent process. Pipeline steps carry per-step `accessMode`. Non-write modes show a badge in the terminal toolbar.
+
+---
+
+## Renderer Structure
+
+### Workspace UI
+- `WorkspaceView` — root; 3 main tabs (Agents, Project, Monitor) + sub-tabs
+- `WorkspaceTabs` / `WorkspaceTabBar` — tab chrome with quick-launch, layout presets dropdown, PiP controls
+- `WorkspaceLayout` — recursive split-pane tree
+- `WorkspacePane` — dispatches to 5 pane types: terminal, browser, files, git, empty
+- `GitPane` — Changes list + Diff viewer + Oplog; hosts SmartGitAction
+- `SmartGitAction` — 11-state context-aware git button; Sparkles generates conventional-commit message via Claude Haiku
+- `LayoutPresets` — 6 built-in presets + custom saved layouts; `computePresetTransformation` / `templateFromLayout` pure helpers in `lib/layout-presets.ts`
+- `PaneContextMenu` — equalize splits + detach to PiP
+- `sections/` — 16 section components covering Tasks, Prompts & Skills, Memory, Pipelines, Diff, Tokens, Resources, Scoring, QA, etc.
+
+### Terminal
+- `TerminalPanel` — live / read-only / crashed states; snapshot probe on reattach
+- `TerminalInstance` — xterm.js 6 + WebGL renderer + Serialize addon
+
+### Settings
+- `SettingsPanel` — 5 tabs: General, CLIs (cards grid, YOLO/Active toggles), Terminal (bundled fonts, per-card preview, family chain badges), API Keys, Shortcuts
+- General and Terminal auto-save on change; CLI cards save per field
+
+### Stores (Zustand 5, all persisted)
+- `app` — activeView, activeProjectId, sidebar state
+- `agents` — agent state map, push event handler, shell auto-cleanup
+- `terminals` — xterm instances
+- `workspace` — tab/pane tree, custom layouts, floatingPanes set, recovery state
+
+### Hooks
+- `use-hotkeys` — global keyboard shortcuts (Cmd+B, Cmd+,, Cmd+T, Cmd+W, Cmd+D, Cmd+Shift+D, Cmd+], Cmd+[, Cmd+1–9, …)
+- `use-theme` — `data-theme` on `<html>`, respects system preference
+- `use-trpc` — TanStack Query wrappers over `window.api.trpc.invoke`
+- `use-floating-pane-sync` — unmarks floating panes when PiP window closes
+
+### FloatingPaneRoot
+Top-level renderer entry point for PiP windows. Loaded lazily via `?floatingPane=<id>` query param.
+
+---
+
+## Key Patterns
+
+- **tRPC over IPC**: renderer calls `window.api.trpc.invoke(path, input)` → `ipcMain.handle('trpc', ...)` → `appRouter.createCaller(ctx)` with dot-path traversal
+- **Push-first**: `broadcastAgentStatus()` IPC push events on every status change; 30s polling fallback only
+- **Structured errors**: `ExegolError` hierarchy with `cause` chain; `withRetry()` retries transient errors with exponential backoff (1s base, max 3 attempts)
+- **Lifecycle scripts**: `.exegol/lifecycle.yaml` per repo; `setup` runs once per session on first agent spawn; `beforeAgent` prepended to shell command; `teardown` awaited before worktree deletion; line-based parser (no YAML lib)
+- **Crash recovery**: `session.listInfo` RPC → alive IDs → `reattachSidecarAgents()`; dead IDs → `recoverStaleAgents()` → marked `crashed` with scrollback preserved
+- **Shell skip**: shell agents bypass scoring, memory extraction, scrollback buffering, status parsing
+- **Bundle splits**: workspace sections, xterm+addons, SettingsPanel, ProjectList, CommandPalette, FloatingPaneRoot are lazy chunks; initial `index.js` ~1,026 KB
+- **Bundled Nerd Fonts**: MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono (~6.8 MB) loaded via `@font-face` in `styles/fonts.css`
+
+---
+
+## Monorepo Structure
 
 ```
-User clicks agent icon in AgentLauncher (or selects from empty pane grid)
-       │
-       ▼
-Agent spawned directly (CLI name only, no task description dialog)
-       │
-       ▼
-tRPC agents.create mutation
-       │
-       ├── Insert agent row in DB (status: spawning)
-       ├── AgentManager.spawn(db, agent, config)
-       │   ├── Resolve CLI config (cliType → command + args)
-       │   ├── Look up project path from DB
-       │   ├── pty.spawn($SHELL, ["-ilc", "claude 'task description'"])
-       │   │   └── cwd = project path (worktrees not yet wired)
-       │   ├── Update DB: PID, status → running
-       │   └── Register onData + onExit handlers
-       │
-       ▼
-Agent runs in PTY
-       │
-       ├── proc.onData fires
-       │   ├── Forward to all renderer windows (terminal:data IPC)
-       │   └── AgentStatusParser extracts current step / status changes
-       │       └── Update DB (status, currentStep)
-       │
-       └── proc.onExit fires
-              ├── Remove from processes map
-              ├── exitCode 0 → status: completed
-              └── exitCode != 0 → status: failed
-
-User clicks "Stop" (or Cmd+.)
-       │
-       ├── AgentManager.stop(db, agentId)
-       │   ├── proc.kill() (SIGTERM)
-       │   ├── Wait up to 5s
-       │   └── SIGKILL if still running
-       └── onExit handler cleans up
+apps/desktop/src/
+  main/
+    agents/         manager, spawn-env, spawn-context, registry, handoff, scoring, queue, status-parser
+    db/             client, migrations (35), queries/ (18 domain modules)
+    ipc/            router, procedures/ (21 modules)
+    pipeline/       executor, context, defaults, state-machine
+    mcp/            host (stdio/HTTP), registry
+    memory/         extractor, store
+    lifecycle/      loader (.exegol/lifecycle.yaml parser + runner)
+    lib/            logger, errors (ExegolError hierarchy + withRetry)
+    skills/         loader, discovery, defaults (5 personas)
+    scheduler/      engine (croner + dependency-aware)
+    security/       keystore (safeStorage)
+    system/         resources (metrics), ports (lsof + config)
+    ide/            opener (vscode, cursor, zed, windsurf, custom)
+    windows/        floating (PiP BrowserWindows), app-menu
+  renderer/
+    components/
+      workspace/    WorkspaceView, WorkspaceTabs, WorkspacePane (5 types),
+                    WorkspaceTabBar, WorkspaceLayout, GitPane, LayoutPresets,
+                    SmartGitAction, PaneContextMenu, sections/ (16 + pipeline/), diff/
+      settings/     SettingsPanel, GeneralSettings, CliSettings, TerminalSettings, ApiKeysSettings
+      terminal/     TerminalPanel, TerminalInstance (xterm.js + WebGL + Serialize)
+      common/       AgentIcon, EmptyState, StatusDot, CronBuilder
+      agents/       AgentLauncher (portal dropdown from registry)
+      layout/       Sidebar, ProjectsSection, StatusBar, TitleBar
+    FloatingPaneRoot.tsx
+    hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
+                    use-floating-pane-sync
+    stores/         app, agents, terminals, workspace
+    lib/            layout-presets, trpc-client, dispatch-refit, semantic-colors
+    assets/
+      fonts/        MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono
+      icons/        26 SVG/PNG icons
+    styles/         globals.css, fonts.css
+  preload/          contextBridge: trpc, terminal, dialog, push events, floating, menu
+packages/
+  shared/           types (20+), schemas (zod: agent, db-rows, mcp, pipeline,
+                    project, scheduler, settings, token-usage)
+  ui/               Radix primitives, cn()
+  core-rust/        napi-rs: git2 + processing pipeline
+docs/
+  TASK_TODO.md, BENCHMARKS.md, CHANGELOG.md, RELEASE.md, UI_RESTRUCTURE.md,
+  agent_prompts/, applied/, tasks_completed/
 ```
 
-### Planned Data Flow (Future — with worktrees, hooks, budget)
+---
 
-```
-User creates task
-       │
-       ▼
-WorktreeManager.create()  ──→  git worktree add
-       │
-       ▼
-AgentManager.spawn() in worktree
-       │
-       ├── PreToolUse hook fires ──→ HookEngine evaluates
-       ├── Token usage recorded → Budget exceeded? → circuit breaker
-       ├── OSC 9/99/777 detected? → sidebar badge + desktop notification
-       │
-       └── Agent completes / user stops
-              ├── Changes? → Keep worktree, show diff viewer
-              └── No changes? → Auto-remove worktree + branch
-```
+## Database
 
-## Monorepo Structure (Current)
+**35 migrations · 29 tables**
 
-```
-exegol/
-├── apps/
-│   └── desktop/                        # Electron 41 app
-│       ├── src/
-│       │   ├── main/                   # Main process (Node/Bun)
-│       │   │   ├── index.ts            # App entry, window, IPC, lifecycle
-│       │   │   ├── agents/
-│       │   │   │   ├── manager.ts      # AgentManager (spawn/stop via node-pty)
-│       │   │   │   └── status-parser.ts # Parse agent stdout for live status
-│       │   │   ├── db/
-│       │   │   │   ├── client.ts       # libSQL init + WAL mode
-│       │   │   │   ├── migrations.ts   # 12 migrations (001-012)
-│       │   │   │   ├── queries.ts      # Barrel re-export of domain query modules
-│       │   │   │   └── queries/        # Domain-split query files
-│       │   │   │       ├── helpers.ts       # Row mappers + nanoid
-│       │   │   │       ├── projects.ts
-│       │   │   │       ├── agents.ts
-│       │   │   │       ├── worktrees.ts
-│       │   │   │       ├── token-usage.ts
-│       │   │   │       ├── scheduler.ts
-│       │   │   │       └── prompts.ts
-│       │   │   ├── ipc/
-│       │   │   │   ├── router.ts       # tRPC appRouter (11 sub-routers)
-│       │   │   │   ├── trpc.ts         # tRPC init
-│       │   │   │   ├── trpc-ipc.ts     # createCaller proxy traversal
-│       │   │   │   ├── context.ts      # tRPC context (db)
-│       │   │   │   └── procedures/     # agents, projects, settings, apikeys, token-usage,
-│       │   │   │                       # resources, scheduler, files, prompts, diff, scrollback
-│       │   │   ├── system/
-│       │   │   │   └── resources.ts    # Background metrics collector
-│       │   │   └── terminal/
-│       │   │       └── pty-manager.ts  # PTY instance tracking
-│       │   ├── renderer/               # React 18 UI
-│       │   │   ├── App.tsx             # Root layout: TitleBar + Sidebar + Content + StatusBar
-│       │   │   ├── main.tsx            # React entry
-│       │   │   ├── contexts/
-│       │   │   │   └── ProjectContext.tsx  # Project + agents provider
-│       │   │   ├── hooks/
-│       │   │   │   ├── use-hotkeys.ts  # Global keyboard shortcuts
-│       │   │   │   ├── use-theme.ts    # Theme hook: data-theme on <html>, system pref
-│       │   │   │   └── use-trpc.ts     # tRPC query/mutation hooks
-│       │   │   ├── stores/
-│       │   │   │   ├── app.ts          # activeView, activeProjectId, sidebar (persisted)
-│       │   │   │   ├── agents.ts       # Agent state, focused agent, DB sync
-│       │   │   │   ├── terminals.ts    # Terminal instances
-│       │   │   │   └── workspace.ts    # Workspace tabs, panes, layout tree (persisted)
-│       │   │   ├── lib/
-│       │   │   │   ├── trpc-client.ts  # trpcInvoke/trpcMutate via IPC
-│       │   │   │   └── markdown-tasks.ts  # parseMarkdownTasks, toggleTask
-│       │   │   └── components/
-│       │   │       ├── ErrorBoundary.tsx
-│       │   │       ├── layout/         # Sidebar, SidebarSection, SidebarHeader/Footer,
-│       │   │       │                   # ProjectsSection, RecentSessions, ResourcesOverview,
-│       │   │       │                   # SchedulersOverview, StatusBar, TitleBar
-│       │   │       ├── agents/         # AgentLauncher (quick-launch bar, portal dropdown)
-│       │   │       ├── projects/       # ProjectList, AddProjectDialog
-│       │   │       ├── settings/       # SettingsPanel (5 tabs), GeneralSettings,
-│       │   │       │                   # CliSettings, TerminalSettings, KeyboardShortcuts,
-│       │   │       │                   # ApiKeysSettings
-│       │   │       ├── workspace/      # WorkspaceView, WorkspaceTabBar, WorkspacePane,
-│       │   │       │                   # WorkspaceLayout, CodeViewer, FileExplorer,
-│       │   │       │                   # WorkspaceTabs
-│       │   │       │   └── sections/   # AgentsSection, TasksSection, DiffSection,
-│       │   │       │                   # SchedulerSection, TokensSection, ResourcesSection,
-│       │   │       │                   # PromptsSection
-│       │   │       ├── terminal/       # TerminalPanel, TerminalInstance
-│       │   │       └── common/         # EmptyState, KeyValue, LoadingSpinner,
-│       │   │                           # StatusDot, ConfirmDialog, CronBuilder
-│       │   └── preload/
-│       │       └── index.ts            # contextBridge APIs
-│       └── electron-builder.yml
-├── packages/
-│   ├── shared/                         # @exegol/shared
-│   │   └── src/
-│   │       ├── types/                  # agent, project, settings, scheduler,
-│   │       │                           # token-usage, worktree
-│   │       └── schemas/                # Zod: agent, project, settings
-│   ├── ui/                             # @exegol/ui (Radix primitives)
-│   │   └── src/
-│   │       ├── lib/utils.ts            # cn() utility
-│   │       └── primitives/             # Button, Badge, Input, ScrollArea,
-│   │                                   # Separator, Tooltip
-│   └── core-rust/                      # Rust native (napi-rs) — scaffold
-│       ├── Cargo.toml                  # git2 0.19, napi 3, serde
-│       └── src/                        # Git worktree ops (not yet wired)
-├── docs/
-│   ├── project_definition/             # Architecture, features, stack, competitors
-│   └── tasks_completed/                # Work log by month
-├── turbo.json
-├── biome.json                          # Biome 2.4.7
-└── package.json                        # Bun 1.2.0 workspace root
-```
+| Table | Purpose |
+|---|---|
+| `projects` | Project registry with path, remote, default branch/IDE |
+| `agents` | Agent instances: status, cli_type, access_mode, session_id, resume_command |
+| `worktrees` | Git worktrees: path, branch, auto_cleanup, disk_usage |
+| `sessions` | Layout snapshot per project session |
+| `scheduled_tasks` | Cron definitions with depends_on support |
+| `scheduled_results` | Per-run outcomes (success/failure/timeout/budget_exceeded) |
+| `token_usage` | Per-agent token consumption and estimated cost |
+| `port_registry` | Detected/configured ports per worktree |
+| `host_metrics` | CPU/memory/disk snapshots per agent |
+| `settings` | Key-value app settings (JSON values) |
+| `prompts` | Saved prompt templates per project |
+| `activities` | Activity feed (type + entity + description) |
+| `search_index` | FTS5 virtual table (porter + unicode61 tokenizer) |
+| `handoffs` | Agent-to-agent context transfer records |
+| `messages` | Inter-agent messages (text/handoff/status/request/result) |
+| `task_queue` | Queued tasks with priority and dependency graph |
+| `skills_state` | Per-project skill enable/disable state |
+| `memories` | Extracted project memories with relevance scoring |
+| `agent_scores` | Post-exit quality scores (files, compile, tests, overall) |
+| `oplog` | Agent operation log for undo (commit/branch/worktree/file/revert) |
+| `pipeline_templates` | Pipeline step definitions |
+| `pipeline_runs` | Pipeline execution state + step results |
+| `agent_events` | Structured event stream per agent |
+| `file_index` | Project file index (path, hash, language, chunk count) |
+| `file_chunks` | Chunked file content with optional embeddings |
+| `parallel_runs` | Parallel agent runs with promotion tracking |
+| `qa_tests` | Recorded QA test definitions (actions, start URL) |
+| `qa_test_runs` | QA test execution results + step-level outcomes |
+| `diff_comments` | Inline diff annotations per file/line |
 
-### Planned directories (not yet created)
-```
-apps/desktop/src/main/
-├── worktrees/   # WorktreeManager (Rust git2 integration)
-├── hooks/       # HookEngine
-├── mcp/         # MCPHost (JS wrapper around Rust rmcp)
-├── skills/      # SkillLoader + Progressive Disclosure
-├── memory/      # Layered memory system
-└── plans/       # PlanFSM
+Agent status values: `idle | spawning | running | waiting_input | paused | completed | failed | stopped | crashed`
 
-skills/          # Built-in SKILL.md files (batch, review-pr, debug, plan)
-```
+---
+
+## Rust Native Module (`packages/core-rust`)
+
+Built with napi-rs. Loaded at startup; JS fallbacks activate if the `.node` binary is absent.
+
+### `processing/strip_ansi.rs`
+Strips ANSI escape sequences from agent output. Uses memchr for fast byte scanning. Called on every PTY data chunk before status parsing and before memory extraction.
+
+### `processing/status_parser.rs`
+`AgentOutputStream` class. Stateful stream processor: accumulates chunks, matches tool-call and status patterns using zero-alloc case-insensitive matching. Emits `{ status, currentStep }` on transitions.
+
+### `git/`
+- `worktree.rs` — create / remove / list git worktrees via libgit2
+- `diff.rs` — staged and unstaged diff computation
+- `oplog.rs` — operation log entries (commit SHAs, branch refs)
+- `repo_info.rs` — remote URL, current branch, ahead/behind counts
+
+**12 tests · Clippy pedantic clean**
+
+---
+
+## QA Automation
+
+Browser-based test recording and replay backed by Electron's webview.
+
+- **Recording**: user performs actions in a browser pane; each interaction (click, type, navigate, assert) is captured as a structured action step
+- **Storage**: `qa_tests` table stores action sequences as JSON; `qa_test_runs` stores per-step results and console errors
+- **Replay engine**: replays recorded actions programmatically; compares expected vs actual state; reports pass/fail per step with duration
+- **UI**: save/run controls in the browser pane toolbar; test list in the Project > QA section

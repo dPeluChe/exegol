@@ -14,10 +14,17 @@
 
 ### P0 — Must land before broad release push
 - **Parallel Multi-Agent on Worktrees** (T65)
+- **Release config** (T103) — owner/repo, notarization, canary channel, release checklist
+- **Preflight spawn check** (T104) — validate CLI found, auth, git repo, worktree, access mode before spawn
+
+### P1 — Differentiators for first users
+- **Worktree isolation status** (T105) — visible badge per agent: `project root | isolated | pipeline | fallback`
+- **Agent stop reason** (T106) — "Why did this agent stop?" panel: exit code, last N lines, resume available
+- **Agent comparator** (T107) — side-by-side diff summary + score + cost for parallel runs; promote/continue buttons
+- **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 
 ### P2 — Valuable follow-ups once the core is stable
 - Issue tracker expansion (T71)
-- **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 
 ### P3 — Strategic bets / larger scope
 - **SSH Remote Development** (T73)
@@ -430,6 +437,106 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 **Do not overlap with**
 - Lane D file decomposition (T75) — coordinate on manager.ts split
 - Lane A spawn context changes unless agreed first
+
+---
+
+### T103 — Release Config Completion
+**Priority**: P0 | **Effort**: Small | **Source**: Audit 2026-04-27
+
+**Why**
+- `electron-builder.ts` still has `publish.owner: "OWNER"` placeholder and `notarize: false`.
+- No canary/stable channel separation. No release checklist.
+
+**Scope**
+- Fill `owner`/`repo` in electron-builder publish config
+- Define `stable` and `canary` channel update feeds
+- Document notarization steps (requires Apple Developer credentials)
+- Add `scripts/release-checklist.md`: typecheck → lint → tests → package mac → smoke launch → auto-update test
+
+**Likely files**
+- `apps/desktop/electron-builder.ts`
+- `scripts/release-checklist.md` (new)
+
+---
+
+### T104 — Preflight Spawn Check
+**Priority**: P0 | **Effort**: Small | **Source**: Audit 2026-04-27
+
+**Why**
+- Agents can fail silently if the CLI isn't installed, auth is missing, or the project directory isn't a git repo.
+- Better to surface a clear error before the PTY is created.
+
+**Scope**
+- Before `AgentManager.spawn()`: check CLI binary on PATH, API key present (if provider needs it), git repo valid
+- Optional worktree check: can create worktree for this repo?
+- Return structured `PreflightResult { ok, warnings[], errors[] }` — warnings don't block, errors do
+- UI: show preflight result inline in spawn modal / launcher before the agent starts
+
+**Likely files**
+- `apps/desktop/src/main/agents/preflight.ts` (new)
+- `apps/desktop/src/main/agents/manager.ts`
+- `apps/desktop/src/renderer/components/agents/SpawnAgentModal.tsx`
+
+---
+
+### T105 — Worktree Isolation Status Badge
+**Priority**: P1 | **Effort**: Small | **Source**: Audit 2026-04-27
+
+**Why**
+- When an agent runs in project root (worktree creation failed silently), the user assumes isolation that doesn't exist.
+- Making this visible builds trust and helps diagnose worktree problems.
+
+**Scope**
+- Derive isolation mode from agent state: `isolated` (has worktree_id) | `pipeline` (shared pipeline worktree) | `project-root` (no worktree) | `fallback` (worktree creation failed)
+- Show as a small badge in the terminal toolbar (next to access mode badge)
+- Click badge → tooltip with worktree path + branch
+
+**Likely files**
+- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx`
+- `apps/desktop/src/renderer/components/terminal/TerminalToolbar.tsx`
+- `packages/shared/src/types/agent.ts`
+
+---
+
+### T106 — Agent Stop Reason Panel
+**Priority**: P1 | **Effort**: Small | **Source**: Audit 2026-04-27
+
+**Why**
+- Currently when an agent stops/crashes, the user sees the terminal go silent with no structured explanation.
+- "Why did this agent stop?" is a common question.
+
+**Scope**
+- On stopped/failed/crashed terminal: show overlay or expandable section with:
+  - Status (completed / failed / crashed / stopped)
+  - Exit code + signal if available
+  - Last `current_step` value
+  - Whether session resume is available (resumeCommand present in DB)
+  - Quick action: Resume / New agent with same task / View diff
+- Does not replace existing terminal output — sits above or below it
+
+**Likely files**
+- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx`
+- `apps/desktop/src/renderer/components/terminal/AgentStopReason.tsx` (new)
+
+---
+
+### T107 — Agent Comparator (parallel runs)
+**Priority**: P1 | **Effort**: Medium | **Source**: Audit 2026-04-27
+
+**Why**
+- T65 (parallel multi-agent) creates N branches for the same task. Without a comparison surface, the user has to manually diff all of them.
+
+**Scope**
+- Comparison view when a parallel run completes: N columns (one per agent)
+- Per column: diff summary (files changed, insertions/deletions), agent score, cost, duration, test status
+- Promote button: apply worktree as main branch, discard others
+- Continue button: pick one branch as base for the next step
+- Depends on T65
+
+**Likely files**
+- `apps/desktop/src/renderer/components/workspace/sections/ParallelRunComparator.tsx` (new)
+- `apps/desktop/src/main/ipc/procedures/parallel.ts`
+- `apps/desktop/src/main/db/queries/parallel-runs.ts`
 
 ---
 

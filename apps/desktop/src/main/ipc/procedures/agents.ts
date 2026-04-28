@@ -7,6 +7,8 @@ import {
   getHandoffByAgent,
   setHandoffSuccessor,
 } from "../../agents/handoff";
+import { runPreflight } from "../../agents/preflight";
+import { coreRust } from "../../agents/spawn-env";
 import {
   createAgent,
   getAgent,
@@ -372,5 +374,43 @@ export const agentRouter = router({
       }
       updateParallelRunStatus(ctx.db, input.id, "cancelled");
       return { success: true };
+    }),
+
+  /** T104 — Run preflight checks before spawning an agent.
+   *  Returns errors (blocking) and warnings (non-blocking) without side effects. */
+  preflight: publicProcedure
+    .input(
+      z.object({
+        cliType: z.string(),
+        projectId: z.string(),
+        useWorktree: z.boolean().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const provider = ctx.providerRegistry.get(input.cliType);
+      if (!provider) {
+        return {
+          ok: false,
+          errors: [{ code: "UNKNOWN_CLI", message: `Unknown CLI type: ${input.cliType}` }],
+          warnings: [],
+        };
+      }
+      const project = ctx.db
+        .prepare("SELECT path FROM projects WHERE id = ?")
+        .get(input.projectId) as { path: string } | undefined;
+      if (!project) {
+        return {
+          ok: false,
+          errors: [{ code: "PROJECT_NOT_FOUND", message: "Project not found" }],
+          warnings: [],
+        };
+      }
+      return runPreflight(ctx.db, {
+        cliType: input.cliType as Parameters<typeof runPreflight>[1]["cliType"],
+        command: provider.command,
+        projectPath: project.path,
+        useWorktree: input.useWorktree,
+        coreRustLoaded: !!coreRust,
+      });
     }),
 });
