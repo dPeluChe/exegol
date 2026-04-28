@@ -203,7 +203,7 @@ fn parse_resume_command_pattern(pattern: &str, line: &str) -> Option<String> {
     let pos = lower.find(pattern_lower.as_str())?;
     let cmd = line[pos..].trim();
     let end = cmd
-        .find(|c: char| c == '\n' || c == '│' || c == '|')
+        .find(['\n', '│', '|'])
         .unwrap_or(cmd.len());
     let result = cmd[..end].trim().to_string();
     // Must contain more than just the pattern (i.e. has a session ID appended)
