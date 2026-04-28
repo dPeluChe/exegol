@@ -44,7 +44,7 @@
 | Structured errors: `ExegolError` hierarchy + `withRetry()` exponential backoff | DONE |
 | Agent spawn performance: PATH pre-captured, single DB write (`activateAgent`), no login-shell flag | DONE |
 | Shell agents bypass scoring, memory, scrollback buffering | DONE |
-| Parallel multi-agent on isolated worktrees | PLANNED |
+| Parallel multi-agent on isolated worktrees | PARTIAL |
 | Runtime access mode switching (while agent is running) | PLANNED |
 | Scheduler task `accessMode` propagation | PLANNED |
 

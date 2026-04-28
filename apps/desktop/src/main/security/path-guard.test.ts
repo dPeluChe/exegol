@@ -106,4 +106,38 @@ describe("isPathAllowed", () => {
     const outsideFile = join(tmpDir, "other", "secret.ts");
     expect(await isPathAllowed(outsideFile, [base1, base2])).toBe(false);
   });
+
+  it("blocks a symlink inside the project pointing outside (symlink escape)", async () => {
+    // /project/evil-link -> /etc
+    // accessing /project/evil-link/passwd should be denied even though
+    // /project is the allowed base
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-test-"));
+    const projectDir = join(tmpDir, "project");
+    const externalDir = join(tmpDir, "external-secret");
+    const { mkdir } = await import("node:fs/promises");
+    await Promise.all([mkdir(projectDir), mkdir(externalDir)]);
+
+    const evilLink = join(projectDir, "evil-link");
+    await symlink(externalDir, evilLink);
+
+    // path that traverses through the symlink
+    const escapedPath = join(evilLink, "secret.txt");
+    expect(await isPathAllowed(escapedPath, [projectDir])).toBe(false);
+  });
+
+  it("blocks creating a file via a symlink that escapes the project", async () => {
+    // Same as above but for a non-existent target (write scenario)
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-test-"));
+    const projectDir = join(tmpDir, "project");
+    const externalDir = join(tmpDir, "external");
+    const { mkdir } = await import("node:fs/promises");
+    await Promise.all([mkdir(projectDir), mkdir(externalDir)]);
+
+    const evilLink = join(projectDir, "link-out");
+    await symlink(externalDir, evilLink);
+
+    // new.txt does not exist yet — write scenario
+    const newFile = join(evilLink, "new.txt");
+    expect(await isPathAllowed(newFile, [projectDir])).toBe(false);
+  });
 });

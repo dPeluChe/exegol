@@ -18,6 +18,7 @@ import { loadLifecycleConfig, runSetupIfNeeded } from "../lifecycle/loader";
 import { getPtyHost } from "../terminal/pty-host";
 import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../terminal/shell-wrappers";
 import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
+import { runPreflight } from "./preflight";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import {
@@ -101,6 +102,22 @@ export class AgentManager {
     }
 
     let cwd = project.path;
+
+    // ── Preflight check (T104) ────────────────────────────────────────
+    const preflight = await runPreflight(db, {
+      cliType: agent.cliType,
+      command: cliConfig.command,
+      projectPath: project.path,
+      useWorktree: config.useWorktree,
+      coreRustLoaded: !!coreRust,
+    });
+    for (const w of preflight.warnings) {
+      logger.warn(`[Preflight] ${w.code}: ${w.message}`);
+    }
+    if (!preflight.ok) {
+      const msg = preflight.errors.map((e) => e.message).join("; ");
+      throw new Error(`Preflight failed: ${msg}`);
+    }
 
     // ── Lifecycle: run setup once per session per project (T91) ────────
     runSetupIfNeeded(project.path).catch(() => {});
