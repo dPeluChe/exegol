@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog } from "electron";
 import { z } from "zod";
 import { listProjects } from "../../db/queries";
+import { isPathAllowed } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 
 const EXTENSION_LANGUAGES: Record<string, string> = {
@@ -43,17 +44,18 @@ const IGNORED_NAMES = new Set([
 
 /**
  * Validate that a path is inside one of the registered project directories.
- * Resolves symlinks and normalizes before comparison to prevent traversal attacks.
+ * Uses realpath + relative() to prevent both symlink traversal and prefix
+ * confusion attacks (e.g. /repo/app matching /repo/app-evil via startsWith).
  */
-function assertPathInsideProject(filePath: string, ctx: { db: import("libsql").Database }): void {
-  const normalized = resolve(filePath);
+async function assertPathInsideProject(
+  filePath: string,
+  ctx: { db: import("libsql").Database },
+): Promise<void> {
   const projects = listProjects(ctx.db);
-  // Allow project directories + worktree directories (~/.exegol/worktrees/ and ~/.exegol/pipelines/)
   const exegolDir = resolve(require("node:os").homedir(), ".exegol");
-  const isAllowed =
-    projects.some((p) => normalized.startsWith(resolve(p.path))) ||
-    normalized.startsWith(exegolDir);
-  if (!isAllowed) {
+  const allowedBases = [...projects.map((p) => p.path), exegolDir];
+  const allowed = await isPathAllowed(filePath, allowedBases);
+  if (!allowed) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "Access denied: path is outside any registered project directory",
@@ -71,7 +73,7 @@ export interface DirectoryEntry {
 
 export const filesRouter = router({
   exists: publicProcedure.input(z.object({ path: z.string() })).query(async ({ ctx, input }) => {
-    assertPathInsideProject(input.path, ctx);
+    await assertPathInsideProject(input.path, ctx);
     try {
       await access(input.path);
       return { exists: true };
@@ -81,7 +83,7 @@ export const filesRouter = router({
   }),
 
   readFile: publicProcedure.input(z.object({ path: z.string() })).query(async ({ ctx, input }) => {
-    assertPathInsideProject(input.path, ctx);
+    await assertPathInsideProject(input.path, ctx);
     try {
       const content = await readFile(input.path, "utf-8");
       const ext = extname(input.path);
@@ -99,7 +101,7 @@ export const filesRouter = router({
   writeFile: publicProcedure
     .input(z.object({ path: z.string(), content: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      assertPathInsideProject(input.path, ctx);
+      await assertPathInsideProject(input.path, ctx);
       await writeFile(input.path, input.content, "utf-8");
       return { success: true };
     }),
@@ -130,7 +132,7 @@ export const filesRouter = router({
   create: publicProcedure
     .input(z.object({ path: z.string(), type: z.enum(["file", "folder"]) }))
     .mutation(async ({ ctx, input }) => {
-      assertPathInsideProject(input.path, ctx);
+      await assertPathInsideProject(input.path, ctx);
       if (input.type === "folder") {
         await mkdir(input.path, { recursive: true });
       } else {
@@ -140,7 +142,7 @@ export const filesRouter = router({
     }),
 
   delete: publicProcedure.input(z.object({ path: z.string() })).mutation(async ({ ctx, input }) => {
-    assertPathInsideProject(input.path, ctx);
+    await assertPathInsideProject(input.path, ctx);
     await rm(input.path, { recursive: true });
     return { success: true };
   }),
@@ -148,7 +150,7 @@ export const filesRouter = router({
   listDirectory: publicProcedure
     .input(z.object({ path: z.string() }))
     .query(async ({ ctx, input }) => {
-      assertPathInsideProject(input.path, ctx);
+      await assertPathInsideProject(input.path, ctx);
       let items: string[];
       try {
         items = await readdir(input.path);
