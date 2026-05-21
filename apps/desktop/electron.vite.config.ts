@@ -56,7 +56,10 @@ export default defineConfig({
         output: {
           manualChunks: (id) => {
             if (id.includes("node_modules/@xterm/")) return "xterm";
-            if (id.includes("node_modules/monaco-editor") || id.includes("node_modules/@monaco-editor/")) {
+            if (
+              id.includes("node_modules/monaco-editor") ||
+              id.includes("node_modules/@monaco-editor/")
+            ) {
               return "monaco";
             }
             if (
@@ -67,7 +70,8 @@ export default defineConfig({
               return "react-vendor";
             }
             if (id.includes("node_modules/@radix-ui/")) return "radix";
-            if (id.includes("node_modules/@trpc/") || id.includes("node_modules/@tanstack/")) return "trpc";
+            if (id.includes("node_modules/@trpc/") || id.includes("node_modules/@tanstack/"))
+              return "trpc";
             return undefined;
           },
         },

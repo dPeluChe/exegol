@@ -19,9 +19,8 @@ than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_S
 
 **Bundle as 1 PR — quick wins (S, low risk, orthogonal):**
 - **Build & bundle opts** (T108) — Vite manualChunks + esbuild drop debugger/console.debug + chrome134 target
-- **Tailwind v4 `@theme` migration** (T109) — config-in-CSS, drop `tailwind.config.ts`
-- **Streaming UX libs** (T110) — `streamdown` + `use-stick-to-bottom` + diff cache LRU
-- **tokenlens token counter** (T111) — accurate per-agent token usage in Monitor tab
+- **Streaming UX libs** (T110) — `streamdown` + diff cache LRU (use-stick-to-bottom deferred — no streaming surface today)
+- **tokenlens model registry** (T111) — augment our DB catalog with model context-window info
 - **electron-window-state** (T121) — restore window size/position across launches
 
 **Terminal/PTY hardening (S–M):**
@@ -569,24 +568,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 **Likely files**
 - `apps/desktop/electron.vite.config.ts`
-
----
-
-### T109 — Tailwind v4 `@theme` Migration
-**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `src/App.css` (no `tailwind.config.ts`)
-
-**Why**
-- Tailwind v4 supports config-in-CSS via `@theme`. We still ship a `tailwind.config.ts` written for v3 patterns.
-- Single source of truth + smaller config surface + faster Vite cold start.
-
-**Scope**
-- Move tokens (colors, fonts, spacing scale) into `apps/desktop/src/renderer/styles/globals.css` under `@theme { ... }`.
-- Delete `apps/desktop/tailwind.config.ts` (or reduce to a one-liner Vite plugin entry).
-- Verify all Tailwind utilities used across the renderer still resolve (run dev build).
-
-**Likely files**
-- `apps/desktop/src/renderer/styles/globals.css`
-- `apps/desktop/tailwind.config.ts` (delete or shrink)
 
 ---
 
