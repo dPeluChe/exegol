@@ -12,10 +12,37 @@
 
 ## Priority Order
 
+### Wave 1 — Stack Optimizations (Terax Review, 2026-05) — FIRST FOCUS
+Strategic context: we stay on **Electron + spawned-CLI agents** (our core differentiator).
+Terax (Tauri-based terminal) is more focused than us — but ships several patterns sharper
+than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_STACK_REVIEW.md`.
+
+**Bundle as 1 PR — quick wins (S, low risk, orthogonal):**
+- **Build & bundle opts** (T108) — Vite manualChunks + esbuild drop debugger/console.debug + chrome134 target
+- **Tailwind v4 `@theme` migration** (T109) — config-in-CSS, drop `tailwind.config.ts`
+- **Streaming UX libs** (T110) — `streamdown` + `use-stick-to-bottom` + diff cache LRU
+- **tokenlens token counter** (T111) — accurate per-agent token usage in Monitor tab
+- **electron-window-state** (T121) — restore window size/position across launches
+
+**Terminal/PTY hardening (S–M):**
+- **PTY flusher hardening** (T113) — 4ms coalesce + ESC c on overflow + WebGL context-loss recovery
+- **OSC 7 + OSC 133 shell integration** (T112) — cwd + prompt boundaries + exit code for shell panes
+- **DormantRing for hidden panes** (T115) — 256KB bounded chunk ring (foundation for T114)
+
+**Security & defense-in-depth (S–M):**
+- **Security hardening** (T117) — bidi-char Trojan Source, NTFS ADS, fork bombs, dangerous-command regex
+- **CSP header in renderer** (T118) — explicit `script-src 'self' 'wasm-unsafe-eval'` + `connect-src` allowlist
+- **Capability allowlist pattern** (T119) — Tauri-style declarative allowlist for tRPC routers/IPC channels
+
+**Larger / deferred:**
+- **Rust search crates** (T116, M) — `ignore` + `grep-regex` + `grep-searcher` + `globset` in core-rust
+- **Settings as separate window** (T120, M) — use floating BrowserWindow infra
+- **xterm renderer pool** (T114, L) — 5-slot LRU pool with snapshot+replay, blocks N-WebGL-context lag
+- **Vercel AI SDK + Ollama** (T122, M, P3) — replace 2 fetch calls in `diff.ts` + `scoring.ts`, unlock Ollama via `@ai-sdk/openai-compatible`
+
 ### P0 — Must land before broad release push
 - **Parallel Multi-Agent on Worktrees** (T65)
 - **Release config** (T103) — owner/repo, notarization, canary channel, release checklist
-- **Preflight spawn check** (T104) — validate CLI found, auth, git repo, worktree, access mode before spawn
 
 ### P1 — Differentiators for first users
 - **Worktree isolation status** (T105) — visible badge per agent: `project root | isolated | pipeline | fallback`
@@ -459,26 +486,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ---
 
-### T104 — Preflight Spawn Check
-**Priority**: P0 | **Effort**: Small | **Source**: Audit 2026-04-27
-
-**Why**
-- Agents can fail silently if the CLI isn't installed, auth is missing, or the project directory isn't a git repo.
-- Better to surface a clear error before the PTY is created.
-
-**Scope**
-- Before `AgentManager.spawn()`: check CLI binary on PATH, API key present (if provider needs it), git repo valid
-- Optional worktree check: can create worktree for this repo?
-- Return structured `PreflightResult { ok, warnings[], errors[] }` — warnings don't block, errors do
-- UI: show preflight result inline in spawn modal / launcher before the agent starts
-
-**Likely files**
-- `apps/desktop/src/main/agents/preflight.ts` (new)
-- `apps/desktop/src/main/agents/manager.ts`
-- `apps/desktop/src/renderer/components/agents/SpawnAgentModal.tsx`
-
----
-
 ### T105 — Worktree Isolation Status Badge
 **Priority**: P1 | **Effort**: Small | **Source**: Audit 2026-04-27
 
@@ -537,6 +544,355 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 - `apps/desktop/src/renderer/components/workspace/sections/ParallelRunComparator.tsx` (new)
 - `apps/desktop/src/main/ipc/procedures/parallel.ts`
 - `apps/desktop/src/main/db/queries/parallel-runs.ts`
+
+---
+
+## Terax Review — Stack Optimizations (Wave 1)
+
+> Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` (Terax-AI vs Exegol comparison, 2026-05-21).
+> All tasks below cite specific Terax files when copying patterns.
+> Strategic stance: keep AI-spawned CLI as our core; adopt Terax's tighter implementation patterns.
+
+### T108 — Vite Build & Bundle Optimizations
+**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `vite.config.ts:16-67`
+
+**Why**
+- Initial renderer chunk currently loads xterm + all addons + future SDKs eagerly.
+- `console.debug/info/trace` and `debugger` ship to users in prod builds.
+- Build target locked to a conservative Chromium; we control Electron's Chromium (41 → chrome134) — wasted polyfills today.
+
+**Scope**
+- Add `build.rollupOptions.output.manualChunks` to `electron.vite.config.ts` (renderer config): one chunk for xterm + addons, one per future `@ai-sdk/*` provider (T122 placeholder), one for monaco (or codemirror if T114-companion lands).
+- Add `build.esbuild: { drop: ['debugger'], pure: ['console.debug','console.info','console.trace'] }`.
+- Set `build.target: 'chrome134'` (verify with smoke launch — falls back to 'chrome120' if anything breaks).
+- Measure initial `index.js` size before/after (current ~1,026 KB per `CLAUDE.md`).
+
+**Likely files**
+- `apps/desktop/electron.vite.config.ts`
+
+---
+
+### T109 — Tailwind v4 `@theme` Migration
+**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `src/App.css` (no `tailwind.config.ts`)
+
+**Why**
+- Tailwind v4 supports config-in-CSS via `@theme`. We still ship a `tailwind.config.ts` written for v3 patterns.
+- Single source of truth + smaller config surface + faster Vite cold start.
+
+**Scope**
+- Move tokens (colors, fonts, spacing scale) into `apps/desktop/src/renderer/styles/globals.css` under `@theme { ... }`.
+- Delete `apps/desktop/tailwind.config.ts` (or reduce to a one-liner Vite plugin entry).
+- Verify all Tailwind utilities used across the renderer still resolve (run dev build).
+
+**Likely files**
+- `apps/desktop/src/renderer/styles/globals.css`
+- `apps/desktop/tailwind.config.ts` (delete or shrink)
+
+---
+
+### T110 — Streaming UX Libraries
+**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `package.json`, `src/modules/editor/lib/diffCache.ts:1-104`
+
+**Why**
+- Our markdown rendering for agent output is `react-markdown` (re-parses on every stream chunk).
+- Our auto-scroll-to-bottom in `TerminalPanel` is hand-rolled and weakly correct.
+- Our diff IPC has no cache → "open same file twice" pays the full diff cost.
+
+**Scope**
+- Add `streamdown` (~40 KB gzip) — drop-in for agent message rendering and pipeline output.
+- Add `use-stick-to-bottom` (~5 KB) — replace ad-hoc scroll-to-bottom in `TerminalPanel.tsx` and any chat/oplog stream view.
+- Implement diff cache: LRU 6 entries + in-flight Promise dedup, keyed by `${repo}|${kind}|${mode}|${path}`. Invalidate per-repo on git mutations.
+- Pattern reference: `src/modules/editor/lib/diffCache.ts:1-104`.
+
+**Likely files**
+- `apps/desktop/package.json` (deps)
+- Renderer markdown components (find via grep for `react-markdown`)
+- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx`
+- `apps/desktop/src/main/ipc/procedures/diff.ts` (cache layer)
+
+---
+
+### T111 — tokenlens Token Counter
+**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `package.json:64`
+
+**Why**
+- We log token usage from agent CLI output where available, but have no in-app token estimator for arbitrary text.
+- Useful for the Monitor tab's Tokens panel and for future prompt-builder UIs.
+
+**Scope**
+- Add `tokenlens` (~30 KB) to renderer deps.
+- Wire into `MonitorView` / Resources & Tokens section: per-agent token estimate, prompt-size badge in any compose surface.
+- Consider exposing a small helper `estimateTokens(text, model)` in `packages/shared`.
+
+**Likely files**
+- `apps/desktop/package.json`
+- `apps/desktop/src/renderer/components/workspace/sections/MonitorTokens.tsx` (or equivalent)
+- `packages/shared/src/lib/tokens.ts` (new helper, optional)
+
+---
+
+### T112 — OSC 7 + OSC 133 Shell Integration
+**Priority**: Wave 1 / P1 | **Effort**: M | **Source**: Terax `src-tauri/src/modules/pty/scripts/` + `src/modules/terminal/lib/osc-handlers.ts:1-86`
+
+**Why**
+- Our `status_parser.rs` parses agent CLI output via regex — fragile and content-specific.
+- For **shell panes** (non-agent, plain `$SHELL`) we have no reliable cwd tracking or prompt-boundary detection.
+- OSC 7 (cwd) + OSC 133 A/B/C/D (prompt start/end/pre-exec/done+exit-code) are content-agnostic ANSI sequences emitted by the shell itself.
+- Unlocks: per-pane cwd badge, Smart Git Button refresh after `git commit` without polling, "jump to previous command" navigation.
+
+**Scope**
+- Lift Terax init scripts: `zshenv.zsh`, `zprofile.zsh`, `zlogin.zsh`, `zshrc.zsh`, `bashrc.bash`, `profile.ps1` (future Windows).
+- Materialize under `~/.exegol/shell-integration/` on first run.
+- When spawning a shell pane (NOT an agent CLI — those have their own loop), wrap shell command with `ZDOTDIR=...` (zsh) or `--rcfile ...` (bash).
+- Frontend OSC handlers in renderer: register OSC 7 + OSC 133 sequences on xterm, push parsed cwd into workspace store, register `IMarker` at each `A` for jump-to-prompt.
+- **Threat model**: reject OSC 7 updates emitted while `inCommand` is true (prevents SSH session from spoofing cwd badge). Mirror Terax `osc-handlers.ts:27-32`.
+- Apply only to `terminal` panes with `kind: shell` (no agent CLI). Status parser stays for agent panes.
+
+**Likely files**
+- `apps/desktop/src/main/terminal/shell-integration/` (new — init scripts)
+- `apps/desktop/src/main/terminal/shell-wrappers.ts` (materialize + wrap on spawn)
+- `apps/desktop/src/renderer/components/terminal/osc-handlers.ts` (new — frontend parser)
+- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx` (register handlers)
+- `apps/desktop/src/renderer/stores/workspace.ts` (per-pane cwd state)
+
+---
+
+### T113 — PTY Flusher Hardening
+**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `src-tauri/src/modules/pty/session.rs:86-271` + frontend WebGL context-loss handling
+
+**Why**
+- Current sidecar overflow behavior may slice partial ANSI/CSI sequences → broken rendering.
+- We have no WebGL context-loss handler (Mac sleep/wake can drop GPU contexts → blank terminal).
+
+**Scope**
+- Audit `apps/desktop/src/main/terminal/pty-sidecar-entry.ts` flusher:
+  - Confirm coalescing window (Terax uses 4ms, MAX_PENDING 4 MiB).
+  - On overflow: **drop entire pending buffer + emit `ESC c` (hard reset) + dim notice**. Never slice partial CSI sequences.
+- Add WebGL context-loss handler in `TerminalInstance.tsx`:
+  - Listen for `webglcontextlost` on the canvas.
+  - 250 ms delay → re-attach WebGL addon.
+  - **Add max-retry counter (e.g., 3) — if GPU is truly gone, fall back to canvas renderer** (this is the gap in Terax's impl, anti-pattern listed in the review).
+
+**Likely files**
+- `apps/desktop/src/main/terminal/pty-sidecar-entry.ts`
+- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx`
+
+---
+
+### T114 — xterm Renderer Pool
+**Priority**: Wave 1 / P3 | **Effort**: L | **Source**: Terax `src/modules/terminal/lib/rendererPool.ts:1-700`
+
+**Why**
+- Today: 1 xterm instance per pane = 1 WebGL context per pane. 10+ tabs saturates GPU and balloons memory.
+- Terax keeps ≤5 active slots in a pool; hidden tabs release their slot after snapshotting screen + push live ring into DormantRing (T115).
+- When the tab returns: pick best slot (LRU, deprioritize alt-screen + focused), reset, write snapshot, replay ring. For alt-screen TUIs (vim, htop): discard ring, force SIGWINCH "kick".
+
+**Scope**
+- Lift `rendererPool.ts` into `apps/desktop/src/renderer/lib/terminal-pool.ts`.
+- Replace `TerminalInstance` with `usePooledTerminal(paneId, container)` hook.
+- Permanent off-screen recycler div (`position: fixed; left: -99999px; contain: strict`).
+- Wire `WorkspacePane` so hidden panes release the slot instead of unmounting.
+- Floating PiP (T84) integration: ensure snapshot/replay works when a pane detaches.
+- WebGL context-loss recovery (already in T113, adapt for pool).
+
+**Depends on**
+- T115 (DormantRing) — ideally ship T115 first as standalone, then build pool on top.
+
+**Risk**
+- Our sidecar ring already provides instant reconnect; pool's value is only above ~5 concurrent tabs.
+- Cross-cuts Workspace, FloatingPaneRoot, ring-buffer reattach, snapshot replay.
+
+**Likely files**
+- `apps/desktop/src/renderer/lib/terminal-pool.ts` (new)
+- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx` (replaced or wrapped)
+- `apps/desktop/src/renderer/components/workspace/WorkspacePane.tsx`
+- `apps/desktop/src/renderer/FloatingPaneRoot.tsx`
+
+---
+
+### T115 — DormantRing for Hidden Panes
+**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `src/modules/terminal/lib/dormantRing.ts:1-71`
+
+**Why**
+- Today: when a pane is hidden or detached, the renderer-side ring is gone (we rely 100% on the sidecar's 8 MB ring for replay).
+- For hidden tabs that aren't released yet, a small in-memory chunk ring is enough to bridge.
+- Foundation block for T114 (renderer pool) but useful standalone.
+
+**Scope**
+- Implement bounded chunk ring: 256 KB / 256 chunks max.
+- On overflow: keep most-recent slice + prepend `ESC c` + a dim "[buffer overflow — earlier output dropped]" notice.
+- Push every write into ring while pane is hidden; flush on un-hide.
+- Standalone hook `useDormantRing(paneId)` consumed by `TerminalInstance.tsx` when `paneVisible === false`.
+
+**Likely files**
+- `apps/desktop/src/renderer/lib/dormant-ring.ts` (new)
+- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx`
+
+---
+
+### T116 — Rust Search Crates (ignore + grep-* + globset)
+**Priority**: Wave 1 / P1 | **Effort**: M | **Source**: Terax `src-tauri/Cargo.toml` + `fs::search`, `fs::grep`
+
+**Why**
+- We have no in-process fast file search or content grep — would have to spawn `rg` from a shell, parse output.
+- `ignore` crate (powers ripgrep) respects `.gitignore` natively, returns structured results.
+- Critical foundation for any future in-process AI tool that needs to read project context.
+
+**Scope**
+- Add Rust crates to `packages/core-rust/Cargo.toml`: `ignore`, `grep-regex`, `grep-searcher`, `grep-matcher`, `globset`.
+- New module `packages/core-rust/src/search/` with napi exports:
+  - `fs_search(query: string, root: string, limits: { maxResults: number }) -> SearchResult[]`
+  - `fs_grep(pattern: string, root: string, opts: { caseInsensitive, hidden, maxMatches }) -> GrepHit[]`
+- Wire into tRPC procedures so renderer can drive Command Palette file finder + future search panel.
+- Bundle cost: ~1 MB added to `.node` artifact — acceptable.
+
+**Likely files**
+- `packages/core-rust/Cargo.toml`
+- `packages/core-rust/src/search/mod.rs` (new)
+- `packages/core-rust/src/lib.rs` (export napi bindings)
+- `apps/desktop/src/main/ipc/procedures/search.ts` (new or expand)
+
+---
+
+### T117 — Security Hardening (path-guard + command-guard)
+**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `src/modules/ai/lib/security.ts:31-402`
+
+**Why**
+- Our `path-guard.ts` is narrow (`.env` / `.ssh` prefix matches).
+- Terax's guard catches more: bidi-char Trojan Source attacks, NTFS Alternate Data Streams (`name:stream`), fork bombs (`:(){ :|:& };:`), `rm -rf ~` / `/` / `$HOME` variants, `curl|sh`, `dd of=/dev/disk`.
+- Defense-in-depth: even if an agent gets adversarial input, the boundary check refuses obviously dangerous operations.
+
+**Scope**
+- Expand `apps/desktop/src/main/security/path-guard.ts`:
+  - Add bidi-char detection (`‪-‮`, `⁦-⁩`).
+  - Add NTFS ADS collapse (Windows future-proof).
+  - Re-canonicalize symlinks and re-check after resolution (already there per T104 — verify).
+- New `apps/desktop/src/main/security/command-guard.ts`:
+  - Refuse: fork bombs, `rm -rf` on home/root, `dd of=/dev/...`, `curl|sh`, `wget -O- | sh`.
+  - Apply at any shell-exec boundary (currently only spawn — extend if/when we add one-shot exec).
+- Unit tests covering each refusal in `__tests__/`.
+
+**Likely files**
+- `apps/desktop/src/main/security/path-guard.ts`
+- `apps/desktop/src/main/security/command-guard.ts` (new)
+- `apps/desktop/src/main/security/__tests__/`
+
+---
+
+### T118 — CSP Header in Renderer
+**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `tauri.conf.json:27`
+
+**Why**
+- Renderer has no Content-Security-Policy. With browser pane loading arbitrary URLs, XSS surface is larger than necessary.
+- Defense-in-depth — explicit allowlist of script sources and connect targets.
+
+**Scope**
+- Add `<meta http-equiv="Content-Security-Policy" content="...">` to `apps/desktop/src/renderer/index.html`.
+- Suggested baseline:
+  - `default-src 'self'`
+  - `script-src 'self' 'wasm-unsafe-eval'`
+  - `style-src 'self' 'unsafe-inline'` (Tailwind needs inline)
+  - `img-src 'self' data: blob: https:`
+  - `connect-src 'self' https://api.anthropic.com https://api.openai.com https://generativelanguage.googleapis.com ...` (whatever providers we hit directly).
+- Verify the browser pane webview doesn't inherit this (it's its own webContents).
+
+**Likely files**
+- `apps/desktop/src/renderer/index.html`
+
+---
+
+### T119 — Capability Allowlist Pattern (Tauri-style)
+**Priority**: Wave 1 / P2 | **Effort**: M | **Source**: Terax `src-tauri/capabilities/default.json:9-28`
+
+**Why**
+- Today the preload exposes the full tRPC surface and every IPC channel to the renderer via `contextBridge`.
+- With a XSS hole the attacker gets everything. Tauri's capability allowlist limits this declaratively.
+
+**Scope**
+- New `apps/desktop/src/preload/capabilities.json`: declarative list of allowed tRPC procedure paths + raw IPC channels.
+- Modify `apps/desktop/src/preload/index.ts` to enforce the allowlist before forwarding.
+- Modify `apps/desktop/src/main/ipc/router.ts` to also enforce (defense in depth — preload check + main check).
+- Doc: `docs/ARCHITECTURE/CAPABILITIES.md` explaining the model.
+
+**Likely files**
+- `apps/desktop/src/preload/capabilities.json` (new)
+- `apps/desktop/src/preload/index.ts`
+- `apps/desktop/src/main/ipc/router.ts`
+
+---
+
+### T120 — Settings as Separate BrowserWindow
+**Priority**: Wave 1 / P2 | **Effort**: M | **Source**: Terax `src-tauri/src/lib.rs:32-86`
+
+**Why**
+- Today `SettingsPanel` is a modal in the main window — opening it covers the terminal layout.
+- We already have `windows/floating.ts` (T84 PiP) — same primitive works for a settings window.
+- Better multitask: keep an eye on agent output while changing API keys, themes, etc.
+
+**Scope**
+- New `apps/desktop/src/main/windows/settings.ts`:
+  - `openSettingsWindow(tab?: string)`: open if not exists, focus if exists, emit deep-link event for specific tab.
+  - `parent: mainWindow` (lifecycle tied — closes when main closes).
+  - **Do NOT use `alwaysOnTop: true`** — anti-pattern (fights Mission Control on macOS, listed in review).
+- Renderer: settings webview entry (`?settings=1`) mounts `<SettingsPanel/>` standalone.
+- Replace current modal trigger with IPC call to `openSettingsWindow`.
+- Deep-link example: "No API key" error → button "Open API Keys" → `openSettingsWindow('api-keys')`.
+
+**Likely files**
+- `apps/desktop/src/main/windows/settings.ts` (new)
+- `apps/desktop/src/main/ipc/procedures/window.ts` (new IPC)
+- `apps/desktop/src/renderer/main.tsx` (route on `?settings=1`)
+- `apps/desktop/src/renderer/components/settings/SettingsPanel.tsx` (adapt to standalone)
+
+---
+
+### T121 — electron-window-state
+**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `tauri-plugin-window-state` (analog)
+
+**Why**
+- Window size and position aren't restored across launches. Annoying for power users.
+- Library `electron-window-state` (npm) is the canonical Electron solution. Stable, ~200 LOC.
+
+**Scope**
+- Add `electron-window-state` to `apps/desktop/package.json`.
+- Wire into `apps/desktop/src/main/index.ts` window creation: `windowStateKeeper({ defaultWidth, defaultHeight })`.
+- Persist position, size, maximized state across launches.
+- **Exclude `VISIBLE` state** (mirror Terax pattern at `lib.rs:98-102`): app should always paint first, then `show()`, to avoid transparent-window-shadow flash on Linux/Windows when we get there.
+
+**Likely files**
+- `apps/desktop/package.json`
+- `apps/desktop/src/main/index.ts`
+
+---
+
+### T122 — Vercel AI SDK + Ollama Support
+**Priority**: Wave 1 / P3 (radar) | **Effort**: M | **Source**: Terax `src/modules/ai/lib/agent.ts:70-211` + `transport.ts:71-114`
+
+**Why**
+- Today our two direct LLM calls (`diff.ts:324-396` Smart Git Button commit msg + `scoring.ts:210-280` Tier-3 LLM-as-judge) use raw `fetch()` to `api.anthropic.com`. No cache breakpoints, no retry, no abort beyond timeout, brittle regex parse for structured output.
+- Vercel AI SDK v6 gives us all of that + provider-agnostic API. Unlocks **Ollama / LM Studio / local models** via `@ai-sdk/openai-compatible` with a single abstraction.
+- Not vital for our spawned-CLI core — keep on radar but value compounds if we add more in-process LLM utilities.
+
+**Scope**
+- Add deps: `ai`, `@ai-sdk/anthropic`, `@ai-sdk/openai-compatible` (for Ollama/LM Studio).
+- New `apps/desktop/src/main/ai/llm.ts`:
+  - `getAnthropic(db)`: pulls key from `keystore`, returns `LanguageModel`.
+  - `getOllama(baseUrl)`: returns local OpenAI-compatible model.
+  - `applyCacheBreakpoints(messages)`: helper porting Terax's `agent.ts:294-311` pattern.
+- Refactor `diff.ts:324-396`:
+  - `generateText({ model, prompt, maxOutputTokens: 120, abortSignal })` instead of fetch.
+- Refactor `scoring.ts:210-280`:
+  - `generateObject({ model, schema: z.object({ clarity: z.number().min(1).max(5), ... }) })` — replaces regex parse on `text.match(/\{[^}]+\}/)`.
+  - Apply cache breakpoints for ~30–50 % cost reduction across Tier-3 evaluations.
+- Settings UI: new "Local Models" section under API Keys for Ollama base URL + model picker.
+- **Anti-pattern reminder**: do NOT add separate code branches for Ollama / LM Studio / MLX. Single OpenAI-compatible abstraction with base-URL + name + key + headers config.
+
+**Likely files**
+- `apps/desktop/package.json`
+- `apps/desktop/src/main/ai/llm.ts` (new)
+- `apps/desktop/src/main/ipc/procedures/diff.ts`
+- `apps/desktop/src/main/agents/scoring.ts`
+- `apps/desktop/src/renderer/components/settings/ApiKeysSettings.tsx` (Ollama config)
 
 ---
 
