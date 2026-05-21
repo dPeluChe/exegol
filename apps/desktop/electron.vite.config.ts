@@ -50,5 +50,32 @@ export default defineConfig({
         "@exegol/ui": resolve("../../packages/ui/src"),
       },
     },
+    build: {
+      target: "chrome134",
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            if (id.includes("node_modules/@xterm/")) return "xterm";
+            if (id.includes("node_modules/monaco-editor") || id.includes("node_modules/@monaco-editor/")) {
+              return "monaco";
+            }
+            if (
+              id.includes("node_modules/react/") ||
+              id.includes("node_modules/react-dom/") ||
+              id.includes("node_modules/scheduler/")
+            ) {
+              return "react-vendor";
+            }
+            if (id.includes("node_modules/@radix-ui/")) return "radix";
+            if (id.includes("node_modules/@trpc/") || id.includes("node_modules/@tanstack/")) return "trpc";
+            return undefined;
+          },
+        },
+      },
+    },
+    esbuild: {
+      drop: ["debugger"],
+      pure: ["console.debug", "console.info", "console.trace"],
+    },
   },
 });
