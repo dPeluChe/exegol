@@ -28,6 +28,7 @@
     "@xterm/headless": "^6.0.0",
     "croner": "^9.0.0",
     "electron-updater": "^6.0.0",
+    "electron-window-state": "^5.0.3",
     "libsql": "^0.5.0",
     "nanoid": "^5.0.0",
     "node-pty": "^1.0.0",

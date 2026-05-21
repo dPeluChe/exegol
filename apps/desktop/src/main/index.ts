@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, webContents } from "electron";
+import windowStateKeeper from "electron-window-state";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
@@ -53,9 +54,16 @@ const endMark = (label: string, from = "appReady") => {
 };
 
 function createWindow(): void {
+  const state = windowStateKeeper({
+    defaultWidth: 1400,
+    defaultHeight: 900,
+  });
+
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    x: state.x,
+    y: state.y,
+    width: state.width,
+    height: state.height,
     minWidth: 900,
     minHeight: 600,
     show: false,
@@ -70,6 +78,8 @@ function createWindow(): void {
       webviewTag: true,
     },
   });
+
+  state.manage(mainWindow);
 
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
