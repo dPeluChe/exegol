@@ -3,6 +3,7 @@ import { Button, cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Coins, RefreshCw } from "lucide-react";
 import { useState } from "react";
+import { getContext } from "tokenlens";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   useAgentCosts,
@@ -38,6 +39,19 @@ function getModelPrice(
     if (model.startsWith(key) || key.startsWith(model)) return val;
   }
   return null;
+}
+
+/**
+ * Look up max context window for a model via tokenlens registry.
+ * Returns combined/total token cap when available, falling back to maxInput.
+ */
+function getModelMaxContext(model: string): number | null {
+  try {
+    const ctx = getContext({ modelId: model });
+    return ctx.maxTotal ?? ctx.maxInput ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── Summary Card ─────────────────────────────────────────────────────────
@@ -130,12 +144,18 @@ function ModelBreakdownTable({ projectId, days }: { projectId: string; days: num
     <div className="space-y-2">
       {models.map((m) => {
         const price = getModelPrice(m.model, catalog);
+        const maxContext = getModelMaxContext(m.model);
         return (
           <div key={`${m.provider}/${m.model}`} className="space-y-1">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-text-primary">{m.model}</span>
                 <span className="text-[10px] text-text-muted">{m.provider}</span>
+                {maxContext && (
+                  <span className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] tabular-nums text-text-muted">
+                    {formatTokens(maxContext)} ctx
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <span className="tabular-nums text-text-muted">
