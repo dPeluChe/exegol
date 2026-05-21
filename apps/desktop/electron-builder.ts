@@ -106,8 +106,8 @@ const config: Configuration = {
   // ─── Auto-update publish config (GitHub Releases) ──────────────────
   publish: {
     provider: "github",
-    owner: "OWNER", // TODO: replace with actual GitHub owner
-    repo: "exegol", // TODO: replace with actual repo name
+    owner: "dPeluChe",
+    repo: "exegol",
     releaseType: "release",
   },
 };

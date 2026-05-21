@@ -41,7 +41,6 @@ than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_S
 
 ### P0 — Must land before broad release push
 - **Parallel Multi-Agent on Worktrees** (T65)
-- **Release config** (T103) — owner/repo, notarization, canary channel, release checklist
 
 ### P1 — Differentiators for first users
 - **Worktree isolation status** (T105) — visible badge per agent: `project root | isolated | pipeline | fallback`
@@ -463,25 +462,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 **Do not overlap with**
 - Lane D file decomposition (T75) — coordinate on manager.ts split
 - Lane A spawn context changes unless agreed first
-
----
-
-### T103 — Release Config Completion
-**Priority**: P0 | **Effort**: Small | **Source**: Audit 2026-04-27
-
-**Why**
-- `electron-builder.ts` still has `publish.owner: "OWNER"` placeholder and `notarize: false`.
-- No canary/stable channel separation. No release checklist.
-
-**Scope**
-- Fill `owner`/`repo` in electron-builder publish config
-- Define `stable` and `canary` channel update feeds
-- Document notarization steps (requires Apple Developer credentials)
-- Add `scripts/release-checklist.md`: typecheck → lint → tests → package mac → smoke launch → auto-update test
-
-**Likely files**
-- `apps/desktop/electron-builder.ts`
-- `scripts/release-checklist.md` (new)
 
 ---
 
