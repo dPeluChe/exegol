@@ -3,7 +3,7 @@ import Editor, { loader } from "@monaco-editor/react";
 import { Code2, Eye } from "lucide-react";
 import * as monaco from "monaco-editor";
 import { useState } from "react";
-import Markdown from "react-markdown";
+import { Streamdown } from "streamdown";
 
 // Use local monaco-editor instance instead of CDN
 loader.config({ monaco });
@@ -111,7 +111,7 @@ function MonacoViewer({ content, language }: { content: string; language: string
 function MarkdownViewer({ content }: { content: string }) {
   return (
     <div className="prose prose-invert prose-sm max-w-none overflow-auto p-4 text-text-primary prose-headings:text-text-primary prose-a:text-accent prose-strong:text-text-primary prose-code:rounded prose-code:bg-bg-tertiary prose-code:px-1 prose-code:py-0.5 prose-code:text-[12px] prose-code:text-accent prose-pre:bg-bg-tertiary prose-pre:text-[12px]">
-      <Markdown>{content}</Markdown>
+      <Streamdown>{content}</Streamdown>
     </div>
   );
 }
