@@ -71,7 +71,7 @@ describe("isPathAllowed", () => {
   it("denies a prefix-confusion path", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "pg-test-"));
     // tmpDir might be /tmp/pg-test-abc; check that /tmp/pg-test-abcEVIL is blocked
-    const evil = tmpDir + "EVIL";
+    const evil = `${tmpDir}EVIL`;
     const allowed = await isPathAllowed(join(evil, "secret"), [tmpDir]);
     expect(allowed).toBe(false);
   });

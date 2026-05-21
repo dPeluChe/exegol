@@ -16,7 +16,7 @@ import {
   Send,
   XCircle,
 } from "lucide-react";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import {
   type PortInfo,

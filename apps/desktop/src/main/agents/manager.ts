@@ -9,7 +9,6 @@ import {
   listWorktrees,
   setAgentWorktree,
   stopAgent,
-  updateAgentStatus,
 } from "../db/queries";
 import { runSetupHook } from "../hooks/project-hooks";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
@@ -18,9 +17,9 @@ import { loadLifecycleConfig, runSetupIfNeeded } from "../lifecycle/loader";
 import { getPtyHost } from "../terminal/pty-host";
 import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../terminal/shell-wrappers";
 import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
-import { runPreflight } from "./preflight";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { runPreflight } from "./preflight";
 import {
   type ReattachResult,
   reattachSidecarAgents as reattachSidecarAgentsImpl,
