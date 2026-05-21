@@ -6,9 +6,17 @@ import { TRPCError } from "@trpc/server";
 import type Database from "libsql";
 import { z } from "zod";
 import { logger } from "../../lib/logger";
+import { AsyncLruCache } from "../../lib/lru-cache";
 import { getApiKey } from "../../security/keystore";
 import { getProjectPorts } from "../../system/ports";
 import { publicProcedure, router } from "../trpc";
+
+// Cache shape: key = `${projectId}|${kind}|${staged}|${pathOverride ?? ""}`
+// Invalidated whenever a mutation touches the same projectId.
+const diffCache = new AsyncLruCache<string, unknown>(6);
+function invalidateProjectDiff(projectId: string): void {
+  diffCache.invalidateWhere((k) => k.startsWith(`${projectId}|`));
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -70,7 +78,7 @@ export const diffRouter = router({
   /** Structured diff via Rust git2 — returns FileDiff[] */
   structuredDiff: publicProcedure
     .input(z.object({ projectId: z.string(), staged: z.boolean().default(false) }))
-    .query(({ ctx, input }) => {
+    .query(async ({ ctx, input }) => {
       const projectPath = resolveProjectPath(ctx.db, input.projectId);
       if (!coreRust) {
         throw new TRPCError({
@@ -78,7 +86,9 @@ export const diffRouter = router({
           message: "Rust native module not available for structured diff",
         });
       }
-      return coreRust.getDiff(projectPath, input.staged);
+      const rust = coreRust;
+      const key = `${input.projectId}|structured|${input.staged}|`;
+      return diffCache.getOrCompute(key, async () => rust.getDiff(projectPath, input.staged));
     }),
 
   /** Legacy string diff — kept for backward compat, prefers Rust when available */
@@ -86,14 +96,17 @@ export const diffRouter = router({
     .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const projectPath = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      if (coreRust) {
-        try {
-          return coreRust.getWorktreeDiff(projectPath);
-        } catch {
-          // Fall through to CLI
+      const key = `${input.projectId}|project|false|${input.pathOverride ?? ""}`;
+      return diffCache.getOrCompute(key, async () => {
+        if (coreRust) {
+          try {
+            return coreRust.getWorktreeDiff(projectPath);
+          } catch {
+            // Fall through to CLI
+          }
         }
-      }
-      return runGitDiff(projectPath, ["--unified=3"]);
+        return runGitDiff(projectPath, ["--unified=3"]);
+      });
     }),
 
   /** Legacy staged diff */
@@ -101,7 +114,10 @@ export const diffRouter = router({
     .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const projectPath = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      return runGitDiff(projectPath, ["--cached", "--unified=3"]);
+      const key = `${input.projectId}|staged|true|${input.pathOverride ?? ""}`;
+      return diffCache.getOrCompute(key, async () =>
+        runGitDiff(projectPath, ["--cached", "--unified=3"]),
+      );
     }),
 
   /** Git status: list changed files with their staging state */
@@ -140,6 +156,7 @@ export const diffRouter = router({
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       const args = input.files && input.files.length > 0 ? ["add", ...input.files] : ["add", "-A"];
       await execFileAsync("git", args, { cwd });
+      invalidateProjectDiff(input.projectId);
       return { success: true };
     }),
 
@@ -159,6 +176,7 @@ export const diffRouter = router({
           ? ["reset", "HEAD", ...input.files]
           : ["reset", "HEAD"];
       await execFileAsync("git", args, { cwd });
+      invalidateProjectDiff(input.projectId);
       return { success: true };
     }),
 
@@ -188,6 +206,7 @@ export const diffRouter = router({
         await execFileAsync("git", ["add", "-A"], { cwd });
       }
       const { stdout } = await execFileAsync("git", ["commit", "-m", input.message], { cwd });
+      invalidateProjectDiff(input.projectId);
       return { output: stdout.trim() };
     }),
 
