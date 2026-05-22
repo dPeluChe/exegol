@@ -1,12 +1,10 @@
-import type { AgentActivityLevel, AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
-import { FolderTree, GitBranch, Globe, Plus, Terminal, X } from "lucide-react";
+import { Plus, Terminal } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import {
@@ -14,64 +12,15 @@ import {
   findFirstPaneId,
   getFocusedOrFirstPaneId,
   getProjectState,
-  type Pane,
   selectActiveTabId,
   selectPanes,
   selectTabs,
   useWorkspaceStore,
 } from "../../stores/workspace";
-import { AgentIcon } from "../common/AgentIcon";
 import { LayoutPresets } from "./LayoutPresets";
-
-// ─── T70: Activity dot for tab chrome ───────────────────────────────────────
-
-const ACTIVITY_DOT_CLASS: Partial<Record<AgentActivityLevel, string>> = {
-  busy: "bg-success animate-status-pulse",
-  idle: "bg-warning",
-};
-
-// ─── Tab auto-naming helpers ────────────────────────────────────────────────
-
-const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  terminal: Terminal,
-  browser: Globe,
-  files: FolderTree,
-  git: GitBranch,
-};
-
-/** Derive display name, icon, and primary agent ID from the tab's primary pane */
-function getTabMeta(
-  tabLabel: string,
-  tabLayout: import("../../stores/workspace").LayoutNode,
-  panes: Record<string, Pane>,
-  agents: Record<string, { cliType: string; taskDescription: string }>,
-): {
-  displayName: string;
-  Icon: React.ComponentType<{ className?: string }> | null;
-  primaryAgentId: string | null;
-} {
-  // If user explicitly renamed the tab (not a default name), respect it
-  const isDefault =
-    tabLabel.startsWith("Tab ") || tabLabel === "Workspace" || tabLabel === "Terminal";
-
-  const firstPaneId = findFirstPaneId(tabLayout);
-  const firstPane = firstPaneId ? panes[firstPaneId] : null;
-  const Icon = firstPane ? (PANE_TYPE_ICONS[firstPane.type] ?? null) : null;
-  const primaryAgentId = firstPane?.type === "terminal" ? (firstPane.agentId ?? null) : null;
-
-  if (!isDefault) return { displayName: tabLabel, Icon, primaryAgentId };
-
-  if (firstPane?.type === "terminal" && firstPane.agentId) {
-    const agent = agents[firstPane.agentId];
-    if (agent) return { displayName: agent.cliType, Icon: Terminal, primaryAgentId };
-  }
-  if (firstPane?.type === "browser") return { displayName: "Browser", Icon: Globe, primaryAgentId };
-  if (firstPane?.type === "git") return { displayName: "Git", Icon: GitBranch, primaryAgentId };
-  if (firstPane?.type === "files")
-    return { displayName: "Files", Icon: FolderTree, primaryAgentId };
-
-  return { displayName: tabLabel, Icon, primaryAgentId };
-}
+import { QuickLaunchBar } from "./QuickLaunchBar";
+import { getTabMeta } from "./tab-bar-helpers";
+import { WorkspaceTabItem } from "./WorkspaceTabItem";
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -296,78 +245,29 @@ export function WorkspaceTabBar() {
             const tabActivity = primaryAgentId ? agents[primaryAgentId]?.activityLevel : undefined;
 
             return (
-              // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
-              <div
-                role="button"
-                tabIndex={0}
+              <WorkspaceTabItem
                 key={tab.id}
-                draggable={!isEditing}
-                onDragStart={(e) => handleTabDragStart(e, tab.id)}
-                onDragOver={(e) => handleTabDragOver(e, tab.id)}
-                onDragLeave={handleTabDragLeave}
-                onDrop={(e) => handleTabDrop(e, tab.id)}
-                onDragEnd={handleTabDragEnd}
-                onClick={() => setActiveTab(tab.id)}
-                onDoubleClick={() => startEditing(tab.id, tab.label)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") setActiveTab(tab.id);
-                }}
-                className={cn(
-                  "group relative flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] font-medium transition-colors",
-                  "hover:bg-white/5 cursor-pointer",
-                  isActive ? "bg-white/10 text-text-primary" : "text-text-secondary",
-                  dragOverTabId === tab.id && "ring-1 ring-accent/50",
-                )}
-              >
-                {isEditing ? (
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onBlur={finishEditing}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") finishEditing();
-                      if (e.key === "Escape") setEditingTabId(null);
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-24 bg-transparent text-[11px] text-text-primary outline-none"
-                  />
-                ) : (
-                  <>
-                    {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
-                    <span className="max-w-[140px] truncate">{displayName}</span>
-                    {tabActivity && ACTIVITY_DOT_CLASS[tabActivity] && (
-                      <span
-                        className={cn(
-                          "h-1.5 w-1.5 shrink-0 rounded-full",
-                          ACTIVITY_DOT_CLASS[tabActivity],
-                        )}
-                        aria-hidden="true"
-                      />
-                    )}
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCloseTab(tab.id);
-                  }}
-                  className={cn(
-                    "ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded",
-                    "opacity-0 transition-opacity group-hover:opacity-100",
-                    "hover:bg-white/10",
-                  )}
-                  title="Close tab"
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-                {isActive && (
-                  <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent" />
-                )}
-              </div>
+                tab={tab}
+                isActive={isActive}
+                isEditing={isEditing}
+                displayName={displayName}
+                TabIcon={TabIcon}
+                tabActivity={tabActivity}
+                dragOverTabId={dragOverTabId}
+                editValue={editValue}
+                setEditValue={setEditValue}
+                setEditingTabId={setEditingTabId}
+                inputRef={inputRef}
+                finishEditing={finishEditing}
+                startEditing={startEditing}
+                setActiveTab={setActiveTab}
+                handleCloseTab={handleCloseTab}
+                handleTabDragStart={handleTabDragStart}
+                handleTabDragOver={handleTabDragOver}
+                handleTabDragLeave={handleTabDragLeave}
+                handleTabDrop={handleTabDrop}
+                handleTabDragEnd={handleTabDragEnd}
+              />
             );
           })}
 
@@ -398,147 +298,6 @@ export function WorkspaceTabBar() {
 
       {/* Quick-launch bar */}
       <QuickLaunchBar />
-    </div>
-  );
-}
-
-// ─── Quick Launch Bar ───────────────────────────────────────────────────────
-
-function QuickLaunchBar() {
-  const { projectId } = useProjectContext();
-  const [launching, setLaunching] = useState<string | null>(null);
-  const updatePane = useWorkspaceStore((s) => s.updatePane);
-  const addTab = useWorkspaceStore((s) => s.addTab);
-  const addAgent = useAgentStore((s) => s.addAgent);
-  const createTerminal = useTerminalStore((s) => s.createTerminal);
-  const { data: providers } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
-  const cliAgents = providers ?? [];
-
-  const handleLaunch = useCallback(
-    async (cli: AgentProvider) => {
-      if (!projectId || launching) return;
-      setLaunching(cli.id);
-      try {
-        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-        const agent = await trpcMutate<any>("agents.spawn", {
-          projectId,
-          cliType: cli.id as AgentCliType,
-          taskDescription: cli.name,
-        });
-
-        addAgent({
-          id: agent.id,
-          projectId,
-          cliType: agent.cliType,
-          status: agent.status,
-          currentStep: agent.currentStep,
-          taskDescription: agent.taskDescription,
-          branchName: agent.branchName ?? null,
-          tokenUsage: { input: 0, output: 0, cost: 0 },
-          startedAt: agent.startedAt,
-          accessMode: agent.accessMode ?? null,
-          claudeSessionId: null,
-          activityLevel: "busy",
-        });
-        createTerminal(agent.id);
-
-        // Read fresh state to avoid stale closure
-        const freshPw = getProjectState();
-        const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
-        if (activeTab) {
-          // T95: Prefer focused pane over first pane when targeting
-          const targetPaneId = getFocusedOrFirstPaneId(activeTab);
-          const targetPane = targetPaneId ? freshPw.panes[targetPaneId] : null;
-
-          // Only replace empty panes or terminals with stopped/no agent
-          // NEVER replace a pane with a running agent — that orphans the session
-          const agentState = targetPane?.agentId
-            ? useAgentStore.getState().agents[targetPane.agentId]
-            : null;
-          const isRunningAgent =
-            agentState &&
-            ["running", "spawning", "waiting_input", "paused"].includes(agentState.status);
-          const canReplace =
-            targetPane?.type === "empty" || (targetPane?.type === "terminal" && !isRunningAgent);
-
-          if (canReplace && targetPaneId) {
-            // Replace empty/stopped pane with new agent terminal
-            updatePane(targetPaneId, {
-              type: "terminal",
-              agentId: agent.id,
-            });
-          } else {
-            // Pane has a running agent or is browser/files/git: create a new tab
-            const newTabId = addTab(cli.name);
-            const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
-            if (newTab) {
-              const newPaneId = findFirstPaneId(newTab.layout);
-              if (newPaneId) {
-                useWorkspaceStore.getState().updatePane(newPaneId, {
-                  type: "terminal",
-                  agentId: agent.id,
-                });
-              }
-            }
-          }
-        } else {
-          // No active tab: create one
-          const newTabId = addTab(cli.name);
-          const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
-          if (newTab) {
-            const newPaneId = findFirstPaneId(newTab.layout);
-            if (newPaneId) {
-              useWorkspaceStore.getState().updatePane(newPaneId, {
-                type: "terminal",
-                agentId: agent.id,
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("[QuickLaunchBar] Spawn failed:", err);
-      } finally {
-        setLaunching(null);
-      }
-    },
-    [projectId, launching, addAgent, createTerminal, updatePane, addTab],
-  );
-
-  return (
-    <div className="flex h-7 items-center gap-1.5 overflow-x-auto px-2">
-      {cliAgents.map((cli) => (
-        <button
-          type="button"
-          key={cli.id}
-          disabled={launching === cli.id}
-          onClick={() => handleLaunch(cli)}
-          className={cn(
-            "group/cli relative flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold transition-all",
-            "bg-zinc-700 text-zinc-400 hover:text-white",
-            launching === cli.id && "opacity-40",
-          )}
-          style={{ "--cli-color": cli.color } as React.CSSProperties}
-          title={cli.name}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = cli.color;
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "";
-          }}
-        >
-          <AgentIcon
-            provider={cli.id}
-            size={14}
-            fallback={cli.icon}
-            fallbackColor={cli.color}
-            className="rounded-full"
-          />
-        </button>
-      ))}
     </div>
   );
 }
