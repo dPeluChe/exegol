@@ -578,6 +578,8 @@ if (!nativeBinding) {
 module.exports = nativeBinding
 module.exports.AgentOutputStream = nativeBinding.AgentOutputStream
 module.exports.createWorktree = nativeBinding.createWorktree
+module.exports.fsGrep = nativeBinding.fsGrep
+module.exports.fsSearch = nativeBinding.fsSearch
 module.exports.getDiff = nativeBinding.getDiff
 module.exports.getRepoInfo = nativeBinding.getRepoInfo
 module.exports.getRepoSnapshot = nativeBinding.getRepoSnapshot

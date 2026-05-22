@@ -72,6 +72,30 @@ export interface FileDiff {
 }
 
 /**
+ * Regex-search file contents under `root`. Gitignore-aware by default,
+ * honors `globs` include filters, skips files larger than
+ * `max_file_size_kb`, stops early once `max_matches` is reached.
+ *
+ * `root` MUST be a directory the caller is authorized to search; this
+ * function does no path validation. Returns Err on invalid regex or
+ * missing root.
+ */
+export declare function fsGrep(pattern: string, root: string, opts: GrepOptions): Array<GrepHit>
+
+/**
+ * Fuzzy-find files and directories under `root`.
+ *
+ * `root` MUST be a directory the caller is authorized to search; this
+ * function does no path validation. Results are gitignore-aware (default)
+ * and bounded by `max_results`.
+ *
+ * Scoring: basename substring (+200) outranks full-path substring (+100);
+ * word-boundary hits add +50; subsequence-only matches score by query
+ * length. Empty query returns the first `max_results` entries in walk order.
+ */
+export declare function fsSearch(query: string, root: string, limits: SearchLimits): Array<SearchResult>
+
+/**
  * Get structured diff of changes (staged or unstaged).
  * Returns a list of FileDiff objects with hunks and lines.
  */
@@ -85,6 +109,38 @@ export declare function getRepoSnapshot(repoPath: string): RepoSnapshot
 
 /** Get a unified diff of all changes (staged + unstaged + untracked) in a worktree. */
 export declare function getWorktreeDiff(worktreePath: string): string
+
+/** A single line match from `fs_grep`. */
+export interface GrepHit {
+  /** Absolute path on disk. */
+  path: string
+  /** Path relative to the search `root` (forward-slash form). */
+  relativePath: string
+  /** 1-indexed line number where the match was found. */
+  lineNumber: number
+  /** The matching line content (trailing newline stripped, truncated to ~240 chars). */
+  line: string
+  /** 0-indexed byte offset of the first match in the line. */
+  columnStart: number
+  /** 0-indexed byte offset of the end of the first match in the line. */
+  columnEnd: number
+}
+
+/** Options for `fs_grep`. */
+export interface GrepOptions {
+  /** Case-insensitive regex. Default false. */
+  caseInsensitive?: boolean
+  /** Include dotfiles. Default false. */
+  includeHidden?: boolean
+  /** Honor `.gitignore` / `.ignore` / `.git/info/exclude`. Default true. */
+  respectGitignore?: boolean
+  /** Max matches to return. Default 500, hard cap 5000. */
+  maxMatches?: number
+  /** Skip files larger than this (KB). Default 1024, hard cap 10240. */
+  maxFileSizeKb?: number
+  /** Optional include globs (e.g. `["**\/*.ts", "**\/*.tsx"]`). */
+  globs?: Array<string>
+}
 
 /** Health check function to verify the native module is loaded correctly. */
 export declare function healthCheck(): string
@@ -147,6 +203,30 @@ export interface RepoSnapshot {
  * Never force-pushes — creates a new "revert" commit on current branch.
  */
 export declare function revertToSnapshot(repoPath: string, targetSha: string): string
+
+/** Limits applied to `fs_search` walks. */
+export interface SearchLimits {
+  /** Max results to return. Default 100, hard cap 500. */
+  maxResults?: number
+  /** Max recursion depth. Default 16, hard cap 32. */
+  maxDepth?: number
+  /** Include dotfiles. Default false. */
+  includeHidden?: boolean
+  /** Honor `.gitignore` / `.ignore` / `.git/info/exclude`. Default true. */
+  respectGitignore?: boolean
+}
+
+/** A filename/path hit from `fs_search`. */
+export interface SearchResult {
+  /** Absolute path on disk. */
+  path: string
+  /** Path relative to the search `root` (forward-slash form). */
+  relativePath: string
+  /** Fuzzy match score (higher = better). */
+  score: number
+  /** True if the entry is a directory. */
+  isDir: boolean
+}
 
 /**
  * Strip ANSI escape codes from terminal output.
