@@ -49,8 +49,13 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const resumableCliTypes = useResumableCliTypes();
   const storeAgent = useAgentStore((s) => s.agents[agentId]);
   const { data: dbAgent } = useAgent(agentId);
-  // Prefer store (push events) over DB query (polling fallback)
-  const agent = storeAgent ?? dbAgent ?? null;
+  // Prefer store (push events) over DB query (polling fallback). Merge in
+  // dbAgent-only fields (resumeCommand) so T106 Resume gating works even
+  // when the push-event store is the source for the rest of the shape.
+  const agent = useMemo(() => {
+    if (!storeAgent) return dbAgent ?? null;
+    return { ...storeAgent, resumeCommand: dbAgent?.resumeCommand ?? null };
+  }, [storeAgent, dbAgent]);
   const rawIsStopped = agent ? STOPPED_STATUSES.has(agent.status) : false;
   const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
     rawIsStopped ? agentId : null,

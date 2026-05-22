@@ -9,6 +9,21 @@ import { getAgent } from "./agents";
 import { mapScoreRow } from "./scoring";
 import { getWorktreeByAgentId } from "./worktrees";
 
+// Compiled once: ANSI/OSC/CSI strip + residual single-byte controls.
+// The patterns contain literal control bytes, so they're built with `new
+// RegExp` (string literal) — the biome-ignores below override the
+// `useRegexLiterals` rule on purpose.
+// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
+const OSC_RE = new RegExp("\\u001b\\][\\s\\S]*?(?:\\u0007|\\u001b\\\\)", "g");
+// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
+const CSI_RE = new RegExp("\\u001b\\[[0-9;?]*[ -\\/]*[@-~]", "g");
+// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
+const CTRL_RE = new RegExp("[\\u0000-\\u0008\\u000b-\\u001f\\u007f]", "g");
+
+function stripTerminalControlBytes(text: string): string {
+  return text.replace(OSC_RE, "").replace(CSI_RE, "").replace(CTRL_RE, "");
+}
+
 export function createParallelRun(
   db: Database.Database,
   data: {
@@ -200,9 +215,7 @@ function tailScrollback(agentId: string, lineCount: number): string[] {
   try {
     const path = getScrollbackPath(agentId);
     if (!existsSync(path)) return [];
-    const content = readFileSync(path, "utf-8");
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: strip CSI escape sequences for a human-readable scrollback tail
-    const stripped = content.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "");
+    const stripped = stripTerminalControlBytes(readFileSync(path, "utf-8"));
     const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0);
     return lines.slice(-lineCount);
   } catch {

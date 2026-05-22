@@ -5,6 +5,16 @@ import { AlertCircle, FileDiff, PlayCircle, RotateCcw } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { trpcInvoke } from "../../lib/trpc-client";
 
+// Compiled once: ANSI/OSC/CSI strip + residual single-byte controls.
+// Built with `new RegExp` so the source doesn't contain literal control
+// bytes (which `noControlCharactersInRegex` would reject in a regex literal).
+// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
+const STOP_OSC_RE = new RegExp("\\u001b\\][\\s\\S]*?(?:\\u0007|\\u001b\\\\)", "g");
+// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
+const STOP_CSI_RE = new RegExp("\\u001b\\[[0-9;?]*[ -\\/]*[@-~]", "g");
+// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
+const STOP_CTRL_RE = new RegExp("[\\u0000-\\u0008\\u000b-\\u001f\\u007f]", "g");
+
 const TERMINAL_STATUSES: ReadonlySet<AgentStatus> = new Set([
   "completed",
   "failed",
@@ -122,7 +132,11 @@ export function AgentStopReason({
 
 function extractLastLines(content: string | null | undefined, count: number): string[] {
   if (!content) return [];
-  return content
+  const cleaned = content
+    .replace(STOP_OSC_RE, "")
+    .replace(STOP_CSI_RE, "")
+    .replace(STOP_CTRL_RE, "");
+  return cleaned
     .split(/\r?\n/)
     .filter((line) => line.trim().length > 0)
     .slice(-count);

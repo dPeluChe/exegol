@@ -18,7 +18,7 @@ import type { WorktreeRecord } from "./agent-worktree-ops";
 import type { AgentProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
 import { _getFullPath, buildApiKeyEnv, coreRust, slugifyBranchName } from "./spawn-env";
-import { createManagedWorktree, getWorktreeName } from "./worktrees";
+import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
 
 export interface PtyInvocation {
   shell: string;
@@ -92,8 +92,10 @@ export function setupAgentCwd(
     return cwd;
   }
 
+  let createdWtInfo: { worktreeName: string; path: string; branchName: string } | null = null;
   try {
     const wtInfo = createManagedWorktree(project.path, project.name, requestedBranchName);
+    createdWtInfo = wtInfo;
     cwd = wtInfo.path;
 
     const dbWt = dbCreateWorktree(db, {
@@ -135,6 +137,21 @@ export function setupAgentCwd(
     setIsolationMode(db, agent.id, "isolated");
   } catch (err) {
     logger.error("[AgentManager] Failed to create worktree, falling back to project root:", err);
+    // Half-success guard: createManagedWorktree may have written a worktree
+    // to disk before dbCreateWorktree threw. Tear the on-disk worktree down
+    // so we don't leak it, and reset cwd so the agent runs in project.path
+    // (matching what the "fallback" badge claims).
+    if (createdWtInfo) {
+      try {
+        removeManagedWorktree(project.path, createdWtInfo.worktreeName, createdWtInfo.path, true);
+      } catch (cleanupErr) {
+        logger.warn(
+          "[AgentManager] Failed to remove orphaned worktree during fallback:",
+          cleanupErr,
+        );
+      }
+    }
+    cwd = project.path;
     setIsolationMode(db, agent.id, "fallback");
   }
 

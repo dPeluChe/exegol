@@ -75,7 +75,10 @@ export function IsolationModeBadge({
   mode: IsolationMode;
   branchName?: string | null;
 }) {
-  const config = ISOLATION_LABEL[mode];
+  // Defensive: a future migration or manual DB edit could put a value here
+  // that the renderer doesn't know about. Fall back to "project-root" tone
+  // rather than crashing the whole terminal pane.
+  const config = ISOLATION_LABEL[mode] ?? ISOLATION_LABEL["project-root"];
   const Icon = config.icon;
   const tooltip = branchName ? `${config.tooltip} (branch: ${branchName})` : config.tooltip;
   return (

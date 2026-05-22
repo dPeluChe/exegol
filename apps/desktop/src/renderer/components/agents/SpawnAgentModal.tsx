@@ -28,11 +28,23 @@ interface SpawnAgentModalProps {
   projectId: string;
   onClose: () => void;
   initialProvider?: AgentProvider;
+  /** Pre-fill the task field (used by T106 "New agent with same task"). */
+  initialTask?: string;
+  /** Pre-select a CLI by id (overrides initialProvider when both are passed). */
+  initialCliType?: string;
 }
 
-export function SpawnAgentModal({ projectId, onClose, initialProvider }: SpawnAgentModalProps) {
-  const [task, setTask] = useState("");
-  const [selectedProviderId, setSelectedProviderId] = useState(initialProvider?.id ?? "");
+export function SpawnAgentModal({
+  projectId,
+  onClose,
+  initialProvider,
+  initialTask,
+  initialCliType,
+}: SpawnAgentModalProps) {
+  const [task, setTask] = useState(initialTask ?? "");
+  const [selectedProviderId, setSelectedProviderId] = useState(
+    initialCliType ?? initialProvider?.id ?? "",
+  );
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const [useWorktree, setUseWorktree] = useState(true);
   const [branchName, setBranchName] = useState("");

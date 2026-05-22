@@ -207,6 +207,14 @@ export const agentRouter = router({
       return getAgent(ctx.db, input.id) ?? null;
     }),
 
+  /** T106 — Resolve the on-disk worktree path for an agent (for "View diff"). */
+  getWorktreePath: publicProcedure
+    .input(z.object({ agentId: z.string() }))
+    .query(({ ctx, input }) => {
+      const wt = getWorktreeByAgentId(ctx.db, input.agentId);
+      return wt?.path ?? null;
+    }),
+
   // ─── Handoff ────────────────────────────────────────────────────────────
 
   getHandoff: publicProcedure.input(z.object({ agentId: z.string() })).query(({ ctx, input }) => {

@@ -37,14 +37,16 @@ export function handleParallelAgentExit(db: Database.Database, agentId: string):
     const run = getParallelRun(db, runId);
     if (!run) return;
     if (run.status !== "running") return;
+    // empty array → `WHERE id IN ()` is a SQLite syntax error
+    if (run.agentIds.length === 0) return;
 
     const statuses = db
       .prepare(`SELECT status FROM agents WHERE id IN (${run.agentIds.map(() => "?").join(",")})`)
       .all(...run.agentIds) as AgentStatusRow[];
 
-    if (statuses.length !== run.agentIds.length) {
-      // Some sibling agents have been deleted — still proceed if remaining are terminal.
-    }
+    // If every sibling has been deleted, don't flip the run to "failed"
+    // vacuously via [].every(...). Leave it as-is for the user to resolve.
+    if (statuses.length === 0) return;
 
     const allTerminal = statuses.every((s) => TERMINAL_STATUSES.has(s.status));
     if (!allTerminal) return;
