@@ -116,6 +116,8 @@ export type Agent = {
   accessMode?: AgentAccessMode;
   /** T105: Worktree isolation status — set at spawn time. */
   isolationMode?: IsolationMode | null;
+  /** T101: CLI-emitted "resume this session" command string. T106: gates the Resume action. */
+  resumeCommand?: string | null;
 };
 
 export type AgentCreate = {

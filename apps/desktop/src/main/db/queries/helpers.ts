@@ -76,6 +76,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     stoppedAt: r.stopped_at,
     accessMode: r.access_mode,
     isolationMode: (r.isolation_mode ?? null) as IsolationMode | null,
+    resumeCommand: r.resume_command ?? null,
   };
 }
 

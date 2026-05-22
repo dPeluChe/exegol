@@ -8,6 +8,7 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { AgentStopReason } from "./AgentStopReason";
 import { ChatView } from "./ChatView";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { TerminalViewToggle } from "./TerminalToolbar";
@@ -19,6 +20,7 @@ export type ScrollbackAgent = Pick<
   "id" | "projectId" | "cliType" | "status" | "taskDescription" | "branchName"
 > & {
   accessMode?: Agent["accessMode"] | null;
+  resumeCommand?: string | null;
 };
 
 interface TerminalScrollbackProps {
@@ -158,6 +160,23 @@ export function TerminalScrollback({
             {resolvedHandoff.goal.length > 100 ? "..." : ""}
           </p>
         </div>
+      )}
+      {agent && (
+        <AgentStopReason
+          agent={agent}
+          scrollback={scrollbackContent}
+          onResume={canResume && agent.resumeCommand ? handleResume : undefined}
+          onSpawnNew={(task) => {
+            window.dispatchEvent(
+              new CustomEvent("exegol:spawn-agent", {
+                detail: { taskDescription: task, cliType: agent.cliType },
+              }),
+            );
+          }}
+          onViewDiff={(aid) => {
+            window.dispatchEvent(new CustomEvent("exegol:view-diff", { detail: { agentId: aid } }));
+          }}
+        />
       )}
       <div className="relative flex-1">
         {viewMode === "chat" ? (

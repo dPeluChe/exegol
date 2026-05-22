@@ -56,6 +56,7 @@ export const agentRowSchema = z.object({
   stopped_at: optNum,
   access_mode: z.enum(AGENT_ACCESS_MODES).catch("write"),
   isolation_mode: optStr,
+  resume_command: optStr,
 });
 
 export const worktreeRowSchema = z.object({
