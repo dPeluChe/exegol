@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { CapabilityDeniedError, isTrpcPathAllowed } from "./capabilities";
 import { createContext } from "./context";
 import { appRouter } from "./router";
 
@@ -13,6 +14,13 @@ import { appRouter } from "./router";
 export function registerTrpcIpcHandler(): void {
   ipcMain.handle("trpc", async (_event, payload: { path: string; input: unknown }) => {
     const { path, input } = payload;
+    // Defense in depth: even if the preload allowlist is bypassed (compromised
+    // renderer or preload), refuse any procedure not declared in capabilities.json.
+    if (!isTrpcPathAllowed(path)) {
+      const err = new CapabilityDeniedError("trpc", path);
+      console.warn(`[capabilities] ${err.message}`);
+      throw err;
+    }
     const ctx = createContext();
     const caller = appRouter.createCaller(ctx);
 
