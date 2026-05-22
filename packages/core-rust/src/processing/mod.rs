@@ -1,5 +1,9 @@
-mod strip_ansi;
+mod status_matchers;
 mod status_parser;
+mod strip_ansi;
 
-pub use strip_ansi::*;
+#[cfg(test)]
+mod status_parser_tests;
+
 pub use status_parser::*;
+pub use strip_ansi::*;
