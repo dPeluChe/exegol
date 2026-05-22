@@ -325,7 +325,10 @@ export class AgentManager {
         env.EXEGOL_USER_ZDOTDIR = process.env.ZDOTDIR || require("node:os").homedir();
         env.ZDOTDIR = getShellIntegrationZdotdir();
       } else if (shellName === "bash") {
-        args = ["-il", "--rcfile", getShellIntegrationBashRcfile()];
+        // Drop -l: bash silently ignores --rcfile when started as a login
+        // shell. The integration script emulates login init internally
+        // (sources /etc/profile + ~/.bash_profile|~/.profile + ~/.bashrc).
+        args = ["-i", "--rcfile", getShellIntegrationBashRcfile()];
       }
     }
 
