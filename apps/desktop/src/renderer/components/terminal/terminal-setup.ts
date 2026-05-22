@@ -112,12 +112,36 @@ export function setupTerminalSession(
       }),
     );
 
+    // Snapshot must land BEFORE any live bytes so the history isn't replayed
+    // after newer output. Buffer live data until getSnapshot resolves, then
+    // write the snapshot directly to xterm (bypassing the dormant ring so a
+    // large snapshot isn't truncated to its 256 KB cap when the pane mounts
+    // hidden), and finally drain the live buffer in arrival order.
+    let snapshotResolved = false;
+    let liveDisposed = false;
+    const liveBuffer: string[] = [];
     unsubData = window.api.terminal.onData(deps.agentId, (data) => {
-      dormantPipe.push(data);
+      if (liveDisposed) return;
+      if (!snapshotResolved) {
+        liveBuffer.push(data);
+      } else {
+        dormantPipe.push(data);
+      }
     });
 
     window.api.terminal.getSnapshot(deps.agentId).then((snapshot) => {
-      if (snapshot) dormantPipe.push(snapshot);
+      if (liveDisposed) return;
+      if (snapshot) terminal.write(snapshot);
+      snapshotResolved = true;
+      for (const chunk of liveBuffer) dormantPipe.push(chunk);
+      liveBuffer.length = 0;
+    });
+
+    disposables.push({
+      dispose: () => {
+        liveDisposed = true;
+        liveBuffer.length = 0;
+      },
     });
   }
 
