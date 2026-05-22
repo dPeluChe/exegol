@@ -378,7 +378,11 @@ function start(): void {
 // ─── Signal handling ────────────────────────────────────────────────────
 
 process.on("SIGTERM", () => {
+  // Flush any coalesced pending output before signalling — onExit may not
+  // fire before the 2 s SIGKILL escalation, and renderer clients may
+  // disconnect during shutdown, leaving the last <4 ms of output stranded.
   for (const [, s] of sessions) {
+    flushSession(s);
     if (s.alive) {
       try {
         s.pty.kill();
