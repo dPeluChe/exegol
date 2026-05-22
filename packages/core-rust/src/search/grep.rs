@@ -117,9 +117,14 @@ pub fn fs_grep(pattern: String, root: String, opts: GrepOptions) -> Result<Vec<G
         path,
         UTF8(|line_num, text| {
           let trimmed = text.trim_end_matches('\n');
-          let (column_start, column_end) = match matcher_for_sink.find(trimmed.as_bytes()) {
+          let (byte_start, byte_end) = match matcher_for_sink.find(trimmed.as_bytes()) {
             Ok(Some(m)) => (m.start() as u32, m.end() as u32),
-            _ => (0, 0),
+            other => {
+              eprintln!(
+                "[fs_grep] matcher.find disagreed with searcher on {abs}:{line_num} (result={other:?}) — pushing hit with byte_start/end = 0"
+              );
+              (0, 0)
+            }
           };
           let line = truncate_line(trimmed);
           let line_number = u32::try_from(line_num).unwrap_or(u32::MAX);
@@ -136,8 +141,8 @@ pub fn fs_grep(pattern: String, root: String, opts: GrepOptions) -> Result<Vec<G
             relative_path: rel.clone(),
             line_number,
             line,
-            column_start,
-            column_end,
+            byte_start,
+            byte_end,
           });
           Ok(true)
         }),
@@ -364,7 +369,7 @@ mod tests {
   }
 
   #[test]
-  fn columns_point_at_match() {
+  fn byte_offsets_point_at_match() {
     let tmp = TempDir::new().unwrap();
     write(tmp.path(), "a.txt", "abc needle def\n");
 
@@ -375,7 +380,24 @@ mod tests {
     )
     .unwrap();
     assert_eq!(hits.len(), 1);
-    assert_eq!(hits[0].column_start, 4);
-    assert_eq!(hits[0].column_end, 10);
+    assert_eq!(hits[0].byte_start, 4);
+    assert_eq!(hits[0].byte_end, 10);
+  }
+
+  #[test]
+  fn byte_offsets_are_bytes_not_chars_on_multibyte_lines() {
+    let tmp = TempDir::new().unwrap();
+    // 'café ' = 'c'(1) + 'a'(1) + 'f'(1) + 'é'(2) + ' '(1) = 6 bytes before 'needle'
+    write(tmp.path(), "a.txt", "café needle\n");
+
+    let hits = fs_grep(
+      "needle".into(),
+      tmp.path().to_string_lossy().into_owned(),
+      opts(),
+    )
+    .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].byte_start, 6);
+    assert_eq!(hits[0].byte_end, 12);
   }
 }

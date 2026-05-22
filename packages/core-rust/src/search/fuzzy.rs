@@ -174,7 +174,9 @@ fn score_entry(query: &str, basename_lower: &str, rel_lower: &str) -> Option<i32
   } else if rel_lower.contains(query) {
     score += 100;
   } else if is_subsequence(rel_lower, query) {
-    score += query.len() as i32;
+    // Score by character count so multi-byte queries (emoji, accented chars)
+    // don't get inflated scores from UTF-8 byte width.
+    score += i32::try_from(query.chars().count()).unwrap_or(i32::MAX);
   } else {
     return None;
   }

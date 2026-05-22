@@ -80,8 +80,8 @@ describe("fsSearchRouter.grep", () => {
         relativePath: "a.ts",
         lineNumber: 3,
         line: "needle",
-        columnStart: 0,
-        columnEnd: 6,
+        byteStart: 0,
+        byteEnd: 6,
       },
     ];
     fsGrep.mockReturnValue(fake);

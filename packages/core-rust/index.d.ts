@@ -120,10 +120,13 @@ export interface GrepHit {
   lineNumber: number
   /** The matching line content (trailing newline stripped, truncated to ~240 chars). */
   line: string
-  /** 0-indexed byte offset of the first match in the line. */
-  columnStart: number
-  /** 0-indexed byte offset of the end of the first match in the line. */
-  columnEnd: number
+  /**
+   * 0-indexed BYTE offset of the first match in the line (NOT a character column).
+   * Renderers using character-column APIs (Monaco, xterm) must convert.
+   */
+  byteStart: number
+  /** 0-indexed BYTE offset (exclusive) of the end of the first match in the line. */
+  byteEnd: number
 }
 
 /** Options for `fs_grep`. */

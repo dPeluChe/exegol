@@ -40,10 +40,11 @@ pub struct GrepHit {
   pub line_number: u32,
   /// The matching line content (trailing newline stripped, truncated to ~240 chars).
   pub line: String,
-  /// 0-indexed byte offset of the first match in the line.
-  pub column_start: u32,
-  /// 0-indexed byte offset of the end of the first match in the line.
-  pub column_end: u32,
+  /// 0-indexed BYTE offset of the first match in the line (NOT a character column).
+  /// Renderers using character-column APIs (Monaco, xterm) must convert.
+  pub byte_start: u32,
+  /// 0-indexed BYTE offset (exclusive) of the end of the first match in the line.
+  pub byte_end: u32,
 }
 
 /// Options for `fs_grep`.
