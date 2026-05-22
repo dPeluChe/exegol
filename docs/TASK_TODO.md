@@ -31,12 +31,9 @@ than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_S
 - **Vercel AI SDK + Ollama** (T122, M, P3) — replace 2 fetch calls in `diff.ts` + `scoring.ts`, unlock Ollama via `@ai-sdk/openai-compatible`
 
 ### P0 — Must land before broad release push
-- **Parallel Multi-Agent on Worktrees** (T65)
+- _(empty — T65 completion + comparator UI landed in WT4, see `docs/tasks_completed/2026_05.md`)_
 
 ### P1 — Differentiators for first users
-- **Worktree isolation status** (T105) — visible badge per agent: `project root | isolated | pipeline | fallback`
-- **Agent stop reason** (T106) — "Why did this agent stop?" panel: exit code, last N lines, resume available
-- **Agent comparator** (T107) — side-by-side diff summary + score + cost for parallel runs; promote/continue buttons
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
 
 ### P2 — Valuable follow-ups once the core is stable
@@ -100,30 +97,6 @@ than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_S
 - `apps/desktop/src/main/hooks/*`
 - `apps/desktop/src/main/agents/*`
 - `apps/desktop/src/main/db/*`
-
----
-
-### T65 — Parallel Multi-Agent on Worktrees
-**Priority**: P0 | **Effort**: Medium | **Source**: Emdash + Codex + Exegol analysis
-
-**Why**
-- Pipelines are useful, but Exegol also needs “3 agents attack one problem in parallel, then compare”.
-- Strong user-facing differentiator once T61 exists.
-
-**Scope**
-- Add a parallel execution mode for one task across N worktrees
-- Shared prompt template, isolated branches/worktrees
-- Compare runs in one review surface
-- Allow “promote best result” or continue from selected branch
-
-**Depends on**
-- T61
-
-**Likely files**
-- `apps/desktop/src/main/pipeline/*`
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/renderer/components/workspace/sections/PipelineSection.tsx`
-- `apps/desktop/src/renderer/hooks/use-trpc-pipeline.ts`
 
 ---
 
@@ -453,67 +426,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 **Do not overlap with**
 - Lane D file decomposition (T75) — coordinate on manager.ts split
 - Lane A spawn context changes unless agreed first
-
----
-
-### T105 — Worktree Isolation Status Badge
-**Priority**: P1 | **Effort**: Small | **Source**: Audit 2026-04-27
-
-**Why**
-- When an agent runs in project root (worktree creation failed silently), the user assumes isolation that doesn't exist.
-- Making this visible builds trust and helps diagnose worktree problems.
-
-**Scope**
-- Derive isolation mode from agent state: `isolated` (has worktree_id) | `pipeline` (shared pipeline worktree) | `project-root` (no worktree) | `fallback` (worktree creation failed)
-- Show as a small badge in the terminal toolbar (next to access mode badge)
-- Click badge → tooltip with worktree path + branch
-
-**Likely files**
-- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx`
-- `apps/desktop/src/renderer/components/terminal/TerminalToolbar.tsx`
-- `packages/shared/src/types/agent.ts`
-
----
-
-### T106 — Agent Stop Reason Panel
-**Priority**: P1 | **Effort**: Small | **Source**: Audit 2026-04-27
-
-**Why**
-- Currently when an agent stops/crashes, the user sees the terminal go silent with no structured explanation.
-- "Why did this agent stop?" is a common question.
-
-**Scope**
-- On stopped/failed/crashed terminal: show overlay or expandable section with:
-  - Status (completed / failed / crashed / stopped)
-  - Exit code + signal if available
-  - Last `current_step` value
-  - Whether session resume is available (resumeCommand present in DB)
-  - Quick action: Resume / New agent with same task / View diff
-- Does not replace existing terminal output — sits above or below it
-
-**Likely files**
-- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx`
-- `apps/desktop/src/renderer/components/terminal/AgentStopReason.tsx` (new)
-
----
-
-### T107 — Agent Comparator (parallel runs)
-**Priority**: P1 | **Effort**: Medium | **Source**: Audit 2026-04-27
-
-**Why**
-- T65 (parallel multi-agent) creates N branches for the same task. Without a comparison surface, the user has to manually diff all of them.
-
-**Scope**
-- Comparison view when a parallel run completes: N columns (one per agent)
-- Per column: diff summary (files changed, insertions/deletions), agent score, cost, duration, test status
-- Promote button: apply worktree as main branch, discard others
-- Continue button: pick one branch as base for the next step
-- Depends on T65
-
-**Likely files**
-- `apps/desktop/src/renderer/components/workspace/sections/ParallelRunComparator.tsx` (new)
-- `apps/desktop/src/main/ipc/procedures/parallel.ts`
-- `apps/desktop/src/main/db/queries/parallel-runs.ts`
 
 ---
 
