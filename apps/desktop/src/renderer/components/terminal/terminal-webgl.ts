@@ -17,52 +17,30 @@ export interface WebglController {
  *
  * Terax retries forever — we cap at MAX_RETRIES and fall back to the canvas
  * renderer so a broken GPU doesn't loop wedging the renderer.
+ *
+ * We rely solely on xterm's `WebglAddon.onContextLoss` callback. Adding a
+ * second `webglcontextlost` DOM listener on the same canvas would double-fire
+ * for a single GPU loss (xterm's internal listener targets the same node),
+ * eating half the retry budget. xterm handles the restore path internally.
  */
 export function createWebglController(terminal: Terminal): WebglController {
   let addon: WebglAddon | null = null;
-  let canvasEl: HTMLCanvasElement | null = null;
-  let restoreHandler: ((ev: Event) => void) | null = null;
-  let lossHandler: ((ev: Event) => void) | null = null;
   let scheduledTimer: ReturnType<typeof setTimeout> | null = null;
   let retries = 0;
   let fellBack = false;
   let disposed = false;
 
-  function findCanvas(): HTMLCanvasElement | null {
-    const el = terminal.element;
-    if (!el) return null;
-    return el.querySelector("canvas");
-  }
-
-  function bindContextLossListeners(): void {
-    canvasEl = findCanvas();
-    if (!canvasEl) return;
-    lossHandler = (ev) => {
-      ev.preventDefault();
-      onContextLost();
-    };
-    restoreHandler = () => {
-      retries = 0;
-    };
-    canvasEl.addEventListener("webglcontextlost", lossHandler);
-    canvasEl.addEventListener("webglcontextrestored", restoreHandler);
-  }
-
-  function unbindContextLossListeners(): void {
-    if (canvasEl) {
-      if (lossHandler) canvasEl.removeEventListener("webglcontextlost", lossHandler);
-      if (restoreHandler) canvasEl.removeEventListener("webglcontextrestored", restoreHandler);
+  function clearScheduled(): void {
+    if (scheduledTimer) {
+      clearTimeout(scheduledTimer);
+      scheduledTimer = null;
     }
-    canvasEl = null;
-    lossHandler = null;
-    restoreHandler = null;
   }
 
   function onContextLost(): void {
     if (disposed) return;
     addon?.dispose();
     addon = null;
-    unbindContextLossListeners();
     if (retries >= MAX_RETRIES) {
       fellBack = true;
       if (typeof console !== "undefined") {
@@ -73,6 +51,9 @@ export function createWebglController(terminal: Terminal): WebglController {
       return;
     }
     retries++;
+    // Always clear before reassigning so a redundant loss event doesn't leak
+    // the previously-scheduled retry timer (which would still attach()).
+    clearScheduled();
     scheduledTimer = setTimeout(() => {
       scheduledTimer = null;
       if (disposed) return;
@@ -87,7 +68,6 @@ export function createWebglController(terminal: Terminal): WebglController {
       webgl.onContextLoss(() => onContextLost());
       terminal.loadAddon(webgl);
       addon = webgl;
-      bindContextLossListeners();
     } catch {
       // WebGL not supported by this device — silently fall back to canvas.
       fellBack = true;
@@ -95,11 +75,7 @@ export function createWebglController(terminal: Terminal): WebglController {
   }
 
   function detach(): void {
-    if (scheduledTimer) {
-      clearTimeout(scheduledTimer);
-      scheduledTimer = null;
-    }
-    unbindContextLossListeners();
+    clearScheduled();
     addon?.dispose();
     addon = null;
   }
