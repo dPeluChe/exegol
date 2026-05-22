@@ -2,6 +2,7 @@ import type { AgentCliType } from "@exegol/shared";
 import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import {
   formatHandoffForInjection,
   getHandoffByAgent,
@@ -19,9 +20,9 @@ import {
 } from "../../db/queries";
 import {
   createParallelRun,
+  enrichParallelRunForComparison,
   getParallelRun,
   listParallelRuns,
-  promoteParallelRunAgent,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { publicProcedure, router } from "../trpc";
@@ -206,6 +207,14 @@ export const agentRouter = router({
       return getAgent(ctx.db, input.id) ?? null;
     }),
 
+  /** T106 — Resolve the on-disk worktree path for an agent (for "View diff"). */
+  getWorktreePath: publicProcedure
+    .input(z.object({ agentId: z.string() }))
+    .query(({ ctx, input }) => {
+      const wt = getWorktreeByAgentId(ctx.db, input.agentId);
+      return wt?.path ?? null;
+    }),
+
   // ─── Handoff ────────────────────────────────────────────────────────────
 
   getHandoff: publicProcedure.input(z.object({ agentId: z.string() })).query(({ ctx, input }) => {
@@ -352,10 +361,24 @@ export const agentRouter = router({
     return getParallelRun(ctx.db, input.id) ?? null;
   }),
 
+  /** T107 — enriched comparator payload: single round-trip, server-side N work. */
+  getParallelRunDetails: publicProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(({ ctx, input }) => {
+      const run = getParallelRun(ctx.db, input.runId);
+      if (!run) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Parallel run ${input.runId} not found`,
+        });
+      }
+      return enrichParallelRunForComparison(ctx.db, run);
+    }),
+
   promoteParallelAgent: publicProcedure
     .input(z.object({ runId: z.string(), agentId: z.string() }))
     .mutation(({ ctx, input }) => {
-      promoteParallelRunAgent(ctx.db, input.runId, input.agentId);
+      promoteParallelAgent(ctx.db, input.runId, input.agentId);
       return { success: true };
     }),
 

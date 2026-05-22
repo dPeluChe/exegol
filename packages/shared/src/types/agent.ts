@@ -72,6 +72,34 @@ export function classifyActivity(
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 
+// ─── T105: Worktree Isolation Status ───────────────────────────────────────
+
+export const ISOLATION_MODES = ["isolated", "pipeline", "project-root", "fallback"] as const;
+export type IsolationMode = (typeof ISOLATION_MODES)[number];
+
+/**
+ * Derive the isolation badge state from an Agent. Prefers the stored
+ * `isolationMode` field (set at spawn time); otherwise falls back to a
+ * coarse heuristic based on worktreeId. Pure function — testable.
+ *
+ * - `isolated` — agent owns a private git worktree
+ * - `pipeline` — agent runs in a shared pipeline worktree (cwdOverride)
+ * - `project-root` — agent was launched without isolation, intentionally
+ * - `fallback` — agent requested a worktree but creation failed silently
+ *
+ * Why: the user thinks they have isolation if they ticked the "worktree"
+ * box at spawn time. A silent fallback to project root is a footgun and
+ * must surface visibly (red badge). Pipeline and isolated are both safe
+ * (green) but distinct in operator mental model.
+ */
+export function deriveIsolationMode(agent: {
+  isolationMode?: IsolationMode | null;
+  worktreeId?: string | null;
+}): IsolationMode {
+  if (agent.isolationMode) return agent.isolationMode;
+  return agent.worktreeId ? "isolated" : "project-root";
+}
+
 export type Agent = {
   id: string;
   projectId: string;
@@ -86,6 +114,10 @@ export type Agent = {
   stoppedAt: number | null;
   /** T58: read = explore-only, write = full access (default), plan = analysis-only (no file writes) */
   accessMode?: AgentAccessMode;
+  /** T105: Worktree isolation status — set at spawn time. */
+  isolationMode?: IsolationMode | null;
+  /** T101: CLI-emitted "resume this session" command string. T106: gates the Resume action. */
+  resumeCommand?: string | null;
 };
 
 export type AgentCreate = {
@@ -225,6 +257,34 @@ export type ParallelRun = {
   promotedAgentId: string | null;
   createdAt: number;
   completedAt: number | null;
+};
+
+// ─── T107: Comparator payload ──────────────────────────────────────────────
+
+export type ParallelRunColumn = {
+  agent: Agent;
+  worktreePath: string | null;
+  diffStat: { filesChanged: number; insertions: number; deletions: number } | null;
+  /** AgentScoreRow shape, kept loose to avoid a circular type import. */
+  score: {
+    overallScore: number;
+    exitReason: "success" | "failure" | "stopped" | "timeout" | "unknown";
+    turnsUsed: number;
+    filesChanged: number;
+    taskCompleted: boolean;
+  } | null;
+  cost: {
+    totalCostUsd: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+  } | null;
+  durationSeconds: number | null;
+  lastLines: string[];
+};
+
+export type ParallelRunDetails = {
+  run: ParallelRun;
+  columns: ParallelRunColumn[];
 };
 
 // ─── QA Tests (T102) ───────────────────────────────────────────────────────

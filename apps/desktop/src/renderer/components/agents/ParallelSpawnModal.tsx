@@ -66,9 +66,9 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
 
       const { agentIds } = result as { agentIds: string[] };
 
-      // Switch to Agents section
+      // Open the comparator so the user can watch all variants side-by-side.
       window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
+        new CustomEvent("exegol:switch-section", { detail: { section: "parallel-runs" } }),
       );
 
       // Create tabs and terminals for each spawned agent

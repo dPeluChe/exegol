@@ -13,7 +13,13 @@ const MAIN_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
 
 // ─── Sub-tabs per main tab ──────────────────────────────────────────────────
 
-export type ProjectSubTab = "tasks" | "prompts-skills" | "memory" | "pipelines" | "qa-tests";
+export type ProjectSubTab =
+  | "tasks"
+  | "prompts-skills"
+  | "memory"
+  | "pipelines"
+  | "parallel-runs"
+  | "qa-tests";
 export type MonitorSubTab = "agent-dashboard" | "resources-tokens" | "scoring";
 
 export type WorkspaceSection =
@@ -22,6 +28,7 @@ export type WorkspaceSection =
   | "prompts-skills"
   | "memory"
   | "pipelines"
+  | "parallel-runs"
   | "qa-tests"
   | "agent-dashboard"
   | "resources-tokens"
@@ -32,6 +39,7 @@ const PROJECT_SUBS: { id: ProjectSubTab; label: string }[] = [
   { id: "prompts-skills", label: "Prompts & Skills" },
   { id: "memory", label: "Memory" },
   { id: "pipelines", label: "Pipelines" },
+  { id: "parallel-runs", label: "Parallel Runs" },
   { id: "qa-tests", label: "QA Tests" },
 ];
 
@@ -50,6 +58,7 @@ export function getMainTab(section: WorkspaceSection): MainTab {
     section === "prompts-skills" ||
     section === "memory" ||
     section === "pipelines" ||
+    section === "parallel-runs" ||
     section === "qa-tests"
   )
     return "project";

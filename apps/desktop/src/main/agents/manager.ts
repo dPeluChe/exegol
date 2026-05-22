@@ -1,27 +1,13 @@
 import type { Agent, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
-import {
-  activateAgent,
-  createOplogEntry,
-  createWorktree as dbCreateWorktree,
-  getAgent,
-  insertActivity,
-  listWorktrees,
-  setAgentWorktree,
-  stopAgent,
-} from "../db/queries";
-import { runSetupHook } from "../hooks/project-hooks";
+import { activateAgent, getAgent, insertActivity, stopAgent } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
-import { loadLifecycleConfig, runSetupIfNeeded } from "../lifecycle/loader";
+import { runSetupIfNeeded } from "../lifecycle/loader";
 import { getPtyHost } from "../terminal/pty-host";
-import {
-  getShellIntegrationBashRcfile,
-  getShellIntegrationZdotdir,
-  shellSupportsMarker,
-} from "../terminal/shell-wrappers";
 import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
+import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { runPreflight } from "./preflight";
 import {
@@ -29,18 +15,8 @@ import {
   reattachSidecarAgents as reattachSidecarAgentsImpl,
 } from "./reattach-sidecar-agents";
 import { getProviderRegistry } from "./registry";
-import { buildShellCommand, buildSpawnContext } from "./spawn-context";
-import {
-  _getFullPath,
-  broadcastAgentStatus,
-  buildApiKeyEnv,
-  coreRust,
-  DEFAULT_PTY_COLS,
-  DEFAULT_PTY_ROWS,
-  slugifyBranchName,
-} from "./spawn-env";
+import { broadcastAgentStatus, coreRust, DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "./spawn-env";
 import { createTitleStatusTracker } from "./title-status";
-import { createManagedWorktree, getWorktreeName } from "./worktrees";
 
 export type { AgentStatusEvent } from "./spawn-env";
 
@@ -104,9 +80,6 @@ export class AgentManager {
       throw new Error(`Project ${agent.projectId} not found`);
     }
 
-    let cwd = project.path;
-
-    // ── Preflight check (T104) ────────────────────────────────────────
     const preflight = await runPreflight(db, {
       cliType: agent.cliType,
       command: cliConfig.command,
@@ -122,224 +95,26 @@ export class AgentManager {
       throw new Error(`Preflight failed: ${msg}`);
     }
 
-    // ── Lifecycle: run setup once per session per project (T91) ────────
     runSetupIfNeeded(project.path).catch(() => {});
 
-    // ── cwdOverride (e.g. pipeline shared worktree) — skip worktree creation
-    if (config.cwdOverride) {
-      cwd = config.cwdOverride;
-      logger.info("[AgentManager] Using cwdOverride:", { cwd });
-    }
+    const cwd = setupAgentCwd(db, agent, config, project, this.worktrees, this.initialSnapshots);
 
-    // ── Worktree creation / reuse ───────────────────────────────────────
-    if (!config.cwdOverride && config.useWorktree && coreRust) {
-      const requestedBranchName =
-        config.branchName?.trim() || slugifyBranchName(agent.taskDescription);
+    const { shell, args, env, stdinCommand, enableMarker, isPlainShell } = buildPtyInvocation(
+      db,
+      agent,
+      config,
+      cwd,
+      registry,
+      cliConfig,
+      project.path,
+    );
 
-      // Check for existing worktree with same branch (reuse on relaunch/handoff)
-      const existingWts = listWorktrees(db, agent.projectId);
-      const reuseWt = existingWts.find((w) => w.branchName === requestedBranchName);
-      if (reuseWt) {
-        cwd = reuseWt.path;
-        setAgentWorktree(db, agent.id, reuseWt.id);
-        this.worktrees.set(agent.id, {
-          dbId: reuseWt.id,
-          worktreeName: getWorktreeName(reuseWt.branchName),
-          worktreePath: reuseWt.path,
-          repoPath: project.path,
-        });
-        logger.info("[AgentManager] Reusing existing worktree:", {
-          branch: requestedBranchName,
-          path: reuseWt.path,
-        });
-      } else
-        try {
-          const wtInfo = createManagedWorktree(project.path, project.name, requestedBranchName);
-          cwd = wtInfo.path;
-
-          const dbWt = dbCreateWorktree(db, {
-            projectId: agent.projectId,
-            agentId: agent.id,
-            path: wtInfo.path,
-            branchName: wtInfo.branchName,
-            autoCleanup: true,
-          });
-          setAgentWorktree(db, agent.id, dbWt.id);
-          this.worktrees.set(agent.id, {
-            dbId: dbWt.id,
-            worktreeName: wtInfo.worktreeName,
-            worktreePath: wtInfo.path,
-            repoPath: project.path,
-          });
-
-          try {
-            const snapshot = coreRust.getRepoSnapshot(project.path);
-            createOplogEntry(db, {
-              agentId: agent.id,
-              projectId: agent.projectId,
-              operation: "worktree_create",
-              refBefore: snapshot.headSha,
-              refAfter: snapshot.headSha,
-              description: `Created worktree '${wtInfo.worktreeName}' on branch '${wtInfo.branchName}'`,
-            });
-          } catch {
-            /* Non-fatal oplog recording */
-          }
-
-          logger.info("[AgentManager] Created worktree:", {
-            requestedBranch: requestedBranchName,
-            branch: wtInfo.branchName,
-            path: wtInfo.path,
-          });
-
-          // Run project setup hook (T60: exegol.yaml) — non-blocking
-          runSetupHook(project.path, wtInfo.path, wtInfo.branchName).catch(() => {});
-        } catch (err) {
-          logger.error(
-            "[AgentManager] Failed to create worktree, falling back to project root:",
-            err,
-          );
-        }
-    }
-
-    // ── Plain shell mode (no agent CLI, just $SHELL) ───────────────────
-    const isPlainShell = agent.cliType === "shell";
-    const userShell = process.env.SHELL || "/bin/zsh";
-
-    let shell: string;
-    let args: string[];
-    let env: Record<string, string>;
-    let stdinCommand: string | null = null; // For interactive CLIs: injected after shell ready
-
-    if (isPlainShell) {
-      shell = userShell;
-      args = ["-il"];
-      env = {
-        ...process.env,
-        TERM: "xterm-256color",
-        EXEGOL_AGENT_ID: agent.id,
-      } as Record<string, string>;
-    } else {
-      const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, cwd);
-      let fullCommand = buildShellCommand(
-        registry,
-        agent,
-        cliConfig,
-        contextPrefix,
-        config.accessMode,
-      );
-
-      // T101: Resume — prefer stored resume_command (exact command printed at shutdown),
-      // fall back to provider's resumeFlag (e.g. --continue for most CLIs).
-      if (config.resumeSession) {
-        const sourceAgentId = config.resumeFromAgentId ?? agent.id;
-        const row = db
-          .prepare("SELECT resume_command, claude_session_id FROM agents WHERE id = ?")
-          .get(sourceAgentId) as
-          | { resume_command: string | null; claude_session_id: string | null }
-          | undefined;
-
-        if (row?.resume_command) {
-          // Best path: use the exact command the agent printed at shutdown
-          fullCommand = row.resume_command;
-          logger.info(
-            `[AgentManager] Resuming ${agent.cliType} with stored command: ${row.resume_command}`,
-          );
-        } else if (row?.claude_session_id && agent.cliType === "claude-code") {
-          // Backwards compat: old claude session ID captured at startup
-          fullCommand = `${cliConfig.command} --resume ${row.claude_session_id}`;
-          logger.info(`[AgentManager] Resuming Claude via session ID ${row.claude_session_id}`);
-        } else {
-          // Fallback: static resumeFlag from provider config (e.g. --continue)
-          const provider = registry.get(agent.cliType);
-          const resumeFlag = provider?.capabilities?.resumeFlag;
-          if (resumeFlag) {
-            fullCommand = `${cliConfig.command} ${resumeFlag}`;
-          }
-        }
-      }
-      const apiKeyEnv = buildApiKeyEnv(db);
-
-      if (coreRust) {
-        try {
-          const snapshot = coreRust.getRepoSnapshot(cwd);
-          this.initialSnapshots.set(agent.id, {
-            headSha: snapshot.headSha,
-            cwd,
-            projectId: agent.projectId,
-          });
-        } catch {
-          /* Non-fatal */
-        }
-      }
-
-      // ── Lifecycle: prepend beforeAgent script if configured (T91) ──────
-      const lifecycle = loadLifecycleConfig(project.path);
-      if (lifecycle?.beforeAgent) {
-        fullCommand = `${lifecycle.beforeAgent} && ${fullCommand}`;
-      }
-
-      // Interactive CLIs (no prompt arg support) need a persistent shell
-      // that stays open. We launch as shell (-il) and inject the command
-      // via stdin write after shell is ready.
-      const provider = registry.get(agent.cliType);
-      const isInteractiveCli = !provider?.capabilities?.supportsPromptArg;
-
-      logger.info("[AgentManager] Spawning:", {
-        userShell,
-        fullCommand,
-        isInteractiveCli,
-        cwd,
-        shellExists: require("node:fs").existsSync(userShell),
-      });
-
-      shell = userShell;
-      if (isInteractiveCli) {
-        args = ["-i"];
-        stdinCommand = fullCommand;
-      } else {
-        args = ["-ic", fullCommand];
-      }
-      env = {
-        ...process.env,
-        ...apiKeyEnv,
-        ...cliConfig.env,
-        // Inject the resolved shell PATH so the -l (login) flag is not needed.
-        // Without -l, .zprofile/.profile are skipped — saves 50-200ms per spawn.
-        // .zshrc still loads via -i so NVM, pyenv, etc. remain available.
-        PATH: _getFullPath(),
-        TERM: "xterm-256color",
-        EXEGOL_AGENT_ID: agent.id,
-        EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
-      } as Record<string, string>;
-    }
-
-    // ── Shell readiness: only for plain shells (interactive prompt) ─────
-    const shellName = userShell.split("/").pop() ?? "";
-    const enableMarker = isPlainShell && shellSupportsMarker(userShell);
-    if (enableMarker) {
-      if (shellName === "zsh") {
-        // T112: route via the OSC 7 + OSC 133 shell-integration dir so plain
-        // shells emit cwd + prompt boundary markers. The integration scripts
-        // also emit the existing OSC-777 ready marker (pty-shell-ready.ts).
-        env.EXEGOL_USER_ZDOTDIR = process.env.ZDOTDIR || require("node:os").homedir();
-        env.ZDOTDIR = getShellIntegrationZdotdir();
-      } else if (shellName === "bash") {
-        // Drop -l: bash silently ignores --rcfile when started as a login
-        // shell. The integration script emulates login init internally
-        // (sources /etc/profile + ~/.bash_profile|~/.profile + ~/.bashrc).
-        args = ["-i", "--rcfile", getShellIntegrationBashRcfile()];
-      }
-    }
-
-    // ── Output processing setup (non-shell agents only) ─────────────────
     if (!isPlainShell) {
       const resumePattern = registry.get(agent.cliType)?.capabilities?.resumeCommandPattern;
       this.outputProcessors.set(
         agent.id,
         createOutputProcessor(agent.id, agent.cliType, resumePattern),
       );
-      // Title-based status detection (T56) — only for CLIs that set terminal titles
       if (["claude-code", "gemini", "codex", "crush"].includes(agent.cliType)) {
         this.titleTrackers.set(
           agent.id,
@@ -359,7 +134,6 @@ export class AgentManager {
       this.scrollbackSizes.set(agent.id, 0);
     }
 
-    // ── Spawn PTY in isolated subprocess (T35) ──────────────────────────
     const ptyHost = getPtyHost();
     const scrollbackPath = isPlainShell ? undefined : getScrollbackPath(agent.id);
 
@@ -378,10 +152,8 @@ export class AgentManager {
       { scrollbackPath, shellReadyGating: enableMarker },
     );
 
-    // Single round-trip: pid + session_id + status = 'running'
     activateAgent(db, agent.id, pid);
 
-    // Interactive CLIs: inject the command after shell initializes
     if (stdinCommand) {
       setTimeout(() => {
         ptyHost.write(agent.id, `${stdinCommand}\n`);

@@ -4,6 +4,7 @@ import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import type { OutputProcessor } from "./agent-output-processor";
+import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import {
   type AgentContext,
@@ -149,6 +150,9 @@ export function createSpawnCallbacks(
       maps.scrollbackSizes.delete(agent.id);
 
       finalizeAgentStatus(db, agent, exitCode);
+
+      // T65: if this agent was part of a parallel run, check if the run is done.
+      handleParallelAgentExit(db, agent.id);
 
       if (!isShell) {
         scoreAndRecordOplog(

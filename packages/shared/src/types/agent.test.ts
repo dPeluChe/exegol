@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyActivity } from "./agent";
+import { classifyActivity, deriveIsolationMode } from "./agent";
 
 // ─── classifyActivity ─────────────────────────────────────────────────────
 
@@ -82,5 +82,35 @@ describe("classifyActivity", () => {
     it("idle returns neutral", () => {
       expect(classifyActivity("idle")).toBe("neutral");
     });
+  });
+});
+
+// ─── deriveIsolationMode ─────────────────────────────────────────────────
+
+describe("deriveIsolationMode", () => {
+  it("prefers stored isolationMode when present", () => {
+    expect(deriveIsolationMode({ isolationMode: "pipeline", worktreeId: null })).toBe("pipeline");
+    expect(deriveIsolationMode({ isolationMode: "fallback", worktreeId: "wt-1" })).toBe("fallback");
+  });
+
+  it("returns isolated when worktreeId is set and no stored mode", () => {
+    expect(deriveIsolationMode({ worktreeId: "wt-1" })).toBe("isolated");
+    expect(deriveIsolationMode({ isolationMode: null, worktreeId: "wt-1" })).toBe("isolated");
+  });
+
+  it("returns project-root when neither isolationMode nor worktreeId is set", () => {
+    expect(deriveIsolationMode({})).toBe("project-root");
+    expect(deriveIsolationMode({ isolationMode: null, worktreeId: null })).toBe("project-root");
+  });
+
+  it("returns the stored isolated mode unchanged", () => {
+    expect(deriveIsolationMode({ isolationMode: "isolated", worktreeId: "wt-1" })).toBe("isolated");
+  });
+
+  it("returns the stored project-root mode unchanged even with a worktreeId", () => {
+    // Edge case: explicit project-root flag should override the heuristic.
+    expect(deriveIsolationMode({ isolationMode: "project-root", worktreeId: "wt-1" })).toBe(
+      "project-root",
+    );
   });
 });
