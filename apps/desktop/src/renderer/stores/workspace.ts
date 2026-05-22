@@ -289,8 +289,14 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           const tab = pw.tabs[idx]!;
           const paneIds = collectPaneIds(tab.layout);
           const newPanes = { ...pw.panes };
+          const cwd = { ...s.paneCwd };
+          const exit = { ...s.paneLastExit };
           for (const pid of paneIds) {
             delete newPanes[pid];
+            // T112: scrub per-pane OSC 7/133 state so paneCwd/paneLastExit
+            // don't accumulate over long sessions.
+            delete cwd[pid];
+            delete exit[pid];
           }
 
           const newTabs = pw.tabs.filter((t) => t.id !== tabId);
@@ -300,7 +306,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
             newActiveTabId = neighborIdx >= 0 ? (newTabs[neighborIdx]?.id ?? null) : null;
           }
 
-          return setPw(s, { tabs: newTabs, activeTabId: newActiveTabId, panes: newPanes });
+          return {
+            ...setPw(s, { tabs: newTabs, activeTabId: newActiveTabId, panes: newPanes }),
+            paneCwd: cwd,
+            paneLastExit: exit,
+          };
         }),
 
       setActiveTab: (tabId) => {
@@ -391,23 +401,37 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
           const newLayout = removeNodeByPaneId(tab.layout, paneId);
           const { [paneId]: _, ...restPanes } = pw.panes;
+          // T112: scrub per-pane OSC 7/133 state so paneCwd/paneLastExit
+          // don't leak entries over long sessions.
+          const cwd = { ...s.paneCwd };
+          const exit = { ...s.paneLastExit };
+          delete cwd[paneId];
+          delete exit[paneId];
 
           if (!newLayout) {
             const emptyPane = createEmptyPane();
-            return setPw(s, {
-              tabs: pw.tabs.map((t) =>
-                t.id === tabId
-                  ? { ...t, layout: { type: "pane" as const, paneId: emptyPane.id } }
-                  : t,
-              ),
-              panes: { ...restPanes, [emptyPane.id]: emptyPane },
-            });
+            return {
+              ...setPw(s, {
+                tabs: pw.tabs.map((t) =>
+                  t.id === tabId
+                    ? { ...t, layout: { type: "pane" as const, paneId: emptyPane.id } }
+                    : t,
+                ),
+                panes: { ...restPanes, [emptyPane.id]: emptyPane },
+              }),
+              paneCwd: cwd,
+              paneLastExit: exit,
+            };
           }
 
-          return setPw(s, {
-            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
-            panes: restPanes,
-          });
+          return {
+            ...setPw(s, {
+              tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
+              panes: restPanes,
+            }),
+            paneCwd: cwd,
+            paneLastExit: exit,
+          };
         }),
 
       splitPane: (tabId, paneId, direction, newPaneType, config) =>
