@@ -34,7 +34,6 @@ than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_S
 - **Capability allowlist pattern** (T119) — Tauri-style declarative allowlist for tRPC routers/IPC channels
 
 **Larger / deferred:**
-- **Rust search crates** (T116, M) — `ignore` + `grep-regex` + `grep-searcher` + `globset` in core-rust
 - **Settings as separate window** (T120, M) — use floating BrowserWindow infra
 - **xterm renderer pool** (T114, L) — 5-slot LRU pool with snapshot+replay, blocks N-WebGL-context lag
 - **Vercel AI SDK + Ollama** (T122, M, P3) — replace 2 fetch calls in `diff.ts` + `scoring.ts`, unlock Ollama via `@ai-sdk/openai-compatible`
@@ -688,30 +687,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 **Likely files**
 - `apps/desktop/src/renderer/lib/dormant-ring.ts` (new)
 - `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx`
-
----
-
-### T116 — Rust Search Crates (ignore + grep-* + globset)
-**Priority**: Wave 1 / P1 | **Effort**: M | **Source**: Terax `src-tauri/Cargo.toml` + `fs::search`, `fs::grep`
-
-**Why**
-- We have no in-process fast file search or content grep — would have to spawn `rg` from a shell, parse output.
-- `ignore` crate (powers ripgrep) respects `.gitignore` natively, returns structured results.
-- Critical foundation for any future in-process AI tool that needs to read project context.
-
-**Scope**
-- Add Rust crates to `packages/core-rust/Cargo.toml`: `ignore`, `grep-regex`, `grep-searcher`, `grep-matcher`, `globset`.
-- New module `packages/core-rust/src/search/` with napi exports:
-  - `fs_search(query: string, root: string, limits: { maxResults: number }) -> SearchResult[]`
-  - `fs_grep(pattern: string, root: string, opts: { caseInsensitive, hidden, maxMatches }) -> GrepHit[]`
-- Wire into tRPC procedures so renderer can drive Command Palette file finder + future search panel.
-- Bundle cost: ~1 MB added to `.node` artifact — acceptable.
-
-**Likely files**
-- `packages/core-rust/Cargo.toml`
-- `packages/core-rust/src/search/mod.rs` (new)
-- `packages/core-rust/src/lib.rs` (export napi bindings)
-- `apps/desktop/src/main/ipc/procedures/search.ts` (new or expand)
 
 ---
 

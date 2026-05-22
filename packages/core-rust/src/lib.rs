@@ -2,9 +2,11 @@
 
 mod git;
 mod processing;
+mod search;
 
 pub use git::*;
 pub use processing::*;
+pub use search::*;
 
 use napi_derive::napi;
 

@@ -13,6 +13,14 @@ git2 = "0.19"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 memchr = "2"
+ignore = "0.4"
+grep-regex = "0.1"
+grep-searcher = "0.1"
+grep-matcher = "0.1"
+globset = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
 
 [build-dependencies]
 napi-build = "2"
