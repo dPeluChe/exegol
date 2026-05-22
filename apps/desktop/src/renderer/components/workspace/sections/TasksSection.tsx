@@ -1,5 +1,3 @@
-import { Button, cn } from "@exegol/ui";
-import { Archive, CheckSquare, FolderOpen, Github, Plus } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
@@ -23,39 +21,14 @@ import {
   toggleTask,
 } from "../../../lib/markdown-tasks";
 import { trpcInvoke } from "../../../lib/trpc-client";
-import { EmptyState } from "../../common/EmptyState";
-import { COLUMN_CONFIG } from "./tasks/config";
 import { TaskColumn as TaskColumnComponent } from "./tasks/TaskColumn";
 import { TaskDetailModal } from "./tasks/TaskDetailModal";
-
-// ─── Hook: persist task file path per project ────────────────────────────────
-
-/** Persist task file path per project in localStorage */
-function usePersistedTaskFile(projectId: string | undefined) {
-  const key = projectId ? `exegol-task-file-${projectId}` : null;
-  const [filePath, setFilePathState] = useState<string | null>(() => {
-    if (!key) return null;
-    return localStorage.getItem(key);
-  });
-
-  const setFilePath = useCallback(
-    (path: string | null) => {
-      setFilePathState(path);
-      if (key) {
-        if (path) localStorage.setItem(key, path);
-        else localStorage.removeItem(key);
-      }
-    },
-    [key],
-  );
-
-  return [filePath, setFilePath] as const;
-}
+import { TasksEmptyState } from "./tasks/TasksEmptyState";
+import { type TaskFilter, TasksToolbar } from "./tasks/TasksToolbar";
+import { archiveCompletedTasks, createTodoFile } from "./tasks/task-file-actions";
+import { usePersistedTaskFile } from "./tasks/use-persisted-task-file";
 
 // ─── Main Section ───────────────────────────────────────────────────────────
-
-const TASK_FILTERS = ["all", "active", "done"] as const;
-type TaskFilter = (typeof TASK_FILTERS)[number];
 
 const ACTIVE_COLUMNS: Set<TaskColumn> = new Set(["backlog", "todo", "in-progress", "validated"]);
 const DONE_COLUMNS: Set<TaskColumn> = new Set(["done", "archived"]);
@@ -251,68 +224,24 @@ export function TasksSection() {
 
   const handleArchiveCompleted = useCallback(async () => {
     if (!fileData || !filePath || !project) return;
-    const parsedBoard = parseTaskBoard(fileData.content, filePath);
-    const allTasks = Object.values(parsedBoard.columns).flat();
-    const completed = allTasks.filter((t) => t.completed);
-    if (completed.length === 0) return;
-
-    const date = new Date().toISOString().split("T")[0];
-    const archiveLines = completed.map((t) => `- [x] ${t.text}`).join("\n");
-    const archiveEntry = `\n## Archived ${date}\n${archiveLines}\n`;
-
-    const archivePath = `${project.path}/docs/tasks_completed.md`;
-    try {
-      const existing = await trpcInvoke<{ content: string }>("files.readFile", {
-        path: archivePath,
-      });
-      await writeFile.mutateAsync({
-        path: archivePath,
-        content: `${existing.content}${archiveEntry}`,
-      });
-    } catch {
-      await writeFile.mutateAsync({
-        path: archivePath,
-        content: `# Completed Tasks\n${archiveEntry}`,
-      });
+    const newContent = await archiveCompletedTasks({
+      content: fileData.content,
+      filePath,
+      projectPath: project.path,
+      writeFile,
+    });
+    if (newContent !== null) {
+      await writeAndRefresh(newContent);
     }
-
-    const content = fileData.content;
-    const sortedLines = completed.map((t) => t.line).sort((a, b) => b - a);
-    const lines = content.split("\n");
-    for (const line of sortedLines) {
-      lines.splice(line, 1);
-    }
-    await writeAndRefresh(lines.join("\n"));
   }, [fileData, filePath, project, writeFile, writeAndRefresh]);
 
   const handleCreateTodo = useCallback(async () => {
     if (!project) return;
-    const todoPath = `${project.path}/docs/TODO.md`;
-    const template = `# ${project.name} — Task Board
-
-## Backlog
-- [ ] Define project requirements
-- [ ] Setup development environment
-
-## Todo
-
-## In Progress
-
-## Validated
-
-## Done
-
----
-> Managed by Exegol. Move tasks between sections to update status.
-> Tags: #feature #bug #refactor #docs | Priority: !high !medium !low | Agent: @claude-code
-`;
-    // Ensure docs/ directory exists
-    try {
-      await trpcInvoke("files.writeFile", { path: `${project.path}/docs/.gitkeep`, content: "" });
-    } catch {
-      /* dir may already exist */
-    }
-    await writeFile.mutateAsync({ path: todoPath, content: template });
+    const todoPath = await createTodoFile({
+      projectName: project.name,
+      projectPath: project.path,
+      writeFile,
+    });
     setFilePath(todoPath);
   }, [project, writeFile, setFilePath]);
 
@@ -326,33 +255,7 @@ export function TasksSection() {
 
   // ─── Empty state ──────────────────────────────────────────────────────
   if (!filePath || !fileData) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-3">
-        <EmptyState
-          icon={<CheckSquare className="h-8 w-8 text-text-muted" />}
-          title="No task file found"
-          description="Create a TODO.md or open an existing one"
-        />
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            onClick={handleCreateTodo}
-            className="gap-1.5 bg-accent text-white hover:bg-accent/90"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Create TODO.md
-          </Button>
-          <Button
-            type="button"
-            onClick={handlePickFile}
-            className="gap-1.5 bg-bg-tertiary text-text-secondary hover:text-text-primary"
-          >
-            <FolderOpen className="h-3.5 w-3.5" />
-            Open Existing
-          </Button>
-        </div>
-      </div>
-    );
+    return <TasksEmptyState onCreateTodo={handleCreateTodo} onPickFile={handlePickFile} />;
   }
 
   if (!board) return null;
@@ -371,99 +274,21 @@ export function TasksSection() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Top bar */}
-      <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border bg-bg-secondary px-3">
-        <span className="truncate text-[10px] text-text-muted" title={filePath}>
-          {filePath.split("/").pop()}
-        </span>
-        {/* Filter toggle */}
-        <div className="flex items-center rounded-md border border-border">
-          {TASK_FILTERS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFilter(f)}
-              className={cn(
-                "px-2 py-0.5 text-[9px] font-medium capitalize transition-colors",
-                filter === f
-                  ? "bg-accent/15 text-accent"
-                  : "text-text-muted hover:text-text-secondary",
-              )}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-        {/* Column counts */}
-        <div className="flex items-center gap-1">
-          {displayColumns.map((col) => {
-            const count = mergedColumns[col].length;
-            if (count === 0) return null;
-            const cfg = COLUMN_CONFIG[col];
-            return (
-              <span
-                key={col}
-                className={cn("rounded px-1.5 py-0.5 text-[8px] font-medium", cfg.color)}
-                title={cfg.label}
-              >
-                {cfg.label.slice(0, 3)} {count}
-              </span>
-            );
-          })}
-          <span className="text-[8px] text-text-muted">· {totalTasks} total</span>
-        </div>
-        {/* Progress bar */}
-        <div className="flex items-center gap-1">
-          <div className="h-1 w-16 overflow-hidden rounded-full bg-bg-tertiary">
-            <div
-              className="h-full rounded-full bg-accent transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <span className="text-[8px] tabular-nums text-text-muted">{progress}%</span>
-        </div>
-        {hasGitRemote && (
-          <Button
-            type="button"
-            onClick={() => setShowGitHubIssues(!showGitHubIssues)}
-            className={cn(
-              "ml-auto h-6 gap-1 px-2 text-[10px]",
-              showGitHubIssues
-                ? "bg-accent/15 text-accent hover:bg-accent/25"
-                : "bg-bg-tertiary text-text-secondary hover:text-text-primary",
-            )}
-            title={showGitHubIssues ? "Hide GitHub Issues" : "Show GitHub Issues"}
-          >
-            <Github className="h-3 w-3" />
-            Issues
-          </Button>
-        )}
-        {doneTasks > 0 && (
-          <Button
-            type="button"
-            onClick={handleArchiveCompleted}
-            className={cn(
-              !hasGitRemote && "ml-auto",
-              "h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary",
-            )}
-            title="Move completed tasks to tasks_completed.md"
-          >
-            <Archive className="h-3 w-3" />
-            Archive {doneTasks}
-          </Button>
-        )}
-        <Button
-          type="button"
-          onClick={handlePickFile}
-          className={cn(
-            !hasGitRemote && doneTasks === 0 && "ml-auto",
-            "h-6 gap-1 bg-bg-tertiary px-2 text-[10px] text-text-secondary hover:text-text-primary",
-          )}
-        >
-          <FolderOpen className="h-3 w-3" />
-          Open
-        </Button>
-      </div>
+      <TasksToolbar
+        filePath={filePath}
+        filter={filter}
+        onFilterChange={setFilter}
+        displayColumns={displayColumns}
+        mergedColumns={mergedColumns}
+        totalTasks={totalTasks}
+        progress={progress}
+        doneTasks={doneTasks}
+        hasGitRemote={hasGitRemote}
+        showGitHubIssues={showGitHubIssues}
+        onToggleGitHubIssues={() => setShowGitHubIssues(!showGitHubIssues)}
+        onArchiveCompleted={handleArchiveCompleted}
+        onPickFile={handlePickFile}
+      />
 
       {/* Kanban board */}
       <div className="flex flex-1 gap-2 overflow-x-auto p-2">
