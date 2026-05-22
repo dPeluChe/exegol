@@ -27,7 +27,7 @@ import { startMetricsCollector, stopMetricsCollector } from "./system/resources"
 import { destroyTray, initTray } from "./system/tray";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureSidecar } from "./terminal/pty-sidecar-discovery";
-import { ensureShellWrappers } from "./terminal/shell-wrappers";
+import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
 import { installAppMenu } from "./windows/app-menu";
 import {
   closeAllFloatingPanes,
@@ -265,6 +265,7 @@ app.whenReady().then(async () => {
     try {
       ensureDefaultSkills();
       ensureShellWrappers();
+      ensureShellIntegration();
       ensureAgentWrappers();
     } catch (err) {
       logger.error("[Startup] FS init failed (non-fatal):", err);

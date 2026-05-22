@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import * as pty from "node-pty";
+import { appendPending, FLUSH_INTERVAL_MS } from "./pty-sidecar-flusher";
 import {
   EXEGOL_DIR,
   type JsonRpcMessage,
@@ -35,6 +36,10 @@ interface SidecarSession {
   alive: boolean;
   exitCode: number | null;
   signal: string | null;
+  /** T113: pending output coalesced for the next flush. */
+  pending: string;
+  pendingBytes: number;
+  flushTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const sessions = new Map<string, SidecarSession>();
@@ -52,6 +57,29 @@ function broadcast(msg: string): void {
       /* dead client */
     }
   }
+}
+
+function applyAppend(s: SidecarSession, data: string): void {
+  const result = appendPending(s, data);
+  s.pending = result.pending;
+  s.pendingBytes = result.pendingBytes;
+}
+
+function flushSession(s: SidecarSession): void {
+  if (s.flushTimer) {
+    clearTimeout(s.flushTimer);
+    s.flushTimer = null;
+  }
+  if (s.pending.length === 0) return;
+  const data = s.pending;
+  s.pending = "";
+  s.pendingBytes = 0;
+  broadcast(makeNotification("session.data", { id: s.id, data }));
+}
+
+function scheduleFlush(s: SidecarSession): void {
+  if (s.flushTimer) return;
+  s.flushTimer = setTimeout(() => flushSession(s), FLUSH_INTERVAL_MS);
 }
 
 function resetIdleTimer(): void {
@@ -108,16 +136,21 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           alive: true,
           exitCode: null,
           signal: null,
+          pending: "",
+          pendingBytes: 0,
+          flushTimer: null,
         };
         sessions.set(p.id, session);
 
         proc.onData((data: string) => {
           const buf = Buffer.from(data, "utf-8");
           ringBuffer.write(buf);
-          broadcast(makeNotification("session.data", { id: p.id, data }));
+          applyAppend(session, data);
+          scheduleFlush(session);
         });
 
         proc.onExit(({ exitCode, signal }) => {
+          flushSession(session);
           session.alive = false;
           session.exitCode = exitCode ?? null;
           session.signal = signal != null ? String(signal) : null;
@@ -179,6 +212,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
         const { id } = req.params as SessionIdParams;
         const s = sessions.get(id);
         if (s) {
+          flushSession(s);
           if (s.alive) {
             try {
               s.pty.kill();
@@ -221,6 +255,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
         client.write(makeResponse(req.id, { ok: true }));
         // Kill all sessions, then exit
         for (const [, s] of sessions) {
+          flushSession(s);
           if (s.alive) {
             try {
               s.pty.kill();
@@ -343,7 +378,11 @@ function start(): void {
 // ─── Signal handling ────────────────────────────────────────────────────
 
 process.on("SIGTERM", () => {
+  // Flush any coalesced pending output before signalling — onExit may not
+  // fire before the 2 s SIGKILL escalation, and renderer clients may
+  // disconnect during shutdown, leaving the last <4 ms of output stranded.
   for (const [, s] of sessions) {
+    flushSession(s);
     if (s.alive) {
       try {
         s.pty.kill();

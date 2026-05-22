@@ -15,7 +15,11 @@ import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig, runSetupIfNeeded } from "../lifecycle/loader";
 import { getPtyHost } from "../terminal/pty-host";
-import { getBashRcfile, getZshWrapperDir, shellSupportsMarker } from "../terminal/shell-wrappers";
+import {
+  getShellIntegrationBashRcfile,
+  getShellIntegrationZdotdir,
+  shellSupportsMarker,
+} from "../terminal/shell-wrappers";
 import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
@@ -315,10 +319,16 @@ export class AgentManager {
     const enableMarker = isPlainShell && shellSupportsMarker(userShell);
     if (enableMarker) {
       if (shellName === "zsh") {
-        env.EXEGOL_ORIG_ZDOTDIR = process.env.ZDOTDIR || require("node:os").homedir();
-        env.ZDOTDIR = getZshWrapperDir();
+        // T112: route via the OSC 7 + OSC 133 shell-integration dir so plain
+        // shells emit cwd + prompt boundary markers. The integration scripts
+        // also emit the existing OSC-777 ready marker (pty-shell-ready.ts).
+        env.EXEGOL_USER_ZDOTDIR = process.env.ZDOTDIR || require("node:os").homedir();
+        env.ZDOTDIR = getShellIntegrationZdotdir();
       } else if (shellName === "bash") {
-        args = ["-il", "--rcfile", getBashRcfile()];
+        // Drop -l: bash silently ignores --rcfile when started as a login
+        // shell. The integration script emulates login init internally
+        // (sources /etc/profile + ~/.bash_profile|~/.profile + ~/.bashrc).
+        args = ["-i", "--rcfile", getShellIntegrationBashRcfile()];
       }
     }
 
