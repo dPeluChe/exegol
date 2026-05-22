@@ -2,7 +2,15 @@ import { mkdtemp, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { isPathAllowed, isPathInside } from "./path-guard";
+import {
+  assertSafePath,
+  hasAdsSuffix,
+  hasBidiChars,
+  isPathAllowed,
+  isPathInside,
+  isSensitivePath,
+  PathGuardError,
+} from "./path-guard";
 
 // ─── isPathInside (sync, no I/O) ──────────────────────────────────────────────
 
@@ -139,5 +147,176 @@ describe("isPathAllowed", () => {
     // new.txt does not exist yet — write scenario
     const newFile = join(evilLink, "new.txt");
     expect(await isPathAllowed(newFile, [projectDir])).toBe(false);
+  });
+});
+
+// ─── hasBidiChars ────────────────────────────────────────────────────────────
+
+describe("hasBidiChars", () => {
+  it.each([
+    // U+202A LRE
+    ["file‪hidden.ts"],
+    // U+202E RLO — classic Trojan Source
+    ["fi‮le.ts"],
+    // U+2066 LRI
+    ["dir/⁦inner/file"],
+    // U+2069 PDI
+    ["x⁩.txt"],
+  ])("detects bidi chars in %p", (input) => {
+    expect(hasBidiChars(input)).toBe(true);
+  });
+
+  it.each([
+    "plain/path/file.ts",
+    "with-dashes_and.dots/x.txt",
+    "/users/me/projects/myapp/src/main.ts",
+  ])("allows clean names: %p", (input) => {
+    expect(hasBidiChars(input)).toBe(false);
+  });
+});
+
+// ─── hasAdsSuffix ────────────────────────────────────────────────────────────
+
+describe("hasAdsSuffix", () => {
+  it("detects a `:stream` suffix on a basename", () => {
+    expect(hasAdsSuffix("file.txt:hidden_stream")).toBe(true);
+  });
+
+  it("detects ADS on a nested path", () => {
+    expect(hasAdsSuffix("/projects/app/secrets.json:$DATA")).toBe(true);
+  });
+
+  it("ignores the Windows drive-letter colon", () => {
+    expect(hasAdsSuffix("C:/projects/app/src/main.ts")).toBe(false);
+    expect(hasAdsSuffix("D:\\work\\file.txt")).toBe(false);
+  });
+
+  it("allows clean POSIX paths", () => {
+    expect(hasAdsSuffix("/home/user/project/file.ts")).toBe(false);
+  });
+});
+
+// ─── isSensitivePath ─────────────────────────────────────────────────────────
+
+describe("isSensitivePath", () => {
+  it.each([
+    ".env",
+    "/projects/app/.env",
+    "/projects/app/.env.local",
+    "/projects/app/.env.production",
+    "/home/me/.netrc",
+    "/home/me/.npmrc",
+    "/home/me/.ssh/id_rsa",
+    "/home/me/.ssh/config",
+    "/home/me/.aws/credentials",
+    "/home/me/.gnupg/private-keys-v1.d/key.key",
+    "/home/me/.config/gh/hosts.yml",
+    "/users/me/library/keychains/login.keychain-db",
+    "/home/me/.kube/config",
+    "/private/var/db/something",
+    "/projects/app/server.pem",
+    "/projects/app/cert.key",
+  ])("refuses sensitive path: %p", (input) => {
+    expect(isSensitivePath(input)).toBe(true);
+  });
+
+  it.each([
+    "/projects/app/src/main.ts",
+    "/projects/app/README.md",
+    // .sshx must NOT collide with .ssh
+    "/projects/app/.sshx/config",
+    "/projects/app/logs/.envcheck.log",
+    "/projects/app/keys-readme.md",
+  ])("allows benign path: %p", (input) => {
+    expect(isSensitivePath(input)).toBe(false);
+  });
+});
+
+// ─── assertSafePath ──────────────────────────────────────────────────────────
+
+describe("assertSafePath", () => {
+  let tmpDir: string;
+
+  afterEach(async () => {
+    if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns the canonical path on success", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const target = join(tmpDir, "src", "main.ts");
+    const canonical = await assertSafePath(target, { allowedBases: [tmpDir] });
+    // realpath may rewrite /tmp -> /private/tmp on macOS; just check it ends correctly
+    expect(canonical.endsWith(join("src", "main.ts"))).toBe(true);
+  });
+
+  it("refuses bidi chars with reason 'bidi-chars'", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const bad = join(tmpDir, "bad‮name.ts");
+    await expect(assertSafePath(bad, { allowedBases: [tmpDir] })).rejects.toMatchObject({
+      name: "PathGuardError",
+      reason: "bidi-chars",
+    });
+  });
+
+  it("refuses ADS suffix with reason 'ads-suffix'", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const bad = join(tmpDir, "file.txt:hidden");
+    await expect(assertSafePath(bad, { allowedBases: [tmpDir] })).rejects.toMatchObject({
+      name: "PathGuardError",
+      reason: "ads-suffix",
+    });
+  });
+
+  it("refuses sensitive path with reason 'sensitive-path'", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const bad = join(tmpDir, ".env.production");
+    await expect(assertSafePath(bad, { allowedBases: [tmpDir] })).rejects.toMatchObject({
+      name: "PathGuardError",
+      reason: "sensitive-path",
+    });
+  });
+
+  it("refuses path outside allowed bases with reason 'outside-allowed-bases'", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const otherBase = await mkdtemp(join(tmpdir(), "pg-other-"));
+    try {
+      const bad = join(otherBase, "file.ts");
+      await expect(assertSafePath(bad, { allowedBases: [tmpDir] })).rejects.toMatchObject({
+        name: "PathGuardError",
+        reason: "outside-allowed-bases",
+      });
+    } finally {
+      await rm(otherBase, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a symlink that resolves to a sensitive location", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const projectDir = join(tmpDir, "project");
+    const fakeSshDir = join(tmpDir, ".ssh");
+    await Promise.all([mkdir(projectDir), mkdir(fakeSshDir)]);
+    await writeFile(join(fakeSshDir, "id_rsa"), "");
+    // Inside the project, create a symlink that points into a sensitive dir.
+    const trojan = join(projectDir, "innocent.txt");
+    await symlink(join(fakeSshDir, "id_rsa"), trojan);
+    await expect(assertSafePath(trojan, { allowedBases: [projectDir] })).rejects.toMatchObject({
+      name: "PathGuardError",
+      reason: "sensitive-path",
+    });
+  });
+
+  it("throws PathGuardError instances with a path field", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const bad = join(tmpDir, ".env");
+    try {
+      await assertSafePath(bad, { allowedBases: [tmpDir] });
+      throw new Error("expected rejection");
+    } catch (err) {
+      expect(err).toBeInstanceOf(PathGuardError);
+      const e = err as PathGuardError;
+      expect(e.reason).toBe("sensitive-path");
+      expect(e.path).toBe(bad);
+    }
   });
 });
