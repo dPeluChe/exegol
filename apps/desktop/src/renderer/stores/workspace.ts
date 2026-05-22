@@ -75,6 +75,10 @@ interface WorkspaceStore {
    * In-memory only — resets on reload. Keyed by paneId.
    */
   floatingPanes: Record<string, { type: "terminal" | "browser"; openedAt: number }>;
+  /** Per-pane current working directory reported via OSC 7 (T112). In-memory only. */
+  paneCwd: Record<string, string>;
+  /** Per-pane last command exit code reported via OSC 133;D (T112). In-memory only. */
+  paneLastExit: Record<string, number | null>;
 
   // Tab actions
   addTab: (label?: string) => string;
@@ -128,6 +132,12 @@ interface WorkspaceStore {
   markPaneFloating: (paneId: string, type: "terminal" | "browser") => void;
   /** Remove the floating marker (used when the floating window closes) */
   unmarkPaneFloating: (paneId: string) => void;
+  /** Update the cwd reported via OSC 7 for a pane (T112) */
+  setPaneCwd: (paneId: string, cwd: string) => void;
+  /** Update the last command exit code reported via OSC 133;D for a pane (T112) */
+  setPaneLastExit: (paneId: string, code: number | null) => void;
+  /** Clear OSC 7/133 state for a pane when it is closed (T112) */
+  clearPaneShellState: (paneId: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -247,6 +257,8 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       focusedPaneId: null,
       customLayouts: [],
       floatingPanes: {},
+      paneCwd: {},
+      paneLastExit: {},
 
       addTab: (label) => {
         const pane = createEmptyPane();
@@ -619,6 +631,30 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           const next = { ...s.floatingPanes };
           delete next[paneId];
           return { floatingPanes: next };
+        }),
+
+      setPaneCwd: (paneId, cwd) =>
+        set((s) => {
+          if (s.paneCwd[paneId] === cwd) return s;
+          return { paneCwd: { ...s.paneCwd, [paneId]: cwd } };
+        }),
+
+      setPaneLastExit: (paneId, code) =>
+        set((s) => {
+          if (s.paneLastExit[paneId] === code) return s;
+          return { paneLastExit: { ...s.paneLastExit, [paneId]: code } };
+        }),
+
+      clearPaneShellState: (paneId) =>
+        set((s) => {
+          const hasCwd = paneId in s.paneCwd;
+          const hasExit = paneId in s.paneLastExit;
+          if (!hasCwd && !hasExit) return s;
+          const cwd = { ...s.paneCwd };
+          const exit = { ...s.paneLastExit };
+          delete cwd[paneId];
+          delete exit[paneId];
+          return { paneCwd: cwd, paneLastExit: exit };
         }),
 
       invalidatePane: (paneId, reason) =>

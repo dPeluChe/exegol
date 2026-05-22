@@ -6,11 +6,18 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { logger } from "../lib/logger";
+import bashrcBash from "./shell-integration/bashrc.bash?raw";
+import profilePs1 from "./shell-integration/profile.ps1?raw";
+import zlogin from "./shell-integration/zlogin.zsh?raw";
+import zprofile from "./shell-integration/zprofile.zsh?raw";
+import zshenv from "./shell-integration/zshenv.zsh?raw";
+import zshrc from "./shell-integration/zshrc.zsh?raw";
 
 const EXEGOL_DIR = join(homedir(), ".exegol");
 const SHELL_DIR = join(EXEGOL_DIR, "shell");
 const ZSH_DIR = join(SHELL_DIR, "zsh");
 const BASH_DIR = join(SHELL_DIR, "bash");
+const SHELL_INTEGRATION_DIR = join(EXEGOL_DIR, "shell-integration");
 
 /** OSC-777 private-use marker — avoids conflicts with VS Code (133), iTerm2 (1337), Warp (9001) */
 export const SHELL_READY_MARKER = "\x1b]777;exegol-shell-ready\x07";
@@ -24,6 +31,16 @@ export function getZshWrapperDir(): string {
 
 export function getBashRcfile(): string {
   return join(BASH_DIR, "rcfile");
+}
+
+/** T112: ZDOTDIR pointing at the OSC 7 + OSC 133 shell-integration scripts. */
+export function getShellIntegrationZdotdir(): string {
+  return SHELL_INTEGRATION_DIR;
+}
+
+/** T112: bash rcfile that emits OSC 7 + OSC 133 sequences. */
+export function getShellIntegrationBashRcfile(): string {
+  return join(SHELL_INTEGRATION_DIR, "bashrc.bash");
 }
 
 /** Check if a shell supports readiness markers */
@@ -135,5 +152,28 @@ fi
     logger.info("[ShellWrappers] Shell wrapper files created/updated");
   } catch (err) {
     logger.error("[ShellWrappers] Failed to create shell wrappers:", err);
+  }
+}
+
+/**
+ * T112: write OSC 7 + OSC 133 shell-integration scripts to
+ * ~/.exegol/shell-integration/. Idempotent — safe to call every startup.
+ *
+ * Lifted from Terax (terax-ai/src-tauri/src/modules/pty/scripts/*) with the
+ * names rebranded and the existing OSC-777 "shell-ready" marker preserved
+ * so pty-shell-ready.ts gating still works for plain shells.
+ */
+export function ensureShellIntegration(): void {
+  try {
+    mkdirSync(SHELL_INTEGRATION_DIR, { recursive: true });
+    writeFileSync(join(SHELL_INTEGRATION_DIR, ".zshenv"), zshenv);
+    writeFileSync(join(SHELL_INTEGRATION_DIR, ".zprofile"), zprofile);
+    writeFileSync(join(SHELL_INTEGRATION_DIR, ".zlogin"), zlogin);
+    writeFileSync(join(SHELL_INTEGRATION_DIR, ".zshrc"), zshrc);
+    writeFileSync(join(SHELL_INTEGRATION_DIR, "bashrc.bash"), bashrcBash);
+    writeFileSync(join(SHELL_INTEGRATION_DIR, "profile.ps1"), profilePs1);
+    logger.info("[ShellIntegration] OSC 7 + OSC 133 scripts written");
+  } catch (err) {
+    logger.error("[ShellIntegration] Failed to materialize scripts:", err);
   }
 }

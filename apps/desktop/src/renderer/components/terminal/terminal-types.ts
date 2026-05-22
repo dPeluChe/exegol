@@ -9,6 +9,8 @@ export interface TerminalInstanceHandle {
 
 export interface TerminalInstanceProps {
   agentId: string;
+  /** Pane this terminal lives in — used to key per-pane cwd/exit state (T112) */
+  paneId?: string;
   cliType?: string;
   readOnly?: boolean;
   initialContent?: string;

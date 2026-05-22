@@ -2,18 +2,26 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
+import {
+  createShellIntegrationState,
+  type OscHandlersDisposable,
+  registerOscHandlers,
+} from "./osc-handlers";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
 import type { TerminalInstanceProps } from "./terminal-types";
 
 export interface TerminalSessionDeps {
   agentId: string;
+  paneId?: string;
   readOnly: boolean;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
   theme: ITerminalOptions["theme"];
   onScrollPosition: TerminalInstanceProps["onScrollPosition"];
+  setPaneCwd: (paneId: string, cwd: string) => void;
+  setPaneLastExit: (paneId: string, code: number | null) => void;
 }
 
 export interface TerminalSession {
@@ -21,9 +29,15 @@ export interface TerminalSession {
   fitAddon: FitAddon;
   serializeAddon: SerializeAddon;
   dormantPipe: DormantPipe;
+  oscHandlers: OscHandlersDisposable | null;
+  /** Tear down all listeners + addons but not the terminal itself. */
   dispose: () => void;
 }
 
+/**
+ * Build a Terminal, attach addons, and wire input/output (PTY <-> xterm),
+ * shell-integration OSC handlers (T112), and the dormant ring pipe (T115).
+ */
 export function setupTerminalSession(
   container: HTMLElement,
   deps: TerminalSessionDeps,
@@ -47,6 +61,20 @@ export function setupTerminalSession(
   terminal.loadAddon(serializeAddon);
 
   terminal.open(container);
+
+  let oscHandlers: OscHandlersDisposable | null = null;
+  if (!deps.readOnly && deps.paneId) {
+    const state = createShellIntegrationState();
+    const paneId = deps.paneId;
+    oscHandlers = registerOscHandlers(
+      terminal,
+      {
+        setCwd: (cwd) => deps.setPaneCwd(paneId, cwd),
+        setLastExit: (code) => deps.setPaneLastExit(paneId, code),
+      },
+      state,
+    );
+  }
 
   const dormantPipe = createDormantPipe(terminal, true);
   if (deps.initialContent) terminal.write(deps.initialContent);
@@ -106,12 +134,17 @@ export function setupTerminalSession(
   function dispose(): void {
     for (const d of disposables) d.dispose();
     unsubData?.();
+    oscHandlers?.dispose();
     dormantPipe.dispose();
   }
 
-  return { terminal, fitAddon, serializeAddon, dormantPipe, dispose };
+  return { terminal, fitAddon, serializeAddon, dormantPipe, oscHandlers, dispose };
 }
 
+/**
+ * Fit the terminal and broadcast the new size to PTY + store. Wrapped so the
+ * many callers in TerminalInstance don't each have to repeat the try/catch.
+ */
 export function fitAndSyncSize(
   terminal: Terminal,
   fitAddon: FitAddon,

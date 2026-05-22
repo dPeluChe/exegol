@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { useTerminalStore } from "../../stores/terminals";
+import { useWorkspaceStore } from "../../stores/workspace";
 import type { DormantPipe } from "./terminal-dormant-wiring";
 import { fitAndSyncSize, setupTerminalSession } from "./terminal-setup";
 import {
@@ -26,6 +27,20 @@ import { createWebglController, type WebglController } from "./terminal-webgl";
 
 export type { TerminalInstanceHandle, TerminalInstanceProps } from "./terminal-types";
 
+function paneIdForAgentSelector(
+  state: ReturnType<typeof useWorkspaceStore.getState>,
+  agentId: string,
+  fallback: string | undefined,
+): string | undefined {
+  if (fallback) return fallback;
+  for (const pw of Object.values(state.projectWorkspaces)) {
+    for (const [id, pane] of Object.entries(pw.panes)) {
+      if (pane.agentId === agentId) return id;
+    }
+  }
+  return undefined;
+}
+
 export const TerminalInstance = forwardRef(function TerminalInstance(
   {
     agentId,
@@ -34,9 +49,14 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     initialContent,
     onReady,
     onScrollPosition,
+    paneId: paneIdProp,
   }: TerminalInstanceProps,
   ref: ForwardedRef<TerminalInstanceHandle>,
 ) {
+  // paneIdProp lets parents (e.g. floating windows) override the lookup.
+  // The normal flow falls back to a workspace-store search by agentId so
+  // we don't force TerminalPanel (owned by WT4) to plumb the paneId.
+  const paneId = useWorkspaceStore((s) => paneIdForAgentSelector(s, agentId, paneIdProp));
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -75,6 +95,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
   const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
   const setTerminalSize = useTerminalStore((s) => s.setTerminalSize);
+  const setPaneCwd = useWorkspaceStore((s) => s.setPaneCwd);
+  const setPaneLastExit = useWorkspaceStore((s) => s.setPaneLastExit);
   const { data: settings } = useSettings();
 
   const fontSize = settings?.terminalFontSize ?? 14;
@@ -106,12 +128,15 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     const session = setupTerminalSession(container, {
       agentId,
+      paneId,
       readOnly,
       initialContent,
       fontSize,
       fontFamily,
       theme: terminalTheme,
       onScrollPosition,
+      setPaneCwd,
+      setPaneLastExit,
     });
 
     terminalRef.current = session.terminal;
@@ -121,6 +146,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     const sync = (cols: number, rows: number) => setTerminalSize(agentId, cols, rows);
 
+    // Double-RAF: first frame settles layout, second fits terminal accurately
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, sync);
@@ -159,8 +185,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     };
   }, [
     agentId,
+    paneId,
     setTerminalReady,
     setTerminalSize,
+    setPaneCwd,
+    setPaneLastExit,
     onReady,
     fontFamily,
     fontSize,
@@ -177,6 +206,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     }
   }, [fontSize, fontFamily]);
 
+  // T38: visibility observer — drives WebGL attach/detach + T115 dormant ring
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -190,6 +220,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     return () => observer.disconnect();
   }, []);
 
+  // Route visibility changes to the dormant pipe so hidden writes get
+  // buffered into the ring and replayed on un-hide (T115).
   useEffect(() => {
     dormantPipeRef.current?.setVisible(isVisible);
   }, [isVisible]);

@@ -23,10 +23,7 @@ than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_S
 - **tokenlens model registry** (T111) — augment our DB catalog with model context-window info
 - **electron-window-state** (T121) — restore window size/position across launches
 
-**Terminal/PTY hardening (S–M):**
-- **PTY flusher hardening** (T113) — 4ms coalesce + ESC c on overflow + WebGL context-loss recovery
-- **OSC 7 + OSC 133 shell integration** (T112) — cwd + prompt boundaries + exit code for shell panes
-- **DormantRing for hidden panes** (T115) — 256KB bounded chunk ring (foundation for T114)
+**Terminal/PTY hardening (S–M):** _shipped in WT1 — see `docs/tasks_completed/2026_05.md`_
 
 **Larger / deferred:**
 - **Settings as separate window** (T120, M) — use floating BrowserWindow infra
@@ -586,54 +583,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ---
 
-### T112 — OSC 7 + OSC 133 Shell Integration
-**Priority**: Wave 1 / P1 | **Effort**: M | **Source**: Terax `src-tauri/src/modules/pty/scripts/` + `src/modules/terminal/lib/osc-handlers.ts:1-86`
-
-**Why**
-- Our `status_parser.rs` parses agent CLI output via regex — fragile and content-specific.
-- For **shell panes** (non-agent, plain `$SHELL`) we have no reliable cwd tracking or prompt-boundary detection.
-- OSC 7 (cwd) + OSC 133 A/B/C/D (prompt start/end/pre-exec/done+exit-code) are content-agnostic ANSI sequences emitted by the shell itself.
-- Unlocks: per-pane cwd badge, Smart Git Button refresh after `git commit` without polling, "jump to previous command" navigation.
-
-**Scope**
-- Lift Terax init scripts: `zshenv.zsh`, `zprofile.zsh`, `zlogin.zsh`, `zshrc.zsh`, `bashrc.bash`, `profile.ps1` (future Windows).
-- Materialize under `~/.exegol/shell-integration/` on first run.
-- When spawning a shell pane (NOT an agent CLI — those have their own loop), wrap shell command with `ZDOTDIR=...` (zsh) or `--rcfile ...` (bash).
-- Frontend OSC handlers in renderer: register OSC 7 + OSC 133 sequences on xterm, push parsed cwd into workspace store, register `IMarker` at each `A` for jump-to-prompt.
-- **Threat model**: reject OSC 7 updates emitted while `inCommand` is true (prevents SSH session from spoofing cwd badge). Mirror Terax `osc-handlers.ts:27-32`.
-- Apply only to `terminal` panes with `kind: shell` (no agent CLI). Status parser stays for agent panes.
-
-**Likely files**
-- `apps/desktop/src/main/terminal/shell-integration/` (new — init scripts)
-- `apps/desktop/src/main/terminal/shell-wrappers.ts` (materialize + wrap on spawn)
-- `apps/desktop/src/renderer/components/terminal/osc-handlers.ts` (new — frontend parser)
-- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx` (register handlers)
-- `apps/desktop/src/renderer/stores/workspace.ts` (per-pane cwd state)
-
----
-
-### T113 — PTY Flusher Hardening
-**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `src-tauri/src/modules/pty/session.rs:86-271` + frontend WebGL context-loss handling
-
-**Why**
-- Current sidecar overflow behavior may slice partial ANSI/CSI sequences → broken rendering.
-- We have no WebGL context-loss handler (Mac sleep/wake can drop GPU contexts → blank terminal).
-
-**Scope**
-- Audit `apps/desktop/src/main/terminal/pty-sidecar-entry.ts` flusher:
-  - Confirm coalescing window (Terax uses 4ms, MAX_PENDING 4 MiB).
-  - On overflow: **drop entire pending buffer + emit `ESC c` (hard reset) + dim notice**. Never slice partial CSI sequences.
-- Add WebGL context-loss handler in `TerminalInstance.tsx`:
-  - Listen for `webglcontextlost` on the canvas.
-  - 250 ms delay → re-attach WebGL addon.
-  - **Add max-retry counter (e.g., 3) — if GPU is truly gone, fall back to canvas renderer** (this is the gap in Terax's impl, anti-pattern listed in the review).
-
-**Likely files**
-- `apps/desktop/src/main/terminal/pty-sidecar-entry.ts`
-- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx`
-
----
-
 ### T114 — xterm Renderer Pool
 **Priority**: Wave 1 / P3 | **Effort**: L | **Source**: Terax `src/modules/terminal/lib/rendererPool.ts:1-700`
 
@@ -662,26 +611,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 - `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx` (replaced or wrapped)
 - `apps/desktop/src/renderer/components/workspace/WorkspacePane.tsx`
 - `apps/desktop/src/renderer/FloatingPaneRoot.tsx`
-
----
-
-### T115 — DormantRing for Hidden Panes
-**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `src/modules/terminal/lib/dormantRing.ts:1-71`
-
-**Why**
-- Today: when a pane is hidden or detached, the renderer-side ring is gone (we rely 100% on the sidecar's 8 MB ring for replay).
-- For hidden tabs that aren't released yet, a small in-memory chunk ring is enough to bridge.
-- Foundation block for T114 (renderer pool) but useful standalone.
-
-**Scope**
-- Implement bounded chunk ring: 256 KB / 256 chunks max.
-- On overflow: keep most-recent slice + prepend `ESC c` + a dim "[buffer overflow — earlier output dropped]" notice.
-- Push every write into ring while pane is hidden; flush on un-hide.
-- Standalone hook `useDormantRing(paneId)` consumed by `TerminalInstance.tsx` when `paneVisible === false`.
-
-**Likely files**
-- `apps/desktop/src/renderer/lib/dormant-ring.ts` (new)
-- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx`
 
 ---
 
