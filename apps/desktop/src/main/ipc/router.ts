@@ -4,6 +4,7 @@ import { apiKeysRouter } from "./procedures/apikeys";
 import { diffRouter } from "./procedures/diff";
 import { diffCommentsRouter } from "./procedures/diff-comments";
 import { filesRouter } from "./procedures/files";
+import { fsSearchRouter } from "./procedures/fs-search";
 import { githubRouter } from "./procedures/github";
 import { indexerRouter } from "./procedures/indexer";
 import { mcpRouter } from "./procedures/mcp";
@@ -51,6 +52,7 @@ export const appRouter = router({
   qaTests: qaTestRouter,
   activities: activitiesRouter,
   search: searchRouter,
+  fsSearch: fsSearchRouter,
   github: githubRouter,
   indexer: indexerRouter,
 });
