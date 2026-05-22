@@ -1,19 +1,94 @@
-import type { AgentAccessMode } from "@exegol/shared";
+import type { AgentAccessMode, IsolationMode } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
-import { AlertCircle, ArrowRight, Loader2, MessageSquare, TerminalSquare } from "lucide-react";
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  GitBranch,
+  Loader2,
+  MessageSquare,
+  Shield,
+  ShieldAlert,
+  TerminalSquare,
+} from "lucide-react";
 
 interface TerminalToolbarProps {
   accessMode?: AgentAccessMode | null;
+  isolationMode?: IsolationMode | null;
+  branchName?: string | null;
   viewMode: "terminal" | "chat";
   onToggleView: () => void;
 }
 
-export function TerminalToolbar({ accessMode, viewMode, onToggleView }: TerminalToolbarProps) {
+export function TerminalToolbar({
+  accessMode,
+  isolationMode,
+  branchName,
+  viewMode,
+  onToggleView,
+}: TerminalToolbarProps) {
   return (
     <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border/40 px-2 py-0.5">
+      {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}
       <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} />
     </div>
+  );
+}
+
+// ─── T105: Isolation status badge ───────────────────────────────────────────
+
+const ISOLATION_LABEL: Record<
+  IsolationMode,
+  { label: string; className: string; icon: typeof Shield; tooltip: string }
+> = {
+  isolated: {
+    label: "Isolated",
+    className: "bg-green-500/20 text-green-400",
+    icon: Shield,
+    tooltip: "Running in a dedicated git worktree — changes are isolated from project root.",
+  },
+  pipeline: {
+    label: "Pipeline",
+    className: "bg-green-500/20 text-green-300",
+    icon: GitBranch,
+    tooltip: "Running in a shared pipeline worktree.",
+  },
+  "project-root": {
+    label: "Root",
+    className: "bg-yellow-500/20 text-yellow-400",
+    icon: AlertTriangle,
+    tooltip: "Running directly in project root — changes affect the main checkout.",
+  },
+  fallback: {
+    label: "Fallback",
+    className: "bg-red-500/20 text-red-400",
+    icon: ShieldAlert,
+    tooltip: "Worktree creation failed — agent silently fell back to project root. Check logs.",
+  },
+};
+
+export function IsolationModeBadge({
+  mode,
+  branchName,
+}: {
+  mode: IsolationMode;
+  branchName?: string | null;
+}) {
+  const config = ISOLATION_LABEL[mode];
+  const Icon = config.icon;
+  const tooltip = branchName ? `${config.tooltip} (branch: ${branchName})` : config.tooltip;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+        config.className,
+      )}
+      title={tooltip}
+    >
+      <Icon className="h-2.5 w-2.5" />
+      {config.label}
+    </span>
   );
 }
 

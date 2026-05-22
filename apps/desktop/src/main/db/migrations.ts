@@ -550,6 +550,10 @@ const migrations: Migration[] = [
         ON diff_comments(project_id, file_path);
     `,
   },
+  {
+    id: "036_agents_isolation_mode",
+    sql: `ALTER TABLE agents ADD COLUMN isolation_mode TEXT;`,
+  },
 ];
 
 export function runMigrations(db: Database.Database): void {

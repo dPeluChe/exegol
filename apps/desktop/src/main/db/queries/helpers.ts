@@ -2,6 +2,7 @@ import type {
   Agent,
   AgentStatus,
   DiffComment,
+  IsolationMode,
   Project,
   Prompt,
   ScheduledResult,
@@ -74,6 +75,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     startedAt: r.started_at,
     stoppedAt: r.stopped_at,
     accessMode: r.access_mode,
+    isolationMode: (r.isolation_mode ?? null) as IsolationMode | null,
   };
 }
 

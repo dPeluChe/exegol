@@ -1,4 +1,4 @@
-import type { AgentProvider, HandoffSummary } from "@exegol/shared";
+import { type AgentProvider, deriveIsolationMode, type HandoffSummary } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -237,6 +237,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       {hasData && (
         <TerminalToolbar
           accessMode={agent?.accessMode}
+          isolationMode={dbAgent ? deriveIsolationMode(dbAgent) : null}
+          branchName={agent?.branchName}
           viewMode={viewMode}
           onToggleView={handleToggleLiveView}
         />

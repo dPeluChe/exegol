@@ -53,11 +53,19 @@ export function setupAgentCwd(
   if (config.cwdOverride) {
     cwd = config.cwdOverride;
     logger.info("[AgentManager] Using cwdOverride:", { cwd });
+    setIsolationMode(db, agent.id, "pipeline");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
     return cwd;
   }
 
-  if (!config.useWorktree || !coreRust) {
+  if (!config.useWorktree) {
+    setIsolationMode(db, agent.id, "project-root");
+    captureInitialSnapshot(agent, cwd, initialSnapshots);
+    return cwd;
+  }
+  if (!coreRust) {
+    // Worktree was requested but the native module is missing — silent fall back.
+    setIsolationMode(db, agent.id, "fallback");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
     return cwd;
   }
@@ -79,6 +87,7 @@ export function setupAgentCwd(
       branch: requestedBranchName,
       path: reuseWt.path,
     });
+    setIsolationMode(db, agent.id, "isolated");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
     return cwd;
   }
@@ -123,12 +132,22 @@ export function setupAgentCwd(
     });
 
     runSetupHook(project.path, wtInfo.path, wtInfo.branchName).catch(() => {});
+    setIsolationMode(db, agent.id, "isolated");
   } catch (err) {
     logger.error("[AgentManager] Failed to create worktree, falling back to project root:", err);
+    setIsolationMode(db, agent.id, "fallback");
   }
 
   captureInitialSnapshot(agent, cwd, initialSnapshots);
   return cwd;
+}
+
+function setIsolationMode(db: Database.Database, agentId: string, mode: string): void {
+  try {
+    db.prepare("UPDATE agents SET isolation_mode = ? WHERE id = ?").run(mode, agentId);
+  } catch (err) {
+    logger.warn(`[AgentManager] Failed to persist isolation_mode=${mode}:`, err);
+  }
 }
 
 function captureInitialSnapshot(

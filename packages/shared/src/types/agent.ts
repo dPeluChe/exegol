@@ -72,6 +72,34 @@ export function classifyActivity(
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 
+// ─── T105: Worktree Isolation Status ───────────────────────────────────────
+
+export const ISOLATION_MODES = ["isolated", "pipeline", "project-root", "fallback"] as const;
+export type IsolationMode = (typeof ISOLATION_MODES)[number];
+
+/**
+ * Derive the isolation badge state from an Agent. Prefers the stored
+ * `isolationMode` field (set at spawn time); otherwise falls back to a
+ * coarse heuristic based on worktreeId. Pure function — testable.
+ *
+ * - `isolated` — agent owns a private git worktree
+ * - `pipeline` — agent runs in a shared pipeline worktree (cwdOverride)
+ * - `project-root` — agent was launched without isolation, intentionally
+ * - `fallback` — agent requested a worktree but creation failed silently
+ *
+ * Why: the user thinks they have isolation if they ticked the "worktree"
+ * box at spawn time. A silent fallback to project root is a footgun and
+ * must surface visibly (red badge). Pipeline and isolated are both safe
+ * (green) but distinct in operator mental model.
+ */
+export function deriveIsolationMode(agent: {
+  isolationMode?: IsolationMode | null;
+  worktreeId?: string | null;
+}): IsolationMode {
+  if (agent.isolationMode) return agent.isolationMode;
+  return agent.worktreeId ? "isolated" : "project-root";
+}
+
 export type Agent = {
   id: string;
   projectId: string;
@@ -86,6 +114,8 @@ export type Agent = {
   stoppedAt: number | null;
   /** T58: read = explore-only, write = full access (default), plan = analysis-only (no file writes) */
   accessMode?: AgentAccessMode;
+  /** T105: Worktree isolation status — set at spawn time. */
+  isolationMode?: IsolationMode | null;
 };
 
 export type AgentCreate = {
