@@ -26,43 +26,52 @@ function trpcAllowed(path: string): boolean {
   return allow.includes(procedure);
 }
 
-function denyTrpc(path: string): never {
-  const msg = `Capability denied: ${path}`;
+function makeDenialError(target: string, kind: "trpc" | "ipc"): Error {
+  const msg = kind === "trpc" ? `Capability denied: ${target}` : `Capability denied: ipc:${target}`;
   console.warn(`[capabilities] ${msg}`);
-  throw new Error(msg);
+  return Object.assign(new Error(msg), { code: "FORBIDDEN", name: "CapabilityDeniedError" });
 }
 
-function denyIpc(channel: string): never {
-  const msg = `Capability denied: ipc:${channel}`;
-  console.warn(`[capabilities] ${msg}`);
-  throw new Error(msg);
-}
-
+// `invoke` and `send` route synchronous-style API calls; returning a rejected
+// Promise (for invoke) or throwing (for send, which is fire-and-forget) keeps
+// the existing call contract intact for `.catch(...)` chains.
 const safe = {
   invoke: (channel: string, ...args: unknown[]) =>
-    ipcSet.has(channel) ? ipcRenderer.invoke(channel, ...args) : denyIpc(channel),
-  send: (channel: string, ...args: unknown[]) =>
-    ipcSet.has(channel) ? ipcRenderer.send(channel, ...args) : denyIpc(channel),
+    ipcSet.has(channel)
+      ? ipcRenderer.invoke(channel, ...args)
+      : Promise.reject(makeDenialError(channel, "ipc")),
+  send: (channel: string, ...args: unknown[]) => {
+    if (!ipcSet.has(channel)) throw makeDenialError(channel, "ipc");
+    ipcRenderer.send(channel, ...args);
+  },
+  // `on` runs inside React effects — a sync throw would crash the subtree at
+  // mount time. Log the denial, return without attaching the listener, and let
+  // the calling component degrade gracefully (the unsubscribe wrapper is still
+  // safe to call later because removeListener with a never-attached handler
+  // is a no-op in Electron).
   on: (
     channel: string,
     handler: (event: Electron.IpcRendererEvent, ...args: unknown[]) => void,
   ) => {
-    if (!ipcSet.has(channel)) denyIpc(channel);
+    if (!ipcSet.has(channel)) {
+      makeDenialError(channel, "ipc");
+      return;
+    }
     ipcRenderer.on(channel, handler);
   },
   off: (
-    channel: string,
+    _channel: string,
     handler: (event: Electron.IpcRendererEvent, ...args: unknown[]) => void,
   ) => {
     // Removing a listener is always safe — no allowlist gate needed.
-    ipcRenderer.removeListener(channel, handler);
+    ipcRenderer.removeListener(_channel, handler);
   },
 };
 
 contextBridge.exposeInMainWorld("api", {
   trpc: {
     invoke: (path: string, input: unknown) => {
-      if (!trpcAllowed(path)) denyTrpc(path);
+      if (!trpcAllowed(path)) return Promise.reject(makeDenialError(path, "trpc"));
       return ipcRenderer.invoke("trpc", { path, input });
     },
   },

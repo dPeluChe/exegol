@@ -22,7 +22,19 @@ export type CommandRefusal =
   | { ok: false; reason: CommandRefusalReason; matched: string };
 
 // Bidi formatting chars (Trojan Source). Same range as path-guard.
-const BIDI_CHAR_RE = /[‪-‮⁦-⁩]/u;
+const BIDI_CHAR_RE = /[‪-‮⁦-⁩‎‏؜]/u;
+
+// Normalize the command string before pattern matching: strip leading
+// backslashes in front of words (`\rm` → `rm`) and collapse empty-string
+// quoting that the shell would otherwise erase (`r''m` / `r""m` → `rm`,
+// `e""cho` → `echo`). The original string is kept for the `matched` field;
+// we only normalize the comparison surface. This closes the most common
+// trivial-evasion vectors against `\bword\b` patterns below.
+function normalizeCommand(cmd: string): string {
+  let s = cmd.replace(/\\([A-Za-z])/g, "$1");
+  s = s.replace(/(?<=[A-Za-z])(?:''|"")+(?=[A-Za-z])/g, "");
+  return s;
+}
 
 // Fork bomb. Matches `:(){ :|:& };:` with arbitrary whitespace between tokens.
 const FORK_BOMB_RE = /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/;
@@ -47,9 +59,15 @@ const NO_PRESERVE_ROOT_RE = /--no-preserve-root\b/i;
 // command word, then look for `of=/dev/...` anywhere before a pipe/redirect.
 const DD_OF_DISK_RE = /\bdd\b[^|;&\n]*\bof=\/dev\/(?:disk|sd|hd|nvme)/i;
 
-// `curl ... | sh` / `wget -O- ... | bash` etc. Match the network fetcher,
-// then a pipe to any common shell.
-const CURL_PIPE_SH_RE = /\b(?:curl|wget)\b[^|;&\n]*\|\s*(?:ba|z|k|d|fi|c)?sh\b/;
+// `curl ... | sh` / `wget ... | /bin/sh` / `curl ... | dash` etc.
+// After the pipe accept either a bare shell name OR an absolute path ending in
+// a known shell. `[\w./-]*` consumes path prefix; final alternation enumerates
+// every common Unix shell rather than relying on a brittle letter prefix.
+const SHELL_NAMES = "(?:sh|bash|zsh|ksh|dash|ash|csh|tcsh|fish)";
+const CURL_PIPE_SH_RE = new RegExp(
+  `\\b(?:curl|wget|fetch)\\b[^|;&\\n]*\\|\\s*(?:[\\w./-]*\\/)?${SHELL_NAMES}\\b`,
+  "i",
+);
 
 function firstMatch(input: string, re: RegExp): string | null {
   const m = input.match(re);
@@ -58,10 +76,12 @@ function firstMatch(input: string, re: RegExp): string | null {
 
 export function inspectCommand(cmd: string): CommandRefusal {
   if (typeof cmd !== "string" || cmd.length === 0) return { ok: true };
-  const c = cmd;
-
-  const bidi = firstMatch(c, BIDI_CHAR_RE);
+  // Bidi check runs against the raw string — normalization would strip
+  // characters we want to surface.
+  const bidi = firstMatch(cmd, BIDI_CHAR_RE);
   if (bidi !== null) return { ok: false, reason: "bidi-chars", matched: bidi };
+
+  const c = normalizeCommand(cmd);
 
   const fork = firstMatch(c, FORK_BOMB_RE);
   if (fork !== null) return { ok: false, reason: "fork-bomb", matched: fork };

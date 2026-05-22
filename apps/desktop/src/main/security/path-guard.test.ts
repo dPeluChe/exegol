@@ -162,6 +162,12 @@ describe("hasBidiChars", () => {
     ["dir/⁦inner/file"],
     // U+2069 PDI
     ["x⁩.txt"],
+    // U+200E LRM — directional mark, also abused in Trojan Source
+    ["safe‎config.ts"],
+    // U+200F RLM
+    ["safe‏key.pem"],
+    // U+061C ALM
+    ["auth؜key.pem"],
   ])("detects bidi chars in %p", (input) => {
     expect(hasBidiChars(input)).toBe(true);
   });
@@ -178,21 +184,29 @@ describe("hasBidiChars", () => {
 // ─── hasAdsSuffix ────────────────────────────────────────────────────────────
 
 describe("hasAdsSuffix", () => {
-  it("detects a `:stream` suffix on a basename", () => {
-    expect(hasAdsSuffix("file.txt:hidden_stream")).toBe(true);
+  // ADS only exists on Windows; this whole helper short-circuits on POSIX so a
+  // legitimate timestamped filename containing `:` is never refused on
+  // macOS/Linux. The Windows-side checks are exercised only when the test runs
+  // on Windows.
+  const isWin = process.platform === "win32";
+
+  it("on POSIX, returns false for any path (including ISO timestamps)", () => {
+    if (isWin) return;
+    expect(hasAdsSuffix("/repo/logs/2026-05-21T10:00:00.log")).toBe(false);
+    expect(hasAdsSuffix("file.txt:hidden_stream")).toBe(false);
+    expect(hasAdsSuffix("/home/user/project/file.ts")).toBe(false);
   });
 
-  it("detects ADS on a nested path", () => {
+  it("on Windows, detects an ADS suffix", () => {
+    if (!isWin) return;
+    expect(hasAdsSuffix("file.txt:hidden_stream")).toBe(true);
     expect(hasAdsSuffix("/projects/app/secrets.json:$DATA")).toBe(true);
   });
 
-  it("ignores the Windows drive-letter colon", () => {
+  it("on Windows, ignores the drive-letter colon", () => {
+    if (!isWin) return;
     expect(hasAdsSuffix("C:/projects/app/src/main.ts")).toBe(false);
     expect(hasAdsSuffix("D:\\work\\file.txt")).toBe(false);
-  });
-
-  it("allows clean POSIX paths", () => {
-    expect(hasAdsSuffix("/home/user/project/file.ts")).toBe(false);
   });
 });
 
@@ -216,6 +230,21 @@ describe("isSensitivePath", () => {
     "/private/var/db/something",
     "/projects/app/server.pem",
     "/projects/app/cert.key",
+    // newly covered patterns
+    "/projects/app/service-account.json",
+    "/projects/app/service_account_prod.json",
+    "/projects/app/client_secret_xxxxx.apps.googleusercontent.com.json",
+    "/projects/app/secrets.json",
+    "/projects/app/secrets.yml",
+    "/projects/app/secret.env",
+    "/home/me/.gitconfig",
+    "/home/me/.dockercfg",
+    "/home/me/.terraformrc",
+    "/home/me/.cargo/credentials",
+    "/home/me/.config/git/credentials",
+    "/projects/app/release.asc",
+    "/projects/app/release.gpg",
+    "/projects/app/store.jks",
   ])("refuses sensitive path: %p", (input) => {
     expect(isSensitivePath(input)).toBe(true);
   });
@@ -227,6 +256,10 @@ describe("isSensitivePath", () => {
     "/projects/app/.sshx/config",
     "/projects/app/logs/.envcheck.log",
     "/projects/app/keys-readme.md",
+    // ISO-8601 timestamps in filenames are common; must not trip ADS-shaped
+    // checks on POSIX (hasAdsSuffix is platform-gated; isSensitivePath has no
+    // ADS check at all). Both should pass.
+    "/projects/app/logs/2026-05-21T10:00:00.log",
   ])("allows benign path: %p", (input) => {
     expect(isSensitivePath(input)).toBe(false);
   });
@@ -258,7 +291,8 @@ describe("assertSafePath", () => {
     });
   });
 
-  it("refuses ADS suffix with reason 'ads-suffix'", async () => {
+  it("refuses ADS suffix with reason 'ads-suffix' (Windows only)", async () => {
+    if (process.platform !== "win32") return;
     tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
     const bad = join(tmpDir, "file.txt:hidden");
     await expect(assertSafePath(bad, { allowedBases: [tmpDir] })).rejects.toMatchObject({

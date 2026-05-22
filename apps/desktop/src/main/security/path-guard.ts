@@ -74,10 +74,11 @@ export class PathGuardError extends Error {
 }
 
 // Unicode bidirectional formatting characters used in Trojan Source attacks.
-// Range U+202A–U+202E covers LRE/RLE/PDF/LRO/RLO; U+2066–U+2069 covers
-// LRI/RLI/FSI/PDI. A filename containing any of these can be visually reordered
-// in a code review or terminal, hiding the real path from the reviewer.
-const BIDI_CHAR_RE = /[‪-‮⁦-⁩]/u;
+// U+202A–U+202E covers LRE/RLE/PDF/LRO/RLO; U+2066–U+2069 covers LRI/RLI/FSI/PDI;
+// U+200E/U+200F (LRM/RLM) and U+061C (ALM) are the directional marks. Any of
+// these in a filename or command can visually reorder text in a reviewer's
+// terminal or editor, hiding the real intent.
+const BIDI_CHAR_RE = /[‪-‮⁦-⁩‎‏؜]/u;
 
 export function hasBidiChars(name: string): boolean {
   return BIDI_CHAR_RE.test(name);
@@ -85,10 +86,14 @@ export function hasBidiChars(name: string): boolean {
 
 // NTFS Alternate Data Streams: `file.txt:hidden_stream` opens `file.txt` but
 // hides the stream content. Strip the Windows drive-letter prefix (`C:`) and
-// reject any other `:` in the path.
+// reject any other `:` in the path. Only meaningful on Windows; gated on
+// platform so legitimate POSIX filenames containing `:` (ISO-8601 timestamps,
+// Time Machine metadata, etc.) are not refused on macOS/Linux.
 const DRIVE_PREFIX_RE = /^[a-zA-Z]:/;
+const IS_WIN32 = process.platform === "win32";
 
 export function hasAdsSuffix(name: string): boolean {
+  if (!IS_WIN32) return false;
   const noDrive = name.replace(DRIVE_PREFIX_RE, "");
   return noDrive.includes(":");
 }
@@ -101,19 +106,32 @@ const SENSITIVE_BASENAME_RE: RegExp[] = [
   /^\.netrc$/i,
   /^\.npmrc$/i,
   /^\.pgpass$/i,
+  /^\.pypirc$/i,
+  /^\.gitconfig$/i, // may contain http.<url>.extraheader PAT tokens
+  /^\.dockercfg$/i,
+  /^\.terraformrc$/i,
   /^id_(rsa|dsa|ecdsa|ed25519)([._-].*)?$/i,
   /^authorized_keys$/i,
   /^known_hosts$/i,
   /^credentials$/i, // .aws/credentials, gcloud, etc.
+  /^secrets?\.(json|ya?ml|toml|env)$/i,
+  /^service[-_]?account.*\.json$/i, // GCP service-account keys
+  /^client[-_]?secret.*\.json$/i, // OAuth client secrets
   /^.+\.pem$/i,
   /^.+\.key$/i,
   /^.+\.p12$/i,
   /^.+\.pfx$/i,
+  /^.+\.asc$/i, // PGP armored keys
+  /^.+\.gpg$/i,
   /^.+\.keystore$/i,
+  /^.+\.jks$/i,
 ];
 
 // Sensitive directory segments — matched as `/segment/` against the
 // normalized comparison surface so `.sshx` does not collide with `.ssh`.
+// Path-segment matching also catches the macOS Keychain dir under any user
+// home (`/Users/<me>/Library/Keychains/...` lowercase contains
+// `/library/keychains/`) without needing absolute-prefix logic.
 const SENSITIVE_DIR_SEGMENTS: string[] = [
   ".ssh",
   ".gnupg",
@@ -122,17 +140,23 @@ const SENSITIVE_DIR_SEGMENTS: string[] = [
   ".kube",
   ".docker",
   ".gcloud",
+  ".cargo", // ~/.cargo/credentials (crates.io tokens)
   ".config/gh",
   ".config/gcloud",
   ".config/op",
+  ".config/git", // git-credential store
+  "library/keychains", // macOS Keychain
+  "library/cookies", // macOS / Safari cookies
 ];
 
-// Absolute-path-prefix sensitive dirs (system keychains, root profile).
+// Absolute-path-prefix sensitive dirs (root profile, system var dirs).
+// Matched with startsWith only — interior occurrences would refuse legitimate
+// projects that happen to live under directories with these names.
 const SENSITIVE_PATH_PREFIXES: string[] = [
-  "/library/keychains/",
-  "/library/cookies/",
   "/private/var/db/",
   "/private/var/root/",
+  "/var/db/",
+  "/var/root/",
 ];
 
 function normalizeForCompare(p: string): string {
@@ -154,7 +178,7 @@ export function isSensitivePath(p: string): boolean {
     if (padded.includes(`/${seg}/`)) return true;
   }
   for (const prefix of SENSITIVE_PATH_PREFIXES) {
-    if (padded.startsWith(prefix) || padded.includes(prefix)) return true;
+    if (padded.startsWith(prefix)) return true;
   }
   return false;
 }
