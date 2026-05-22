@@ -2,6 +2,7 @@ import type { AgentCliType } from "@exegol/shared";
 import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import {
   formatHandoffForInjection,
   getHandoffByAgent,
@@ -21,7 +22,6 @@ import {
   createParallelRun,
   getParallelRun,
   listParallelRuns,
-  promoteParallelRunAgent,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { publicProcedure, router } from "../trpc";
@@ -355,7 +355,7 @@ export const agentRouter = router({
   promoteParallelAgent: publicProcedure
     .input(z.object({ runId: z.string(), agentId: z.string() }))
     .mutation(({ ctx, input }) => {
-      promoteParallelRunAgent(ctx.db, input.runId, input.agentId);
+      promoteParallelAgent(ctx.db, input.runId, input.agentId);
       return { success: true };
     }),
 
