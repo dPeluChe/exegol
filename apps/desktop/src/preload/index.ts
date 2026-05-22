@@ -1,31 +1,100 @@
 import { contextBridge, ipcRenderer } from "electron";
+import capabilities from "./capabilities.json";
+
+type TrpcAllow = "*" | readonly string[];
+type Capabilities = {
+  trpc: Readonly<Record<string, TrpcAllow>>;
+  ipc: readonly string[];
+};
+
+const caps = capabilities as unknown as Capabilities;
+const ipcSet = new Set(caps.ipc);
+
+// Wildcards mean: every procedure under this router is allowed today. Tightening
+// to per-procedure lists is a future migration; the gate must already be in
+// place at every call site so the migration is purely a JSON edit.
+function trpcAllowed(path: string): boolean {
+  if (typeof path !== "string") return false;
+  const dot = path.indexOf(".");
+  if (dot <= 0) return false;
+  const router = path.slice(0, dot);
+  const procedure = path.slice(dot + 1);
+  if (!procedure) return false;
+  const allow = caps.trpc[router];
+  if (!allow) return false;
+  if (allow === "*") return true;
+  return allow.includes(procedure);
+}
+
+function makeDenialError(target: string, kind: "trpc" | "ipc"): Error {
+  const msg = kind === "trpc" ? `Capability denied: ${target}` : `Capability denied: ipc:${target}`;
+  console.warn(`[capabilities] ${msg}`);
+  return Object.assign(new Error(msg), { code: "FORBIDDEN", name: "CapabilityDeniedError" });
+}
+
+// `invoke` and `send` route synchronous-style API calls; returning a rejected
+// Promise (for invoke) or throwing (for send, which is fire-and-forget) keeps
+// the existing call contract intact for `.catch(...)` chains.
+const safe = {
+  invoke: (channel: string, ...args: unknown[]) =>
+    ipcSet.has(channel)
+      ? ipcRenderer.invoke(channel, ...args)
+      : Promise.reject(makeDenialError(channel, "ipc")),
+  send: (channel: string, ...args: unknown[]) => {
+    if (!ipcSet.has(channel)) throw makeDenialError(channel, "ipc");
+    ipcRenderer.send(channel, ...args);
+  },
+  // `on` runs inside React effects — a sync throw would crash the subtree at
+  // mount time. Log the denial, return without attaching the listener, and let
+  // the calling component degrade gracefully (the unsubscribe wrapper is still
+  // safe to call later because removeListener with a never-attached handler
+  // is a no-op in Electron).
+  on: (
+    channel: string,
+    handler: (event: Electron.IpcRendererEvent, ...args: unknown[]) => void,
+  ) => {
+    if (!ipcSet.has(channel)) {
+      makeDenialError(channel, "ipc");
+      return;
+    }
+    ipcRenderer.on(channel, handler);
+  },
+  off: (
+    _channel: string,
+    handler: (event: Electron.IpcRendererEvent, ...args: unknown[]) => void,
+  ) => {
+    // Removing a listener is always safe — no allowlist gate needed.
+    ipcRenderer.removeListener(_channel, handler);
+  },
+};
 
 contextBridge.exposeInMainWorld("api", {
   trpc: {
-    invoke: (path: string, input: unknown) => ipcRenderer.invoke("trpc", { path, input }),
+    invoke: (path: string, input: unknown) => {
+      if (!trpcAllowed(path)) return Promise.reject(makeDenialError(path, "trpc"));
+      return ipcRenderer.invoke("trpc", { path, input });
+    },
   },
   terminal: {
     onData: (id: string, callback: (data: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, termId: string, data: string): void => {
         if (termId === id) callback(data);
       };
-      ipcRenderer.on("terminal:data", handler);
+      safe.on("terminal:data", handler as never);
       return () => {
-        ipcRenderer.removeListener("terminal:data", handler);
+        safe.off("terminal:data", handler as never);
       };
     },
-    write: (id: string, data: string) => ipcRenderer.send("terminal:write", id, data),
+    write: (id: string, data: string) => safe.send("terminal:write", id, data),
     resize: (id: string, cols: number, rows: number) =>
-      ipcRenderer.send("terminal:resize", id, cols, rows),
+      safe.send("terminal:resize", id, cols, rows),
     /** Get ring buffer snapshot for late-mounting terminals */
-    getSnapshot: (id: string): Promise<string | null> =>
-      ipcRenderer.invoke("terminal:get-snapshot", id),
+    getSnapshot: (id: string): Promise<string | null> => safe.invoke("terminal:get-snapshot", id),
     /** Save clipboard image as temp file, returns file path or null */
-    saveClipboardImage: (): Promise<string | null> =>
-      ipcRenderer.invoke("terminal:save-clipboard-image"),
+    saveClipboardImage: (): Promise<string | null> => safe.invoke("terminal:save-clipboard-image"),
   },
   app: {
-    getVersion: () => ipcRenderer.invoke("app:version"),
+    getVersion: () => safe.invoke("app:version"),
     getPlatform: () => process.platform,
   },
   // Menu-driven actions (macOS app menu routes accelerators via IPC so the
@@ -33,11 +102,11 @@ contextBridge.exposeInMainWorld("api", {
   onMenuAction: (callback: (action: "new-tab" | "close-pane") => void) => {
     const onNewTab = () => callback("new-tab");
     const onClosePane = () => callback("close-pane");
-    ipcRenderer.on("menu:new-tab", onNewTab);
-    ipcRenderer.on("menu:close-pane", onClosePane);
+    safe.on("menu:new-tab", onNewTab as never);
+    safe.on("menu:close-pane", onClosePane as never);
     return () => {
-      ipcRenderer.removeListener("menu:new-tab", onNewTab);
-      ipcRenderer.removeListener("menu:close-pane", onClosePane);
+      safe.off("menu:new-tab", onNewTab as never);
+      safe.off("menu:close-pane", onClosePane as never);
     };
   },
   onAgentHandoff: (callback: (agentId: string, handoffId: string) => void) => {
@@ -48,68 +117,67 @@ contextBridge.exposeInMainWorld("api", {
     ): void => {
       callback(agentId, handoffId);
     };
-    ipcRenderer.on("agent:handoff-ready", handler);
+    safe.on("agent:handoff-ready", handler as never);
     return () => {
-      ipcRenderer.removeListener("agent:handoff-ready", handler);
+      safe.off("agent:handoff-ready", handler as never);
     };
   },
   // Push event subscriptions (T17: push-first status updates)
   onAgentStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
-    ipcRenderer.on("agent:status-changed", handler);
+    safe.on("agent:status-changed", handler as never);
     return () => {
-      ipcRenderer.removeListener("agent:status-changed", handler);
+      safe.off("agent:status-changed", handler as never);
     };
   },
   onMetrics: (callback: (metrics: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
-    ipcRenderer.on("metrics:update", handler);
+    safe.on("metrics:update", handler as never);
     return () => {
-      ipcRenderer.removeListener("metrics:update", handler);
+      safe.off("metrics:update", handler as never);
     };
   },
   onPipelineStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
-    ipcRenderer.on("pipeline:status-changed", handler);
+    safe.on("pipeline:status-changed", handler as never);
     return () => {
-      ipcRenderer.removeListener("pipeline:status-changed", handler);
+      safe.off("pipeline:status-changed", handler as never);
     };
   },
   dialog: {
     // biome-ignore lint/suspicious/noExplicitAny: Electron dialog options are dynamic
-    showOpenDialog: (options: any) => ipcRenderer.invoke("dialog:showOpenDialog", options),
+    showOpenDialog: (options: any) => safe.invoke("dialog:showOpenDialog", options),
   },
   windowControls: {
-    minimize: () => ipcRenderer.send("window:minimize"),
-    maximize: () => ipcRenderer.send("window:maximize"),
-    close: () => ipcRenderer.send("window:close"),
+    minimize: () => safe.send("window:minimize"),
+    maximize: () => safe.send("window:maximize"),
+    close: () => safe.send("window:close"),
   },
   // T47: Notification navigation
   onNotificationNavigate: (callback: (data: { agentId: string }) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: { agentId: string }) => callback(data);
-    ipcRenderer.on("notification:navigate", handler);
+    safe.on("notification:navigate", handler as never);
     return () => {
-      ipcRenderer.removeListener("notification:navigate", handler);
+      safe.off("notification:navigate", handler as never);
     };
   },
   // T44: Auto-updater
   updater: {
-    check: () => ipcRenderer.invoke("updater:check"),
-    install: () => ipcRenderer.invoke("updater:install"),
+    check: () => safe.invoke("updater:check"),
+    install: () => safe.invoke("updater:install"),
     onStatus: (callback: (status: unknown) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
-      ipcRenderer.on("updater:status", handler);
+      safe.on("updater:status", handler as never);
       return () => {
-        ipcRenderer.removeListener("updater:status", handler);
+        safe.off("updater:status", handler as never);
       };
     },
   },
   // T102: Design Mode + QA — browser pane inspection
   browser: {
-    executeJs: (code: string) => ipcRenderer.invoke("browser:execute-js", { code }),
-    captureScreenshot: () => ipcRenderer.invoke("browser:capture-screenshot"),
-    captureElement: (selector: string) =>
-      ipcRenderer.invoke("browser:capture-element", { selector }),
+    executeJs: (code: string) => safe.invoke("browser:execute-js", { code }),
+    captureScreenshot: () => safe.invoke("browser:capture-screenshot"),
+    captureElement: (selector: string) => safe.invoke("browser:capture-element", { selector }),
   },
   // T84: Picture-in-Picture pane floating windows
   floating: {
@@ -121,19 +189,19 @@ contextBridge.exposeInMainWorld("api", {
       agentId?: string;
       url?: string;
       projectId?: string;
-    }) => ipcRenderer.invoke("floating:open", config),
+    }) => safe.invoke("floating:open", config),
     /** Close a specific floating pane window by paneId (from main window) */
-    close: (paneId: string) => ipcRenderer.invoke("floating:close", paneId),
+    close: (paneId: string) => safe.invoke("floating:close", paneId),
     /** Close the current floating window (called from inside it) */
-    selfClose: () => ipcRenderer.send("floating:self-close"),
+    selfClose: () => safe.send("floating:self-close"),
     /** Toggle devtools in the current floating window */
-    selfToggleDevTools: () => ipcRenderer.send("floating:self-devtools"),
+    selfToggleDevTools: () => safe.send("floating:self-devtools"),
     /** Main window: subscribe to "floating window closed" events */
     onClosed: (callback: (paneId: string) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, paneId: string) => callback(paneId);
-      ipcRenderer.on("floating:closed", handler);
+      safe.on("floating:closed", handler as never);
       return () => {
-        ipcRenderer.removeListener("floating:closed", handler);
+        safe.off("floating:closed", handler as never);
       };
     },
   },

@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { CapabilityDeniedError, isTrpcPathAllowed } from "./capabilities";
 import { createContext } from "./context";
 import { appRouter } from "./router";
 
@@ -13,6 +14,18 @@ import { appRouter } from "./router";
 export function registerTrpcIpcHandler(): void {
   ipcMain.handle("trpc", async (_event, payload: { path: string; input: unknown }) => {
     const { path, input } = payload;
+    // Defense in depth: even if the preload allowlist is bypassed (compromised
+    // renderer or preload), refuse any procedure not declared in capabilities.json.
+    // Attach `code: 'FORBIDDEN'` so the renderer's tRPC error pipeline classifies
+    // this as a permission denial (not a transient network failure to retry).
+    if (!isTrpcPathAllowed(path)) {
+      const err = new CapabilityDeniedError("trpc", path);
+      console.warn(`[capabilities] ${err.message}`);
+      throw Object.assign(new Error(err.message), {
+        code: "FORBIDDEN",
+        name: "CapabilityDeniedError",
+      });
+    }
     const ctx = createContext();
     const caller = appRouter.createCaller(ctx);
 
