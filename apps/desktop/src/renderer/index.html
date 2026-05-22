@@ -3,9 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Content-Security-Policy — defense-in-depth for the renderer process.
+
+      `frame-src *` + `child-src *` are intentionally permissive: the browser
+      pane (T84 / WT2) loads arbitrary user URLs inside a <webview>. The
+      <webview> has its own webContents and is isolated from this renderer's
+      JS context, so a wide frame allowlist here does NOT expose the preload
+      bridge to those URLs. Do not tighten these without first redesigning
+      the browser pane.
+
+      All external network access (Anthropic API, GitHub API, etc.) happens
+      from the main process via node fetch, so `connect-src` here only needs
+      `'self'` — the renderer talks to main over IPC, not over HTTP.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net blob:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; worker-src blob:; frame-src *; child-src *"
+      content="
+        default-src 'self';
+        script-src 'self' 'wasm-unsafe-eval' blob:;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob:;
+        font-src 'self' data:;
+        connect-src 'self';
+        worker-src 'self' blob:;
+        frame-src *;
+        child-src *;
+        object-src 'none';
+        base-uri 'self';
+        form-action 'self'
+      "
     />
     <title>Exegol</title>
     <style>
