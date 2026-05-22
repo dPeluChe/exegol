@@ -227,6 +227,34 @@ export type ParallelRun = {
   completedAt: number | null;
 };
 
+// ─── T107: Comparator payload ──────────────────────────────────────────────
+
+export type ParallelRunColumn = {
+  agent: Agent;
+  worktreePath: string | null;
+  diffStat: { filesChanged: number; insertions: number; deletions: number } | null;
+  /** AgentScoreRow shape, kept loose to avoid a circular type import. */
+  score: {
+    overallScore: number;
+    exitReason: "success" | "failure" | "stopped" | "timeout" | "unknown";
+    turnsUsed: number;
+    filesChanged: number;
+    taskCompleted: boolean;
+  } | null;
+  cost: {
+    totalCostUsd: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+  } | null;
+  durationSeconds: number | null;
+  lastLines: string[];
+};
+
+export type ParallelRunDetails = {
+  run: ParallelRun;
+  columns: ParallelRunColumn[];
+};
+
 // ─── QA Tests (T102) ───────────────────────────────────────────────────────
 
 export const QA_TEST_STATUSES = ["saved", "running", "passed", "failed"] as const;

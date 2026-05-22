@@ -20,6 +20,7 @@ import {
 } from "../../db/queries";
 import {
   createParallelRun,
+  enrichParallelRunForComparison,
   getParallelRun,
   listParallelRuns,
   updateParallelRunStatus,
@@ -351,6 +352,20 @@ export const agentRouter = router({
   getParallelRun: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
     return getParallelRun(ctx.db, input.id) ?? null;
   }),
+
+  /** T107 — enriched comparator payload: single round-trip, server-side N work. */
+  getParallelRunDetails: publicProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(({ ctx, input }) => {
+      const run = getParallelRun(ctx.db, input.runId);
+      if (!run) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: `Parallel run ${input.runId} not found`,
+        });
+      }
+      return enrichParallelRunForComparison(ctx.db, run);
+    }),
 
   promoteParallelAgent: publicProcedure
     .input(z.object({ runId: z.string(), agentId: z.string() }))
