@@ -25,11 +25,13 @@ function makeDeps() {
 }
 
 describe("registerOscHandlers — OSC 7 cwd", () => {
-  it("extracts cwd from a well-formed OSC 7 sequence", () => {
+  it("extracts cwd from a well-formed OSC 7 sequence at the prompt context", () => {
     const { term, handlers } = makeFakeTerm();
     const deps = makeDeps();
     registerOscHandlers(term, deps);
-    handlers.get(133)?.("A");
+    // Our local shell's precmd emits D then OSC 7 then A on every prompt;
+    // D drops us into the trusted prompt context.
+    handlers.get(133)?.("D;0");
     handlers.get(7)?.("file://host/home/me/project");
     expect(deps.setCwd).toHaveBeenCalledWith("/home/me/project");
   });
@@ -55,8 +57,23 @@ describe("registerOscHandlers — OSC 7 cwd", () => {
     const state = createShellIntegrationState();
     const deps = makeDeps();
     registerOscHandlers(term, deps, state);
-    handlers.get(133)?.("A");
+    handlers.get(133)?.("D;0");
     handlers.get(133)?.("B");
+    handlers.get(7)?.("file://attacker/etc");
+    expect(deps.setCwd).not.toHaveBeenCalled();
+  });
+
+  it("rejects OSC 7 when a remote shell emits 133;A inside our local command", () => {
+    // Bypass attempted by Terax's pattern: a remote shell with its own
+    // integration emits 133;A mid-command. Hardened guard does NOT flip
+    // inCommand=false on A, so the local pane's cwd stays untouched.
+    const { term, handlers } = makeFakeTerm();
+    const state = createShellIntegrationState();
+    const deps = makeDeps();
+    registerOscHandlers(term, deps, state);
+    handlers.get(133)?.("D;0"); // local prompt context
+    handlers.get(133)?.("C"); // local command starts (ssh remote)
+    handlers.get(133)?.("A"); // remote shell's prompt — must NOT clear guard
     handlers.get(7)?.("file://attacker/etc");
     expect(deps.setCwd).not.toHaveBeenCalled();
   });
@@ -66,10 +83,10 @@ describe("registerOscHandlers — OSC 7 cwd", () => {
     const state = createShellIntegrationState();
     const deps = makeDeps();
     registerOscHandlers(term, deps, state);
-    handlers.get(133)?.("A");
+    handlers.get(133)?.("D;0");
     handlers.get(133)?.("B");
     handlers.get(7)?.("file://attacker/etc");
-    handlers.get(133)?.("D;0");
+    handlers.get(133)?.("D;0"); // command exited
     handlers.get(7)?.("file://host/home/me/new-cwd");
     expect(deps.setCwd).toHaveBeenCalledTimes(1);
     expect(deps.setCwd).toHaveBeenCalledWith("/home/me/new-cwd");
@@ -87,7 +104,7 @@ describe("registerOscHandlers — OSC 7 cwd", () => {
 });
 
 describe("registerOscHandlers — OSC 133 state machine", () => {
-  it("transitions inCommand on A/B/C/D", () => {
+  it("inCommand transitions: A is a no-op; B/C set true; D resets false", () => {
     const { term, handlers } = makeFakeTerm();
     const state = createShellIntegrationState();
     const deps = makeDeps();
@@ -96,6 +113,9 @@ describe("registerOscHandlers — OSC 133 state machine", () => {
     handlers.get(133)?.("A");
     expect(state.inCommand).toBe(false);
     handlers.get(133)?.("B");
+    expect(state.inCommand).toBe(true);
+    // A while inCommand=true must NOT clear the guard (remote-A bypass).
+    handlers.get(133)?.("A");
     expect(state.inCommand).toBe(true);
     handlers.get(133)?.("C");
     expect(state.inCommand).toBe(true);
@@ -113,12 +133,15 @@ describe("registerOscHandlers — OSC 133 state machine", () => {
     expect(deps.setLastExit).toHaveBeenLastCalledWith(127);
   });
 
-  it("OSC 133 D without exit code reports null", () => {
+  it("OSC 133 D without exit code does NOT clobber the previously-stored value", () => {
     const { term, handlers } = makeFakeTerm();
     const deps = makeDeps();
     registerOscHandlers(term, deps);
-    handlers.get(133)?.("D");
-    expect(deps.setLastExit).toHaveBeenLastCalledWith(null);
+    handlers.get(133)?.("D;0");
+    expect(deps.setLastExit).toHaveBeenLastCalledWith(0);
+    handlers.get(133)?.("D"); // bare D from a foreign integration
+    // setLastExit must not be called again with null — the store keeps 0.
+    expect(deps.setLastExit).toHaveBeenCalledTimes(1);
   });
 
   it("registers a prompt marker on OSC 133 A", () => {

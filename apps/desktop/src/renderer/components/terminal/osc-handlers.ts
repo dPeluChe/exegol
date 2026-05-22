@@ -44,7 +44,11 @@ export function registerOscHandlers(
 
   const osc133 = term.parser.registerOscHandler(133, (data) => {
     if (data.startsWith("A")) {
-      state.inCommand = false;
+      // Do NOT flip inCommand on A. A nested shell (a remote SSH session
+      // with its own integration) emits 133;A inside our local command and
+      // would otherwise clear the spoof guard before sending a malicious
+      // OSC 7. Only 133;D — issued by our local shell's precmd, after the
+      // remote subprocess exits — returns us to the trusted prompt state.
       marker?.dispose();
       marker = term.registerMarker(0);
     } else if (data.startsWith("B")) {
@@ -54,7 +58,9 @@ export function registerOscHandlers(
     } else if (data.startsWith("D")) {
       state.inCommand = false;
       const code = parseOsc133D(data);
-      deps.setLastExit(code);
+      // Bare `D` (no `;<n>` payload) is spec-legal but tells us nothing —
+      // don't clobber a previously-stored exit code with null.
+      if (code !== null) deps.setLastExit(code);
     }
     return true;
   });
