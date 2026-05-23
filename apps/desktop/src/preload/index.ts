@@ -194,6 +194,16 @@ contextBridge.exposeInMainWorld("api", {
         safe.off("settings:navigate", handler as never);
       };
     },
+    /** Fan out a "settings changed" signal to peer windows after mutation. */
+    broadcastChanged: () => safe.send("settings:broadcast-changed"),
+    /** Subscribe to peer-window settings changes (refetch the local query cache). */
+    onChanged: (callback: () => void) => {
+      const handler = () => callback();
+      safe.on("settings:changed", handler as never);
+      return () => {
+        safe.off("settings:changed", handler as never);
+      };
+    },
   },
   // T84: Picture-in-Picture pane floating windows
   floating: {

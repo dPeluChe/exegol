@@ -2,10 +2,10 @@
  * Settings window (T120).
  *
  * Settings used to be an in-app view; now it lives in its own BrowserWindow so
- * users can keep an eye on agent output while tweaking config. The window is
- * parented to the main window (lifecycle tied — closes when main closes) and
- * intentionally does NOT use alwaysOnTop (anti-pattern noted in the Terax
- * review).
+ * users can keep an eye on agent output while tweaking config. Intentionally
+ * does NOT use `parent:` (would inherit minimize/hide with main on macOS) and
+ * does NOT use alwaysOnTop (anti-pattern noted in the Terax review). Lifecycle
+ * is bound manually via mainWindow.on("closed").
  */
 
 import { join } from "node:path";
@@ -15,10 +15,15 @@ import { BrowserWindow, ipcMain } from "electron";
 export type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys";
 
 let settingsWindow: BrowserWindow | null = null;
-let mainWindowRef: BrowserWindow | null = null;
 
 export function registerMainWindowForSettings(win: BrowserWindow): void {
-  mainWindowRef = win;
+  // T120: bind lifecycle without using BrowserWindow `parent:` — on macOS a
+  // parented child window minimizes/hides with the parent, which defeats the
+  // "watch agent output while tweaking config" goal of moving Settings out
+  // of the in-app view.
+  win.on("closed", () => {
+    closeSettingsWindow();
+  });
 }
 
 function buildUrl(tab?: SettingsTab): string {
@@ -31,9 +36,21 @@ function buildUrl(tab?: SettingsTab): string {
   return `file://${join(__dirname, "../renderer/index.html")}?${query}`;
 }
 
+function dispatchNavigate(win: BrowserWindow, tab: SettingsTab): void {
+  // Renderer may still be loading on a rapid second open() call. Queue the
+  // navigate until did-finish-load so the message isn't dropped silently.
+  if (win.webContents.isLoading()) {
+    win.webContents.once("did-finish-load", () => {
+      if (!win.isDestroyed()) win.webContents.send("settings:navigate", tab);
+    });
+    return;
+  }
+  win.webContents.send("settings:navigate", tab);
+}
+
 export function openSettingsWindow(tab?: SettingsTab): void {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
-    if (tab) settingsWindow.webContents.send("settings:navigate", tab);
+    if (tab) dispatchNavigate(settingsWindow, tab);
     if (settingsWindow.isMinimized()) settingsWindow.restore();
     settingsWindow.focus();
     return;
@@ -45,7 +62,6 @@ export function openSettingsWindow(tab?: SettingsTab): void {
     minWidth: 720,
     minHeight: 480,
     show: false,
-    parent: mainWindowRef ?? undefined,
     backgroundColor: "#09090b",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 16 },
@@ -78,5 +94,15 @@ export function registerSettingsIpcHandlers(): void {
   });
   ipcMain.on("settings:self-close", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+  // T120: fan out "settings changed" to every renderer so each window's
+  // TanStack Query cache refetches. Sender included — receivers can ignore
+  // their own broadcast since they already invalidated locally.
+  ipcMain.on("settings:broadcast-changed", (event) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      if (win.webContents.id === event.sender.id) continue;
+      win.webContents.send("settings:changed");
+    }
   });
 }

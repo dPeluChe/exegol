@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { LoadingSpinner } from "./components/common";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles/globals.css";
 
@@ -40,7 +41,7 @@ ReactDOM.createRoot(rootEl).render(
             <FloatingPaneRoot />
           </Suspense>
         ) : isSettingsWindow ? (
-          <Suspense fallback={null}>
+          <Suspense fallback={<LoadingSpinner className="h-screen w-screen" />}>
             <SettingsRoot />
           </Suspense>
         ) : (

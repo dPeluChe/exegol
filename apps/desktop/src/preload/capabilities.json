@@ -58,6 +58,8 @@
     "floating:closed",
     "settings:open",
     "settings:self-close",
-    "settings:navigate"
+    "settings:navigate",
+    "settings:broadcast-changed",
+    "settings:changed"
   ]
 }

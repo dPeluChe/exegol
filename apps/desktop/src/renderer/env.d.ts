@@ -105,6 +105,8 @@ interface Window {
       open: (tab?: "general" | "clis" | "terminal" | "shortcuts" | "apikeys") => Promise<void>;
       selfClose: () => void;
       onNavigate: (callback: (tab: string) => void) => () => void;
+      broadcastChanged: () => void;
+      onChanged: (callback: () => void) => () => void;
     };
   };
 }

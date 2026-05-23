@@ -12,6 +12,7 @@ import { ProjectProvider } from "./contexts/ProjectContext";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
+import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
 import { useAppStore } from "./stores/app";
@@ -61,6 +62,7 @@ export default function App() {
   useTheme();
   useAutoSelectProject();
   useFloatingPaneSync();
+  useSettingsSync();
 
   const showSidebar = activeView === "workspace";
 

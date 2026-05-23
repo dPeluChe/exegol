@@ -42,6 +42,21 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "exegol-app-state",
+      version: 2,
+      // T120: dropped 'settings' from ActiveView. Coerce stale persisted
+      // value so upgrading users don't rehydrate into a sidebarless state.
+      migrate: (persisted, fromVersion) => {
+        if (!persisted || typeof persisted !== "object") return persisted as AppStore;
+        const state = persisted as {
+          activeView?: string;
+          activeProjectId?: string | null;
+          sidebarCollapsed?: boolean;
+        };
+        if (fromVersion < 2 && state.activeView === "settings") {
+          state.activeView = state.activeProjectId ? "workspace" : "projects";
+        }
+        return state as unknown as AppStore;
+      },
       partialize: (state) => ({
         activeProjectId: state.activeProjectId,
         activeView: state.activeView,

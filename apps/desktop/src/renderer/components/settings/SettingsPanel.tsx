@@ -4,7 +4,6 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowLeft, Key, Keyboard, Monitor, Settings2, Terminal } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
-import { useAppStore } from "../../stores/app";
 import { ApiKeysSettings } from "./ApiKeysSettings";
 import { CliSettings } from "./CliSettings";
 import { GeneralSettings } from "./GeneralSettings";
@@ -24,22 +23,12 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
 export interface SettingsPanelProps {
   /** Initial tab selection (used by the standalone settings window for deep-links). */
   initialTab?: SettingsTab;
-  /** Programmatic tab change from outside (e.g., IPC navigate event). */
-  tabOverride?: SettingsTab;
-  /** Called when the back/close button is pressed. */
-  onClose?: () => void;
+  /** Called when the back/close button is pressed. Required — there is no in-app embed. */
+  onClose: () => void;
 }
 
-export function SettingsPanel({ initialTab, tabOverride, onClose }: SettingsPanelProps = {}) {
+export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "general");
-  const setActiveView = useAppStore((s) => s.setActiveView);
-  const activeProjectId = useAppStore((s) => s.activeProjectId);
-
-  if (tabOverride && tabOverride !== activeTab) {
-    setActiveTab(tabOverride);
-  }
-
-  const handleClose = onClose ?? (() => setActiveView(activeProjectId ? "workspace" : "projects"));
 
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
@@ -89,7 +78,7 @@ export function SettingsPanel({ initialTab, tabOverride, onClose }: SettingsPane
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <button
           type="button"
-          onClick={handleClose}
+          onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />
