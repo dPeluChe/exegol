@@ -7,6 +7,100 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — Wave 1+2 stack optimizations, parallel multi-agent, settings window
+
+Big batch of work landed in May 2026 across 5 parallel worktrees (Wave 1+2)
+plus T120 settings window. Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` +
+`docs/tasks_completed/2026_05.md`.
+
+### Added
+
+- **Settings as a separate window** (T120). `Cmd+,` now opens settings in its
+  own `BrowserWindow` so you can tweak themes / API keys / fonts while still
+  watching agent output. macOS App menu gains a `Preferences…` item. Tab
+  deep-links available via `window.api.settings.open(tab)`.
+- **Parallel multi-agent** (T65/T107). Spawn 2–3 agents on the same task,
+  compare in a responsive grid (diff stat + score + cost + duration +
+  scrollback tail per column), promote the winner with one click.
+- **Worktree isolation badge** (T105). Color-coded chip in the terminal
+  toolbar shows the agent's isolation mode (`isolated` / `pipeline` /
+  `project-root` / `fallback`) with the branch name in the tooltip.
+- **Agent stop-reason panel** (T106). When an agent exits, an overlay above
+  the read-only scrollback shows status + exit reason + 12-line tail and
+  offers Resume / New agent with same task / View diff actions.
+- **OSC 7 + OSC 133 shell integration** (T112). The bundled `zsh` / `bash`
+  helpers emit cwd updates and prompt boundaries; the terminal pane shows a
+  cwd badge and exposes jump-to-previous-prompt.
+- **DormantRing** (T115). 256 KB / 256-chunk bounded ring buffer for hidden
+  panes so reattach picks up where the user left off without holding the
+  full ANSI stream in memory.
+- **Rust-powered file search** (T116). `ignore` + `grep-*` + `globset`
+  crates exposed via napi-rs; `fsSearchRouter` handles fuzzy file search
+  and content grep through Rust instead of node fs walks.
+- **Window state persistence** (T121). Width / height / position survive
+  restarts via `electron-window-state`.
+- **Streaming markdown** (T110). `Streamdown` replaces `react-markdown` in
+  the code viewer — no re-parse per chunk.
+- **Diff cache** (T110c). `AsyncLruCache` with in-flight Promise dedup keyed
+  by `projectId|kind|staged|pathOverride`; stage/unstage/commit invalidate
+  per project. Repeated diff opens are free.
+- **Model context registry** (T111). `tokenlens` integrated into the Tokens
+  panel for per-model context-window badges.
+- **Capability allowlist for IPC + tRPC** (T119). Every `ipcRenderer.invoke
+  / send / on` and every tRPC path is gated by a declarative JSON allowlist
+  shared between preload and the main process. XSS in the renderer can't
+  reach a router that isn't on the list. See `docs/ARCHITECTURE/CAPABILITIES.md`.
+- **CSP tightening** (T118). Dropped unused `cdn.jsdelivr.net`; added
+  explicit `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`,
+  `form-action 'self'`, `font-src 'self' data:`. `<webview>` `frame-src` /
+  `child-src` left wide — annotated inline.
+- **`path-guard` + `command-guard`** (T117). `assertSafePath` rejects bidi
+  Trojan Source chars, NTFS Alternate Data Streams, `.env*`, `.ssh/`,
+  `.aws/credentials`, GPG/keychain paths. `inspectCommand` refuses fork
+  bombs, `rm -rf /`, `dd of=/dev/disk*`, `curl|sh`. Both side-effect free
+  with parameterized test coverage.
+- **Release packaging** (T103). `electron-builder.ts` owner/repo wired,
+  release checklist at `scripts/release-checklist.md`.
+
+### Changed
+
+- **Settings rendering moved out of the in-app activeView**. `ActiveView`
+  union no longer includes `"settings"`; a Zustand persist migration
+  (`version: 2`) coerces stale values so upgrading users keep their sidebar.
+  Sidebar gear / Command Palette / Cmd+, all route through the new IPC.
+- **PTY flusher hardened** (T113). `SIGTERM` flushes pending output before
+  killing the PTY; WebGL context-loss recovery uses a bounded retry budget.
+- **Terminal pane split**. `TerminalPanel.tsx` decomposed into
+  `TerminalToolbar` + `TerminalScrollback` + `TerminalFloatingButtons` +
+  `use-terminal-lifecycle` (598 → 271 LOC; siblings ≤ 173 LOC).
+- **Agent manager split**. `manager.ts` extracted worktree-setup + PTY
+  invocation into `agent-spawn-flow.ts` (485 → 267 LOC).
+- **TerminalInstance split** (425 → 253 LOC) into focused modules.
+- **Vite bundle ops** (T108). `manualChunks` per family (xterm, monaco,
+  react-vendor, radix, trpc); `esbuild.drop: ['debugger']` +
+  `pure: ['console.debug', 'console.info', 'console.trace']`;
+  `target: 'chrome134'` (Electron 41 native).
+- **WT5 hygiene splits**. 6 monolith files > 500 LOC split (pure motion).
+
+### Fixed
+
+- **Sidecar reattach ordering**: snapshot is sent before live PTY data on
+  reattach so xterm renders the scrollback in the correct order.
+- **Pane state hygiene** (T112): `paneCwd` / `paneLastExit` scrubbed when a
+  pane or tab is removed; OSC 7 spoof guard hardened against nested `133;A`
+  and bare `133;D`.
+- **`bash -l` dropped from agent spawn args** so `--rcfile` actually loads.
+- **WebGL retry budget no longer halved** by a redundant DOM listener.
+
+### Documentation
+
+- `docs/RESEARCH/TERAX_STACK_REVIEW.md` — comparative architecture review.
+- `docs/ARCHITECTURE/CAPABILITIES.md` — threat model + capability allowlist.
+- `docs/agent_prompts/wt[1-5]_*.md` — per-worktree briefs used by the
+  parallel multi-agent run.
+
+---
+
 ## [0.4.4] — 2026-04-24 — QA hardening, FloatingBrowser extraction, spawn perf
 
 ### Added

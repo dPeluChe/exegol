@@ -50,6 +50,16 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 - Browser float has its own back/forward/reload + DevTools toggle (drops alwaysOnTop while DevTools is open so the detached window is visible)
 - IPC round-trip: `floating:open`, `floating:close`, `floating:self-close`, `floating:self-devtools`, `floating:closed` (notification back to main window)
 
+### Settings window (T120, 2026-05)
+- Settings live in a standalone BrowserWindow (`main/windows/settings.ts`) so users can tweak themes/API keys/fonts while watching agent output
+- Renderer routes on `?settings=1` → lazy `<SettingsRoot/>` (own QueryClient + TooltipProvider + useTheme)
+- Lifecycle bound via `mainWindow.on("closed")` — intentionally NO `parent:` (would propagate minimize/hide on macOS) and NO `alwaysOnTop`
+- Cmd+W routed by `app-menu.ts#handleCloseAccelerator`: settings/floating URLs close the window directly; main window receives `menu:close-pane`
+- macOS App submenu has a `Preferences… (Cmd+,)` item that works regardless of focused window
+- Cross-window sync: `settings:broadcast-changed` IPC fans out from the settings window; main window's `use-settings-sync` hook invalidates `['settings']` so theme/font changes are immediate
+- Deep-link API: `window.api.settings.open(tab?)` — URL gets `?settingsTab=<tab>`; existing window receives `settings:navigate` event queued until `did-finish-load` if mid-load
+- IPC channels: `settings:open`, `settings:self-close`, `settings:navigate`, `settings:broadcast-changed`, `settings:changed`
+
 ### Smart Git Button (T83, v0.3.0)
 Context-aware git action button in GitPane with 11 states:
 - conflicts → Resolve (disabled, hint)
@@ -107,7 +117,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Auto-save**: Settings tabs save independently (General/Terminal auto-save on change, CLIs save per field)
 - **Startup instrumentation**: `[Startup] dbInit`, `criticalPath`, `windowCreated`, `firstPaint` log lines (single-log guarded); `[Reattach]` + `[Recovery]` per-agent decisions for diagnosing recovery issues
-- **Bundle splits**: workspace sections, xterm+addons, SettingsPanel, ProjectList, CommandPalette, FloatingPaneRoot are all lazy chunks — initial `index.js` ~1,026 KB
+- **Bundle splits**: workspace sections, xterm+addons, SettingsRoot, ProjectList, CommandPalette, FloatingPaneRoot are all lazy chunks — initial `index.js` ~1,026 KB
 - **Bundled Nerd Fonts**: 3 fonts (MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono) shipped inside the renderer assets, loaded via `@font-face` in `styles/fonts.css`, lazy-fetched from disk only when referenced
 
 ### Rust native module (`packages/core-rust`)
@@ -134,7 +144,7 @@ apps/desktop/src/
     security/       keystore (safeStorage)
     system/         resources (metrics collector), ports (lsof + config)
     ide/            opener (vscode, cursor, zed, windsurf, custom)
-    windows/        floating (T84 PiP BrowserWindows), app-menu (macOS custom menu)
+    windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router)
   renderer/
     components/
       workspace/    WorkspaceView, WorkspaceTabs (3 main + sub-tabs), WorkspacePane (5 types),
@@ -150,8 +160,10 @@ apps/desktop/src/
       agents/       AgentLauncher (portal dropdown from registry)
       layout/       Sidebar, ProjectsSection, StatusBar, TitleBar
     FloatingPaneRoot.tsx  (T84 — top-level renderer for floating PiP windows)
+    SettingsRoot.tsx      (T120 — top-level renderer for the standalone settings window)
     hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
-                    use-floating-pane-sync (unmark panes when floating window closes)
+                    use-floating-pane-sync (unmark panes when floating window closes),
+                    use-settings-sync (T120 — invalidate ['settings'] on cross-window broadcast)
     stores/         app, agents (push events, shell auto-cleanup), terminals,
                     workspace (5 pane types, recovery, custom layouts, floatingPanes)
     lib/            layout-presets (pure transformation helpers), trpc-client,
@@ -160,7 +172,7 @@ apps/desktop/src/
       fonts/        MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono (~6.8 MB, bundled)
       icons/        26 SVG/PNG icons (agents, IDEs, providers)
     styles/         globals.css, fonts.css (@font-face for bundled fonts)
-  preload/          contextBridge: trpc, terminal, dialog, push events, floating, menu
+  preload/          contextBridge: trpc, terminal, dialog, push events, floating, settings (T120), menu — gated by capabilities.json allowlist
 packages/
   shared/           types (20+), schemas (zod: agent, db-rows, mcp, pipeline, project, scheduler, settings, token-usage)
   ui/               Radix primitives, cn()

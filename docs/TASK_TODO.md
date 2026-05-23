@@ -24,13 +24,15 @@ Terax (Tauri-based terminal) is more focused than us — adopted their tighter p
 - WT4 — Parallel Multi-Agent + Agent UX (T65 completion/broadcast · T107 comparator · T105 isolation badge · T106 stop-reason panel) + manager.ts + TerminalPanel splits
 - WT5 — Codebase Hygiene Splits (6 monolith files >500 LOC split, pure motion)
 
-**Wave 1 deferred to wave 3 (decided post-merge):**
+**Wave 1.5 (post-merge follow-ups):**
+- ✅ **Settings as separate window** (T120, M) — shipped 2026-05-22, see `docs/tasks_completed/2026_05.md`
+
+**Wave 1 deferred to wave 3:**
 - **xterm renderer pool** (T114, L) — 5-slot LRU pool with snapshot+replay, blocks N-WebGL-context lag at high tab counts
-- **Settings as separate window** (T120, M) — use floating BrowserWindow infra
 - **Vercel AI SDK + Ollama** (T122, M, P3) — replace 2 fetch calls in `diff.ts` + `scoring.ts`, unlock Ollama via `@ai-sdk/openai-compatible`
 
 ### Manual verification pending (post-merge)
-Wave 1+2 landed via 5 parallel WTs. Manual smoke-test recommended before broad release:
+Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended before broad release:
 - OSC 7 cwd badge on shell panes (open shell, `cd /tmp`, verify badge updates)
 - OSC 133 prompt boundaries (jump-to-previous-prompt should work)
 - Parallel agent comparator (spawn 2-3 agents on same task, verify columns + promote button)
@@ -38,6 +40,7 @@ Wave 1+2 landed via 5 parallel WTs. Manual smoke-test recommended before broad r
 - Stop-reason panel (let an agent finish/fail, verify overlay with resume/new-task/diff actions)
 - CSP changes (open DevTools console, verify zero CSP violations on basic flow)
 - Capability allowlist (no functional regression — all routers/IPC still callable from renderer)
+- **T120 settings window**: Cmd+, opens standalone; second Cmd+, focuses existing (no duplicate); Cmd+W closes settings only; main close also closes settings; minimize main keeps settings visible; theme change in settings reflects in main without reload
 
 ### P0 — Must land before broad release push
 - _(empty — all P0 items shipped in wave 1+2)_
@@ -472,31 +475,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 - `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx` (replaced or wrapped)
 - `apps/desktop/src/renderer/components/workspace/WorkspacePane.tsx`
 - `apps/desktop/src/renderer/FloatingPaneRoot.tsx`
-
----
-
-### T120 — Settings as Separate BrowserWindow
-**Priority**: Wave 1 / P2 | **Effort**: M | **Source**: Terax `src-tauri/src/lib.rs:32-86`
-
-**Why**
-- Today `SettingsPanel` is a modal in the main window — opening it covers the terminal layout.
-- We already have `windows/floating.ts` (T84 PiP) — same primitive works for a settings window.
-- Better multitask: keep an eye on agent output while changing API keys, themes, etc.
-
-**Scope**
-- New `apps/desktop/src/main/windows/settings.ts`:
-  - `openSettingsWindow(tab?: string)`: open if not exists, focus if exists, emit deep-link event for specific tab.
-  - `parent: mainWindow` (lifecycle tied — closes when main closes).
-  - **Do NOT use `alwaysOnTop: true`** — anti-pattern (fights Mission Control on macOS, listed in review).
-- Renderer: settings webview entry (`?settings=1`) mounts `<SettingsPanel/>` standalone.
-- Replace current modal trigger with IPC call to `openSettingsWindow`.
-- Deep-link example: "No API key" error → button "Open API Keys" → `openSettingsWindow('api-keys')`.
-
-**Likely files**
-- `apps/desktop/src/main/windows/settings.ts` (new)
-- `apps/desktop/src/main/ipc/procedures/window.ts` (new IPC)
-- `apps/desktop/src/renderer/main.tsx` (route on `?settings=1`)
-- `apps/desktop/src/renderer/components/settings/SettingsPanel.tsx` (adapt to standalone)
 
 ---
 
