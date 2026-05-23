@@ -11,7 +11,7 @@ import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TerminalSettings } from "./TerminalSettings";
 
-type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys";
+export type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys";
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: Settings2 },
@@ -21,10 +21,25 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "apikeys", label: "API Keys", icon: Key },
 ];
 
-export function SettingsPanel() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
+export interface SettingsPanelProps {
+  /** Initial tab selection (used by the standalone settings window for deep-links). */
+  initialTab?: SettingsTab;
+  /** Programmatic tab change from outside (e.g., IPC navigate event). */
+  tabOverride?: SettingsTab;
+  /** Called when the back/close button is pressed. */
+  onClose?: () => void;
+}
+
+export function SettingsPanel({ initialTab, tabOverride, onClose }: SettingsPanelProps = {}) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "general");
   const setActiveView = useAppStore((s) => s.setActiveView);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
+
+  if (tabOverride && tabOverride !== activeTab) {
+    setActiveTab(tabOverride);
+  }
+
+  const handleClose = onClose ?? (() => setActiveView(activeProjectId ? "workspace" : "projects"));
 
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
@@ -74,7 +89,7 @@ export function SettingsPanel() {
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <button
           type="button"
-          onClick={() => setActiveView(activeProjectId ? "workspace" : "projects")}
+          onClick={handleClose}
           className="flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />

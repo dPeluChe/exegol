@@ -100,5 +100,11 @@ interface Window {
       selfToggleDevTools: () => void;
       onClosed: (callback: (paneId: string) => void) => () => void;
     };
+    // T120: Settings as a separate BrowserWindow
+    settings: {
+      open: (tab?: "general" | "clis" | "terminal" | "shortcuts" | "apikeys") => Promise<void>;
+      selfClose: () => void;
+      onNavigate: (callback: (tab: string) => void) => () => void;
+    };
   };
 }

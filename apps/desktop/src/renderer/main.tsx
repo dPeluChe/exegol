@@ -6,11 +6,16 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles/globals.css";
 
 // T84: floating pane windows render a minimal UI (not the full app shell).
-// Check the URL for `?floatingPane=...` before deciding what to mount.
-// FloatingPaneRoot is lazy so the main window never pays for it.
-const isFloatingWindow = new URLSearchParams(window.location.search).has("floatingPane");
+// T120: settings window mounts a standalone <SettingsRoot/>.
+// Check the URL before deciding what to mount.
+const searchParams = new URLSearchParams(window.location.search);
+const isFloatingWindow = searchParams.has("floatingPane");
+const isSettingsWindow = searchParams.has("settings");
 const FloatingPaneRoot = lazy(() =>
   import("./FloatingPaneRoot").then((m) => ({ default: m.FloatingPaneRoot })),
+);
+const SettingsRoot = lazy(() =>
+  import("./SettingsRoot").then((m) => ({ default: m.SettingsRoot })),
 );
 
 const queryClient = new QueryClient({
@@ -34,6 +39,10 @@ ReactDOM.createRoot(rootEl).render(
           <Suspense fallback={null}>
             <FloatingPaneRoot />
           </Suspense>
+        ) : isSettingsWindow ? (
+          <Suspense fallback={null}>
+            <SettingsRoot />
+          </Suspense>
         ) : (
           <App />
         )}
@@ -44,7 +53,7 @@ ReactDOM.createRoot(rootEl).render(
 
 // Dismiss splash screen immediately for floating windows (they're small and
 // don't need the brand intro). For the main window, honor the minimum time.
-const SPLASH_MIN_MS = isFloatingWindow ? 0 : 2000;
+const SPLASH_MIN_MS = isFloatingWindow || isSettingsWindow ? 0 : 2000;
 const splashStart = performance.now();
 
 requestAnimationFrame(() => {

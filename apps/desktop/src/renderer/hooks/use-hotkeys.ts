@@ -47,10 +47,10 @@ export function useHotkeys() {
         return;
       }
 
-      // Cmd+,: Open Settings
+      // Cmd+,: Open Settings (separate BrowserWindow, T120)
       if (e.key === ",") {
         e.preventDefault();
-        setActiveView("settings");
+        window.api.settings.open();
         return;
       }
 

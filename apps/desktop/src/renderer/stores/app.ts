@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type ActiveView = "projects" | "workspace" | "settings";
+export type ActiveView = "projects" | "workspace";
 
 interface AppStore {
   /** Current main view */
