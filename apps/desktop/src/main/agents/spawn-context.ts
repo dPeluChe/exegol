@@ -25,12 +25,16 @@ interface SpawnContextResult {
  * Build the full context payload (memory, MCP tools, skills) to inject
  * into an agent's task prompt. Each source is non-fatal: a failure logs
  * and yields an empty section, never blocks the spawn.
+ *
+ * Skills resolve from projectPath — the same root skills.list uses — so the
+ * picker in SpawnAgentModal and the injected content always agree, regardless
+ * of the worktree the agent runs in.
  */
 export function buildSpawnContext(
   db: Database.Database,
   projectId: string,
   config: AgentCreate,
-  cwd: string,
+  projectPath: string,
 ): SpawnContextResult {
   let memoryContext = "";
   let mcpContext = "";
@@ -52,7 +56,9 @@ export function buildSpawnContext(
   if (config.skillNames?.length) {
     try {
       const requested = new Set(config.skillNames);
-      const skills = discoverSkills(cwd).filter((s) => requested.has(s.name));
+      const skills = discoverSkills(projectPath).filter(
+        (s) => requested.has(s.name) && s.available,
+      );
       if (skills.length > 0) {
         const sections = skills.map((s) => `## Skill: ${s.name}\n\n${s.content}`).join("\n\n");
         skillContext = `# Skills\n\n${sections}\n`;
