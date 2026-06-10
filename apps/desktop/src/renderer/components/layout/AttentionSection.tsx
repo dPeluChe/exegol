@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import {
   type AgentState,
@@ -99,7 +99,13 @@ function getSpinnerIndex(agentId: string): number {
   return Math.abs(hash) % SPINNER_PRESETS.length;
 }
 
-function AgentSpinner({ agentId, className }: { agentId: string; className?: string }) {
+const AgentSpinner = memo(function AgentSpinner({
+  agentId,
+  className,
+}: {
+  agentId: string;
+  className?: string;
+}) {
   const preset = SPINNER_PRESETS[getSpinnerIndex(agentId)] ?? SPINNER_PRESETS[0];
   const frames = preset?.frames ?? ["⣾"];
   const [frame, setFrame] = useState(0);
@@ -112,7 +118,7 @@ function AgentSpinner({ agentId, className }: { agentId: string; className?: str
       {frames[frame]}
     </span>
   );
-}
+});
 
 // ─── Time formatting ─────────────────────────────────────────────────────
 
