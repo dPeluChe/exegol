@@ -1,3 +1,4 @@
+import { safeStorage } from "electron";
 import { z } from "zod";
 import { deleteApiKey, getApiKey, listApiKeys, storeApiKey } from "../../security/keystore";
 import { publicProcedure, router } from "../trpc";
@@ -6,6 +7,9 @@ export const apiKeysRouter = router({
   list: publicProcedure.query(({ ctx }) => {
     return listApiKeys(ctx.db);
   }),
+
+  /** Whether OS-level encryption backs the keystore — false means plaintext fallback. */
+  encryptionAvailable: publicProcedure.query(() => safeStorage.isEncryptionAvailable()),
 
   set: publicProcedure
     .input(z.object({ provider: z.string().min(1), key: z.string().min(1) }))

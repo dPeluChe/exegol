@@ -170,6 +170,14 @@ export function useApiKeys() {
   });
 }
 
+export function useKeystoreEncryptionAvailable() {
+  return useQuery({
+    queryKey: ["apiKeys", "encryptionAvailable"],
+    queryFn: () => trpcInvoke<boolean>("apiKeys.encryptionAvailable"),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
 export function useSetApiKey() {
   const queryClient = useQueryClient();
   return useMutation({
