@@ -1,8 +1,10 @@
 import type { AgentAccessMode, AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, FileEdit, GitBranch, Layers, Map as MapIcon, X } from "lucide-react";
+import { Eye, FileEdit, GitBranch, Layers, Map as MapIcon, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useProject } from "../../hooks/use-trpc";
+import { useSkills } from "../../hooks/use-trpc-skills";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -49,6 +51,7 @@ export function SpawnAgentModal({
   const [useWorktree, setUseWorktree] = useState(true);
   const [branchName, setBranchName] = useState("");
   const [branchEdited, setBranchEdited] = useState(false);
+  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [spawning, setSpawning] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -61,6 +64,19 @@ export function SpawnAgentModal({
     queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
     staleTime: 30_000,
   });
+
+  const { data: project } = useProject(projectId);
+  const { data: skills = [] } = useSkills(projectId, project?.path ?? null);
+  const availableSkills = skills.filter((s) => s.available);
+
+  const toggleSkill = useCallback((name: string) => {
+    setSelectedSkills((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
 
   const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
 
@@ -95,6 +111,7 @@ export function SpawnAgentModal({
         useWorktree,
         branchName: useWorktree && branchName ? branchName : undefined,
         accessMode,
+        skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
       });
       addAgent({
         id: agent.id,
@@ -147,6 +164,7 @@ export function SpawnAgentModal({
     accessMode,
     useWorktree,
     branchName,
+    selectedSkills,
     projectId,
     addAgent,
     createTerminal,
@@ -267,6 +285,32 @@ export function SpawnAgentModal({
             </div>
           </div>
 
+          {/* Skill picker — injected into the agent prompt via buildSpawnContext */}
+          {availableSkills.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium text-text-muted">Skills (optional)</span>
+              <div className="flex flex-wrap gap-1.5">
+                {availableSkills.map((s) => (
+                  <button
+                    key={s.name}
+                    type="button"
+                    onClick={() => toggleSkill(s.name)}
+                    title={s.description}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
+                      selectedSkills.has(s.name)
+                        ? "border-accent/50 bg-accent/10 text-accent"
+                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                    )}
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    {s.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Worktree toggle + branch name */}
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 cursor-pointer" htmlFor="use-worktree">
@@ -307,6 +351,9 @@ export function SpawnAgentModal({
             {selectedProvider ? `${selectedProvider.name}` : "Select an agent"}
             {useWorktree ? " · worktree" : " · main repo"}
             {accessMode !== "write" ? ` · ${accessMode}` : ""}
+            {selectedSkills.size > 0
+              ? ` · ${selectedSkills.size} skill${selectedSkills.size > 1 ? "s" : ""}`
+              : ""}
           </span>
           <div className="flex items-center gap-2">
             <button
