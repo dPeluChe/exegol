@@ -13,8 +13,7 @@ let checkTimer: ReturnType<typeof setInterval> | null = null;
 // Detect channel from version string (e.g., "0.2.0-canary.20260320" → canary)
 const IS_PRERELEASE = prerelease(app.getVersion()) !== null;
 
-// TODO: replace with actual GitHub owner/repo when publishing
-const GITHUB_OWNER = "OWNER";
+const GITHUB_OWNER = "dPeluChe";
 const GITHUB_REPO = "exegol";
 
 const STABLE_FEED = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download`;

@@ -148,6 +148,7 @@ export function createSpawnCallbacks(
       maps.sessionIdsCaptured.delete(agent.id);
       maps.scrollbackBuffers.delete(agent.id);
       maps.scrollbackSizes.delete(agent.id);
+      maps.dataCallbacks.delete(agent.id);
 
       finalizeAgentStatus(db, agent, exitCode);
 
