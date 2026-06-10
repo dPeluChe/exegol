@@ -71,7 +71,7 @@ function useCommands(close: () => void): Command[] {
         category: "navigation",
         icon: Settings,
         shortcut: "⌘,",
-        action: run(() => useAppStore.getState().setActiveView("settings")),
+        action: run(() => window.api.settings.open()),
       },
       {
         id: "nav:sidebar",

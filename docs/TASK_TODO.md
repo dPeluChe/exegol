@@ -12,26 +12,38 @@
 
 ## Priority Order
 
-### Wave 1 — Stack Optimizations (Terax Review, 2026-05) — FIRST FOCUS
+### Wave 1 — Stack Optimizations (Terax Review, 2026-05) — ✅ SHIPPED
 Strategic context: we stay on **Electron + spawned-CLI agents** (our core differentiator).
-Terax (Tauri-based terminal) is more focused than us — but ships several patterns sharper
-than ours. We adopt them inside our stack. Full analysis: `docs/RESEARCH/TERAX_STACK_REVIEW.md`.
+Terax (Tauri-based terminal) is more focused than us — adopted their tighter patterns inside our stack. Full analysis: `docs/RESEARCH/TERAX_STACK_REVIEW.md`.
 
-**Bundle as 1 PR — quick wins (S, low risk, orthogonal):**
-- **Build & bundle opts** (T108) — Vite manualChunks + esbuild drop debugger/console.debug + chrome134 target
-- **Streaming UX libs** (T110) — `streamdown` + diff cache LRU (use-stick-to-bottom deferred — no streaming surface today)
-- **tokenlens model registry** (T111) — augment our DB catalog with model context-window info
-- **electron-window-state** (T121) — restore window size/position across launches
+**Shipped (see `docs/tasks_completed/2026_05.md` for details):**
+- Quick wins (T108 build opts · T110 streamdown + diff cache · T111 tokenlens · T121 electron-window-state · T103 release config)
+- WT1 — Terminal Foundations (T112 OSC 7+133 · T113 PTY flusher hardening · T115 DormantRing) + TerminalInstance split
+- WT2 — Security Hardening (T117 path-guard + command-guard · T118 CSP tightening · T119 capability allowlist)
+- WT3 — Rust Search Backend (T116 ignore + grep-* + globset + fsSearchRouter)
+- WT4 — Parallel Multi-Agent + Agent UX (T65 completion/broadcast · T107 comparator · T105 isolation badge · T106 stop-reason panel) + manager.ts + TerminalPanel splits
+- WT5 — Codebase Hygiene Splits (6 monolith files >500 LOC split, pure motion)
 
-**Terminal/PTY hardening (S–M):** _shipped in WT1 — see `docs/tasks_completed/2026_05.md`_
+**Wave 1.5 (post-merge follow-ups):**
+- ✅ **Settings as separate window** (T120, M) — shipped 2026-05-22, see `docs/tasks_completed/2026_05.md`
 
-**Larger / deferred:**
-- **Settings as separate window** (T120, M) — use floating BrowserWindow infra
-- **xterm renderer pool** (T114, L) — 5-slot LRU pool with snapshot+replay, blocks N-WebGL-context lag
+**Wave 1 deferred to wave 3:**
+- **xterm renderer pool** (T114, L) — 5-slot LRU pool with snapshot+replay, blocks N-WebGL-context lag at high tab counts
 - **Vercel AI SDK + Ollama** (T122, M, P3) — replace 2 fetch calls in `diff.ts` + `scoring.ts`, unlock Ollama via `@ai-sdk/openai-compatible`
 
+### Manual verification pending (post-merge)
+Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended before broad release:
+- OSC 7 cwd badge on shell panes (open shell, `cd /tmp`, verify badge updates)
+- OSC 133 prompt boundaries (jump-to-previous-prompt should work)
+- Parallel agent comparator (spawn 2-3 agents on same task, verify columns + promote button)
+- Isolation badge states (isolated / pipeline / project-root / fallback)
+- Stop-reason panel (let an agent finish/fail, verify overlay with resume/new-task/diff actions)
+- CSP changes (open DevTools console, verify zero CSP violations on basic flow)
+- Capability allowlist (no functional regression — all routers/IPC still callable from renderer)
+- **T120 settings window**: Cmd+, opens standalone; second Cmd+, focuses existing (no duplicate); Cmd+W closes settings only; main close also closes settings; minimize main keeps settings visible; theme change in settings reflects in main without reload
+
 ### P0 — Must land before broad release push
-- _(empty — T65 completion + comparator UI landed in WT4, see `docs/tasks_completed/2026_05.md`)_
+- _(empty — all P0 items shipped in wave 1+2)_
 
 ### P1 — Differentiators for first users
 - **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
@@ -435,66 +447,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 > All tasks below cite specific Terax files when copying patterns.
 > Strategic stance: keep AI-spawned CLI as our core; adopt Terax's tighter implementation patterns.
 
-### T108 — Vite Build & Bundle Optimizations
-**Priority**: Wave 1 / P1 | **Effort**: S | **Source**: Terax `vite.config.ts:16-67`
-
-**Why**
-- Initial renderer chunk currently loads xterm + all addons + future SDKs eagerly.
-- `console.debug/info/trace` and `debugger` ship to users in prod builds.
-- Build target locked to a conservative Chromium; we control Electron's Chromium (41 → chrome134) — wasted polyfills today.
-
-**Scope**
-- Add `build.rollupOptions.output.manualChunks` to `electron.vite.config.ts` (renderer config): one chunk for xterm + addons, one per future `@ai-sdk/*` provider (T122 placeholder), one for monaco (or codemirror if T114-companion lands).
-- Add `build.esbuild: { drop: ['debugger'], pure: ['console.debug','console.info','console.trace'] }`.
-- Set `build.target: 'chrome134'` (verify with smoke launch — falls back to 'chrome120' if anything breaks).
-- Measure initial `index.js` size before/after (current ~1,026 KB per `CLAUDE.md`).
-
-**Likely files**
-- `apps/desktop/electron.vite.config.ts`
-
----
-
-### T110 — Streaming UX Libraries
-**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `package.json`, `src/modules/editor/lib/diffCache.ts:1-104`
-
-**Why**
-- Our markdown rendering for agent output is `react-markdown` (re-parses on every stream chunk).
-- Our auto-scroll-to-bottom in `TerminalPanel` is hand-rolled and weakly correct.
-- Our diff IPC has no cache → "open same file twice" pays the full diff cost.
-
-**Scope**
-- Add `streamdown` (~40 KB gzip) — drop-in for agent message rendering and pipeline output.
-- Add `use-stick-to-bottom` (~5 KB) — replace ad-hoc scroll-to-bottom in `TerminalPanel.tsx` and any chat/oplog stream view.
-- Implement diff cache: LRU 6 entries + in-flight Promise dedup, keyed by `${repo}|${kind}|${mode}|${path}`. Invalidate per-repo on git mutations.
-- Pattern reference: `src/modules/editor/lib/diffCache.ts:1-104`.
-
-**Likely files**
-- `apps/desktop/package.json` (deps)
-- Renderer markdown components (find via grep for `react-markdown`)
-- `apps/desktop/src/renderer/components/terminal/TerminalPanel.tsx`
-- `apps/desktop/src/main/ipc/procedures/diff.ts` (cache layer)
-
----
-
-### T111 — tokenlens Token Counter
-**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `package.json:64`
-
-**Why**
-- We log token usage from agent CLI output where available, but have no in-app token estimator for arbitrary text.
-- Useful for the Monitor tab's Tokens panel and for future prompt-builder UIs.
-
-**Scope**
-- Add `tokenlens` (~30 KB) to renderer deps.
-- Wire into `MonitorView` / Resources & Tokens section: per-agent token estimate, prompt-size badge in any compose surface.
-- Consider exposing a small helper `estimateTokens(text, model)` in `packages/shared`.
-
-**Likely files**
-- `apps/desktop/package.json`
-- `apps/desktop/src/renderer/components/workspace/sections/MonitorTokens.tsx` (or equivalent)
-- `packages/shared/src/lib/tokens.ts` (new helper, optional)
-
----
-
 ### T114 — xterm Renderer Pool
 **Priority**: Wave 1 / P3 | **Effort**: L | **Source**: Terax `src/modules/terminal/lib/rendererPool.ts:1-700`
 
@@ -523,50 +475,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 - `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx` (replaced or wrapped)
 - `apps/desktop/src/renderer/components/workspace/WorkspacePane.tsx`
 - `apps/desktop/src/renderer/FloatingPaneRoot.tsx`
-
----
-
-### T120 — Settings as Separate BrowserWindow
-**Priority**: Wave 1 / P2 | **Effort**: M | **Source**: Terax `src-tauri/src/lib.rs:32-86`
-
-**Why**
-- Today `SettingsPanel` is a modal in the main window — opening it covers the terminal layout.
-- We already have `windows/floating.ts` (T84 PiP) — same primitive works for a settings window.
-- Better multitask: keep an eye on agent output while changing API keys, themes, etc.
-
-**Scope**
-- New `apps/desktop/src/main/windows/settings.ts`:
-  - `openSettingsWindow(tab?: string)`: open if not exists, focus if exists, emit deep-link event for specific tab.
-  - `parent: mainWindow` (lifecycle tied — closes when main closes).
-  - **Do NOT use `alwaysOnTop: true`** — anti-pattern (fights Mission Control on macOS, listed in review).
-- Renderer: settings webview entry (`?settings=1`) mounts `<SettingsPanel/>` standalone.
-- Replace current modal trigger with IPC call to `openSettingsWindow`.
-- Deep-link example: "No API key" error → button "Open API Keys" → `openSettingsWindow('api-keys')`.
-
-**Likely files**
-- `apps/desktop/src/main/windows/settings.ts` (new)
-- `apps/desktop/src/main/ipc/procedures/window.ts` (new IPC)
-- `apps/desktop/src/renderer/main.tsx` (route on `?settings=1`)
-- `apps/desktop/src/renderer/components/settings/SettingsPanel.tsx` (adapt to standalone)
-
----
-
-### T121 — electron-window-state
-**Priority**: Wave 1 / P2 | **Effort**: S | **Source**: Terax `tauri-plugin-window-state` (analog)
-
-**Why**
-- Window size and position aren't restored across launches. Annoying for power users.
-- Library `electron-window-state` (npm) is the canonical Electron solution. Stable, ~200 LOC.
-
-**Scope**
-- Add `electron-window-state` to `apps/desktop/package.json`.
-- Wire into `apps/desktop/src/main/index.ts` window creation: `windowStateKeeper({ defaultWidth, defaultHeight })`.
-- Persist position, size, maximized state across launches.
-- **Exclude `VISIBLE` state** (mirror Terax pattern at `lib.rs:98-102`): app should always paint first, then `show()`, to avoid transparent-window-shadow flash on Linux/Windows when we get there.
-
-**Likely files**
-- `apps/desktop/package.json`
-- `apps/desktop/src/main/index.ts`
 
 ---
 

@@ -179,6 +179,32 @@ contextBridge.exposeInMainWorld("api", {
     captureScreenshot: () => safe.invoke("browser:capture-screenshot"),
     captureElement: (selector: string) => safe.invoke("browser:capture-element", { selector }),
   },
+  // T120: Settings as a separate BrowserWindow
+  settings: {
+    /** Open the settings window (or focus it if already open) */
+    open: (tab?: "general" | "clis" | "terminal" | "shortcuts" | "apikeys") =>
+      safe.invoke("settings:open", tab),
+    /** Close the settings window from inside it */
+    selfClose: () => safe.send("settings:self-close"),
+    /** Subscribe to tab deep-link events from the main window */
+    onNavigate: (callback: (tab: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, tab: string) => callback(tab);
+      safe.on("settings:navigate", handler as never);
+      return () => {
+        safe.off("settings:navigate", handler as never);
+      };
+    },
+    /** Fan out a "settings changed" signal to peer windows after mutation. */
+    broadcastChanged: () => safe.send("settings:broadcast-changed"),
+    /** Subscribe to peer-window settings changes (refetch the local query cache). */
+    onChanged: (callback: () => void) => {
+      const handler = () => callback();
+      safe.on("settings:changed", handler as never);
+      return () => {
+        safe.off("settings:changed", handler as never);
+      };
+    },
+  },
   // T84: Picture-in-Picture pane floating windows
   floating: {
     /** Open a floating pane window from the main window */

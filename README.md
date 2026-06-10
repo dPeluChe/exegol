@@ -157,9 +157,14 @@ exegol/
 
 ### Settings & Infrastructure
 
+- **Settings window** — Lives in its own `BrowserWindow` (T120): tweak themes / API keys / fonts while still watching agent output. `Cmd+,` and the macOS `Preferences…` menu item both open or focus it. Cross-window cache sync via `settings:broadcast-changed` so changes are immediate.
 - **API key management** — `safeStorage` encryption with session-level cache; providers: Anthropic, OpenAI, Google, etc.
 - **Terminal fonts** — 3 bundled Nerd Fonts (MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono); per-card live preview
 - **Themes** — Light / Dark / Dark-black (OLED) / System
+- **Capability allowlist** — Every IPC channel and tRPC procedure is gated by a declarative JSON allowlist (T119). See [`docs/ARCHITECTURE/CAPABILITIES.md`](docs/ARCHITECTURE/CAPABILITIES.md).
+- **Hardened path / command guards** — `assertSafePath` rejects bidi Trojan Source chars, NTFS ADS, and sensitive paths (`.env*`, `.ssh/`, `.aws/credentials`, GPG/keychains); `inspectCommand` refuses fork bombs, `rm -rf /`, `dd of=/dev/disk*`, `curl|sh` (T117).
+- **Tight CSP** — Explicit `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` (T118).
+- **Window state persistence** — Width / height / position survive restarts via `electron-window-state` (T121).
 - **Structured errors** — `ExegolError → TransientError / PermanentError / TimeoutError` with `withRetry()` helper (T80)
 - **DB row validation** — Zod schemas for all 14 row types with graceful degradation on parse failure (T77)
 - **DI context** — All 5 tRPC singletons injected via context (no module-level globals) (T81)
@@ -170,7 +175,7 @@ exegol/
 |----------|--------|
 | `Cmd+K` | Command Palette |
 | `Cmd+B` | Toggle sidebar |
-| `Cmd+,` | Settings |
+| `Cmd+,` | Open Settings window |
 | `Cmd+N` | New Agent |
 | `Cmd+.` | Stop focused agent |
 | `Cmd+T` | New workspace tab |

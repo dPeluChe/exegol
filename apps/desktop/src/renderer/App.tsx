@@ -12,19 +12,17 @@ import { ProjectProvider } from "./contexts/ProjectContext";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
+import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
 import { useAppStore } from "./stores/app";
 
 // Lazy: rarely-used surfaces are not needed on first paint.
 // ProjectList: only when there are no projects or user clicks "Add project".
-// SettingsPanel: only when user opens settings (Radix dropdowns, form libs).
 // CommandPalette: only opens on ⌘K.
+// Settings live in their own BrowserWindow (T120) — not lazy-loaded here.
 const ProjectList = lazy(() =>
   import("./components/projects/ProjectList").then((m) => ({ default: m.ProjectList })),
-);
-const SettingsPanel = lazy(() =>
-  import("./components/settings/SettingsPanel").then((m) => ({ default: m.SettingsPanel })),
 );
 const CommandPalette = lazy(() =>
   import("./components/CommandPalette").then((m) => ({ default: m.CommandPalette })),
@@ -46,12 +44,6 @@ function MainContent() {
           <WorkspaceView />
         </ProjectProvider>
       );
-    case "settings":
-      return (
-        <Suspense fallback={<LoadingSpinner className="h-full" />}>
-          <SettingsPanel />
-        </Suspense>
-      );
     default:
       return (
         <Suspense fallback={<LoadingSpinner className="h-full" />}>
@@ -70,6 +62,7 @@ export default function App() {
   useTheme();
   useAutoSelectProject();
   useFloatingPaneSync();
+  useSettingsSync();
 
   const showSidebar = activeView === "workspace";
 

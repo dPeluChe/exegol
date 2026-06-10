@@ -4,14 +4,13 @@ import type { LucideIcon } from "lucide-react";
 import { ArrowLeft, Key, Keyboard, Monitor, Settings2, Terminal } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
-import { useAppStore } from "../../stores/app";
 import { ApiKeysSettings } from "./ApiKeysSettings";
 import { CliSettings } from "./CliSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TerminalSettings } from "./TerminalSettings";
 
-type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys";
+export type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys";
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: Settings2 },
@@ -21,10 +20,15 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "apikeys", label: "API Keys", icon: Key },
 ];
 
-export function SettingsPanel() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
-  const setActiveView = useAppStore((s) => s.setActiveView);
-  const activeProjectId = useAppStore((s) => s.activeProjectId);
+export interface SettingsPanelProps {
+  /** Initial tab selection (used by the standalone settings window for deep-links). */
+  initialTab?: SettingsTab;
+  /** Called when the back/close button is pressed. Required — there is no in-app embed. */
+  onClose: () => void;
+}
+
+export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "general");
 
   const { data: settings, isLoading } = useSettings();
   const updateSettings = useUpdateSettings();
@@ -74,7 +78,7 @@ export function SettingsPanel() {
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <button
           type="button"
-          onClick={() => setActiveView(activeProjectId ? "workspace" : "projects")}
+          onClick={onClose}
           className="flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />

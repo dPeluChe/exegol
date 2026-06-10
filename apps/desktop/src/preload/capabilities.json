@@ -55,6 +55,11 @@
     "floating:close",
     "floating:self-close",
     "floating:self-devtools",
-    "floating:closed"
+    "floating:closed",
+    "settings:open",
+    "settings:self-close",
+    "settings:navigate",
+    "settings:broadcast-changed",
+    "settings:changed"
   ]
 }

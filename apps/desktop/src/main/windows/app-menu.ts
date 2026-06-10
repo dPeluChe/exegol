@@ -6,6 +6,7 @@ import {
   type MenuItemConstructorOptions,
   shell,
 } from "electron";
+import { openSettingsWindow } from "./settings";
 
 /**
  * Install a custom application menu on macOS.
@@ -33,6 +34,12 @@ export function installAppMenu(): void {
       submenu: [
         { role: "about" },
         { type: "separator" },
+        {
+          label: "Preferences…",
+          accelerator: "Cmd+,",
+          click: () => openSettingsWindow(),
+        },
+        { type: "separator" },
         { role: "services" },
         { type: "separator" },
         { role: "hide" },
@@ -54,11 +61,11 @@ export function installAppMenu(): void {
         {
           label: "Close Pane",
           accelerator: "Cmd+W",
-          // IMPORTANT: explicitly NOT role: "close" — we want to intercept
-          // the accelerator so the renderer closes the focused pane, not
-          // the whole window.
+          // Main window: intercept and close the focused pane (not the
+          // whole window). Auxiliary windows (settings, floating PiP)
+          // close themselves — they don't have pane state.
           click: (_item, browserWindow) =>
-            sendToRenderer(browserWindow as BaseWindow | undefined, "menu:close-pane"),
+            handleCloseAccelerator(browserWindow as BaseWindow | undefined),
         },
       ],
     },
@@ -116,4 +123,20 @@ function sendToRenderer(win: BaseWindow | undefined, channel: string): void {
   if (candidate instanceof BrowserWindow) {
     candidate.webContents.send(channel);
   }
+}
+
+/**
+ * Cmd+W router: settings + floating windows close themselves; the main
+ * window forwards to the renderer's pane-close handler.
+ */
+function handleCloseAccelerator(win: BaseWindow | undefined): void {
+  const candidate = win ?? BrowserWindow.getFocusedWindow();
+  if (!candidate || candidate.isDestroyed()) return;
+  if (!(candidate instanceof BrowserWindow)) return;
+  const url = candidate.webContents.getURL();
+  if (url.includes("settings=1") || url.includes("floatingPane=")) {
+    candidate.close();
+    return;
+  }
+  candidate.webContents.send("menu:close-pane");
 }

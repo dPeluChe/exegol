@@ -34,6 +34,11 @@ import {
   registerFloatingIpcHandlers,
   registerMainWindow,
 } from "./windows/floating";
+import {
+  closeSettingsWindow,
+  registerMainWindowForSettings,
+  registerSettingsIpcHandlers,
+} from "./windows/settings";
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -86,7 +91,10 @@ function createWindow(): void {
     endMark("firstPaint");
   });
 
-  if (mainWindow) registerMainWindow(mainWindow);
+  if (mainWindow) {
+    registerMainWindow(mainWindow);
+    registerMainWindowForSettings(mainWindow);
+  }
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url);
@@ -249,6 +257,7 @@ app.whenReady().then(async () => {
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerFloatingIpcHandlers();
+  registerSettingsIpcHandlers();
   registerGlobalHotkey();
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
@@ -467,6 +476,7 @@ app.on("will-quit", () => {
   globalShortcut.unregisterAll();
 
   closeAllFloatingPanes();
+  closeSettingsWindow();
 
   // Sidecar mode: disconnect (sessions survive for reconnect on next launch)
   // Legacy mode: kill all subprocess PTY sessions

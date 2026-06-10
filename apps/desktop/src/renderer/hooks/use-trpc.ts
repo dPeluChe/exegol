@@ -154,6 +154,9 @@ export function useUpdateSettings() {
     mutationFn: (data: Partial<Settings>) => trpcMutate<Settings>("settings.update", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      // T120: settings live in their own window — fan out to peer windows so
+      // their TanStack Query caches refetch (theme, terminal font, etc.).
+      window.api.settings.broadcastChanged();
     },
   });
 }
