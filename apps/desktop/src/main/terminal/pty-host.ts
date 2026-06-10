@@ -29,6 +29,7 @@ export class PtyHost {
   private activeSpawns = 0;
   private spawnQueue: Array<() => void> = [];
   private sidecarClient: SidecarClient | null = null;
+  private exitWaiters = new Map<string, Array<() => void>>();
 
   // ─── Sidecar integration ────────────────────────────────────────────
 
@@ -295,6 +296,36 @@ export class PtyHost {
     return this.sessions.has(id);
   }
 
+  /** Resolve when the session is cleaned up (exit), or after timeoutMs as a fallback. */
+  waitForExit(id: string, timeoutMs: number): Promise<void> {
+    if (!this.sessions.has(id)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const waiter = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(() => {
+        const list = this.exitWaiters.get(id);
+        if (list) {
+          const idx = list.indexOf(waiter);
+          if (idx !== -1) list.splice(idx, 1);
+          if (list.length === 0) this.exitWaiters.delete(id);
+        }
+        resolve();
+      }, timeoutMs);
+      const list = this.exitWaiters.get(id) ?? [];
+      list.push(waiter);
+      this.exitWaiters.set(id, list);
+    });
+  }
+
+  private notifyExitWaiters(id: string): void {
+    const waiters = this.exitWaiters.get(id);
+    if (!waiters) return;
+    this.exitWaiters.delete(id);
+    for (const w of waiters) w();
+  }
+
   listSessions(): string[] {
     return Array.from(this.sessions.keys());
   }
@@ -304,6 +335,9 @@ export class PtyHost {
       this.forceKillSession(session);
     }
     this.sessions.clear();
+    for (const id of [...this.exitWaiters.keys()]) {
+      this.notifyExitWaiters(id);
+    }
   }
 
   /** Force-kill a session: flush scrollback, send dispose, then SIGKILL as safety net */
@@ -379,6 +413,7 @@ export class PtyHost {
     flushScrollbackSync(session);
     session.emulator.dispose();
     this.sessions.delete(id);
+    this.notifyExitWaiters(id);
   }
 
   // ── Spawn semaphore (max 3 concurrent) ────────────────────────────────

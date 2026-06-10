@@ -1,6 +1,10 @@
 import { randomBytes } from "node:crypto";
 import type { Agent, AgentAccessMode, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
+import { logger } from "../lib/logger";
+import { getMcpHost } from "../mcp/host";
+import { buildMemoryContext, getMemoriesForInjection } from "../memory/store";
+import { discoverSkills } from "../skills/discovery";
 import type { AgentProviderRegistry } from "./registry";
 
 // ─── T58: Access mode system prompts ──────────────────────────────────────
@@ -19,16 +23,47 @@ interface SpawnContextResult {
 
 /**
  * Build the full context payload (memory, MCP tools, skills) to inject
- * into an agent's task prompt.
+ * into an agent's task prompt. Each source is non-fatal: a failure logs
+ * and yields an empty section, never blocks the spawn.
  */
 export function buildSpawnContext(
-  _db: Database.Database,
-  _projectId: string,
-  _config: AgentCreate,
-  _cwd: string,
+  db: Database.Database,
+  projectId: string,
+  config: AgentCreate,
+  cwd: string,
 ): SpawnContextResult {
-  // TODO: Context injection disabled until task pipeline is implemented.
-  return { memoryContext: "", mcpContext: "", skillContext: "", contextPrefix: "" };
+  let memoryContext = "";
+  let mcpContext = "";
+  let skillContext = "";
+
+  try {
+    // Bounded by getMemoriesForInjection's token budget (~2000 tokens).
+    memoryContext = buildMemoryContext(getMemoriesForInjection(db, projectId));
+  } catch (err) {
+    logger.warn("[SpawnContext] Failed to build memory context:", err);
+  }
+
+  try {
+    mcpContext = getMcpHost().buildToolContext();
+  } catch (err) {
+    logger.warn("[SpawnContext] Failed to build MCP context:", err);
+  }
+
+  if (config.skillNames?.length) {
+    try {
+      const requested = new Set(config.skillNames);
+      const skills = discoverSkills(cwd).filter((s) => requested.has(s.name));
+      if (skills.length > 0) {
+        const sections = skills.map((s) => `## Skill: ${s.name}\n\n${s.content}`).join("\n\n");
+        skillContext = `# Skills\n\n${sections}\n`;
+      }
+    } catch (err) {
+      logger.warn("[SpawnContext] Failed to build skill context:", err);
+    }
+  }
+
+  const contextPrefix = [memoryContext, mcpContext, skillContext].filter(Boolean).join("\n");
+  return { memoryContext, mcpContext, skillContext, contextPrefix };
 }
 
 /**

@@ -7,9 +7,12 @@ import {
   setAgentWorktree,
 } from "../db/queries";
 import { runSetupHook } from "../hooks/project-hooks";
+import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
+import { inspectCommand } from "../security/command-guard";
 import {
+  getFishInitCommand,
   getShellIntegrationBashRcfile,
   getShellIntegrationZdotdir,
   shellSupportsMarker,
@@ -256,6 +259,19 @@ export function buildPtyInvocation(
       fullCommand = `${lifecycle.beforeAgent} && ${fullCommand}`;
     }
 
+    // Spawn-boundary guard: refuse obviously destructive commands. Scans the
+    // final string handed to the shell (prompt + resume + lifecycle included).
+    const verdict = inspectCommand(fullCommand);
+    if (!verdict.ok) {
+      logger.error(
+        `[AgentManager] Refusing to spawn ${agent.cliType}: ${verdict.reason} (matched: ${JSON.stringify(verdict.matched)})`,
+      );
+      throw new PermanentError(
+        `Command refused by safety guard (${verdict.reason}): ${verdict.matched}`,
+        "COMMAND_REFUSED",
+      );
+    }
+
     const provider = registry.get(agent.cliType);
     const isInteractiveCli = !provider?.capabilities?.supportsPromptArg;
 
@@ -286,7 +302,10 @@ export function buildPtyInvocation(
   }
 
   const shellName = userShell.split("/").pop() ?? "";
-  const enableMarker = isPlainShell && shellSupportsMarker(userShell);
+  // Marker gating also covers interactive-CLI spawns: PtyHost queues the
+  // stdinCommand until the shell-ready marker (or its timeout) fires, so we
+  // don't race a blind delay against shell startup.
+  const enableMarker = (isPlainShell || stdinCommand !== null) && shellSupportsMarker(userShell);
   if (enableMarker) {
     if (shellName === "zsh") {
       // T112: route via the OSC 7 + OSC 133 shell-integration dir so plain
@@ -299,6 +318,10 @@ export function buildPtyInvocation(
       // shell. The integration script emulates login init internally
       // (sources /etc/profile + ~/.bash_profile|~/.profile + ~/.bashrc).
       args = ["-i", "--rcfile", getShellIntegrationBashRcfile()];
+    } else if (shellName === "fish") {
+      // fish is in SHELLS_WITH_MARKER but had no wiring — without this the
+      // ready gate only resolves via its 15s timeout, queueing early input.
+      args = [...args, "--init-command", getFishInitCommand()];
     }
   }
 

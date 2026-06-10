@@ -58,12 +58,14 @@ export function useDiff(
   projectId: string | null,
   mode: "unstaged" | "staged",
   pathOverride?: string,
+  refetchIntervalMs?: number,
 ) {
   const procedure = mode === "staged" ? "diff.stagedDiff" : "diff.projectDiff";
   return useQuery({
     queryKey: ["diff", pathOverride || projectId, mode],
     queryFn: () => trpcInvoke<string>(procedure, { projectId, pathOverride }),
     enabled: !!projectId,
+    refetchInterval: refetchIntervalMs ?? false,
   });
 }
 

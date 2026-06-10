@@ -155,7 +155,11 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [autoRefresh, setAutoRefresh] = useState(false);
 
-  const { data: rawDiff, isLoading, refetch } = useDiff(projectId, diffMode, overridePath);
+  const {
+    data: rawDiff,
+    isLoading,
+    refetch,
+  } = useDiff(projectId, diffMode, overridePath, autoRefresh ? 5000 : undefined);
   const { data: reviewSummary } = useReviewSummary(projectId, overridePath, diffMode === "staged");
 
   // Track collapsed state per file (all collapsed by default)
@@ -191,13 +195,6 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
       return next;
     });
   }, []);
-
-  // Auto-refresh interval
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const interval = setInterval(() => refetch(), 5000);
-    return () => clearInterval(interval);
-  }, [autoRefresh, refetch]);
 
   const handleRefresh = useCallback(() => {
     refetch();

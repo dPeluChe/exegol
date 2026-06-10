@@ -31,7 +31,6 @@ export function getAgentManager(): AgentManager {
   return instance;
 }
 
-const STOP_POLL_INTERVAL_MS = 100;
 const STOP_TIMEOUT_MS = 5_000;
 
 export class AgentManager {
@@ -155,9 +154,15 @@ export class AgentManager {
     activateAgent(db, agent.id, pid);
 
     if (stdinCommand) {
-      setTimeout(() => {
+      if (enableMarker) {
+        // PtyHost queues pre-ready writes and flushes them on the shell-ready
+        // marker (or its timeout) — no blind delay racing shell startup.
         ptyHost.write(agent.id, `${stdinCommand}\n`);
-      }, 500);
+      } else {
+        setTimeout(() => {
+          ptyHost.write(agent.id, `${stdinCommand}\n`);
+        }, 500);
+      }
     }
 
     broadcastAgentStatus({
@@ -205,20 +210,7 @@ export class AgentManager {
     const ptyHost = getPtyHost();
     if (ptyHost.isAlive(agentId)) {
       ptyHost.kill(agentId);
-      // Wait for exit
-      await new Promise<void>((resolve) => {
-        const checkInterval = setInterval(() => {
-          if (!ptyHost.hasSession(agentId)) {
-            clearInterval(checkInterval);
-            clearTimeout(timeout);
-            resolve();
-          }
-        }, STOP_POLL_INTERVAL_MS);
-        const timeout = setTimeout(() => {
-          clearInterval(checkInterval);
-          resolve();
-        }, STOP_TIMEOUT_MS);
-      });
+      await ptyHost.waitForExit(agentId, STOP_TIMEOUT_MS);
     } else {
       stopAgent(db, agentId, "completed");
       cleanupWorktree(db, agentId, this.worktrees);

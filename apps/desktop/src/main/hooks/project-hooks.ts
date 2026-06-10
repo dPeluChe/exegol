@@ -5,6 +5,7 @@ import { exec } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../lib/logger";
+import { inspectCommand } from "../security/command-guard";
 
 const HOOK_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -63,6 +64,13 @@ export function runHook(
       EXEGOL_WORKTREE_PATH: opts.worktreePath,
       EXEGOL_BRANCH: opts.branchName,
     };
+
+    const verdict = inspectCommand(script);
+    if (!verdict.ok) {
+      logger.error(`[Hooks] Refused by safety guard (${verdict.reason}): ${script}`);
+      resolve({ success: false, output: `Refused by safety guard: ${verdict.reason}` });
+      return;
+    }
 
     logger.info(`[Hooks] Running: ${script}`, { cwd: opts.cwd });
 

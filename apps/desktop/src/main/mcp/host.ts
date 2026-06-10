@@ -30,6 +30,10 @@ interface JsonRpcResponse {
 
 // ─── Stdio transport ─────────────────────────────────────────────────────────
 
+// Cap on the un-framed stdout accumulator. A server that streams data without
+// a parseable Content-Length frame would otherwise grow this without bound.
+const MAX_STDIO_BUFFER_BYTES = 16 * 1024 * 1024;
+
 class StdioTransport {
   private process: ChildProcess | null = null;
   private buffer = "";
@@ -55,6 +59,12 @@ class StdioTransport {
     this.process.stdout?.on("data", (data: Buffer) => {
       this.buffer += data.toString();
       this.processBuffer();
+      if (this.buffer.length > MAX_STDIO_BUFFER_BYTES) {
+        logger.error(
+          `[MCP] stdout buffer exceeded ${MAX_STDIO_BUFFER_BYTES} bytes without a parseable frame — dropping buffer`,
+        );
+        this.buffer = "";
+      }
     });
 
     this.process.stderr?.on("data", (data: Buffer) => {
@@ -199,6 +209,9 @@ class HttpTransport {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(request),
+      // Match the stdio transport's 30s per-request timeout — a hung HTTP
+      // server would otherwise block callTool forever.
+      signal: AbortSignal.timeout(30_000),
     });
 
     // Capture session ID from response
