@@ -209,6 +209,9 @@ class HttpTransport {
       method: "POST",
       headers: reqHeaders,
       body: JSON.stringify(request),
+      // Match the stdio transport's 30s per-request timeout — a hung HTTP
+      // server would otherwise block callTool forever.
+      signal: AbortSignal.timeout(30_000),
     });
 
     // Capture session ID from response

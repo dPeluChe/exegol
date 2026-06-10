@@ -10,6 +10,7 @@ import { exec } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../lib/logger";
+import { inspectCommand } from "../security/command-guard";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -139,6 +140,13 @@ export function runLifecycleScript(
   label: string,
 ): Promise<{ success: boolean; output: string }> {
   return new Promise((resolve) => {
+    const verdict = inspectCommand(script);
+    if (!verdict.ok) {
+      logger.error(`[Lifecycle] ${label} refused by safety guard (${verdict.reason}): ${script}`);
+      resolve({ success: false, output: `Refused by safety guard: ${verdict.reason}` });
+      return;
+    }
+
     logger.info(`[Lifecycle] Running ${label}: ${script}`, { cwd });
 
     exec(
