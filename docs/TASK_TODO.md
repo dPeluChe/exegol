@@ -25,6 +25,10 @@ Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 5. **T127** — Progressive disclosure skills (metadata-only injection)
 6. **T128** — terminal-url-detector → browser pane
 7. **T141** — Attention Inbox (unread/needs-attention UX, depends on T123)
+8. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
+
+**P1 additions:**
+- **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
 
 **P1 — Launch differentiators:**
 8. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
@@ -36,7 +40,7 @@ Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 **P2 — Post-launch bets:**
 T132 automations catalog · T133 remote channel (Telegram) · T134 ACP experimental ·
 T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
-T138 ModeTracker headless · T139 skills security scan
+T138 ModeTracker headless · T139 skills security scan · T144 dependency/library audit
 
 ### Wave 1 — Stack Optimizations (Terax Review, 2026-05) — ✅ SHIPPED
 Strategic context: we stay on **Electron + spawned-CLI agents** (our core differentiator).
@@ -560,6 +564,56 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
+### T142 — Integrations Hub: GitHub API first
+**Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + emdash (11 tracker integrations validate demand); extends T71
+
+**Why**
+- Today PR state comes from `gh` CLI (Smart Git Button). A token-based GitHub API integration (Integrations section, not GitHub-exclusive) removes the gh dependency and unlocks the real prize: **closing the review loop** — PR review comments flow back into Exegol and can spawn a fix agent.
+- Relating PRs ↔ projects ↔ agent runs gives us data no competitor surfaces: which agent's PRs get merged fastest, which get the most review pushback (feeds scoring).
+
+**Scope**
+- Settings → Integrations section: GitHub token (keystore/safeStorage), scopes documented; `gh` CLI stays as fallback
+- PR sync per project: open PRs, review states, CI checks, review comments (poll + on-focus refresh)
+- GitPane: PR panel enriched from API (checks, reviewers, comments count) — replaces gh-based lookups when token present
+- **Review-comment → task → fix agent**: one click turns unresolved review threads into a task with `{{prComments}}` context, optionally auto-spawns a fix agent on the PR branch
+- Link PR ↔ agent run ↔ pipeline run in DB (provenance: "this PR came from run X")
+- Architecture: `main/integrations/{registry,github/*}.ts` — registry pattern so Linear/Jira (T71) plug in later
+
+**Likely files**
+- New: `apps/desktop/src/main/integrations/*`, migration (pr_links table)
+- `apps/desktop/src/main/ipc/procedures/github.ts`, `GitPane.tsx`, `SmartGitAction.tsx`, settings UI
+
+---
+
+### T143 — Resource & Memory Hardening
+**Priority**: P0 | **Effort**: M | **Source**: internal audit + emdash (pidusage per agent) + terax renderer pool (re-scopes T114)
+
+**Why**
+- Launch quality: a demo with 10 agents must not lag or leak. Known risk surface: 8MB ring buffer × N sessions, 1 WebGL context per terminal pane (T114 deferred), xterm/addon disposal on pane close, scrollback serialize size, 6.8MB bundled fonts in initial load path.
+
+**Scope**
+- **Budget & metrics**: per-agent RSS (pidusage-style) + ring buffer memory + PTY count surfaced in Monitor → Resources; warning threshold with notification (via T124)
+- **Disposal audit**: verify xterm + WebGL addon + Serialize addon are fully disposed on pane close/tab close/float detach; fix leaks
+- **Ring buffer policy**: global cap (e.g. 256MB) with LRU eviction to disk for idle sessions; shells keep small buffers
+- **T114 re-scope**: renderer pool only if >5 visible terminals proves laggy after disposal fixes — measure first, then decide (BENCHMARKS.md entry)
+- Scrollback serialize cap on reattach snapshot
+
+**Likely files**
+- `apps/desktop/src/main/system/resources.ts`, sidecar ring buffer, `TerminalInstance.tsx`, `stores/terminals.ts`, Monitor sections
+
+---
+
+### T144 — Dependency & Library Audit
+**Priority**: P2 | **Effort**: S-M | **Source**: internal
+
+**Scope**
+- Upgrade pass: Electron 41 → current stable, React 18 → 19 (evaluate: emdash ships 19), xterm/addons, node-pty rebuild chain, Biome, TS
+- `spark audit` + `bun pm ls` review: prune unused deps, dedupe, license check pre-open-source
+- Bundle budget: initial chunk ≤ 1MB enforced in CI (fonts already lazy — verify), track in BENCHMARKS.md
+- Rust: `cargo update` + clippy pedantic re-run; napi + memchr versions
+
+---
+
 ### T132 — Automations Catalog
 **Priority**: P2 | **Effort**: S-M | **Source**: emdash `builtin-catalog.ts` + openclaw heartbeat/cron delivery
 
@@ -613,8 +667,10 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 | **W2-E Git/Oplog** | T129, T131 | `packages/core-rust/src/git/*`, `main/ipc/procedures/git.ts`, GitPane oplog UI | Consumes turn boundaries from W2-A (can stub) |
 | **W2-F Pipelines** | T88v2, T130 | `main/pipeline/*`, `sections/pipeline/*`, `packages/shared/src/types/pipeline.ts` | Independent of the rest |
 | **W2-G UX quick wins** | T128 | terminal toolbar, sidecar URL scan | Small, safe anywhere |
+| **W2-H Integrations** | T142 | new `main/integrations/*`, `procedures/github.ts`, GitPane PR panel | Coordinate GitPane touches with W2-E |
+| **W2-I Resources** | T143, T144 | `system/resources.ts`, `TerminalInstance.tsx`, sidecar ring buffer, package.json | Dep upgrades (T144) LAST — after other lanes merge, to avoid rebase pain |
 
-Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G can merge anytime.
+Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G/H can merge anytime; W2-I's T144 goes last.
 
 ### Lane A — Git Isolation Core
 **Tasks**
