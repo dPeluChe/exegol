@@ -26,11 +26,15 @@ Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 6. **T128** — terminal-url-detector → browser pane
 7. **T141** — Attention Inbox (unread/needs-attention UX, depends on T123)
 8. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
+9. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
 
 **P1 additions:**
 - **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
 - **T145** — Exegol MCP Server + CLI shim (agents query/update memory & knowledge mid-session; pairs with T140)
 - **T146** — Project Groups (sidebar folders: color, icon, collapse — visual only, paths unchanged)
+- **T147** — Cost Dashboard + Budgets (pain point #2: surprise costs; alerts via NotificationBus)
+
+> Pain-point coverage map: `docs/RESEARCH/DEV_PAIN_POINTS_2026.md` (top-10 complaints vs backlog)
 
 **P1 — Launch differentiators:**
 8. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
@@ -409,6 +413,7 @@ location (local path vs ssh://host). Key files to study:
 **Scope**
 - `main/notifications/bus.ts`: receives `agent:attention`, `agent:finished`, `pipeline:paused`, `run:failed` (fed by T123)
 - Channel interface: `deliver(event, content)` — v1 channel: Electron Notification API + dock badge + optional sound
+- **Include the agent's pending question** in the attention notification when available (scrollback tail parse) — "waiting for input" alone forces a context switch to find out why (pain point #4)
 - Settings: per-event toggles, quiet mode
 - Suppress-empty pattern (openclaw `shouldSkipHeartbeatOnlyDelivery`)
 
@@ -509,8 +514,9 @@ location (local path vs ssh://host). Key files to study:
 
 **Scope**
 - Per step persist: diff, scrollback tail, score, optional browser-pane screenshot, evaluator verdict
+- **AI diff summary per step** (reuse Haiku commit-message infra) — review fatigue (#5) is about mega-diffs; per-step summaries make review incremental
 - Evidence panel in pipeline run view: step timeline → click = evidence bundle
-- Export run report (markdown) for PR descriptions
+- Export run report (markdown) for PR descriptions — per-step sections instead of one mega-diff narrative
 
 **Likely files**
 - `apps/desktop/src/main/pipeline/executor.ts`, new `evidence.ts`, `sections/pipeline/*`
@@ -645,6 +651,41 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
+### T147 — Cost Dashboard + Budgets
+**Priority**: P1 | **Effort**: M | **Source**: dev pain point #2 (`docs/RESEARCH/DEV_PAIN_POINTS_2026.md`) — surprise costs / rate limits is the #2 complaint industry-wide
+
+**Why**
+- We already collect `token_usage` + tokenlens; nobody surfaces "what did this run cost me" across providers. Post-repricing (Cursor 2025) devs are burned and cost-anxious — visibility is a trust feature.
+
+**Scope**
+- Monitor → Tokens upgraded: cost per agent, per run, per pipeline, per day/week; provider price table (editable, ships with defaults)
+- Budgets: per-project daily/weekly token or $ budget → warning at 80%, alert at 100% via NotificationBus (T124); optional hard-stop option for scheduled/automation runs
+- Pipeline run view + T130 evidence: cost per step surfaced inline
+- Rate-limit awareness: detect provider rate-limit messages (hook/OSC or scrollback pattern) → status + suggest switching provider (ties to comparator A/B story)
+
+**Likely files**
+- `apps/desktop/src/main/db/queries/token-usage.ts`, Monitor sections, `main/notifications/*`, pipeline run UI
+
+---
+
+### T148 — First-run Onboarding Wizard
+**Priority**: P0 | **Effort**: S-M | **Source**: dev pain point #7 (setup complexity) — critical for public launch
+
+**Why**
+- Public launch means cold users. Complaint #7: "every repo demands complex setup just to start". Our pitch is "one place for all your CLIs" — the first run must prove it in under 2 minutes.
+
+**Scope**
+- First-run flow: detect installed CLIs (which of the 11 providers exist on PATH + versions), show found/missing with install links
+- API key setup: only for what they use; keystore storage; skip-able
+- "Add your first project" + optional guided spawn (safe: read-only mode suggestion)
+- Health check summary reusable later as Settings → Doctor (gh present? git version? node-pty ok? Ollama running?)
+
+**Likely files**
+- New: `apps/desktop/src/renderer/components/onboarding/*`, `main/system/doctor.ts`
+- `apps/desktop/src/main/agents/registry.ts` (CLI detection reuse)
+
+---
+
 ### T146 — Project Groups (sidebar folders)
 **Priority**: P1 | **Effort**: S-M | **Source**: original idea (Antonio)
 
@@ -686,8 +727,9 @@ location (local path vs ssh://host). Key files to study:
 - Persist only durable facts (`activity_state`, `is_terminated`); derive display status read-time by precedence. `change_log` table (SQLite triggers) with seq watermark → renderer reconnects without gaps. Kills stale-status bug class.
 
 ### T136 — Tiered Merge Resolver
-**Priority**: P2 | **Effort**: M | **Source**: overstory merge queue
+**Priority**: P2 | **Effort**: M | **Source**: overstory merge queue + clash (worktree conflict detection)
 - For parallel runs/pipelines: (1) clean merge → (2) keep-incoming → (3) AI-resolve → (4) reimplement-from-spec. Auto-commit runtime state files (`.claude/`, etc.) so they never block merges.
+- **Proactive overlap detection**: warn when 2+ active worktrees touch the same files *before* merge time (cheap: compare `git status` paths across worktrees on a timer / on turn end).
 
 ### T137 — Hunk Assignment + Absorb (GitPane)
 **Priority**: P2 | **Effort**: M-L | **Source**: GitButler `but-hunk-assignment` + `absorb.rs`
