@@ -444,6 +444,7 @@ location (local path vs ssh://host). Key files to study:
 - Migration: add `reinforcement_count`, `last_reinforced_at`, `superseded_by` to memories
 - Re-observed fact → reinforce instead of duplicate; contradicting fact → new row + mark old `superseded_by` (never overwrite)
 - Extractor prompt: anti-ephemeral rules; consider adding `tool`/`behavior` categories (memU's 6)
+- Memories remain **project-scoped in DB** (worktree-agnostic; see T140 storage model) — `MEMORY.md` synthesis export lives in T140
 
 **Likely files**
 - `apps/desktop/src/main/memory/{store,extractor}.ts`, `apps/desktop/src/main/db/migrations`
@@ -534,12 +535,16 @@ location (local path vs ssh://host). Key files to study:
 - The IDE becomes a knowledge node that feeds any agent it spawns — memory is per-fact, this is per-project narrative + structure.
 
 **Scope**
-- `.exegol/knowledge/` in each project repo (versionable, travels with the repo):
-  - `DIGEST.md` — generated via `trs digest` (external tool, detect binary; fallback: internal summarizer). Staleness tracking: refresh on Smart Git Button commit/push/PR-merge or N commits behind
-  - `PROJECT.md` — user-editable brief; agents may propose updates (supersession style, never silent overwrite)
-- Injection via spawn-context with progressive disclosure (one metadata line + read-on-demand, same mechanism as T127)
+**Storage model (decided 2026-07 — two tiers + bridge):**
+- **Facts stay in DB** (memories table, project-scoped): worktree-agnostic — learned in any worktree, instantly available to all agents; nothing lost on worktree deletion; high-churn data never pollutes PRs. Salience/decay/supersession (T126) require DB anyway.
+- **`.exegol/knowledge/` in the repo** (git-tracked, travels with branches):
+  - `PROJECT.md` — user-editable brief, **committed** → agent/user updates show up as reviewable diffs in PRs. Section-structured to minimize merge conflicts. Agents propose, never silently overwrite.
+  - `DIGEST.md` — generated via `trs digest` (detect binary; fallback internal summarizer), **gitignored by default** (derivable, high-churn); staleness refresh on Smart Git commit/push/merge or N commits behind. Opt-in commit.
+  - `MEMORY.md` — **the bridge (memU synthesizer pattern)**: periodic/manual distillation of top-salience DB facts, **committed** → team members seed their Exegol from it on clone; agents outside Exegol benefit too; facts become PR-reviewable.
+- **Managed block in AGENTS.md / CLAUDE.md**: delimited markers (`<!-- exegol:knowledge:begin/end -->`) with a ~40-token pointer to `.exegol/knowledge/` — Exegol only writes inside markers. Even CLIs launched outside Exegol pick up the knowledge (their native context file reads it). Progressive disclosure: pointer always, files read on demand.
+- Injection via spawn-context with progressive disclosure (same mechanism as T127)
 - Pipelines: `{{knowledge}}` template variable
-- UI: "Knowledge" sub-tab under Project (edit brief, view digest freshness, force refresh)
+- UI: "Knowledge" sub-tab under Project (edit brief, digest freshness, force refresh, "Sync MEMORY.md" action, import MEMORY.md as seed on project add)
 
 **Likely files**
 - New: `apps/desktop/src/main/knowledge/{digest,brief,staleness}.ts`
