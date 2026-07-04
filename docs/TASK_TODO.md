@@ -30,6 +30,7 @@ Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 **P1 additions:**
 - **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
 - **T145** — Exegol MCP Server + CLI shim (agents query/update memory & knowledge mid-session; pairs with T140)
+- **T146** — Project Groups (sidebar folders: color, icon, collapse — visual only, paths unchanged)
 
 **P1 — Launch differentiators:**
 8. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
@@ -632,6 +633,7 @@ location (local path vs ssh://host). Key files to study:
   - `memory_search(query, category?)` → hybrid RRF search (T125), returns top-salience facts
   - `memory_save(fact, category)` → T126 semantics: reinforce if known, supersede if contradicting — the store decides, the agent can't corrupt
   - `knowledge_get(section?)` → PROJECT.md brief / digest summary
+  - **v1.1 — project awareness & management**: `task_list/task_update` (tasks from DB), `history_search` (past runs/handoffs/scrollback summaries), `score_get` (own past performance on this project) — the agent can *know* the project's state and improve it, not just read facts
 - **CLI shim fallback**: `exegol-ctl mem search|add`, `knowledge get` — same socket; covers CLIs without MCP. Documented in the managed AGENTS.md block (T140)
 - **Guards**: `EXEGOL_AGENT_ID` env signs every write (attribution); access modes (T58) gate writes — `read`/`plan` agents get search-only tool set
 - Shells skip the server entirely (existing shell-skip pattern)
@@ -640,6 +642,26 @@ location (local path vs ssh://host). Key files to study:
 - New: `apps/desktop/src/main/mcp/exegol-server.ts` (socket endpoint + tool handlers), `packages/mcp-shim/` or bundled script for stdio↔socket proxy + `exegol-ctl`
 - `apps/desktop/src/main/agents/spawn-context.ts` (auto-register server, mode-based tool set)
 - `apps/desktop/src/main/memory/store.ts` (reuse search/save paths)
+
+---
+
+### T146 — Project Groups (sidebar folders)
+**Priority**: P1 | **Effort**: S-M | **Source**: original idea (Antonio)
+
+**Why**
+- Devs with many repos (front + back + infra of one product, client work, experiments) get a flat sidebar today. Visual grouping unifies a product's repos regardless of workspace state — purely presentational, **paths and project identity unchanged**.
+- Cheap sibling of T92 (cross-repo workspaces): groups give the mental model now; T92 can later bind a workspace to a whole group.
+
+**Scope**
+- New `project_groups` table: `id, name, color, icon, background?, sortOrder, collapsed`; `projects.groupId` nullable (ungrouped = root level) + `projects.sortOrder`
+- Sidebar: collapsible group headers with color dot / icon / optional subtle background tint on the section; drag & drop projects between groups; divider between groups
+- Group context menu: rename, color/icon picker (reuse AgentIcon-style picker), collapse/expand, disband (projects fall back to root)
+- Optional: collapse-all / expand-all; group-level quick action "open all repos' status"
+
+**Likely files**
+- `apps/desktop/src/main/db/migrations` (+ queries/projects), `apps/desktop/src/main/ipc/procedures/projects.ts`
+- `apps/desktop/src/renderer/components/layout/{Sidebar,ProjectsSection}.tsx`, `stores/app.ts`
+- `packages/shared/src/schemas/project.ts`
 
 ---
 
