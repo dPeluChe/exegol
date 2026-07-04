@@ -12,6 +12,32 @@
 
 ## Priority Order
 
+### Wave 2 — Competitive Review (2026-07) — ACTIVE
+Strategic context: the "worktree wrapper" niche commoditized (Bloop dead, Crystal deprecated, Roo archived).
+Exegol's moat = orchestration layer: **Pipelines → Evidence → Undo → Scoring** on top of sidecar resilience.
+Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
+
+**P0 — Pre-launch (table stakes + quick wins):**
+1. **T123** — Agent status via hooks + OSC 777 (replaces scraping as primary signal) ← unblocks T124, T129, T141
+2. **T124** — NotificationBus + desktop notifications (depends on T123)
+3. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
+4. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
+5. **T127** — Progressive disclosure skills (metadata-only injection)
+6. **T128** — terminal-url-detector → browser pane
+7. **T141** — Attention Inbox (unread/needs-attention UX, depends on T123)
+
+**P1 — Launch differentiators:**
+8. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
+9. **T130** — Pipeline Evidence (Artifacts-style, multi-provider)
+10. **T88v2** — Evaluator gate: two-pass judge + score distribution + ship/hold/retry
+11. **T131** — Race mode polish (loser cleanup + defer)
+12. **T140** — Project Knowledge Node (digest + brief per project)
+
+**P2 — Post-launch bets:**
+T132 automations catalog · T133 remote channel (Telegram) · T134 ACP experimental ·
+T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
+T138 ModeTracker headless · T139 skills security scan
+
 ### Wave 1 — Stack Optimizations (Terax Review, 2026-05) — ✅ SHIPPED
 Strategic context: we stay on **Electron + spawned-CLI agents** (our core differentiator).
 Terax (Tauri-based terminal) is more focused than us — adopted their tighter patterns inside our stack. Full analysis: `docs/RESEARCH/TERAX_STACK_REVIEW.md`.
@@ -200,6 +226,13 @@ location (local path vs ssh://host). Key files to study:
 - UI: distinct icon in PipelineEditor, visual loop arrow when editing
 - Safety: hard max (e.g., 10 iterations) even if maxLoops is higher
 
+**v2 upgrade (2026-07 review — agent-eval + theloop patterns):**
+- **Two-pass judge**: pass 1 describes what the diff actually does (adversarial),
+  pass 2 issues the verdict — reduces judge rationalization
+- **Score distribution, not binary**: N judge calls (default 3) → distribution;
+  gate policy `ship / hold / retry` with thresholds instead of single PASS/RETRY
+- **Cost tracking** per loop iteration surfaced in run view (feeds T130 evidence)
+
 **Likely files**
 - `packages/shared/src/types/pipeline.ts` (new step type)
 - `apps/desktop/src/main/pipeline/executor.ts` (evaluator routing)
@@ -334,9 +367,254 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
+## Wave 2 Backlog — Competitive Review 2026-07
+
+> Source analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`. Repos studied live in
+> `~/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/`.
+
+### T123 — Agent Status via Hooks + OSC 777
+**Priority**: P0 | **Effort**: M | **Source**: terax `src-tauri/src/modules/pty/agent_detect.rs` + superset `terminal-agents/store.ts` + emdash `hook-server.ts`
+
+**Why**
+- Current `status_parser.rs` guesses state from ANSI output — fragile, imprecise `waiting_input`.
+- Three competitors converged independently on deterministic signal: CLI hooks emit `OSC 777 notify;Exegol;<agentId>;<event>` into the PTY; a byte-level FSM in the stream detects Started/Working/Attention/Finished.
+- Unblocks: T124 notifications, T129 per-turn snapshots, T141 attention inbox, precise pipeline transitions.
+
+**Scope**
+- Spawn-time hook injection per provider: Claude Code native hooks (`Stop`, `Notification`, `PreToolUse` → settings JSON in spawn env), wrapper/shell-init for others
+- OSC 777 FSM in Rust `AgentOutputStream` (extend `processing/status_parser.rs`) — existing parser becomes fallback for hook-less CLIs
+- New push event fields: `turnStarted/turnEnded/needsAttention` timestamps
+- Emit turn boundaries on the agent event bus (consumed by T124/T129)
+
+**Likely files**
+- `packages/core-rust/src/processing/status_parser.rs`
+- `apps/desktop/src/main/agents/spawn-env.ts`, `spawn-context.ts`, `manager.ts`
+- `apps/desktop/src/main/agents/status-parser.ts` (JS fallback)
+
+---
+
+### T124 — NotificationBus + Desktop Notifications
+**Priority**: P0 | **Effort**: S-M | **Source**: openclaw clones (`nanoclaw/src/delivery.ts`, `nanobot/channels/base.py`) — irreducible pattern: bus + 1-method channel adapters
+
+**Why**
+- Table-stakes gap: Warp, Codex app, Orca all notify "agent finished / needs input". Indispensable at 5+ agents.
+- Minimal channel interface keeps Telegram/mobile (T133) cheap later.
+
+**Scope**
+- `main/notifications/bus.ts`: receives `agent:attention`, `agent:finished`, `pipeline:paused`, `run:failed` (fed by T123)
+- Channel interface: `deliver(event, content)` — v1 channel: Electron Notification API + dock badge + optional sound
+- Settings: per-event toggles, quiet mode
+- Suppress-empty pattern (openclaw `shouldSkipHeartbeatOnlyDelivery`)
+
+**Likely files**
+- New: `apps/desktop/src/main/notifications/{bus,channels/desktop}.ts`
+- `apps/desktop/src/main/ipc/procedures/settings.ts`, renderer settings UI
+
+---
+
+### T125 — Hybrid Search RRF (FTS5 + Vectors)
+**Priority**: P0 | **Effort**: S | **Source**: qmd `src/store.ts` (RRF line 3982, hybridQuery 4731, blend 4957)
+
+**Why**
+- `memory/store.ts` uses LIKE while FTS5 sits unused in the schema; Ollama embeddings exist (T100). Connect existing pieces.
+
+**Scope**
+- FTS5 query path with column weights `bm25(fts, 1.5, 4.0, 1.0)` (path, title, body)
+- RRF fusion: `score += weight / (60 + rank + 1)`; original-query lists ×2.0; top-rank bonus +0.05/+0.02
+- Strong-BM25-signal probe → skip expensive vector path when keyword match is decisive
+- Apply to memory recall + global search section
+
+**Likely files**
+- `apps/desktop/src/main/memory/store.ts`, `apps/desktop/src/main/db/queries/search.ts`
+
+---
+
+### T126 — Memory Salience v2 (Decay + Reinforcement + Supersession)
+**Priority**: P0 | **Effort**: S | **Source**: memU `src/memu/vector.py` (salience 25-62), schema `reinforcement_count`
+
+**Why**
+- Current 3-factor relevance never decays; stale facts (old build commands) rank forever.
+
+**Scope**
+- `salience = similarity × log(reinforcement_count + 1) × exp(-0.693 × days_ago / 30)` (30-day half-life)
+- Migration: add `reinforcement_count`, `last_reinforced_at`, `superseded_by` to memories
+- Re-observed fact → reinforce instead of duplicate; contradicting fact → new row + mark old `superseded_by` (never overwrite)
+- Extractor prompt: anti-ephemeral rules; consider adding `tool`/`behavior` categories (memU's 6)
+
+**Likely files**
+- `apps/desktop/src/main/memory/{store,extractor}.ts`, `apps/desktop/src/main/db/migrations`
+
+---
+
+### T127 — Progressive Disclosure Skills
+**Priority**: P0 | **Effort**: S-M | **Source**: openclaw `skill-contract.ts` + `local-loader.ts`; nullclaw `skills.zig` (flag `always`)
+
+**Why**
+- Today full skill content is injected into agent prompts; grows linearly with skill count.
+- openclaw proves the fix works without controlling the agent loop: inject only `<name>+<description>` XML + instruction "use your read tool to load the skill file when the task matches".
+
+**Scope**
+- Skills as folders with `SKILL.md` + frontmatter (`name`, `description`, optional `requires.bins`)
+- Spawn context injects metadata block only (~100 tokens/skill); full body read on demand by the CLI itself
+- Per-skill `always: bool` escape hatch for tiny critical skills
+
+**Likely files**
+- `apps/desktop/src/main/skills/{loader,discovery,defaults}.ts`, `apps/desktop/src/main/agents/spawn-context.ts`
+
+---
+
+### T128 — Terminal URL Detector → Browser Pane
+**Priority**: P0 | **Effort**: S | **Source**: emdash `terminal-url-detector`
+
+**Scope**
+- Detect `https?://localhost:PORT` (and 127.0.0.1) in PTY output stream
+- Toolbar chip "Open preview" → opens URL in a browser pane in the same tab
+- Dedup per session; ignore URLs inside scrollback replay
+
+**Likely files**
+- `apps/desktop/src/main/terminal/*` or sidecar notification path, `TerminalPanel.tsx`, workspace store
+
+---
+
+### T129 — Oplog v2: Git-Tree Snapshots per Agent Turn
+**Priority**: P1 | **Effort**: M-L | **Source**: GitButler `crates/gitbutler-oplog/` (oplog.rs, reflog.rs, entry.rs) + `but-oplog` unmaterialized pattern + t3code `CheckpointStore.ts`
+
+**Why**
+- Strongest differentiator identified. Agents edit faster than git commits; current oplog only covers git operations. GitButler's model gives per-turn granular undo with zero new infra (no CAS, no daemon, no file watcher) — pure git2, which we already ship.
+
+**Scope**
+- Snapshot = commit whose tree captures `worktree/ + index/ + app state`; chained parent-child log per project
+- Anti-GC: hidden ref (`refs/exegol/oplog`) with forged reflog (GitButler `reflog.rs` trick) — reachable but invisible in `git log --all`
+- Metadata as git trailers: `operation: AgentTurn|PipelineStep|Promote|...`, `agentId`, `provider`
+- Trigger: turn boundaries from T123 (`prepare_snapshot` on turn start → `commit_snapshot` on success; unmaterialized discard on failure)
+- Undo UI: timeline in GitPane oplog tab with per-turn restore + agent attribution
+
+**Likely files**
+- `packages/core-rust/src/git/oplog.rs` (major extension), `apps/desktop/src/main/ipc/procedures/git.ts`, GitPane oplog UI
+
+---
+
+### T130 — Pipeline Evidence (Verifiable Artifacts per Step)
+**Priority**: P1 | **Effort**: M | **Source**: Google Antigravity "Artifacts" (gap: Gemini-only; ours is multi-provider)
+
+**Why**
+- No competitor offers verifiable evidence (diff, logs, screenshots) agnostic of the CLI. We already capture diff + scrollback per pipeline step — surface it as a first-class review artifact.
+
+**Scope**
+- Per step persist: diff, scrollback tail, score, optional browser-pane screenshot, evaluator verdict
+- Evidence panel in pipeline run view: step timeline → click = evidence bundle
+- Export run report (markdown) for PR descriptions
+
+**Likely files**
+- `apps/desktop/src/main/pipeline/executor.ts`, new `evidence.ts`, `sections/pipeline/*`
+
+---
+
+### T131 — Race Mode Polish (T65 follow-up)
+**Priority**: P1 | **Effort**: S | **Source**: runoff (race semantics)
+
+**Scope**
+- Auto-cleanup loser worktrees + branches on promote (unless dirty → prompt)
+- Defer mode: nothing lands on the main branch until explicit winner selection
+- Comparator: "promote & clean" single action
+
+---
+
+### T140 — Project Knowledge Node (digest + brief)
+**Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + memU `memory_fs/synthesizer.py` (incremental synthesis) + stoneforge (git-tracked state) + Kilo Code "Memory Bank" (closest prior art — validate against it)
+
+**Why**
+- No orchestrator offers a per-project living knowledge layer, provider-agnostic. Two complementary halves:
+  1. **DIGEST** — structural understanding of the codebase (what exists), auto-refreshed
+  2. **BRIEF** — intent (what it does, what it should do, where it's going, decisions)
+- The IDE becomes a knowledge node that feeds any agent it spawns — memory is per-fact, this is per-project narrative + structure.
+
+**Scope**
+- `.exegol/knowledge/` in each project repo (versionable, travels with the repo):
+  - `DIGEST.md` — generated via `trs digest` (external tool, detect binary; fallback: internal summarizer). Staleness tracking: refresh on Smart Git Button commit/push/PR-merge or N commits behind
+  - `PROJECT.md` — user-editable brief; agents may propose updates (supersession style, never silent overwrite)
+- Injection via spawn-context with progressive disclosure (one metadata line + read-on-demand, same mechanism as T127)
+- Pipelines: `{{knowledge}}` template variable
+- UI: "Knowledge" sub-tab under Project (edit brief, view digest freshness, force refresh)
+
+**Likely files**
+- New: `apps/desktop/src/main/knowledge/{digest,brief,staleness}.ts`
+- `apps/desktop/src/main/agents/spawn-context.ts`, `apps/desktop/src/main/pipeline/context.ts`
+- New renderer section `sections/KnowledgeSection.tsx`
+
+---
+
+### T141 — Attention Inbox (unread / needs-attention UX)
+**Priority**: P0 | **Effort**: S-M | **Source**: Orca (Gmail-like unread/star on worktrees) + superset (ringtone/badge bindings)
+
+**Why**
+- With 5+ agents the question is "who needs me now?". We have StatusDot/activity pulse but no unread semantics — attention state is lost when you look away.
+
+**Scope**
+- Unread state per agent/tab: set on `finished`/`needsAttention` (from T123), cleared on focus
+- Sidebar + tab badges with counts; global "needs attention" queue in TitleBar (click = jump to pane)
+- Keyboard: hotkey jumps to next agent needing attention
+
+**Likely files**
+- `apps/desktop/src/renderer/stores/agents.ts`, `WorkspaceTabBar.tsx`, `Sidebar.tsx`, `TitleBar.tsx`
+
+---
+
+### T132 — Automations Catalog
+**Priority**: P2 | **Effort**: S-M | **Source**: emdash `builtin-catalog.ts` + openclaw heartbeat/cron delivery
+
+**Scope**
+- Template catalog over existing `scheduler/engine`: "daily summary", "scan vulns", "add test coverage", "triage TODOs"
+- Each run delivers result via NotificationBus (T124); suppress empty results
+- One-click enable from a catalog UI in Project → Tasks
+
+### T133 — Remote Notification Channel (Telegram first)
+**Priority**: P2 | **Effort**: M | **Depends**: T124
+- Telegram bot channel implementing the same `deliver()` interface; allowlist of chat ids; optional reply→prompt injection later. Validated demand: Orca mobile app, AgentsRoom.
+
+### T134 — ACP Boundary (experimental)
+**Priority**: P2 | **Effort**: L | **Source**: emdash `packages/core/src/acp/`, t3code `effect-acp`, Zed ACP
+- Agent Client Protocol (JSON-RPC/stdio) for one provider (Claude Code or Gemini) in an experimental pane; structured events instead of PTY scraping; PTY remains default. Evaluate before committing to boundary refactor.
+
+### T135 — Derived Status + CDC change_log
+**Priority**: P2 | **Effort**: M | **Source**: ComposioHQ/agent-orchestrator (OBSERVE→UPDATE→DERIVE)
+- Persist only durable facts (`activity_state`, `is_terminated`); derive display status read-time by precedence. `change_log` table (SQLite triggers) with seq watermark → renderer reconnects without gaps. Kills stale-status bug class.
+
+### T136 — Tiered Merge Resolver
+**Priority**: P2 | **Effort**: M | **Source**: overstory merge queue
+- For parallel runs/pipelines: (1) clean merge → (2) keep-incoming → (3) AI-resolve → (4) reimplement-from-spec. Auto-commit runtime state files (`.claude/`, etc.) so they never block merges.
+
+### T137 — Hunk Assignment + Absorb (GitPane)
+**Priority**: P2 | **Effort**: M-L | **Source**: GitButler `but-hunk-assignment` + `absorb.rs`
+- Stable hunk UUIDs surviving edits → attribute uncommitted hunks to agents/branches; "absorb" redistributes agent fixups to the right commits.
+
+### T138 — ModeTracker Headless
+**Priority**: P2 | **Effort**: S | **Source**: superset `terminal-mode-tracker.ts` (VSCode XtermSerializer lineage)
+- Per-session headless xterm (scrollback 1) tracking VT modes (kitty keyboard, bracketed paste); reconstruct preamble on reattach — fixes Shift+Enter/paste after reload.
+
+### T139 — Skills Security Scan (pre-import)
+**Priority**: P2 | **Effort**: S-M | **Source**: mission-control Skills Hub scanner
+- Pattern gate before installing external skills/MCP configs: prompt-injection, credential exfil, dangerous shell, obfuscation. Blocks write-to-disk on match; user override with warning.
+
+---
+
 ## Execution Lanes for Parallel Work
 
 Use these lanes only if multiple agents are working concurrently. The goal is disjoint write sets.
+
+### Wave 2 lanes (recommended split for parallel agents)
+
+| Lane | Tasks | Owned write set | Notes |
+|---|---|---|---|
+| **W2-A Signal Core** | T123 | `packages/core-rust/src/processing/*`, `main/agents/{spawn-env,spawn-context,status-parser,manager}.ts` | Land FIRST or in parallel with contract agreed: event names `agent:attention/finished`, turn timestamps |
+| **W2-B Notifications + Inbox** | T124, T141 | new `main/notifications/*`, `renderer/stores/agents.ts`, `WorkspaceTabBar/Sidebar/TitleBar` | Consumes W2-A events; can build against a mock emitter |
+| **W2-C Knowledge & Memory** | T125, T126, T140 | `main/memory/*`, new `main/knowledge/*`, `db/queries/search.ts`, migrations, `KnowledgeSection.tsx` | Self-contained; migration numbering coordinate with W2-D |
+| **W2-D Skills** | T127, T139 | `main/skills/*` | Touches `spawn-context.ts` — coordinate one-line injection point with W2-A |
+| **W2-E Git/Oplog** | T129, T131 | `packages/core-rust/src/git/*`, `main/ipc/procedures/git.ts`, GitPane oplog UI | Consumes turn boundaries from W2-A (can stub) |
+| **W2-F Pipelines** | T88v2, T130 | `main/pipeline/*`, `sections/pipeline/*`, `packages/shared/src/types/pipeline.ts` | Independent of the rest |
+| **W2-G UX quick wins** | T128 | terminal toolbar, sidecar URL scan | Small, safe anywhere |
+
+Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G can merge anytime.
 
 ### Lane A — Git Isolation Core
 **Tasks**
@@ -511,19 +789,28 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 ## Suggested Order
 
-### Next wave (P0)
-1. **T65** — Parallel Multi-Agent on Worktrees
+### Next wave — Wave 2 P0 (pre-launch)
+1. **T123** — Hooks + OSC status (unblocks the wave)
+2. **T124** + **T141** — NotificationBus + Attention Inbox
+3. **T125** + **T126** — Hybrid search RRF + salience v2
+4. **T127** — Progressive disclosure skills
+5. **T128** — URL detector
+
+### Wave 2 P1 (launch headline)
+6. **T129** — Oplog v2 (per-turn snapshots)
+7. **T130** + **T88v2** — Pipeline Evidence + statistical evaluator gate
+8. **T131** — Race polish · **T140** — Project Knowledge Node
 
 ### Stabilization & quality (P2)
-2. T81 — Dependency Injection for Singletons
+- T81 — Dependency Injection for Singletons
+- Wave 2 P2: T132-T139 (see Priority Order)
 
-### Competitor-inspired backlog (P2-P3)
-4. **T88** — Ralph Loops in Pipelines (evaluator step)
-4. **T90** — Terminal ↔ Chat dual view
-5. **T92** — Cross-repo workspaces
-6. **T93** — Mobile companion app
-7. **T94** — Headless daemon mode
-8. **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
+### Strategic backlog (P3)
+- **T90** — Terminal ↔ Chat dual view
+- **T92** — Cross-repo workspaces
+- **T93** — Mobile companion app (validated: Orca shipped one — real demand)
+- **T94** — Headless daemon mode
+- **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
 
 ---
 
