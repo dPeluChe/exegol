@@ -403,14 +403,16 @@ export async function getSidecarMemoryMetrics(): Promise<SessionMemoryResult | n
   return getPtyHost().getSidecarMemoryInfo();
 }
 
+const LEVEL_ORDER = { none: 0, warn: 1, alert: 2 } as const;
+
 function checkResourceThresholds(mem: SessionMemoryResult): void {
   const ratio = mem.globalCapBytes > 0 ? mem.totalCapacityBytes / mem.globalCapBytes : 0;
   const level = ratio >= ALERT_THRESHOLD ? "alert" : ratio >= WARN_THRESHOLD ? "warn" : "none";
-  if (level === lastWarnedLevel || level === "none") {
-    lastWarnedLevel = level;
-    return;
-  }
+  // Notify only on ESCALATION: alert→warn means usage is improving — pinging
+  // the user with "high memory usage" while things get better is noise.
+  const escalated = LEVEL_ORDER[level] > LEVEL_ORDER[lastWarnedLevel];
   lastWarnedLevel = level;
+  if (!escalated) return;
   getNotificationBus().emit({
     type: "resource:warning",
     title: level === "alert" ? "Terminal memory limit reached" : "High terminal memory usage",

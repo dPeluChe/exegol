@@ -32,6 +32,9 @@ function evictedPathFor(id: string): string {
 /** Synchronously reload an evicted session's buffer before it's written to or read. */
 export function reloadIfEvicted(s: EvictableSession): void {
   if (!s.evictedPath) return;
+  // release() dropped the backing allocation — regrow before writing, or the
+  // reloaded snapshot (and every subsequent PTY byte) is silently discarded.
+  s.ringBuffer.ensureCapacity();
   try {
     const data = readFileSync(s.evictedPath);
     s.ringBuffer.write(data);
@@ -52,7 +55,9 @@ function evictToDisk(s: EvictableSession): void {
   try {
     mkdirSync(RING_EVICT_DIR, { recursive: true });
     writeFileSync(evictedPathFor(s.id), s.ringBuffer.snapshot());
-    s.ringBuffer.clear();
+    // release(), not clear(): clear only resets pointers and keeps the 8MB
+    // allocation resident — eviction would free zero actual memory.
+    s.ringBuffer.release();
     s.evictedPath = evictedPathFor(s.id);
   } catch {
     // Disk write failed — leave the buffer resident, try again next sweep.

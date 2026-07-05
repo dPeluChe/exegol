@@ -2,10 +2,16 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type Database from "libsql";
 import { getProviderRegistry } from "../agents/registry";
-import { coreRust } from "../agents/spawn-env";
+import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getApiKey } from "../security/keystore";
 
 const execAsync = promisify(exec);
+
+// Packaged macOS Electron inherits launchd's stripped PATH — Homebrew CLIs
+// (claude, gh, ollama...) are invisible to it. _getFullPath resolves the
+// user's login-shell PATH exactly like agent spawns do; without this the
+// onboarding wizard reports every installed CLI as missing on first run.
+const shellEnv = { ...process.env, PATH: _getFullPath() };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -44,12 +50,12 @@ const CLI_INSTALL_LINKS: Partial<Record<string, string>> = {
 
 function checkCommandAvailable(command: string): Promise<boolean> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which "${command}"`;
-  return new Promise((resolve) => exec(cmd, (err) => resolve(!err)));
+  return new Promise((resolve) => exec(cmd, { env: shellEnv }, (err) => resolve(!err)));
 }
 
 async function checkGitVersion(): Promise<string | null> {
   try {
-    const { stdout } = await execAsync("git --version", { timeout: 3_000 });
+    const { stdout } = await execAsync("git --version", { timeout: 3_000, env: shellEnv });
     return stdout.trim();
   } catch {
     return null;

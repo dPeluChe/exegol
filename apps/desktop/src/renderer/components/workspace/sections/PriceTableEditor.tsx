@@ -12,8 +12,16 @@ function PriceRow({
   onSave: (model: string, input: number, output: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [inputPerM, setInputPerM] = useState((price.input * 1e6).toFixed(2));
-  const [outputPerM, setOutputPerM] = useState((price.output * 1e6).toFixed(2));
+  const [inputPerM, setInputPerM] = useState("");
+  const [outputPerM, setOutputPerM] = useState("");
+
+  // Seed on edit-click, not at mount: a row mounted before a catalog refetch
+  // would otherwise show (and save back) pre-refetch prices.
+  const startEditing = () => {
+    setInputPerM((price.input * 1e6).toFixed(2));
+    setOutputPerM((price.output * 1e6).toFixed(2));
+    setEditing(true);
+  };
 
   const handleSave = () => {
     const inVal = Number.parseFloat(inputPerM);
@@ -62,7 +70,7 @@ function PriceRow({
           </span>
           <button
             type="button"
-            onClick={() => setEditing(true)}
+            onClick={startEditing}
             className="text-[10px] text-accent hover:underline"
           >
             Edit

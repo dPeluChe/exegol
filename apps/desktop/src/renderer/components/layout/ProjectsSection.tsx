@@ -66,6 +66,10 @@ function ProjectListSection({
   const handleDrop = async (targetIndex: number) => {
     const fromIndex = dragIndexRef.current;
     dragIndexRef.current = null;
+    // Always clear the shared ref: a within-section reorder that leaves it set
+    // would make a later unrelated drop on a group header silently move this
+    // project into that group.
+    draggedProjectIdRef.current = null;
     if (fromIndex === null || fromIndex === targetIndex) return;
 
     const reordered = [...list];

@@ -69,8 +69,20 @@ export function deleteBudget(db: Database.Database, id: string): void {
 }
 
 // ─── Period windows ─────────────────────────────────────────────────────
-// "weekly" is a rolling 7-day window ending today (UTC), not an ISO week —
-// simpler to reason about and avoids Monday/Sunday locale ambiguity.
+// "weekly" MEASURES a rolling 7-day window ending today (UTC), but its
+// periodKey must be a STABLE ISO-week label: keying alert dedup on the
+// rolling window's start date changed every midnight, re-firing the same
+// "budget at 80%" notification daily and growing budget_alerts unboundedly.
+
+function isoWeekKey(d: Date): string {
+  // ISO-8601 week number (Thursday rule), UTC.
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
 
 function periodWindow(period: BudgetPeriod): { since: number; periodKey: string } {
   const now = new Date();
@@ -85,7 +97,7 @@ function periodWindow(period: BudgetPeriod): { since: number; periodKey: string 
   );
   return {
     since: Math.floor(startDate.getTime() / 1000),
-    periodKey: startDate.toISOString().slice(0, 10),
+    periodKey: isoWeekKey(now),
   };
 }
 
