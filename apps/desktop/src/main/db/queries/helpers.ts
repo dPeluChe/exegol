@@ -4,6 +4,7 @@ import type {
   DiffComment,
   IsolationMode,
   Project,
+  ProjectGroup,
   Prompt,
   ScheduledResult,
   ScheduledTask,
@@ -14,6 +15,7 @@ import {
   agentRowSchema,
   diffCommentRowSchema,
   parseRow,
+  projectGroupRowSchema,
   projectRowSchema,
   promptRowSchema,
   scheduledResultRowSchema,
@@ -57,6 +59,22 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     defaultIde: r.default_ide,
     createdAt: r.created_at,
     lastOpenedAt: r.last_opened_at,
+    groupId: r.group_id,
+    sortOrder: r.sort_order,
+  };
+}
+
+export function mapProjectGroupRow(row: Record<string, unknown>): ProjectGroup {
+  const r = parseRow(projectGroupRowSchema, row, "projectGroup");
+  return {
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    icon: r.icon,
+    background: r.background,
+    sortOrder: r.sort_order,
+    collapsed: r.collapsed,
+    createdAt: r.created_at,
   };
 }
 

@@ -9,12 +9,16 @@ export const projectSchema = z.object({
   defaultIde: z.string().min(1).default("vscode"),
   createdAt: z.number(),
   lastOpenedAt: z.number(),
+  groupId: z.string().nullable(),
+  sortOrder: z.number(),
 });
 
 export const projectCreateSchema = projectSchema.omit({
   id: true,
   createdAt: true,
   lastOpenedAt: true,
+  groupId: true,
+  sortOrder: true,
 });
 
 export type ProjectSchema = z.infer<typeof projectSchema>;

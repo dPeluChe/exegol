@@ -16,6 +16,7 @@ import {
   listWorktrees,
   removeWorktree,
   renameProject,
+  updateProjectGroup,
   updateProjectLastOpened,
   updateProjectSortOrder,
 } from "../../db/queries";
@@ -100,6 +101,14 @@ export const projectRouter = router({
       for (let i = 0; i < input.orderedIds.length; i++) {
         updateProjectSortOrder(ctx.db, input.orderedIds[i] as string, i);
       }
+      return { success: true };
+    }),
+
+  /** T146: move a project into a group (or ungroup with groupId: null). */
+  setGroup: publicProcedure
+    .input(z.object({ id: z.string(), groupId: z.string().nullable() }))
+    .mutation(({ ctx, input }) => {
+      updateProjectGroup(ctx.db, input.id, input.groupId);
       return { success: true };
     }),
 

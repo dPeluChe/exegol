@@ -7,6 +7,12 @@ export type Project = {
   defaultIde: string;
   createdAt: number;
   lastOpenedAt: number;
+  /** T146: sidebar folder grouping — null means ungrouped (root level) */
+  groupId: string | null;
+  sortOrder: number;
 };
 
-export type ProjectCreate = Omit<Project, "id" | "createdAt" | "lastOpenedAt">;
+export type ProjectCreate = Omit<
+  Project,
+  "id" | "createdAt" | "lastOpenedAt" | "groupId" | "sortOrder"
+>;

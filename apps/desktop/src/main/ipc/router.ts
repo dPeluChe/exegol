@@ -15,6 +15,7 @@ import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
 import { oplogRouter } from "./procedures/oplog";
 import { pipelineRouter } from "./procedures/pipeline";
+import { projectGroupsRouter } from "./procedures/project-groups";
 import { projectRouter } from "./procedures/projects";
 import { promptsRouter } from "./procedures/prompts";
 import { qaTestRouter } from "./procedures/qa-tests";
@@ -61,6 +62,7 @@ export const appRouter = router({
   knowledge: knowledgeRouter,
   doctor: doctorRouter,
   budgets: budgetsRouter,
+  projectGroups: projectGroupsRouter,
 });
 
 export type AppRouter = typeof appRouter;

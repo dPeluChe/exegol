@@ -20,6 +20,7 @@ export * from "./use-trpc-github";
 export * from "./use-trpc-mcp";
 export * from "./use-trpc-memory";
 export * from "./use-trpc-pipeline";
+export * from "./use-trpc-project-groups";
 export * from "./use-trpc-resources";
 export * from "./use-trpc-scheduler";
 export * from "./use-trpc-scoring";

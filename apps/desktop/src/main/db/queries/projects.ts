@@ -40,6 +40,15 @@ export function updateProjectSortOrder(db: Database.Database, id: string, sortOr
   db.prepare("UPDATE projects SET sort_order = ? WHERE id = ?").run(sortOrder, id);
 }
 
+/** T146: move a project into a group (or ungroup with groupId = null). */
+export function updateProjectGroup(
+  db: Database.Database,
+  id: string,
+  groupId: string | null,
+): void {
+  db.prepare("UPDATE projects SET group_id = ? WHERE id = ?").run(groupId, id);
+}
+
 export function deleteProject(db: Database.Database, id: string): void {
   db.prepare("DELETE FROM projects WHERE id = ?").run(id);
 }
