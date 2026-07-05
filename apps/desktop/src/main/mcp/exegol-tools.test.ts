@@ -1,9 +1,11 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
+import { ensureProjectBrief } from "../knowledge/brief";
+import { refreshDigest } from "../knowledge/staleness";
 import type { ExegolToolContext } from "./exegol-protocol";
 import {
   callExegolTool,
@@ -24,9 +26,9 @@ describe("exegol-tools", () => {
     db = new Database(":memory:");
     runMigrations(db);
     projectPath = mkdtempSync(join(tmpdir(), "exegol-mcp-test-"));
-    db.prepare(
-      "INSERT INTO projects (id, name, path) VALUES ('proj-1', 'Test Project', ?)",
-    ).run(projectPath);
+    db.prepare("INSERT INTO projects (id, name, path) VALUES ('proj-1', 'Test Project', ?)").run(
+      projectPath,
+    );
     db.prepare(
       "INSERT INTO agents (id, project_id, cli_type, task_description) VALUES ('agent-1', 'proj-1', 'claude-code', 'test task')",
     ).run();
@@ -69,7 +71,9 @@ describe("exegol-tools", () => {
       )) as { id: string };
 
       expect(result.id).toBeTruthy();
-      const row = db.prepare("SELECT source_agent_id FROM memories WHERE id = ?").get(result.id) as {
+      const row = db
+        .prepare("SELECT source_agent_id FROM memories WHERE id = ?")
+        .get(result.id) as {
         source_agent_id: string;
       };
       expect(row.source_agent_id).toBe("agent-1");
@@ -104,7 +108,22 @@ describe("exegol-tools", () => {
       expect(result.facts.some((f) => f.content.includes("bun"))).toBe(true);
     });
 
-    it("knowledge_get returns the brief and digest", async () => {
+    it("knowledge_get is read-only: uninitialized project returns nulls, writes nothing", async () => {
+      const result = (await callExegolTool(
+        db,
+        "knowledge_get",
+        {},
+        makeContext({ accessMode: "read" }),
+      )) as { brief: string | null; digest: string | null };
+      expect(result.brief).toBeNull();
+      expect(result.digest).toBeNull();
+      // The read must not have created the knowledge dir in the repo.
+      expect(existsSync(join(projectPath, ".exegol", "knowledge"))).toBe(false);
+    });
+
+    it("knowledge_get returns the brief and digest once initialized", async () => {
+      ensureProjectBrief(projectPath);
+      refreshDigest(projectPath);
       const result = (await callExegolTool(db, "knowledge_get", {}, makeContext())) as {
         brief: string;
         digest: string;
@@ -114,6 +133,7 @@ describe("exegol-tools", () => {
     });
 
     it("knowledge_get respects the section filter", async () => {
+      ensureProjectBrief(projectPath);
       const result = (await callExegolTool(
         db,
         "knowledge_get",

@@ -8,17 +8,21 @@
  *   exegol-ctl mem add <category> <fact...>
  *   exegol-ctl knowledge get [section]
  *
- * Reads EXEGOL_AGENT_ID / EXEGOL_PROJECT_ID / EXEGOL_ACCESS_MODE from env,
- * same attribution/gating as the MCP shim — documented in the managed
- * AGENTS.md/CLAUDE.md block (T140) so non-MCP CLIs can shell out to it.
+ * Reads EXEGOL_MCP_TOKEN from env (injected into the agent's environment at
+ * spawn) — the server derives identity and access mode from the token, same
+ * as the MCP shim. Documented in the managed AGENTS.md/CLAUDE.md block (T140)
+ * so non-MCP CLIs can shell out to it.
  */
 
 import { connect } from "node:net";
-import { createNdjsonBuffer, encodeRequest, type ExegolAccessMode, type JsonRpcResponse, MCP_SOCK_PATH } from "./exegol-protocol";
+import {
+  createNdjsonBuffer,
+  encodeRequest,
+  type JsonRpcResponse,
+  MCP_SOCK_PATH,
+} from "./exegol-protocol";
 
-const accessMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "write";
-const agentId = process.env.EXEGOL_AGENT_ID ?? "";
-const projectId = process.env.EXEGOL_PROJECT_ID ?? "";
+const token = process.env.EXEGOL_MCP_TOKEN ?? "";
 
 function usageError(message: string): never {
   process.stderr.write(`${message}\n`);
@@ -55,7 +59,7 @@ const { tool, args } = parseArgs(process.argv.slice(2));
 
 const socket = connect(MCP_SOCK_PATH);
 socket.on("connect", () => {
-  socket.write(encodeRequest(1, "call_tool", { tool, args, context: { agentId, accessMode, projectId } }));
+  socket.write(encodeRequest(1, "call_tool", { tool, args, token }));
 });
 
 socket.on(

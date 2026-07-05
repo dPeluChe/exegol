@@ -12,16 +12,18 @@
 import { connect } from "node:net";
 import {
   createNdjsonBuffer,
-  encodeRequest,
   type ExegolAccessMode,
+  encodeRequest,
+  getToolDefsForAccessMode,
   type JsonRpcResponse,
   MCP_SOCK_PATH,
 } from "./exegol-protocol";
-import { getToolDefsForAccessMode } from "./exegol-tools";
 
-const accessMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "write";
-const agentId = process.env.EXEGOL_AGENT_ID ?? "";
-const projectId = process.env.EXEGOL_PROJECT_ID ?? "";
+// Identity is the token — the server maps it to agent/project and re-reads
+// access mode from the DB. The env mode below only shapes tools/list display;
+// it fails CLOSED to "read" (enforcement is server-side regardless).
+const token = process.env.EXEGOL_MCP_TOKEN ?? "";
+const displayMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "read";
 
 // ─── stdio framing (Content-Length, mirrors host.ts's StdioTransport) ──────
 
@@ -58,7 +60,11 @@ function processStdinBuffer(): void {
   }
 }
 
-function writeToClient(id: number | string, result?: unknown, error?: { code: number; message: string }): void {
+function writeToClient(
+  id: number | string,
+  result?: unknown,
+  error?: { code: number; message: string },
+): void {
   const body = error
     ? { jsonrpc: "2.0", id, error }
     : { jsonrpc: "2.0", id, result: result ?? null };
@@ -71,36 +77,55 @@ function writeToClient(id: number | string, result?: unknown, error?: { code: nu
 const socket = connect(MCP_SOCK_PATH);
 let nextSocketId = 1;
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+const CALL_TIMEOUT_MS = 30_000;
 
-socket.on("data", createNdjsonBuffer<JsonRpcResponse>((res) => {
-  const waiter = pending.get(res.id);
-  if (!waiter) return;
-  pending.delete(res.id);
-  if (res.error) waiter.reject(new Error(res.error.message));
-  else waiter.resolve(res.result);
-}));
+function rejectAllPending(reason: string): void {
+  for (const [id, waiter] of pending) {
+    pending.delete(id);
+    waiter.reject(new Error(reason));
+  }
+}
 
+socket.on(
+  "data",
+  createNdjsonBuffer<JsonRpcResponse>((res) => {
+    const waiter = pending.get(res.id);
+    if (!waiter) return;
+    pending.delete(res.id);
+    if (res.error) waiter.reject(new Error(res.error.message));
+    else waiter.resolve(res.result);
+  }),
+);
+
+// Exegol quitting or the socket dropping must not leave the agent CLI hung
+// on an MCP call forever — reject everything in flight.
 socket.on("error", (err) => {
   process.stderr.write(`[exegol-mcp-shim] socket error: ${err.message}\n`);
+  rejectAllPending(`Exegol MCP socket error: ${err.message}`);
+});
+socket.on("close", () => {
+  rejectAllPending("Exegol MCP socket closed (app quit?)");
 });
 
 function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
   const id = nextSocketId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
-    socket.write(
-      encodeRequest(id, "call_tool", {
-        tool,
-        args,
-        context: { agentId, accessMode, projectId },
-      }),
-    );
+    const timer = setTimeout(() => {
+      if (pending.delete(id)) reject(new Error(`Exegol MCP call timed out (${tool})`));
+    }, CALL_TIMEOUT_MS);
+    timer.unref?.();
+    socket.write(encodeRequest(id, "call_tool", { tool, args, token }));
   });
 }
 
 // ─── MCP protocol handling ──────────────────────────────────────────────────
 
-function handleClientMessage(msg: { id?: number | string; method: string; params?: unknown }): void {
+function handleClientMessage(msg: {
+  id?: number | string;
+  method: string;
+  params?: unknown;
+}): void {
   if (msg.id === undefined) return; // notification — nothing to reply to
 
   switch (msg.method) {
@@ -113,7 +138,7 @@ function handleClientMessage(msg: { id?: number | string; method: string; params
       return;
 
     case "tools/list": {
-      const tools = getToolDefsForAccessMode(accessMode).map((t) => ({
+      const tools = getToolDefsForAccessMode(displayMode).map((t) => ({
         name: t.name,
         description: t.description,
         inputSchema: t.inputSchema,

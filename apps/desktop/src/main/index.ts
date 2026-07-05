@@ -12,6 +12,7 @@ import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { recoverStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { logger, markShutdown } from "./lib/logger";
+import { stopExegolMcpServer } from "./mcp/exegol-server";
 import { getMcpHost } from "./mcp/host";
 import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
@@ -477,6 +478,10 @@ app.on("will-quit", () => {
 
   closeAllFloatingPanes();
   closeSettingsWindow();
+
+  // T145: close the MCP socket + revoke all tokens so shim calls fail fast
+  // instead of hanging, and the socket file doesn't go stale on disk.
+  stopExegolMcpServer();
 
   // Sidecar mode: disconnect (sessions survive for reconnect on next launch)
   // Legacy mode: kill all subprocess PTY sessions

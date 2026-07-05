@@ -6,7 +6,7 @@
  * the user has configured.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { logger } from "../lib/logger";
 import type { ExegolAccessMode } from "./exegol-protocol";
@@ -42,8 +42,7 @@ function readMcpJson(path: string): McpJsonFile {
 export function writeAgentMcpConfig(
   cwd: string,
   shimPath: string,
-  agentId: string,
-  projectId: string,
+  token: string,
   accessMode: ExegolAccessMode,
 ): void {
   const configPath = join(cwd, ".mcp.json");
@@ -58,8 +57,10 @@ export function writeAgentMcpConfig(
         args: [shimPath],
         env: {
           ELECTRON_RUN_AS_NODE: "1",
-          EXEGOL_AGENT_ID: agentId,
-          EXEGOL_PROJECT_ID: projectId,
+          // The token IS the identity: the server maps it to agent/project
+          // and re-reads access mode from the DB per call. EXEGOL_ACCESS_MODE
+          // is a display-only hint for the shim's tools/list.
+          EXEGOL_MCP_TOKEN: token,
           EXEGOL_ACCESS_MODE: accessMode,
         },
       },
@@ -70,5 +71,29 @@ export function writeAgentMcpConfig(
     writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
   } catch (err) {
     logger.warn("[ExegolMcp] Failed to write .mcp.json:", err);
+  }
+}
+
+/** Best-effort removal of the exegol entry on agent exit — the token is
+ *  revoked anyway, but a dead entry pollutes the repo if committed. */
+export function removeAgentMcpConfig(cwd: string): void {
+  const configPath = join(cwd, ".mcp.json");
+  if (!existsSync(configPath)) return;
+  try {
+    const existing = readMcpJson(configPath);
+    const servers = existing.mcpServers;
+    if (!servers || !(EXEGOL_SERVER_KEY in servers)) return;
+    const { [EXEGOL_SERVER_KEY]: _removed, ...rest } = servers;
+    if (Object.keys(rest).length === 0 && Object.keys(existing).length === 1) {
+      unlinkSync(configPath);
+      return;
+    }
+    writeFileSync(
+      configPath,
+      `${JSON.stringify({ ...existing, mcpServers: rest }, null, 2)}\n`,
+      "utf-8",
+    );
+  } catch (err) {
+    logger.warn("[ExegolMcp] Failed to clean .mcp.json:", err);
   }
 }

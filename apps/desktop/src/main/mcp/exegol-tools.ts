@@ -6,73 +6,24 @@
  * can't corrupt data even if it tries.
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import type { MemoryCategory } from "@exegol/shared";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import { getProject } from "../db/queries";
-import { ensureProjectBrief } from "../knowledge/brief";
-import { refreshDigestIfStale } from "../knowledge/staleness";
+import { readProjectBrief } from "../knowledge/brief";
+import { getDigestPath } from "../knowledge/paths";
 import { observeMemory, searchMemories } from "../memory/store";
-import type { ExegolAccessMode, ExegolToolContext } from "./exegol-protocol";
+import {
+  EXEGOL_TOOL_NAMES,
+  type ExegolToolContext,
+  type ExegolToolName,
+  SEARCH_ONLY_TOOLS,
+} from "./exegol-protocol";
 
-export const EXEGOL_TOOL_NAMES = ["memory_search", "memory_save", "knowledge_get"] as const;
-export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
-
-/** Tools a read/plan agent may still call — everything else needs write access. */
-const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>(["memory_search", "knowledge_get"]);
-
-export interface ExegolToolDef {
-  name: ExegolToolName;
-  description: string;
-  inputSchema: Record<string, unknown>;
-}
-
-export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
-  {
-    name: "memory_search",
-    description: "Hybrid RRF search over this project's memory store. Returns top facts.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string" },
-        category: { type: "string", enum: MEMORY_CATEGORIES },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "memory_save",
-    description:
-      "Record a fact into this project's memory store. The store decides whether to " +
-      "reinforce an existing fact, supersede a contradicting one, or create a new entry.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fact: { type: "string" },
-        category: { type: "string", enum: MEMORY_CATEGORIES },
-      },
-      required: ["fact", "category"],
-    },
-  },
-  {
-    name: "knowledge_get",
-    description:
-      "Read this project's knowledge base. `section` is 'brief' (PROJECT.md) or " +
-      "'digest' (auto-generated structure summary); omit for both.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        section: { type: "string", enum: ["brief", "digest"] },
-      },
-    },
-  },
-];
-
-/** Tool defs visible to an agent at the given access mode — read/plan agents don't even see memory_save. */
-export function getToolDefsForAccessMode(accessMode: ExegolAccessMode): ExegolToolDef[] {
-  if (accessMode === "write") return EXEGOL_TOOL_DEFS;
-  return EXEGOL_TOOL_DEFS.filter((t) => SEARCH_ONLY_TOOLS.has(t.name));
-}
+// Tool definitions live in exegol-protocol.ts (dependency-free) so the shim
+// bundle never drags this module's memory/knowledge/db import graph.
+export { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-protocol";
 
 export class ExegolToolError extends Error {
   constructor(
@@ -124,7 +75,10 @@ function handleMemorySave(
   const category = args.category as MemoryCategory;
   if (!fact) throw new ExegolToolError("memory_save requires a non-empty fact", -32602);
   if (!MEMORY_CATEGORIES.includes(category)) {
-    throw new ExegolToolError(`memory_save requires a valid category (one of ${MEMORY_CATEGORIES.join(", ")})`, -32602);
+    throw new ExegolToolError(
+      `memory_save requires a valid category (one of ${MEMORY_CATEGORIES.join(", ")})`,
+      -32602,
+    );
   }
 
   const id = observeMemory(db, {
@@ -145,14 +99,18 @@ function handleKnowledgeGet(
   const project = getProject(db, context.projectId);
   if (!project) throw new ExegolToolError(`Project ${context.projectId} not found`, -32603);
 
+  // STRICTLY read-only: this runs for read/plan agents too — creating
+  // PROJECT.md or regenerating DIGEST.md here would dirty the user's repo
+  // from a read call (and violate the read-mode contract).
   const section = typeof args.section === "string" ? args.section : null;
-  const result: { brief?: string; digest?: string } = {};
+  const result: { brief?: string | null; digest?: string | null } = {};
 
   if (section === "brief" || !section) {
-    result.brief = ensureProjectBrief(project.path);
+    result.brief = readProjectBrief(project.path);
   }
   if (section === "digest" || !section) {
-    result.digest = refreshDigestIfStale(project.path).digest;
+    const digestPath = getDigestPath(project.path);
+    result.digest = existsSync(digestPath) ? readFileSync(digestPath, "utf-8") : null;
   }
   return result;
 }
