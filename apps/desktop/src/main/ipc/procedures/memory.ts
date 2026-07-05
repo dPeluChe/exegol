@@ -1,4 +1,6 @@
+import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { z } from "zod";
+import type { OllamaConfig } from "../../indexer/ollama-client";
 import { extractAndStoreMemories } from "../../memory/extractor";
 import {
   buildMemoryContext,
@@ -34,12 +36,23 @@ export const memoryRouter = router({
     }),
 
   /**
-   * Search memories by keyword.
+   * Hybrid RRF search over memories (T125): FTS5 keyword + optional Ollama vector pass.
    */
   search: publicProcedure
-    .input(z.object({ projectId: z.string(), query: z.string().min(1) }))
+    .input(
+      z.object({
+        projectId: z.string(),
+        query: z.string().min(1),
+        ollamaUrl: z.string().optional(),
+        ollamaModel: z.string().optional(),
+      }),
+    )
     .query(({ ctx, input }) => {
-      return searchMemories(ctx.db, input.projectId, input.query);
+      const ollamaConfig: OllamaConfig = {
+        url: input.ollamaUrl ?? DEFAULT_SETTINGS.ollamaUrl,
+        model: input.ollamaModel ?? DEFAULT_SETTINGS.ollamaModel,
+      };
+      return searchMemories(ctx.db, input.projectId, input.query, ollamaConfig);
     }),
 
   /**
