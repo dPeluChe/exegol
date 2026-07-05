@@ -2,7 +2,7 @@
 
 > Audience: current contributors planning the next implementation wave after the initial MVP.
 > This board is the active backlog for product differentiation, operational confidence, and release readiness.
-> **Pending tasks only** — completed work lives in [`tasks_completed/`](./tasks_completed/) (monthly files) and `CHANGELOG.md` (per release).
+> **Pending tasks only** — completed work lives in [`TASK_COMPLETED/`](./TASK_COMPLETED/) (monthly files) and `CHANGELOG.md` (per release).
 
 > **Quality gate before PR**
 > - `npx @biomejs/biome check --fix apps/ packages/shared/src/ packages/ui/src/`
@@ -49,8 +49,8 @@ T138 ModeTracker headless · T139 skills security scan · T144 dependency/librar
 
 ### Shipped waves
 - **Wave 1 — Stack Optimizations (Terax review, 2026-05)**: quick wins + WT1-WT5 + T120 settings window.
-  Details: `docs/tasks_completed/2026_05.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
-- Earlier waves (V1-V3, T01-T107): `docs/tasks_completed/2026_03.md`, `2026_04.md`, `docs/applied/`
+  Details: `docs/TASK_COMPLETED/2605.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
+- Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/applied/`
 
 ### Manual verification pending (post-merge) `added: 2026-05-22`
 Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended before broad release:
@@ -83,7 +83,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ### T58 — Runtime Permission Modes (remaining delta) `added: 2026-04-01`
 **Priority**: P2 | **Effort**: S | **Source**: Anvil
 
-Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline propagation — archived in `tasks_completed/2026_04.md`). Remaining:
+Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline propagation — archived in `TASK_COMPLETED/2604.md`). Remaining:
 - Runtime mode switching (change mode while agent is running)
 - Scheduler task `accessMode` propagation
 - New consumer: T145 MCP tool-set gating reads this mode
@@ -701,25 +701,43 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-## Execution Lanes for Parallel Work
+## Wave 2 Work Groups — 4 parallel worktrees from main
 
-Use these lanes only if multiple agents are working concurrently. The goal is disjoint write sets.
+> Execution model: one worktree + one agent per group, branched from `main`.
+> Each group works its tasks **in the internal order listed** (dependencies flow that way),
+> runs the quality gate, and opens **one PR per task** (small, reviewable) against `main`.
+> Rebase from main after every merged PR from another group.
 
-### Wave 2 lanes (recommended split for parallel agents)
+### WT-A — Signal & Attention `branch: feat/wta-signal`
+**Tasks in order**: T123 → T124 → T141 → T128
+**Theme**: deterministic agent status + everything that consumes it in the UI.
+**Write set**: `packages/core-rust/src/processing/*` · `main/agents/{spawn-env,status-parser,manager}.ts` · new `main/notifications/*` · `renderer/stores/agents.ts` · `WorkspaceTabBar/Sidebar/TitleBar` · terminal toolbar (URL chip)
+**Contract it publishes** (other groups build against this): event names `agent:attention` / `agent:finished` / `pipeline:paused` / `run:failed`, turn timestamps `turnStarted/turnEnded`, `NotificationBus.emit(event, payload)` interface.
 
-| Lane | Tasks | Owned write set | Notes |
-|---|---|---|---|
-| **W2-A Signal Core** | T123 | `packages/core-rust/src/processing/*`, `main/agents/{spawn-env,spawn-context,status-parser,manager}.ts` | Land FIRST or in parallel with contract agreed: event names `agent:attention/finished`, turn timestamps |
-| **W2-B Notifications + Inbox** | T124, T141 | new `main/notifications/*`, `renderer/stores/agents.ts`, `WorkspaceTabBar/Sidebar/TitleBar` | Consumes W2-A events; can build against a mock emitter |
-| **W2-C Knowledge & Memory** | T125, T126, T140 | `main/memory/*`, new `main/knowledge/*`, `db/queries/search.ts`, migrations, `KnowledgeSection.tsx` | Self-contained; migration numbering coordinate with W2-D |
-| **W2-D Skills** | T127, T139 | `main/skills/*` | Touches `spawn-context.ts` — coordinate one-line injection point with W2-A |
-| **W2-E Git/Oplog** | T129, T131 | `packages/core-rust/src/git/*`, `main/ipc/procedures/git.ts`, GitPane oplog UI | Consumes turn boundaries from W2-A (can stub) |
-| **W2-F Pipelines** | T88v2, T130 | `main/pipeline/*`, `sections/pipeline/*`, `packages/shared/src/types/pipeline.ts` | Independent of the rest |
-| **W2-G UX quick wins** | T128 | terminal toolbar, sidecar URL scan | Small, safe anywhere |
-| **W2-H Integrations** | T142 | new `main/integrations/*`, `procedures/github.ts`, GitPane PR panel | Coordinate GitPane touches with W2-E |
-| **W2-I Resources** | T143, T144 | `system/resources.ts`, `TerminalInstance.tsx`, sidecar ring buffer, package.json | Dep upgrades (T144) LAST — after other lanes merge, to avoid rebase pain |
+### WT-B — Memory, Knowledge & Skills `branch: feat/wtb-knowledge`
+**Tasks in order**: T125 → T126 → T127 → T140 → T145
+**Theme**: everything an agent knows — search, salience, skills disclosure, knowledge node, MCP access.
+**Write set**: `main/memory/*` · new `main/knowledge/*` · `main/skills/*` · new `main/mcp/exegol-server.ts` · `db/queries/search.ts` · migrations **36-39** · `sections/KnowledgeSection.tsx`
+**Owns** the injection block in `spawn-context.ts` (WT-A only touches `spawn-env.ts` — keep functions separate).
 
-Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G/H can merge anytime; W2-I's T144 goes last.
+### WT-C — Git, Pipelines & Evidence `branch: feat/wtc-pipelines`
+**Tasks in order**: T129 → T130 → T88v2 → T131
+**Theme**: the launch headline — per-turn undo, verifiable evidence, statistical evaluator, race semantics.
+**Write set**: `packages/core-rust/src/git/*` · `main/pipeline/*` · `main/ipc/procedures/{git,diff}.ts` · GitPane oplog UI · `sections/pipeline/*` · `packages/shared/src/types/pipeline.ts`
+**Stub note**: T129 uses turn boundaries from T123 — start with process-exit boundaries, wire real turns after WT-A's T123 PR merges.
+
+### WT-D — Product Surface & Health `branch: feat/wtd-surface`
+**Tasks in order**: T148 → T143 → T147 → T146
+**Theme**: what a new user touches — onboarding, stability, cost visibility, project organization.
+**Write set**: new `renderer/components/onboarding/*` · new `main/system/doctor.ts` · `main/system/resources.ts` · Monitor sections · `db/queries/token-usage.ts` · `TerminalInstance.tsx` (disposal) · `Sidebar/ProjectsSection` · migrations **40-42**
+**Stub note**: T143/T147 alerts emit through the `NotificationBus` interface from WT-A's contract — mock the emitter until WT-A merges.
+
+### Coordination rules
+1. **Merge order**: WT-A's T123+T124 PRs first (they publish the contract); everything else merges in any order after rebasing.
+2. **Migrations**: WT-B owns numbers 36-39, WT-D owns 40-42 — no other group adds migrations. Renumber on rebase if a range shifts.
+3. **Shared-file discipline**: `spawn-context.ts` → WT-B only · `spawn-env.ts` → WT-A only · GitPane → WT-C only (T142's PR panel comes later, it's P1-late) · `stores/agents.ts` → WT-A only.
+4. **PR hygiene**: one task = one PR, titled `feat(T123): ...`; quality gate (top of file) before each PR; archive the task to `TASK_COMPLETED/2607.md` in the same PR that completes it.
+5. **Not in any group** (deliberately deferred, assign after these merge): T142 (GitPane conflicts with WT-C), T144 (dep upgrades last), P2 batch T132-T139.
 
 
 ## Terax Review — Stack Optimizations (Wave 1)

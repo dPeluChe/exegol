@@ -112,3 +112,9 @@ All data verified from primary sources (GitHub, official docs, reverse engineeri
 ```
 
 Exegol targets the upper-right quadrant: maximum orchestration power with full agent agnosticism.
+
+---
+
+> **⚠️ Superseded (2026-07):** this analysis is from the project-definition era.
+> Current competitive landscape: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`
+> and pain-point map `docs/RESEARCH/DEV_PAIN_POINTS_2026.md`.

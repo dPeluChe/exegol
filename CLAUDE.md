@@ -178,8 +178,9 @@ packages/
   ui/               Radix primitives, cn()
   core-rust/        napi-rs: git2 + processing pipeline
 docs/
-  TASK_TODO.md (V1-V3 done + v0.3.0 wave), BENCHMARKS.md, CHANGELOG.md,
-  RELEASE.md, UI_RESTRUCTURE.md, agent_prompts/, applied/, tasks_completed/
+  TASK_TODO.md (pending only, Wave 2 active), BENCHMARKS.md, CHANGELOG.md,
+  RELEASE.md, RESEARCH/, TASK_COMPLETED/ (YYMM.md monthly archives), applied/,
+  archived/ (UI_RESTRUCTURE, agent_prompts/, review_notes/, old boards)
 ```
 
 ## Database
