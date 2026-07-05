@@ -14,6 +14,7 @@ import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
 // ─── Domain re-exports (barrel) ─────────────────────────────────────────────
 
+export * from "./use-trpc-budgets";
 export * from "./use-trpc-diff-comments";
 export * from "./use-trpc-github";
 export * from "./use-trpc-mcp";

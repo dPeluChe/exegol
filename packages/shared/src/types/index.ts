@@ -1,6 +1,7 @@
 export * from "./activity";
 export * from "./agent";
 export * from "./agent-signals";
+export * from "./budget";
 export * from "./dashboard";
 export * from "./diff-comment";
 export * from "./github-issue";

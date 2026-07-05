@@ -1,5 +1,6 @@
 export * from "./queries/activities";
 export * from "./queries/agents";
+export * from "./queries/budgets";
 export * from "./queries/diff-comments";
 export * from "./queries/messages";
 export * from "./queries/oplog";

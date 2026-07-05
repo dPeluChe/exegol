@@ -179,3 +179,50 @@ export function getDailyTrend(
     requestCount: r.request_count as number,
   }));
 }
+
+// ─── T147: Per-pipeline-run cost (backend only — no T130 evidence UI yet) ──
+
+export interface PipelineRunStepCost {
+  stepIndex: number;
+  agentId: string | null;
+  cost: number;
+  tokens: number;
+}
+
+export interface PipelineRunCost {
+  totalCost: number;
+  totalTokens: number;
+  perStep: PipelineRunStepCost[];
+}
+
+export function getPipelineRunCost(db: Database.Database, pipelineRunId: string): PipelineRunCost {
+  const row = db
+    .prepare("SELECT step_results FROM pipeline_runs WHERE id = ?")
+    .get(pipelineRunId) as { step_results: string } | undefined;
+  if (!row) return { totalCost: 0, totalTokens: 0, perStep: [] };
+
+  let steps: { stepIndex: number; agentId: string | null }[] = [];
+  try {
+    steps = JSON.parse(row.step_results);
+  } catch {
+    return { totalCost: 0, totalTokens: 0, perStep: [] };
+  }
+
+  const usageStmt = db.prepare(
+    `SELECT COALESCE(SUM(estimated_cost_usd), 0.0) AS cost,
+      COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens
+     FROM token_usage WHERE agent_id = ?`,
+  );
+
+  const perStep: PipelineRunStepCost[] = steps.map((s) => {
+    if (!s.agentId) return { stepIndex: s.stepIndex, agentId: null, cost: 0, tokens: 0 };
+    const usage = usageStmt.get(s.agentId) as { cost: number; tokens: number };
+    return { stepIndex: s.stepIndex, agentId: s.agentId, cost: usage.cost, tokens: usage.tokens };
+  });
+
+  return {
+    totalCost: perStep.reduce((sum, s) => sum + s.cost, 0),
+    totalTokens: perStep.reduce((sum, s) => sum + s.tokens, 0),
+    perStep,
+  };
+}

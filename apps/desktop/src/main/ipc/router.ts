@@ -1,6 +1,7 @@
 import { activitiesRouter } from "./procedures/activities";
 import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
+import { budgetsRouter } from "./procedures/budgets";
 import { diffRouter } from "./procedures/diff";
 import { diffCommentsRouter } from "./procedures/diff-comments";
 import { doctorRouter } from "./procedures/doctor";
@@ -59,6 +60,7 @@ export const appRouter = router({
   indexer: indexerRouter,
   knowledge: knowledgeRouter,
   doctor: doctorRouter,
+  budgets: budgetsRouter,
 });
 
 export type AppRouter = typeof appRouter;
