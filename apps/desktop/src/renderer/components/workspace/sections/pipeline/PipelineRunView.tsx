@@ -3,6 +3,7 @@ import { cn } from "@exegol/ui";
 import {
   CheckCircle,
   Circle,
+  Download,
   GitBranch,
   Loader2,
   Pause,
@@ -12,9 +13,10 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   useCancelPipelineRun,
+  useExportRunReport,
   usePausePipelineRun,
   usePipelineRun,
   usePipelineTemplate,
@@ -82,6 +84,22 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
   const pauseMutation = usePausePipelineRun();
   const resumeMutation = useResumePipelineRun();
   const cancelMutation = useCancelPipelineRun();
+  const exportReport = useExportRunReport();
+  const [copied, setCopied] = useState(false);
+
+  const handleExportReport = useCallback(() => {
+    exportReport.mutate(runId, {
+      onSuccess: (markdown) => {
+        navigator.clipboard
+          .writeText(markdown)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          })
+          .catch((err) => console.warn("[PipelineRunView] clipboard write failed:", err));
+      },
+    });
+  }, [exportReport, runId]);
 
   const navigateToTerminal = useCallback((agentId: string) => {
     // Switch to Agents section (from Pipelines sub-tab)
@@ -160,6 +178,18 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
               iter {run.iterationCount}/{run.maxIterations}
             </span>
           )}
+          {run.stepResults.length > 0 && (
+            <button
+              type="button"
+              onClick={handleExportReport}
+              disabled={exportReport.isPending}
+              className="flex items-center gap-1 rounded bg-white/5 px-2 py-1 text-[10px] font-medium text-text-muted hover:bg-white/10 hover:text-text-primary"
+              title="Copy a markdown evidence report for this run"
+            >
+              <Download className="h-3 w-3" />
+              {copied ? "Copied!" : "Export Report"}
+            </button>
+          )}
           {run.status === "running" && (
             <button
               type="button"
@@ -237,6 +267,14 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                           Terminal
                         </button>
                       )}
+                      {result?.score != null && (
+                        <span
+                          className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-text-muted"
+                          title="Agent score for this step"
+                        >
+                          score {result.score}
+                        </span>
+                      )}
                       {result && (
                         <span className="text-[9px] text-text-muted">
                           {formatDuration(result.startedAt, result.completedAt)}
@@ -244,6 +282,13 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                       )}
                     </div>
                   </div>
+
+                  {/* T130 — AI diff summary (evidence) */}
+                  {!isActive && result?.aiSummary && (
+                    <p className="mt-2 text-[10px] italic text-text-secondary">
+                      {result.aiSummary}
+                    </p>
+                  )}
 
                   {/* Live terminal for active step */}
                   {isActive && result?.agentId && (
@@ -263,6 +308,21 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                       </pre>
                     </details>
                   )}
+
+                  {/* T130 — evidence: full diff for this step (skip capture placeholders) */}
+                  {!isActive &&
+                    result?.diffSummary &&
+                    !result.diffSummary.trim().startsWith("(") &&
+                    result.status !== "pending" && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-[10px] text-text-muted hover:text-text-secondary">
+                          Diff
+                        </summary>
+                        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-bg-primary p-2 text-[10px] text-text-secondary">
+                          {result.diffSummary}
+                        </pre>
+                      </details>
+                    )}
                 </div>
               </div>
             );

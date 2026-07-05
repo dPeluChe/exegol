@@ -609,7 +609,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           if (s.paneLastExit[paneId] === code) return s;
           return { paneLastExit: { ...s.paneLastExit, [paneId]: code } };
         }),
-
     }),
     {
       name: "exegol-workspace",

@@ -16,6 +16,7 @@ import {
   listPipelineTemplates,
   updatePipelineTemplate,
 } from "../../db/queries";
+import { buildRunReport } from "../../pipeline/evidence";
 import { checkGitSync } from "../../pipeline/executor";
 import { publicProcedure, router } from "../trpc";
 
@@ -101,6 +102,14 @@ export const pipelineRouter = router({
   deleteRun: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     deletePipelineRun(ctx.db, input.id);
     return { success: true };
+  }),
+
+  /** T130 — markdown run report (evidence bundle), suitable for a PR description */
+  exportRunReport: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
+    const run = getPipelineRun(ctx.db, input.id);
+    if (!run) throw new TRPCError({ code: "NOT_FOUND", message: "Pipeline run not found" });
+    const template = getPipelineTemplate(ctx.db, run.templateId);
+    return buildRunReport(run, template);
   }),
 
   /** Check if a project's git repo is synced (no uncommitted changes, no unpushed commits) */

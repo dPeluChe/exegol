@@ -445,23 +445,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T130 — Pipeline Evidence (Verifiable Artifacts per Step) `added: 2026-07-04`
-**Priority**: P1 | **Effort**: M | **Source**: Google Antigravity "Artifacts" (gap: Gemini-only; ours is multi-provider)
-
-**Why**
-- No competitor offers verifiable evidence (diff, logs, screenshots) agnostic of the CLI. We already capture diff + scrollback per pipeline step — surface it as a first-class review artifact.
-
-**Scope**
-- Per step persist: diff, scrollback tail, score, optional browser-pane screenshot, evaluator verdict
-- **AI diff summary per step** (reuse Haiku commit-message infra) — review fatigue (#5) is about mega-diffs; per-step summaries make review incremental
-- Evidence panel in pipeline run view: step timeline → click = evidence bundle
-- Export run report (markdown) for PR descriptions — per-step sections instead of one mega-diff narrative
-
-**Likely files**
-- `apps/desktop/src/main/pipeline/executor.ts`, new `evidence.ts`, `sections/pipeline/*`
-
----
-
 ### T131 — Race Mode Polish (T65 follow-up) `added: 2026-07-04`
 **Priority**: P1 | **Effort**: S | **Source**: runoff (race semantics)
 

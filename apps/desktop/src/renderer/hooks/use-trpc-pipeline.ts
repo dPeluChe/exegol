@@ -157,3 +157,12 @@ export function useDeletePipelineRun() {
     },
   });
 }
+
+// ─── Evidence (T130) ────────────────────────────────────────────────────────
+
+/** Markdown run report — fetched lazily (only when the user asks to export). */
+export function useExportRunReport() {
+  return useMutation({
+    mutationFn: (id: string) => trpcInvoke<string>("pipeline.exportRunReport", { id }),
+  });
+}

@@ -4,6 +4,7 @@ import { getAgentManager } from "../agents/manager";
 import { getPipelineRun, updatePipelineRun } from "../db/queries";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
+import { attachStepScore, summarizeStepDiff } from "./evidence";
 import { captureGitDiff, now, readScrollbackSummary } from "./pipeline-helpers";
 
 export interface StepHandlerDeps {
@@ -43,6 +44,11 @@ export async function handleStepComplete(
     run.worktreePath ? captureGitDiff(run.worktreePath) : Promise.resolve(""),
   ]);
 
+  const stepDef = template.steps[stepIndex];
+  // T130 — evidence: agent score attaches synchronously; the AI diff summary
+  // is fire-and-forget (up to 20s of network) so it never delays advancing.
+  const score = attachStepScore(db, agentId);
+
   const updatedResults = run.stepResults.map((r) =>
     r.agentId === agentId
       ? {
@@ -51,12 +57,28 @@ export async function handleStepComplete(
           exitCode,
           outputSummary,
           diffSummary,
+          score,
           completedAt: now(),
         }
       : r,
   );
 
-  const stepDef = template.steps[stepIndex];
+  if (exitCode === 0) {
+    // Patch aiSummary in later against a FRESH run read — the local snapshot
+    // may be stale by the time the network call resolves (cancel, next step).
+    summarizeStepDiff(db, diffSummary, stepDef?.label ?? "step")
+      .then((aiSummary) => {
+        if (!aiSummary) return;
+        const fresh = getPipelineRun(db, runId);
+        if (!fresh || fresh.status === "cancelled") return;
+        const patched = fresh.stepResults.map((r) =>
+          r.agentId === agentId ? { ...r, aiSummary } : r,
+        );
+        updatePipelineRun(db, runId, { stepResults: patched });
+      })
+      .catch((err) => logger.warn("[Pipeline] Evidence summary patch failed (non-fatal):", err));
+  }
+
   const success = exitCode === 0;
 
   if (success) {
