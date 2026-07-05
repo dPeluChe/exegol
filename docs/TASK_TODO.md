@@ -523,6 +523,8 @@ location (local path vs ssh://host). Key files to study:
 **Why**
 - With 5+ agents the question is "who needs me now?". We have StatusDot/activity pulse but no unread semantics — attention state is lost when you look away.
 
+**Head start (found in 2026-07 dead-code sweep)**: `stores/agents.ts` already ships a persisted attention inbox from T57 — `attentionItems` (level/reason/read/pinned), `addAttentionItem`, `markAttentionRead`, `dismissAttention`, `toggleAttentionPin`, `unreadAttentionCount`, auto-read-on-focus. Push events already feed it. **Extend this store; the missing part is UI** (badges, TitleBar queue, jump hotkey) + wiring T123's richer signals.
+
 **Scope**
 - Unread state per agent/tab: set on `finished`/`needsAttention` (from T123), cleared on focus
 - Sidebar + tab badges with counts; global "needs attention" queue in TitleBar (click = jump to pane)
@@ -581,7 +583,9 @@ location (local path vs ssh://host). Key files to study:
 - **knip config** (`knip.json` with electron-vite entries: main/index, preload, renderer, pty-sidecar-entry, workspaces): raw run 2026-07 flagged 42 exports + deps but produced false positives on `export *` barrels (e.g. `listProjects` flagged while used) — needs tuned config before pruning; then delete verified-dead exports
 - Bundle budget: initial chunk ≤ 1MB enforced in CI (fonts already lazy — verify), track in BENCHMARKS.md
 - Rust: `cargo update` + clippy pedantic re-run; napi + memchr versions
-- Baseline 2026-07 (pre-wave sweep): 0 files >450 LOC, 0 TODOs/FIXMEs, clippy clean
+- Baseline 2026-07 (pre-wave sweep): 0 files >450 LOC, 0 TODOs/FIXMEs, clippy clean; dead code removed (-1,981 LOC: 5 disconnected sections, paneLayouts subsystem, dead store actions/query fns)
+- **Orphaned tRPC procedures inventory** (defined in routers, renderer never calls — review with product before deleting; some are planned-feature stubs): `projects.open`, `agents.getStatus/updateStatus/getParallelRun/cancelParallelRun/preflight`, `settings.updateModelCatalog`, `resources.portConflicts`, `apikeys.test`, `scheduler.get`, `scrollback.exists`, `skills.getEnabledForSpawn`, `mcp.callTool`, `memory.updateRelevance/getContext/extract`, `messages.conversation/markAllRead/unreadCount`, `queue.get/updateStatus`, `qa-tests.get`, `fs-search.fuzzyFind/grep`, `indexer.projectStats/startIndexing/search`
+- Recovery half-wiring: `invalidatePane`/`getRecoveryToken` have no callers but `invalidReason` renders in WorkspacePane — decide: rewire or remove
 
 ---
 
