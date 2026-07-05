@@ -375,11 +375,24 @@ export const agentRouter = router({
       return enrichParallelRunForComparison(ctx.db, run);
     }),
 
+  /** T131 — promote & clean is the default: losers' worktrees + branches are
+   *  removed unless dirty (reported back, unset `clean` or pass `force` to
+   *  override). The winner is never touched — defer mode. */
   promoteParallelAgent: publicProcedure
-    .input(z.object({ runId: z.string(), agentId: z.string() }))
+    .input(
+      z.object({
+        runId: z.string(),
+        agentId: z.string(),
+        clean: z.boolean().default(true),
+        force: z.boolean().default(false),
+      }),
+    )
     .mutation(({ ctx, input }) => {
-      promoteParallelAgent(ctx.db, input.runId, input.agentId);
-      return { success: true };
+      const cleanup = promoteParallelAgent(ctx.db, input.runId, input.agentId, {
+        clean: input.clean,
+        force: input.force,
+      });
+      return { success: true, cleanup };
     }),
 
   cancelParallelRun: publicProcedure

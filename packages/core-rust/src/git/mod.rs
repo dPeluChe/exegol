@@ -195,6 +195,26 @@ pub fn remove_worktree(
   Ok(true)
 }
 
+/// Delete a local branch. Used by race mode (T131) to clean up loser
+/// branches after their worktree has already been removed. `force` maps to
+/// git2's `Branch::delete`, which does not check merge status itself — the
+/// caller is expected to have already confirmed the worktree/branch is safe
+/// to discard (e.g. no uncommitted changes).
+#[napi]
+pub fn delete_branch(repo_path: String, branch_name: String, _force: bool) -> Result<bool, Error> {
+  let repo = open_repo(&repo_path)?;
+
+  let mut branch = repo
+    .find_branch(&branch_name, git2::BranchType::Local)
+    .map_err(|e| Error::from_reason(format!("Branch '{branch_name}' not found: {e}")))?;
+
+  branch
+    .delete()
+    .map_err(|e| Error::from_reason(format!("Failed to delete branch '{branch_name}': {e}")))?;
+
+  Ok(true)
+}
+
 /// List all worktrees for a repository.
 #[napi]
 pub fn list_worktrees(repo_path: String) -> Result<Vec<WorktreeInfo>, Error> {
@@ -324,4 +344,48 @@ pub fn get_worktree_diff(worktree_path: String) -> Result<String, Error> {
     .map_err(|e| Error::from_reason(format!("Failed to format diff: {e}")))?;
 
   Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::fs;
+  use tempfile::TempDir;
+
+  fn init_repo_with_branch(branch_name: &str) -> TempDir {
+    let tmp = TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+    fs::write(tmp.path().join("a.txt"), "one\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("a.txt")).unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::now("Test", "test@local").unwrap();
+    let commit_oid = repo
+      .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+      .unwrap();
+    let commit = repo.find_commit(commit_oid).unwrap();
+    repo.branch(branch_name, &commit, false).unwrap();
+    tmp
+  }
+
+  #[test]
+  fn delete_branch_removes_local_branch() {
+    let tmp = init_repo_with_branch("feature/loser");
+    let path = tmp.path().to_string_lossy().into_owned();
+
+    let deleted = delete_branch(path.clone(), "feature/loser".into(), true).unwrap();
+    assert!(deleted);
+
+    let repo = open_repo(&path).unwrap();
+    assert!(repo.find_branch("feature/loser", git2::BranchType::Local).is_err());
+  }
+
+  #[test]
+  fn delete_branch_errors_on_unknown_branch() {
+    let tmp = init_repo_with_branch("feature/loser");
+    let path = tmp.path().to_string_lossy().into_owned();
+
+    assert!(delete_branch(path, "does-not-exist".into(), true).is_err());
+  }
 }
