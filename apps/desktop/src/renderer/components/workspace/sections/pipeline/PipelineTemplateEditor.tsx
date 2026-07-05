@@ -1,8 +1,8 @@
-import type { AgentProvider } from "@exegol/shared";
+import type { AgentProvider, EvaluatorStepDef } from "@exegol/shared";
 import { AGENT_ACCESS_MODES, PIPELINE_STEP_ROLES, type PipelineStepDef } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { GripVertical, Plus, Trash2, X } from "lucide-react";
+import { GripVertical, Plus, Scale, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../../contexts/ProjectContext";
 import {
@@ -10,6 +10,7 @@ import {
   useUpdatePipelineTemplate,
 } from "../../../../hooks/use-trpc-pipeline";
 import { trpcInvoke } from "../../../../lib/trpc-client";
+import { EvaluatorStepFields } from "./EvaluatorStepFields";
 
 function emptyStep(defaultCliType = "claude-code"): PipelineStepDef {
   return {
@@ -18,6 +19,10 @@ function emptyStep(defaultCliType = "claude-code"): PipelineStepDef {
     role: "implement",
     promptTemplate: "",
   };
+}
+
+function defaultEvaluator(): EvaluatorStepDef {
+  return { acceptanceCriteria: "" };
 }
 
 export function PipelineTemplateEditor({
@@ -142,109 +147,136 @@ export function PipelineTemplateEditor({
                     <GripVertical className="h-3 w-3 text-text-muted/40" />
                     <span className="text-[10px] font-medium text-text-muted">Step {i + 1}</span>
                   </div>
-                  {steps.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeStep(i)}
-                      className="text-text-muted hover:text-red-400"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center gap-1 text-[10px] text-text-muted">
+                      <input
+                        type="checkbox"
+                        checked={!!step.evaluator}
+                        onChange={(e) =>
+                          updateStep(i, {
+                            evaluator: e.target.checked ? defaultEvaluator() : undefined,
+                          })
+                        }
+                        className="h-3 w-3 rounded"
+                      />
+                      <Scale className="h-3 w-3" /> Evaluator gate
+                    </label>
+                    {steps.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeStep(i)}
+                        className="text-text-muted hover:text-red-400"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  <input
-                    type="text"
-                    value={step.label}
-                    onChange={(e) => updateStep(i, { label: e.target.value })}
-                    placeholder="Label"
-                    className="rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted/50 focus:border-accent focus:outline-none"
+                {step.evaluator ? (
+                  <EvaluatorStepFields
+                    step={step}
+                    stepIndex={i}
+                    totalSteps={steps.length}
+                    onLabelChange={(label) => updateStep(i, { label })}
+                    onChange={(evaluator) => updateStep(i, { evaluator })}
                   />
-                  <select
-                    value={step.cliType}
-                    onChange={(e) => updateStep(i, { cliType: e.target.value })}
-                    className="rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
-                  >
-                    {cliOptions.map((cli) => (
-                      <option key={cli} value={cli}>
-                        {cli}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={step.role}
-                    onChange={(e) =>
-                      updateStep(i, { role: e.target.value as PipelineStepDef["role"] })
-                    }
-                    className="rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
-                  >
-                    {PIPELINE_STEP_ROLES.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="mt-2 flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
-                    <input
-                      type="checkbox"
-                      checked={step.allowFailure ?? false}
-                      onChange={(e) => updateStep(i, { allowFailure: e.target.checked })}
-                      className="h-3 w-3 rounded"
-                    />
-                    Allow failure
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
-                    Mode:
-                    <select
-                      value={step.accessMode ?? "write"}
-                      onChange={(e) =>
-                        updateStep(i, {
-                          accessMode: e.target.value as PipelineStepDef["accessMode"],
-                        })
-                      }
-                      className="rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none"
-                    >
-                      {AGENT_ACCESS_MODES.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
-                    Loop back to:
-                    <select
-                      value={step.loopBackTo ?? -1}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        updateStep(i, { loopBackTo: val >= 0 ? val : undefined });
-                      }}
-                      className="rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none"
-                    >
-                      <option value={-1}>None</option>
-                      {steps.map((_, si) =>
-                        si !== i ? (
-                          // biome-ignore lint/suspicious/noArrayIndexKey: index is the value
-                          <option key={`loop-${si}`} value={si}>
-                            Step {si + 1}
+                ) : (
+                  <>
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        value={step.label}
+                        onChange={(e) => updateStep(i, { label: e.target.value })}
+                        placeholder="Label"
+                        className="rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted/50 focus:border-accent focus:outline-none"
+                      />
+                      <select
+                        value={step.cliType}
+                        onChange={(e) => updateStep(i, { cliType: e.target.value })}
+                        className="rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
+                      >
+                        {cliOptions.map((cli) => (
+                          <option key={cli} value={cli}>
+                            {cli}
                           </option>
-                        ) : null,
-                      )}
-                    </select>
-                  </label>
-                </div>
+                        ))}
+                      </select>
+                      <select
+                        value={step.role}
+                        onChange={(e) =>
+                          updateStep(i, { role: e.target.value as PipelineStepDef["role"] })
+                        }
+                        className="rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
+                      >
+                        {PIPELINE_STEP_ROLES.map((role) => (
+                          <option key={role} value={role}>
+                            {role}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                <textarea
-                  value={step.promptTemplate}
-                  onChange={(e) => updateStep(i, { promptTemplate: e.target.value })}
-                  placeholder="Custom prompt template (leave empty for role default). Variables: {{task}}, {{diff}}, {{previousOutput}}, {{iteration}}"
-                  className="mt-2 w-full rounded border border-border bg-bg-primary px-2 py-1.5 text-[10px] text-text-primary placeholder:text-text-muted/40 focus:border-accent focus:outline-none"
-                  rows={2}
-                />
+                    <div className="mt-2 flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
+                        <input
+                          type="checkbox"
+                          checked={step.allowFailure ?? false}
+                          onChange={(e) => updateStep(i, { allowFailure: e.target.checked })}
+                          className="h-3 w-3 rounded"
+                        />
+                        Allow failure
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
+                        Mode:
+                        <select
+                          value={step.accessMode ?? "write"}
+                          onChange={(e) =>
+                            updateStep(i, {
+                              accessMode: e.target.value as PipelineStepDef["accessMode"],
+                            })
+                          }
+                          className="rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none"
+                        >
+                          {AGENT_ACCESS_MODES.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[10px] text-text-muted">
+                        Loop back to:
+                        <select
+                          value={step.loopBackTo ?? -1}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            updateStep(i, { loopBackTo: val >= 0 ? val : undefined });
+                          }}
+                          className="rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none"
+                        >
+                          <option value={-1}>None</option>
+                          {steps.map((_, si) =>
+                            si !== i ? (
+                              // biome-ignore lint/suspicious/noArrayIndexKey: index is the value
+                              <option key={`loop-${si}`} value={si}>
+                                Step {si + 1}
+                              </option>
+                            ) : null,
+                          )}
+                        </select>
+                      </label>
+                    </div>
+
+                    <textarea
+                      value={step.promptTemplate}
+                      onChange={(e) => updateStep(i, { promptTemplate: e.target.value })}
+                      placeholder="Custom prompt template (leave empty for role default). Variables: {{task}}, {{diff}}, {{previousOutput}}, {{iteration}}, {{retryFeedback}}"
+                      className="mt-2 w-full rounded border border-border bg-bg-primary px-2 py-1.5 text-[10px] text-text-primary placeholder:text-text-muted/40 focus:border-accent focus:outline-none"
+                      rows={2}
+                    />
+                  </>
+                )}
               </div>
             ))}
           </div>

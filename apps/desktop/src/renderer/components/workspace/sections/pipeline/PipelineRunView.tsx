@@ -250,10 +250,18 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-text-primary">{step.label}</span>
-                      <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-text-muted">
-                        {step.cliType}
-                      </span>
-                      <span className="text-[9px] text-text-muted">{step.role}</span>
+                      {step.evaluator ? (
+                        <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-text-muted">
+                          evaluator gate
+                        </span>
+                      ) : (
+                        <>
+                          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[9px] text-text-muted">
+                            {step.cliType}
+                          </span>
+                          <span className="text-[9px] text-text-muted">{step.role}</span>
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {result?.agentId && (
@@ -294,6 +302,37 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                   {isActive && result?.agentId && (
                     <div className="mt-2 h-64 overflow-hidden rounded border border-border">
                       <PipelineTerminal agentId={result.agentId} />
+                    </div>
+                  )}
+
+                  {/* T88v2 — evaluator gate verdict */}
+                  {result?.verdict && (
+                    <div className="mt-2 rounded border border-border bg-bg-primary p-2">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.5 text-[9px] font-medium",
+                            result.verdict.decision === "ship" && "bg-green-500/15 text-green-400",
+                            result.verdict.decision === "hold" &&
+                              "bg-yellow-500/15 text-yellow-400",
+                            result.verdict.decision === "retry" && "bg-red-500/15 text-red-400",
+                          )}
+                        >
+                          {result.verdict.decision}
+                        </span>
+                        <span className="text-[9px] text-text-muted">
+                          avg {result.verdict.avgScore.toFixed(2)} · scores [
+                          {result.verdict.scores.map((s) => s.toFixed(2)).join(", ")}]
+                        </span>
+                        <span className="text-[9px] text-text-muted">
+                          ${result.verdict.costUsd.toFixed(4)}
+                        </span>
+                      </div>
+                      {result.verdict.feedback && (
+                        <p className="mt-1 text-[10px] text-text-secondary">
+                          {result.verdict.feedback}
+                        </p>
+                      )}
                     </div>
                   )}
 
