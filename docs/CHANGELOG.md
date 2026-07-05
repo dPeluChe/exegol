@@ -7,7 +7,59 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — Wave 1+2 stack optimizations, parallel multi-agent, settings window
+## [Unreleased] — Wave 2: signal, knowledge, evidence, undo, surface (2026-07)
+
+17 tasks landed across 4 parallel worktree groups (PRs #40–#50, each review-fixed
+before merge). Source: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md` +
+`docs/TASK_COMPLETED/2607.md`.
+
+### Added
+
+- **Deterministic agent status** (T123). Claude Code hooks emit OSC-777 signals
+  into the PTY (via `/dev/tty`); a byte-level FSM (Rust + JS mirror) turns them
+  into precise `working / attention / turn` events. Output scraping remains the
+  fallback for other CLIs.
+- **Desktop notifications + Attention Inbox** (T124/T141). "Agent needs your
+  attention" (with the pending question), finished/failed alerts, TitleBar
+  attention queue with unread badges and `Cmd+J` jump-to-agent.
+- **Hybrid memory search** (T125). FTS5 keyword ranking fused with Ollama
+  embeddings via Reciprocal Rank Fusion; degrades gracefully to keyword-only.
+- **Memory salience v2** (T126). Facts decay with a 30-day half-life, reinforce
+  on re-observation, and supersede (never overwrite) on contradiction.
+- **Progressive-disclosure skills** (T127). Agents get name+description pointers
+  (~100 tokens/skill) and read the full SKILL.md on demand; `always: true`
+  frontmatter inlines critical skills.
+- **Project Knowledge Node** (T140). Opt-in `.exegol/knowledge/` per repo:
+  committed PROJECT.md brief, gitignored auto-DIGEST.md, MEMORY.md bridge
+  synced from the memory store, and a managed pointer block in AGENTS.md/CLAUDE.md.
+- **Exegol MCP server** (T145). Agents query/update memory and knowledge
+  mid-session (`memory_search` / `memory_save` / `knowledge_get`) over a
+  token-authenticated local socket; read/plan agents are write-gated server-side.
+- **Oplog v2 — per-turn undo** (T129). Git-tree snapshots on a hidden ref per
+  pipeline step, with agent attribution, safety snapshot before every restore,
+  and cross-worktree restore protection.
+- **Pipeline Evidence** (T130). Per-step score badge, AI diff summary, diff
+  collapsible, and a one-click markdown run report for PR descriptions.
+- **Evaluator gate** (T88v2). Pipeline steps can gate on N two-pass judge calls
+  with a score distribution and ship/hold/retry policy; retry feedback loops
+  back into the next attempt.
+- **Race mode polish** (T131). "Promote & Clean" removes loser worktrees and
+  branches safely: dirty losers prompt, live agents refuse cleanup.
+- **First-run onboarding wizard + Doctor** (T148). CLI detection (login-shell
+  PATH), API key setup, first project — reusable health check in Settings.
+- **Resource hardening** (T143). Per-agent memory metrics in Monitor, xterm
+  disposal fixes, and a global ring-buffer cap with real LRU eviction to disk.
+- **Cost dashboard + budgets** (T147). Cost per agent/run/day, editable price
+  table, and 80%/100% budget alerts through the notification bus.
+- **Project groups** (T146). Sidebar folders with color/icon/collapse and drag
+  & drop — purely visual, paths unchanged.
+
+### Database
+
+- 3 new tables (`budgets`, `budget_alerts`, `project_groups`) and 3 new memory
+  columns via per-group migration sets (`db/migration-sets/`).
+
+## [Unreleased — May 2026 batch] — Wave 1 stack optimizations, parallel multi-agent, settings window
 
 Big batch of work landed in May 2026 across 5 parallel worktrees (Wave 1+2)
 plus T120 settings window. Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` +
