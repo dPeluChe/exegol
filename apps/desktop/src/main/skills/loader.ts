@@ -117,6 +117,7 @@ export function parseSkillContent(
 
   const allowedTools = parseCommaSeparated(meta["allowed-tools"]);
   const available = checkRequirements(requires);
+  const always = meta.always?.trim().toLowerCase() === "true";
 
   return {
     name,
@@ -129,6 +130,7 @@ export function parseSkillContent(
     filePath,
     scope,
     available,
+    always,
   };
 }
 
