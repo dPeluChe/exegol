@@ -1,5 +1,8 @@
+import { cosineSimilarity } from "@exegol/shared";
 import type { SearchEntityType, SearchResult } from "@exegol/shared";
 import type Database from "libsql";
+import type { OllamaConfig } from "../../indexer/ollama-client";
+import { generateEmbedding, generateEmbeddingsBatch } from "../../indexer/ollama-client";
 
 export type { SearchEntityType, SearchResult };
 
@@ -97,53 +100,47 @@ export function isIndexed(db: Database.Database, entityId: string): boolean {
   return row !== undefined;
 }
 
-/** Full-text search with BM25 ranking and snippet extraction. */
+/**
+ * Full-text search with BM25 ranking and snippet extraction.
+ * Column weights (title=4.0, body=1.0) — qmd's hybridQuery weights title/body/path
+ * as (4.0, 1.0, 1.5); our index has no `path` column so it's dropped.
+ */
 export function search(
   db: Database.Database,
   query: string,
-  opts?: { projectId?: string; limit?: number },
+  opts?: { projectId?: string; entityType?: SearchEntityType; limit?: number },
 ): SearchResult[] {
   const ftsQuery = buildFts5Query(query);
   if (!ftsQuery) return [];
 
   const limit = opts?.limit ?? 50;
-
-  let sql: string;
+  const conditions = ["search_index MATCH ?"];
   const params: (string | number)[] = [ftsQuery];
 
   if (opts?.projectId) {
-    sql = `
-      SELECT
-        title,
-        snippet(search_index, 1, '<mark>', '</mark>', '...', 40) as snippet,
-        entity_type,
-        entity_id,
-        project_id,
-        agent_id,
-        bm25(search_index, 5.0, 1.0) as score
-      FROM search_index
-      WHERE search_index MATCH ? AND project_id = ?
-      ORDER BY score
-      LIMIT ?
-    `;
-    params.push(opts.projectId, limit);
-  } else {
-    sql = `
-      SELECT
-        title,
-        snippet(search_index, 1, '<mark>', '</mark>', '...', 40) as snippet,
-        entity_type,
-        entity_id,
-        project_id,
-        agent_id,
-        bm25(search_index, 5.0, 1.0) as score
-      FROM search_index
-      WHERE search_index MATCH ?
-      ORDER BY score
-      LIMIT ?
-    `;
-    params.push(limit);
+    conditions.push("project_id = ?");
+    params.push(opts.projectId);
   }
+  if (opts?.entityType) {
+    conditions.push("entity_type = ?");
+    params.push(opts.entityType);
+  }
+  params.push(limit);
+
+  const sql = `
+    SELECT
+      title,
+      snippet(search_index, 1, '<mark>', '</mark>', '...', 40) as snippet,
+      entity_type,
+      entity_id,
+      project_id,
+      agent_id,
+      bm25(search_index, 4.0, 1.0) as score
+    FROM search_index
+    WHERE ${conditions.join(" AND ")}
+    ORDER BY score
+    LIMIT ?
+  `;
 
   const rows = db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
 
@@ -156,6 +153,125 @@ export function search(
     agentId: (row.agent_id as string) || null,
     score: Math.abs(row.score as number),
   }));
+}
+
+// ─── Hybrid RRF search (T125) ────────────────────────────────────────────────
+//
+// Fuses the FTS5 keyword list with an Ollama-embedding similarity pass using
+// Reciprocal Rank Fusion (qmd's hybridQuery/blend formula):
+//   score += weight / (60 + rank + 1), +0.05 for rank 0, +0.02 for rank 1
+// The keyword list carries weight 2.0 (it's the literal/"original query" match,
+// qmd's convention for boosting exact matches); the vector list carries 1.0.
+// When the top BM25 hit is decisive (|score| above the threshold), the vector
+// pass — and its Ollama round-trips — is skipped entirely.
+
+const RRF_K = 60;
+const KEYWORD_WEIGHT = 2.0;
+const VECTOR_WEIGHT = 1.0;
+const RANK0_BONUS = 0.05;
+const RANK1_BONUS = 0.02;
+const STRONG_BM25_THRESHOLD = 8;
+/** Cap on how many top keyword candidates get embedded for the vector pass. */
+const VECTOR_CANDIDATE_CAP = 25;
+
+interface RankedItem {
+  entityId: string;
+  rank: number;
+}
+
+function rrfScoreFor(rank: number, weight: number): number {
+  let score = weight / (RRF_K + rank + 1);
+  if (rank === 0) score += RANK0_BONUS;
+  else if (rank === 1) score += RANK1_BONUS;
+  return score;
+}
+
+/** Reciprocal Rank Fusion across weighted ranked lists. */
+function fuseRankedLists(lists: Array<{ items: RankedItem[]; weight: number }>): Map<string, number> {
+  const fused = new Map<string, number>();
+  for (const { items, weight } of lists) {
+    for (const item of items) {
+      fused.set(item.entityId, (fused.get(item.entityId) ?? 0) + rrfScoreFor(item.rank, weight));
+    }
+  }
+  return fused;
+}
+
+/** Embed the query + a bounded set of keyword candidates, rank by cosine similarity. */
+async function rankByEmbeddingSimilarity(
+  query: string,
+  candidates: SearchResult[],
+  ollamaConfig: OllamaConfig,
+): Promise<RankedItem[]> {
+  const queryEmbedding = await generateEmbedding(query, ollamaConfig);
+  if (!queryEmbedding) return [];
+
+  const pool = candidates.slice(0, VECTOR_CANDIDATE_CAP);
+  const texts = pool.map((c) => `${c.title}\n${c.snippet.replace(/<\/?mark>/g, "")}`);
+  const embeddings = await generateEmbeddingsBatch(texts, ollamaConfig);
+
+  const scored: Array<{ entityId: string; sim: number }> = [];
+  pool.forEach((candidate, i) => {
+    const embedding = embeddings[i];
+    if (!embedding) return;
+    scored.push({
+      entityId: candidate.entityId,
+      sim: cosineSimilarity(queryEmbedding, new Float32Array(embedding)),
+    });
+  });
+
+  scored.sort((a, b) => b.sim - a.sim);
+  return scored.map((s, i) => ({ entityId: s.entityId, rank: i }));
+}
+
+export interface HybridSearchOptions {
+  projectId?: string;
+  entityType?: SearchEntityType;
+  limit?: number;
+  /** Ollama config for the vector pass. Omit to run keyword-only (FTS5 stays authoritative). */
+  ollamaConfig?: OllamaConfig;
+}
+
+/**
+ * Hybrid search: FTS5 keyword ranking fused with Ollama-embedding similarity via RRF.
+ * Falls back to pure keyword ranking when no Ollama config is given, the top BM25
+ * hit is already decisive, or Ollama is unreachable (generateEmbedding resolves null).
+ */
+export async function hybridSearch(
+  db: Database.Database,
+  query: string,
+  opts?: HybridSearchOptions,
+): Promise<SearchResult[]> {
+  const limit = opts?.limit ?? 50;
+  const keywordResults = search(db, query, {
+    projectId: opts?.projectId,
+    entityType: opts?.entityType,
+    limit: Math.max(limit, VECTOR_CANDIDATE_CAP),
+  });
+  if (keywordResults.length === 0) return [];
+
+  const topBm25 = keywordResults[0]?.score ?? 0;
+  const keywordList: RankedItem[] = keywordResults.map((r, i) => ({ entityId: r.entityId, rank: i }));
+
+  let vectorList: RankedItem[] = [];
+  if (opts?.ollamaConfig && topBm25 < STRONG_BM25_THRESHOLD) {
+    vectorList = await rankByEmbeddingSimilarity(query, keywordResults, opts.ollamaConfig);
+  }
+
+  const fused = fuseRankedLists([
+    { items: keywordList, weight: KEYWORD_WEIGHT },
+    { items: vectorList, weight: VECTOR_WEIGHT },
+  ]);
+
+  const byId = new Map(keywordResults.map((r) => [r.entityId, r]));
+  return [...fused.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([entityId, score]) => {
+      const base = byId.get(entityId);
+      return base ? { ...base, score } : null;
+    })
+    .filter((r): r is SearchResult => r !== null);
 }
 
 /**

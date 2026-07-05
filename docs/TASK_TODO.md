@@ -379,23 +379,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T125 — Hybrid Search RRF (FTS5 + Vectors) `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S | **Source**: qmd `src/store.ts` (RRF line 3982, hybridQuery 4731, blend 4957)
-
-**Why**
-- `memory/store.ts` uses LIKE while FTS5 sits unused in the schema; Ollama embeddings exist (T100). Connect existing pieces.
-
-**Scope**
-- FTS5 query path with column weights `bm25(fts, 1.5, 4.0, 1.0)` (path, title, body)
-- RRF fusion: `score += weight / (60 + rank + 1)`; original-query lists ×2.0; top-rank bonus +0.05/+0.02
-- Strong-BM25-signal probe → skip expensive vector path when keyword match is decisive
-- Apply to memory recall + global search section
-
-**Likely files**
-- `apps/desktop/src/main/memory/store.ts`, `apps/desktop/src/main/db/queries/search.ts`
-
----
-
 ### T126 — Memory Salience v2 (Decay + Reinforcement + Supersession) `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S | **Source**: memU `src/memu/vector.py` (salience 25-62), schema `reinforcement_count`
 

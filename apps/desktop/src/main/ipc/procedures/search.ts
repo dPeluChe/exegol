@@ -1,23 +1,32 @@
+import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
-import { indexScrollback, rebuildIndex, search } from "../../db/queries/search";
+import { hybridSearch, indexScrollback, rebuildIndex } from "../../db/queries/search";
+import type { OllamaConfig } from "../../indexer/ollama-client";
 import { publicProcedure, router } from "../trpc";
 import { getScrollbackPath } from "./scrollback";
 
 export const searchRouter = router({
-  /** Full-text search across indexed content. */
+  /** Hybrid (FTS5 + Ollama-vector) search across indexed content (T125). */
   query: publicProcedure
     .input(
       z.object({
         query: z.string().min(1).max(500),
         projectId: z.string().optional(),
         limit: z.number().min(1).max(200).optional(),
+        ollamaUrl: z.string().optional(),
+        ollamaModel: z.string().optional(),
       }),
     )
     .query(({ input, ctx }) => {
-      return search(ctx.db, input.query, {
+      const ollamaConfig: OllamaConfig = {
+        url: input.ollamaUrl ?? DEFAULT_SETTINGS.ollamaUrl,
+        model: input.ollamaModel ?? DEFAULT_SETTINGS.ollamaModel,
+      };
+      return hybridSearch(ctx.db, input.query, {
         projectId: input.projectId,
         limit: input.limit,
+        ollamaConfig,
       });
     }),
 

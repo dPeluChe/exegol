@@ -9,6 +9,10 @@ import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import { stripAnsi } from "../agents/status-parser";
 import { nanoid } from "../db/queries/helpers";
+import { hybridSearch, indexEntry, removeFromIndex } from "../db/queries/search";
+import type { OllamaConfig } from "../indexer/ollama-client";
+
+const memorySearchEntityId = (id: string) => `memory:${id}`;
 
 export type { MemoryCategory, MemoryCreate, MemoryEntry };
 export { MEMORY_CATEGORIES };
@@ -59,6 +63,15 @@ export function createMemory(db: Database.Database, data: MemoryCreate): MemoryE
     now,
   );
 
+  indexEntry(db, {
+    title: data.content.slice(0, 80),
+    body: data.content,
+    entityType: "memory",
+    entityId: memorySearchEntityId(id),
+    projectId: data.projectId,
+    agentId: data.sourceAgentId,
+  });
+
   return {
     id,
     projectId: data.projectId,
@@ -74,6 +87,7 @@ export function createMemory(db: Database.Database, data: MemoryCreate): MemoryE
 
 export function deleteMemory(db: Database.Database, id: string): void {
   db.prepare("DELETE FROM memories WHERE id = ?").run(id);
+  removeFromIndex(db, memorySearchEntityId(id));
 }
 
 export function updateMemoryRelevance(
@@ -86,20 +100,43 @@ export function updateMemoryRelevance(
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
-export function searchMemories(
+/**
+ * Hybrid RRF search over memories (T125): FTS5 keyword ranking fused with
+ * Ollama-embedding similarity when `ollamaConfig` is given. Falls back to a
+ * LIKE scan when the query has no usable FTS5 tokens (e.g. punctuation-only).
+ */
+export async function searchMemories(
   db: Database.Database,
   projectId: string,
   query: string,
-): MemoryEntry[] {
-  // Simple keyword search using LIKE (FTS5 can be added in T23)
-  const pattern = `%${query}%`;
+  ollamaConfig?: OllamaConfig,
+): Promise<MemoryEntry[]> {
+  const hits = await hybridSearch(db, query, {
+    projectId,
+    entityType: "memory",
+    limit: 20,
+    ollamaConfig,
+  });
+
+  if (hits.length === 0) {
+    const pattern = `%${query}%`;
+    const rows = db
+      .prepare(
+        `SELECT * FROM memories WHERE project_id = ? AND content LIKE ?
+         ORDER BY relevance_score DESC LIMIT 20`,
+      )
+      .all(projectId, pattern);
+    return (rows as Record<string, unknown>[]).map(mapMemoryRow);
+  }
+
+  const ids = hits.map((h) => h.entityId.replace(/^memory:/, ""));
+  const placeholders = ids.map(() => "?").join(",");
   const rows = db
-    .prepare(
-      `SELECT * FROM memories WHERE project_id = ? AND content LIKE ?
-       ORDER BY relevance_score DESC LIMIT 20`,
-    )
-    .all(projectId, pattern);
-  return (rows as Record<string, unknown>[]).map(mapMemoryRow);
+    .prepare(`SELECT * FROM memories WHERE id IN (${placeholders})`)
+    .all(...ids) as Record<string, unknown>[];
+
+  const byId = new Map(rows.map((r) => [r.id as string, mapMemoryRow(r)]));
+  return ids.map((id) => byId.get(id)).filter((m): m is MemoryEntry => m !== undefined);
 }
 
 // ─── Retrieval for injection ─────────────────────────────────────────────────
