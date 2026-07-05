@@ -51,6 +51,10 @@ export type PipelineStepResult = {
   diffSummary: string;
   startedAt: number | null;
   completedAt: number | null;
+  /** T130 — AI-generated one-paragraph summary of diffSummary (Haiku, best-effort). */
+  aiSummary?: string;
+  /** T130 — the step agent's overall score (agent_scores.overall_score), if scored yet. */
+  score?: number | null;
 };
 
 // ─── Pipeline Template ─────────────────────────────────────────────────────

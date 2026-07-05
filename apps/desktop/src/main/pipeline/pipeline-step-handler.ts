@@ -4,6 +4,7 @@ import { getAgentManager } from "../agents/manager";
 import { getPipelineRun, updatePipelineRun } from "../db/queries";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
+import { attachStepScore, summarizeStepDiff } from "./evidence";
 import { captureGitDiff, now, readScrollbackSummary } from "./pipeline-helpers";
 
 export interface StepHandlerDeps {
@@ -43,6 +44,16 @@ export async function handleStepComplete(
     run.worktreePath ? captureGitDiff(run.worktreePath) : Promise.resolve(""),
   ]);
 
+  const stepDef = template.steps[stepIndex];
+  // T130 — evidence: AI diff summary + agent score. Both are best-effort
+  // (never throw) and must not delay stepping on a failed step.
+  const [aiSummary, score] = await Promise.all([
+    exitCode === 0
+      ? summarizeStepDiff(db, diffSummary, stepDef?.label ?? "step")
+      : Promise.resolve(""),
+    Promise.resolve(attachStepScore(db, agentId)),
+  ]);
+
   const updatedResults = run.stepResults.map((r) =>
     r.agentId === agentId
       ? {
@@ -51,12 +62,13 @@ export async function handleStepComplete(
           exitCode,
           outputSummary,
           diffSummary,
+          aiSummary,
+          score,
           completedAt: now(),
         }
       : r,
   );
 
-  const stepDef = template.steps[stepIndex];
   const success = exitCode === 0;
 
   if (success) {
