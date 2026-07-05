@@ -365,3 +365,13 @@ export function stripAnsi(str: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence stripping
   return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
 }
+
+/**
+ * Strip OSC sequences (ESC ] ... BEL/ST) — stripAnsi's regex only removes
+ * ESC + one char for non-CSI, leaving OSC payloads (e.g. our own
+ * `777;notify;Exegol;...`) behind as literal text in scrollback tails.
+ */
+export function stripOscSequences(str: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional OSC sequence stripping
+  return str.replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)?/g, "");
+}

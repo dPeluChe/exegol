@@ -25,7 +25,13 @@ export function useTerminalUrlDetector(
   const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      // Agent stopped/pane changed: a stale "Open preview" chip would point
+      // at a dev server that is likely dead.
+      seenRef.current = new Set();
+      setUrl(null);
+      return;
+    }
     seenRef.current = new Set();
     setUrl(null);
 

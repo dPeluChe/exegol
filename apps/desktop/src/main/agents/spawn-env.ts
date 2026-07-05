@@ -68,11 +68,15 @@ export function deriveStatusFromSignal(event: string): {
     case "turn_ended":
       return { turnEnded: now };
     case "attention":
-    case "finished":
-      // The CLI process is still alive (interactive shell) — "finished" here
-      // means the agent's turn ended and it's back at the prompt awaiting the
-      // user, not process exit. Actual exit is handled by finalizeAgentStatus.
+      // The Notification hook fires when the CLI genuinely needs the user
+      // (permission prompt, question) — the only per-turn attention signal.
       return { status: "waiting_input", turnEnded: now, needsAttention: true };
+    case "finished":
+      // Stop fires at the end of EVERY assistant turn in an interactive
+      // session — it is a turn boundary, not an attention event. Notifying
+      // here would ping the user once per reply (and double-notify on exit,
+      // where finalizeAgentStatus already emits agent:finished).
+      return { status: "waiting_input", turnEnded: now };
     case "exited":
       return {};
     default:
@@ -84,9 +88,14 @@ export function deriveStatusFromSignal(event: string): {
 
 const HOOKS_DIR = join(homedir(), ".exegol", "hooks");
 
-/** Shell command a Claude Code hook runs to emit an OSC-777 notify signal. */
+/** Shell command a Claude Code hook runs to emit an OSC-777 notify signal.
+ *  Written to /dev/tty, NOT stdout: Claude Code captures hook stdout (it only
+ *  surfaces it in transcript mode), so bytes on stdout never reach the PTY
+ *  stream our FSM scans. /dev/tty is the controlling terminal = our PTY.
+ *  Falls back to stdout for environments without a controlling tty. */
 function oscNotifyCommand(agentId: string, event: AgentSignalType): string {
-  return `printf '\\033]777;notify;Exegol;${agentId};${event}\\007'`;
+  const seq = `\\033]777;notify;Exegol;${agentId};${event}\\007`;
+  return `printf '${seq}' > /dev/tty 2>/dev/null || printf '${seq}'`;
 }
 
 /**

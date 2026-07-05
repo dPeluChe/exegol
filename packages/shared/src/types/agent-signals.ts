@@ -6,14 +6,23 @@
  */
 
 /** Deterministic agent lifecycle signals (T123: hooks + OSC 777 FSM). */
-export type AgentSignalType =
-  | "started"
-  | "working"
-  | "attention" // agent is waiting for user input/approval
-  | "turn_started"
-  | "turn_ended"
-  | "finished"
-  | "exited";
+export const AGENT_SIGNAL_TYPES = [
+  "started",
+  "working",
+  "attention", // agent is waiting for user input/approval
+  "turn_started",
+  "turn_ended",
+  "finished",
+  "exited",
+] as const;
+
+export type AgentSignalType = (typeof AGENT_SIGNAL_TYPES)[number];
+
+/** Boundary validator: PTY-derived strings must be whitelisted before they
+ *  flow through the contract as typed AgentSignalEvents. */
+export function isKnownSignalType(value: string): value is AgentSignalType {
+  return (AGENT_SIGNAL_TYPES as readonly string[]).includes(value);
+}
 
 export interface AgentSignalEvent {
   agentId: string;

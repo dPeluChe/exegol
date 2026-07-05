@@ -263,7 +263,10 @@ export function buildPtyInvocation(
     // T123: deterministic status via Claude Code native hooks (Stop/Notification/
     // PreToolUse) emitting OSC-777 notify signals into the PTY stream. Other
     // providers fall back to the scraped-output parser (source: "parser").
-    if (agent.cliType === "claude-code" && !config.resumeSession) {
+    // Resumed sessions get hooks too — long-lived sessions are exactly the
+    // ones that need deterministic status, and --settings composes with
+    // --resume (guard against a stored resume_command that already has one).
+    if (agent.cliType === "claude-code" && !fullCommand.includes("--settings")) {
       const hooksPath = buildClaudeCodeHooksFile(agent.id);
       if (hooksPath) {
         fullCommand = `${fullCommand} --settings ${hooksPath}`;
