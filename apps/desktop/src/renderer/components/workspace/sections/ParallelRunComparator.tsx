@@ -37,6 +37,7 @@ export function ParallelRunComparator({ runId, onBack }: ParallelRunComparatorPr
     agentId: string;
     dirty: LoserCleanupResult[];
   } | null>(null);
+  const [cleanupErrors, setCleanupErrors] = useState<LoserCleanupResult[]>([]);
 
   const promote = useMutation({
     mutationFn: ({ agentId, force }: { agentId: string; force?: boolean }) =>
@@ -51,6 +52,9 @@ export function ParallelRunComparator({ runId, onBack }: ParallelRunComparatorPr
       if (dirty.length > 0 && !variables.force) {
         setDirtyPrompt({ agentId: variables.agentId, dirty });
       }
+      // Failed cleanups (live agent, locked worktree, missing native module)
+      // must be visible — silently leaking worktrees is the bug T131 fixes.
+      setCleanupErrors(result.cleanup.filter((c) => c.error));
     },
   });
 
@@ -79,6 +83,12 @@ export function ParallelRunComparator({ runId, onBack }: ParallelRunComparatorPr
   return (
     <div className="flex h-full flex-col">
       <ComparatorHeader run={run} onBack={onBack} />
+      {cleanupErrors.length > 0 && (
+        <div className="border-b border-border bg-amber-500/10 px-4 py-2 text-[11px] text-amber-400">
+          {cleanupErrors.length} loser worktree(s) could not be cleaned:{" "}
+          {cleanupErrors.map((c) => `${c.branchName ?? c.agentId}: ${c.error}`).join(" · ")}
+        </div>
+      )}
       <div className="flex-1 overflow-auto p-4">
         {columns.length === 0 ? (
           <EmptyState

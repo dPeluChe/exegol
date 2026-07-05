@@ -201,12 +201,33 @@ pub fn remove_worktree(
 /// caller is expected to have already confirmed the worktree/branch is safe
 /// to discard (e.g. no uncommitted changes).
 #[napi]
-pub fn delete_branch(repo_path: String, branch_name: String, _force: bool) -> Result<bool, Error> {
+pub fn delete_branch(repo_path: String, branch_name: String, force: bool) -> Result<bool, Error> {
   let repo = open_repo(&repo_path)?;
 
   let mut branch = repo
     .find_branch(&branch_name, git2::BranchType::Local)
     .map_err(|e| Error::from_reason(format!("Branch '{branch_name}' not found: {e}")))?;
+
+  // git2's Branch::delete never checks merge status (always `-D` semantics).
+  // Honor force=false with `-d` semantics: refuse when the branch tip is not
+  // reachable from HEAD — its commits would be silently orphaned.
+  if !force {
+    let tip = branch
+      .get()
+      .target()
+      .ok_or_else(|| Error::from_reason(format!("Branch '{branch_name}' has no target")))?;
+    let head = repo
+      .head()
+      .ok()
+      .and_then(|h| h.target())
+      .ok_or_else(|| Error::from_reason("Failed to resolve HEAD".to_string()))?;
+    let merged = repo.graph_descendant_of(head, tip).unwrap_or(false) || head == tip;
+    if !merged {
+      return Err(Error::from_reason(format!(
+        "Branch '{branch_name}' is not merged into HEAD — pass force=true to delete anyway"
+      )));
+    }
+  }
 
   branch
     .delete()
