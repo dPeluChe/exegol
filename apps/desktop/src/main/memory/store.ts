@@ -12,6 +12,7 @@ import { nanoid } from "../db/queries/helpers";
 import { hybridSearch, indexEntries, indexEntry, removeFromIndex } from "../db/queries/search";
 import type { OllamaConfig } from "../indexer/ollama-client";
 import { logger } from "../lib/logger";
+import { classifyObservation, computeSalience } from "./salience";
 
 const memorySearchEntityId = (id: string) => `memory:${id}`;
 
@@ -68,17 +69,24 @@ function mapMemoryRow(row: Record<string, unknown>): MemoryEntry {
     accessCount: (row.access_count as number) ?? 0,
     createdAt: row.created_at as number,
     lastAccessedAt: (row.last_accessed_at as number) ?? (row.created_at as number),
+    reinforcementCount: (row.reinforcement_count as number) ?? 1,
+    lastReinforcedAt: (row.last_reinforced_at as number) ?? (row.created_at as number),
+    supersededBy: (row.superseded_by as string) ?? null,
   };
 }
 
 // ─── CRUD ────────────────────────────────────────────────────────────────────
 
-export function listMemories(db: Database.Database, projectId: string): MemoryEntry[] {
-  const rows = db
-    .prepare(
-      "SELECT * FROM memories WHERE project_id = ? ORDER BY relevance_score DESC, last_accessed_at DESC",
-    )
-    .all(projectId);
+export function listMemories(
+  db: Database.Database,
+  projectId: string,
+  opts?: { includeSuperseded?: boolean },
+): MemoryEntry[] {
+  const sql = opts?.includeSuperseded
+    ? "SELECT * FROM memories WHERE project_id = ? ORDER BY relevance_score DESC, last_accessed_at DESC"
+    : `SELECT * FROM memories WHERE project_id = ? AND superseded_by IS NULL
+       ORDER BY relevance_score DESC, last_accessed_at DESC`;
+  const rows = db.prepare(sql).all(projectId);
   return (rows as Record<string, unknown>[]).map(mapMemoryRow);
 }
 
@@ -88,8 +96,10 @@ export function createMemory(db: Database.Database, data: MemoryCreate): MemoryE
   const score = data.relevanceScore ?? 0.5;
 
   db.prepare(
-    `INSERT INTO memories (id, project_id, category, content, source_agent_id, relevance_score, access_count, created_at, last_accessed_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+    `INSERT INTO memories
+       (id, project_id, category, content, source_agent_id, relevance_score,
+        access_count, created_at, last_accessed_at, reinforcement_count, last_reinforced_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 1, ?)`,
   ).run(
     id,
     data.projectId,
@@ -97,6 +107,7 @@ export function createMemory(db: Database.Database, data: MemoryCreate): MemoryE
     data.content,
     data.sourceAgentId ?? null,
     score,
+    now,
     now,
     now,
   );
@@ -120,6 +131,9 @@ export function createMemory(db: Database.Database, data: MemoryCreate): MemoryE
     accessCount: 0,
     createdAt: now,
     lastAccessedAt: now,
+    reinforcementCount: 1,
+    lastReinforcedAt: now,
+    supersededBy: null,
   };
 }
 
@@ -134,6 +148,60 @@ export function updateMemoryRelevance(
   relevanceScore: number,
 ): void {
   db.prepare("UPDATE memories SET relevance_score = ? WHERE id = ?").run(relevanceScore, id);
+}
+
+// ─── Reinforcement + supersession (T126) ────────────────────────────────────
+
+/** The same fact was re-observed: bump reinforcement_count, never duplicate. */
+export function reinforceMemory(db: Database.Database, id: string): void {
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare(
+    `UPDATE memories SET reinforcement_count = reinforcement_count + 1, last_reinforced_at = ?
+     WHERE id = ?`,
+  ).run(now, id);
+}
+
+/** A contradicting/updated fact: insert the new row, mark the old one superseded. Never overwrites. */
+export function supersedeMemory(
+  db: Database.Database,
+  oldId: string,
+  data: MemoryCreate,
+): MemoryEntry {
+  // Transactional: a crash between INSERT and UPDATE must not leave both
+  // rows active (duplicate near-identical facts injected into agents).
+  const run = db.transaction(() => {
+    const created = createMemory(db, data);
+    db.prepare("UPDATE memories SET superseded_by = ? WHERE id = ?").run(created.id, oldId);
+    return created;
+  });
+  const created = run();
+  // Deindex the superseded row so hybrid search stops surfacing it.
+  removeFromIndex(db, memorySearchEntityId(oldId));
+  return created;
+}
+
+/**
+ * Record an observed fact, deciding among reinforce / supersede / create by
+ * comparing it against active (non-superseded) memories in the same project
+ * + category. Returns the id of the row that now represents this fact.
+ */
+export function observeMemory(db: Database.Database, data: MemoryCreate): string {
+  const candidates = db
+    .prepare(
+      "SELECT id, content FROM memories WHERE project_id = ? AND category = ? AND superseded_by IS NULL",
+    )
+    .all(data.projectId, data.category) as Array<{ id: string; content: string }>;
+
+  const decision = classifyObservation(data.content, candidates);
+  switch (decision.action) {
+    case "reinforce":
+      reinforceMemory(db, decision.matchId);
+      return decision.matchId;
+    case "supersede":
+      return supersedeMemory(db, decision.matchId, data).id;
+    case "create":
+      return createMemory(db, data).id;
+  }
 }
 
 // ─── Search ──────────────────────────────────────────────────────────────────
@@ -169,17 +237,21 @@ export async function searchMemories(
     const pattern = `%${query}%`;
     const rows = db
       .prepare(
-        `SELECT * FROM memories WHERE project_id = ? AND content LIKE ?
+        `SELECT * FROM memories WHERE project_id = ? AND superseded_by IS NULL AND content LIKE ?
          ORDER BY relevance_score DESC LIMIT 20`,
       )
       .all(projectId, pattern);
     return (rows as Record<string, unknown>[]).map(mapMemoryRow);
   }
 
+  // T126: superseded rows are filtered here too — the search index may still
+  // hold entries indexed before their row was superseded.
   const ids = hits.map((h) => h.entityId.replace(/^memory:/, ""));
   const placeholders = ids.map(() => "?").join(",");
   const rows = db
-    .prepare(`SELECT * FROM memories WHERE id IN (${placeholders})`)
+    .prepare(
+      `SELECT * FROM memories WHERE id IN (${placeholders}) AND superseded_by IS NULL`,
+    )
     .all(...ids) as Record<string, unknown>[];
 
   const byId = new Map(rows.map((r) => [r.id as string, mapMemoryRow(r)]));
@@ -190,8 +262,9 @@ export async function searchMemories(
 
 /**
  * Retrieve top-N most relevant memories for injection into an agent prompt.
- * Uses a combined score: relevance (40%) + recency (30%) + access frequency (30%).
- * Inspired by TinyClaw's 3-factor relevance scoring.
+ * Ranked by salience v2 (T126): similarity × log(reinforcement+1) × half-life
+ * decay — computed in JS since sqlite has no LN/EXP without an extension.
+ * Superseded facts are always excluded.
  */
 export function getMemoriesForInjection(
   db: Database.Database,
@@ -199,21 +272,19 @@ export function getMemoriesForInjection(
   maxCount = 10,
   maxTokenBudget = 2000,
 ): MemoryEntry[] {
+  // Bounded scan: salience needs JS math, but sorting by last_reinforced_at in
+  // SQL first keeps the spawn critical path O(500) instead of O(all memories).
   const rows = db
     .prepare(
-      `SELECT *,
-        (relevance_score * 0.4 +
-         (1.0 / (1.0 + (unixepoch() - last_accessed_at) / 86400.0)) * 0.3 +
-         MIN(access_count / 10.0, 1.0) * 0.3
-        ) AS combined_score
-       FROM memories
-       WHERE project_id = ?
-       ORDER BY combined_score DESC
-       LIMIT ?`,
+      `SELECT * FROM memories WHERE project_id = ? AND superseded_by IS NULL
+       ORDER BY last_reinforced_at DESC LIMIT 500`,
     )
-    .all(projectId, maxCount * 2);
+    .all(projectId);
 
-  const memories = (rows as Record<string, unknown>[]).map(mapMemoryRow);
+  const now = Math.floor(Date.now() / 1000);
+  const memories = (rows as Record<string, unknown>[])
+    .map(mapMemoryRow)
+    .sort((a, b) => computeSalience(b, now) - computeSalience(a, now));
 
   // Apply token budget (rough estimate: 1 token ~= 4 chars)
   const selected: MemoryEntry[] = [];
@@ -228,7 +299,6 @@ export function getMemoriesForInjection(
 
   // Bump access count for retrieved memories
   if (selected.length > 0) {
-    const now = Math.floor(Date.now() / 1000);
     const ids = selected.map((m) => m.id);
     for (const id of ids) {
       db.prepare(

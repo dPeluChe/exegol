@@ -11,8 +11,11 @@ function makeEntry(overrides: Partial<MemoryEntry> = {}): MemoryEntry {
     sourceAgentId: null,
     relevanceScore: 0.8,
     accessCount: 0,
-    createdAt: Date.now(),
-    lastAccessedAt: Date.now(),
+    createdAt: Math.floor(Date.now() / 1000),
+    lastAccessedAt: Math.floor(Date.now() / 1000),
+    reinforcementCount: 1,
+    lastReinforcedAt: Math.floor(Date.now() / 1000),
+    supersededBy: null,
     ...overrides,
   };
 }

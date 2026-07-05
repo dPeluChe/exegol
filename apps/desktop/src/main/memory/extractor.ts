@@ -13,7 +13,25 @@ import type { MemoryCategory } from "@exegol/shared";
 import type Database from "libsql";
 import { stripAnsi } from "../agents/status-parser";
 import { logger } from "../lib/logger";
-import { createMemory } from "./store";
+import { textSimilarity } from "./salience";
+import { observeMemory } from "./store";
+
+// ─── Anti-ephemeral guard (T126) ─────────────────────────────────────────────
+//
+// Filters out transient progress noise that would otherwise slip through the
+// looser conventions/preference patterns below (e.g. "always installing X").
+// These lines describe what's happening right now, not a durable fact worth
+// remembering across sessions.
+const EPHEMERAL_PATTERNS: RegExp[] = [
+  /^(building|compiling|loading|installing|fetching|downloading|starting|running|processing|initializing|waiting|retrying|reconnecting)\b/i,
+  /^\[?\d{1,3}%\]?\s*(complete|done)?$/i,
+  /^\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}/i,
+];
+
+function isEphemeral(content: string): boolean {
+  const trimmed = content.trim();
+  return EPHEMERAL_PATTERNS.some((p) => p.test(trimmed));
+}
 
 // ─── Extraction patterns ─────────────────────────────────────────────────────
 
@@ -90,29 +108,6 @@ const EXTRACTION_RULES: ExtractionRule[] = [
   },
 ];
 
-// ─── Deduplication ───────────────────────────────────────────────────────────
-
-function normalizeForDedup(content: string): string {
-  return content.toLowerCase().replace(/\s+/g, " ").trim();
-}
-
-/**
- * Simple Jaccard-like similarity for short strings.
- * Returns 0-1 where 1 = identical.
- */
-function textSimilarity(a: string, b: string): number {
-  const wordsA = new Set(normalizeForDedup(a).split(" "));
-  const wordsB = new Set(normalizeForDedup(b).split(" "));
-
-  let intersection = 0;
-  for (const w of wordsA) {
-    if (wordsB.has(w)) intersection++;
-  }
-
-  const union = wordsA.size + wordsB.size - intersection;
-  return union === 0 ? 0 : intersection / union;
-}
-
 // ─── Main extraction function ────────────────────────────────────────────────
 
 interface ExtractedMemory {
@@ -135,6 +130,7 @@ export function extractFromScrollback(scrollback: string): ExtractedMemory[] {
   const lines = cleanedScrollback.split("\n");
   for (const line of lines) {
     if (line.length < 10 || line.length > 500) continue;
+    if (isEphemeral(line)) continue;
 
     for (const rule of EXTRACTION_RULES) {
       for (const pattern of rule.patterns) {
@@ -142,7 +138,7 @@ export function extractFromScrollback(scrollback: string): ExtractedMemory[] {
         if (!match) continue;
 
         const content = rule.extractor(match, line);
-        if (!content) continue;
+        if (!content || isEphemeral(content)) continue;
 
         // Check for near-duplicate
         const isDuplicate = results.some(
@@ -169,6 +165,11 @@ export function extractFromScrollback(scrollback: string): ExtractedMemory[] {
 /**
  * Extract memories from an agent's scrollback and store them in the DB.
  * Called on agent completion. Non-fatal (best-effort, try/catch).
+ *
+ * Each extracted fact goes through `observeMemory` (T126): re-stated facts
+ * reinforce their existing row, contradicting/updated facts supersede it
+ * (new row + old marked `superseded_by`, never overwritten), and genuinely
+ * new facts get created.
  */
 export function extractAndStoreMemories(
   db: Database.Database,
@@ -180,20 +181,9 @@ export function extractAndStoreMemories(
     const extracted = extractFromScrollback(scrollback);
     if (extracted.length === 0) return 0;
 
-    // Check against existing memories to avoid duplicates
-    const existing = db
-      .prepare("SELECT content FROM memories WHERE project_id = ?")
-      .all(projectId) as Array<{ content: string }>;
-
-    const existingContents = existing.map((e) => e.content);
-
     let stored = 0;
     for (const mem of extracted) {
-      // Skip if too similar to existing memory
-      const isDuplicate = existingContents.some((c) => textSimilarity(c, mem.content) > 0.8);
-      if (isDuplicate) continue;
-
-      createMemory(db, {
+      observeMemory(db, {
         projectId,
         category: mem.category,
         content: mem.content,
@@ -204,7 +194,7 @@ export function extractAndStoreMemories(
     }
 
     if (stored > 0) {
-      logger.info(`[Memory] Extracted ${stored} memories from agent ${agentId}`);
+      logger.info(`[Memory] Observed ${stored} memories from agent ${agentId}`);
     }
     return stored;
   } catch (err) {
