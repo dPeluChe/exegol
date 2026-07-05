@@ -14,14 +14,23 @@ import { getApiKey } from "../security/keystore";
 
 const MAX_DIFF_CHARS = 20_000;
 
+// captureGitDiff resolves these literal placeholders instead of empty string —
+// they must never reach the paid summary call or render as a "diff".
+const DIFF_PLACEHOLDERS = new Set(["(no changes)", "(failed to capture git diff)"]);
+
+export function isRealDiff(diff: string): boolean {
+  const trimmed = diff.trim();
+  return trimmed.length > 0 && !DIFF_PLACEHOLDERS.has(trimmed);
+}
+
 /** Summarize a step's diff in 1-2 sentences via Haiku. Empty string on any
- *  failure (no API key, empty diff, network error) — never throws. */
+ *  failure (no API key, empty/placeholder diff, network error) — never throws. */
 export async function summarizeStepDiff(
   db: Database.Database,
   diff: string,
   stepLabel: string,
 ): Promise<string> {
-  if (!diff.trim()) return "";
+  if (!isRealDiff(diff)) return "";
   const apiKey = getApiKey(db, "anthropic");
   if (!apiKey) return "";
 
@@ -98,12 +107,15 @@ export function buildRunReport(run: PipelineRun, template: PipelineTemplate | nu
       lines.push("");
     }
 
-    if (result.diffSummary.trim()) {
+    if (isRealDiff(result.diffSummary)) {
+      const diff = result.diffSummary.trim();
+      // A diff touching markdown can contain ``` — pick a fence that can't be escaped.
+      const fence = diff.includes("```") ? "~~~~" : "```";
       lines.push("<details><summary>Diff</summary>");
       lines.push("");
-      lines.push("```diff");
-      lines.push(result.diffSummary.trim());
-      lines.push("```");
+      lines.push(`${fence}diff`);
+      lines.push(diff);
+      lines.push(fence);
       lines.push("");
       lines.push("</details>");
       lines.push("");

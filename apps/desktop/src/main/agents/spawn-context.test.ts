@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -29,7 +29,12 @@ describe("buildSkillContext (T127 progressive disclosure)", () => {
   });
 
   it("returns empty string when no skills match", () => {
-    writeSkill(projectPath, "unselected-skill", "name: unselected-skill\ndescription: not picked", "Full body");
+    writeSkill(
+      projectPath,
+      "unselected-skill",
+      "name: unselected-skill\ndescription: not picked",
+      "Full body",
+    );
     expect(buildSkillContext(projectPath, ["some-other-skill"])).toBe("");
   });
 

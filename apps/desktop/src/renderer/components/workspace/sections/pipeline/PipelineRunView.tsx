@@ -90,10 +90,13 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
   const handleExportReport = useCallback(() => {
     exportReport.mutate(runId, {
       onSuccess: (markdown) => {
-        navigator.clipboard.writeText(markdown).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        });
+        navigator.clipboard
+          .writeText(markdown)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          })
+          .catch((err) => console.warn("[PipelineRunView] clipboard write failed:", err));
       },
     });
   }, [exportReport, runId]);
@@ -306,17 +309,20 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
                     </details>
                   )}
 
-                  {/* T130 — evidence: full diff for this step */}
-                  {!isActive && result?.diffSummary && result.status !== "pending" && (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-[10px] text-text-muted hover:text-text-secondary">
-                        Diff
-                      </summary>
-                      <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-bg-primary p-2 text-[10px] text-text-secondary">
-                        {result.diffSummary}
-                      </pre>
-                    </details>
-                  )}
+                  {/* T130 — evidence: full diff for this step (skip capture placeholders) */}
+                  {!isActive &&
+                    result?.diffSummary &&
+                    !result.diffSummary.trim().startsWith("(") &&
+                    result.status !== "pending" && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-[10px] text-text-muted hover:text-text-secondary">
+                          Diff
+                        </summary>
+                        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-bg-primary p-2 text-[10px] text-text-secondary">
+                          {result.diffSummary}
+                        </pre>
+                      </details>
+                    )}
                 </div>
               </div>
             );
