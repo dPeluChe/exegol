@@ -732,9 +732,14 @@ location (local path vs ssh://host). Key files to study:
 **Write set**: new `renderer/components/onboarding/*` · new `main/system/doctor.ts` · `main/system/resources.ts` · Monitor sections · `db/queries/token-usage.ts` · `TerminalInstance.tsx` (disposal) · `Sidebar/ProjectsSection` · migrations **40-42**
 **Stub note**: T143/T147 alerts emit through the `NotificationBus` interface from WT-A's contract — mock the emitter until WT-A merges.
 
+### Base already in main (do NOT recreate — extend)
+- **Signal/notification contract**: `packages/shared/src/types/agent-signals.ts` — `AgentSignalEvent`, `TurnBoundary`, `NotificationEvent(+Type)`. Extend here, never fork shapes locally.
+- **NotificationBus skeleton**: `apps/desktop/src/main/notifications/bus.ts` — `getNotificationBus().emit(event)` is a safe no-op until WT-A registers channels. WT-C/D emit through it from day 1.
+- **Per-group migration sets**: `apps/desktop/src/main/db/migration-sets/{wave2-signal,wave2-knowledge,wave2-surface}.ts` — append ONLY to your own file with your id prefix (`w2a_`/`w2b_`/`w2d_`). `migrations.ts` already spreads them; never touch another group's set.
+
 ### Coordination rules
-1. **Merge order**: WT-A's T123+T124 PRs first (they publish the contract); everything else merges in any order after rebasing.
-2. **Migrations**: WT-B owns numbers 36-39, WT-D owns 40-42 — no other group adds migrations. Renumber on rebase if a range shifts.
+1. **Merge order**: WT-A's T123+T124 PRs first (they implement the contract); everything else merges in any order after rebasing.
+2. **Migrations**: each group appends only to its own `migration-sets/` file (see base above) — zero conflicts by construction.
 3. **Shared-file discipline**: `spawn-context.ts` → WT-B only · `spawn-env.ts` → WT-A only · GitPane → WT-C only (T142's PR panel comes later, it's P1-late) · `stores/agents.ts` → WT-A only.
 4. **PR hygiene**: one task = one PR, titled `feat(T123): ...`; quality gate (top of file) before each PR; archive the task to `TASK_COMPLETED/2607.md` in the same PR that completes it.
 5. **Not in any group** (deliberately deferred, assign after these merge): T142 (GitPane conflicts with WT-C), T144 (dep upgrades last), P2 batch T132-T139.

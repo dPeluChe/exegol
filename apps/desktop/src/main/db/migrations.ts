@@ -1,10 +1,15 @@
 import type Database from "libsql";
+import { wave2KnowledgeMigrations } from "./migration-sets/wave2-knowledge";
+import { wave2SignalMigrations } from "./migration-sets/wave2-signal";
+import { wave2SurfaceMigrations } from "./migration-sets/wave2-surface";
 
-type Migration = {
+export type Migration = {
   id: string;
   sql: string;
 };
 
+// Wave 2: each work group appends ONLY to its own migration-sets/ file
+// (w2a_/w2b_/w2d_ id prefixes) — this array stays conflict-free.
 const migrations: Migration[] = [
   {
     id: "001_projects",
@@ -554,6 +559,9 @@ const migrations: Migration[] = [
     id: "036_agents_isolation_mode",
     sql: `ALTER TABLE agents ADD COLUMN isolation_mode TEXT;`,
   },
+  ...wave2SignalMigrations,
+  ...wave2KnowledgeMigrations,
+  ...wave2SurfaceMigrations,
 ];
 
 export function runMigrations(db: Database.Database): void {
