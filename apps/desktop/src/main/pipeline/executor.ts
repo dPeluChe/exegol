@@ -19,6 +19,7 @@ import {
   updatePipelineRun,
 } from "../db/queries";
 import { runSetupHook } from "../hooks/project-hooks";
+import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput } from "./context";
 import { broadcastPipelineStatus, captureGitDiff, now, YOLO_FLAGS } from "./pipeline-helpers";
@@ -144,12 +145,18 @@ export class PipelineExecutor {
     const diff = run.worktreePath ? await captureGitDiff(run.worktreePath) : "";
     const previousOutput = getPreviousOutput(run.stepResults);
     const isLastStep = stepIndex === template.steps.length - 1;
+    const project = getProject(db, run.projectId);
+    // Knowledge files are git-tracked: point at the run's worktree copy so the
+    // agent reads the branch's own PROJECT/MEMORY.md, not the main checkout's.
+    const knowledgeRoot = run.worktreePath ?? project?.path;
+    const knowledge = knowledgeRoot ? buildKnowledgeContext(knowledgeRoot) : "";
     const prompt = buildStepPrompt(stepDef, {
       task: run.originalTask,
       diff,
       previousOutput,
       iteration: run.iterationCount,
       isLastStep,
+      knowledge,
     });
 
     const agent = createAgent(db, {

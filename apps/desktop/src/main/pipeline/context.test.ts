@@ -158,6 +158,33 @@ describe("buildStepPrompt", () => {
     expect(prompt).toContain("Reminder: Refactor");
   });
 
+  it("should interpolate {{knowledge}} variable (T140)", () => {
+    const step = makeStep({
+      promptTemplate: "Context:\n{{knowledge}}\n\nTask: {{task}}",
+    });
+    const prompt = buildStepPrompt(step, {
+      task: "Add feature",
+      diff: "",
+      previousOutput: "",
+      iteration: 0,
+      knowledge: "# Project Knowledge\n\n- read PROJECT.md",
+    });
+    expect(prompt).toContain("read PROJECT.md");
+  });
+
+  it("should replace {{knowledge}} with empty string when omitted", () => {
+    const step = makeStep({
+      promptTemplate: "Context:[{{knowledge}}]",
+    });
+    const prompt = buildStepPrompt(step, {
+      task: "",
+      diff: "",
+      previousOutput: "",
+      iteration: 0,
+    });
+    expect(prompt).toBe("Context:[]");
+  });
+
   it("should fall back to custom template for unknown roles", () => {
     const step = makeStep({
       role: "custom" as PipelineStepDef["role"],

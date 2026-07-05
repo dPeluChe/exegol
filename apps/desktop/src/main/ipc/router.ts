@@ -7,6 +7,7 @@ import { filesRouter } from "./procedures/files";
 import { fsSearchRouter } from "./procedures/fs-search";
 import { githubRouter } from "./procedures/github";
 import { indexerRouter } from "./procedures/indexer";
+import { knowledgeRouter } from "./procedures/knowledge";
 import { mcpRouter } from "./procedures/mcp";
 import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
@@ -55,6 +56,7 @@ export const appRouter = router({
   fsSearch: fsSearchRouter,
   github: githubRouter,
   indexer: indexerRouter,
+  knowledge: knowledgeRouter,
 });
 
 export type AppRouter = typeof appRouter;

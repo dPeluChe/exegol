@@ -420,34 +420,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T140 — Project Knowledge Node (digest + brief) `added: 2026-07-04`
-**Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + memU `memory_fs/synthesizer.py` (incremental synthesis) + stoneforge (git-tracked state) + Kilo Code "Memory Bank" (closest prior art — validate against it)
-
-**Why**
-- No orchestrator offers a per-project living knowledge layer, provider-agnostic. Two complementary halves:
-  1. **DIGEST** — structural understanding of the codebase (what exists), auto-refreshed
-  2. **BRIEF** — intent (what it does, what it should do, where it's going, decisions)
-- The IDE becomes a knowledge node that feeds any agent it spawns — memory is per-fact, this is per-project narrative + structure.
-
-**Scope**
-**Storage model (decided 2026-07 — two tiers + bridge):**
-- **Facts stay in DB** (memories table, project-scoped): worktree-agnostic — learned in any worktree, instantly available to all agents; nothing lost on worktree deletion; high-churn data never pollutes PRs. Salience/decay/supersession (T126) require DB anyway.
-- **`.exegol/knowledge/` in the repo** (git-tracked, travels with branches):
-  - `PROJECT.md` — user-editable brief, **committed** → agent/user updates show up as reviewable diffs in PRs. Section-structured to minimize merge conflicts. Agents propose, never silently overwrite.
-  - `DIGEST.md` — generated via `trs digest` (detect binary; fallback internal summarizer), **gitignored by default** (derivable, high-churn); staleness refresh on Smart Git commit/push/merge or N commits behind. Opt-in commit.
-  - `MEMORY.md` — **the bridge (memU synthesizer pattern)**: periodic/manual distillation of top-salience DB facts, **committed** → team members seed their Exegol from it on clone; agents outside Exegol benefit too; facts become PR-reviewable.
-- **Managed block in AGENTS.md / CLAUDE.md**: delimited markers (`<!-- exegol:knowledge:begin/end -->`) with a ~40-token pointer to `.exegol/knowledge/` — Exegol only writes inside markers. Even CLIs launched outside Exegol pick up the knowledge (their native context file reads it). Progressive disclosure: pointer always, files read on demand.
-- Injection via spawn-context with progressive disclosure (same mechanism as T127)
-- Pipelines: `{{knowledge}}` template variable
-- UI: "Knowledge" sub-tab under Project (edit brief, digest freshness, force refresh, "Sync MEMORY.md" action, import MEMORY.md as seed on project add)
-
-**Likely files**
-- New: `apps/desktop/src/main/knowledge/{digest,brief,staleness}.ts`
-- `apps/desktop/src/main/agents/spawn-context.ts`, `apps/desktop/src/main/pipeline/context.ts`
-- New renderer section `sections/KnowledgeSection.tsx`
-
----
-
 ### T141 — Attention Inbox (unread / needs-attention UX) `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S-M | **Source**: Orca (Gmail-like unread/star on worktrees) + superset (ringtone/badge bindings)
 
@@ -652,7 +624,7 @@ location (local path vs ssh://host). Key files to study:
 **Contract it publishes** (other groups build against this): event names `agent:attention` / `agent:finished` / `pipeline:paused` / `run:failed`, turn timestamps `turnStarted/turnEnded`, `NotificationBus.emit(event, payload)` interface.
 
 ### WT-B — Memory, Knowledge & Skills `branch: feat/wtb-knowledge`
-**Tasks in order**: ~~T125~~ → ~~T126~~ → ~~T127~~ → T140 → T145 (T125/T126/T127 shipped 2026-07-05, see `TASK_COMPLETED/2607.md`)
+**Tasks in order**: ~~T125~~ → ~~T126~~ → ~~T127~~ → ~~T140~~ → T145 (T125/T126/T127/T140 shipped 2026-07-05, see `TASK_COMPLETED/2607.md`)
 **Theme**: everything an agent knows — search, salience, skills disclosure, knowledge node, MCP access.
 **Write set**: `main/memory/*` · new `main/knowledge/*` · `main/skills/*` · new `main/mcp/exegol-server.ts` · `db/queries/search.ts` · migrations **36-39** · `sections/KnowledgeSection.tsx`
 **Owns** the injection block in `spawn-context.ts` (WT-A only touches `spawn-env.ts` — keep functions separate).
