@@ -414,23 +414,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T127 — Progressive Disclosure Skills `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S-M | **Source**: openclaw `skill-contract.ts` + `local-loader.ts`; nullclaw `skills.zig` (flag `always`)
-
-**Why**
-- Today full skill content is injected into agent prompts; grows linearly with skill count.
-- openclaw proves the fix works without controlling the agent loop: inject only `<name>+<description>` XML + instruction "use your read tool to load the skill file when the task matches".
-
-**Scope**
-- Skills as folders with `SKILL.md` + frontmatter (`name`, `description`, optional `requires.bins`)
-- Spawn context injects metadata block only (~100 tokens/skill); full body read on demand by the CLI itself
-- Per-skill `always: bool` escape hatch for tiny critical skills
-
-**Likely files**
-- `apps/desktop/src/main/skills/{loader,discovery,defaults}.ts`, `apps/desktop/src/main/agents/spawn-context.ts`
-
----
-
 ### T128 — Terminal URL Detector → Browser Pane `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S | **Source**: emdash `terminal-url-detector`
 
@@ -721,7 +704,7 @@ location (local path vs ssh://host). Key files to study:
 **Contract it publishes** (other groups build against this): event names `agent:attention` / `agent:finished` / `pipeline:paused` / `run:failed`, turn timestamps `turnStarted/turnEnded`, `NotificationBus.emit(event, payload)` interface.
 
 ### WT-B — Memory, Knowledge & Skills `branch: feat/wtb-knowledge`
-**Tasks in order**: T125 → T126 → T127 → T140 → T145
+**Tasks in order**: ~~T125~~ → ~~T126~~ → ~~T127~~ → T140 → T145 (T125/T126/T127 shipped 2026-07-05, see `TASK_COMPLETED/2607.md`)
 **Theme**: everything an agent knows — search, salience, skills disclosure, knowledge node, MCP access.
 **Write set**: `main/memory/*` · new `main/knowledge/*` · `main/skills/*` · new `main/mcp/exegol-server.ts` · `db/queries/search.ts` · migrations **36-39** · `sections/KnowledgeSection.tsx`
 **Owns** the injection block in `spawn-context.ts` (WT-A only touches `spawn-env.ts` — keep functions separate).

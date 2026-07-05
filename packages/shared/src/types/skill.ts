@@ -67,6 +67,12 @@ export type Skill = {
   scope: "global" | "project";
   available: boolean;
   source?: SkillSource;
+  /**
+   * Escape hatch for tiny critical skills (T127): when true, the full skill
+   * body is always injected at spawn time instead of the progressive-disclosure
+   * metadata-only pointer, regardless of explicit selection.
+   */
+  always: boolean;
 };
 
 export type SkillState = {

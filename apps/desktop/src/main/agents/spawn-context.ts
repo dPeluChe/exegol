@@ -21,6 +21,43 @@ interface SpawnContextResult {
   contextPrefix: string;
 }
 
+// ─── T127: Progressive disclosure skills ──────────────────────────────────
+//
+// Full skill bodies grow linearly with skill count — not viable once a
+// project accumulates a dozen skills. Instead, inject only `name`+
+// `description` (~100 tokens/skill) with an instruction to read the skill's
+// file on demand when the task matches. `always: true` in a skill's
+// frontmatter is the escape hatch for tiny critical skills that should
+// always be fully inlined (e.g. a 10-line house-style reminder).
+export function buildSkillContext(projectPath: string, requestedNames?: string[]): string {
+  const requested = new Set(requestedNames ?? []);
+  const available = discoverSkills(projectPath).filter((s) => s.available);
+
+  // always-on skills bypass selection entirely — that's the point of the escape hatch.
+  const always = available.filter((s) => s.always);
+  const disclosed = available.filter((s) => !s.always && requested.has(s.name));
+
+  const parts: string[] = [];
+
+  if (always.length > 0) {
+    parts.push(always.map((s) => `## Skill: ${s.name}\n\n${s.content}`).join("\n\n"));
+  }
+
+  if (disclosed.length > 0) {
+    const pointers = disclosed
+      .map((s) => {
+        const desc = s.description || "no description — read the file to see when it applies";
+        return `- **${s.name}**: ${desc} — read \`${s.filePath}\` when this task matches.`;
+      })
+      .join("\n");
+    parts.push(
+      `## Available Skills\n\nUse your read tool to load a skill's file when its description matches the task at hand.\n\n${pointers}`,
+    );
+  }
+
+  return parts.length > 0 ? `# Skills\n\n${parts.join("\n\n")}\n` : "";
+}
+
 /**
  * Build the full context payload (memory, MCP tools, skills) to inject
  * into an agent's task prompt. Each source is non-fatal: a failure logs
@@ -53,19 +90,10 @@ export function buildSpawnContext(
     logger.warn("[SpawnContext] Failed to build MCP context:", err);
   }
 
-  if (config.skillNames?.length) {
-    try {
-      const requested = new Set(config.skillNames);
-      const skills = discoverSkills(projectPath).filter(
-        (s) => requested.has(s.name) && s.available,
-      );
-      if (skills.length > 0) {
-        const sections = skills.map((s) => `## Skill: ${s.name}\n\n${s.content}`).join("\n\n");
-        skillContext = `# Skills\n\n${sections}\n`;
-      }
-    } catch (err) {
-      logger.warn("[SpawnContext] Failed to build skill context:", err);
-    }
+  try {
+    skillContext = buildSkillContext(projectPath, config.skillNames);
+  } catch (err) {
+    logger.warn("[SpawnContext] Failed to build skill context:", err);
   }
 
   const contextPrefix = [memoryContext, mcpContext, skillContext].filter(Boolean).join("\n");

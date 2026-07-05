@@ -44,18 +44,29 @@ function parseCommaSeparated(value: string | undefined): string[] {
 
 // ─── Requirement checking ────────────────────────────────────────────────────
 
+// Cached: discovery runs on every spawn, and each execSync blocks the main
+// process up to 3s. Installed binaries don't churn — 5 min TTL is plenty.
+const binCache = new Map<string, { ok: boolean; ts: number }>();
+const BIN_CACHE_TTL = 300_000;
+
 function isBinAvailable(bin: string): boolean {
   // Validate bin name to prevent command injection
   if (!/^[a-zA-Z0-9._-]+$/.test(bin)) {
     logger.warn(`[Skills] Rejected suspicious binary name: ${bin}`);
     return false;
   }
+  const cached = binCache.get(bin);
+  if (cached && Date.now() - cached.ts < BIN_CACHE_TTL) return cached.ok;
+
+  let ok: boolean;
   try {
     execSync(`command -v ${bin}`, { stdio: "ignore", timeout: 3_000 });
-    return true;
+    ok = true;
   } catch {
-    return false;
+    ok = false;
   }
+  binCache.set(bin, { ok, ts: Date.now() });
+  return ok;
 }
 
 function checkRequirements(requires: SkillRequirements): boolean {
@@ -117,6 +128,13 @@ export function parseSkillContent(
 
   const allowedTools = parseCommaSeparated(meta["allowed-tools"]);
   const available = checkRequirements(requires);
+  const alwaysRaw = meta.always?.trim().toLowerCase();
+  const always = alwaysRaw === "true";
+  if (alwaysRaw && alwaysRaw !== "true" && alwaysRaw !== "false") {
+    logger.warn(
+      `[Skills] Unrecognized 'always: ${meta.always}' in ${filePath} — only 'true' enables it, treating as false`,
+    );
+  }
 
   return {
     name,
@@ -129,6 +147,7 @@ export function parseSkillContent(
     filePath,
     scope,
     available,
+    always,
   };
 }
 
