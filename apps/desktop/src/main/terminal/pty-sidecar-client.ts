@@ -15,6 +15,7 @@ import {
   type SessionInfo,
   type SessionListInfoResult,
   type SessionListResult,
+  type SessionMemoryResult,
   type SessionSnapshotResult,
 } from "./pty-sidecar-protocol";
 
@@ -140,6 +141,11 @@ export class SidecarClient {
   async listSessionsInfo(): Promise<SessionInfo[]> {
     const result = (await this.call("session.listInfo")) as SessionListInfoResult;
     return result.sessions;
+  }
+
+  /** T143: per-session ring buffer memory usage, for Monitor > Resources */
+  async getMemoryInfo(): Promise<SessionMemoryResult> {
+    return this.call("session.memory") as Promise<SessionMemoryResult>;
   }
 
   async shutdown(): Promise<void> {

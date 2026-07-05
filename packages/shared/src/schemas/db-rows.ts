@@ -40,6 +40,19 @@ export const projectRowSchema = z.object({
   default_ide: z.string(),
   created_at: z.number(),
   last_opened_at: z.number(),
+  group_id: optStr,
+  sort_order: z.number().catch(0),
+});
+
+export const projectGroupRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: optStr,
+  icon: optStr,
+  background: optStr,
+  sort_order: z.number(),
+  collapsed: sqlBool,
+  created_at: z.number(),
 });
 
 export const agentRowSchema = z.object({

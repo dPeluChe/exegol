@@ -51,8 +51,37 @@ export class RingBuffer {
     return this.filled ? this.buf.length : this.head;
   }
 
+  /** Pre-allocated capacity (memory footprint regardless of how full the buffer is) */
+  get capacity(): number {
+    return this.buf.length;
+  }
+
   clear(): void {
     this.head = 0;
     this.filled = false;
+  }
+
+  /**
+   * Actually release the backing allocation (eviction). `clear()` only resets
+   * pointers — the pre-allocated buffer stays resident, so evicting via clear
+   * frees zero memory and the global cap becomes accounting fiction. The next
+   * `write()` after `release()` regrows lazily to the original capacity.
+   */
+  release(): void {
+    this.originalCapacity = this.buf.length;
+    this.buf = Buffer.alloc(0);
+    this.head = 0;
+    this.filled = false;
+  }
+
+  private originalCapacity = 0;
+
+  /** Regrow after release — call before writing again (reattach reload). */
+  ensureCapacity(): void {
+    if (this.buf.length === 0) {
+      this.buf = Buffer.allocUnsafe(this.originalCapacity || DEFAULT_CAPACITY);
+      this.head = 0;
+      this.filled = false;
+    }
   }
 }

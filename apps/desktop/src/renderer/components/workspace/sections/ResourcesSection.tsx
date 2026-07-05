@@ -5,42 +5,17 @@ import { useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import {
+  type SidecarSessionMemory,
   useAgents,
   useMetricsHistory,
   useProjectMetrics,
+  useSidecarMemory,
   useSystemMetrics,
 } from "../../../hooks/use-trpc";
-import { EmptyState, StatusDot } from "../../common";
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}
-
-function formatUptime(seconds: number): string {
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-function thresholdColor(percent: number): string {
-  if (percent >= 90) return "text-red-400";
-  if (percent >= 70) return "text-yellow-400";
-  return "text-green-400";
-}
-
-function thresholdBarColor(percent: number): string {
-  if (percent >= 90) return "bg-red-500";
-  if (percent >= 70) return "bg-yellow-500";
-  return "bg-accent";
-}
+import { EmptyState } from "../../common";
+import { AgentProcessTable } from "./AgentProcessTable";
+import { PtyMemoryCard } from "./PtyMemoryCard";
+import { formatBytes, formatUptime, thresholdBarColor, thresholdColor } from "./resource-format";
 
 // ─── Sparkline (inline SVG) ─────────────────────────────────────────────────
 
@@ -152,83 +127,6 @@ function MetricCard({
     </div>
   );
 }
-
-// ─── Agent Process Table ────────────────────────────────────────────────────
-
-function AgentProcessTable({
-  agents,
-  agentProcessMap,
-}: {
-  agents: {
-    id: string;
-    cliType: string;
-    taskDescription: string;
-    status: string;
-    startedAt: number | null;
-  }[];
-  agentProcessMap: Map<string, { cpu: number; memory: number }>;
-}) {
-  const now = Math.floor(Date.now() / 1000);
-
-  if (agents.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-bg-secondary p-4 text-center">
-        <p className="text-xs text-text-muted">No agents currently running</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-border">
-      <table className="w-full text-xs">
-        <thead className="bg-bg-tertiary text-text-muted">
-          <tr>
-            <th className="px-3 py-2 text-left font-medium">Agent</th>
-            <th className="px-3 py-2 text-left font-medium">Task</th>
-            <th className="px-3 py-2 text-left font-medium">Status</th>
-            <th className="px-3 py-2 text-right font-medium">CPU</th>
-            <th className="px-3 py-2 text-right font-medium">Memory</th>
-            <th className="px-3 py-2 text-right font-medium">Uptime</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {agents.map((agent) => {
-            const proc = agentProcessMap.get(agent.id);
-            const uptime = agent.startedAt ? now - agent.startedAt : 0;
-            const cpuVal = proc?.cpu ?? 0;
-            return (
-              <tr key={agent.id} className="bg-bg-secondary text-text-secondary">
-                <td className="px-3 py-2">
-                  <span className="font-medium text-text-primary">{agent.cliType}</span>
-                </td>
-                <td className="max-w-[200px] truncate px-3 py-2">{agent.taskDescription}</td>
-                <td className="px-3 py-2">
-                  <span className="inline-flex items-center gap-1 text-[10px] font-medium text-text-secondary">
-                    <StatusDot
-                      status={agent.status as import("@exegol/shared").AgentStatus}
-                      size="sm"
-                    />
-                    {agent.status}
-                  </span>
-                </td>
-                <td className={cn("px-3 py-2 text-right tabular-nums", thresholdColor(cpuVal))}>
-                  {proc ? `${cpuVal.toFixed(1)}%` : "\u2014"}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {proc ? formatBytes(proc.memory) : "\u2014"}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums text-text-muted">
-                  {uptime > 0 ? formatUptime(uptime) : "\u2014"}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
 // ─── Main Section ───────────────────────────────────────────────────────────
 
 export function ResourcesSection() {
@@ -236,6 +134,7 @@ export function ResourcesSection() {
   const { data: systemMetrics } = useSystemMetrics();
   const { data: historyData } = useMetricsHistory();
   const { data: dbAgents } = useAgents(project?.id ?? null);
+  const { data: sidecarMemory } = useSidecarMemory();
 
   const { data: projectMetrics, isLoading: projectLoading } = useProjectMetrics(
     project?.id ?? null,
@@ -287,6 +186,14 @@ export function ResourcesSection() {
     }
     return map;
   }, [dbAgents, projectMetrics?.agentProcesses]);
+
+  // T143: sidecar ring buffer memory per session, keyed by agent id (PTY
+  // sessions are keyed by agent.id — see AgentManager.createSession call site)
+  const ptyMemoryMap = useMemo(() => {
+    const map = new Map<string, SidecarSessionMemory>();
+    for (const s of sidecarMemory?.sessions ?? []) map.set(s.id, s);
+    return map;
+  }, [sidecarMemory]);
 
   if (!project) {
     return (
@@ -346,6 +253,7 @@ export function ResourcesSection() {
             percent={disk.usagePercent}
             detail={`${formatBytes(disk.free)} free`}
           />
+          <PtyMemoryCard />
         </div>
 
         {/* Project stats */}
@@ -390,7 +298,11 @@ export function ResourcesSection() {
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Active Agents ({runningAgents.length})
           </h4>
-          <AgentProcessTable agents={runningAgents} agentProcessMap={agentProcessMap} />
+          <AgentProcessTable
+            agents={runningAgents}
+            agentProcessMap={agentProcessMap}
+            ptyMemoryMap={ptyMemoryMap}
+          />
         </div>
       </div>
     </div>

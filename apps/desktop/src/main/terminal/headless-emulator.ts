@@ -7,6 +7,9 @@ import { Terminal } from "@xterm/headless";
 
 const ESC = "\x1b";
 
+/** T143: cap the serialized ANSI snapshot size (reattach + disk scrollback flush). */
+const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024; // 2MB
+
 /** Terminal mode state for reattach protocol */
 export interface TerminalModes {
   applicationCursorKeys: boolean; // DECCKM (1)
@@ -68,7 +71,12 @@ export class HeadlessEmulator {
   /** Generate a serialized snapshot of the full terminal state */
   snapshot(): string | null {
     try {
-      return this.serializer.serialize({ excludeAltBuffer: true, excludeModes: true });
+      const serialized = this.serializer.serialize({ excludeAltBuffer: true, excludeModes: true });
+      const buf = Buffer.from(serialized, "utf-8");
+      if (buf.byteLength <= MAX_SNAPSHOT_BYTES) return serialized;
+      // Keep the most recent bytes — old scrollback is less useful than a
+      // bounded reattach/disk-flush payload.
+      return buf.subarray(buf.byteLength - MAX_SNAPSHOT_BYTES).toString("utf-8");
     } catch {
       return null;
     }

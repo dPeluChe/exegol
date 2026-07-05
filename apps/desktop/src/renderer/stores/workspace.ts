@@ -10,6 +10,7 @@ import {
   templateFromLayout,
 } from "../lib/layout-presets";
 import { useAppStore } from "./app";
+import { useTerminalStore } from "./terminals";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -353,13 +354,18 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           if (!tab) return s;
 
           const newLayout = removeNodeByPaneId(tab.layout, paneId);
-          const { [paneId]: _, ...restPanes } = pw.panes;
+          const { [paneId]: closedPane, ...restPanes } = pw.panes;
           // T112: scrub per-pane OSC 7/133 state so paneCwd/paneLastExit
           // don't leak entries over long sessions.
           const cwd = { ...s.paneCwd };
           const exit = { ...s.paneLastExit };
           delete cwd[paneId];
           delete exit[paneId];
+          // T143: drop terminal store state too — otherwise useTerminalStore's
+          // map only ever grows across the app session.
+          if (closedPane?.agentId) {
+            useTerminalStore.getState().removeTerminal(closedPane.agentId);
+          }
 
           if (!newLayout) {
             const emptyPane = createEmptyPane();

@@ -1,7 +1,12 @@
 import { z } from "zod";
 import { listAgents } from "../../db/queries";
 import { detectPortConflicts, getProjectPorts } from "../../system/ports";
-import { getMetricsHistory, getProjectMetrics, getSystemMetrics } from "../../system/resources";
+import {
+  getMetricsHistory,
+  getProjectMetrics,
+  getSidecarMemoryMetrics,
+  getSystemMetrics,
+} from "../../system/resources";
 import { detectProjectScripts } from "../../system/scripts";
 import type { Context } from "../context";
 import { publicProcedure, router } from "../trpc";
@@ -95,4 +100,7 @@ export const resourcesRouter = router({
   scripts: publicProcedure
     .input(z.object({ projectPath: z.string() }))
     .query(async ({ input }) => detectProjectScripts(input.projectPath)),
+
+  /** T143: per-session PTY ring buffer memory usage + PTY count */
+  sidecarMemory: publicProcedure.query(async () => getSidecarMemoryMetrics()),
 });

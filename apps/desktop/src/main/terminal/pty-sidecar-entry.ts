@@ -6,15 +6,18 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import * as pty from "node-pty";
+import { computeMemoryInfo, evictIfOverCap, reloadIfEvicted } from "./pty-sidecar-eviction";
 import { appendPending, FLUSH_INTERVAL_MS } from "./pty-sidecar-flusher";
 import {
   EXEGOL_DIR,
+  GLOBAL_RING_BUFFER_CAP_BYTES,
   type JsonRpcMessage,
   type JsonRpcRequest,
   makeNotification,
   makeResponse,
   type PidFile,
   RING_BUFFER_CAPACITY,
+  RING_BUFFER_EVICTION_SWEEP_MS,
   type SessionCreateParams,
   type SessionIdParams,
   type SessionResizeParams,
@@ -40,12 +43,19 @@ interface SidecarSession {
   pending: string;
   pendingBytes: number;
   flushTimer: ReturnType<typeof setTimeout> | null;
+  /** T143: last time this session produced PTY output (LRU eviction signal) */
+  lastActivityAt: number;
+  /** T143: set once this session's ring buffer content was evicted to disk */
+  evictedPath: string | null;
 }
 
 const sessions = new Map<string, SidecarSession>();
 const clients = new Set<Socket>();
 const startTime = Date.now();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+// T143: periodic ring buffer eviction sweep (see pty-sidecar-eviction.ts)
+setInterval(() => evictIfOverCap(sessions.values()), RING_BUFFER_EVICTION_SWEEP_MS).unref();
 
 // ─── Client management ──────────────────────────────────────────────────
 
@@ -127,7 +137,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           env: p.env,
         });
 
-        const ringBuffer = new RingBuffer(RING_BUFFER_CAPACITY);
+        const ringBuffer = new RingBuffer(p.bufferCapacity ?? RING_BUFFER_CAPACITY);
         const session: SidecarSession = {
           id: p.id,
           pty: proc,
@@ -139,12 +149,16 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           pending: "",
           pendingBytes: 0,
           flushTimer: null,
+          lastActivityAt: Date.now(),
+          evictedPath: null,
         };
         sessions.set(p.id, session);
 
         proc.onData((data: string) => {
+          reloadIfEvicted(session);
           const buf = Buffer.from(data, "utf-8");
           ringBuffer.write(buf);
+          session.lastActivityAt = Date.now();
           applyAppend(session, data);
           scheduleFlush(session);
         });
@@ -230,6 +244,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
       case "session.snapshot": {
         const { id } = req.params as SessionIdParams;
         const s = sessions.get(id);
+        if (s) reloadIfEvicted(s);
         const data = s ? s.ringBuffer.snapshot().toString("utf-8") : null;
         client.write(makeResponse(req.id, { data }));
         break;
@@ -248,6 +263,18 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           signal: s.signal,
         }));
         client.write(makeResponse(req.id, { sessions: info }));
+        break;
+      }
+
+      case "session.memory": {
+        const { sessions: memInfo, totalCapacityBytes } = computeMemoryInfo(sessions.values());
+        client.write(
+          makeResponse(req.id, {
+            sessions: memInfo,
+            totalCapacityBytes,
+            globalCapBytes: GLOBAL_RING_BUFFER_CAP_BYTES,
+          }),
+        );
         break;
       }
 

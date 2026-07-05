@@ -4,6 +4,7 @@ import {
   getAgentCosts,
   getDailyTrend,
   getModelBreakdown,
+  getPipelineRunCost,
   getProjectTokenUsage,
   getProjectTokenUsageSummary,
   getTokenUsageSummary,
@@ -112,5 +113,16 @@ export const tokenUsageRouter = router({
     .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
     .query(({ ctx, input }) => {
       return getDailyTrend(ctx.db, input.projectId, input.days);
+    }),
+
+  /**
+   * T147: cost per pipeline step, joining step_results.agentId against
+   * token_usage. Backend-only for now — T130 (Pipeline Evidence, WT-C) owns
+   * the run-view UI; this just makes the data available once that lands.
+   */
+  pipelineRunCost: publicProcedure
+    .input(z.object({ pipelineRunId: z.string() }))
+    .query(({ ctx, input }) => {
+      return getPipelineRunCost(ctx.db, input.pipelineRunId);
     }),
 });

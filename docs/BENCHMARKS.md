@@ -101,6 +101,50 @@ land in the 150-250 ms range — to be measured after next packaged build.
 - `index.js` initial chunk: **< 1.1 MB** ✅ (1,026 KB)
 - First paint (M1, dev mode): **< 500 ms** ✅ (277-391 ms)
 - First paint (packaged): **< 250 ms** (pending measurement on v0.3.0 DMG)
+- PTY ring buffer total memory (T143): **< 256MB** globally, LRU-evicted to
+  disk beyond that for sessions idle 2+ minutes ✅ (enforced in
+  `pty-sidecar-eviction.ts`, surfaced in Monitor → Resources)
+
+## Terminal count re-measurement (T143, xterm renderer pool re-scope)
+
+T114 (xterm renderer pool) was deferred pending a measurement pass after
+T143's disposal audit and ring buffer hardening. **This pass could not be
+run interactively** — the implementing agent operated in a headless
+environment with no way to launch the packaged Electron app, open N
+terminal tabs, and read GPU/Activity Monitor counters. Recording that
+limitation explicitly rather than fabricating numbers.
+
+What the audit *did* establish by reading the code (see T143 PR):
+
+- **Disposal is already correct.** `TerminalInstance.tsx`'s unmount effect
+  disposes the WebGL addon before `terminal.dispose()`, which in turn
+  disposes `FitAddon`/`WebLinksAddon`/`SerializeAddon` via xterm's internal
+  addon manager. No dangling `ResizeObserver`/`IntersectionObserver`/window
+  listeners were found. One real leak was fixed as part of this pass:
+  `useTerminalStore` (`stores/terminals.ts`) never removed entries on pane
+  close — now wired into `workspace.ts`'s `removePane`.
+- **WebGL contexts are already gated by visibility** (T38): a hidden pane's
+  WebGL context is disposed and only a headless emulator + ring buffer keep
+  its state, so the "1 WebGL context per pane" risk T114 was scoped against
+  is already bounded to *visible* panes, not total open panes.
+- **PTY memory is now bounded independent of the renderer**: the sidecar's
+  ring buffers (8MB default / 1MB for plain shells) are capped globally at
+  256MB with LRU-to-disk eviction for idle sessions (see T143 PR), so a
+  demo with many idle agents no longer scales renderer-adjacent memory
+  linearly either.
+
+**Recommendation**: keep T114 deferred. The GPU-context risk it targets
+(many *simultaneously visible* xterm/WebGL instances, e.g. a 3x3+ grid
+layout) is real but narrower than "N open tabs" — most panes in a tab are
+hidden and already shed their WebGL context. Re-measure with a real build
+once a grid layout with 6+ concurrently visible terminal panes is a
+common usage pattern; until then the disposal fixes in this PR are the
+higher-value spend.
+
+**Follow-up needed**: someone with a display should open the packaged app,
+create a 3x3 grid layout with 9 live shells, and check Activity Monitor
+(macOS) / `chrome://gpu`-equivalent for actual GPU memory before deciding
+whether T114 is worth building.
 
 ## Recovery telemetry (v0.3.0)
 

@@ -1,16 +1,17 @@
 import type { Settings } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, Key, Keyboard, Monitor, Settings2, Terminal } from "lucide-react";
+import { ArrowLeft, Key, Keyboard, Monitor, Settings2, Stethoscope, Terminal } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { ApiKeysSettings } from "./ApiKeysSettings";
 import { CliSettings } from "./CliSettings";
+import { DoctorSettings } from "./DoctorSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { TerminalSettings } from "./TerminalSettings";
 
-export type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys";
+export type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys" | "doctor";
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: Settings2 },
@@ -18,6 +19,7 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "terminal", label: "Terminal", icon: Monitor },
   { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   { id: "apikeys", label: "API Keys", icon: Key },
+  { id: "doctor", label: "Doctor", icon: Stethoscope },
 ];
 
 export interface SettingsPanelProps {
@@ -116,6 +118,7 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
           {activeTab === "terminal" && <TerminalSettings settings={form} onChange={updateField} />}
           {activeTab === "shortcuts" && <KeyboardShortcuts />}
           {activeTab === "apikeys" && <ApiKeysSettings />}
+          {activeTab === "doctor" && <DoctorSettings />}
 
           {updateSettings.isError && (
             <p className="mt-4 text-xs text-error">

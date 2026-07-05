@@ -21,6 +21,7 @@ import {
 } from "./pty-session-types";
 import { scanForMarker } from "./pty-shell-ready";
 import type { SidecarClient } from "./pty-sidecar-client";
+import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
 
 export type { SessionCallbacks } from "./pty-session-types";
 
@@ -103,6 +104,16 @@ export class PtyHost {
     return this.sidecarClient.listSessionsInfo();
   }
 
+  /** T143: per-session ring buffer memory usage, for Monitor > Resources */
+  async getSidecarMemoryInfo(): Promise<SessionMemoryResult | null> {
+    if (!this.sidecarClient?.isConnected()) return null;
+    try {
+      return await this.sidecarClient.getMemoryInfo();
+    } catch {
+      return null;
+    }
+  }
+
   /** Reattach to a session that survived in the sidecar after app restart */
   async reattachSession(
     id: string,
@@ -149,7 +160,7 @@ export class PtyHost {
     id: string,
     spawnOpts: SpawnPayload,
     callbacks: SessionCallbacks,
-    options?: { scrollbackPath?: string; shellReadyGating?: boolean },
+    options?: { scrollbackPath?: string; shellReadyGating?: boolean; smallRingBuffer?: boolean },
   ): Promise<{ pid: number }> {
     if (this.sidecarClient?.isConnected()) {
       return this.doCreateSidecar(id, spawnOpts, callbacks, options);
@@ -166,7 +177,7 @@ export class PtyHost {
     id: string,
     spawnOpts: SpawnPayload,
     callbacks: SessionCallbacks,
-    options?: { scrollbackPath?: string; shellReadyGating?: boolean },
+    options?: { scrollbackPath?: string; shellReadyGating?: boolean; smallRingBuffer?: boolean },
   ): Promise<{ pid: number }> {
     const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
     const session: Session = {
@@ -203,6 +214,7 @@ export class PtyHost {
       cols: spawnOpts.cols,
       rows: spawnOpts.rows,
       env: spawnOpts.env,
+      bufferCapacity: options?.smallRingBuffer ? SHELL_RING_BUFFER_CAPACITY : undefined,
     });
 
     session.pid = result.pid;

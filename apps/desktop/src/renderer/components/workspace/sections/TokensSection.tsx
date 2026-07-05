@@ -1,9 +1,7 @@
 import type { DailyTrendRow, TokenUsageSummary } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { Coins, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { getContext } from "tokenlens";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   useAgentCosts,
@@ -13,46 +11,10 @@ import {
   useTokenUsageSummary,
 } from "../../../hooks/use-trpc";
 import { formatCost, formatTokens } from "../../../lib/format";
-import { trpcInvoke } from "../../../lib/trpc-client";
 import { EmptyState } from "../../common";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
-
-// ─── Dynamic model pricing catalog (T19: DB-backed) ─────────────────────
-
-function useModelCatalog() {
-  return useQuery({
-    queryKey: ["modelCatalog"],
-    queryFn: () =>
-      trpcInvoke<Record<string, { input: number; output: number }>>("settings.modelCatalog"),
-    staleTime: 60_000,
-  });
-}
-
-function getModelPrice(
-  model: string,
-  catalog: Record<string, { input: number; output: number }> | undefined,
-): { input: number; output: number } | null {
-  if (!catalog) return null;
-  if (catalog[model]) return catalog[model];
-  for (const [key, val] of Object.entries(catalog)) {
-    if (model.startsWith(key) || key.startsWith(model)) return val;
-  }
-  return null;
-}
-
-/**
- * Look up max context window for a model via tokenlens registry.
- * Returns combined/total token cap when available, falling back to maxInput.
- */
-function getModelMaxContext(model: string): number | null {
-  try {
-    const ctx = getContext({ modelId: model });
-    return ctx.maxTotal ?? ctx.maxInput ?? null;
-  } catch {
-    return null;
-  }
-}
+import { BudgetsCard } from "./BudgetsCard";
+import { getModelMaxContext, getModelPrice, useModelCatalog } from "./model-pricing";
+import { PriceTableEditor } from "./PriceTableEditor";
 
 // ─── Summary Card ─────────────────────────────────────────────────────────
 
@@ -324,6 +286,14 @@ export function TokensSection() {
           />
         </div>
 
+        {/* Budgets */}
+        <div>
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Budgets
+          </h4>
+          <BudgetsCard projectId={project.id} />
+        </div>
+
         {/* Daily trend chart */}
         <div>
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -348,6 +318,14 @@ export function TokensSection() {
             Cost by Agent
           </h4>
           <AgentCostTable projectId={project.id} days={days} />
+        </div>
+
+        {/* Provider pricing (editable) */}
+        <div>
+          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Provider Pricing
+          </h4>
+          <PriceTableEditor />
         </div>
 
         {/* Scan result */}

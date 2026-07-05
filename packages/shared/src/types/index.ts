@@ -1,6 +1,7 @@
 export * from "./activity";
 export * from "./agent";
 export * from "./agent-signals";
+export * from "./budget";
 export * from "./dashboard";
 export * from "./diff-comment";
 export * from "./github-issue";
@@ -8,6 +9,7 @@ export * from "./mcp";
 export * from "./memory";
 export * from "./pipeline";
 export * from "./project";
+export * from "./project-group";
 export * from "./prompt";
 export * from "./scheduler";
 export * from "./scoring";

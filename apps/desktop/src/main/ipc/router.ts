@@ -1,8 +1,10 @@
 import { activitiesRouter } from "./procedures/activities";
 import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
+import { budgetsRouter } from "./procedures/budgets";
 import { diffRouter } from "./procedures/diff";
 import { diffCommentsRouter } from "./procedures/diff-comments";
+import { doctorRouter } from "./procedures/doctor";
 import { filesRouter } from "./procedures/files";
 import { fsSearchRouter } from "./procedures/fs-search";
 import { githubRouter } from "./procedures/github";
@@ -13,6 +15,7 @@ import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
 import { oplogRouter } from "./procedures/oplog";
 import { pipelineRouter } from "./procedures/pipeline";
+import { projectGroupsRouter } from "./procedures/project-groups";
 import { projectRouter } from "./procedures/projects";
 import { promptsRouter } from "./procedures/prompts";
 import { qaTestRouter } from "./procedures/qa-tests";
@@ -57,6 +60,9 @@ export const appRouter = router({
   github: githubRouter,
   indexer: indexerRouter,
   knowledge: knowledgeRouter,
+  doctor: doctorRouter,
+  budgets: budgetsRouter,
+  projectGroups: projectGroupsRouter,
 });
 
 export type AppRouter = typeof appRouter;
