@@ -51,6 +51,11 @@ export class RingBuffer {
     return this.filled ? this.buf.length : this.head;
   }
 
+  /** Pre-allocated capacity (memory footprint regardless of how full the buffer is) */
+  get capacity(): number {
+    return this.buf.length;
+  }
+
   clear(): void {
     this.head = 0;
     this.filled = false;

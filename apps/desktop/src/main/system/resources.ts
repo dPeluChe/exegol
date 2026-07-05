@@ -3,6 +3,9 @@ import * as os from "node:os";
 import { promisify } from "node:util";
 import type { MetricsSnapshot } from "@exegol/shared";
 import { broadcast } from "../lib/event-bus";
+import { getNotificationBus } from "../notifications/bus";
+import { getPtyHost } from "../terminal/pty-host";
+import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
 
 const execFileAsync = promisify(execFile);
 
@@ -129,6 +132,14 @@ async function collectMetrics(): Promise<void> {
 
   // Push to renderer
   broadcastMetrics(cachedMetrics);
+
+  // T143: check ring buffer memory against the global cap, warn via NotificationBus
+  try {
+    const mem = await getSidecarMemoryMetrics();
+    if (mem) checkResourceThresholds(mem);
+  } catch {
+    // Sidecar unavailable — skip this cycle's check
+  }
 }
 
 /**
@@ -378,6 +389,39 @@ async function getAgentProcessMetrics(
   } catch {
     return [];
   }
+}
+
+// ─── Sidecar Ring Buffer Memory (T143) ─────────────────────────────────────
+
+/** Resource-warning thresholds — fraction of the global ring buffer cap. */
+const WARN_THRESHOLD = 0.8;
+const ALERT_THRESHOLD = 1.0;
+let lastWarnedLevel: "none" | "warn" | "alert" = "none";
+
+/** Per-session ring buffer memory usage from the sidecar (PTY count included via array length). */
+export async function getSidecarMemoryMetrics(): Promise<SessionMemoryResult | null> {
+  return getPtyHost().getSidecarMemoryInfo();
+}
+
+function checkResourceThresholds(mem: SessionMemoryResult): void {
+  const ratio = mem.globalCapBytes > 0 ? mem.totalCapacityBytes / mem.globalCapBytes : 0;
+  const level = ratio >= ALERT_THRESHOLD ? "alert" : ratio >= WARN_THRESHOLD ? "warn" : "none";
+  if (level === lastWarnedLevel || level === "none") {
+    lastWarnedLevel = level;
+    return;
+  }
+  lastWarnedLevel = level;
+  getNotificationBus().emit({
+    type: "resource:warning",
+    title: level === "alert" ? "Terminal memory limit reached" : "High terminal memory usage",
+    body: `${mem.sessions.length} PTY sessions using ${formatMB(mem.totalCapacityBytes)} of the ${formatMB(mem.globalCapBytes)} budget.`,
+    at: Date.now(),
+    meta: { totalCapacityBytes: mem.totalCapacityBytes, globalCapBytes: mem.globalCapBytes },
+  });
+}
+
+function formatMB(bytes: number): string {
+  return `${Math.round(bytes / (1024 * 1024))}MB`;
 }
 
 export async function getProjectMetrics(

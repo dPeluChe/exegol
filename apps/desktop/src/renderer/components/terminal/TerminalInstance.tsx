@@ -174,9 +174,16 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       clearTimeout(settleTimer);
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
       resizeObserver.disconnect();
+      // WebGL context must be freed before the terminal itself is torn down.
       webglRef.current?.dispose();
       webglRef.current = null;
+      // session.dispose() unsubscribes onData/onScroll/OSC handlers + the
+      // dormant ring pipe (T115) before xterm's own teardown runs.
       session.dispose();
+      // T143 disposal audit: FitAddon/WebLinksAddon/SerializeAddon are not
+      // disposed individually — xterm.js's Terminal.dispose() disposes every
+      // addon still registered via its internal addon manager. Explicit here
+      // so this isn't mistaken for a leak on a future audit.
       session.terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;

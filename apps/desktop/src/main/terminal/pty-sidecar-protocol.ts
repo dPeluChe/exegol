@@ -9,16 +9,26 @@ import { join } from "node:path";
 export const EXEGOL_DIR = join(homedir(), ".exegol");
 export const SIDECAR_SOCK_PATH = join(EXEGOL_DIR, "pty-sidecar.sock");
 export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
-// Bumped to 1.1.0 when session.listInfo was added. Older running sidecars
-// are auto-upgraded by main/index.ts on startup when safe.
-export const SIDECAR_VERSION = "1.1.0";
+// Bumped to 1.2.0 when session.memory + per-session bufferCapacity were added.
+// Older running sidecars are auto-upgraded by main/index.ts on startup when safe.
+export const SIDECAR_VERSION = "1.2.0";
 export const SIDECAR_MIN_COMPATIBLE_VERSION = "1.1.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 
 export const SIDECAR_CONNECT_TIMEOUT_MS = 5_000;
 export const SIDECAR_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // Auto-exit after 5min idle
-export const RING_BUFFER_CAPACITY = 8 * 1024 * 1024; // 8MB per session
+export const RING_BUFFER_CAPACITY = 8 * 1024 * 1024; // 8MB per session (default)
+export const SHELL_RING_BUFFER_CAPACITY = 1 * 1024 * 1024; // 1MB for plain shells (T143)
+
+// ─── Ring buffer memory policy (T143) ────────────────────────────────────
+
+/** Global cap across all sessions' pre-allocated ring buffer capacity. */
+export const GLOBAL_RING_BUFFER_CAP_BYTES = 256 * 1024 * 1024; // 256MB
+/** A session is eviction-eligible once idle (no PTY output) for this long. */
+export const RING_BUFFER_EVICTION_IDLE_MS = 2 * 60 * 1000; // 2 minutes
+/** How often the sidecar checks whether it's over the global cap. */
+export const RING_BUFFER_EVICTION_SWEEP_MS = 60 * 1000; // 1 minute
 
 // ─── PID file ───────────────────────────────────────────────────────────
 
@@ -63,6 +73,8 @@ export interface SessionCreateParams {
   cols: number;
   rows: number;
   env: Record<string, string>;
+  /** T143: override the default 8MB ring buffer (e.g. smaller for plain shells) */
+  bufferCapacity?: number;
 }
 
 export interface SessionCreateResult {
@@ -112,6 +124,23 @@ export interface PingResult {
   version: string;
   uptime: number;
   sessions: number;
+}
+
+/** Per-session ring buffer memory usage (T143 — Monitor > Resources). */
+export interface SessionMemoryInfo {
+  id: string;
+  /** Pre-allocated ring buffer capacity in bytes */
+  capacityBytes: number;
+  /** Bytes currently coalesced, not yet flushed to the renderer */
+  pendingBytes: number;
+  /** True if this session's ring buffer was evicted to disk (idle, over the global cap) */
+  evicted: boolean;
+}
+
+export interface SessionMemoryResult {
+  sessions: SessionMemoryInfo[];
+  totalCapacityBytes: number;
+  globalCapBytes: number;
 }
 
 // ─── Notification params (sidecar → main) ───────────────────────────────

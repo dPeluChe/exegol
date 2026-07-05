@@ -17,6 +17,8 @@ interface TerminalStore {
   setTerminalReady: (agentId: string) => void;
   setTerminalSize: (agentId: string, cols: number, rows: number) => void;
   hasTerminal: (agentId: string) => boolean;
+  /** T143: drop terminal state when its pane/agent is torn down — otherwise this map only grows. */
+  removeTerminal: (agentId: string) => void;
 }
 
 export const useTerminalStore = create<TerminalStore>((set, get) => ({
@@ -52,4 +54,11 @@ export const useTerminalStore = create<TerminalStore>((set, get) => ({
     }),
 
   hasTerminal: (agentId) => agentId in get().terminals,
+
+  removeTerminal: (agentId) =>
+    set((state) => {
+      if (!(agentId in state.terminals)) return state;
+      const { [agentId]: _removed, ...rest } = state.terminals;
+      return { terminals: rest };
+    }),
 }));

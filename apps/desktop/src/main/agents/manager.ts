@@ -148,7 +148,7 @@ export class AgentManager {
       agent.id,
       { shell, args, cwd, cols: DEFAULT_PTY_COLS, rows: DEFAULT_PTY_ROWS, env },
       callbacks,
-      { scrollbackPath, shellReadyGating: enableMarker },
+      { scrollbackPath, shellReadyGating: enableMarker, smallRingBuffer: isPlainShell },
     );
 
     activateAgent(db, agent.id, pid);

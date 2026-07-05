@@ -52,3 +52,27 @@ export function useProjectMetrics(
     enabled: !!projectId && !!projectPath,
   });
 }
+
+// ─── PTY Ring Buffer Memory (T143) ─────────────────────────────────────────
+
+export interface SidecarSessionMemory {
+  id: string;
+  capacityBytes: number;
+  pendingBytes: number;
+  evicted: boolean;
+}
+
+export interface SidecarMemoryReport {
+  sessions: SidecarSessionMemory[];
+  totalCapacityBytes: number;
+  globalCapBytes: number;
+}
+
+export function useSidecarMemory() {
+  return useQuery({
+    queryKey: ["resources", "sidecarMemory"],
+    queryFn: () => trpcInvoke<SidecarMemoryReport | null>("resources.sidecarMemory"),
+    refetchInterval: 15_000,
+    staleTime: 10_000,
+  });
+}
