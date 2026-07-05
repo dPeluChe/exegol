@@ -2,6 +2,7 @@
 
 > Audience: current contributors planning the next implementation wave after the initial MVP.
 > This board is the active backlog for product differentiation, operational confidence, and release readiness.
+> **Pending tasks only** — completed work lives in [`tasks_completed/`](./tasks_completed/) (monthly files) and `CHANGELOG.md` (per release).
 
 > **Quality gate before PR**
 > - `npx @biomejs/biome check --fix apps/ packages/shared/src/ packages/ui/src/`
@@ -28,46 +29,30 @@ Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 8. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
 9. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
 
-**P1 additions:**
-- **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
-- **T145** — Exegol MCP Server + CLI shim (agents query/update memory & knowledge mid-session; pairs with T140)
-- **T146** — Project Groups (sidebar folders: color, icon, collapse — visual only, paths unchanged)
-- **T147** — Cost Dashboard + Budgets (pain point #2: surprise costs; alerts via NotificationBus)
+**P1 — Launch differentiators:**
+10. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
+11. **T130** — Pipeline Evidence (Artifacts-style, multi-provider)
+12. **T88v2** — Evaluator gate: two-pass judge + score distribution + ship/hold/retry
+13. **T140** — Project Knowledge Node (digest + brief per project)
+14. **T145** — Exegol MCP Server + CLI shim (agents query/update memory/knowledge/tasks mid-session)
+15. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
+16. **T147** — Cost Dashboard + Budgets (pain point #2; alerts via NotificationBus)
+17. **T131** — Race mode polish (loser cleanup + defer)
+18. **T146** — Project Groups (sidebar folders: color, icon, collapse — visual only)
 
 > Pain-point coverage map: `docs/RESEARCH/DEV_PAIN_POINTS_2026.md` (top-10 complaints vs backlog)
-
-**P1 — Launch differentiators:**
-8. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
-9. **T130** — Pipeline Evidence (Artifacts-style, multi-provider)
-10. **T88v2** — Evaluator gate: two-pass judge + score distribution + ship/hold/retry
-11. **T131** — Race mode polish (loser cleanup + defer)
-12. **T140** — Project Knowledge Node (digest + brief per project)
 
 **P2 — Post-launch bets:**
 T132 automations catalog · T133 remote channel (Telegram) · T134 ACP experimental ·
 T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
 T138 ModeTracker headless · T139 skills security scan · T144 dependency/library audit
 
-### Wave 1 — Stack Optimizations (Terax Review, 2026-05) — ✅ SHIPPED
-Strategic context: we stay on **Electron + spawned-CLI agents** (our core differentiator).
-Terax (Tauri-based terminal) is more focused than us — adopted their tighter patterns inside our stack. Full analysis: `docs/RESEARCH/TERAX_STACK_REVIEW.md`.
+### Shipped waves
+- **Wave 1 — Stack Optimizations (Terax review, 2026-05)**: quick wins + WT1-WT5 + T120 settings window.
+  Details: `docs/tasks_completed/2026_05.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
+- Earlier waves (V1-V3, T01-T107): `docs/tasks_completed/2026_03.md`, `2026_04.md`, `docs/applied/`
 
-**Shipped (see `docs/tasks_completed/2026_05.md` for details):**
-- Quick wins (T108 build opts · T110 streamdown + diff cache · T111 tokenlens · T121 electron-window-state · T103 release config)
-- WT1 — Terminal Foundations (T112 OSC 7+133 · T113 PTY flusher hardening · T115 DormantRing) + TerminalInstance split
-- WT2 — Security Hardening (T117 path-guard + command-guard · T118 CSP tightening · T119 capability allowlist)
-- WT3 — Rust Search Backend (T116 ignore + grep-* + globset + fsSearchRouter)
-- WT4 — Parallel Multi-Agent + Agent UX (T65 completion/broadcast · T107 comparator · T105 isolation badge · T106 stop-reason panel) + manager.ts + TerminalPanel splits
-- WT5 — Codebase Hygiene Splits (6 monolith files >500 LOC split, pure motion)
-
-**Wave 1.5 (post-merge follow-ups):**
-- ✅ **Settings as separate window** (T120, M) — shipped 2026-05-22, see `docs/tasks_completed/2026_05.md`
-
-**Wave 1 deferred to wave 3:**
-- **xterm renderer pool** (T114, L) — 5-slot LRU pool with snapshot+replay, blocks N-WebGL-context lag at high tab counts
-- **Vercel AI SDK + Ollama** (T122, M, P3) — replace 2 fetch calls in `diff.ts` + `scoring.ts`, unlock Ollama via `@ai-sdk/openai-compatible`
-
-### Manual verification pending (post-merge)
+### Manual verification pending (post-merge) `added: 2026-05-22`
 Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended before broad release:
 - OSC 7 cwd badge on shell panes (open shell, `cd /tmp`, verify badge updates)
 - OSC 133 prompt boundaries (jump-to-previous-prompt should work)
@@ -78,45 +63,30 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Capability allowlist (no functional regression — all routers/IPC still callable from renderer)
 - **T120 settings window**: Cmd+, opens standalone; second Cmd+, focuses existing (no duplicate); Cmd+W closes settings only; main close also closes settings; minimize main keeps settings visible; theme change in settings reflects in main without reload
 
-### P0 — Must land before broad release push
-- _(empty — all P0 items shipped in wave 1+2)_
-
-### P1 — Differentiators for first users
-- **Ralph loops in pipelines** (T88) — evaluator step for iterative refinement
-
-### P2 — Valuable follow-ups once the core is stable
-- Issue tracker expansion (T71)
-
-### P3 — Strategic bets / larger scope
+### P3 — Strategic bets / larger scope (post Wave 2)
 - **SSH Remote Development** (T73)
 - **CI/CD release pipeline** (T45) — activate when repo goes public
 - **Canary channel** (T46)
-- **Cross-repo workspaces** (T92) — front + back in one workspace
-- **Mobile companion app** (T93) — monitor agents from phone via daemon
-- **Headless daemon mode** (T94) — remote WebSocket for cloud/server deploys
-- **Panel Plugin SDK** (T97) — extensible panel system, community plugins, v1.0 architecture
+- **Cross-repo workspaces** (T92) — front + back in one workspace (T146 project groups is the cheap precursor)
+- **Mobile companion app** (T93) — natural successor of T133 Telegram channel
+- **Headless daemon mode** (T94) — prerequisite for T93
+- **Panel Plugin SDK** (T97) — extensible panel system, v1.0 architecture (design spike first)
+- **xterm renderer pool** (T114) — re-scoped inside T143: measure after disposal fixes, build only if needed
+- **Vercel AI SDK + Ollama** (T122) — value compounds with T130/T147 in-process LLM calls
+- **Issue tracker expansion** (T71) — Linear/Jira; plugs into T142 integrations registry
+- **T60 project hooks** — ⚠️ mostly superseded by shipped T91 (`.exegol/lifecycle.yaml`); pending delta only: `archive` hook on worktree archival + env vars — review & fold or drop
 
 ---
 
 ## Active Backlog
 
-### T58 — Runtime Permission Modes
-**Priority**: High | **Effort**: Medium | **Source**: Anvil
+### T58 — Runtime Permission Modes (remaining delta) `added: 2026-04-01`
+**Priority**: P2 | **Effort**: S | **Source**: Anvil
 
-**Why**
-- Creates clearer runtime control for risky or high-cost agent sessions.
-- Useful foundation for scheduler, hooks, and later automations.
-
-**Done (v0.4.3)**
-- Types: `AgentAccessMode` (`read`, `write`, `plan`) + DB migration
-- Spawn-time injection (prompt prefix + `EXEGOL_ACCESS_MODE` env var)
-- SpawnAgentModal mode selector (Full Access / Plan Only / Read Only)
-- Access mode badge in live terminal toolbar
-- Pipeline step `accessMode` field + executor propagation + editor UI
-
-**Remaining**
+Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline propagation — archived in `tasks_completed/2026_04.md`). Remaining:
 - Runtime mode switching (change mode while agent is running)
 - Scheduler task `accessMode` propagation
+- New consumer: T145 MCP tool-set gating reads this mode
 
 **Likely files**
 - `apps/desktop/src/main/agents/*`
@@ -126,29 +96,20 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
-### T60 — Project Hook Scripts (`exegol.yaml`)
-**Priority**: P2 | **Effort**: Medium | **Source**: Orca + Emdash
+### T60 — Project Hook Scripts (remaining delta) `added: 2026-04-01`
+**Priority**: P3 | **Effort**: S | **Source**: Orca + Emdash
 
-**Why**
-- Projects often need setup/teardown steps around worktree creation and archival.
-- This becomes much more useful once worktrees are real.
-
-**Scope**
-- `exegol.yaml` in project root with `setup`, `archive`, `preAgent`, `postAgent` hooks
-- 2-minute timeout and non-blocking execution
-- Environment vars: `EXEGOL_ROOT_PATH`, `EXEGOL_WORKTREE_PATH`, `EXEGOL_BRANCH`, `EXEGOL_AGENT_ID`
-
-**Depends on**
-- T61 for worktree lifecycle integration
+⚠️ **Mostly superseded by shipped T91** (`.exegol/lifecycle.yaml`: `setup`, `beforeAgent`, `afterCommit`, `teardown`). Remaining delta only:
+- `archive` hook fired on worktree archival (T91 has no archival-specific hook)
+- Env vars in hooks: `EXEGOL_ROOT_PATH`, `EXEGOL_WORKTREE_PATH`, `EXEGOL_BRANCH`, `EXEGOL_AGENT_ID`
+- Decision: fold into `lifecycle/loader.ts` or drop
 
 **Likely files**
-- `apps/desktop/src/main/hooks/*`
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/db/*`
+- `apps/desktop/src/main/lifecycle/loader.ts`
 
 ---
 
-### T71 — Issue Tracker Expansion (Linear / Jira)
+### T71 — Issue Tracker Expansion (Linear / Jira) `added: 2026-04-15`
 **Priority**: P2 | **Effort**: Medium | **Source**: Emdash
 
 **Why**
@@ -166,7 +127,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
-### T73 — SSH Remote Development
+### T73 — SSH Remote Development `added: 2026-04-15`
 **Priority**: P3 | **Effort**: High | **Source**: Emdash + Orca (stablyai/orca)
 
 **Why**
@@ -209,14 +170,9 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-## Codebase Quality & Health (from deep analysis)
-
-> These tasks surfaced from a comprehensive codebase audit (April 2026).
-> They address technical debt, testability, and robustness gaps that will compound if left unattended.
-
 ## Post-launch Backlog — Inspired by Competitors
 
-### T88 — Ralph Loops in Pipelines
+### T88 — Ralph Loops in Pipelines `added: 2026-04-15`
 **Priority**: P2 | **Effort**: Medium | **Source**: Paseo orchestration skills
 
 **Why**
@@ -251,7 +207,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T92 — Cross-repo Workspaces
+### T92 — Cross-repo Workspaces `added: 2026-04-15`
 **Priority**: P3 | **Effort**: Large | **Source**: Superconductor
 
 **Why**
@@ -276,7 +232,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T93 — Mobile Companion App
+### T93 — Mobile Companion App `added: 2026-04-15`
 **Priority**: P3 | **Effort**: Very large | **Source**: Paseo Expo client
 
 **Why**
@@ -299,7 +255,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T94 — Headless Daemon Mode
+### T94 — Headless Daemon Mode `added: 2026-04-15`
 **Priority**: P3 | **Effort**: Large | **Source**: Paseo daemon architecture
 
 **Why**
@@ -325,7 +281,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T97 — Panel Plugin SDK
+### T97 — Panel Plugin SDK `added: 2026-04-15`
 **Priority**: P3 | **Effort**: Very large (2-4 weeks) | **Source**: kcosr/assistant
 
 **Why**
@@ -382,7 +338,7 @@ location (local path vs ssh://host). Key files to study:
 > Source analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`. Repos studied live in
 > `~/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/`.
 
-### T123 — Agent Status via Hooks + OSC 777
+### T123 — Agent Status via Hooks + OSC 777 `added: 2026-07-04`
 **Priority**: P0 | **Effort**: M | **Source**: terax `src-tauri/src/modules/pty/agent_detect.rs` + superset `terminal-agents/store.ts` + emdash `hook-server.ts`
 
 **Why**
@@ -403,7 +359,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T124 — NotificationBus + Desktop Notifications
+### T124 — NotificationBus + Desktop Notifications `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S-M | **Source**: openclaw clones (`nanoclaw/src/delivery.ts`, `nanobot/channels/base.py`) — irreducible pattern: bus + 1-method channel adapters
 
 **Why**
@@ -423,7 +379,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T125 — Hybrid Search RRF (FTS5 + Vectors)
+### T125 — Hybrid Search RRF (FTS5 + Vectors) `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S | **Source**: qmd `src/store.ts` (RRF line 3982, hybridQuery 4731, blend 4957)
 
 **Why**
@@ -440,7 +396,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T126 — Memory Salience v2 (Decay + Reinforcement + Supersession)
+### T126 — Memory Salience v2 (Decay + Reinforcement + Supersession) `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S | **Source**: memU `src/memu/vector.py` (salience 25-62), schema `reinforcement_count`
 
 **Why**
@@ -458,7 +414,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T127 — Progressive Disclosure Skills
+### T127 — Progressive Disclosure Skills `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S-M | **Source**: openclaw `skill-contract.ts` + `local-loader.ts`; nullclaw `skills.zig` (flag `always`)
 
 **Why**
@@ -475,7 +431,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T128 — Terminal URL Detector → Browser Pane
+### T128 — Terminal URL Detector → Browser Pane `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S | **Source**: emdash `terminal-url-detector`
 
 **Scope**
@@ -488,7 +444,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T129 — Oplog v2: Git-Tree Snapshots per Agent Turn
+### T129 — Oplog v2: Git-Tree Snapshots per Agent Turn `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M-L | **Source**: GitButler `crates/gitbutler-oplog/` (oplog.rs, reflog.rs, entry.rs) + `but-oplog` unmaterialized pattern + t3code `CheckpointStore.ts`
 
 **Why**
@@ -506,7 +462,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T130 — Pipeline Evidence (Verifiable Artifacts per Step)
+### T130 — Pipeline Evidence (Verifiable Artifacts per Step) `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: Google Antigravity "Artifacts" (gap: Gemini-only; ours is multi-provider)
 
 **Why**
@@ -523,7 +479,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T131 — Race Mode Polish (T65 follow-up)
+### T131 — Race Mode Polish (T65 follow-up) `added: 2026-07-04`
 **Priority**: P1 | **Effort**: S | **Source**: runoff (race semantics)
 
 **Scope**
@@ -533,7 +489,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T140 — Project Knowledge Node (digest + brief)
+### T140 — Project Knowledge Node (digest + brief) `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + memU `memory_fs/synthesizer.py` (incremental synthesis) + stoneforge (git-tracked state) + Kilo Code "Memory Bank" (closest prior art — validate against it)
 
 **Why**
@@ -561,7 +517,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T141 — Attention Inbox (unread / needs-attention UX)
+### T141 — Attention Inbox (unread / needs-attention UX) `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S-M | **Source**: Orca (Gmail-like unread/star on worktrees) + superset (ringtone/badge bindings)
 
 **Why**
@@ -577,7 +533,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T142 — Integrations Hub: GitHub API first
+### T142 — Integrations Hub: GitHub API first `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + emdash (11 tracker integrations validate demand); extends T71
 
 **Why**
@@ -598,7 +554,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T143 — Resource & Memory Hardening
+### T143 — Resource & Memory Hardening `added: 2026-07-04`
 **Priority**: P0 | **Effort**: M | **Source**: internal audit + emdash (pidusage per agent) + terax renderer pool (re-scopes T114)
 
 **Why**
@@ -616,7 +572,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T144 — Dependency & Library Audit
+### T144 — Dependency & Library Audit `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: internal
 
 **Scope**
@@ -627,7 +583,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T145 — Exegol MCP Server + CLI Shim (agent ↔ Exegol runtime API)
+### T145 — Exegol MCP Server + CLI Shim (agent ↔ Exegol runtime API) `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Depends**: T125, T126, T140 | **Source**: design discussion 2026-07
 
 **Why**
@@ -651,7 +607,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T147 — Cost Dashboard + Budgets
+### T147 — Cost Dashboard + Budgets `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: dev pain point #2 (`docs/RESEARCH/DEV_PAIN_POINTS_2026.md`) — surprise costs / rate limits is the #2 complaint industry-wide
 
 **Why**
@@ -668,7 +624,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T148 — First-run Onboarding Wizard
+### T148 — First-run Onboarding Wizard `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S-M | **Source**: dev pain point #7 (setup complexity) — critical for public launch
 
 **Why**
@@ -686,7 +642,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T146 — Project Groups (sidebar folders)
+### T146 — Project Groups (sidebar folders) `added: 2026-07-04`
 **Priority**: P1 | **Effort**: S-M | **Source**: original idea (Antonio)
 
 **Why**
@@ -706,7 +662,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T132 — Automations Catalog
+### T132 — Automations Catalog `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: emdash `builtin-catalog.ts` + openclaw heartbeat/cron delivery
 
 **Scope**
@@ -714,32 +670,32 @@ location (local path vs ssh://host). Key files to study:
 - Each run delivers result via NotificationBus (T124); suppress empty results
 - One-click enable from a catalog UI in Project → Tasks
 
-### T133 — Remote Notification Channel (Telegram first)
+### T133 — Remote Notification Channel (Telegram first) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M | **Depends**: T124
 - Telegram bot channel implementing the same `deliver()` interface; allowlist of chat ids; optional reply→prompt injection later. Validated demand: Orca mobile app, AgentsRoom.
 
-### T134 — ACP Boundary (experimental)
+### T134 — ACP Boundary (experimental) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: L | **Source**: emdash `packages/core/src/acp/`, t3code `effect-acp`, Zed ACP
 - Agent Client Protocol (JSON-RPC/stdio) for one provider (Claude Code or Gemini) in an experimental pane; structured events instead of PTY scraping; PTY remains default. Evaluate before committing to boundary refactor.
 
-### T135 — Derived Status + CDC change_log
+### T135 — Derived Status + CDC change_log `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M | **Source**: ComposioHQ/agent-orchestrator (OBSERVE→UPDATE→DERIVE)
 - Persist only durable facts (`activity_state`, `is_terminated`); derive display status read-time by precedence. `change_log` table (SQLite triggers) with seq watermark → renderer reconnects without gaps. Kills stale-status bug class.
 
-### T136 — Tiered Merge Resolver
+### T136 — Tiered Merge Resolver `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M | **Source**: overstory merge queue + clash (worktree conflict detection)
 - For parallel runs/pipelines: (1) clean merge → (2) keep-incoming → (3) AI-resolve → (4) reimplement-from-spec. Auto-commit runtime state files (`.claude/`, etc.) so they never block merges.
 - **Proactive overlap detection**: warn when 2+ active worktrees touch the same files *before* merge time (cheap: compare `git status` paths across worktrees on a timer / on turn end).
 
-### T137 — Hunk Assignment + Absorb (GitPane)
+### T137 — Hunk Assignment + Absorb (GitPane) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M-L | **Source**: GitButler `but-hunk-assignment` + `absorb.rs`
 - Stable hunk UUIDs surviving edits → attribute uncommitted hunks to agents/branches; "absorb" redistributes agent fixups to the right commits.
 
-### T138 — ModeTracker Headless
+### T138 — ModeTracker Headless `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S | **Source**: superset `terminal-mode-tracker.ts` (VSCode XtermSerializer lineage)
 - Per-session headless xterm (scrollback 1) tracking VT modes (kitty keyboard, bracketed paste); reconstruct preamble on reattach — fixes Shift+Enter/paste after reload.
 
-### T139 — Skills Security Scan (pre-import)
+### T139 — Skills Security Scan (pre-import) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: mission-control Skills Hub scanner
 - Pattern gate before installing external skills/MCP configs: prompt-injection, credential exfil, dangerous shell, obfuscation. Blocks write-to-disk on match; user override with warning.
 
@@ -765,108 +721,6 @@ Use these lanes only if multiple agents are working concurrently. The goal is di
 
 Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G/H can merge anytime; W2-I's T144 goes last.
 
-### Lane A — Git Isolation Core
-**Tasks**
-- T61
-- T65
-- T66
-- T78
-
-**Owned files**
-- `packages/core-rust/src/git/*`
-- `apps/desktop/src/main/agents/*`
-- `apps/desktop/src/main/terminal/*`
-- `apps/desktop/src/main/ipc/procedures/agents.ts`
-- `apps/desktop/src/main/db/*`
-
-**Do not overlap with**
-- Diff UI work in Lane C
-- Renderer performance work in Lane D unless a shared interface is agreed first
-
-### Lane B — Attention / UX Command Surfaces
-**Tasks**
-- T57
-- T64
-- T70
-- T72
-
-**Owned files**
-- `apps/desktop/src/renderer/components/layout/*`
-- `apps/desktop/src/renderer/components/common/*`
-- `apps/desktop/src/renderer/hooks/use-hotkeys.ts`
-- `apps/desktop/src/renderer/stores/*`
-
-**Do not overlap with**
-- Git/Diff procedure changes in Lane C
-
-### Lane C — Review Experience
-**Tasks**
-- T62
-- T69
-
-**Owned files**
-- `apps/desktop/src/main/ipc/procedures/diff.ts`
-- `apps/desktop/src/renderer/components/workspace/GitPane.tsx`
-- `apps/desktop/src/renderer/components/workspace/sections/DiffSection.tsx`
-- `apps/desktop/src/renderer/components/workspace/sections/diff/*`
-
-**Do not overlap with**
-- T63 changes to diff refresh behavior unless coordinated up front
-
-### Lane D — Performance / Main Process Hygiene
-**Tasks**
-- T59
-- T63
-- T75
-- T80
-
-**Owned files**
-- `apps/desktop/src/renderer/hooks/use-trpc*.ts`
-- `apps/desktop/src/main/system/resources.ts`
-- `apps/desktop/src/main/ipc/procedures/files.ts`
-- `apps/desktop/src/renderer/components/workspace/FileExplorer.tsx`
-
-**Do not overlap with**
-- Lane C diff UI files
-
-### Lane E — Intelligence Layer
-**Tasks**
-- T67
-- T68
-- T71
-- T79
-
-**Owned files**
-- `apps/desktop/src/main/hooks/*`
-- `apps/desktop/src/main/memory/*`
-- `apps/desktop/src/main/ipc/procedures/search.ts`
-- `apps/desktop/src/main/db/queries/search.ts`
-- `apps/desktop/src/renderer/components/workspace/sections/SearchSection.tsx`
-
-**Do not overlap with**
-- Lane A unless a shared spawn-context contract changes
-
-### Lane F — Testability & Quality Foundation
-**Tasks**
-- T74
-- T76
-- T77
-- T81
-- T82
-
-**Owned files**
-- New: `apps/desktop/src/main/__tests__/*`
-- New: `apps/desktop/src/renderer/__tests__/*`
-- `packages/shared/src/schemas/*`
-- `apps/desktop/src/main/lib/errors.ts` (new)
-- `apps/desktop/src/main/app-context.ts` (new)
-- `apps/desktop/src/main/agents/scoring.ts` (T76: curl → SDK)
-
-**Do not overlap with**
-- Lane D file decomposition (T75) — coordinate on manager.ts split
-- Lane A spawn context changes unless agreed first
-
----
 
 ## Terax Review — Stack Optimizations (Wave 1)
 
@@ -874,7 +728,7 @@ Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G/
 > All tasks below cite specific Terax files when copying patterns.
 > Strategic stance: keep AI-spawned CLI as our core; adopt Terax's tighter implementation patterns.
 
-### T114 — xterm Renderer Pool
+### T114 — xterm Renderer Pool `added: 2026-04-15`
 **Priority**: Wave 1 / P3 | **Effort**: L | **Source**: Terax `src/modules/terminal/lib/rendererPool.ts:1-700`
 
 **Why**
@@ -905,7 +759,7 @@ Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G/
 
 ---
 
-### T122 — Vercel AI SDK + Ollama Support
+### T122 — Vercel AI SDK + Ollama Support `added: 2026-04-15`
 **Priority**: Wave 1 / P3 (radar) | **Effort**: M | **Source**: Terax `src/modules/ai/lib/agent.ts:70-211` + `transport.ts:71-114`
 
 **Why**
@@ -936,38 +790,14 @@ Merge order suggestion: W2-A → (W2-B, W2-E) → rest in any order. W2-C/D/F/G/
 
 ---
 
-## Suggested Order
-
-### Next wave — Wave 2 P0 (pre-launch)
-1. **T123** — Hooks + OSC status (unblocks the wave)
-2. **T124** + **T141** — NotificationBus + Attention Inbox
-3. **T125** + **T126** — Hybrid search RRF + salience v2
-4. **T127** — Progressive disclosure skills
-5. **T128** — URL detector
-
-### Wave 2 P1 (launch headline)
-6. **T129** — Oplog v2 (per-turn snapshots)
-7. **T130** + **T88v2** — Pipeline Evidence + statistical evaluator gate
-8. **T131** — Race polish · **T140** — Project Knowledge Node
-
-### Stabilization & quality (P2)
-- T81 — Dependency Injection for Singletons
-- Wave 2 P2: T132-T139 (see Priority Order)
-
-### Strategic backlog (P3)
-- **T90** — Terminal ↔ Chat dual view
-- **T92** — Cross-repo workspaces
-- **T93** — Mobile companion app (validated: Orca shipped one — real demand)
-- **T94** — Headless daemon mode
-- **T97** — Panel Plugin SDK (v1.0 architecture — design spike first)
 
 ---
 
 ## Distribution (pending GitHub)
 
-### T45 — CI/CD Release Pipeline
+### T45 — CI/CD Release Pipeline `added: 2026-04-15`
 **Priority**: P3 — activate when repo goes to GitHub
 
-### T46 — Canary Channel
+### T46 — Canary Channel `added: 2026-04-15`
 **Priority**: P3
 
