@@ -19,6 +19,10 @@ interface AppStore {
   /** Command palette open state */
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
+
+  /** T148: first-run onboarding wizard completed (or skipped) */
+  onboardingComplete: boolean;
+  setOnboardingComplete: (complete: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -39,6 +43,9 @@ export const useAppStore = create<AppStore>()(
 
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+
+      onboardingComplete: false,
+      setOnboardingComplete: (complete) => set({ onboardingComplete: complete }),
     }),
     {
       name: "exegol-app-state",
@@ -61,6 +68,7 @@ export const useAppStore = create<AppStore>()(
         activeProjectId: state.activeProjectId,
         activeView: state.activeView,
         sidebarCollapsed: state.sidebarCollapsed,
+        onboardingComplete: state.onboardingComplete,
       }),
     },
   ),

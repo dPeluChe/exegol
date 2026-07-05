@@ -27,6 +27,12 @@ const ProjectList = lazy(() =>
 const CommandPalette = lazy(() =>
   import("./components/CommandPalette").then((m) => ({ default: m.CommandPalette })),
 );
+// OnboardingWizard: only rendered for first-run users with zero projects (T148).
+const OnboardingWizard = lazy(() =>
+  import("./components/onboarding/OnboardingWizard").then((m) => ({
+    default: m.OnboardingWizard,
+  })),
+);
 
 function MainContent() {
   const activeView = useAppStore((s) => s.activeView);
@@ -96,6 +102,9 @@ export default function App() {
         <ToastStack />
         <Suspense fallback={null}>
           <CommandPalette />
+        </Suspense>
+        <Suspense fallback={null}>
+          <OnboardingWizard />
         </Suspense>
       </div>
     </TooltipProvider>

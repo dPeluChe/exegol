@@ -3,6 +3,7 @@ import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { diffRouter } from "./procedures/diff";
 import { diffCommentsRouter } from "./procedures/diff-comments";
+import { doctorRouter } from "./procedures/doctor";
 import { filesRouter } from "./procedures/files";
 import { fsSearchRouter } from "./procedures/fs-search";
 import { githubRouter } from "./procedures/github";
@@ -57,6 +58,7 @@ export const appRouter = router({
   github: githubRouter,
   indexer: indexerRouter,
   knowledge: knowledgeRouter,
+  doctor: doctorRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -392,24 +392,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T148 — First-run Onboarding Wizard `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S-M | **Source**: dev pain point #7 (setup complexity) — critical for public launch
-
-**Why**
-- Public launch means cold users. Complaint #7: "every repo demands complex setup just to start". Our pitch is "one place for all your CLIs" — the first run must prove it in under 2 minutes.
-
-**Scope**
-- First-run flow: detect installed CLIs (which of the 11 providers exist on PATH + versions), show found/missing with install links
-- API key setup: only for what they use; keystore storage; skip-able
-- "Add your first project" + optional guided spawn (safe: read-only mode suggestion)
-- Health check summary reusable later as Settings → Doctor (gh present? git version? node-pty ok? Ollama running?)
-
-**Likely files**
-- New: `apps/desktop/src/renderer/components/onboarding/*`, `main/system/doctor.ts`
-- `apps/desktop/src/main/agents/registry.ts` (CLI detection reuse)
-
----
-
 ### T146 — Project Groups (sidebar folders) `added: 2026-07-04`
 **Priority**: P1 | **Effort**: S-M | **Source**: original idea (Antonio)
 
@@ -495,7 +477,7 @@ location (local path vs ssh://host). Key files to study:
 **Stub note**: T129 uses turn boundaries from T123 — start with process-exit boundaries, wire real turns after WT-A's T123 PR merges.
 
 ### WT-D — Product Surface & Health `branch: feat/wtd-surface`
-**Tasks in order**: T148 → T143 → T147 → T146
+**Tasks in order**: ~~T148~~ (shipped 2026-07-05) → T143 → T147 → T146
 **Theme**: what a new user touches — onboarding, stability, cost visibility, project organization.
 **Write set**: new `renderer/components/onboarding/*` · new `main/system/doctor.ts` · `main/system/resources.ts` · Monitor sections · `db/queries/token-usage.ts` · `TerminalInstance.tsx` (disposal) · `Sidebar/ProjectsSection` · migrations **40-42**
 **Stub note**: T143/T147 alerts emit through the `NotificationBus` interface from WT-A's contract — mock the emitter until WT-A merges.
