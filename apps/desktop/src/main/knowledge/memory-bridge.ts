@@ -7,13 +7,13 @@
  * never duplicates facts already in the DB.
  */
 
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import type { MemoryCategory } from "@exegol/shared";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
 import { computeSalience } from "../memory/salience";
 import { listMemories, observeMemory } from "../memory/store";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { ensureKnowledgeDir, getMemoryBridgePath } from "./paths";
 
 const CATEGORY_LABELS: Record<MemoryCategory, string> = {
@@ -58,9 +58,17 @@ export function syncMemoryBridge(
 
   const header =
     "# Project Memory\n\n_Synced from Exegol's memory store — top-salience facts only. " +
-    "Edits here are not read back automatically; use \"Import as seed\" to bring manual edits into the DB._";
-  const content = sections.length > 0 ? `${header}\n\n${sections.join("\n\n")}\n` : `${header}\n`;
+    'Edits here are not read back automatically; use "Import as seed" to bring manual edits into the DB._';
 
+  // No facts → no file. A header-only MEMORY.md would still be advertised to
+  // every spawned agent as "distilled team facts" and waste a read.
+  if (sections.length === 0) {
+    const path = getMemoryBridgePath(projectPath);
+    if (existsSync(path)) rmSync(path);
+    return "";
+  }
+
+  const content = `${header}\n\n${sections.join("\n\n")}\n`;
   ensureKnowledgeDir(projectPath);
   writeFileSync(getMemoryBridgePath(projectPath), content, "utf-8");
   return content;

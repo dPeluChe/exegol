@@ -146,7 +146,10 @@ export class PipelineExecutor {
     const previousOutput = getPreviousOutput(run.stepResults);
     const isLastStep = stepIndex === template.steps.length - 1;
     const project = getProject(db, run.projectId);
-    const knowledge = project ? buildKnowledgeContext(project.path) : "";
+    // Knowledge files are git-tracked: point at the run's worktree copy so the
+    // agent reads the branch's own PROJECT/MEMORY.md, not the main checkout's.
+    const knowledgeRoot = run.worktreePath ?? project?.path;
+    const knowledge = knowledgeRoot ? buildKnowledgeContext(knowledgeRoot) : "";
     const prompt = buildStepPrompt(stepDef, {
       task: run.originalTask,
       diff,

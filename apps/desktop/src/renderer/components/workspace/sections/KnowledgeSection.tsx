@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   useImportMemoryBridgeAsSeed,
+  useInitializeKnowledge,
   useKnowledge,
   useRefreshDigest,
   useSaveBrief,
@@ -14,6 +15,7 @@ import { EmptyState } from "../../common/EmptyState";
 export function KnowledgeSection() {
   const { projectId } = useProjectContext();
   const { data, isLoading } = useKnowledge(projectId);
+  const initialize = useInitializeKnowledge(projectId);
   const saveBrief = useSaveBrief(projectId);
   const refreshDigest = useRefreshDigest(projectId);
   const syncMemoryBridge = useSyncMemoryBridge(projectId);
@@ -23,7 +25,7 @@ export function KnowledgeSection() {
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
-    if (data && !dirty) setBriefDraft(data.brief);
+    if (data?.brief != null && !dirty) setBriefDraft(data.brief);
   }, [data, dirty]);
 
   if (!projectId) {
@@ -42,6 +44,24 @@ export function KnowledgeSection() {
     return (
       <div className="flex h-full items-center justify-center text-xs text-text-muted">
         Loading knowledge base…
+      </div>
+    );
+  }
+
+  // Explicit opt-in: `knowledge.get` is read-only, so a repo without a
+  // knowledge base shows this instead of silently creating files on tab open.
+  if (!data.initialized) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          icon={<BookOpen className="h-8 w-8 text-text-muted" />}
+          title="No knowledge base yet"
+          description="Creates .exegol/knowledge/ (PROJECT.md brief + DIGEST.md) and adds a pointer block to AGENTS.md/CLAUDE.md."
+          action={{
+            label: initialize.isPending ? "Setting up…" : "Set up knowledge base",
+            onClick: () => initialize.mutate(),
+          }}
+        />
       </div>
     );
   }

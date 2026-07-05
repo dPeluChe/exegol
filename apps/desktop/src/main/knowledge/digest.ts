@@ -5,7 +5,7 @@
  * Derivable + high-churn — gitignored by default (see paths.ts).
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
 import { logger } from "../lib/logger";
@@ -40,7 +40,9 @@ function isBinAvailable(bin: string): boolean {
 function generateDigestViaBinary(projectPath: string): string | null {
   if (!isBinAvailable("trs")) return null;
   try {
-    return execSync(`trs digest ${JSON.stringify(projectPath)}`, {
+    // execFileSync, never a shell string: a project path containing $(...) or
+    // backticks (legal on macOS) must not become command execution.
+    return execFileSync("trs", ["digest", projectPath], {
       timeout: 30_000,
       maxBuffer: 2 * 1024 * 1024,
     })
@@ -109,7 +111,8 @@ function summarizePackageJson(projectPath: string): string | null {
     const deps = Object.keys(pkg.dependencies ?? {});
     const devDeps = Object.keys(pkg.devDependencies ?? {});
     const lines = [`**Package**: ${pkg.name ?? "(unnamed)"}`];
-    if (deps.length > 0) lines.push(`**Dependencies** (${deps.length}): ${deps.slice(0, 20).join(", ")}`);
+    if (deps.length > 0)
+      lines.push(`**Dependencies** (${deps.length}): ${deps.slice(0, 20).join(", ")}`);
     if (devDeps.length > 0)
       lines.push(`**Dev dependencies** (${devDeps.length}): ${devDeps.slice(0, 20).join(", ")}`);
     return lines.join("\n\n");
@@ -125,7 +128,9 @@ function generateInternalDigest(projectPath: string): string {
 
   const dirLines = dirs
     .sort((a, b) => b.fileCount - a.fileCount)
-    .map((d) => `- \`${d.name}/\` — ${d.fileCount} files (${d.topExtensions.join(", ") || "mixed"})`);
+    .map(
+      (d) => `- \`${d.name}/\` — ${d.fileCount} files (${d.topExtensions.join(", ") || "mixed"})`,
+    );
 
   const parts = [
     "# Codebase Digest\n\n_Auto-generated. Do not edit by hand — see PROJECT.md for the human-authored brief._",

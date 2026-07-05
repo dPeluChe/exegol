@@ -26,12 +26,23 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Upsert the managed block in a single file's content. Returns the new content. */
-export function upsertManagedBlockContent(content: string): string {
+/**
+ * Upsert the managed block in a single file's content. Returns the new
+ * content, or null when the file is damaged (one marker without the other) —
+ * appending in that state would make the NEXT sync's replace span from the
+ * orphan marker across user content and silently delete it.
+ */
+export function upsertManagedBlockContent(content: string): string | null {
   const block = buildManagedBlock();
+  const hasBegin = content.includes(BEGIN_MARKER);
+  const hasEnd = content.includes(END_MARKER);
 
-  if (content.includes(BEGIN_MARKER) && content.includes(END_MARKER)) {
-    const pattern = new RegExp(`${escapeRegExp(BEGIN_MARKER)}[\\s\\S]*?${escapeRegExp(END_MARKER)}`);
+  if (hasBegin !== hasEnd) return null; // damaged: refuse, never guess
+
+  if (hasBegin && hasEnd) {
+    const pattern = new RegExp(
+      `${escapeRegExp(BEGIN_MARKER)}[\\s\\S]*?${escapeRegExp(END_MARKER)}`,
+    );
     return content.replace(pattern, block);
   }
 
@@ -42,19 +53,27 @@ export function upsertManagedBlockContent(content: string): string {
 const CANDIDATE_FILES = ["AGENTS.md", "CLAUDE.md"];
 
 /**
- * Sync the managed knowledge pointer into every existing AGENTS.md/CLAUDE.md
- * at the project root. If neither exists, creates AGENTS.md (the more
- * CLI-agnostic convention) with just the managed block.
+ * Sync the managed knowledge pointer into every EXISTING AGENTS.md/CLAUDE.md
+ * at the project root. Never invents a context file in a repo that has none —
+ * unsolicited AGENTS.md creation surprises users and dirties git status; the
+ * explicit "Sync" action in the Knowledge UI is the place to opt in.
  */
-export function syncManagedBlock(projectPath: string): void {
+export function syncManagedBlock(projectPath: string, opts?: { createIfMissing?: boolean }): void {
   const existingFiles = CANDIDATE_FILES.filter((name) => existsSync(join(projectPath, name)));
-  const targets = existingFiles.length > 0 ? existingFiles : ["AGENTS.md"];
+  const targets =
+    existingFiles.length > 0 ? existingFiles : opts?.createIfMissing ? ["AGENTS.md"] : [];
 
   for (const name of targets) {
     const filePath = join(projectPath, name);
     try {
       const existing = existsSync(filePath) ? readFileSync(filePath, "utf-8") : "";
       const updated = upsertManagedBlockContent(existing);
+      if (updated === null) {
+        logger.warn(
+          `[Knowledge] ${name} has a damaged exegol:knowledge block (one marker missing) — skipping sync, fix the markers manually`,
+        );
+        continue;
+      }
       if (updated !== existing) {
         writeFileSync(filePath, updated, "utf-8");
       }

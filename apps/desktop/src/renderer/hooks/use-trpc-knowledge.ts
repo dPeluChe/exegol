@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
 export interface KnowledgeSnapshot {
-  brief: string;
-  digest: string;
-  digestRefreshedOnLoad: boolean;
+  initialized: boolean;
+  brief: string | null;
+  digest: string | null;
   digestStale: boolean;
   memoryBridgeExists: boolean;
 }
@@ -14,6 +14,18 @@ export function useKnowledge(projectId: string | null) {
     queryKey: ["knowledge", projectId],
     queryFn: () => trpcInvoke<KnowledgeSnapshot>("knowledge.get", { projectId }),
     enabled: !!projectId,
+  });
+}
+
+/** Explicit opt-in: creates PROJECT.md + DIGEST.md + the managed block. */
+export function useInitializeKnowledge(projectId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      trpcMutate<{ brief: string; digest: string }>("knowledge.initialize", { projectId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge", projectId] });
+    },
   });
 }
 
@@ -41,8 +53,7 @@ export function useRefreshDigest(projectId: string | null) {
 export function useSyncMemoryBridge(projectId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      trpcMutate<{ content: string }>("knowledge.syncMemoryBridge", { projectId }),
+    mutationFn: () => trpcMutate<{ content: string }>("knowledge.syncMemoryBridge", { projectId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge", projectId] });
     },

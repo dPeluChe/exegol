@@ -28,15 +28,32 @@ describe("upsertManagedBlockContent", () => {
     ].join("\n");
 
     const result = upsertManagedBlockContent(before);
+    expect(result).not.toBeNull();
     expect(result).toContain("# My Project");
     expect(result).toContain("## Other section");
     expect(result).not.toContain("stale pointer text");
-    expect(result.match(/<!-- exegol:knowledge:begin -->/g)?.length).toBe(1);
+    expect(result?.match(/<!-- exegol:knowledge:begin -->/g)?.length).toBe(1);
   });
 
   it("is idempotent — running twice produces the same result", () => {
     const once = upsertManagedBlockContent("# My Project\n");
-    const twice = upsertManagedBlockContent(once);
+    expect(once).not.toBeNull();
+    const twice = upsertManagedBlockContent(once as string);
     expect(twice).toBe(once);
+  });
+
+  it("refuses to touch a file with a damaged block (one marker missing)", () => {
+    const orphanBegin = [
+      "# My Project",
+      "",
+      "<!-- exegol:knowledge:begin -->",
+      "user text after an accidentally-deleted end marker",
+      "",
+      "## Important user section",
+    ].join("\n");
+    expect(upsertManagedBlockContent(orphanBegin)).toBeNull();
+
+    const orphanEnd = "# My Project\n\n<!-- exegol:knowledge:end -->\n";
+    expect(upsertManagedBlockContent(orphanEnd)).toBeNull();
   });
 });

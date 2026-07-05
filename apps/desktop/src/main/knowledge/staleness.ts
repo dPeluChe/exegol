@@ -53,7 +53,12 @@ export function isDigestStale(projectPath: string): boolean {
   if (!match?.[1]) return true;
 
   const behind = getCommitsBehind(projectPath, match[1]);
-  if (behind === null) return false; // git unavailable — don't force a refresh loop
+  if (behind === null) {
+    // rev-list fails for two very different reasons: not a git repo (don't
+    // loop refreshes) vs the stamped sha no longer existing (rebase, squash-
+    // merge, gc) — in a live repo an unknown sha means definitively stale.
+    return getGitHead(projectPath) !== null;
+  }
   return behind >= STALE_COMMIT_THRESHOLD;
 }
 
