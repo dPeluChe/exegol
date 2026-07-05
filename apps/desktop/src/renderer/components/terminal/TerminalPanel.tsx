@@ -6,6 +6,7 @@ import { useAgent, useScrollback, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { collectPaneIds, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
@@ -13,6 +14,7 @@ import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstanc
 import { TerminalScrollback } from "./TerminalScrollback";
 import { LiveHandoffBanner, LiveStartOverlay, TerminalToolbar } from "./TerminalToolbar";
 import { useTerminalLifecycle } from "./use-terminal-lifecycle";
+import { useTerminalUrlDetector } from "./use-terminal-url-detector";
 
 /** Hook: set of CLI types that support session resume (from provider registry) */
 function useResumableCliTypes(): Set<string> {
@@ -178,6 +180,19 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     }
   }, [viewMode]);
 
+  // T128: localhost URL detector → "Open preview" toolbar chip
+  const [previewUrl, dismissPreview] = useTerminalUrlDetector(agentId, !isStopped);
+  const handleOpenPreview = useCallback(() => {
+    if (!previewUrl || !paneId) return;
+    const tab = getProjectState().tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
+    if (tab) {
+      useWorkspaceStore
+        .getState()
+        .splitPane(tab.id, paneId, "vertical", "browser", { url: previewUrl });
+    }
+    dismissPreview();
+  }, [previewUrl, paneId, dismissPreview]);
+
   const floatingButtons = (
     <TerminalFloatingButtons
       terminalRef={terminalRef}
@@ -246,6 +261,9 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           branchName={agent?.branchName}
           viewMode={viewMode}
           onToggleView={handleToggleLiveView}
+          previewUrl={previewUrl}
+          onOpenPreview={handleOpenPreview}
+          onDismissPreview={dismissPreview}
         />
       )}
       <div className="relative flex-1">

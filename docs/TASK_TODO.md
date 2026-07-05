@@ -22,9 +22,8 @@ Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 1. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
 2. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
 3. **T127** — Progressive disclosure skills (metadata-only injection)
-4. **T128** — terminal-url-detector → browser pane
-5. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
-6. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
+4. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
+5. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
 
 **P1 — Launch differentiators:**
 10. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
@@ -303,19 +302,21 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T128 — Terminal URL Detector → Browser Pane `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S | **Source**: emdash `terminal-url-detector`
+### T129 — Oplog v2: Git-Tree Snapshots per Agent Turn `added: 2026-07-04`
+**Priority**: P1 | **Effort**: M-L | **Source**: GitButler `crates/gitbutler-oplog/` (oplog.rs, reflog.rs, entry.rs) + `but-oplog` unmaterialized pattern + t3code `CheckpointStore.ts`
+
+**Why**
+- Strongest differentiator identified. Agents edit faster than git commits; current oplog only covers git operations. GitButler's model gives per-turn granular undo with zero new infra (no CAS, no daemon, no file watcher) — pure git2, which we already ship.
 
 **Scope**
-- Detect `https?://localhost:PORT` (and 127.0.0.1) in PTY output stream
-- Toolbar chip "Open preview" → opens URL in a browser pane in the same tab
-- Dedup per session; ignore URLs inside scrollback replay
+- Snapshot = commit whose tree captures `worktree/ + index/ + app state`; chained parent-child log per project
+- Anti-GC: hidden ref (`refs/exegol/oplog`) with forged reflog (GitButler `reflog.rs` trick) — reachable but invisible in `git log --all`
+- Metadata as git trailers: `operation: AgentTurn|PipelineStep|Promote|...`, `agentId`, `provider`
+- Trigger: turn boundaries from T123 (`prepare_snapshot` on turn start → `commit_snapshot` on success; unmaterialized discard on failure)
+- Undo UI: timeline in GitPane oplog tab with per-turn restore + agent attribution
 
 **Likely files**
-- `apps/desktop/src/main/terminal/*` or sidecar notification path, `TerminalPanel.tsx`, workspace store
-
----
-
+- `packages/core-rust/src/git/oplog.rs` (major extension), `apps/desktop/src/main/ipc/procedures/git.ts`, GitPane oplog UI
 
 ---
 
