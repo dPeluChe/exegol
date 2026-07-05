@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useAgentStore } from "../stores/agents";
+import { jumpToAttentionItem, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
 import { deleteAgentImperative } from "./use-delete-agent";
@@ -124,6 +124,13 @@ export function useHotkeys() {
         return;
       }
 
+      // Cmd+J: Jump to the next agent needing attention (T141)
+      if (e.key === "j") {
+        e.preventDefault();
+        jumpToNextAttention();
+        return;
+      }
+
       // Cmd+/ (Cmd+?): Show keyboard shortcuts overlay
       if (e.key === "/") {
         e.preventDefault();
@@ -192,6 +199,23 @@ function cleanupAndCloseFocusedPane(): void {
   }
 
   ws.closeFocusedPane();
+}
+
+/**
+ * Jump to the next unread attention item (T141), cycling past the currently
+ * focused agent so repeated presses walk the queue. Falls back to any item
+ * (including already-read/pinned) if nothing is unread.
+ */
+function jumpToNextAttention(): void {
+  const { attentionItems, focusedAgentId } = useAgentStore.getState();
+  const queue = sortAttentionItems(Object.values(attentionItems));
+  if (queue.length === 0) return;
+
+  const unread = queue.filter((i) => !i.read);
+  const pool = unread.length > 0 ? unread : queue;
+  const currentIndex = pool.findIndex((i) => i.agentId === focusedAgentId);
+  const next = pool[(currentIndex + 1) % pool.length];
+  if (next) jumpToAttentionItem(next.agentId, next.projectId);
 }
 
 /** Cycle through workspace tabs (next/prev) */

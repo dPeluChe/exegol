@@ -23,9 +23,8 @@ Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 2. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
 3. **T127** — Progressive disclosure skills (metadata-only injection)
 4. **T128** — terminal-url-detector → browser pane
-5. **T141** — Attention Inbox (unread/needs-attention UX, depends on T123)
-6. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
-7. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
+5. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
+6. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
 
 **P1 — Launch differentiators:**
 10. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
@@ -320,24 +319,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-
-### T141 — Attention Inbox (unread / needs-attention UX) `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S-M | **Source**: Orca (Gmail-like unread/star on worktrees) + superset (ringtone/badge bindings)
-
-**Why**
-- With 5+ agents the question is "who needs me now?". We have StatusDot/activity pulse but no unread semantics — attention state is lost when you look away.
-
-**Head start (found in 2026-07 dead-code sweep)**: `stores/agents.ts` already ships a persisted attention inbox from T57 — `attentionItems` (level/reason/read/pinned), `addAttentionItem`, `markAttentionRead`, `dismissAttention`, `toggleAttentionPin`, `unreadAttentionCount`, auto-read-on-focus. Push events already feed it. **Extend this store; the missing part is UI** (badges, TitleBar queue, jump hotkey) + wiring T123's richer signals.
-
-**Scope**
-- Unread state per agent/tab: set on `finished`/`needsAttention` (from T123), cleared on focus
-- Sidebar + tab badges with counts; global "needs attention" queue in TitleBar (click = jump to pane)
-- Keyboard: hotkey jumps to next agent needing attention
-
-**Likely files**
-- `apps/desktop/src/renderer/stores/agents.ts`, `WorkspaceTabBar.tsx`, `Sidebar.tsx`, `TitleBar.tsx`
-
----
 
 ### T142 — Integrations Hub: GitHub API first `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + emdash (11 tracker integrations validate demand); extends T71

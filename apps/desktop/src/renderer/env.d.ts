@@ -9,6 +9,12 @@ interface AgentStatusEvent {
   timestamp: number;
   /** T101: Claude session ID, set once when first parsed from startup output. */
   claudeSessionId?: string;
+  /** T123: unix epoch ms — set when a hook/OSC signal reports a new turn boundary. */
+  turnStarted?: number;
+  /** T123: unix epoch ms — set when a hook/OSC signal reports a turn completed. */
+  turnEnded?: number;
+  /** T123: true when the agent is waiting on the user (drives T141 attention inbox). */
+  needsAttention?: boolean;
 }
 
 interface SystemMetricsEvent {
