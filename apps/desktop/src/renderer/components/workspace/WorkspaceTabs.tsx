@@ -17,6 +17,7 @@ export type ProjectSubTab =
   | "tasks"
   | "prompts-skills"
   | "memory"
+  | "knowledge"
   | "pipelines"
   | "parallel-runs"
   | "qa-tests";
@@ -27,6 +28,7 @@ export type WorkspaceSection =
   | "tasks"
   | "prompts-skills"
   | "memory"
+  | "knowledge"
   | "pipelines"
   | "parallel-runs"
   | "qa-tests"
@@ -38,6 +40,7 @@ const PROJECT_SUBS: { id: ProjectSubTab; label: string }[] = [
   { id: "tasks", label: "Tasks" },
   { id: "prompts-skills", label: "Prompts & Skills" },
   { id: "memory", label: "Memory" },
+  { id: "knowledge", label: "Knowledge" },
   { id: "pipelines", label: "Pipelines" },
   { id: "parallel-runs", label: "Parallel Runs" },
   { id: "qa-tests", label: "QA Tests" },
@@ -57,6 +60,7 @@ export function getMainTab(section: WorkspaceSection): MainTab {
     section === "tasks" ||
     section === "prompts-skills" ||
     section === "memory" ||
+    section === "knowledge" ||
     section === "pipelines" ||
     section === "parallel-runs" ||
     section === "qa-tests"

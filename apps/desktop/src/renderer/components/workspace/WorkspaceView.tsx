@@ -44,6 +44,9 @@ const PromptsSkillsSection = lazy(() =>
 const MemorySection = lazy(() =>
   import("./sections/MemorySection").then((m) => ({ default: m.MemorySection })),
 );
+const KnowledgeSection = lazy(() =>
+  import("./sections/KnowledgeSection").then((m) => ({ default: m.KnowledgeSection })),
+);
 const PipelineSection = lazy(() =>
   import("./sections/PipelineSection").then((m) => ({ default: m.PipelineSection })),
 );
@@ -176,6 +179,7 @@ export function WorkspaceView() {
             {activeSection === "tasks" && <TasksSection />}
             {activeSection === "prompts-skills" && <PromptsSkillsSection />}
             {activeSection === "memory" && <MemorySection />}
+            {activeSection === "knowledge" && <KnowledgeSection />}
             {activeSection === "pipelines" && <PipelineSection />}
             {activeSection === "parallel-runs" && <ParallelRunsSection />}
             {activeSection === "qa-tests" && <QaTestsSection />}

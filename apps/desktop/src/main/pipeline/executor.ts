@@ -19,6 +19,7 @@ import {
   updatePipelineRun,
 } from "../db/queries";
 import { runSetupHook } from "../hooks/project-hooks";
+import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput } from "./context";
 import { broadcastPipelineStatus, captureGitDiff, now, YOLO_FLAGS } from "./pipeline-helpers";
@@ -144,12 +145,15 @@ export class PipelineExecutor {
     const diff = run.worktreePath ? await captureGitDiff(run.worktreePath) : "";
     const previousOutput = getPreviousOutput(run.stepResults);
     const isLastStep = stepIndex === template.steps.length - 1;
+    const project = getProject(db, run.projectId);
+    const knowledge = project ? buildKnowledgeContext(project.path) : "";
     const prompt = buildStepPrompt(stepDef, {
       task: run.originalTask,
       diff,
       previousOutput,
       iteration: run.iterationCount,
       isLastStep,
+      knowledge,
     });
 
     const agent = createAgent(db, {

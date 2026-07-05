@@ -27,6 +27,8 @@ export function buildStepPrompt(
     previousOutput: string;
     iteration: number;
     isLastStep?: boolean;
+    /** T140: progressive-disclosure pointer block to `.exegol/knowledge/`. */
+    knowledge?: string;
   },
 ): string {
   const template =
@@ -39,7 +41,8 @@ export function buildStepPrompt(
     .replace(/\{\{task\}\}/g, vars.task)
     .replace(/\{\{diff\}\}/g, vars.diff)
     .replace(/\{\{previousOutput\}\}/g, vars.previousOutput)
-    .replace(/\{\{iteration\}\}/g, String(vars.iteration));
+    .replace(/\{\{iteration\}\}/g, String(vars.iteration))
+    .replace(/\{\{knowledge\}\}/g, vars.knowledge ?? "");
 
   // Auto-inject PR instruction on the last step (unless user already mentioned PR)
   if (

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Agent, AgentAccessMode, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
+import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
 import { getMcpHost } from "../mcp/host";
 import { buildMemoryContext, getMemoriesForInjection } from "../memory/store";
@@ -18,6 +19,7 @@ interface SpawnContextResult {
   memoryContext: string;
   mcpContext: string;
   skillContext: string;
+  knowledgeContext: string;
   contextPrefix: string;
 }
 
@@ -76,6 +78,13 @@ export function buildSpawnContext(
   let memoryContext = "";
   let mcpContext = "";
   let skillContext = "";
+  let knowledgeContext = "";
+
+  try {
+    knowledgeContext = buildKnowledgeContext(projectPath);
+  } catch (err) {
+    logger.warn("[SpawnContext] Failed to build knowledge context:", err);
+  }
 
   try {
     // Bounded by getMemoriesForInjection's token budget (~2000 tokens).
@@ -96,8 +105,10 @@ export function buildSpawnContext(
     logger.warn("[SpawnContext] Failed to build skill context:", err);
   }
 
-  const contextPrefix = [memoryContext, mcpContext, skillContext].filter(Boolean).join("\n");
-  return { memoryContext, mcpContext, skillContext, contextPrefix };
+  const contextPrefix = [memoryContext, mcpContext, skillContext, knowledgeContext]
+    .filter(Boolean)
+    .join("\n");
+  return { memoryContext, mcpContext, skillContext, knowledgeContext, contextPrefix };
 }
 
 /**
