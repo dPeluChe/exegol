@@ -19,8 +19,7 @@ Exegol's moat = orchestration layer: **Pipelines → Evidence → Undo → Scori
 Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 
 **P0 — Pre-launch (table stakes + quick wins):**
-1. **T123** — Agent status via hooks + OSC 777 (replaces scraping as primary signal) ← unblocks T124, T129, T141
-2. **T124** — NotificationBus + desktop notifications (depends on T123)
+1. **T124** — NotificationBus + desktop notifications (depends on T123)
 3. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
 4. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
 5. **T127** — Progressive disclosure skills (metadata-only injection)
@@ -302,27 +301,6 @@ location (local path vs ssh://host). Key files to study:
 
 > Source analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`. Repos studied live in
 > `~/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/`.
-
-### T123 — Agent Status via Hooks + OSC 777 `added: 2026-07-04`
-**Priority**: P0 | **Effort**: M | **Source**: terax `src-tauri/src/modules/pty/agent_detect.rs` + superset `terminal-agents/store.ts` + emdash `hook-server.ts`
-
-**Why**
-- Current `status_parser.rs` guesses state from ANSI output — fragile, imprecise `waiting_input`.
-- Three competitors converged independently on deterministic signal: CLI hooks emit `OSC 777 notify;Exegol;<agentId>;<event>` into the PTY; a byte-level FSM in the stream detects Started/Working/Attention/Finished.
-- Unblocks: T124 notifications, T129 per-turn snapshots, T141 attention inbox, precise pipeline transitions.
-
-**Scope**
-- Spawn-time hook injection per provider: Claude Code native hooks (`Stop`, `Notification`, `PreToolUse` → settings JSON in spawn env), wrapper/shell-init for others
-- OSC 777 FSM in Rust `AgentOutputStream` (extend `processing/status_parser.rs`) — existing parser becomes fallback for hook-less CLIs
-- New push event fields: `turnStarted/turnEnded/needsAttention` timestamps
-- Emit turn boundaries on the agent event bus (consumed by T124/T129)
-
-**Likely files**
-- `packages/core-rust/src/processing/status_parser.rs`
-- `apps/desktop/src/main/agents/spawn-env.ts`, `spawn-context.ts`, `manager.ts`
-- `apps/desktop/src/main/agents/status-parser.ts` (JS fallback)
-
----
 
 ### T124 — NotificationBus + Desktop Notifications `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S-M | **Source**: openclaw clones (`nanoclaw/src/delivery.ts`, `nanobot/channels/base.py`) — irreducible pattern: bus + 1-method channel adapters

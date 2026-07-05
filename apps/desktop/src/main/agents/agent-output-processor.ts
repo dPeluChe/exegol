@@ -11,6 +11,8 @@ export type ProcessResult = {
   tokenLimitWarning: boolean;
   sessionId?: string;
   resumeCommand?: string;
+  /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
+  signals?: { agentId: string; event: string }[];
 };
 
 export type OutputProcessor = { process(data: string): ProcessResult };
@@ -47,6 +49,9 @@ export function createOutputProcessor(
             tokenLimitWarning: r.tokenLimitWarning,
             sessionId: r.sessionId ?? undefined,
             resumeCommand: r.resumeCommand ?? undefined,
+            signals: r.signals?.length
+              ? r.signals.map((s) => ({ agentId: s.agentId, event: s.event }))
+              : undefined,
           };
         },
       };
@@ -65,6 +70,7 @@ export function createOutputProcessor(
         tokenLimitWarning: u?.tokenLimitWarning ?? false,
         sessionId: u?.sessionId,
         resumeCommand: u?.resumeCommand,
+        signals: u?.signals,
       };
     },
   };

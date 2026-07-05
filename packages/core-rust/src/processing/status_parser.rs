@@ -1,3 +1,4 @@
+use super::osc_notify::{AgentSignal, OscNotifyScanner};
 use super::status_matchers::{check_token_limit, parse_line, parse_resume_command_pattern, parse_session_id};
 use super::strip_ansi::strip_ansi_bytes;
 use napi::Error;
@@ -33,6 +34,8 @@ pub struct ProcessedOutput {
     /// e.g. "claude --resume <id>", "gemini --resume <id>", "opencode -s <id>",
     ///      "codex resume <id>", "droid --resume <id>"
     pub resume_command: Option<String>,
+    /// Deterministic hook/OSC-777 signals detected in this chunk (T123).
+    pub signals: Vec<AgentSignal>,
 }
 
 /// Persistent state for an agent's output stream.
@@ -44,6 +47,7 @@ pub struct AgentOutputStream {
     /// in shutdown output. Matched case-insensitively. Empty = no detection.
     resume_command_pattern: String,
     buffer: String,
+    osc_scanner: OscNotifyScanner,
 }
 
 #[napi]
@@ -57,6 +61,7 @@ impl AgentOutputStream {
             cli_type,
             resume_command_pattern,
             buffer: String::with_capacity(1024),
+            osc_scanner: OscNotifyScanner::new(),
         }
     }
 
@@ -64,6 +69,10 @@ impl AgentOutputStream {
     /// Returns cleaned text + optional status update.
     #[napi]
     pub fn process_chunk(&mut self, raw_data: String) -> Result<ProcessedOutput, Error> {
+        // OSC-777 notify signals must be scanned on the raw (pre-strip) stream —
+        // strip_ansi_bytes discards OSC payloads entirely.
+        let signals = self.osc_scanner.scan(&raw_data);
+
         // Strip ANSI from the raw data
         let clean = strip_ansi_bytes(raw_data.as_bytes());
 
@@ -134,6 +143,7 @@ impl AgentOutputStream {
             token_limit_warning,
             session_id,
             resume_command,
+            signals,
         })
     }
 
@@ -141,5 +151,6 @@ impl AgentOutputStream {
     #[napi]
     pub fn reset(&mut self) {
         self.buffer.clear();
+        self.osc_scanner.reset();
     }
 }

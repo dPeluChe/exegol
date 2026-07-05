@@ -1,4 +1,4 @@
-import type { AgentStatus } from "@exegol/shared";
+import type { AgentSignalEvent, AgentStatus } from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
@@ -10,6 +10,7 @@ import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import {
   type AgentContext,
   broadcastAgentStatus,
+  deriveStatusFromSignal,
   finalizeAgentStatus,
   scoreAndRecordOplog,
 } from "./spawn-env";
@@ -55,6 +56,52 @@ export function createSpawnCallbacks(
       const processor = maps.outputProcessors.get(agent.id);
       if (!processor) return;
       const result = processor.process(data);
+
+      // T123: deterministic hook/OSC-777 signals take priority over scraped status.
+      if (result.signals?.length) {
+        let signalStatus: AgentStatus | undefined;
+        let turnStarted: number | undefined;
+        let turnEnded: number | undefined;
+        let needsAttention: boolean | undefined;
+
+        for (const sig of result.signals) {
+          if (sig.agentId !== agent.id) continue;
+          const derived = deriveStatusFromSignal(sig.event);
+          if (derived.status) signalStatus = derived.status;
+          if (derived.turnStarted) turnStarted = derived.turnStarted;
+          if (derived.turnEnded) turnEnded = derived.turnEnded;
+          if (derived.needsAttention) needsAttention = true;
+
+          const signalEvent: AgentSignalEvent = {
+            agentId: agent.id,
+            projectId: agent.projectId,
+            type: sig.event as AgentSignalEvent["type"],
+            at: Date.now(),
+            source: "hook",
+          };
+          broadcast("agent:signal", signalEvent);
+        }
+
+        if (signalStatus || turnStarted || turnEnded || needsAttention) {
+          if (signalStatus) {
+            updateAgentStatus(db, agent.id, signalStatus, result.currentStep);
+          }
+          logger.info(
+            `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}`,
+          );
+          broadcastAgentStatus({
+            agentId: agent.id,
+            projectId: agent.projectId,
+            status: signalStatus ?? "running",
+            currentStep: result.currentStep ?? null,
+            cliType: agent.cliType,
+            timestamp: Date.now(),
+            turnStarted,
+            turnEnded,
+            needsAttention,
+          });
+        }
+      }
 
       // T101: store session ID (claude startup) or resume command (all CLIs shutdown)
       // Both use sessionIdsCaptured to avoid redundant DB writes per agent.
