@@ -183,6 +183,11 @@ export interface OplogSnapshotInfo {
   description: string
   /** Commit timestamp (unix seconds). */
   timestamp: number
+  /**
+   * Trailer: the worktree the snapshot was taken in — restore must target
+   * the same path (pipeline snapshots must never overwrite the main checkout).
+   */
+  worktreePath?: string
 }
 
 /**
@@ -258,6 +263,13 @@ export interface RepoSnapshot {
  * Reuses the same "never force-push, always create a new commit" semantics
  * as `revert_to_snapshot` — the snapshot's tree is resolvable by SHA
  * regardless of hidden-ref reachability once committed to the odb.
+ *
+ * Safety rails (GitButler model):
+ * 1. A snapshot taken in a different worktree is never restored here —
+ *    pipeline-worktree state must not overwrite the user's main checkout.
+ *    If the original worktree is gone, the snapshot is view-only.
+ * 2. A "PreRestore" snapshot of the CURRENT state (incl. untracked files)
+ *    is committed to the chain first, so restore is itself undoable.
  */
 export declare function restoreOplogSnapshot(repoPath: string, sha: string): string
 
@@ -265,7 +277,7 @@ export declare function restoreOplogSnapshot(repoPath: string, sha: string): str
  * Revert to a specific commit by creating a new commit that restores its tree.
  * Never force-pushes — creates a new "revert" commit on current branch.
  */
-export declare function revertToSnapshot(repoPath: string, targetSha: string): string
+export declare function revertToSnapshot(repoPath: string, targetSha: string, removeUntracked?: boolean | undefined | null): string
 
 /** Limits applied to `fs_search` walks. */
 export interface SearchLimits {

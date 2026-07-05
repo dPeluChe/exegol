@@ -35,8 +35,16 @@ pub fn get_repo_snapshot(repo_path: String) -> Result<RepoSnapshot, Error> {
 /// Revert to a specific commit by creating a new commit that restores its tree.
 /// Never force-pushes — creates a new "revert" commit on current branch.
 #[napi]
-pub fn revert_to_snapshot(repo_path: String, target_sha: String) -> Result<String, Error> {
+pub fn revert_to_snapshot(
+  repo_path: String,
+  target_sha: String,
+  remove_untracked: Option<bool>,
+) -> Result<String, Error> {
   let repo = open_repo(&repo_path)?;
+  // Default FALSE: v1 oplog undo predates turn snapshots — untracked files
+  // were never captured anywhere, so deleting them here would be data loss.
+  // Turn-snapshot restore opts in (its snapshots DO capture untracked files).
+  let remove_untracked = remove_untracked.unwrap_or(false);
 
   // Find the target commit
   let target_oid = git2::Oid::from_str(&target_sha)
@@ -77,11 +85,13 @@ pub fn revert_to_snapshot(repo_path: String, target_sha: String) -> Result<Strin
     .map_err(|e| Error::from_reason(format!("Failed to create revert commit: {e}")))?;
 
   // Checkout the new tree to update working directory
+  let mut checkout = git2::build::CheckoutBuilder::new();
+  checkout.force();
+  if remove_untracked {
+    checkout.remove_untracked(true);
+  }
   repo
-    .checkout_tree(
-      target_tree.as_object(),
-      Some(git2::build::CheckoutBuilder::new().force().remove_untracked(true)),
-    )
+    .checkout_tree(target_tree.as_object(), Some(&mut checkout))
     .map_err(|e| Error::from_reason(format!("Failed to checkout tree: {e}")))?;
 
   Ok(new_oid.to_string())
@@ -202,8 +212,11 @@ pub fn commit_turn_snapshot(
     .map_err(|e| Error::from_reason(format!("Failed to resolve oplog chain parent: {e}")))?;
   let parents: Vec<&git2::Commit> = parent_commit.iter().collect();
 
+  // Single-line-sanitize trailer/description inputs: a step label containing
+  // "\n\n" would shift the fixed title/trailers/description message layout.
+  let description = description.replace('\n', " ");
   let message = format!(
-    "Agent turn snapshot\n\noperation: {operation}\nagent-id: {agent_id}\nprovider: {provider}\nturn-index: {turn_index}\n\n{description}"
+    "Agent turn snapshot\n\noperation: {operation}\nagent-id: {agent_id}\nprovider: {provider}\nturn-index: {turn_index}\nworktree-path: {repo_path}\n\n{description}"
   );
 
   let commit_oid = repo
@@ -225,13 +238,14 @@ pub fn commit_turn_snapshot(
     turn_index,
     description,
     timestamp: commit.time().seconds(),
+    worktree_path: Some(repo_path),
   })
 }
 
 /// Parse the `operation`/`agent-id`/`provider`/`turn-index` trailers out of
 /// a snapshot commit message; everything after the blank line that follows
 /// them is the free-text description.
-fn parse_snapshot_message(message: &str) -> (String, String, String, i64, String) {
+fn parse_snapshot_message(message: &str) -> (String, String, String, i64, String, String) {
   // Fixed layout: "<title>\n\n<trailers block>\n\n<description>".
   let mut parts = message.splitn(3, "\n\n");
   let _title = parts.next().unwrap_or("");
@@ -242,6 +256,7 @@ fn parse_snapshot_message(message: &str) -> (String, String, String, i64, String
   let mut agent_id = String::new();
   let mut provider = String::new();
   let mut turn_index = 0i64;
+  let mut worktree_path = String::new();
 
   for line in trailers.lines() {
     if let Some(v) = line.strip_prefix("operation: ") {
@@ -252,10 +267,19 @@ fn parse_snapshot_message(message: &str) -> (String, String, String, i64, String
       provider = v.to_string();
     } else if let Some(v) = line.strip_prefix("turn-index: ") {
       turn_index = v.trim().parse().unwrap_or(0);
+    } else if let Some(v) = line.strip_prefix("worktree-path: ") {
+      worktree_path = v.to_string();
     }
   }
 
-  (operation, agent_id, provider, turn_index, description)
+  (
+    operation,
+    agent_id,
+    provider,
+    turn_index,
+    description,
+    worktree_path,
+  )
 }
 
 /// Walk the hidden oplog chain from its tip, most recent first.
@@ -270,11 +294,13 @@ pub fn list_oplog_snapshots(repo_path: String, limit: u32) -> Result<Vec<OplogSn
     if result.len() >= limit as usize {
       break;
     }
-    let commit = repo
-      .find_commit(oid)
-      .map_err(|e| Error::from_reason(format!("Failed to read snapshot commit: {e}")))?;
+    // Tolerate a broken link: one unreadable commit (pruned/corrupt) should
+    // truncate the listing at that point, not hide the entire timeline.
+    let Ok(commit) = repo.find_commit(oid) else {
+      break;
+    };
 
-    let (operation, agent_id, provider, turn_index, description) =
+    let (operation, agent_id, provider, turn_index, description, worktree_path) =
       parse_snapshot_message(commit.message().unwrap_or(""));
     let parent_oid = commit.parent_id(0).ok();
 
@@ -287,6 +313,11 @@ pub fn list_oplog_snapshots(repo_path: String, limit: u32) -> Result<Vec<OplogSn
       turn_index,
       description,
       timestamp: commit.time().seconds(),
+      worktree_path: if worktree_path.is_empty() {
+        None
+      } else {
+        Some(worktree_path)
+      },
     });
 
     cursor = parent_oid;
@@ -299,9 +330,49 @@ pub fn list_oplog_snapshots(repo_path: String, limit: u32) -> Result<Vec<OplogSn
 /// Reuses the same "never force-push, always create a new commit" semantics
 /// as `revert_to_snapshot` — the snapshot's tree is resolvable by SHA
 /// regardless of hidden-ref reachability once committed to the odb.
+///
+/// Safety rails (GitButler model):
+/// 1. A snapshot taken in a different worktree is never restored here —
+///    pipeline-worktree state must not overwrite the user's main checkout.
+///    If the original worktree is gone, the snapshot is view-only.
+/// 2. A "PreRestore" snapshot of the CURRENT state (incl. untracked files)
+///    is committed to the chain first, so restore is itself undoable.
 #[napi]
 pub fn restore_oplog_snapshot(repo_path: String, sha: String) -> Result<String, Error> {
-  revert_to_snapshot(repo_path, sha)
+  let repo = open_repo(&repo_path)?;
+  let oid =
+    Oid::from_str(&sha).map_err(|e| Error::from_reason(format!("Invalid SHA '{sha}': {e}")))?;
+  let commit = repo
+    .find_commit(oid)
+    .map_err(|e| Error::from_reason(format!("Snapshot '{sha}' not found: {e}")))?;
+  let (_, _, _, _, _, origin_path) = parse_snapshot_message(commit.message().unwrap_or(""));
+
+  if !origin_path.is_empty() && origin_path != repo_path {
+    if std::path::Path::new(&origin_path).exists() {
+      return Err(Error::from_reason(format!(
+        "Snapshot was taken in a different worktree ({origin_path}) — restore it there, not into this checkout"
+      )));
+    }
+    return Err(Error::from_reason(format!(
+      "Snapshot's original worktree ({origin_path}) no longer exists — snapshot is view-only"
+    )));
+  }
+  drop(commit);
+
+  // Safety snapshot of the current state so the restore itself is undoable.
+  let short: String = sha.chars().take(8).collect();
+  let prepared = prepare_turn_snapshot(repo_path.clone())?;
+  commit_turn_snapshot(
+    repo_path.clone(),
+    prepared.tree_sha,
+    "PreRestore".into(),
+    String::new(),
+    "exegol".into(),
+    0,
+    format!("State before restoring snapshot {short}"),
+  )?;
+
+  revert_to_snapshot(repo_path, sha, Some(true))
 }
 
 #[cfg(test)]

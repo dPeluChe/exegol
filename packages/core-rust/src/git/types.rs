@@ -128,4 +128,7 @@ pub struct OplogSnapshotInfo {
   pub description: String,
   /// Commit timestamp (unix seconds).
   pub timestamp: i64,
+  /// Trailer: the worktree the snapshot was taken in — restore must target
+  /// the same path (pipeline snapshots must never overwrite the main checkout).
+  pub worktree_path: Option<String>,
 }
