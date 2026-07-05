@@ -155,8 +155,8 @@ export function ApiKeysSettings() {
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <p className="text-[11px] text-warning">
-            OS keychain encryption is unavailable on this system — keys will be stored in plain
-            text in the local database. Avoid saving sensitive keys here.
+            OS keychain encryption is unavailable on this system — keys will be stored in plain text
+            in the local database. Avoid saving sensitive keys here.
           </p>
         </div>
       )}

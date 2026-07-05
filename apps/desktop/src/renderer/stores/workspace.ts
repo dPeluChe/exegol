@@ -94,7 +94,6 @@ interface WorkspaceStore {
   ) => void;
 
   // Pane actions
-  addPane: (tabId: string, type: PaneType, config?: { agentId?: string; url?: string }) => string;
   removePane: (tabId: string, paneId: string) => void;
   splitPane: (
     tabId: string,
@@ -136,8 +135,6 @@ interface WorkspaceStore {
   setPaneCwd: (paneId: string, cwd: string) => void;
   /** Update the last command exit code reported via OSC 133;D for a pane (T112) */
   setPaneLastExit: (paneId: string, code: number | null) => void;
-  /** Clear OSC 7/133 state for a pane when it is closed (T112) */
-  clearPaneShellState: (paneId: string) => void;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -362,36 +359,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
           return setPw(s, { tabs: newTabs, activeTabId: targetTabId });
         }),
-
-      addPane: (tabId, type, config) => {
-        const pane: Pane = {
-          id: nanoid(8),
-          type,
-          agentId: config?.agentId,
-          url: config?.url,
-        };
-        set((s) => {
-          const pw = getPw(s);
-          const tab = pw.tabs.find((t) => t.id === tabId);
-          if (!tab) return s;
-
-          // T95: Use focused pane as split target when it belongs to this tab
-          const tabPaneIds = collectPaneIds(tab.layout);
-          const targetPaneId =
-            s.focusedPaneId && tabPaneIds.includes(s.focusedPaneId)
-              ? s.focusedPaneId
-              : findFirstPaneId(tab.layout);
-          if (!targetPaneId) return s;
-
-          const newLayout = splitNodeByPaneId(tab.layout, targetPaneId, "horizontal", pane.id);
-
-          return setPw(s, {
-            tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
-            panes: { ...pw.panes, [pane.id]: pane },
-          });
-        });
-        return pane.id;
-      },
 
       removePane: (tabId, paneId) =>
         set((s) => {
@@ -667,18 +634,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         set((s) => {
           if (s.paneLastExit[paneId] === code) return s;
           return { paneLastExit: { ...s.paneLastExit, [paneId]: code } };
-        }),
-
-      clearPaneShellState: (paneId) =>
-        set((s) => {
-          const hasCwd = paneId in s.paneCwd;
-          const hasExit = paneId in s.paneLastExit;
-          if (!hasCwd && !hasExit) return s;
-          const cwd = { ...s.paneCwd };
-          const exit = { ...s.paneLastExit };
-          delete cwd[paneId];
-          delete exit[paneId];
-          return { paneCwd: cwd, paneLastExit: exit };
         }),
 
       invalidatePane: (paneId, reason) =>

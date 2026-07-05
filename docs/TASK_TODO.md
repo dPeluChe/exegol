@@ -578,8 +578,10 @@ location (local path vs ssh://host). Key files to study:
 **Scope**
 - Upgrade pass: Electron 41 → current stable, React 18 → 19 (evaluate: emdash ships 19), xterm/addons, node-pty rebuild chain, Biome, TS
 - `spark audit` + `bun pm ls` review: prune unused deps, dedupe, license check pre-open-source
+- **knip config** (`knip.json` with electron-vite entries: main/index, preload, renderer, pty-sidecar-entry, workspaces): raw run 2026-07 flagged 42 exports + deps but produced false positives on `export *` barrels (e.g. `listProjects` flagged while used) — needs tuned config before pruning; then delete verified-dead exports
 - Bundle budget: initial chunk ≤ 1MB enforced in CI (fonts already lazy — verify), track in BENCHMARKS.md
 - Rust: `cargo update` + clippy pedantic re-run; napi + memchr versions
+- Baseline 2026-07 (pre-wave sweep): 0 files >450 LOC, 0 TODOs/FIXMEs, clippy clean
 
 ---
 
