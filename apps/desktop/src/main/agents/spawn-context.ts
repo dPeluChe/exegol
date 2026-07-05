@@ -45,7 +45,10 @@ export function buildSkillContext(projectPath: string, requestedNames?: string[]
 
   if (disclosed.length > 0) {
     const pointers = disclosed
-      .map((s) => `- **${s.name}**: ${s.description} — read \`${s.filePath}\` when this task matches.`)
+      .map((s) => {
+        const desc = s.description || "no description — read the file to see when it applies";
+        return `- **${s.name}**: ${desc} — read \`${s.filePath}\` when this task matches.`;
+      })
       .join("\n");
     parts.push(
       `## Available Skills\n\nUse your read tool to load a skill's file when its description matches the task at hand.\n\n${pointers}`,

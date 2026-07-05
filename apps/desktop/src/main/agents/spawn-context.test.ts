@@ -12,13 +12,20 @@ function writeSkill(projectPath: string, name: string, frontmatter: string, body
 
 describe("buildSkillContext (T127 progressive disclosure)", () => {
   let projectPath: string;
+  let globalSkillsDir: string;
 
   beforeEach(() => {
     projectPath = mkdtempSync(join(tmpdir(), "exegol-skill-test-"));
+    // Isolate discovery from the developer's real ~/.agents/skills — a global
+    // skill with always:true would otherwise leak into every assertion.
+    globalSkillsDir = mkdtempSync(join(tmpdir(), "exegol-global-skills-"));
+    process.env.EXEGOL_SKILLS_DIR = globalSkillsDir;
   });
 
   afterEach(() => {
     rmSync(projectPath, { recursive: true, force: true });
+    rmSync(globalSkillsDir, { recursive: true, force: true });
+    delete process.env.EXEGOL_SKILLS_DIR;
   });
 
   it("returns empty string when no skills match", () => {

@@ -21,7 +21,9 @@ const LEGACY_DIR = join(homedir(), ".exegol", "skills");
 const SETUP_MARKER = join(homedir(), ".agents", ".skills-setup");
 
 export function getCanonicalSkillsDir(): string {
-  return CANONICAL_DIR;
+  // EXEGOL_SKILLS_DIR overrides for tests and sandboxed setups — discovery
+  // must be isolatable from the developer's real ~/.agents/skills.
+  return process.env.EXEGOL_SKILLS_DIR || CANONICAL_DIR;
 }
 
 export function getProjectSkillsDir(projectPath: string): string {
