@@ -8,7 +8,8 @@ import {
 } from "@exegol/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { getProjectState, useWorkspaceStore } from "./workspace";
+import { useAppStore } from "./app";
+import { collectPaneIds, getProjectState, useWorkspaceStore } from "./workspace";
 
 // ─── Attention model (T57) ────────────────────────────────────────────────
 
@@ -158,6 +159,51 @@ const ATTENTION_LEVEL_ORDER: Record<AttentionLevel, number> = {
   action_needed: 1,
   info: 2,
 };
+
+/** Sort order for the TitleBar attention queue: pinned first, then unread, then level/recency. */
+export function sortAttentionItems(items: AttentionItem[]): AttentionItem[] {
+  return [...items].sort((a, b) => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    if (a.read !== b.read) return a.read ? 1 : -1;
+    const levelDiff = ATTENTION_LEVEL_ORDER[a.level] - ATTENTION_LEVEL_ORDER[b.level];
+    if (levelDiff !== 0) return levelDiff;
+    return b.timestamp - a.timestamp;
+  });
+}
+
+/** Locate the workspace tab + pane showing a given agent, across all projects. */
+function findAgentPane(
+  agentId: string,
+  projectId: string,
+): { tabId: string; paneId: string } | null {
+  const pw = useWorkspaceStore.getState().projectWorkspaces[projectId];
+  if (!pw) return null;
+  for (const tab of pw.tabs) {
+    for (const paneId of collectPaneIds(tab.layout)) {
+      if (pw.panes[paneId]?.agentId === agentId) {
+        return { tabId: tab.id, paneId };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Jump to the pane hosting `agentId` (T141): switches project/tab if needed,
+ * focuses the pane, and marks the attention item read.
+ */
+export function jumpToAttentionItem(agentId: string, projectId: string): void {
+  if (useAppStore.getState().activeProjectId !== projectId) {
+    useAppStore.getState().setActiveProject(projectId);
+  }
+  const location = findAgentPane(agentId, projectId);
+  if (location) {
+    const ws = useWorkspaceStore.getState();
+    ws.setActiveTab(location.tabId);
+    ws.setFocusedPane(location.paneId);
+  }
+  useAgentStore.getState().setFocusedAgent(agentId);
+}
 
 export const useAgentStore = create<AgentStore>()(
   persist(

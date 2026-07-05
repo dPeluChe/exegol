@@ -7,7 +7,78 @@ type StatusUpdate = {
   tokenLimitWarning?: boolean;
   sessionId?: string;
   resumeCommand?: string;
+  /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
+  signals?: { agentId: string; event: string }[];
 };
+
+/**
+ * OSC 777 notify prefix emitted by CLI hooks: `ESC ] 777 ; notify ; Exegol ; <agentId> ; <event> BEL`.
+ * Distinct from the pre-existing `777;exegol-shell-ready` marker (shell-wrappers.ts).
+ * JS mirror of the Rust `OscNotifyScanner` (core-rust/src/processing/osc_notify.rs) — used
+ * only when the native module is unavailable (JS fallback path).
+ */
+const OSC777_NOTIFY_PREFIX = "\x1b]777;notify;Exegol;";
+const MAX_OSC_PAYLOAD_LEN = 256;
+
+export class OscNotifyScanner {
+  private matchPos = 0;
+  private capturing = false;
+  private payload = "";
+
+  /** Scan a chunk of raw (pre-strip) PTY output and return any completed signals. */
+  scan(data: string): { agentId: string; event: string }[] {
+    const out: { agentId: string; event: string }[] = [];
+    for (let i = 0; i < data.length; i++) {
+      const ch = data[i];
+      if (this.capturing) {
+        if (ch === "\x07") {
+          const signal = this.splitPayload();
+          if (signal) out.push(signal);
+          this.payload = "";
+          this.capturing = false;
+          this.matchPos = 0;
+          continue;
+        }
+        this.payload += ch;
+        if (this.payload.length > MAX_OSC_PAYLOAD_LEN) {
+          this.payload = "";
+          this.capturing = false;
+          this.matchPos = 0;
+        }
+        continue;
+      }
+
+      const expected = OSC777_NOTIFY_PREFIX[this.matchPos];
+      if (ch === expected) {
+        this.matchPos++;
+        if (this.matchPos === OSC777_NOTIFY_PREFIX.length) {
+          this.capturing = true;
+          this.matchPos = 0;
+        }
+      } else if (ch === OSC777_NOTIFY_PREFIX[0]) {
+        this.matchPos = 1;
+      } else {
+        this.matchPos = 0;
+      }
+    }
+    return out;
+  }
+
+  private splitPayload(): { agentId: string; event: string } | null {
+    const idx = this.payload.indexOf(";");
+    if (idx === -1) return null;
+    const agentId = this.payload.slice(0, idx);
+    const event = this.payload.slice(idx + 1);
+    if (!agentId || !event) return null;
+    return { agentId, event };
+  }
+
+  reset(): void {
+    this.matchPos = 0;
+    this.capturing = false;
+    this.payload = "";
+  }
+}
 
 /**
  * Parses agent CLI stdout to extract status information.
@@ -18,6 +89,7 @@ export class AgentStatusParser {
   private cliType: AgentCliType;
   private resumePattern: string;
   private buffer: string = "";
+  private oscScanner = new OscNotifyScanner();
 
   constructor(_agentId: string, cliType: AgentCliType, resumePattern?: string) {
     this.cliType = cliType;
@@ -29,6 +101,9 @@ export class AgentStatusParser {
    * Returns a status update if a meaningful pattern was detected, or null.
    */
   parse(data: string): StatusUpdate | null {
+    // OSC-777 notify signals must be scanned on the raw (pre-strip) stream.
+    const signals = this.oscScanner.scan(data);
+
     // Accumulate partial lines
     this.buffer += data;
 
@@ -69,6 +144,10 @@ export class AgentStatusParser {
         const resumeCommand = parseResumeCommandFromPattern(this.resumePattern, cleaned);
         if (resumeCommand) lastUpdate = { ...lastUpdate, resumeCommand };
       }
+    }
+
+    if (signals.length > 0) {
+      lastUpdate = { ...lastUpdate, signals };
     }
 
     return lastUpdate;
@@ -285,4 +364,14 @@ export function parseResumeCommandFromPattern(pattern: string, line: string): st
 export function stripAnsi(str: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence stripping
   return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
+}
+
+/**
+ * Strip OSC sequences (ESC ] ... BEL/ST) — stripAnsi's regex only removes
+ * ESC + one char for non-CSI, leaving OSC payloads (e.g. our own
+ * `777;notify;Exegol;...`) behind as literal text in scrollback tails.
+ */
+export function stripOscSequences(str: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional OSC sequence stripping
+  return str.replace(/\x1B\][^\x07\x1B]*(?:\x07|\x1B\\)?/g, "");
 }

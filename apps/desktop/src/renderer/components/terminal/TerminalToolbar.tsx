@@ -4,12 +4,14 @@ import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
+  ExternalLink,
   GitBranch,
   Loader2,
   MessageSquare,
   Shield,
   ShieldAlert,
   TerminalSquare,
+  X,
 } from "lucide-react";
 
 interface TerminalToolbarProps {
@@ -18,6 +20,9 @@ interface TerminalToolbarProps {
   branchName?: string | null;
   viewMode: "terminal" | "chat";
   onToggleView: () => void;
+  previewUrl?: string | null;
+  onOpenPreview?: () => void;
+  onDismissPreview?: () => void;
 }
 
 export function TerminalToolbar({
@@ -26,12 +31,53 @@ export function TerminalToolbar({
   branchName,
   viewMode,
   onToggleView,
+  previewUrl,
+  onOpenPreview,
+  onDismissPreview,
 }: TerminalToolbarProps) {
   return (
     <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border/40 px-2 py-0.5">
+      {previewUrl && onOpenPreview && onDismissPreview && (
+        <PreviewUrlChip url={previewUrl} onOpen={onOpenPreview} onDismiss={onDismissPreview} />
+      )}
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}
       <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} />
+    </div>
+  );
+}
+
+// ─── T128: localhost preview chip ───────────────────────────────────────────
+
+function PreviewUrlChip({
+  url,
+  onOpen,
+  onDismiss,
+}: {
+  url: string;
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div className="mr-auto flex items-center gap-1 rounded bg-accent/10 px-1.5 py-0.5">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex items-center gap-1 text-[10px] font-medium text-accent hover:underline"
+        title={`Open ${url} in a browser pane`}
+      >
+        <ExternalLink className="h-3 w-3" />
+        Open preview
+      </button>
+      <span className="max-w-40 truncate text-[9px] text-text-muted">{url}</span>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="flex h-3.5 w-3.5 items-center justify-center rounded text-text-muted hover:text-text-secondary"
+        title="Dismiss"
+      >
+        <X className="h-2.5 w-2.5" />
+      </button>
     </div>
   );
 }

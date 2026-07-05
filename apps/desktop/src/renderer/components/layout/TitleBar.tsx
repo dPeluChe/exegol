@@ -2,6 +2,7 @@ import { cn } from "@exegol/ui";
 import { Minus, Square, X } from "lucide-react";
 import { useProject } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
+import { AttentionQueue } from "./AttentionQueue";
 
 export function TitleBar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
@@ -16,8 +17,10 @@ export function TitleBar() {
         isMac && "pl-20",
       )}
     >
-      {/* Left: spacer for macOS traffic lights */}
-      <div className="flex items-center gap-2" />
+      {/* Left: spacer for macOS traffic lights, attention queue (T141) */}
+      <div className="flex items-center gap-2">
+        <AttentionQueue />
+      </div>
 
       {/* Center: Active project */}
       <div className="absolute left-1/2 -translate-x-1/2">

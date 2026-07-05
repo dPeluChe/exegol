@@ -20,6 +20,11 @@ export declare class AgentOutputStream {
   reset(): void
 }
 
+export interface AgentSignal {
+  agentId: string
+  event: string
+}
+
 /**
  * Commit a previously prepared tree onto the hidden oplog chain
  * (`commit_snapshot` half of the unmaterialized pattern) — call this only
@@ -238,6 +243,8 @@ export interface ProcessedOutput {
    *      "codex resume <id>", "droid --resume <id>"
    */
   resumeCommand?: string
+  /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
+  signals: Array<AgentSignal>
 }
 
 /** Remove a git worktree. If `force` is true, removes even with uncommitted changes. */

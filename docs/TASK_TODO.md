@@ -19,15 +19,11 @@ Exegol's moat = orchestration layer: **Pipelines → Evidence → Undo → Scori
 Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 
 **P0 — Pre-launch (table stakes + quick wins):**
-1. **T123** — Agent status via hooks + OSC 777 (replaces scraping as primary signal) ← unblocks T124, T129, T141
-2. **T124** — NotificationBus + desktop notifications (depends on T123)
-3. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
-4. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
-5. **T127** — Progressive disclosure skills (metadata-only injection)
-6. **T128** — terminal-url-detector → browser pane
-7. **T141** — Attention Inbox (unread/needs-attention UX, depends on T123)
-8. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
-9. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
+1. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
+2. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
+3. **T127** — Progressive disclosure skills (metadata-only injection)
+4. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
+5. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
 
 **P1 — Launch differentiators:**
 10. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
@@ -303,81 +299,27 @@ location (local path vs ssh://host). Key files to study:
 > Source analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`. Repos studied live in
 > `~/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/`.
 
-### T123 — Agent Status via Hooks + OSC 777 `added: 2026-07-04`
-**Priority**: P0 | **Effort**: M | **Source**: terax `src-tauri/src/modules/pty/agent_detect.rs` + superset `terminal-agents/store.ts` + emdash `hook-server.ts`
+
+---
+
+### T129 — Oplog v2: Git-Tree Snapshots per Agent Turn `added: 2026-07-04`
+**Priority**: P1 | **Effort**: M-L | **Source**: GitButler `crates/gitbutler-oplog/` (oplog.rs, reflog.rs, entry.rs) + `but-oplog` unmaterialized pattern + t3code `CheckpointStore.ts`
 
 **Why**
-- Current `status_parser.rs` guesses state from ANSI output — fragile, imprecise `waiting_input`.
-- Three competitors converged independently on deterministic signal: CLI hooks emit `OSC 777 notify;Exegol;<agentId>;<event>` into the PTY; a byte-level FSM in the stream detects Started/Working/Attention/Finished.
-- Unblocks: T124 notifications, T129 per-turn snapshots, T141 attention inbox, precise pipeline transitions.
+- Strongest differentiator identified. Agents edit faster than git commits; current oplog only covers git operations. GitButler's model gives per-turn granular undo with zero new infra (no CAS, no daemon, no file watcher) — pure git2, which we already ship.
 
 **Scope**
-- Spawn-time hook injection per provider: Claude Code native hooks (`Stop`, `Notification`, `PreToolUse` → settings JSON in spawn env), wrapper/shell-init for others
-- OSC 777 FSM in Rust `AgentOutputStream` (extend `processing/status_parser.rs`) — existing parser becomes fallback for hook-less CLIs
-- New push event fields: `turnStarted/turnEnded/needsAttention` timestamps
-- Emit turn boundaries on the agent event bus (consumed by T124/T129)
+- Snapshot = commit whose tree captures `worktree/ + index/ + app state`; chained parent-child log per project
+- Anti-GC: hidden ref (`refs/exegol/oplog`) with forged reflog (GitButler `reflog.rs` trick) — reachable but invisible in `git log --all`
+- Metadata as git trailers: `operation: AgentTurn|PipelineStep|Promote|...`, `agentId`, `provider`
+- Trigger: turn boundaries from T123 (`prepare_snapshot` on turn start → `commit_snapshot` on success; unmaterialized discard on failure)
+- Undo UI: timeline in GitPane oplog tab with per-turn restore + agent attribution
 
 **Likely files**
-- `packages/core-rust/src/processing/status_parser.rs`
-- `apps/desktop/src/main/agents/spawn-env.ts`, `spawn-context.ts`, `manager.ts`
-- `apps/desktop/src/main/agents/status-parser.ts` (JS fallback)
+- `packages/core-rust/src/git/oplog.rs` (major extension), `apps/desktop/src/main/ipc/procedures/git.ts`, GitPane oplog UI
 
 ---
 
-### T124 — NotificationBus + Desktop Notifications `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S-M | **Source**: openclaw clones (`nanoclaw/src/delivery.ts`, `nanobot/channels/base.py`) — irreducible pattern: bus + 1-method channel adapters
-
-**Why**
-- Table-stakes gap: Warp, Codex app, Orca all notify "agent finished / needs input". Indispensable at 5+ agents.
-- Minimal channel interface keeps Telegram/mobile (T133) cheap later.
-
-**Scope**
-- `main/notifications/bus.ts`: receives `agent:attention`, `agent:finished`, `pipeline:paused`, `run:failed` (fed by T123)
-- Channel interface: `deliver(event, content)` — v1 channel: Electron Notification API + dock badge + optional sound
-- **Include the agent's pending question** in the attention notification when available (scrollback tail parse) — "waiting for input" alone forces a context switch to find out why (pain point #4)
-- Settings: per-event toggles, quiet mode
-- Suppress-empty pattern (openclaw `shouldSkipHeartbeatOnlyDelivery`)
-
-**Likely files**
-- New: `apps/desktop/src/main/notifications/{bus,channels/desktop}.ts`
-- `apps/desktop/src/main/ipc/procedures/settings.ts`, renderer settings UI
-
----
-
-### T128 — Terminal URL Detector → Browser Pane `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S | **Source**: emdash `terminal-url-detector`
-
-**Scope**
-- Detect `https?://localhost:PORT` (and 127.0.0.1) in PTY output stream
-- Toolbar chip "Open preview" → opens URL in a browser pane in the same tab
-- Dedup per session; ignore URLs inside scrollback replay
-
-**Likely files**
-- `apps/desktop/src/main/terminal/*` or sidecar notification path, `TerminalPanel.tsx`, workspace store
-
----
-
-
----
-
-
-### T141 — Attention Inbox (unread / needs-attention UX) `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S-M | **Source**: Orca (Gmail-like unread/star on worktrees) + superset (ringtone/badge bindings)
-
-**Why**
-- With 5+ agents the question is "who needs me now?". We have StatusDot/activity pulse but no unread semantics — attention state is lost when you look away.
-
-**Head start (found in 2026-07 dead-code sweep)**: `stores/agents.ts` already ships a persisted attention inbox from T57 — `attentionItems` (level/reason/read/pinned), `addAttentionItem`, `markAttentionRead`, `dismissAttention`, `toggleAttentionPin`, `unreadAttentionCount`, auto-read-on-focus. Push events already feed it. **Extend this store; the missing part is UI** (badges, TitleBar queue, jump hotkey) + wiring T123's richer signals.
-
-**Scope**
-- Unread state per agent/tab: set on `finished`/`needsAttention` (from T123), cleared on focus
-- Sidebar + tab badges with counts; global "needs attention" queue in TitleBar (click = jump to pane)
-- Keyboard: hotkey jumps to next agent needing attention
-
-**Likely files**
-- `apps/desktop/src/renderer/stores/agents.ts`, `WorkspaceTabBar.tsx`, `Sidebar.tsx`, `TitleBar.tsx`
-
----
 
 ### T142 — Integrations Hub: GitHub API first `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + emdash (11 tracker integrations validate demand); extends T71

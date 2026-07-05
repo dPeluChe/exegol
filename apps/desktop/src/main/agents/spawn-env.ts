@@ -1,11 +1,14 @@
 import { execSync } from "node:child_process";
-import type { AgentCliType, AgentStatus } from "@exegol/shared";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
 import type Database from "libsql";
 import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
-import { showAgentNotification } from "../system/notifications";
 import { refreshTray } from "../system/tray";
 import { scoreAgent } from "./scoring";
 
@@ -27,12 +30,101 @@ export interface AgentStatusEvent {
   timestamp: number;
   /** Claude session ID, set once when first parsed from startup output (T101). */
   claudeSessionId?: string;
+  /** unix epoch ms — set when a hook/OSC signal reports a new turn boundary (T123). */
+  turnStarted?: number;
+  /** unix epoch ms — set when a hook/OSC signal reports a turn completed (T123). */
+  turnEnded?: number;
+  /** True when the agent is waiting on the user (T123 `attention` signal / T141 inbox). */
+  needsAttention?: boolean;
+  /** Pending question text extracted from an `attention` signal's detail, if any. */
+  attentionDetail?: string;
 }
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
 export function broadcastAgentStatus(event: AgentStatusEvent): void {
   broadcast("agent:status-changed", event);
   refreshTray();
+}
+
+// ─── Deterministic signal → status mapping (T123) ────────────────────────
+
+/**
+ * Maps a hook/OSC-777 `AgentSignalType` to the status-event fields it implies.
+ * `null` fields mean "no change" — callers should merge onto the existing event.
+ */
+export function deriveStatusFromSignal(event: string): {
+  status?: AgentStatus;
+  turnStarted?: number;
+  turnEnded?: number;
+  needsAttention?: boolean;
+} {
+  const now = Date.now();
+  switch (event as AgentSignalType) {
+    case "started":
+    case "working":
+      return { status: "running" };
+    case "turn_started":
+      return { status: "running", turnStarted: now };
+    case "turn_ended":
+      return { turnEnded: now };
+    case "attention":
+      // The Notification hook fires when the CLI genuinely needs the user
+      // (permission prompt, question) — the only per-turn attention signal.
+      return { status: "waiting_input", turnEnded: now, needsAttention: true };
+    case "finished":
+      // Stop fires at the end of EVERY assistant turn in an interactive
+      // session — it is a turn boundary, not an attention event. Notifying
+      // here would ping the user once per reply (and double-notify on exit,
+      // where finalizeAgentStatus already emits agent:finished).
+      return { status: "waiting_input", turnEnded: now };
+    case "exited":
+      return {};
+    default:
+      return {};
+  }
+}
+
+// ─── Claude Code hook injection (T123) ───────────────────────────────────
+
+const HOOKS_DIR = join(homedir(), ".exegol", "hooks");
+
+/** Shell command a Claude Code hook runs to emit an OSC-777 notify signal.
+ *  Written to /dev/tty, NOT stdout: Claude Code captures hook stdout (it only
+ *  surfaces it in transcript mode), so bytes on stdout never reach the PTY
+ *  stream our FSM scans. /dev/tty is the controlling terminal = our PTY.
+ *  Falls back to stdout for environments without a controlling tty. */
+function oscNotifyCommand(agentId: string, event: AgentSignalType): string {
+  const seq = `\\033]777;notify;Exegol;${agentId};${event}\\007`;
+  return `printf '${seq}' > /dev/tty 2>/dev/null || printf '${seq}'`;
+}
+
+/**
+ * Write a per-agent Claude Code hooks settings file that emits OSC-777 notify
+ * signals on Stop/Notification/PreToolUse so the PTY stream carries
+ * deterministic lifecycle events instead of relying on scraped output.
+ * Returns the settings file path, or null if it couldn't be written
+ * (non-fatal — the scraping parser remains the fallback).
+ */
+export function buildClaudeCodeHooksFile(agentId: string): string | null {
+  try {
+    mkdirSync(HOOKS_DIR, { recursive: true });
+    const path = join(HOOKS_DIR, `${agentId}.json`);
+    const hookEntry = (event: AgentSignalType) => ({
+      hooks: [{ type: "command", command: oscNotifyCommand(agentId, event) }],
+    });
+    const settings = {
+      hooks: {
+        PreToolUse: [hookEntry("working")],
+        Notification: [hookEntry("attention")],
+        Stop: [hookEntry("finished")],
+      },
+    };
+    writeFileSync(path, JSON.stringify(settings, null, 2), "utf-8");
+    return path;
+  } catch (err) {
+    logger.warn(`[AgentManager] Failed to write hooks settings file for ${agentId}:`, err);
+    return null;
+  }
 }
 
 // ─── Rust native module (git2 worktree ops) ──────────────────────────────
@@ -165,7 +257,16 @@ export function finalizeAgentStatus(
       timestamp: Date.now(),
     };
     broadcastAgentStatus(statusEvent);
-    showAgentNotification(statusEvent, db);
+    if (agent.cliType !== "shell") {
+      getNotificationBus().emit({
+        type: finalStatus === "completed" ? "agent:finished" : "agent:failed",
+        title: `Agent ${finalStatus}`,
+        body: (agent.taskDescription ?? "").slice(0, 100),
+        agentId: agent.id,
+        projectId: agent.projectId,
+        at: Date.now(),
+      });
+    }
 
     const actType = finalStatus === "completed" ? "agent_completed" : "agent_failed";
     try {

@@ -1,18 +1,24 @@
-import type { AgentStatus } from "@exegol/shared";
+import { type AgentSignalEvent, type AgentStatus, isKnownSignalType } from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
+import { getNotificationBus } from "../notifications/bus";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import {
   type AgentContext,
   broadcastAgentStatus,
+  deriveStatusFromSignal,
   finalizeAgentStatus,
   scoreAndRecordOplog,
 } from "./spawn-env";
+import { stripAnsi, stripOscSequences } from "./status-parser";
+
+/** Tail length (chars) of scrollback used as the attention notification body. */
+const ATTENTION_TAIL_CHARS = 240;
 
 export interface SessionMaps {
   outputProcessors: Map<string, OutputProcessor>;
@@ -55,6 +61,91 @@ export function createSpawnCallbacks(
       const processor = maps.outputProcessors.get(agent.id);
       if (!processor) return;
       const result = processor.process(data);
+
+      // T123: deterministic hook/OSC-777 signals take priority over scraped status.
+      if (result.signals?.length) {
+        let signalStatus: AgentStatus | undefined;
+        let turnStarted: number | undefined;
+        let turnEnded: number | undefined;
+        let needsAttention: boolean | undefined;
+
+        for (const sig of result.signals) {
+          if (sig.agentId !== agent.id) continue;
+          // Whitelist at the boundary: the event string comes from PTY bytes —
+          // anything the agent prints (or cats) could otherwise flow through
+          // the shared contract as a typed AgentSignalEvent.
+          if (!isKnownSignalType(sig.event)) {
+            logger.warn(`[AgentCallback] Ignoring unknown signal type '${sig.event}'`);
+            continue;
+          }
+          const derived = deriveStatusFromSignal(sig.event);
+          if (derived.status) signalStatus = derived.status;
+          if (derived.turnStarted) turnStarted = derived.turnStarted;
+          if (derived.turnEnded) turnEnded = derived.turnEnded;
+          if (derived.needsAttention) needsAttention = true;
+
+          const signalEvent: AgentSignalEvent = {
+            agentId: agent.id,
+            projectId: agent.projectId,
+            type: sig.event,
+            at: Date.now(),
+            source: "hook",
+          };
+          broadcast("agent:signal", signalEvent);
+        }
+
+        if (signalStatus || turnStarted || turnEnded || needsAttention) {
+          if (signalStatus) {
+            updateAgentStatus(db, agent.id, signalStatus, result.currentStep);
+          }
+          logger.info(
+            `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}`,
+          );
+          if (needsAttention) {
+            // T124: include the agent's pending question (scrollback tail) so a
+            // context switch isn't required just to find out why it's waiting.
+            // stripOscSequences first: the attention moment coincides with our
+            // own OSC-777 emission at the very end of the buffer, and stripAnsi
+            // alone leaves the OSC payload as literal protocol text.
+            const scrollback = maps.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+            const tail = stripAnsi(stripOscSequences(scrollback))
+              .trim()
+              .slice(-ATTENTION_TAIL_CHARS);
+            getNotificationBus().emit({
+              type: "agent:attention",
+              title: "Agent needs your attention",
+              body: tail,
+              agentId: agent.id,
+              projectId: agent.projectId,
+              at: Date.now(),
+            });
+          }
+
+          // Only broadcast a status when the signal actually derived one — a
+          // bare turn boundary must not flip a waiting_input agent back to
+          // "running" in the renderer while the DB keeps the old status.
+          if (signalStatus) {
+            broadcastAgentStatus({
+              agentId: agent.id,
+              projectId: agent.projectId,
+              status: signalStatus,
+              currentStep: result.currentStep ?? null,
+              cliType: agent.cliType,
+              timestamp: Date.now(),
+              needsAttention,
+              turnStarted,
+              turnEnded,
+            });
+          } else {
+            broadcast("agent:turn-boundary", {
+              agentId: agent.id,
+              projectId: agent.projectId,
+              turnStarted,
+              turnEnded,
+            });
+          }
+        }
+      }
 
       // T101: store session ID (claude startup) or resume command (all CLIs shutdown)
       // Both use sessionIdsCaptured to avoid redundant DB writes per agent.

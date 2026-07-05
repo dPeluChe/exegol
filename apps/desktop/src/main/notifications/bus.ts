@@ -1,12 +1,14 @@
 import type { NotificationEvent } from "@exegol/shared";
 import { logger } from "../lib/logger";
+import { desktopChannel } from "./channels/desktop";
 
 /**
- * Wave 2 shared contract — notification delivery (T124 skeleton).
+ * Wave 2 shared contract — notification delivery (T124).
  *
  * WT-A implements the desktop channel + wires T123 signals into emit().
- * WT-C/D emit through getNotificationBus() from day 1; with no channels
- * registered this is a safe no-op, so emitting never blocks a feature.
+ * WT-C/D emit through getNotificationBus() from day 1; the desktop channel
+ * is registered by default so emitting is never a no-op once T123 signals
+ * (or any other producer) start calling emit().
  *
  * Channel pattern from openclaw clones: one deliver() method per channel.
  */
@@ -44,6 +46,9 @@ class NotificationBus {
 let instance: NotificationBus | null = null;
 
 export function getNotificationBus(): NotificationBus {
-  if (!instance) instance = new NotificationBus();
+  if (!instance) {
+    instance = new NotificationBus();
+    instance.register(desktopChannel);
+  }
   return instance;
 }

@@ -14,6 +14,7 @@ import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { logger, markShutdown } from "./lib/logger";
 import { stopExegolMcpServer } from "./mcp/exegol-server";
 import { getMcpHost } from "./mcp/host";
+import { setDesktopChannelDb } from "./notifications/channels/desktop";
 import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
@@ -254,6 +255,7 @@ app.whenReady().then(async () => {
   // ─── Critical path: everything the window needs before first paint ──
   await initializeDatabase();
   endMark("dbInit");
+  setDesktopChannelDb(getDb()); // T124: NotificationBus desktop channel settings lookup
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();
