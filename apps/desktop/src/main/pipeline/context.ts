@@ -43,7 +43,7 @@ export function buildStepPrompt(
     .replace(/\{\{diff\}\}/g, vars.diff)
     .replace(/\{\{previousOutput\}\}/g, vars.previousOutput)
     .replace(/\{\{iteration\}\}/g, String(vars.iteration))
-    .replace(/\{\{knowledge\}\}/g, vars.knowledge ?? "");
+    .replace(/\{\{knowledge\}\}/g, vars.knowledge ?? "")
     .replace(/\{\{retryFeedback\}\}/g, vars.retryFeedback ?? "");
 
   // Auto-inject PR instruction on the last step (unless user already mentioned PR)

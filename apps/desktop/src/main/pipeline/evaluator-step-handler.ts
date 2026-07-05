@@ -14,6 +14,14 @@ import type { StepHandlerDeps } from "./pipeline-step-handler";
  * judge call resolves synchronously within `advanceStep`, so this appends
  * the step result and routes in one pass.
  */
+// Consecutive gate→gate ship hops per run. Two gates pointing onPassNext at
+// each other would otherwise loop forever, burning N×2 judge calls per hop.
+const shipHops = new Map<string, number>();
+
+export function clearEvaluatorHops(runId: string): void {
+  shipHops.delete(runId);
+}
+
 export async function handleEvaluatorStep(
   deps: StepHandlerDeps,
   db: Database.Database,
@@ -26,14 +34,53 @@ export async function handleEvaluatorStep(
   const evalDef = stepDef.evaluator;
   if (!evalDef) return;
 
-  const run = getPipelineRun(db, runId);
-  if (!run || run.status === "cancelled") return;
+  const preRun = getPipelineRun(db, runId);
+  if (!preRun || preRun.status === "cancelled") return;
+
+  const hops = (shipHops.get(runId) ?? 0) + 1;
+  shipHops.set(runId, hops);
+  if (hops > template.steps.length) {
+    shipHops.delete(runId);
+    deps.pauseRun(db, runId, "Evaluator gate cycle detected (gates routing to each other)");
+    return;
+  }
+
+  // Resume-after-hold = human approval: the run was paused for review at this
+  // gate; re-judging the identical diff would statistically hold again forever.
+  const heldBefore = preRun.stepResults.some(
+    (r) => r.stepIndex === stepIndex && r.verdict?.decision === "hold",
+  );
+
+  // Nothing to judge (no worktree / empty diff): adversarial judges score an
+  // empty diff near 0 → guaranteed retry loop. Hold with an explicit reason.
+  const hasRealDiff = diff.trim().length > 0 && !diff.trim().startsWith("(");
 
   const apiKey = getApiKey(db, "anthropic");
-  const verdict = await runEvaluatorGate(apiKey, diff, evalDef.acceptanceCriteria, {
-    judgeCalls: evalDef.judgeCalls,
-    gatePolicy: evalDef.gatePolicy,
-  });
+  const verdict = heldBefore
+    ? {
+        decision: "ship" as const,
+        scores: [],
+        avgScore: 0,
+        feedback: "Resumed after hold — treated as human-approved.",
+        costUsd: 0,
+      }
+    : !hasRealDiff
+      ? {
+          decision: "hold" as const,
+          scores: [],
+          avgScore: 0,
+          feedback: "No diff to judge (run has no worktree or no changes) — review manually.",
+          costUsd: 0,
+        }
+      : await runEvaluatorGate(apiKey, diff, evalDef.acceptanceCriteria, {
+          judgeCalls: evalDef.judgeCalls,
+          gatePolicy: evalDef.gatePolicy,
+        });
+
+  // Re-fetch after the (up to ~60s) judge await: the user may have cancelled,
+  // and completing/routing from the stale snapshot would bypass T78 guards.
+  const run = getPipelineRun(db, runId);
+  if (!run || run.status === "cancelled") return;
 
   const stepResult: PipelineStepResult = {
     stepIndex,
@@ -63,8 +110,11 @@ export async function handleEvaluatorStep(
     updatePipelineRun(db, runId, { stepResults: updatedResults });
     const nextIndex = evalDef.onPassNext ?? stepIndex + 1;
     if (nextIndex >= template.steps.length) {
+      shipHops.delete(runId);
       deps.completeRun(db, { ...run, stepResults: updatedResults });
     } else {
+      // Only gate→gate hops count toward the cycle guard.
+      if (!template.steps[nextIndex]?.evaluator) shipHops.delete(runId);
       deps.advanceStep(db, runId, nextIndex, template).catch((err) => {
         logger.error("[Pipeline] Failed to advance after evaluator ship:", err);
         deps.pauseRun(db, runId, `Failed to advance: ${err}`);
@@ -74,14 +124,18 @@ export async function handleEvaluatorStep(
   }
 
   if (verdict.decision === "hold") {
+    shipHops.delete(runId);
     updatePipelineRun(db, runId, { stepResults: updatedResults });
     deps.pauseRun(
       db,
       runId,
-      `Evaluator gate: hold (avg score ${verdict.avgScore.toFixed(2)}) — needs human review`,
+      verdict.feedback ||
+        `Evaluator gate: hold (avg score ${verdict.avgScore.toFixed(2)}) — needs human review`,
     );
     return;
   }
+
+  shipHops.delete(runId);
 
   // retry
   const hardMax = Math.min(evalDef.maxLoops ?? EVALUATOR_HARD_MAX_LOOPS, EVALUATOR_HARD_MAX_LOOPS);

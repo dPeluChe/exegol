@@ -9,6 +9,22 @@ export const pipelineStepRoleSchema = z.enum(PIPELINE_STEP_ROLES);
 export const pipelineRunStatusSchema = z.enum(PIPELINE_RUN_STATUSES);
 export const pipelineStepStatusSchema = z.enum(PIPELINE_STEP_STATUSES);
 
+// T88v2 — must mirror EvaluatorStepDef: zod strips unknown keys, so a missing
+// field here silently drops the evaluator config on template save.
+export const evaluatorGatePolicySchema = z.object({
+  shipThreshold: z.number().min(0).max(1),
+  holdThreshold: z.number().min(0).max(1),
+});
+
+export const evaluatorStepDefSchema = z.object({
+  acceptanceCriteria: z.string().min(1),
+  onPassNext: z.number().int().min(0).optional(),
+  onFailNext: z.number().int().min(0).optional(),
+  maxLoops: z.number().int().min(1).max(10).optional(),
+  judgeCalls: z.number().int().min(1).max(5).optional(),
+  gatePolicy: evaluatorGatePolicySchema.optional(),
+});
+
 export const pipelineStepDefSchema = z.object({
   label: z.string().min(1),
   cliType: z.string().min(1),
@@ -16,6 +32,7 @@ export const pipelineStepDefSchema = z.object({
   promptTemplate: z.string(),
   allowFailure: z.boolean().optional(),
   loopBackTo: z.number().int().optional(),
+  evaluator: evaluatorStepDefSchema.optional(),
 });
 
 export const pipelineStepResultSchema = z.object({

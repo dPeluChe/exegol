@@ -136,15 +136,31 @@ export async function runEvaluatorGate(
     return { decision: "hold", scores: [], avgScore: 0, feedback: "", costUsd: 0 };
   }
 
-  const n = opts.judgeCalls ?? DEFAULT_JUDGE_CALLS;
+  // Clamp: judgeCalls 0 would make avgScore NaN → 'retry' forever; huge values
+  // are an unbounded parallel cost spike (UI min/max attrs don't validate typed input).
+  const n = Math.max(1, Math.min(5, opts.judgeCalls ?? DEFAULT_JUDGE_CALLS));
   const results = await Promise.all(
     Array.from({ length: n }, () =>
       judgeOnce(apiKey, diff, acceptanceCriteria).catch((err) => {
-        logger.warn("[Evaluator] Judge call failed (scored 0):", err);
-        return { score: 0, description: "", costUsd: 0 };
+        logger.warn("[Evaluator] Judge call failed:", err);
+        return { score: 0, description: "", costUsd: 0, failed: true as const };
       }),
     ),
   );
+
+  // Infrastructure failure is not a code-quality verdict: if every judge call
+  // failed (API outage, rate limit), hold for a human instead of burning
+  // retry loops against a phantom low score.
+  if (results.every((r) => "failed" in r && r.failed)) {
+    logger.warn("[Evaluator] All judge calls failed — holding for human review");
+    return {
+      decision: "hold",
+      scores: [],
+      avgScore: 0,
+      feedback: "All judge calls failed (API outage or rate limit) — resume to re-judge.",
+      costUsd: 0,
+    };
+  }
 
   const scores = results.map((r) => r.score);
   const avgScore = scores.reduce((a, b) => a + b, 0) / scores.length;
