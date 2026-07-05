@@ -585,7 +585,7 @@ location (local path vs ssh://host). Key files to study:
 - Rust: `cargo update` + clippy pedantic re-run; napi + memchr versions
 - Baseline 2026-07 (pre-wave sweep): 0 files >450 LOC, 0 TODOs/FIXMEs, clippy clean; dead code removed (-1,981 LOC: 5 disconnected sections, paneLayouts subsystem, dead store actions/query fns)
 - **Orphaned tRPC procedures inventory** (defined in routers, renderer never calls — review with product before deleting; some are planned-feature stubs): `projects.open`, `agents.getStatus/updateStatus/getParallelRun/cancelParallelRun/preflight`, `settings.updateModelCatalog`, `resources.portConflicts`, `apikeys.test`, `scheduler.get`, `scrollback.exists`, `skills.getEnabledForSpawn`, `mcp.callTool`, `memory.updateRelevance/getContext/extract`, `messages.conversation/markAllRead/unreadCount`, `queue.get/updateStatus`, `qa-tests.get`, `fs-search.fuzzyFind/grep`, `indexer.projectStats/startIndexing/search`
-- Recovery half-wiring: `invalidatePane`/`getRecoveryToken` have no callers but `invalidReason` renders in WorkspacePane — decide: rewire or remove
+- ~~Recovery half-wiring~~ resolved 2026-07: `invalidatePane`/`getRecoveryToken`/`RecoveryToken` removed (`invalidReason` stays — set via `updatePane`, rendered in WorkspacePane); unused deps removed (`@radix-ui/react-dialog` in desktop+ui, `react-dropdown-menu` + `lucide-react` in ui)
 
 ---
 
@@ -742,6 +742,13 @@ location (local path vs ssh://host). Key files to study:
 - **Signal/notification contract**: `packages/shared/src/types/agent-signals.ts` — `AgentSignalEvent`, `TurnBoundary`, `NotificationEvent(+Type)`. Extend here, never fork shapes locally.
 - **NotificationBus skeleton**: `apps/desktop/src/main/notifications/bus.ts` — `getNotificationBus().emit(event)` is a safe no-op until WT-A registers channels. WT-C/D emit through it from day 1.
 - **Per-group migration sets**: `apps/desktop/src/main/db/migration-sets/{wave2-signal,wave2-knowledge,wave2-surface}.ts` — append ONLY to your own file with your id prefix (`w2a_`/`w2b_`/`w2d_`). `migrations.ts` already spreads them; never touch another group's set.
+
+### Code rules — every WT PR is reviewed against these
+1. **Max 400-500 LOC per file.** If a task grows a file past ~400 lines, split it BEFORE opening the PR (domain modules, extracted helpers, sub-components) — same pattern as the WT5 hygiene splits. New files start focused; don't create future monoliths.
+2. **Reuse before creating.** Before writing any UI, grep `packages/ui/src/primitives/` (Button, Input, Badge, Tooltip, ScrollArea, Separator) and `renderer/components/common/` (AgentIcon, ConfirmDialog, EmptyState, StatusDot, IssueBubble, LoadingSpinner, ToastStack) — extend an existing component over duplicating one. Same for hooks (`renderer/hooks/`) and main helpers (`main/lib/`): search first, create second.
+3. **No new dependencies** without flagging it in the PR description — every dep must survive T144's audit.
+4. **React rules** (CLAUDE.md): derive state, TanStack Query for fetching, handlers over effects, `key` resets.
+5. **Follow the shared contract** (`agent-signals.ts`) and your migration-set file — never fork shapes or touch another group's set.
 
 ### Coordination rules
 1. **Merge order**: WT-A's T123+T124 PRs first (they implement the contract); everything else merges in any order after rebasing.

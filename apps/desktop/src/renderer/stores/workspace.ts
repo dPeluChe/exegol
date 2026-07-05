@@ -25,18 +25,6 @@ export interface Pane {
   invalidReason?: string;
 }
 
-export interface RecoveryToken {
-  type: PaneType;
-  agentId?: string;
-  filePath?: string;
-  url?: string;
-  metadata?: {
-    tabLabel?: string;
-    cliType?: string;
-    taskDescription?: string;
-  };
-}
-
 export type LayoutNode =
   | { type: "pane"; paneId: string }
   | {
@@ -111,8 +99,6 @@ interface WorkspaceStore {
   // Derived
   getActiveTab: () => WorkspaceTab | null;
   ensureDefaultTab: () => void;
-  getRecoveryToken: (paneId: string) => RecoveryToken | null;
-  invalidatePane: (paneId: string, reason: string) => void;
   /** Reset all split sizes in the active tab to equal proportions */
   equalizeSplits: (tabId: string) => void;
   /**
@@ -506,18 +492,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         }
       },
 
-      getRecoveryToken: (paneId) => {
-        const pw = getPw(get());
-        const pane = pw.panes[paneId];
-        if (!pane) return null;
-        return {
-          type: pane.type,
-          agentId: pane.agentId,
-          filePath: pane.filePath,
-          url: pane.url,
-        };
-      },
-
       equalizeSplits: (tabId) =>
         set((s) => {
           const pw = getPw(s);
@@ -636,18 +610,6 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           return { paneLastExit: { ...s.paneLastExit, [paneId]: code } };
         }),
 
-      invalidatePane: (paneId, reason) =>
-        set((s) => {
-          const pw = getPw(s);
-          const existing = pw.panes[paneId];
-          if (!existing) return s;
-          return setPw(s, {
-            panes: {
-              ...pw.panes,
-              [paneId]: { ...existing, type: "empty", agentId: undefined, invalidReason: reason },
-            },
-          });
-        }),
     }),
     {
       name: "exegol-workspace",
