@@ -3,6 +3,7 @@ import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
@@ -151,6 +152,10 @@ export function createSpawnCallbacks(
       maps.dataCallbacks.delete(agent.id);
 
       finalizeAgentStatus(db, agent, exitCode);
+
+      // T145: dead agents must not stay live credentials — revoke the MCP
+      // token; a committed/leaked .mcp.json then authorizes nothing.
+      revokeAgentMcpToken(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.
       handleParallelAgentExit(db, agent.id);

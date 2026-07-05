@@ -433,30 +433,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T145 — Exegol MCP Server + CLI Shim (agent ↔ Exegol runtime API) `added: 2026-07-04`
-**Priority**: P1 | **Effort**: M | **Depends**: T125, T126, T140 | **Source**: design discussion 2026-07
-
-**Why**
-- Facts live in the DB (T140 storage model) — spawn-time injection is static. Agents (Claude Code, Codex, Gemini all speak MCP) need to **query and update** memory/knowledge mid-session. We don't control the agent loop, but we can hand it tools.
-- One door for everything: memory today; oplog queries, task updates, notification requests later.
-
-**Scope**
-- **Built-in MCP server `exegol`** (stdio shim → Unix socket → main process), auto-added to spawn MCP config:
-  - `memory_search(query, category?)` → hybrid RRF search (T125), returns top-salience facts
-  - `memory_save(fact, category)` → T126 semantics: reinforce if known, supersede if contradicting — the store decides, the agent can't corrupt
-  - `knowledge_get(section?)` → PROJECT.md brief / digest summary
-  - **v1.1 — project awareness & management**: `task_list/task_update` (tasks from DB), `history_search` (past runs/handoffs/scrollback summaries), `score_get` (own past performance on this project) — the agent can *know* the project's state and improve it, not just read facts
-- **CLI shim fallback**: `exegol-ctl mem search|add`, `knowledge get` — same socket; covers CLIs without MCP. Documented in the managed AGENTS.md block (T140)
-- **Guards**: `EXEGOL_AGENT_ID` env signs every write (attribution); access modes (T58) gate writes — `read`/`plan` agents get search-only tool set
-- Shells skip the server entirely (existing shell-skip pattern)
-
-**Likely files**
-- New: `apps/desktop/src/main/mcp/exegol-server.ts` (socket endpoint + tool handlers), `packages/mcp-shim/` or bundled script for stdio↔socket proxy + `exegol-ctl`
-- `apps/desktop/src/main/agents/spawn-context.ts` (auto-register server, mode-based tool set)
-- `apps/desktop/src/main/memory/store.ts` (reuse search/save paths)
-
----
-
 ### T147 — Cost Dashboard + Budgets `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: dev pain point #2 (`docs/RESEARCH/DEV_PAIN_POINTS_2026.md`) — surprise costs / rate limits is the #2 complaint industry-wide
 

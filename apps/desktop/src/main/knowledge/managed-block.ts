@@ -16,7 +16,10 @@ const END_MARKER = "<!-- exegol:knowledge:end -->";
 const MANAGED_BLOCK_BODY =
   "This project has an Exegol knowledge base at `.exegol/knowledge/`: " +
   "`PROJECT.md` (intent, decisions, roadmap), `DIGEST.md` (auto-generated structure summary), " +
-  "`MEMORY.md` (distilled team facts). Read these files when relevant to the task.";
+  "`MEMORY.md` (distilled team facts). Read these files when relevant to the task. " +
+  "If you have MCP tools, use the `exegol` server's `memory_search`/`memory_save`/`knowledge_get` " +
+  "to query and update this project's memory mid-session. Without MCP, run " +
+  "`exegol-ctl mem search|add` or `exegol-ctl knowledge get` instead.";
 
 function buildManagedBlock(): string {
   return `${BEGIN_MARKER}\n${MANAGED_BLOCK_BODY}\n${END_MARKER}`;

@@ -10,6 +10,8 @@ import { runSetupHook } from "../hooks/project-hooks";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
+import { resolveMcpShimPath, writeAgentMcpConfig } from "../mcp/exegol-mcp-config";
+import { ensureExegolMcpServerStarted, registerAgentMcpToken } from "../mcp/exegol-server";
 import { inspectCommand } from "../security/command-guard";
 import {
   getFishInitCommand,
@@ -299,6 +301,17 @@ export function buildPtyInvocation(
       EXEGOL_AGENT_ID: agent.id,
       EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
     } as Record<string, string>;
+
+    // T145: give the agent mid-session access to memory/knowledge via MCP.
+    // Identity = per-agent secret token; the server never trusts client claims.
+    try {
+      ensureExegolMcpServerStarted(db);
+      const mcpToken = registerAgentMcpToken(agent.id, agent.projectId);
+      env.EXEGOL_MCP_TOKEN = mcpToken;
+      writeAgentMcpConfig(cwd, resolveMcpShimPath(), mcpToken, config.accessMode ?? "write");
+    } catch (err) {
+      logger.warn("[AgentManager] Failed to wire Exegol MCP config:", err);
+    }
   }
 
   const shellName = userShell.split("/").pop() ?? "";
