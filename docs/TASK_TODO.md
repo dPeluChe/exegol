@@ -379,24 +379,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T126 — Memory Salience v2 (Decay + Reinforcement + Supersession) `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S | **Source**: memU `src/memu/vector.py` (salience 25-62), schema `reinforcement_count`
-
-**Why**
-- Current 3-factor relevance never decays; stale facts (old build commands) rank forever.
-
-**Scope**
-- `salience = similarity × log(reinforcement_count + 1) × exp(-0.693 × days_ago / 30)` (30-day half-life)
-- Migration: add `reinforcement_count`, `last_reinforced_at`, `superseded_by` to memories
-- Re-observed fact → reinforce instead of duplicate; contradicting fact → new row + mark old `superseded_by` (never overwrite)
-- Extractor prompt: anti-ephemeral rules; consider adding `tool`/`behavior` categories (memU's 6)
-- Memories remain **project-scoped in DB** (worktree-agnostic; see T140 storage model) — `MEMORY.md` synthesis export lives in T140
-
-**Likely files**
-- `apps/desktop/src/main/memory/{store,extractor}.ts`, `apps/desktop/src/main/db/migrations`
-
----
-
 ### T128 — Terminal URL Detector → Browser Pane `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S | **Source**: emdash `terminal-url-detector`
 

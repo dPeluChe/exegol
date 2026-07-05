@@ -4,11 +4,12 @@ import type { OllamaConfig } from "../../indexer/ollama-client";
 import { extractAndStoreMemories } from "../../memory/extractor";
 import {
   buildMemoryContext,
-  createMemory,
   deleteMemory,
   getMemoriesForInjection,
+  getMemoryById,
   listMemories,
   MEMORY_CATEGORIES,
+  observeMemory,
   searchMemories,
   updateMemoryRelevance,
 } from "../../memory/store";
@@ -69,7 +70,10 @@ export const memoryRouter = router({
       }),
     )
     .mutation(({ ctx, input }) => {
-      return createMemory(ctx.db, input);
+      // T126: manual adds go through the same reinforce/supersede/create
+      // classification as extractor observations — no duplicate active rows.
+      const id = observeMemory(ctx.db, input);
+      return getMemoryById(ctx.db, id);
     }),
 
   /**
