@@ -4,6 +4,7 @@ import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
+import { getNotificationBus } from "../notifications/bus";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
@@ -14,6 +15,10 @@ import {
   finalizeAgentStatus,
   scoreAndRecordOplog,
 } from "./spawn-env";
+import { stripAnsi } from "./status-parser";
+
+/** Tail length (chars) of scrollback used as the attention notification body. */
+const ATTENTION_TAIL_CHARS = 240;
 
 export interface SessionMaps {
   outputProcessors: Map<string, OutputProcessor>;
@@ -89,6 +94,21 @@ export function createSpawnCallbacks(
           logger.info(
             `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}`,
           );
+          if (needsAttention) {
+            // T124: include the agent's pending question (scrollback tail) so a
+            // context switch isn't required just to find out why it's waiting.
+            const scrollback = maps.scrollbackBuffers.get(agent.id)?.join("") ?? "";
+            const tail = stripAnsi(scrollback).trim().slice(-ATTENTION_TAIL_CHARS);
+            getNotificationBus().emit({
+              type: "agent:attention",
+              title: "Agent needs your attention",
+              body: tail,
+              agentId: agent.id,
+              projectId: agent.projectId,
+              at: Date.now(),
+            });
+          }
+
           broadcastAgentStatus({
             agentId: agent.id,
             projectId: agent.projectId,
@@ -96,9 +116,9 @@ export function createSpawnCallbacks(
             currentStep: result.currentStep ?? null,
             cliType: agent.cliType,
             timestamp: Date.now(),
+            needsAttention,
             turnStarted,
             turnEnded,
-            needsAttention,
           });
         }
       }

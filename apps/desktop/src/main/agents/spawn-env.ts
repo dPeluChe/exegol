@@ -7,8 +7,8 @@ import type Database from "libsql";
 import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
-import { showAgentNotification } from "../system/notifications";
 import { refreshTray } from "../system/tray";
 import { scoreAgent } from "./scoring";
 
@@ -68,9 +68,11 @@ export function deriveStatusFromSignal(event: string): {
     case "turn_ended":
       return { turnEnded: now };
     case "attention":
-      return { status: "waiting_input", needsAttention: true };
     case "finished":
-      return { status: "completed", needsAttention: true };
+      // The CLI process is still alive (interactive shell) — "finished" here
+      // means the agent's turn ended and it's back at the prompt awaiting the
+      // user, not process exit. Actual exit is handled by finalizeAgentStatus.
+      return { status: "waiting_input", turnEnded: now, needsAttention: true };
     case "exited":
       return {};
     default:
@@ -246,7 +248,16 @@ export function finalizeAgentStatus(
       timestamp: Date.now(),
     };
     broadcastAgentStatus(statusEvent);
-    showAgentNotification(statusEvent, db);
+    if (agent.cliType !== "shell") {
+      getNotificationBus().emit({
+        type: finalStatus === "completed" ? "agent:finished" : "agent:failed",
+        title: `Agent ${finalStatus}`,
+        body: (agent.taskDescription ?? "").slice(0, 100),
+        agentId: agent.id,
+        projectId: agent.projectId,
+        at: Date.now(),
+      });
+    }
 
     const actType = finalStatus === "completed" ? "agent_completed" : "agent_failed";
     try {

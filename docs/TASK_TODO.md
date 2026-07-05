@@ -19,14 +19,13 @@ Exegol's moat = orchestration layer: **Pipelines → Evidence → Undo → Scori
 Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
 
 **P0 — Pre-launch (table stakes + quick wins):**
-1. **T124** — NotificationBus + desktop notifications (depends on T123)
-3. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
-4. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
-5. **T127** — Progressive disclosure skills (metadata-only injection)
-6. **T128** — terminal-url-detector → browser pane
-7. **T141** — Attention Inbox (unread/needs-attention UX, depends on T123)
-8. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
-9. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
+1. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
+2. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
+3. **T127** — Progressive disclosure skills (metadata-only injection)
+4. **T128** — terminal-url-detector → browser pane
+5. **T141** — Attention Inbox (unread/needs-attention UX, depends on T123)
+6. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
+7. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
 
 **P1 — Launch differentiators:**
 10. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
@@ -302,23 +301,6 @@ location (local path vs ssh://host). Key files to study:
 > Source analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`. Repos studied live in
 > `~/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/`.
 
-### T124 — NotificationBus + Desktop Notifications `added: 2026-07-04`
-**Priority**: P0 | **Effort**: S-M | **Source**: openclaw clones (`nanoclaw/src/delivery.ts`, `nanobot/channels/base.py`) — irreducible pattern: bus + 1-method channel adapters
-
-**Why**
-- Table-stakes gap: Warp, Codex app, Orca all notify "agent finished / needs input". Indispensable at 5+ agents.
-- Minimal channel interface keeps Telegram/mobile (T133) cheap later.
-
-**Scope**
-- `main/notifications/bus.ts`: receives `agent:attention`, `agent:finished`, `pipeline:paused`, `run:failed` (fed by T123)
-- Channel interface: `deliver(event, content)` — v1 channel: Electron Notification API + dock badge + optional sound
-- **Include the agent's pending question** in the attention notification when available (scrollback tail parse) — "waiting for input" alone forces a context switch to find out why (pain point #4)
-- Settings: per-event toggles, quiet mode
-- Suppress-empty pattern (openclaw `shouldSkipHeartbeatOnlyDelivery`)
-
-**Likely files**
-- New: `apps/desktop/src/main/notifications/{bus,channels/desktop}.ts`
-- `apps/desktop/src/main/ipc/procedures/settings.ts`, renderer settings UI
 
 ---
 
