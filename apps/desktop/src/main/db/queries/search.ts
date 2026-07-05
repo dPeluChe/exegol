@@ -1,5 +1,5 @@
-import { cosineSimilarity } from "@exegol/shared";
 import type { SearchEntityType, SearchResult } from "@exegol/shared";
+import { cosineSimilarity } from "@exegol/shared";
 import type Database from "libsql";
 import type { OllamaConfig } from "../../indexer/ollama-client";
 import { generateEmbedding, generateEmbeddingsBatch } from "../../indexer/ollama-client";
@@ -181,13 +181,16 @@ interface RankedItem {
 
 function rrfScoreFor(rank: number, weight: number): number {
   let score = weight / (RRF_K + rank + 1);
+  // qmd formula: +0.05 for rank 0, +0.02 for ranks 1-2 (rank <= 2).
   if (rank === 0) score += RANK0_BONUS;
-  else if (rank === 1) score += RANK1_BONUS;
+  else if (rank <= 2) score += RANK1_BONUS;
   return score;
 }
 
 /** Reciprocal Rank Fusion across weighted ranked lists. */
-function fuseRankedLists(lists: Array<{ items: RankedItem[]; weight: number }>): Map<string, number> {
+function fuseRankedLists(
+  lists: Array<{ items: RankedItem[]; weight: number }>,
+): Map<string, number> {
   const fused = new Map<string, number>();
   for (const { items, weight } of lists) {
     for (const item of items) {
@@ -251,7 +254,10 @@ export async function hybridSearch(
   if (keywordResults.length === 0) return [];
 
   const topBm25 = keywordResults[0]?.score ?? 0;
-  const keywordList: RankedItem[] = keywordResults.map((r, i) => ({ entityId: r.entityId, rank: i }));
+  const keywordList: RankedItem[] = keywordResults.map((r, i) => ({
+    entityId: r.entityId,
+    rank: i,
+  }));
 
   let vectorList: RankedItem[] = [];
   if (opts?.ollamaConfig && topBm25 < STRONG_BM25_THRESHOLD) {
@@ -391,6 +397,25 @@ export function rebuildIndex(db: Database.Database): { indexed: number } {
         entityId: `result:${r.id}`,
         projectId: r.project_id as string,
         agentId: (r.agent_id as string) || undefined,
+      });
+    }
+  }
+
+  // Collect memories (T125) — memory recall depends on this index; dropping
+  // them here would silently degrade searchMemories to the LIKE fallback.
+  const memories = db
+    .prepare("SELECT id, project_id, content, source_agent_id FROM memories")
+    .all() as Array<Record<string, unknown>>;
+  for (const m of memories) {
+    const content = m.content as string;
+    if (content) {
+      entries.push({
+        title: content.slice(0, 80),
+        body: content,
+        entityType: "memory",
+        entityId: `memory:${m.id}`,
+        projectId: m.project_id as string,
+        agentId: (m.source_agent_id as string) || undefined,
       });
     }
   }

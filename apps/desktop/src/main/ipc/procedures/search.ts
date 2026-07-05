@@ -1,5 +1,5 @@
-import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { existsSync, readFileSync } from "node:fs";
+import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { z } from "zod";
 import { hybridSearch, indexScrollback, rebuildIndex } from "../../db/queries/search";
 import type { OllamaConfig } from "../../indexer/ollama-client";

@@ -9,10 +9,48 @@ import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import { stripAnsi } from "../agents/status-parser";
 import { nanoid } from "../db/queries/helpers";
-import { hybridSearch, indexEntry, removeFromIndex } from "../db/queries/search";
+import { hybridSearch, indexEntries, indexEntry, removeFromIndex } from "../db/queries/search";
 import type { OllamaConfig } from "../indexer/ollama-client";
+import { logger } from "../lib/logger";
 
 const memorySearchEntityId = (id: string) => `memory:${id}`;
+
+// ─── One-time backfill ───────────────────────────────────────────────────────
+// Memories created before T125 landed were never indexed into search_index;
+// without this, one indexed hit suppresses the LIKE fallback and pre-existing
+// memories silently vanish from recall.
+let memoriesBackfilled = false;
+
+function ensureMemoriesIndexed(db: Database.Database): void {
+  if (memoriesBackfilled) return;
+  memoriesBackfilled = true;
+  try {
+    const missing = db
+      .prepare(
+        `SELECT m.id, m.project_id, m.content, m.source_agent_id FROM memories m
+         WHERE NOT EXISTS (
+           SELECT 1 FROM search_index s WHERE s.entity_id = 'memory:' || m.id
+         )`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    if (missing.length === 0) return;
+    indexEntries(
+      db,
+      missing.map((m) => ({
+        title: (m.content as string).slice(0, 80),
+        body: m.content as string,
+        entityType: "memory" as const,
+        entityId: memorySearchEntityId(m.id as string),
+        projectId: m.project_id as string,
+        agentId: (m.source_agent_id as string) || undefined,
+      })),
+    );
+    logger.info(`[Memory] Backfilled ${missing.length} memories into search index`);
+  } catch (err) {
+    memoriesBackfilled = false; // retry on next search
+    logger.warn("[Memory] Search index backfill failed:", err);
+  }
+}
 
 export type { MemoryCategory, MemoryCreate, MemoryEntry };
 export { MEMORY_CATEGORIES };
@@ -111,12 +149,21 @@ export async function searchMemories(
   query: string,
   ollamaConfig?: OllamaConfig,
 ): Promise<MemoryEntry[]> {
-  const hits = await hybridSearch(db, query, {
-    projectId,
-    entityType: "memory",
-    limit: 20,
-    ollamaConfig,
-  });
+  ensureMemoriesIndexed(db);
+
+  // Structural guarantee: memory recall never hard-fails — any hybrid-search
+  // exception degrades to the LIKE scan instead of rejecting the IPC call.
+  let hits: Awaited<ReturnType<typeof hybridSearch>> = [];
+  try {
+    hits = await hybridSearch(db, query, {
+      projectId,
+      entityType: "memory",
+      limit: 20,
+      ollamaConfig,
+    });
+  } catch (err) {
+    logger.warn("[Memory] hybridSearch failed, falling back to LIKE:", err);
+  }
 
   if (hits.length === 0) {
     const pattern = `%${query}%`;
