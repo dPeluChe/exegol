@@ -13,30 +13,13 @@
 
 ## Priority Order
 
-### Wave 2 — Competitive Review (2026-07) — ACTIVE
-Strategic context: the "worktree wrapper" niche commoditized (Bloop dead, Crystal deprecated, Roo archived).
-Exegol's moat = orchestration layer: **Pipelines → Evidence → Undo → Scoring** on top of sidecar resilience.
-Full analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`.
+### Wave 2.5 — remaining after the Wave 2 merge (2026-07-05)
+Wave 2 P0+P1 shipped (17 tasks via PRs #40-#50, review-fixed and merged — see `TASK_COMPLETED/2607.md`).
+Moat thesis unchanged: **Pipelines → Evidence → Undo → Scoring** on top of sidecar resilience.
+Analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md` · pain-point map: `docs/RESEARCH/DEV_PAIN_POINTS_2026.md`.
 
-**P0 — Pre-launch (table stakes + quick wins):**
-1. **T125** — Hybrid search RRF (FTS5 + Ollama + qmd formula)
-2. **T126** — Memory salience v2 (half-life decay + reinforcement + supersession)
-3. **T127** — Progressive disclosure skills (metadata-only injection)
-4. **T143** — Resource & Memory Hardening (ring-buffer budget, xterm disposal audit, re-scopes T114)
-5. **T148** — First-run Onboarding Wizard (CLI detection + keys + doctor — cold users must win in <2 min)
-
-**P1 — Launch differentiators:**
-10. **T129** — Oplog v2: git-tree snapshots per agent turn (GitButler model)
-11. **T130** — Pipeline Evidence (Artifacts-style, multi-provider)
-12. **T88v2** — Evaluator gate: two-pass judge + score distribution + ship/hold/retry
-13. **T140** — Project Knowledge Node (digest + brief per project)
-14. **T145** — Exegol MCP Server + CLI shim (agents query/update memory/knowledge/tasks mid-session)
-15. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
-16. **T147** — Cost Dashboard + Budgets (pain point #2; alerts via NotificationBus)
-17. **T131** — Race mode polish (loser cleanup + defer)
-18. **T146** — Project Groups (sidebar folders: color, icon, collapse — visual only)
-
-> Pain-point coverage map: `docs/RESEARCH/DEV_PAIN_POINTS_2026.md` (top-10 complaints vs backlog)
+**P1 — last launch differentiator (deliberately deferred from the wave):**
+1. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
 
 **P2 — Post-launch bets:**
 T132 automations catalog · T133 remote channel (Telegram) · T134 ACP experimental ·
@@ -44,6 +27,9 @@ T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment 
 T138 ModeTracker headless · T139 skills security scan · T144 dependency/library audit
 
 ### Shipped waves
+- **Wave 2 — Competitive Review (2026-07)**: T123-T131, T88v2, T140, T141, T143, T145-T148
+  across WT-A/B/C/D. Details: `docs/TASK_COMPLETED/2607.md`.
+
 - **Wave 1 — Stack Optimizations (Terax review, 2026-05)**: quick wins + WT1-WT5 + T120 settings window.
   Details: `docs/TASK_COMPLETED/2605.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/applied/`
@@ -58,6 +44,23 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - CSP changes (open DevTools console, verify zero CSP violations on basic flow)
 - Capability allowlist (no functional regression — all routers/IPC still callable from renderer)
 - **T120 settings window**: Cmd+, opens standalone; second Cmd+, focuses existing (no duplicate); Cmd+W closes settings only; main close also closes settings; minimize main keeps settings visible; theme change in settings reflects in main without reload
+
+### Manual verification pending — Wave 2 `added: 2026-07-05`
+- **⚠️ T123 OSC delivery (CRITICAL — decides whether deterministic status works at all)**:
+  spawn a real claude-code agent, confirm `[AgentCallback] Signal:` log lines appear on
+  tool use / attention / turn end. The hook printf targets `/dev/tty` (stdout fallback);
+  if signals do not arrive, the scraper fallback still covers status, but T124/T141
+  precision and T129 turn boundaries degrade
+- Desktop notification on agent finished/failed + attention (with pending-question body)
+- Attention Inbox: TitleBar queue, Cmd+J jump, unread badges
+- Knowledge tab: opt-in setup (no files written on tab open), digest refresh, MEMORY.md sync/import
+- Exegol MCP: agent calls memory_search/memory_save (read-mode agent denied memory_save)
+- Pipeline evidence: score badge + AI summary per step, Export Report
+- Evaluator gate: template with gate step persists (zod fix), ship/retry routing works
+- Oplog v2: Turn Snapshots tab lists per-step snapshots; restore refuses cross-worktree
+- Race promote & clean: dirty loser prompts; live-agent loser refuses cleanup
+- Onboarding wizard on fresh profile: CLIs detected (packaged build especially — PATH fix)
+- Monitor → Resources: eviction actually drops RSS; budget alert fires once per period
 
 ### P3 — Strategic bets / larger scope (post Wave 2)
 - **SSH Remote Development** (T73)
@@ -302,24 +305,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T129 — Oplog v2: Git-Tree Snapshots per Agent Turn `added: 2026-07-04`
-**Priority**: P1 | **Effort**: M-L | **Source**: GitButler `crates/gitbutler-oplog/` (oplog.rs, reflog.rs, entry.rs) + `but-oplog` unmaterialized pattern + t3code `CheckpointStore.ts`
-
-**Why**
-- Strongest differentiator identified. Agents edit faster than git commits; current oplog only covers git operations. GitButler's model gives per-turn granular undo with zero new infra (no CAS, no daemon, no file watcher) — pure git2, which we already ship.
-
-**Scope**
-- Snapshot = commit whose tree captures `worktree/ + index/ + app state`; chained parent-child log per project
-- Anti-GC: hidden ref (`refs/exegol/oplog`) with forged reflog (GitButler `reflog.rs` trick) — reachable but invisible in `git log --all`
-- Metadata as git trailers: `operation: AgentTurn|PipelineStep|Promote|...`, `agentId`, `provider`
-- Trigger: turn boundaries from T123 (`prepare_snapshot` on turn start → `commit_snapshot` on success; unmaterialized discard on failure)
-- Undo UI: timeline in GitPane oplog tab with per-turn restore + agent attribution
-
-**Likely files**
-- `packages/core-rust/src/git/oplog.rs` (major extension), `apps/desktop/src/main/ipc/procedures/git.ts`, GitPane oplog UI
-
----
-
 
 ### T142 — Integrations Hub: GitHub API first `added: 2026-07-04`
 **Priority**: P1 | **Effort**: M | **Source**: original idea (Antonio) + emdash (11 tracker integrations validate demand); extends T71
@@ -342,23 +327,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T143 — Resource & Memory Hardening `added: 2026-07-04`
-**Priority**: P0 | **Effort**: M | **Source**: internal audit + emdash (pidusage per agent) + terax renderer pool (re-scopes T114)
-
-**Why**
-- Launch quality: a demo with 10 agents must not lag or leak. Known risk surface: 8MB ring buffer × N sessions, 1 WebGL context per terminal pane (T114 deferred), xterm/addon disposal on pane close, scrollback serialize size, 6.8MB bundled fonts in initial load path.
-
-**Scope**
-- **Budget & metrics**: per-agent RSS (pidusage-style) + ring buffer memory + PTY count surfaced in Monitor → Resources; warning threshold with notification (via T124)
-- **Disposal audit**: verify xterm + WebGL addon + Serialize addon are fully disposed on pane close/tab close/float detach; fix leaks
-- **Ring buffer policy**: global cap (e.g. 256MB) with LRU eviction to disk for idle sessions; shells keep small buffers
-- **T114 re-scope**: renderer pool only if >5 visible terminals proves laggy after disposal fixes — measure first, then decide (BENCHMARKS.md entry)
-- Scrollback serialize cap on reattach snapshot
-
-**Likely files**
-- `apps/desktop/src/main/system/resources.ts`, sidecar ring buffer, `TerminalInstance.tsx`, `stores/terminals.ts`, Monitor sections
-
----
 
 ### T144 — Dependency & Library Audit `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: internal
@@ -375,42 +343,7 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T147 — Cost Dashboard + Budgets `added: 2026-07-04`
-**Priority**: P1 | **Effort**: M | **Source**: dev pain point #2 (`docs/RESEARCH/DEV_PAIN_POINTS_2026.md`) — surprise costs / rate limits is the #2 complaint industry-wide
 
-**Why**
-- We already collect `token_usage` + tokenlens; nobody surfaces "what did this run cost me" across providers. Post-repricing (Cursor 2025) devs are burned and cost-anxious — visibility is a trust feature.
-
-**Scope**
-- Monitor → Tokens upgraded: cost per agent, per run, per pipeline, per day/week; provider price table (editable, ships with defaults)
-- Budgets: per-project daily/weekly token or $ budget → warning at 80%, alert at 100% via NotificationBus (T124); optional hard-stop option for scheduled/automation runs
-- Pipeline run view + T130 evidence: cost per step surfaced inline
-- Rate-limit awareness: detect provider rate-limit messages (hook/OSC or scrollback pattern) → status + suggest switching provider (ties to comparator A/B story)
-
-**Likely files**
-- `apps/desktop/src/main/db/queries/token-usage.ts`, Monitor sections, `main/notifications/*`, pipeline run UI
-
----
-
-### T146 — Project Groups (sidebar folders) `added: 2026-07-04`
-**Priority**: P1 | **Effort**: S-M | **Source**: original idea (Antonio)
-
-**Why**
-- Devs with many repos (front + back + infra of one product, client work, experiments) get a flat sidebar today. Visual grouping unifies a product's repos regardless of workspace state — purely presentational, **paths and project identity unchanged**.
-- Cheap sibling of T92 (cross-repo workspaces): groups give the mental model now; T92 can later bind a workspace to a whole group.
-
-**Scope**
-- New `project_groups` table: `id, name, color, icon, background?, sortOrder, collapsed`; `projects.groupId` nullable (ungrouped = root level) + `projects.sortOrder`
-- Sidebar: collapsible group headers with color dot / icon / optional subtle background tint on the section; drag & drop projects between groups; divider between groups
-- Group context menu: rename, color/icon picker (reuse AgentIcon-style picker), collapse/expand, disband (projects fall back to root)
-- Optional: collapse-all / expand-all; group-level quick action "open all repos' status"
-
-**Likely files**
-- `apps/desktop/src/main/db/migrations` (+ queries/projects), `apps/desktop/src/main/ipc/procedures/projects.ts`
-- `apps/desktop/src/renderer/components/layout/{Sidebar,ProjectsSection}.tsx`, `stores/app.ts`
-- `packages/shared/src/schemas/project.ts`
-
----
 
 ### T132 — Automations Catalog `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: emdash `builtin-catalog.ts` + openclaw heartbeat/cron delivery
@@ -450,56 +383,6 @@ location (local path vs ssh://host). Key files to study:
 - Pattern gate before installing external skills/MCP configs: prompt-injection, credential exfil, dangerous shell, obfuscation. Blocks write-to-disk on match; user override with warning.
 
 ---
-
-## Wave 2 Work Groups — 4 parallel worktrees from main
-
-> Execution model: one worktree + one agent per group, branched from `main`.
-> Each group works its tasks **in the internal order listed** (dependencies flow that way),
-> runs the quality gate, and opens **one PR per task** (small, reviewable) against `main`.
-> Rebase from main after every merged PR from another group.
-
-### WT-A — Signal & Attention `branch: feat/wta-signal`
-**Tasks in order**: T123 → T124 → T141 → T128
-**Theme**: deterministic agent status + everything that consumes it in the UI.
-**Write set**: `packages/core-rust/src/processing/*` · `main/agents/{spawn-env,status-parser,manager}.ts` · new `main/notifications/*` · `renderer/stores/agents.ts` · `WorkspaceTabBar/Sidebar/TitleBar` · terminal toolbar (URL chip)
-**Contract it publishes** (other groups build against this): event names `agent:attention` / `agent:finished` / `pipeline:paused` / `run:failed`, turn timestamps `turnStarted/turnEnded`, `NotificationBus.emit(event, payload)` interface.
-
-### WT-B — Memory, Knowledge & Skills `branch: feat/wtb-knowledge`
-**Tasks in order**: ~~T125~~ → ~~T126~~ → ~~T127~~ → ~~T140~~ → T145 (T125/T126/T127/T140 shipped 2026-07-05, see `TASK_COMPLETED/2607.md`)
-**Theme**: everything an agent knows — search, salience, skills disclosure, knowledge node, MCP access.
-**Write set**: `main/memory/*` · new `main/knowledge/*` · `main/skills/*` · new `main/mcp/exegol-server.ts` · `db/queries/search.ts` · migrations **36-39** · `sections/KnowledgeSection.tsx`
-**Owns** the injection block in `spawn-context.ts` (WT-A only touches `spawn-env.ts` — keep functions separate).
-
-### WT-C — Git, Pipelines & Evidence `branch: feat/wtc-pipelines`
-**Tasks in order**: T129 → T130 → T88v2 → T131
-**Theme**: the launch headline — per-turn undo, verifiable evidence, statistical evaluator, race semantics.
-**Write set**: `packages/core-rust/src/git/*` · `main/pipeline/*` · `main/ipc/procedures/{git,diff}.ts` · GitPane oplog UI · `sections/pipeline/*` · `packages/shared/src/types/pipeline.ts`
-**Stub note**: T129 uses turn boundaries from T123 — start with process-exit boundaries, wire real turns after WT-A's T123 PR merges.
-
-### WT-D — Product Surface & Health `branch: feat/wtd-surface`
-**Tasks in order**: ~~T148~~ (shipped 2026-07-05) → T143 → T147 → T146
-**Theme**: what a new user touches — onboarding, stability, cost visibility, project organization.
-**Write set**: new `renderer/components/onboarding/*` · new `main/system/doctor.ts` · `main/system/resources.ts` · Monitor sections · `db/queries/token-usage.ts` · `TerminalInstance.tsx` (disposal) · `Sidebar/ProjectsSection` · migrations **40-42**
-**Stub note**: T143/T147 alerts emit through the `NotificationBus` interface from WT-A's contract — mock the emitter until WT-A merges.
-
-### Base already in main (do NOT recreate — extend)
-- **Signal/notification contract**: `packages/shared/src/types/agent-signals.ts` — `AgentSignalEvent`, `TurnBoundary`, `NotificationEvent(+Type)`. Extend here, never fork shapes locally.
-- **NotificationBus skeleton**: `apps/desktop/src/main/notifications/bus.ts` — `getNotificationBus().emit(event)` is a safe no-op until WT-A registers channels. WT-C/D emit through it from day 1.
-- **Per-group migration sets**: `apps/desktop/src/main/db/migration-sets/{wave2-signal,wave2-knowledge,wave2-surface}.ts` — append ONLY to your own file with your id prefix (`w2a_`/`w2b_`/`w2d_`). `migrations.ts` already spreads them; never touch another group's set.
-
-### Code rules — every WT PR is reviewed against these
-1. **Max 400-500 LOC per file.** If a task grows a file past ~400 lines, split it BEFORE opening the PR (domain modules, extracted helpers, sub-components) — same pattern as the WT5 hygiene splits. New files start focused; don't create future monoliths.
-2. **Reuse before creating.** Before writing any UI, grep `packages/ui/src/primitives/` (Button, Input, Badge, Tooltip, ScrollArea, Separator) and `renderer/components/common/` (AgentIcon, ConfirmDialog, EmptyState, StatusDot, IssueBubble, LoadingSpinner, ToastStack) — extend an existing component over duplicating one. Same for hooks (`renderer/hooks/`) and main helpers (`main/lib/`): search first, create second.
-3. **No new dependencies** without flagging it in the PR description — every dep must survive T144's audit.
-4. **React rules** (CLAUDE.md): derive state, TanStack Query for fetching, handlers over effects, `key` resets.
-5. **Follow the shared contract** (`agent-signals.ts`) and your migration-set file — never fork shapes or touch another group's set.
-
-### Coordination rules
-1. **Merge order**: WT-A's T123+T124 PRs first (they implement the contract); everything else merges in any order after rebasing.
-2. **Migrations**: each group appends only to its own `migration-sets/` file (see base above) — zero conflicts by construction.
-3. **Shared-file discipline**: `spawn-context.ts` → WT-B only · `spawn-env.ts` → WT-A only · GitPane → WT-C only (T142's PR panel comes later, it's P1-late) · `stores/agents.ts` → WT-A only.
-4. **PR hygiene**: one task = one PR, titled `feat(T123): ...`; quality gate (top of file) before each PR; archive the task to `TASK_COMPLETED/2607.md` in the same PR that completes it.
-5. **Not in any group** (deliberately deferred, assign after these merge): T142 (GitPane conflicts with WT-C), T144 (dep upgrades last), P2 batch T132-T139.
 
 
 ## Terax Review — Stack Optimizations (Wave 1)
