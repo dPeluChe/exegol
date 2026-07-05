@@ -137,6 +137,11 @@ export function createMemory(db: Database.Database, data: MemoryCreate): MemoryE
   };
 }
 
+export function getMemoryById(db: Database.Database, id: string): MemoryEntry | null {
+  const row = db.prepare("SELECT * FROM memories WHERE id = ?").get(id);
+  return row ? mapMemoryRow(row as Record<string, unknown>) : null;
+}
+
 export function deleteMemory(db: Database.Database, id: string): void {
   db.prepare("DELETE FROM memories WHERE id = ?").run(id);
   removeFromIndex(db, memorySearchEntityId(id));
@@ -249,9 +254,7 @@ export async function searchMemories(
   const ids = hits.map((h) => h.entityId.replace(/^memory:/, ""));
   const placeholders = ids.map(() => "?").join(",");
   const rows = db
-    .prepare(
-      `SELECT * FROM memories WHERE id IN (${placeholders}) AND superseded_by IS NULL`,
-    )
+    .prepare(`SELECT * FROM memories WHERE id IN (${placeholders}) AND superseded_by IS NULL`)
     .all(...ids) as Record<string, unknown>[];
 
   const byId = new Map(rows.map((r) => [r.id as string, mapMemoryRow(r)]));
