@@ -15,6 +15,7 @@ import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useProjectOplog, useUndoOplog } from "../../../hooks/use-trpc";
 import { formatTimeAgoLong } from "../../../lib/format";
 import { ConfirmDialog, EmptyState, LoadingSpinner } from "../../common";
+import { OplogSnapshotTimeline } from "./OplogSnapshotTimeline";
 
 // ─── Operation icon mapping ─────────────────────────────────────────────────
 
@@ -131,6 +132,7 @@ export function OplogSection() {
   const undoMutation = useUndoOplog();
   const [filter, setFilter] = useState<string>("all");
   const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
+  const [view, setView] = useState<"operations" | "snapshots">("operations");
 
   const handleUndo = useCallback((oplogId: string) => {
     setConfirmUndoId(oplogId);
@@ -174,21 +176,23 @@ export function OplogSection() {
       {/* Toolbar */}
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-bg-secondary px-3">
         <History className="h-3.5 w-3.5 text-text-muted" />
-        <span className="text-[11px] font-medium text-text-muted">Operations Log</span>
-
-        <div className="flex-1" />
 
         <div className="flex rounded bg-bg-primary">
-          {OPERATION_FILTERS.map(({ key, label }, idx) => (
+          {(
+            [
+              { key: "operations", label: "Operations" },
+              { key: "snapshots", label: "Turn Snapshots" },
+            ] as const
+          ).map(({ key, label }, idx, arr) => (
             <button
               key={key}
               type="button"
-              onClick={() => setFilter(key)}
+              onClick={() => setView(key)}
               className={cn(
                 "px-2 py-1 text-[10px] font-medium transition-colors",
                 idx === 0 && "rounded-l",
-                idx === OPERATION_FILTERS.length - 1 && "rounded-r",
-                filter === key ? "bg-accent text-white" : "text-text-muted hover:text-text-primary",
+                idx === arr.length - 1 && "rounded-r",
+                view === key ? "bg-accent text-white" : "text-text-muted hover:text-text-primary",
               )}
             >
               {label}
@@ -196,34 +200,64 @@ export function OplogSection() {
           ))}
         </div>
 
-        {filteredEntries.length > 0 && (
-          <span className="text-[10px] text-text-muted">{filteredEntries.length} entries</span>
+        <div className="flex-1" />
+
+        {view === "operations" && (
+          <>
+            <div className="flex rounded bg-bg-primary">
+              {OPERATION_FILTERS.map(({ key, label }, idx) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setFilter(key)}
+                  className={cn(
+                    "px-2 py-1 text-[10px] font-medium transition-colors",
+                    idx === 0 && "rounded-l",
+                    idx === OPERATION_FILTERS.length - 1 && "rounded-r",
+                    filter === key
+                      ? "bg-accent text-white"
+                      : "text-text-muted hover:text-text-primary",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {filteredEntries.length > 0 && (
+              <span className="text-[10px] text-text-muted">{filteredEntries.length} entries</span>
+            )}
+          </>
         )}
       </div>
 
       {/* Timeline */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {filteredEntries.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <EmptyState
-              icon={<History className="h-8 w-8 text-text-muted" />}
-              title="No operations recorded"
-              description="Agent git operations will appear here as they happen."
-            />
-          </div>
-        ) : (
-          <div className="space-y-0">
-            {filteredEntries.map((entry) => (
-              <OplogTimelineEntry
-                key={entry.id}
-                entry={entry}
-                onUndo={handleUndo}
-                isUndoing={undoMutation.isPending}
+      {view === "snapshots" ? (
+        <OplogSnapshotTimeline projectId={projectId} />
+      ) : (
+        <div className="flex-1 overflow-y-auto p-4">
+          {filteredEntries.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <EmptyState
+                icon={<History className="h-8 w-8 text-text-muted" />}
+                title="No operations recorded"
+                description="Agent git operations will appear here as they happen."
               />
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
+          ) : (
+            <div className="space-y-0">
+              {filteredEntries.map((entry) => (
+                <OplogTimelineEntry
+                  key={entry.id}
+                  entry={entry}
+                  onUndo={handleUndo}
+                  isUndoing={undoMutation.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Undo confirmation dialog */}
       <ConfirmDialog

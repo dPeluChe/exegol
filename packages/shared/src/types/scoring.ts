@@ -47,6 +47,24 @@ export type OplogEntry = {
   createdAt: number;
 };
 
+// ─── Oplog v2 (T129) — GitButler-style hidden-ref turn snapshots ──────────
+
+export type OplogSnapshotOperation = "AgentTurn" | "PipelineStep" | "Promote" | "Race";
+
+/** A committed turn snapshot read straight off the hidden ref chain — no
+ *  parallel DB store, git is the source of truth. */
+export type OplogSnapshot = {
+  sha: string;
+  parentSha?: string;
+  operation: OplogSnapshotOperation | string;
+  agentId: string;
+  provider: string;
+  turnIndex: number;
+  description: string;
+  /** unix seconds (git commit time) */
+  timestamp: number;
+};
+
 export type RustDiffLine = {
   content: string;
   lineType: string;

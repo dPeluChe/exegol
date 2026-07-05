@@ -93,3 +93,42 @@ pub struct RepoSnapshot {
   /// Timestamp (unix seconds).
   pub timestamp: i64,
 }
+
+// ─── Oplog v2 types (T129 — GitButler-style per-turn tree snapshots) ──────
+
+/// An in-memory tree built from the current index + worktree, not yet
+/// committed. `commit_turn_snapshot` only writes it to the hidden ref chain
+/// if the caller's operation actually succeeded (unmaterialized pattern).
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct PreparedTurnSnapshot {
+  /// SHA of the tree object already written to the odb.
+  pub tree_sha: String,
+  /// SHA of the current tip of the hidden oplog chain, if any.
+  pub parent_sha: Option<String>,
+}
+
+/// A committed turn snapshot in the hidden oplog chain (`refs/exegol/oplog`).
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct OplogSnapshotInfo {
+  /// Commit SHA of this snapshot.
+  pub sha: String,
+  /// Parent snapshot SHA in the chain, if any.
+  pub parent_sha: Option<String>,
+  /// Trailer: operation kind (e.g. "AgentTurn", "PipelineStep", "Promote").
+  pub operation: String,
+  /// Trailer: agent id that produced this turn.
+  pub agent_id: String,
+  /// Trailer: CLI provider (e.g. "claude-code", "codex").
+  pub provider: String,
+  /// Trailer: 0-based turn index for this agent.
+  pub turn_index: i64,
+  /// Free-text description (commit body, after trailers).
+  pub description: String,
+  /// Commit timestamp (unix seconds).
+  pub timestamp: i64,
+  /// Trailer: the worktree the snapshot was taken in — restore must target
+  /// the same path (pipeline snapshots must never overwrite the main checkout).
+  pub worktree_path: Option<String>,
+}

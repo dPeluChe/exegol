@@ -2,6 +2,7 @@ import type {
   Activity,
   AgentScoreRow,
   OplogEntry,
+  OplogSnapshot,
   RustFileDiff,
   ScoringStats,
 } from "@exegol/shared";
@@ -130,6 +131,28 @@ export function useUndoOplog() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (oplogId: string) => trpcMutate<OplogEntry>("oplog.undo", { oplogId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["oplog"] });
+      queryClient.invalidateQueries({ queryKey: ["diff"] });
+    },
+  });
+}
+
+// ─── Oplog v2 (T129) — hidden-ref turn snapshots ───────────────────────────
+
+export function useOplogSnapshots(projectId: string | null, limit = 200) {
+  return useQuery({
+    queryKey: ["oplog", "snapshots", projectId, limit],
+    queryFn: () => trpcInvoke<OplogSnapshot[]>("oplog.listSnapshots", { projectId, limit }),
+    enabled: !!projectId,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useRestoreOplogSnapshot(projectId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sha: string) => trpcMutate<string>("oplog.restoreSnapshot", { projectId, sha }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["oplog"] });
       queryClient.invalidateQueries({ queryKey: ["diff"] });
