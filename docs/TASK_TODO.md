@@ -172,41 +172,6 @@ location (local path vs ssh://host). Key files to study:
 
 ## Post-launch Backlog — Inspired by Competitors
 
-### T88 — Ralph Loops in Pipelines `added: 2026-04-15`
-**Priority**: P2 | **Effort**: Medium | **Source**: Paseo orchestration skills
-
-**Why**
-- Current pipeline loop mechanism (`loopBackTo` + maxIterations) is static. Paseo's
-  "Ralph" pattern runs a lightweight evaluator between steps that decides whether
-  the previous step met the acceptance criteria. This turns pipelines from scripts
-  into goal-seeking workflows.
-
-**Scope**
-- New step type: `evaluator` with fields `acceptanceCriteria` (prompt),
-  `onPassNext` (step id), `onFailNext` (step id, usually a loop-back), `maxLoops`
-- PipelineExecutor: when the evaluator step runs, it spawns a small agent with
-  `{{previousOutput}}` + `{{diff}}` + criteria, parses response as `PASS` or
-  `RETRY: <feedback>`, and routes accordingly
-- Retry path injects the `<feedback>` into the next step's prompt as
-  `{{retryFeedback}}`
-- UI: distinct icon in PipelineEditor, visual loop arrow when editing
-- Safety: hard max (e.g., 10 iterations) even if maxLoops is higher
-
-**v2 upgrade (2026-07 review — agent-eval + theloop patterns):**
-- **Two-pass judge**: pass 1 describes what the diff actually does (adversarial),
-  pass 2 issues the verdict — reduces judge rationalization
-- **Score distribution, not binary**: N judge calls (default 3) → distribution;
-  gate policy `ship / hold / retry` with thresholds instead of single PASS/RETRY
-- **Cost tracking** per loop iteration surfaced in run view (feeds T130 evidence)
-
-**Likely files**
-- `packages/shared/src/types/pipeline.ts` (new step type)
-- `apps/desktop/src/main/pipeline/executor.ts` (evaluator routing)
-- `apps/desktop/src/main/pipeline/context.ts` (retryFeedback variable)
-- `apps/desktop/src/renderer/components/workspace/sections/pipeline/PipelineEditor.tsx`
-
----
-
 ### T92 — Cross-repo Workspaces `added: 2026-04-15`
 **Priority**: P3 | **Effort**: Large | **Source**: Superconductor
 

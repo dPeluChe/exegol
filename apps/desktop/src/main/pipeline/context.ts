@@ -29,6 +29,7 @@ export function buildStepPrompt(
     isLastStep?: boolean;
     /** T140: progressive-disclosure pointer block to `.exegol/knowledge/`. */
     knowledge?: string;
+    retryFeedback?: string;
   },
 ): string {
   const template =
@@ -42,7 +43,8 @@ export function buildStepPrompt(
     .replace(/\{\{diff\}\}/g, vars.diff)
     .replace(/\{\{previousOutput\}\}/g, vars.previousOutput)
     .replace(/\{\{iteration\}\}/g, String(vars.iteration))
-    .replace(/\{\{knowledge\}\}/g, vars.knowledge ?? "");
+    .replace(/\{\{knowledge\}\}/g, vars.knowledge ?? "")
+    .replace(/\{\{retryFeedback\}\}/g, vars.retryFeedback ?? "");
 
   // Auto-inject PR instruction on the last step (unless user already mentioned PR)
   if (
@@ -69,4 +71,18 @@ export function getPreviousOutput(stepResults: PipelineStepResult[]): string {
     }
   }
   return "(no previous output)";
+}
+
+/**
+ * T88v2 — most recent evaluator "retry" verdict's feedback, for the
+ * {{retryFeedback}} template variable on the loop-back step.
+ */
+export function getRetryFeedback(stepResults: PipelineStepResult[]): string {
+  for (let i = stepResults.length - 1; i >= 0; i--) {
+    const r = stepResults[i];
+    if (r?.verdict?.decision === "retry" && r.verdict.feedback) {
+      return r.verdict.feedback;
+    }
+  }
+  return "";
 }

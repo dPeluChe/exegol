@@ -21,7 +21,8 @@ import {
 import { runSetupHook } from "../hooks/project-hooks";
 import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
-import { buildStepPrompt, getPreviousOutput } from "./context";
+import { buildStepPrompt, getPreviousOutput, getRetryFeedback } from "./context";
+import { handleEvaluatorStep } from "./evaluator-step-handler";
 import { broadcastPipelineStatus, captureGitDiff, now, YOLO_FLAGS } from "./pipeline-helpers";
 import {
   handleStepComplete,
@@ -130,6 +131,15 @@ export class PipelineExecutor {
       startedAt,
     });
 
+    const diff = run.worktreePath ? await captureGitDiff(run.worktreePath) : "";
+
+    // T88v2 — evaluator gates resolve synchronously (judge calls, no spawned
+    // agent), so they route to their own handler instead of the agent flow.
+    if (stepDef.evaluator) {
+      await handleEvaluatorStep(this.getStepDeps(), db, runId, stepIndex, stepDef, template, diff);
+      return;
+    }
+
     const stepResult: PipelineStepResult = {
       stepIndex,
       iteration: run.iterationCount,
@@ -142,8 +152,8 @@ export class PipelineExecutor {
       completedAt: null,
     };
 
-    const diff = run.worktreePath ? await captureGitDiff(run.worktreePath) : "";
     const previousOutput = getPreviousOutput(run.stepResults);
+    const retryFeedback = getRetryFeedback(run.stepResults);
     const isLastStep = stepIndex === template.steps.length - 1;
     const project = getProject(db, run.projectId);
     // Knowledge files are git-tracked: point at the run's worktree copy so the
@@ -157,6 +167,7 @@ export class PipelineExecutor {
       iteration: run.iterationCount,
       isLastStep,
       knowledge,
+      retryFeedback,
     });
 
     const agent = createAgent(db, {
