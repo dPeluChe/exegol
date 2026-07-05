@@ -21,6 +21,14 @@ export declare class AgentOutputStream {
 }
 
 /**
+ * Commit a previously prepared tree onto the hidden oplog chain
+ * (`commit_snapshot` half of the unmaterialized pattern) — call this only
+ * when the agent turn actually succeeded; on failure, simply discard the
+ * prepared snapshot and nothing is ever written to the chain.
+ */
+export declare function commitTurnSnapshot(repoPath: string, treeSha: string, operation: string, agentId: string, provider: string, turnIndex: number, description: string): OplogSnapshotInfo
+
+/**
  * Create a new git worktree with a new branch.
  *
  * If `target_path` is provided, the worktree is placed there.
@@ -148,11 +156,55 @@ export interface GrepOptions {
 /** Health check function to verify the native module is loaded correctly. */
 export declare function healthCheck(): string
 
+/** Walk the hidden oplog chain from its tip, most recent first. */
+export declare function listOplogSnapshots(repoPath: string, limit: number): Array<OplogSnapshotInfo>
+
 /** List all worktrees for a repository. */
 export declare function listWorktrees(repoPath: string): Array<WorktreeInfo>
 
 /** Returns the version of the native module. */
 export declare function nativeVersion(): string
+
+/** A committed turn snapshot in the hidden oplog chain (`refs/exegol/oplog`). */
+export interface OplogSnapshotInfo {
+  /** Commit SHA of this snapshot. */
+  sha: string
+  /** Parent snapshot SHA in the chain, if any. */
+  parentSha?: string
+  /** Trailer: operation kind (e.g. "AgentTurn", "PipelineStep", "Promote"). */
+  operation: string
+  /** Trailer: agent id that produced this turn. */
+  agentId: string
+  /** Trailer: CLI provider (e.g. "claude-code", "codex"). */
+  provider: string
+  /** Trailer: 0-based turn index for this agent. */
+  turnIndex: number
+  /** Free-text description (commit body, after trailers). */
+  description: string
+  /** Commit timestamp (unix seconds). */
+  timestamp: number
+}
+
+/**
+ * An in-memory tree built from the current index + worktree, not yet
+ * committed. `commit_turn_snapshot` only writes it to the hidden ref chain
+ * if the caller's operation actually succeeded (unmaterialized pattern).
+ */
+export interface PreparedTurnSnapshot {
+  /** SHA of the tree object already written to the odb. */
+  treeSha: string
+  /** SHA of the current tip of the hidden oplog chain, if any. */
+  parentSha?: string
+}
+
+/**
+ * Build a tree from the current index + worktree without persisting
+ * anything to disk (`prepare_snapshot` half of the unmaterialized pattern).
+ * `index.add_all`/`update_all` mutate only the in-memory `Index` handle —
+ * the real `.git/index` file is untouched unless `index.write()` is called,
+ * which we deliberately never do here.
+ */
+export declare function prepareTurnSnapshot(repoPath: string): PreparedTurnSnapshot
 
 /** Result of processing a chunk of PTY output. */
 export interface ProcessedOutput {
@@ -200,6 +252,14 @@ export interface RepoSnapshot {
   /** Timestamp (unix seconds). */
   timestamp: number
 }
+
+/**
+ * Restore working directory + a new HEAD commit to a snapshot's tree.
+ * Reuses the same "never force-push, always create a new commit" semantics
+ * as `revert_to_snapshot` — the snapshot's tree is resolvable by SHA
+ * regardless of hidden-ref reachability once committed to the odb.
+ */
+export declare function restoreOplogSnapshot(repoPath: string, sha: string): string
 
 /**
  * Revert to a specific commit by creating a new commit that restores its tree.

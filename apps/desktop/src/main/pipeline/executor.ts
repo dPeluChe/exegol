@@ -23,6 +23,7 @@ import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput, getRetryFeedback } from "./context";
 import { handleEvaluatorStep } from "./evaluator-step-handler";
+import { prepareStepSnapshot } from "./oplog-snapshots";
 import { broadcastPipelineStatus, captureGitDiff, now, YOLO_FLAGS } from "./pipeline-helpers";
 import {
   handleStepComplete,
@@ -50,11 +51,14 @@ export function getPipelineExecutor(): PipelineExecutor {
 export class PipelineExecutor {
   private activeAgents: Map<string, string> = new Map();
   private idleTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  /** T129 — prepared (uncommitted) oplog snapshot tree, keyed by agent id. */
+  private pendingSnapshots: Map<string, string> = new Map();
 
   private getStepDeps(): StepHandlerDeps {
     return {
       activeAgents: this.activeAgents,
       idleTimers: this.idleTimers,
+      pendingSnapshots: this.pendingSnapshots,
       advanceStep: (db, runId, stepIndex, template) =>
         this.advanceStep(db, runId, stepIndex, template),
       completeRun: (db, run) => this.completeRun(db, run),
@@ -184,6 +188,9 @@ export class PipelineExecutor {
     updatePipelineRun(db, runId, { stepResults: updatedResults });
 
     this.activeAgents.set(runId, agent.id);
+
+    const snapshotTreeSha = prepareStepSnapshot(run.worktreePath);
+    if (snapshotTreeSha) this.pendingSnapshots.set(agent.id, snapshotTreeSha);
 
     broadcastPipelineStatus({
       runId,

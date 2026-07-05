@@ -577,6 +577,7 @@ if (!nativeBinding) {
 
 module.exports = nativeBinding
 module.exports.AgentOutputStream = nativeBinding.AgentOutputStream
+module.exports.commitTurnSnapshot = nativeBinding.commitTurnSnapshot
 module.exports.createWorktree = nativeBinding.createWorktree
 module.exports.fsGrep = nativeBinding.fsGrep
 module.exports.fsSearch = nativeBinding.fsSearch
@@ -585,9 +586,12 @@ module.exports.getRepoInfo = nativeBinding.getRepoInfo
 module.exports.getRepoSnapshot = nativeBinding.getRepoSnapshot
 module.exports.getWorktreeDiff = nativeBinding.getWorktreeDiff
 module.exports.healthCheck = nativeBinding.healthCheck
+module.exports.listOplogSnapshots = nativeBinding.listOplogSnapshots
 module.exports.listWorktrees = nativeBinding.listWorktrees
 module.exports.nativeVersion = nativeBinding.nativeVersion
+module.exports.prepareTurnSnapshot = nativeBinding.prepareTurnSnapshot
 module.exports.removeWorktree = nativeBinding.removeWorktree
+module.exports.restoreOplogSnapshot = nativeBinding.restoreOplogSnapshot
 module.exports.revertToSnapshot = nativeBinding.revertToSnapshot
 module.exports.stripAnsi = nativeBinding.stripAnsi
 module.exports.worktreeHasChanges = nativeBinding.worktreeHasChanges

@@ -89,4 +89,53 @@ export const oplogRouter = router({
 
     return revertEntry;
   }),
+
+  // ─── Oplog v2 (T129) — hidden-ref turn snapshots. Git is the source of
+  // truth here: no parallel DB table, just read/write the hidden ref chain.
+
+  /** List turn snapshots straight off the project's hidden oplog chain. */
+  listSnapshots: publicProcedure
+    .input(z.object({ projectId: z.string(), limit: z.number().default(200) }))
+    .query(({ ctx, input }) => {
+      if (!coreRust) return [];
+
+      const project = ctx.db
+        .prepare("SELECT path FROM projects WHERE id = ?")
+        .get(input.projectId) as { path: string } | undefined;
+      if (!project) return [];
+
+      try {
+        return coreRust.listOplogSnapshots(project.path, input.limit);
+      } catch (err) {
+        logger.warn("[Oplog] Failed to list turn snapshots:", err);
+        return [];
+      }
+    }),
+
+  /** Restore the worktree to a turn snapshot's tree via a new HEAD commit
+   *  (never force-pushes, same semantics as the v1 `undo` mutation above). */
+  restoreSnapshot: publicProcedure
+    .input(z.object({ projectId: z.string(), sha: z.string() }))
+    .mutation(({ ctx, input }) => {
+      if (!coreRust) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Rust native module not available — cannot restore snapshot",
+        });
+      }
+
+      const project = ctx.db
+        .prepare("SELECT path FROM projects WHERE id = ?")
+        .get(input.projectId) as { path: string } | undefined;
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      }
+
+      const newSha = coreRust.restoreOplogSnapshot(project.path, input.sha);
+      logger.info("[Oplog] Restored turn snapshot:", {
+        sha: input.sha.slice(0, 8),
+        newCommit: newSha.slice(0, 8),
+      });
+      return newSha;
+    }),
 });

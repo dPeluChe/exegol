@@ -357,21 +357,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T129 — Oplog v2: Git-Tree Snapshots per Agent Turn `added: 2026-07-04`
-**Priority**: P1 | **Effort**: M-L | **Source**: GitButler `crates/gitbutler-oplog/` (oplog.rs, reflog.rs, entry.rs) + `but-oplog` unmaterialized pattern + t3code `CheckpointStore.ts`
-
-**Why**
-- Strongest differentiator identified. Agents edit faster than git commits; current oplog only covers git operations. GitButler's model gives per-turn granular undo with zero new infra (no CAS, no daemon, no file watcher) — pure git2, which we already ship.
-
-**Scope**
-- Snapshot = commit whose tree captures `worktree/ + index/ + app state`; chained parent-child log per project
-- Anti-GC: hidden ref (`refs/exegol/oplog`) with forged reflog (GitButler `reflog.rs` trick) — reachable but invisible in `git log --all`
-- Metadata as git trailers: `operation: AgentTurn|PipelineStep|Promote|...`, `agentId`, `provider`
-- Trigger: turn boundaries from T123 (`prepare_snapshot` on turn start → `commit_snapshot` on success; unmaterialized discard on failure)
-- Undo UI: timeline in GitPane oplog tab with per-turn restore + agent attribution
-
-**Likely files**
-- `packages/core-rust/src/git/oplog.rs` (major extension), `apps/desktop/src/main/ipc/procedures/git.ts`, GitPane oplog UI
 
 ---
 

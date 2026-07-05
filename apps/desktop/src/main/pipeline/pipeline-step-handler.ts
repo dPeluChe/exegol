@@ -5,11 +5,14 @@ import { getPipelineRun, updatePipelineRun } from "../db/queries";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { attachStepScore, summarizeStepDiff } from "./evidence";
+import { commitStepSnapshot } from "./oplog-snapshots";
 import { captureGitDiff, now, readScrollbackSummary } from "./pipeline-helpers";
 
 export interface StepHandlerDeps {
   activeAgents: Map<string, string>;
   idleTimers: Map<string, ReturnType<typeof setTimeout>>;
+  /** T129 — prepared (uncommitted) oplog snapshot tree, keyed by agent id. */
+  pendingSnapshots: Map<string, string>;
   advanceStep(
     db: Database.Database,
     runId: string,
@@ -80,6 +83,21 @@ export async function handleStepComplete(
   }
 
   const success = exitCode === 0;
+
+  // T129: commit the prepared snapshot only on success — a failed turn
+  // never lands on the hidden oplog chain (unmaterialized discard).
+  const treeSha = deps.pendingSnapshots.get(agentId) ?? null;
+  deps.pendingSnapshots.delete(agentId);
+  if (success) {
+    commitStepSnapshot(
+      run.worktreePath,
+      treeSha,
+      agentId,
+      stepDef?.cliType ?? "unknown",
+      stepIndex,
+      `${stepDef?.label ?? `step ${stepIndex}`} (run ${runId})`,
+    );
+  }
 
   if (success) {
     updatePipelineRun(db, runId, { stepResults: updatedResults });
