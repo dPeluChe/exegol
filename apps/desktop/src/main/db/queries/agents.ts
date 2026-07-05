@@ -78,10 +78,6 @@ export function clearAgentWorktree(db: Database.Database, agentId: string): void
   db.prepare("UPDATE agents SET worktree_id = NULL WHERE id = ?").run(agentId);
 }
 
-export function setAgentPid(db: Database.Database, agentId: string, pid: number): void {
-  db.prepare("UPDATE agents SET pid = ? WHERE id = ?").run(pid, agentId);
-}
-
 /**
  * Single-query post-spawn activation: sets pid, session_id, and status = "running"
  * in one round-trip, replacing the three separate UPDATEs previously issued after
@@ -180,9 +176,4 @@ export function recoverStaleAgents(
   }
 
   return { crashed, alive };
-}
-
-/** Legacy alias for backwards compatibility */
-export function cleanupStaleAgents(db: Database.Database): void {
-  recoverStaleAgents(db);
 }

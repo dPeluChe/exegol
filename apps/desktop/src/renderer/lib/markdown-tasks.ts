@@ -340,12 +340,3 @@ export function removeTask(content: string, taskLine: number): string {
   }
   return lines.join("\n");
 }
-
-// ─── Legacy compat (used by old TasksSection) ───────────────────────────────
-
-export type { TaskItem as LegacyTaskItem };
-
-export function parseMarkdownTasks(content: string): TaskItem[] {
-  const board = parseTaskBoard(content, "");
-  return Object.values(board.columns).flat();
-}

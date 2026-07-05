@@ -6,27 +6,7 @@ import type {
   TokenUsageSummary,
 } from "@exegol/shared";
 import type Database from "libsql";
-import { mapTokenUsageRow, nanoid } from "./helpers";
-
-export function recordTokenUsage(
-  db: Database.Database,
-  data: Omit<TokenUsage, "id" | "recordedAt">,
-): void {
-  const id = nanoid();
-  db.prepare(
-    `INSERT INTO token_usage (id, agent_id, provider, model, input_tokens, output_tokens, estimated_cost_usd, tool_call_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    id,
-    data.agentId,
-    data.provider,
-    data.model,
-    data.inputTokens,
-    data.outputTokens,
-    data.estimatedCostUsd,
-    data.toolCallCount,
-  );
-}
+import { mapTokenUsageRow } from "./helpers";
 
 export function getTokenUsageSummary(
   db: Database.Database,

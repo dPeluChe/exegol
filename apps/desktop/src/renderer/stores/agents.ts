@@ -132,24 +132,14 @@ interface AgentStore {
   /** Remove an agent from the store */
   removeAgent: (id: string) => void;
 
-  /** Clear all agents (e.g., when switching projects) */
-  clearAgents: () => void;
-
   /** Sync agents from DB for a given project. Merges with existing live state. */
   syncFromDb: (projectId: string, dbAgents: Agent[]) => void;
-
-  /** Get agents as an array for rendering */
-  getAgentList: () => AgentState[];
-
-  /** Get a single agent by ID */
-  getAgent: (id: string) => AgentState | undefined;
 
   /**
    * Whether an agent is "unread" — derived from attentionItems.
    * An agent is unread if it has an attention item that hasn't been read.
    */
   isUnread: (id: string) => boolean;
-  markUnread: (id: string) => void;
   markRead: (id: string) => void;
 
   /** Attention inbox — agents needing user attention, persisted across restarts */
@@ -201,10 +191,6 @@ export const useAgentStore = create<AgentStore>()(
         return !!item && !item.read;
       },
 
-      // markUnread/markRead delegate to attentionItems — kept for backward compat
-      // with AgentMiniCard and other consumers that check unread state.
-      markUnread: (id) => get().addAttentionItem(id),
-
       markRead: (id) => get().markAttentionRead(id),
 
       updateAgent: (id, update) =>
@@ -230,8 +216,6 @@ export const useAgentStore = create<AgentStore>()(
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
           return { agents: rest, focusedAgentId };
         }),
-
-      clearAgents: () => set({ agents: {}, focusedAgentId: null }),
 
       syncFromDb: (_projectId, dbAgents) =>
         set((state) => {
@@ -278,10 +262,6 @@ export const useAgentStore = create<AgentStore>()(
           }
           return { agents: updated };
         }),
-
-      getAgentList: () => Object.values(get().agents),
-
-      getAgent: (id) => get().agents[id],
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────
 

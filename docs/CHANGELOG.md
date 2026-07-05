@@ -11,7 +11,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 Big batch of work landed in May 2026 across 5 parallel worktrees (Wave 1+2)
 plus T120 settings window. Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` +
-`docs/tasks_completed/2026_05.md`.
+`docs/TASK_COMPLETED/2605.md`.
 
 ### Added
 
@@ -96,7 +96,7 @@ plus T120 settings window. Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` +
 
 - `docs/RESEARCH/TERAX_STACK_REVIEW.md` — comparative architecture review.
 - `docs/ARCHITECTURE/CAPABILITIES.md` — threat model + capability allowlist.
-- `docs/agent_prompts/wt[1-5]_*.md` — per-worktree briefs used by the
+- `docs/archived/agent_prompts/wt[1-5]_*.md` — per-worktree briefs used by the
   parallel multi-agent run.
 
 ---
