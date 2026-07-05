@@ -37,6 +37,15 @@ export declare function commitTurnSnapshot(repoPath: string, treeSha: string, op
  */
 export declare function createWorktree(repoPath: string, worktreeName: string, branchName: string, targetPath?: string | undefined | null): WorktreeInfo
 
+/**
+ * Delete a local branch. Used by race mode (T131) to clean up loser
+ * branches after their worktree has already been removed. `force` maps to
+ * git2's `Branch::delete`, which does not check merge status itself — the
+ * caller is expected to have already confirmed the worktree/branch is safe
+ * to discard (e.g. no uncommitted changes).
+ */
+export declare function deleteBranch(repoPath: string, branchName: string, force: boolean): boolean
+
 /** A contiguous section of changes within a file. */
 export interface DiffHunk {
   /** Starting line number in the old file. */

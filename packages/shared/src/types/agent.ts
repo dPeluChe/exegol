@@ -287,6 +287,17 @@ export type ParallelRunDetails = {
   columns: ParallelRunColumn[];
 };
 
+// ─── T131: Race mode — loser cleanup report ────────────────────────────────
+
+export type LoserCleanupResult = {
+  agentId: string;
+  worktreePath: string | null;
+  branchName: string | null;
+  cleaned: boolean;
+  dirty: boolean;
+  error?: string;
+};
+
 // ─── QA Tests (T102) ───────────────────────────────────────────────────────
 
 export const QA_TEST_STATUSES = ["saved", "running", "passed", "failed"] as const;

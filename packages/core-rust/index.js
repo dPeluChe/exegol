@@ -579,6 +579,7 @@ module.exports = nativeBinding
 module.exports.AgentOutputStream = nativeBinding.AgentOutputStream
 module.exports.commitTurnSnapshot = nativeBinding.commitTurnSnapshot
 module.exports.createWorktree = nativeBinding.createWorktree
+module.exports.deleteBranch = nativeBinding.deleteBranch
 module.exports.fsGrep = nativeBinding.fsGrep
 module.exports.fsSearch = nativeBinding.fsSearch
 module.exports.getDiff = nativeBinding.getDiff

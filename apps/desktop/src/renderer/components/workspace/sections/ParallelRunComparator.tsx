@@ -1,4 +1,4 @@
-import type { ParallelRun, ParallelRunDetails } from "@exegol/shared";
+import type { LoserCleanupResult, ParallelRun, ParallelRunDetails } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,9 +10,11 @@ import {
   Trophy,
   XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { formatCost, formatTokens } from "../../../lib/format";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { AgentIcon } from "../../common/AgentIcon";
+import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { EmptyState } from "../../common/EmptyState";
 
 interface ParallelRunComparatorProps {
@@ -28,12 +30,31 @@ export function ParallelRunComparator({ runId, onBack }: ParallelRunComparatorPr
     refetchInterval: (q) => (q.state.data?.run.status === "running" ? 10_000 : false),
   });
 
+  // T131 — "Promote & Clean" is one action: promote marks the winner and
+  // auto-removes loser worktrees/branches; dirty losers come back in the
+  // report and get a confirm prompt before force-deleting.
+  const [dirtyPrompt, setDirtyPrompt] = useState<{
+    agentId: string;
+    dirty: LoserCleanupResult[];
+  } | null>(null);
+  const [cleanupErrors, setCleanupErrors] = useState<LoserCleanupResult[]>([]);
+
   const promote = useMutation({
-    mutationFn: (agentId: string) =>
-      trpcMutate<{ success: boolean }>("agents.promoteParallelAgent", { runId, agentId }),
-    onSuccess: () => {
+    mutationFn: ({ agentId, force }: { agentId: string; force?: boolean }) =>
+      trpcMutate<{ success: boolean; cleanup: LoserCleanupResult[] }>(
+        "agents.promoteParallelAgent",
+        { runId, agentId, force },
+      ),
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["parallelRunDetails", runId] });
       queryClient.invalidateQueries({ queryKey: ["parallelRuns"] });
+      const dirty = result.cleanup.filter((c) => c.dirty && !c.cleaned);
+      if (dirty.length > 0 && !variables.force) {
+        setDirtyPrompt({ agentId: variables.agentId, dirty });
+      }
+      // Failed cleanups (live agent, locked worktree, missing native module)
+      // must be visible — silently leaking worktrees is the bug T131 fixes.
+      setCleanupErrors(result.cleanup.filter((c) => c.error));
     },
   });
 
@@ -62,6 +83,12 @@ export function ParallelRunComparator({ runId, onBack }: ParallelRunComparatorPr
   return (
     <div className="flex h-full flex-col">
       <ComparatorHeader run={run} onBack={onBack} />
+      {cleanupErrors.length > 0 && (
+        <div className="border-b border-border bg-amber-500/10 px-4 py-2 text-[11px] text-amber-400">
+          {cleanupErrors.length} loser worktree(s) could not be cleaned:{" "}
+          {cleanupErrors.map((c) => `${c.branchName ?? c.agentId}: ${c.error}`).join(" · ")}
+        </div>
+      )}
       <div className="flex-1 overflow-auto p-4">
         {columns.length === 0 ? (
           <EmptyState
@@ -79,13 +106,28 @@ export function ParallelRunComparator({ runId, onBack }: ParallelRunComparatorPr
                 isPromoted={run.promotedAgentId === col.agent.id}
                 isRunning={isRunning}
                 runSettled={!isRunning}
-                onPromote={() => promote.mutate(col.agent.id)}
+                onPromote={() => promote.mutate({ agentId: col.agent.id })}
                 pending={promote.isPending}
               />
             ))}
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={dirtyPrompt !== null}
+        onOpenChange={(open) => {
+          if (!open) setDirtyPrompt(null);
+        }}
+        title="Uncommitted changes in loser worktrees"
+        description={`${dirtyPrompt?.dirty.length ?? 0} loser worktree(s) have uncommitted changes and were kept. Delete them anyway?`}
+        confirmLabel="Delete anyway"
+        variant="destructive"
+        onConfirm={() => {
+          if (dirtyPrompt) promote.mutate({ agentId: dirtyPrompt.agentId, force: true });
+          setDirtyPrompt(null);
+        }}
+      />
     </div>
   );
 }
@@ -211,7 +253,7 @@ function ColumnCard({
               ? "Wait for all variants to finish before promoting"
               : isPromoted
                 ? "Already promoted — calling again leaves state unchanged"
-                : "Promote this variant as the winner"
+                : "Promote this variant as the winner and clean up the losers' worktrees/branches"
           }
         >
           {isPromoted ? (
@@ -222,7 +264,7 @@ function ColumnCard({
           ) : (
             <>
               <Trophy className="h-3 w-3" />
-              {pending ? "..." : "Promote"}
+              {pending ? "..." : "Promote & Clean"}
             </>
           )}
         </Button>

@@ -360,15 +360,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-### T131 — Race Mode Polish (T65 follow-up) `added: 2026-07-04`
-**Priority**: P1 | **Effort**: S | **Source**: runoff (race semantics)
-
-**Scope**
-- Auto-cleanup loser worktrees + branches on promote (unless dirty → prompt)
-- Defer mode: nothing lands on the main branch until explicit winner selection
-- Comparator: "promote & clean" single action
-
----
 
 ### T141 — Attention Inbox (unread / needs-attention UX) `added: 2026-07-04`
 **Priority**: P0 | **Effort**: S-M | **Source**: Orca (Gmail-like unread/star on worktrees) + superset (ringtone/badge bindings)
