@@ -37,6 +37,13 @@ gap vs Omnara / Claude web / Codex Remote* · T132 automations catalog · T134 A
 T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
 T138 ModeTracker headless · T139 skills security scan · T144 dependency/library audit
 
+**Wave 2.6 exit criteria (definition of done):**
+- [ ] Both manual-verification checklists below fully checked (T123 result recorded either way)
+- [ ] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green in CI
+- [ ] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test
+- [ ] T151 + T152 merged: no `"*"` capability wildcards, no file > 500 LOC in the flagged pair
+- [ ] Then start T142 — and cut the next release from that point
+
 ### Shipped waves
 - **Wave 2 — Competitive Review (2026-07)**: T123-T131, T88v2, T140, T141, T143, T145-T148
   across WT-A/B/C/D. Details: `docs/TASK_COMPLETED/2607.md`.
