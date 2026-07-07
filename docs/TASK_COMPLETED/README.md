@@ -15,4 +15,4 @@
 8. **Preserve the `added:` date** — Keep the original creation date so the archive shows how long the task lived in the backlog
 
 > Pre-standardization history: files were named `2026_03.md` style until 2026-07 (now `2603.md` etc.).
-> Older per-task notes from the V1 era live in `docs/applied/` (T17-T38).
+> Older per-task notes from the V1 era live in `docs/ARCHIVED/APPLIED/` (T17-T38).

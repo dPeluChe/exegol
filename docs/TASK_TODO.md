@@ -13,18 +13,36 @@
 
 ## Priority Order
 
-### Wave 2.5 — remaining after the Wave 2 merge (2026-07-05)
-Wave 2 P0+P1 shipped (17 tasks via PRs #40-#50, review-fixed and merged — see `TASK_COMPLETED/2607.md`).
-Moat thesis unchanged: **Pipelines → Evidence → Undo → Scoring** on top of sidecar resilience.
-Analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md` · pain-point map: `docs/RESEARCH/DEV_PAIN_POINTS_2026.md`.
+### Wave 2.6 — Hardening & verification (2026-07-06) — ACTIVE
+> **Verificar > construir.** Source: `docs/RESEARCH/CODE_HEALTH_AUDIT_2026_07.md` (Fable audit).
+> New features deferred to the next round — this wave hardens what Wave 1+2 built before
+> shipping anything on top. Moat thesis re-validated against live market (Conductor $22M,
+> Vibe Kanban/Terragon dead, first-party absorption): **Pipelines → Evidence → Undo → Scoring**
+> still uncontested — the risk is follow-through, not direction.
 
-**P1 — last launch differentiator (deliberately deferred from the wave):**
-1. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop)
+**P0 — before any new feature:**
+1. **Manual verification backlog** (sections below) — **T123 OSC delivery FIRST** (critical:
+   decides whether deterministic status works at all), then the Wave 1+2 smoke-test list
+2. **T149** — Orchestration-core tests (executor, manager, MCP server, **db/migrations**)
+3. **T150** — T80 closure (`withRetry` wire-in or delete) + Rust↔JS golden parity vectors
 
-**P2 — Post-launch bets:**
-T132 automations catalog · T133 remote channel (Telegram) · T134 ACP experimental ·
+**P1 — after P0:**
+4. **T151** — Security & hygiene polish (keystore plaintext warning, capabilities allowlist, coverage/)
+5. **T152** — God-module split (`workspace.ts` 698 LOC, `main/index.ts` 506 LOC)
+6. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop) — last launch differentiator, unchanged
+
+**P2 — Post-launch bets (next round):**
+T133 remote channel (Telegram) — *candidate to elevate: remote continuity is the most visible
+gap vs Omnara / Claude web / Codex Remote* · T132 automations catalog · T134 ACP experimental ·
 T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
 T138 ModeTracker headless · T139 skills security scan · T144 dependency/library audit
+
+**Wave 2.6 exit criteria (definition of done):**
+- [ ] Both manual-verification checklists below fully checked (T123 result recorded either way)
+- [ ] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green in CI
+- [ ] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test
+- [ ] T151 + T152 merged: no `"*"` capability wildcards, no file > 500 LOC in the flagged pair
+- [ ] Then start T142 — and cut the next release from that point
 
 ### Shipped waves
 - **Wave 2 — Competitive Review (2026-07)**: T123-T131, T88v2, T140, T141, T143, T145-T148
@@ -32,7 +50,7 @@ T138 ModeTracker headless · T139 skills security scan · T144 dependency/librar
 
 - **Wave 1 — Stack Optimizations (Terax review, 2026-05)**: quick wins + WT1-WT5 + T120 settings window.
   Details: `docs/TASK_COMPLETED/2605.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
-- Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/applied/`
+- Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Manual verification pending (post-merge) `added: 2026-05-22`
 Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended before broad release:
@@ -78,6 +96,99 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ## Active Backlog
+
+### T149 — Orchestration-core Tests `added: 2026-07-06`
+**Priority**: P0 (Wave 2.6) | **Effort**: M | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
+
+**Why**
+- The untested set is exactly the crash/corruption-prone surface: subprocess lifecycle,
+  pipeline state transitions, socket auth, DB schema evolution. Renderer: 6 tests / 179 files;
+  main's existing tests cover only pure leaf logic.
+- Not chasing coverage % — surgically shielding the data-corruption surface.
+
+**Scope**
+- `db/migrations.ts` (**highest value**): run full 36-base + migration-sets chain against a
+  fixture DB; assert final schema + idempotent re-run
+- `pipeline/executor.ts`: run/pause/resume/cancel/loop-back transitions (state-machine already
+  has tests — this covers the executor's use of it, incl. evaluator gate routing)
+- `agents/manager.ts`: spawn lifecycle (context build → spawn → status → exit hooks non-fatal)
+- `mcp/exegol-server.ts`: token mint/revoke/reject (`-32002`), accessMode gating from DB
+- Nice-to-have if cheap: `agents/queue.ts`, `scheduler/engine.ts` happy path
+
+**Likely files**
+- New: `apps/desktop/src/main/{db,pipeline,agents,mcp}/__tests__/*`
+- Test seams may need small DI extractions in `manager.ts` / `executor.ts` (keep minimal)
+
+---
+
+### T150 — T80 Closure + Rust↔JS Parity Vectors `added: 2026-07-06`
+**Priority**: P0 (Wave 2.6) | **Effort**: S-M | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
+
+**Why**
+- `withRetry()` (lib/errors.ts:72-105) has **zero call sites** — the error hierarchy was built
+  (T80) and never wired. 31 generic `throw new Error` on the critical path instead.
+- `agents/status-parser.ts` (377 LOC) is a hand-maintained JS mirror of the Rust
+  `status_parser.rs` + `strip_ansi.rs`; the JS fallback is what users hit when the native
+  build is missing, and nothing prevents silent drift.
+
+**Scope**
+- Decide per call site: wire `withRetry` + `Transient/PermanentError` into agent spawn,
+  git network ops (push/fetch), and Haiku calls (scoring, evaluator, diff summary) — or
+  delete the helper. No half-build left standing.
+- Golden test vectors shared by both implementations: one fixture set (ANSI streams + OSC-777
+  sequences + expected events/stripped output) consumed by a vitest suite (JS) and a
+  `#[cfg(test)]` suite (Rust). CI fails on divergence.
+
+**Likely files**
+- `apps/desktop/src/main/lib/errors.ts`, `agents/manager.ts`, `agents/scoring.ts`,
+  `pipeline/evaluator.ts`, `ipc/procedures/diff.ts`
+- New: shared fixtures dir (e.g. `packages/core-rust/test-vectors/*.json`) +
+  `agents/__tests__/status-parser-parity.test.ts` + Rust test loading the same JSON
+
+---
+
+### T151 — Security & Hygiene Polish `added: 2026-07-06`
+**Priority**: P1 (Wave 2.6) | **Effort**: S | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
+
+**Scope**
+- **Keystore plaintext fallback warning** (`security/keystore.ts:10-15`): when
+  `safeStorage.isEncryptionAvailable()` is false, keys land in the settings table in
+  plaintext with no user-facing notice → warn in ApiKeysSettings + Doctor check (T148)
+- **Tighten `preload/capabilities.json`**: replace `"*"` router wildcards with explicit
+  procedure allowlists (mechanism already built — finish it; cross-check against the
+  orphaned-procedures inventory in T144)
+- **Un-commit `coverage/`**: add to `.gitignore`, delete from repo; generate a whole-repo
+  number instead of the current partial artifact
+
+**Likely files**
+- `apps/desktop/src/main/security/keystore.ts`, `system/doctor.ts`,
+  `renderer/components/settings/ApiKeysSettings.tsx`
+- `apps/desktop/src/preload/capabilities.json`, `.gitignore`
+
+---
+
+### T152 — God-module Split `added: 2026-07-06`
+**Priority**: P1 (Wave 2.6) | **Effort**: S-M | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
+
+**Why**
+- Board rule is max 400-500 LOC/file; two files violate it and are central mutation hubs.
+  agents/ and terminal/ prove the codebase knows how to decompose — these are the exceptions.
+
+**Scope**
+- `renderer/stores/workspace.ts` (**698 LOC**): split by concern — tabs/panes slice,
+  custom-layouts slice, floating-panes slice, recovery slice — keeping one composed store
+  (no consumer API change)
+- `main/index.ts` (506 LOC): extract startup phases (window creation, protocol/menu setup,
+  recovery/reattach orchestration) into `main/bootstrap/*` modules
+- Behind T149 tests where they exist; pure mechanical moves otherwise
+- Radar (no action this wave): CommandPalette 498 · FileExplorer 493 · FloatingBrowser 468 ·
+  WorkspacePane 468 · pty-host 460 · ipc/procedures/agents 452 · resources 449
+
+**Likely files**
+- `apps/desktop/src/renderer/stores/workspace.ts` (+ new slice files)
+- `apps/desktop/src/main/index.ts` (+ new `main/bootstrap/*`)
+
+---
 
 ### T58 — Runtime Permission Modes (remaining delta) `added: 2026-04-01`
 **Priority**: P2 | **Effort**: S | **Source**: Anvil

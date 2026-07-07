@@ -5,7 +5,7 @@
 - **Build config**: `apps/desktop/electron-builder.ts` (macOS DMG/ZIP, Windows NSIS, Linux AppImage)
 - **Auto-updater**: `apps/desktop/src/main/system/auto-updater.ts` (electron-updater, GitHub Releases)
 - **Icons**: Placeholder in `apps/desktop/src/resources/build/icons/` (replace with final design)
-- **Version**: `apps/desktop/package.json` → `"version": "0.1.0"`
+- **Version**: `apps/desktop/package.json` (0.4.1 as of 2026-07)
 
 ## Steps to First Release
 

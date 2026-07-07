@@ -1,3 +1,8 @@
+> **ARCHIVED** — 2026-07
+> The restructure shipped (3-tab workspace + sub-tabs). The code is now the source of truth; see `CLAUDE.md` § Architecture.
+
+---
+
 # UI Restructure Plan — Agreed March 2026
 
 > Reduce 15 flat tabs to 3 grouped tabs + 1 new pane type + 1 global modal.

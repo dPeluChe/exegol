@@ -311,8 +311,8 @@ packages/
   ui/               Radix primitives, cn()
   core-rust/        napi-rs: git2 + processing pipeline
 docs/
-  TASK_TODO.md, BENCHMARKS.md, CHANGELOG.md, RELEASE.md, UI_RESTRUCTURE.md,
-  agent_prompts/, applied/, tasks_completed/
+  README.md, TASK_TODO.md, CHANGELOG.md, TASK_COMPLETED/, ARCHITECTURE/,
+  PROJECT_DEFINITION/, GUIDES/, RESEARCH/, ARCHIVED/
 ```
 
 ---

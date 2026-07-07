@@ -1,3 +1,8 @@
+> **ARCHIVED** — 2026-03
+> V2 board, all 19 tasks shipped. Completed work: `docs/TASK_COMPLETED/2603.md`. Active board: `docs/TASK_TODO.md`.
+
+---
+
 # Exegol — Task Board V2 (Agent-Ready)
 
 > 19 tasks across 5 agent clusters. Each agent works in isolation (worktree).

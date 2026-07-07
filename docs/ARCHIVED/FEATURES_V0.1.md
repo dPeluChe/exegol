@@ -1,3 +1,8 @@
+> **ARCHIVED** — 2026-04
+> v0.1 feature roadmap, superseded. Current reference: `docs/PROJECT_DEFINITION/FEATURES.md` + `docs/TASK_TODO.md`.
+
+---
+
 # Feature Roadmap
 
 > **Status key**: DONE = implemented and working, PARTIAL = UI exists but functionality incomplete, STUB = placeholder UI only, PLANNED = not started
