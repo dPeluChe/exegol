@@ -2,6 +2,13 @@
 
 All data verified from primary sources (GitHub, official docs, reverse engineering). March 2026.
 
+> **⚠️ Partially outdated (kept as baseline).** The market shifted hard in H1 2026:
+> Vibe Kanban (Bloop) and Terragon shut down, Crystal was deprecated (→ Nimbalyst),
+> Conductor raised $22M, and first-party tools (Claude Code agent teams, Codex app,
+> Cursor 3.2, Antigravity) absorbed basic multi-agent orchestration.
+> Current analysis: [`RESEARCH/COMPETITIVE_REVIEW_2026_07.md`](../RESEARCH/COMPETITIVE_REVIEW_2026_07.md)
+> + market addendum in [`RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`](../RESEARCH/CODE_HEALTH_AUDIT_2026_07.md).
+
 ## Platform Comparison Matrix
 
 | | Codex App | Superset | Cmux | Conductor.build | T3 Code | Aider | Exegol (planned) |

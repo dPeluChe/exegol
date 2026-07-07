@@ -148,7 +148,7 @@ plus T120 settings window. Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` +
 
 - `docs/RESEARCH/TERAX_STACK_REVIEW.md` — comparative architecture review.
 - `docs/ARCHITECTURE/CAPABILITIES.md` — threat model + capability allowlist.
-- `docs/archived/agent_prompts/wt[1-5]_*.md` — per-worktree briefs used by the
+- `docs/ARCHIVED/AGENT_PROMPTS/wt[1-5]_*.md` — per-worktree briefs used by the
   parallel multi-agent run.
 
 ---
@@ -397,7 +397,7 @@ Picture-in-Picture panes.
 - **Workspace as default view**. New `useAutoSelectProject` hook picks the
   first project on cold start if no valid active project is persisted, so
   users land in the workspace instead of the project list.
-- **docs/BENCHMARKS.md**, **docs/CHANGELOG.md** (this file), and expanded
+- **docs/RESEARCH/BENCHMARKS.md**, **docs/CHANGELOG.md** (this file), and expanded
   `TASK_TODO.md` with the post-launch competitor backlog (T88-T94).
 
 ### Changed

@@ -96,9 +96,15 @@ exegol/
 │   ├── ui/                 # Radix UI primitives
 │   └── core-rust/          # napi-rs: ANSI strip, status parser, git2
 └── docs/
+    ├── README.md           # Documentation index + writing rules
     ├── CHANGELOG.md        # Release notes per version
-    ├── TASK_TODO.md        # Active backlog
-    └── tasks_completed/    # Work log by month
+    ├── TASK_TODO.md        # Active backlog (pending only)
+    ├── TASK_COMPLETED/     # Work log by month (YYMM.md)
+    ├── ARCHITECTURE/       # Technical architecture docs
+    ├── PROJECT_DEFINITION/ # Vision, stack, roadmap
+    ├── GUIDES/             # Release & how-to guides
+    ├── RESEARCH/           # Analyses, audits, benchmarks
+    └── ARCHIVED/           # Obsolete docs (historical context)
 ```
 
 ## Features
@@ -193,7 +199,7 @@ exegol/
 | [CLAUDE.md](CLAUDE.md) | AI assistant context — current state, dev commands, architecture |
 | [CHANGELOG.md](docs/CHANGELOG.md) | Release notes per version |
 | [Task Board](docs/TASK_TODO.md) | Active backlog |
-| [Benchmarks](docs/BENCHMARKS.md) | First-paint and recovery telemetry |
+| [Benchmarks](docs/RESEARCH/BENCHMARKS.md) | First-paint and recovery telemetry |
 
 ## License
 
