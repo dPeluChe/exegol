@@ -69,9 +69,10 @@ export async function runPreflight(
   const errors: PreflightIssue[] = [];
   const warnings: PreflightIssue[] = [];
 
-  // Run all checks concurrently
+  // Run all checks concurrently. "__shell__" is the plain-shell sentinel
+  // (registry "shell" provider) — resolved to $SHELL at spawn, never on PATH.
   const [cliFound, pathStatus, isGitRepo] = await Promise.all([
-    checkCliAvailable(opts.command),
+    opts.command === "__shell__" ? Promise.resolve(true) : checkCliAvailable(opts.command),
     checkProjectPath(opts.projectPath),
     opts.useWorktree ? checkGitRepo(opts.projectPath) : Promise.resolve(true),
   ]);
