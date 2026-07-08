@@ -151,6 +151,15 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     const wv = webviewRef.current as unknown as { reload?: () => void } | null;
     wv?.reload?.();
   }, []);
+  const handleOpenDevTools = useCallback(() => {
+    const wv = webviewRef.current as unknown as {
+      isDevToolsOpened?: () => boolean;
+      openDevTools?: () => void;
+      closeDevTools?: () => void;
+    } | null;
+    if (wv?.isDevToolsOpened?.()) wv.closeDevTools?.();
+    else wv?.openDevTools?.();
+  }, []);
 
   // Auto-sync to preferred or first detected port on initial load (once)
   useEffect(() => {
@@ -209,6 +218,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         onBack={handleBack}
         onForward={handleForward}
         onReload={handleReload}
+        onOpenDevTools={handleOpenDevTools}
         onToggleDesignMode={toggleDesignMode}
         onToggleQaMode={toggleQaMode}
         onNavigateToPort={navigateToPort}
