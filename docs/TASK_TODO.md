@@ -32,6 +32,7 @@
 6. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop) — last launch differentiator, unchanged
 
 **P2 — Post-launch bets (next round):**
+**T153 Project Awareness Engine — Wave 3 headline candidate** (absorbs T132 phase 1) ·
 T133 remote channel (Telegram) — *candidate to elevate: remote continuity is the most visible
 gap vs Omnara / Claude web / Codex Remote* · T132 automations catalog · T134 ACP experimental ·
 T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
@@ -187,6 +188,77 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 **Likely files**
 - `apps/desktop/src/renderer/stores/workspace.ts` (+ new slice files)
 - `apps/desktop/src/main/index.ts` (+ new `main/bootstrap/*`)
+
+---
+
+### T153 — Project Awareness Engine `added: 2026-07-07`
+**Priority**: P2 — **Wave 3 headline candidate** (do NOT start before Wave 2.6 exit criteria) | **Effort**: L (phased) | **Source**: original idea (Antonio) + design analysis 2026-07-07
+
+**Why**
+- A lightweight per-project local worker that maintains living code memory, detects small
+  health signals, and prepares context for big agents. Directly deepens the uncontested
+  moat: **cross-provider shared brain** — Claude/Codex/Gemini/Aider all consume one
+  project memory no first-party vendor can replicate. Local-first (code never leaves the
+  machine for the awareness layer) = privacy + zero-subscription pitch.
+- ~65% of the plumbing already shipped: knowledge node (T140), memory store + salience v2
+  (T126), Exegol MCP server (T145), scheduler engine, resource monitor (T143),
+  NotificationBus/Attention Inbox (T124/T141). Build as **evolution of
+  `.exegol/knowledge/`**, never a parallel `.project-ai/` system.
+
+**Scope — phased (trust is one-shot: 2-3 false positives kill the Health Inbox)**
+- **Phase 1 — deterministic signals, NO LLM** (absorbs T132 automations catalog):
+  git/fs watcher → stale TODOs (grep + git blame), branches without PR (git + gh), outdated
+  deps (manifest parse), doc-mention vs manifest mismatch (e.g. README says Prisma, deps
+  have Drizzle). Deliver via NotificationBus → **Project Health Inbox** (severity +
+  confidence + mandatory evidence: file/line/fragment). Near-100% precision before any
+  model opines.
+- **Phase 2 — embedded local model**: per-file memory (purpose, exports, internal deps)
+  for changed files only, 1-3 files per cycle → file_index → **context pack** injected at
+  agent spawn. Micro-task queue with budget; pause on high CPU/RAM/battery (resource
+  monitor gates). Modes: Off / Light (deterministic only) / Balanced (1.7B) / Deep (4B+).
+- **Phase 3 — semantic doc↔code drift** (README says 7-day expiry, sessionConfig uses 30):
+  high confidence threshold, always "suggestion" until track record accumulates,
+  `needs_human_review` flag.
+
+**MCP integration (key differentiator — extends T145 Exegol MCP server)**
+- New tools on the existing token-authenticated socket: `project_context_get` (context
+  pack: purpose, modules, key files, open observations, recent changes),
+  `health_inbox_list` (open signals), `project_activity_recent` (bridge to `activities`/
+  oplog: what agents did recently in this repo)
+- Observations feed the memory store (salience/supersession applies); knowledge DIGEST.md
+  refresh consumes the file_index
+- External agents (any of the 11 CLIs) get the shared brain mid-session, not just at spawn
+
+**Execution architecture (decided 2026-07-07)**
+- **Runtime**: llama.cpp `llama-server` binary as an **inference sidecar** (same pattern
+  as the PTY sidecar: pid file, health check, on-demand spawn, idle shutdown 5-10 min
+  frees RAM). NOT in-process node-llama-cpp (1-2GB weights inside Electron main + another
+  napi rebuild dep). Binary ships signed in the .app (~5-10MB/arch).
+- **Client**: single OpenAI-compatible abstraction, base-URL configurable — same code path
+  for embedded llama-server and optional Ollama upgrade (T122's one-abstraction rule;
+  `@ai-sdk/openai-compatible` if T122 lands first)
+- **Structured output**: `response_format: json_schema` (GBNF grammar at decode time) —
+  small model physically cannot emit invalid JSON; zod-validate on receipt anyway
+- **Models** (shortlist verified 2026-07): default **Qwen3 1.7B dense Q4** (~1.2GB,
+  Apache 2.0 — bundling-safe license), Deep mode **Qwen3 4B** (~2.5GB); alternates
+  Phi-4-mini 3.8B (MIT), Llama 3.2. Optional via Ollama: Qwen3-Coder-Next (80B-A3B).
+  Tiny embeddings model (~300MB) for file_index search.
+- **Weights install**: app ships WITHOUT weights → opt-in first-activation download
+  (versioned manifest, pinned SHA256, resumable, `~/.exegol/models/`) → validate via
+  checksum + inference smoke test (schema-valid JSON) → Doctor (T148) check. Engine
+  states: `disabled → downloading → validating → ready`; Phase 1 works with no model.
+
+**Hard rules (from the original proposal — keep)**
+- Never analyzes the whole repo at once; never modifies code; all output JSON-validated;
+  every observation carries evidence; low confidence → suggestion, not alert; budgeted
+  execution; per-project off switch.
+
+**Likely files**
+- New: `apps/desktop/src/main/awareness/` (watcher, task-queue, micro-tasks, inference
+  sidecar client), `resources/bin/llama-server`
+- Extend: `mcp/exegol-tools.ts` (+3 tools), `knowledge/*` (file_index consumer),
+  `agents/spawn-context.ts` (context pack), `notifications/bus.ts` (health signals),
+  `system/doctor.ts` (model check), migrations set (file_index, observations, task queue)
 
 ---
 
