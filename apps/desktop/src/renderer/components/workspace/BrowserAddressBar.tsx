@@ -1,5 +1,14 @@
 import { cn } from "@exegol/ui";
-import { ArrowLeft, ArrowRight, Bug, Crosshair, Globe, RefreshCw, RotateCw } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bug,
+  Code,
+  Crosshair,
+  Globe,
+  RefreshCw,
+  RotateCw,
+} from "lucide-react";
 import type { PortInfo } from "../../hooks/use-trpc-scheduler";
 
 interface BrowserAddressBarProps {
@@ -19,6 +28,7 @@ interface BrowserAddressBarProps {
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
+  onOpenDevTools: () => void;
   onToggleDesignMode: () => void;
   onToggleQaMode: () => void;
   onNavigateToPort: (port: number) => void;
@@ -42,6 +52,7 @@ export function BrowserAddressBar({
   onBack,
   onForward,
   onReload,
+  onOpenDevTools,
   onToggleDesignMode,
   onToggleQaMode,
   onNavigateToPort,
@@ -74,6 +85,14 @@ export function BrowserAddressBar({
         title="Reload"
       >
         <RotateCw className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        onClick={onOpenDevTools}
+        className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+        title="Toggle DevTools (inspect page)"
+      >
+        <Code className="h-3 w-3" />
       </button>
       {/* T102: Design Mode + QA Mode toggles */}
       <div className="mx-0.5 h-3.5 w-px bg-border" />

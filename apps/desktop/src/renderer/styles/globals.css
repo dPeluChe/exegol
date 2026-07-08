@@ -105,8 +105,9 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-/* Terminal container needs full height */
-.terminal-container .xterm { height: 100%; }
+/* Terminal container needs full height. Padding lives on .xterm (not the
+   container) so FitAddon subtracts it when computing cols/rows. */
+.terminal-container .xterm { height: 100%; padding: 8px 10px; }
 
 /* xterm viewport: the global 6px var(--border) thumb is invisible on dark
    terminal backgrounds — wider, theme-neutral thumb so scrollback is
