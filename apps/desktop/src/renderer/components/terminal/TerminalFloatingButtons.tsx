@@ -23,7 +23,7 @@ export function TerminalFloatingButtons({
   onSendTo,
 }: TerminalFloatingButtonsProps) {
   return (
-    <div className="absolute right-3 bottom-3 z-10 flex flex-col items-end gap-1.5">
+    <div className="absolute right-6 bottom-3 z-10 flex flex-col items-end gap-1.5">
       {showSendTo && sendTargets.length > 0 && (
         <div
           className="mb-1 rounded-lg border p-1 shadow-xl"

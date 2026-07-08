@@ -106,7 +106,7 @@ export async function runPreflight(
     if (!inKeystore && !inEnv) {
       warnings.push({
         code: "API_KEY_MISSING",
-        message: `No ${keyReq.envVar} found in keystore or environment. Add it in Settings > API Keys, or the agent may fail to authenticate.`,
+        message: `No ${keyReq.envVar} in keystore or environment — fine if the CLI is logged in via subscription. A key in Settings > API Keys is only needed for Exegol-side AI features (commit messages, scoring, evaluator gates).`,
       });
     }
   }
