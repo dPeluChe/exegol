@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -15,9 +15,17 @@ try {
 }
 
 const logFile = join(LOG_DIR, "exegol.log");
+const MAX_ROTATED = 5;
 
-// Truncate log on startup so each session starts fresh
+// Rotate on startup: exegol.log → exegol.1.log → … → exegol.5.log, so
+// previous sessions survive restarts (needed to diagnose crash/recovery).
 try {
+  rmSync(join(LOG_DIR, `exegol.${MAX_ROTATED}.log`), { force: true });
+  for (let i = MAX_ROTATED - 1; i >= 1; i--) {
+    const from = join(LOG_DIR, `exegol.${i}.log`);
+    if (existsSync(from)) renameSync(from, join(LOG_DIR, `exegol.${i + 1}.log`));
+  }
+  if (existsSync(logFile)) renameSync(logFile, join(LOG_DIR, "exegol.1.log"));
   require("node:fs").writeFileSync(
     logFile,
     `--- Session started ${new Date().toISOString()} ---\n`,
