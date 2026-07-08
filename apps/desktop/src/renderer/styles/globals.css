@@ -108,6 +108,16 @@ body {
 /* Terminal container needs full height */
 .terminal-container .xterm { height: 100%; }
 
+/* xterm viewport: the global 6px var(--border) thumb is invisible on dark
+   terminal backgrounds — wider, theme-neutral thumb so scrollback is
+   discoverable */
+.xterm-viewport::-webkit-scrollbar { width: 10px; }
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.35);
+  border-radius: 5px;
+}
+.xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.6); }
+
 /* Pulse animation for agent status */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; }
