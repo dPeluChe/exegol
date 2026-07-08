@@ -218,11 +218,19 @@ export function buildPtyInvocation(
   let env: Record<string, string>;
   let stdinCommand: string | null = null;
 
+  // oh-my-zsh's interactive update prompt blocks shell init (no ready marker,
+  // frozen pane) — suppress it in every PTY we spawn.
+  const shellInitGuards = {
+    DISABLE_AUTO_UPDATE: "true",
+    DISABLE_UPDATE_PROMPT: "true",
+  };
+
   if (isPlainShell) {
     shell = userShell;
     args = ["-il"];
     env = {
       ...process.env,
+      ...shellInitGuards,
       TERM: "xterm-256color",
       EXEGOL_AGENT_ID: agent.id,
     } as Record<string, string>;
@@ -313,6 +321,7 @@ export function buildPtyInvocation(
     }
     env = {
       ...process.env,
+      ...shellInitGuards,
       ...apiKeyEnv,
       ...cliConfig.env,
       PATH: _getFullPath(),
