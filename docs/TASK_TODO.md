@@ -89,6 +89,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - **Mobile companion app** (T93) — natural successor of T133 Telegram channel
 - **Headless daemon mode** (T94) — prerequisite for T93
 - **Panel Plugin SDK** (T97) — extensible panel system, v1.0 architecture (design spike first)
+- **Ephemeral validation containers** (T154) — run tests/evaluator checks in disposable Apple `container` VMs (NOT agent isolation)
 - **xterm renderer pool** (T114) — re-scoped inside T143: measure after disposal fixes, build only if needed
 - **Vercel AI SDK + Ollama** (T122) — value compounds with T130/T147 in-process LLM calls
 - **Issue tracker expansion** (T71) — Linear/Jira; plugs into T142 integrations registry
@@ -209,13 +210,22 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - **Phase 1 — deterministic signals, NO LLM** (absorbs T132 automations catalog):
   git/fs watcher → stale TODOs (grep + git blame), branches without PR (git + gh), outdated
   deps (manifest parse), doc-mention vs manifest mismatch (e.g. README says Prisma, deps
-  have Drizzle). Deliver via NotificationBus → **Project Health Inbox** (severity +
-  confidence + mandatory evidence: file/line/fragment). Near-100% precision before any
-  model opines.
+  have Drizzle), **git co-change coupling** (codebase-memory-mcp formula: 6-month `git log
+  --name-only`, skip commits >20 files, ≥3 co-changes, `score = co_count / min(a,b)`,
+  threshold 0.3 → "you changed A; B co-changes 78% and wasn't touched"). Watcher = cheap
+  adaptive git poll (`rev-parse HEAD` + `status --porcelain`, 5s + 1s/500 files, cap 60s)
+  plus our OSC/afterCommit hooks for intra-session reaction. Deliver via NotificationBus →
+  **Project Health Inbox** (severity + confidence + mandatory evidence: file/line/fragment).
+  Near-100% precision before any model opines.
 - **Phase 2 — embedded local model**: per-file memory (purpose, exports, internal deps)
   for changed files only, 1-3 files per cycle → file_index → **context pack** injected at
-  agent spawn. Micro-task queue with budget; pause on high CPU/RAM/battery (resource
-  monitor gates). Modes: Off / Light (deterministic only) / Balanced (1.7B) / Deep (4B+).
+  agent spawn. Schema (proven by codebase-memory-mcp): `qualified_name` stable key,
+  `file_hashes(sha256, mtime_ns, size)` staleness ledger, **`index_coverage` honesty table**
+  (rows for partially-indexed files — the pack never pretends completeness), **`source_hash`
+  caching** for AI summaries (regenerate only on input-hash mismatch). Micro-task queue with
+  budget; pause on high CPU/RAM/battery (resource monitor gates). Modes: Off / Light
+  (deterministic only) / Balanced (1.7B) / Deep (4B+). Memory recall side-upgrade:
+  **min-cosine multi-keyword** in `memory/store.ts` (all query terms must match, not average).
 - **Phase 3 — semantic doc↔code drift** (README says 7-day expiry, sessionConfig uses 30):
   high confidence threshold, always "suggestion" until track record accumulates,
   `needs_human_review` flag.
@@ -259,6 +269,44 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Extend: `mcp/exegol-tools.ts` (+3 tools), `knowledge/*` (file_index consumer),
   `agents/spawn-context.ts` (context pack), `notifications/bus.ts` (health signals),
   `system/doctor.ts` (model check), migrations set (file_index, observations, task queue)
+
+---
+
+### T154 — Ephemeral Validation Containers `added: 2026-07-09`
+**Priority**: P3 — strategic bet (post Wave 3) | **Effort**: M-L | **Source**: idea (Antonio) + Apple `container` 1.0.0 (2026-06-09, 30k+ ⭐, WWDC26 "Container machine")
+
+**Why**
+- **Scope guard first**: this is NOT Sculptor-style agent-in-container isolation — the
+  competitive review explicitly rejected that (worktrees + accessModes cover 90% with 10%
+  of the friction; Docker-as-requirement kills onboarding). This is narrower and different:
+  **disposable validation sandboxes** — run tests, builds, and evaluator-gate checks away
+  from the main machine, in a throwaway environment.
+- The timing turned: Apple's native `container` hit 1.0.0 (June 2026) — VM-per-container
+  with sub-second boot, OCI images, zero Docker Desktop dependency, Swift/Apple Silicon
+  native. The "Container machine" feature (WWDC26) is exactly this use case: build/test a
+  project on Linux from macOS with directory mirroring.
+- **Killer internal use case**: parallel agents / race mode candidates running test suites
+  collide on ports, DBs, and dev servers. A disposable container per validation run removes
+  the whole conflict class — and makes evaluator gates (T88v2) stronger: "tests pass in a
+  clean room" is better evidence than "tests pass on the dev's hot machine".
+
+**Scope (design spike first)**
+- Runtime abstraction: Apple `container` CLI first (macOS 26 + Apple Silicon); detect-and-
+  degrade — feature hidden when unavailable; optional adapters later (colima/docker if present)
+- Per-project validation profile in `.exegol/lifecycle.yaml` (extends T91): image, setup
+  cmds, test cmd, resource caps
+- Integration points: evaluator gate step type "run validation container" (T88v2), Smart Git
+  Button pre-push check, race-mode comparator column (tests green per candidate), Health
+  Inbox signal on red
+- Worktree → container mount (readonly bind of the agent's worktree; results out via exit
+  code + captured output, stored as pipeline evidence T130)
+- Budget/cleanup: hard timeout per run, auto-remove on exit, cap concurrent containers via
+  resource monitor (T143)
+
+**Likely files**
+- New: `apps/desktop/src/main/validation/` (runtime adapter, profile loader, run manager)
+- `main/pipeline/evaluator-step-handler.ts` (gate integration), `lifecycle/loader.ts`
+  (profile), `GitPane/SmartGitAction.tsx` (pre-push check), `system/resources.ts` (caps)
 
 ---
 
@@ -496,12 +544,17 @@ location (local path vs ssh://host). Key files to study:
 - Today PR state comes from `gh` CLI (Smart Git Button). A token-based GitHub API integration (Integrations section, not GitHub-exclusive) removes the gh dependency and unlocks the real prize: **closing the review loop** — PR review comments flow back into Exegol and can spawn a fix agent.
 - Relating PRs ↔ projects ↔ agent runs gives us data no competitor surfaces: which agent's PRs get merged fastest, which get the most review pushback (feeds scoring).
 
-**Scope**
-- Settings → Integrations section: GitHub token (keystore/safeStorage), scopes documented; `gh` CLI stays as fallback
-- PR sync per project: open PRs, review states, CI checks, review comments (poll + on-focus refresh)
-- GitPane: PR panel enriched from API (checks, reviewers, comments count) — replaces gh-based lookups when token present
-- **Review-comment → task → fix agent**: one click turns unresolved review threads into a task with `{{prComments}}` context, optionally auto-spawns a fix agent on the PR branch
-- Link PR ↔ agent run ↔ pipeline run in DB (provenance: "this PR came from run X")
+**Scope** (patterns integrated from the terragon-oss study — file refs in the research doc)
+- Settings → Integrations section: GitHub token (keystore/safeStorage), scopes documented; `gh` CLI stays as fallback. **Single identity = the user's `gh auth` login** (PR author is the human → CODEOWNERS works); NO GitHub App/webhooks (needs public endpoint)
+- PR sync per project: poll + on-focus refresh **with ETag conditional requests or one GraphQL query for PR+reviews+checks** (uncached REST hits the 5k/hr limit on active repos)
+- **`github_prs` table** (terragon schema near-verbatim): `repo_full_name + number UNIQUE`, status, base_ref, mergeable_state, checks_status, `agent_id` nullable (creator link never overwritten on upsert), updated_at
+- **Pure derivation helpers** ported from terragon `github-api/helpers.ts`: PR status (merged/closed/draft/open), mergeable passthrough, checks aggregation (any pending→pending, any failure→failure, all success/neutral/skipped→success)
+- **Dirty-check → push refresh**: fetch → compare 4 fields vs DB → write + `broadcastPRStatus` only on change (sibling of `broadcastAgentStatus`)
+- **Review-comment → task → fix agent** (terragon recipe): synthetic ```diff block built from payload only (path, diff_hunk, line/side, "originally at line N"), reply-chain walk to thread root, prompt closes delegating to `gh` CLI; spawn on `pr.head.ref` in a worktree; store `source_metadata {repo, prNumber, commentId}`
+- **One-agent-per-PR debounce**: batch key `{repo}:{pr}` with 60s window — N comments feed ONE agent as queued follow-ups, never N agents; reuse existing agent (unarchived first, newest)
+- **"Fix CI" one-liner** wired to Smart Git Button failing-checks state: *'Fix the failing GitHub checks. Use `gh pr checks` to get the failures.'* — no CI log plumbing
+- **PR idempotency + AI body maintenance**: `pulls.list({state:open, head})` exact head.ref match before create; AI `shouldUpdate` gate; always re-inject task deep-link + issue ref (reuse the Haiku key: `generatePRContent`/`updatePRContent`)
+- Optional polish: model override in comment syntax (`@exegol [sonnet] fix this`)
 - Architecture: `main/integrations/{registry,github/*}.ts` — registry pattern so Linear/Jira (T71) plug in later
 
 **Likely files**
