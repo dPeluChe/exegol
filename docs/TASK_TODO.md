@@ -65,11 +65,17 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - **T120 settings window**: Cmd+, opens standalone; second Cmd+, focuses existing (no duplicate); Cmd+W closes settings only; main close also closes settings; minimize main keeps settings visible; theme change in settings reflects in main without reload
 
 ### Manual verification pending — Wave 2 `added: 2026-07-05`
-- **⚠️ T123 OSC delivery (CRITICAL — decides whether deterministic status works at all)**:
-  spawn a real claude-code agent, confirm `[AgentCallback] Signal:` log lines appear on
-  tool use / attention / turn end. The hook printf targets `/dev/tty` (stdout fallback);
-  if signals do not arrive, the scraper fallback still covers status, but T124/T141
-  precision and T129 turn boundaries degrade
+- [x] **T123 deterministic status — VERIFIED 2026-07-09** (live session, Antonio + Fable):
+  full cycle observed with real claude-code — `prompt_submit→turn_started/running`,
+  `tool_use→working`, `stop→finished/waiting_input`, ~1ms event→signal latency.
+  **Delivery finding**: the OSC-777→PTY path does NOT deliver (Claude Code captures hook
+  stdout; `/dev/tty` doesn't reach the PTY) — verification uncovered that the hook
+  **file-event channel** (`~/.exegol/events` → NotifyHandler) delivers perfectly but was
+  wired to a log-only stub; fixed in PR #63 (`dispatchAgentFileEvent` → signal pipeline,
+  with OSC-priority guard + terminal-status guard + 6 regression tests). File channel also
+  adds `prompt_submit` = turn-START boundary the OSC hook set never had (feeds T129).
+  Still pending below: attention signal (needs a permission-prompt scenario).
+  Optional follow-up (P3): debug OSC delivery or drop the OSC hooks in favor of file events.
 - Desktop notification on agent finished/failed + attention (with pending-question body)
 - Attention Inbox: TitleBar queue, Cmd+J jump, unread badges
 - Knowledge tab: opt-in setup (no files written on tab open), digest refresh, MEMORY.md sync/import
