@@ -2,6 +2,8 @@ export const AGENT_CLI_TYPES = [
   "claude-code",
   "codex",
   "gemini",
+  "agy",
+  "devin",
   "aider",
   "opencode",
   "goose",
