@@ -6,7 +6,11 @@ import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
 import { getPtyHost } from "../terminal/pty-host";
 import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
-import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
+import {
+  createSpawnCallbacks,
+  dispatchAgentFileEvent,
+  type SessionMaps,
+} from "./agent-session-callbacks";
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { runPreflight } from "./preflight";
@@ -50,6 +54,11 @@ export class AgentManager {
   private dataCallbacks: Map<string, (data: string) => void> = new Map();
   /** Agents whose Claude session ID has already been stored (T101). */
   private sessionIdsCaptured: Set<string> = new Set();
+
+  /** T123: NotifyHandler file events (Claude Code hooks) → signal pipeline. */
+  handleAgentFileEvent(db: Database.Database, event: { type: string; agentId: string }): void {
+    dispatchAgentFileEvent(db, this.getSessionMaps(), event);
+  }
 
   private getSessionMaps(): SessionMaps {
     return {
