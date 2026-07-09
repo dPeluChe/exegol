@@ -451,6 +451,11 @@ app.whenReady().then(async () => {
   cleanupOldEvents(getDb());
   startNotifyHandler((event) => {
     logger.info(`[NotifyHandler] Agent event: ${event.type} from ${event.agentId}`);
+    try {
+      getAgentManager().handleAgentFileEvent(getDb(), event);
+    } catch (err) {
+      logger.warn("[NotifyHandler] Failed to apply agent event:", err);
+    }
   });
   startMetricsCollector();
   getSchedulerEngine().start(getDb());

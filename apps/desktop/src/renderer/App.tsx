@@ -83,10 +83,12 @@ export default function App() {
             <PanelGroup direction="horizontal" autoSaveId="exegol-layout">
               {!sidebarCollapsed && (
                 <>
-                  <Panel id="sidebar" order={1} defaultSize={20} minSize={15} maxSize={35}>
+                  <Panel id="sidebar" order={1} defaultSize={20} minSize={10} maxSize={40}>
                     <Sidebar />
                   </Panel>
-                  <PanelResizeHandle className="w-px bg-border hover:w-0.5 transition-all" />
+                  <PanelResizeHandle className="group relative w-1.5 shrink-0">
+                    <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-all group-hover:w-[3px] group-hover:bg-accent/60 group-data-[resize-handle-active]:w-[3px] group-data-[resize-handle-active]:bg-accent" />
+                  </PanelResizeHandle>
                 </>
               )}
               <Panel id="main" order={2} defaultSize={80}>
