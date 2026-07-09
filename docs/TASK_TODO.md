@@ -59,7 +59,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - OSC 133 prompt boundaries (jump-to-previous-prompt should work)
 - Parallel agent comparator (spawn 2-3 agents on same task, verify columns + promote button)
 - Isolation badge states (isolated / pipeline / project-root / fallback)
-- Stop-reason panel (let an agent finish/fail, verify overlay with resume/new-task/diff actions)
+- [x] Stop-reason panel — VERIFIED 2026-07-09 (codex exit: overlay with Completed badge + "New agent with same task" + "View diff")
 - CSP changes (open DevTools console, verify zero CSP violations on basic flow)
 - Capability allowlist (no functional regression — all routers/IPC still callable from renderer)
 - **T120 settings window**: Cmd+, opens standalone; second Cmd+, focuses existing (no duplicate); Cmd+W closes settings only; main close also closes settings; minimize main keeps settings visible; theme change in settings reflects in main without reload
@@ -167,6 +167,9 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   orphaned-procedures inventory in T144)
 - **Un-commit `coverage/`**: add to `.gitignore`, delete from repo; generate a whole-repo
   number instead of the current partial artifact
+- **Doctor: duplicate CLI installs check** (`which -a` per enabled provider; warn on >1
+  binary or version mismatch) — source: live codex Homebrew-vs-bun self-update loop
+  (2026-07-09): update installed to `~/.bun/bin` while Homebrew's older binary won PATH
 
 **Likely files**
 - `apps/desktop/src/main/security/keystore.ts`, `system/doctor.ts`,
