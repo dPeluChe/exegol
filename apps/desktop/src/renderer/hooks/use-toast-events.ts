@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { jumpToAttentionItem, useAgentStore } from "../stores/agents";
 import type { ToastType } from "../stores/toasts";
 import { useToastStore } from "../stores/toasts";
 
@@ -62,8 +63,9 @@ export function useToastEvents(): void {
           detail: { section: "agents" },
         }),
       );
-      // Optionally focus the specific agent's pane in the future
-      void data;
+      // T155.3: land on the exact pane of the agent that raised the notification
+      const agent = useAgentStore.getState().agents[data.agentId];
+      if (agent) jumpToAttentionItem(data.agentId, agent.projectId);
     });
     if (unsubNav) cleanups.push(unsubNav);
 
