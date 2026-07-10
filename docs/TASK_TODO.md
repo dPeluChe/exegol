@@ -329,13 +329,17 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   shippable — ideal parallel-agent or between-waves work.
 
 **Scope (ranked by value/effort — details + file refs in the research doc)**
-1. Drag file → terminal as `@path` mention (file tree, Finder, GitPane rows → any PTY)
-2. Cmd+click file paths (`src/foo.ts:42` → files pane at line) + bare URLs in terminal panes
+1. [x] ~~Drag file → terminal as `@path` mention~~ — **SHIPPED PR #68** (FileExplorer + GitPane
+   rows → any PTY; Finder-external drops deferred — needs preload `webUtils.getPathForFile`)
+2. [x] ~~Cmd+click file paths + bare URLs~~ — **SHIPPED PR #68** (file → IDE at line via
+   `openInIde --goto`; bare URL plain click → external browser, Cmd+click → browser pane;
+   + "Open in default browser" button in the browser address bar)
 3. Attention → exact-pane routing: amber pulse on the originating tab, toast/bell click
    focuses that pane, clear-on-typing/activation semantics (signals already exist — T123/T124)
-4. Terminal input QoL: Shift+Enter newline, Cmd+←/→ home/end, image-paste fix
-   (`term.paste(text ?? "")`), floating scroll-to-bottom + "new output" indicator (⌘↓),
-   max one SIGWINCH per pane activation (alt-screen corruption guard)
+4. [x] ~~Terminal input QoL~~ — **SHIPPED PR #68** (Shift+Enter newline, Cmd+←/→ home/end,
+   Cmd+↓ + amber "new output below" pulse; image paste was already solved better via
+   clipboard-to-file; single-SIGWINCH guard deferred — measure first, current resize path
+   already coalesces via rAF)
 5. Claude session browser + resume: read `~/.claude/projects/*.jsonl` as a session library
    in the launcher/empty pane (label = /rename → summary → first message; click = --resume)
 6. `exegol .` CLI opener + `exegol://` deep link (symlink installer with fallback)
