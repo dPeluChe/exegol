@@ -14,7 +14,12 @@ function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
 }
 
-export async function openInIde(path: string, ide: string, customPath?: string): Promise<void> {
+export async function openInIde(
+  path: string,
+  ide: string,
+  customPath?: string,
+  line?: number,
+): Promise<void> {
   const shell = process.env.SHELL || "/bin/zsh";
 
   if (ide === "custom" && customPath) {
@@ -27,8 +32,15 @@ export async function openInIde(path: string, ide: string, customPath?: string):
   const command = IDE_COMMANDS[ide];
   if (!command) throw new Error(`Unknown IDE: ${ide}. Configure a custom IDE in Settings.`);
 
+  // vscode-family CLIs jump to a line via `--goto file:line`; zed takes `file:line` bare.
+  const targetArg = line
+    ? ide === "zed"
+      ? shellEscape(`${path}:${line}`)
+      : `--goto ${shellEscape(`${path}:${line}`)}`
+    : shellEscape(path);
+
   try {
-    await execFileAsync(shell, ["-ilc", `${command} ${shellEscape(path)}`], {
+    await execFileAsync(shell, ["-ilc", `${command} ${targetArg}`], {
       timeout: 10_000,
     });
   } catch (err) {

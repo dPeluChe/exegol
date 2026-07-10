@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
+import { setFileDragData } from "../../lib/file-drag";
 import { trpcMutate } from "../../lib/trpc-client";
 
 const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
@@ -157,6 +158,17 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
   const { data: fileData } = useFileContent(selectedFile);
   const queryClient = useQueryClient();
 
+  // T155: drag a file onto a terminal pane → pasted as @rel/path mention
+  const handleFileDragStart = useCallback(
+    (e: React.DragEvent, path: string) => {
+      const relPath = path.startsWith(rootPath)
+        ? path.slice(rootPath.length).replace(/^\//, "")
+        : undefined;
+      setFileDragData(e, [{ relPath, absPath: path }]);
+    },
+    [rootPath],
+  );
+
   const toggleDir = useCallback((path: string) => {
     setExpandedDirs((prev) => {
       const next = new Set(prev);
@@ -243,6 +255,7 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
               expandedDirs={expandedDirs}
               onToggleDir={toggleDir}
               onContextMenu={handleContextMenu}
+              onFileDragStart={handleFileDragStart}
               inlineCreate={inlineCreate}
               onInlineConfirm={handleInlineCreateConfirm}
               onInlineCancel={() => setInlineCreate(null)}
@@ -358,6 +371,7 @@ function DirectoryNode({
   expandedDirs,
   onToggleDir,
   onContextMenu,
+  onFileDragStart,
   inlineCreate,
   onInlineConfirm,
   onInlineCancel,
@@ -369,6 +383,7 @@ function DirectoryNode({
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
   onContextMenu: (e: React.MouseEvent, path: string, isDir: boolean) => void;
+  onFileDragStart: (e: React.DragEvent, path: string) => void;
   inlineCreate: InlineCreateState | null;
   onInlineConfirm: (name: string) => void;
   onInlineCancel: () => void;
@@ -425,6 +440,7 @@ function DirectoryNode({
               expandedDirs={expandedDirs}
               onToggleDir={onToggleDir}
               onContextMenu={onContextMenu}
+              onFileDragStart={onFileDragStart}
               inlineCreate={inlineCreate}
               onInlineConfirm={onInlineConfirm}
               onInlineCancel={onInlineCancel}
@@ -437,6 +453,7 @@ function DirectoryNode({
               onSelect={onSelectFile}
               isSelected={selectedFile === entry.path}
               onContextMenu={onContextMenu}
+              onFileDragStart={onFileDragStart}
             />
           ),
         )}
@@ -452,18 +469,22 @@ function FileNode({
   onSelect,
   isSelected,
   onContextMenu,
+  onFileDragStart,
 }: {
   entry: DirectoryEntry;
   depth: number;
   onSelect: (path: string) => void;
   isSelected: boolean;
   onContextMenu: (e: React.MouseEvent, path: string, isDir: boolean) => void;
+  onFileDragStart: (e: React.DragEvent, path: string) => void;
 }) {
   const extLabel = getExtLabel(entry.name);
 
   return (
     <button
       type="button"
+      draggable
+      onDragStart={(e) => onFileDragStart(e, entry.path)}
       onClick={() => onSelect(entry.path)}
       onContextMenu={(e) => {
         e.stopPropagation();

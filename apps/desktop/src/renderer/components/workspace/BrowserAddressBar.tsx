@@ -5,6 +5,7 @@ import {
   Bug,
   Code,
   Crosshair,
+  ExternalLink,
   Globe,
   RefreshCw,
   RotateCw,
@@ -93,6 +94,16 @@ export function BrowserAddressBar({
         title="Toggle DevTools (inspect page)"
       >
         <Code className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (currentUrl) window.open(currentUrl, "_blank", "noopener");
+        }}
+        className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+        title="Open in default browser"
+      >
+        <ExternalLink className="h-3 w-3" />
       </button>
       {/* T102: Design Mode + QA Mode toggles */}
       <div className="mx-0.5 h-3.5 w-px bg-border" />

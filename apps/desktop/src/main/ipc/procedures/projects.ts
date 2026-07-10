@@ -127,6 +127,9 @@ export const projectRouter = router({
         projectId: z.string(),
         ide: z.string().optional(),
         customPath: z.string().optional(),
+        /** open a specific file (absolute or project-relative) instead of the project root */
+        file: z.string().optional(),
+        line: z.number().int().positive().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -153,7 +156,15 @@ export const projectRouter = router({
         }
       }
       ide = ide ?? project.defaultIde ?? "vscode";
-      await openInIde(project.path, ide, input.customPath);
+      let target = project.path;
+      if (input.file) {
+        const resolved = input.file.startsWith("/") ? input.file : `${project.path}/${input.file}`;
+        if (!existsSync(resolved)) {
+          throw new TRPCError({ code: "NOT_FOUND", message: `File not found: ${input.file}` });
+        }
+        target = resolved;
+      }
+      await openInIde(target, ide, input.customPath, input.file ? input.line : undefined);
       return { success: true };
     }),
 

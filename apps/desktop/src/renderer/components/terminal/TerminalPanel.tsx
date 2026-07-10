@@ -67,6 +67,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [scrollAtTop, setScrollAtTop] = useState(true);
   const [scrollAtBottom, setScrollAtBottom] = useState(true);
+  const [hasNewOutput, setHasNewOutput] = useState(false);
   const [showSendTo, setShowSendTo] = useState(false);
   const [viewMode, setViewMode] = useState<"terminal" | "chat">("terminal");
   const [liveSnapshot, setLiveSnapshot] = useState("");
@@ -87,10 +88,35 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   const allAgents = useAgentStore((s) => s.agents);
 
-  const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean) => {
+  const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean, wrote?: boolean) => {
     setScrollAtTop(atTop);
     setScrollAtBottom(atBottom);
+    // T155: pulse the scroll-to-bottom button when output lands off-screen
+    if (atBottom) setHasNewOutput(false);
+    else if (wrote) setHasNewOutput(true);
   }, []);
+
+  // T155: Cmd+click on a file path in the terminal → open in the IDE at line
+  const handleOpenFileLink = useCallback(
+    (path: string, line?: number) => {
+      const pid = agent?.projectId;
+      if (!pid) return;
+      trpcMutate("projects.openInIde", { projectId: pid, file: path, line }).catch(() => {});
+    },
+    [agent?.projectId],
+  );
+
+  // T155: Cmd+click on a URL → in-app browser pane (plain click = external browser)
+  const handleOpenUrlInPane = useCallback(
+    (url: string) => {
+      if (!paneId) return;
+      const tab = getProjectState().tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
+      if (tab) {
+        useWorkspaceStore.getState().splitPane(tab.id, paneId, "vertical", "browser", { url });
+      }
+    },
+    [paneId],
+  );
 
   /** Running agents in other panes (targets for "Send to") */
   const sendTargets = Object.values(allAgents).filter(
@@ -198,6 +224,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       terminalRef={terminalRef}
       scrollAtTop={scrollAtTop}
       scrollAtBottom={scrollAtBottom}
+      hasNewOutput={hasNewOutput}
       sendTargets={sendTargets}
       showSendTo={showSendTo}
       setShowSendTo={setShowSendTo}
@@ -278,6 +305,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               cliType={agent?.cliType}
               onReady={onReady}
               onScrollPosition={handleScrollPosition}
+              onOpenFileLink={handleOpenFileLink}
+              onOpenUrlInPane={handleOpenUrlInPane}
             />
             {floatingButtons}
           </>
