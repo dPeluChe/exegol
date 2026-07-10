@@ -2,10 +2,12 @@ import {
   app,
   type BaseWindow,
   BrowserWindow,
+  dialog,
   Menu,
   type MenuItemConstructorOptions,
   shell,
 } from "electron";
+import { installCli, uninstallCli } from "../system/cli-installer";
 import { openSettingsWindow } from "./settings";
 
 /**
@@ -67,6 +69,15 @@ export function installAppMenu(): void {
           click: (_item, browserWindow) =>
             handleCloseAccelerator(browserWindow as BaseWindow | undefined),
         },
+        { type: "separator" },
+        {
+          label: "Install 'exegol' CLI",
+          click: () => handleInstallCli(),
+        },
+        {
+          label: "Uninstall 'exegol' CLI",
+          click: () => handleUninstallCli(),
+        },
       ],
     },
     {
@@ -113,6 +124,39 @@ export function installAppMenu(): void {
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+/** T155.6: symlink resources/bin/exegol onto PATH and report the result. */
+function handleInstallCli(): void {
+  try {
+    const target = installCli();
+    void dialog.showMessageBox({
+      type: "info",
+      message: "exegol CLI installed",
+      detail: `Symlinked at ${target}. Run \`exegol .\` in any project to open it here.`,
+    });
+  } catch (err) {
+    dialog.showErrorBox(
+      "Could not install the exegol CLI",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
+function handleUninstallCli(): void {
+  try {
+    const removed = uninstallCli();
+    void dialog.showMessageBox({
+      type: "info",
+      message: removed.length > 0 ? "exegol CLI uninstalled" : "exegol CLI was not installed",
+      detail: removed.length > 0 ? `Removed ${removed.join(", ")}` : undefined,
+    });
+  } catch (err) {
+    dialog.showErrorBox(
+      "Could not uninstall the exegol CLI",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
 }
 
 function sendToRenderer(win: BaseWindow | undefined, channel: string): void {

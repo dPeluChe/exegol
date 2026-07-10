@@ -1,0 +1,43 @@
+#!/bin/sh
+# Exegol CLI opener (T155.6).
+#
+# `exegol [path]` resolves the path (default ".") to an absolute one — the
+# .app's CWD at launch is "/", so relative paths must be resolved here — and
+# invokes the app via an exegol:// URL. LaunchServices / xdg-open deliver the
+# URL to the running instance if one exists, or cold-start the app otherwise.
+set -e
+
+SCHEME="exegol"
+
+# Percent-encode every byte (%XX). Fully-encoded values are valid URL query
+# encoding and sidestep locale/shell portability issues of selective encoders.
+urlenc() {
+    printf '%s' "$1" | od -An -tx1 -v | tr ' ' '\n' | grep -v '^$' \
+        | awk '{ printf "%%%s", toupper($0) }'
+}
+
+resolve_abs() {
+    p="$1"
+    if [ -d "$p" ]; then
+        (cd "$p" && pwd)
+    elif [ -e "$p" ]; then
+        printf '%s/%s' "$(cd "$(dirname "$p")" && pwd)" "$(basename "$p")"
+    else
+        case "$p" in
+            /*) printf '%s' "$p" ;;
+            *) printf '%s/%s' "$PWD" "$p" ;;
+        esac
+    fi
+}
+
+abs="$(resolve_abs "${1:-.}")"
+url="$SCHEME://open?path=$(urlenc "$abs")"
+
+case "$(uname -s)" in
+    Darwin) exec open "$url" ;;
+    Linux)  exec xdg-open "$url" ;;
+    *)
+        echo "exegol: unsupported OS ($(uname -s))" >&2
+        exit 1
+        ;;
+esac

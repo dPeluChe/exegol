@@ -67,3 +67,31 @@ export interface NotificationEvent {
   /** channel-specific extras; keep JSON-serializable */
   meta?: Record<string, unknown>;
 }
+
+/** User-facing mute categories (T155.7). Persisted in settings + localStorage. */
+export const NOTIFICATION_MUTE_CHANNELS = [
+  "agent:attention",
+  "agent:finished",
+  "agent:failed",
+  "warnings",
+] as const;
+
+export type NotificationMuteChannel = (typeof NOTIFICATION_MUTE_CHANNELS)[number];
+
+/** Map a bus event to its mute category. `null` = never mutable (pipeline events). */
+export function muteChannelForEvent(type: NotificationEventType): NotificationMuteChannel | null {
+  switch (type) {
+    case "agent:attention":
+      return "agent:attention";
+    case "agent:finished":
+      return "agent:finished";
+    case "agent:failed":
+    case "run:failed":
+      return "agent:failed";
+    case "resource:warning":
+    case "budget:warning":
+      return "warnings";
+    default:
+      return null;
+  }
+}

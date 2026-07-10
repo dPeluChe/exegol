@@ -161,6 +161,14 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("notification:navigate", handler as never);
     };
   },
+  // T155.6: exegol:// deep link → open project by path
+  onDeepLinkOpenPath: (callback: (data: { path: string }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: { path: string }) => callback(data);
+    safe.on("deeplink:open-path", handler as never);
+    return () => {
+      safe.off("deeplink:open-path", handler as never);
+    };
+  },
   // T44: Auto-updater
   updater: {
     check: () => safe.invoke("updater:check"),
