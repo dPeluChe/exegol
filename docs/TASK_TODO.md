@@ -334,8 +334,9 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 2. [x] ~~Cmd+click file paths + bare URLs~~ — **SHIPPED PR #68** (file → IDE at line via
    `openInIde --goto`; bare URL plain click → external browser, Cmd+click → browser pane;
    + "Open in default browser" button in the browser address bar)
-3. Attention → exact-pane routing: amber pulse on the originating tab, toast/bell click
-   focuses that pane, clear-on-typing/activation semantics (signals already exist — T123/T124)
+3. [x] ~~Attention → exact-pane routing~~ — **SHIPPED PR #70** (OS-notification click →
+   exact pane via jumpToAttentionItem, clear-on-activation on pane mousedown, amber tab
+   pulse beats activity dot; + worktree-aware file-link resolution fix for #68)
 4. [x] ~~Terminal input QoL~~ — **SHIPPED PR #68** (Shift+Enter newline, Cmd+←/→ home/end,
    Cmd+↓ + amber "new output below" pulse; image paste was already solved better via
    clipboard-to-file; single-SIGWINCH guard deferred — measure first, current resize path
