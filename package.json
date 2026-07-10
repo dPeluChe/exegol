@@ -4,6 +4,7 @@
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bun run build:rust && turbo run dev",
+    "dev:clean": "bun run clean:dev && bun run dev",
     "dev:ui": "turbo run dev",
     "build": "turbo run build",
     "build:rust": "cd packages/core-rust && npx napi build --platform --release",
