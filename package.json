@@ -12,6 +12,7 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
+    "clean:dev": "rm -rf .turbo apps/desktop/dist apps/desktop/out coverage && (cd packages/core-rust && cargo clean) && git worktree prune",
     "typecheck": "turbo run typecheck",
     "test": "cd apps/desktop && vitest run",
     "test:watch": "cd apps/desktop && vitest",
