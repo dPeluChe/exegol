@@ -33,6 +33,7 @@
 
 **P2 — Post-launch bets (next round):**
 **T153 Project Awareness Engine — Wave 3 headline candidate** (absorbs T132 phase 1) ·
+**T155 Terminal & Attention UX pack** (7 independently-shippable QoL wins — klaudio review) ·
 T133 remote channel (Telegram) — *candidate to elevate: remote continuity is the most visible
 gap vs Omnara / Claude web / Codex Remote* · T132 automations catalog · T134 ACP experimental ·
 T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
@@ -316,6 +317,42 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - New: `apps/desktop/src/main/validation/` (runtime adapter, profile loader, run manager)
 - `main/pipeline/evaluator-step-handler.ts` (gate integration), `lifecycle/loader.ts`
   (profile), `GitPane/SmartGitAction.tsx` (pre-push check), `system/resources.ts` (caps)
+
+---
+
+### T155 — Terminal & Attention UX Pack `added: 2026-07-09`
+**Priority**: P2 (post Wave 2.6 — daily-use polish, great filler between waves) | **Effort**: S-M per item, independently shippable | **Source**: `RESEARCH/KLAUDIO_PANELS_2026_07.md` (willywg/klaudio-panels review — its CHANGELOG.md + PRPs/ are ready-made specs with failure modes documented)
+
+**Why**
+- klaudio-panels (indie, Claude-only shell) is far behind Exegol on power but ahead on
+  daily-use interaction polish. Seven cheap, high-frequency QoL wins, each independently
+  shippable — ideal parallel-agent or between-waves work.
+
+**Scope (ranked by value/effort — details + file refs in the research doc)**
+1. Drag file → terminal as `@path` mention (file tree, Finder, GitPane rows → any PTY)
+2. Cmd+click file paths (`src/foo.ts:42` → files pane at line) + bare URLs in terminal panes
+3. Attention → exact-pane routing: amber pulse on the originating tab, toast/bell click
+   focuses that pane, clear-on-typing/activation semantics (signals already exist — T123/T124)
+4. Terminal input QoL: Shift+Enter newline, Cmd+←/→ home/end, image-paste fix
+   (`term.paste(text ?? "")`), floating scroll-to-bottom + "new output" indicator (⌘↓),
+   max one SIGWINCH per pane activation (alt-screen corruption guard)
+5. Claude session browser + resume: read `~/.claude/projects/*.jsonl` as a session library
+   in the launcher/empty pane (label = /rename → summary → first message; click = --resume)
+6. `exegol .` CLI opener + `exegol://` deep link (symlink installer with fallback)
+7. Notification hygiene: toast hover-pause, dismiss ≠ mark-read, per-channel kill switches
+   in the inbox popover
+
+**Cross-cutting rules to adopt while in there**
+- Focus discipline (their PRP 017): only explicit user action or per-project restore sets
+  focus — visibility flips never do
+- Per-project panel persistence (width/tab/height keyed by project) + non-destructive
+  auto-hide on narrow windows
+
+**Likely files**
+- `renderer/components/terminal/{TerminalInstance,TerminalPanel,terminal-setup}.ts*`,
+  `renderer/components/workspace/{FileExplorer,GitPane,WorkspaceTabBar}.tsx`,
+  `renderer/components/layout/TitleBar.tsx` (bell), `main/notifications/*`,
+  `main/index.ts` (deep link), new `resources/bin/exegol` CLI script
 
 ---
 
