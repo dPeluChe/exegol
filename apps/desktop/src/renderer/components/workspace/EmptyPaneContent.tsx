@@ -2,12 +2,15 @@ import type { AgentAccessMode, AgentCliType, AgentProvider } from "@exegol/share
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ChevronDown,
+  ChevronRight,
   Cpu,
   Eye,
   FileEdit,
   FolderTree,
   GitBranch,
   Globe,
+  History,
   Map as MapIcon,
   Terminal,
 } from "lucide-react";
@@ -21,6 +24,25 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common";
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
+
+interface ResumableSession {
+  agentId: string;
+  cliType: string;
+  taskDescription: string;
+  status: string;
+  endedAt: number | null;
+}
+
+function relativeTime(epoch: number | null): string {
+  if (!epoch) return "";
+  const ms = epoch > 1e12 ? epoch : epoch * 1000;
+  const mins = Math.round((Date.now() - ms) / 60_000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
 
 export function EmptyPane({ paneId }: { paneId: string }) {
   const { projectId, project } = useProjectContext();
@@ -38,7 +60,19 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
     staleTime: 30_000,
   });
+  // T155.5: cross-provider resumable session history for this project
+  const [showSessions, setShowSessions] = useState(false);
+  const { data: resumableSessions } = useQuery({
+    queryKey: ["resumableSessions", projectId],
+    queryFn: () => trpcInvoke<ResumableSession[]>("agents.listResumable", { projectId, limit: 10 }),
+    enabled: !!projectId,
+    staleTime: 15_000,
+  });
   const cliOptions = providers ?? [];
+  // Only offer resume for providers still enabled (e.g. gemini sessions hide once retired)
+  const sessions = (resumableSessions ?? []).filter((s) =>
+    cliOptions.some((c) => c.id === s.cliType),
+  );
   const filteredOptions = search
     ? cliOptions.filter(
         (cli) =>
@@ -96,6 +130,46 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         updatePane(paneId, { type: "terminal", agentId: agent.id });
       } catch (err) {
         console.error("[EmptyPane] Spawn failed:", err);
+      } finally {
+        setLaunching(null);
+      }
+    },
+    [projectId, paneId, accessMode, addAgent, createTerminal, updatePane],
+  );
+
+  // T155.5: relaunch a past session with the provider's own resume mechanism
+  const handleResumeSession = useCallback(
+    async (session: ResumableSession) => {
+      if (!projectId) return;
+      setLaunching(`resume-${session.agentId}`);
+      try {
+        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+        const agent = await trpcMutate<any>("agents.spawn", {
+          projectId,
+          cliType: session.cliType as AgentCliType,
+          taskDescription: session.taskDescription,
+          accessMode,
+          resumeSession: true,
+          resumeFromAgentId: session.agentId,
+        });
+        addAgent({
+          id: agent.id,
+          projectId,
+          cliType: agent.cliType,
+          status: agent.status,
+          currentStep: agent.currentStep,
+          taskDescription: agent.taskDescription,
+          branchName: agent.branchName ?? null,
+          tokenUsage: { input: 0, output: 0, cost: 0 },
+          startedAt: agent.startedAt,
+          accessMode: agent.accessMode ?? null,
+          claudeSessionId: null,
+          activityLevel: "busy",
+        });
+        createTerminal(agent.id);
+        updatePane(paneId, { type: "terminal", agentId: agent.id });
+      } catch (err) {
+        console.error("[EmptyPane] Resume failed:", err);
       } finally {
         setLaunching(null);
       }
@@ -282,6 +356,50 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           </button>
         ))}
       </div>
+
+      {/* T155.5: resumable session history — collapsed by default, 1-5 rows by pane size */}
+      {sessions.length > 0 && (
+        <div className={cn("mt-2 w-full shrink-0", isMini ? "max-w-xs" : "max-w-sm")}>
+          <button
+            type="button"
+            onClick={() => setShowSessions(!showSessions)}
+            className="flex w-full items-center gap-1 text-[9px] font-medium uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary"
+          >
+            {showSessions ? (
+              <ChevronDown className="h-2.5 w-2.5" />
+            ) : (
+              <ChevronRight className="h-2.5 w-2.5" />
+            )}
+            <History className="h-2.5 w-2.5" />
+            <span>Recent sessions ({sessions.length})</span>
+          </button>
+          {showSessions && (
+            <div className="mt-1 space-y-0.5">
+              {sessions.slice(0, isMini ? 1 : isCompact ? 3 : 5).map((s) => (
+                <button
+                  key={s.agentId}
+                  type="button"
+                  disabled={launching === `resume-${s.agentId}`}
+                  onClick={() => handleResumeSession(s)}
+                  className={cn(
+                    "flex w-full items-center gap-1.5 rounded border border-border/50 bg-bg-secondary px-2 py-1 transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+                    launching === `resume-${s.agentId}` && "opacity-50",
+                  )}
+                  title={`Resume: ${s.taskDescription || s.cliType}`}
+                >
+                  <AgentIcon provider={s.cliType} size={12} />
+                  <span className="flex-1 truncate text-left text-[10px] text-text-secondary">
+                    {s.taskDescription || s.cliType}
+                  </span>
+                  <span className="shrink-0 text-[9px] tabular-nums text-text-muted">
+                    {relativeTime(s.endedAt)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Access mode toggle — hidden in mini */}
       {!isMini && (

@@ -140,6 +140,42 @@ export const agentRouter = router({
     return getAgent(ctx.db, input.id) ?? null;
   }),
 
+  /** T155.5: past sessions of ANY provider that captured a resume handle, newest first. */
+  listResumable: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        limit: z.number().int().min(1).max(20).optional(),
+      }),
+    )
+    .query(({ ctx, input }) => {
+      const rows = ctx.db
+        .prepare(
+          `SELECT id, cli_type, task_description, status, started_at, stopped_at
+           FROM agents
+           WHERE project_id = ?
+             AND status IN ('completed', 'failed', 'stopped', 'crashed')
+             AND (resume_command IS NOT NULL OR claude_session_id IS NOT NULL)
+           ORDER BY COALESCE(stopped_at, started_at) DESC
+           LIMIT ?`,
+        )
+        .all(input.projectId, input.limit ?? 10) as Array<{
+        id: string;
+        cli_type: string;
+        task_description: string;
+        status: string;
+        started_at: number | null;
+        stopped_at: number | null;
+      }>;
+      return rows.map((r) => ({
+        agentId: r.id,
+        cliType: r.cli_type,
+        taskDescription: r.task_description,
+        status: r.status,
+        endedAt: r.stopped_at ?? r.started_at,
+      }));
+    }),
+
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {
     const agent = createAgent(ctx.db, input);
     const manager = ctx.agentManager;
