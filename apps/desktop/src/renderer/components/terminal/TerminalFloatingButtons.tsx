@@ -7,6 +7,8 @@ interface TerminalFloatingButtonsProps {
   terminalRef: RefObject<TerminalInstanceHandle | null>;
   scrollAtTop: boolean;
   scrollAtBottom: boolean;
+  /** T155: output landed while scrolled up — pulse the scroll-down button */
+  hasNewOutput?: boolean;
   sendTargets: Array<{ id: string; cliType: string; taskDescription: string }>;
   showSendTo: boolean;
   setShowSendTo: (v: boolean) => void;
@@ -17,6 +19,7 @@ export function TerminalFloatingButtons({
   terminalRef,
   scrollAtTop,
   scrollAtBottom,
+  hasNewOutput = false,
   sendTargets,
   showSendTo,
   setShowSendTo,
@@ -80,8 +83,13 @@ export function TerminalFloatingButtons({
           <button
             type="button"
             onClick={() => terminalRef.current?.scrollToBottom()}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-bg-secondary/90 text-text-muted shadow-lg transition-colors hover:text-text-primary"
-            title="Scroll to bottom"
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded-full border shadow-lg transition-colors",
+              hasNewOutput
+                ? "animate-pulse border-amber-500/50 bg-amber-500/15 text-amber-400"
+                : "border-border bg-bg-secondary/90 text-text-muted hover:text-text-primary",
+            )}
+            title={hasNewOutput ? "New output below (⌘↓)" : "Scroll to bottom (⌘↓)"}
           >
             <ArrowDownToLine className="h-3.5 w-3.5" />
           </button>

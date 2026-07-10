@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { setFileDragData } from "../../lib/file-drag";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useToastStore } from "../../stores/toasts";
 import { SmartGitAction } from "./SmartGitAction";
@@ -280,7 +281,12 @@ function FileRow({
 }) {
   const info = STATUS_LABELS[file.status] ?? { label: file.status, color: "text-text-muted" };
   return (
-    <div className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-white/5">
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag source only — row actions live on the button inside
+    <div
+      draggable
+      onDragStart={(e) => setFileDragData(e, [{ relPath: file.path }])}
+      className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-white/5"
+    >
       <span className={cn("w-2 text-center text-[9px] font-bold", info.color)}>{file.status}</span>
       <span className="flex-1 truncate text-[10px] text-text-secondary">{file.path}</span>
       <button

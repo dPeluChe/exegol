@@ -1,3 +1,4 @@
+import { cn } from "@exegol/ui";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { Terminal } from "@xterm/xterm";
@@ -11,6 +12,7 @@ import {
   useState,
 } from "react";
 import { useSettings } from "../../hooks/use-trpc";
+import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { DormantPipe } from "./terminal-dormant-wiring";
@@ -49,6 +51,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     initialContent,
     onReady,
     onScrollPosition,
+    onOpenFileLink,
+    onOpenUrlInPane,
     paneId: paneIdProp,
   }: TerminalInstanceProps,
   ref: ForwardedRef<TerminalInstanceHandle>,
@@ -64,6 +68,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const webglRef = useRef<WebglController | null>(null);
   const dormantPipeRef = useRef<DormantPipe | null>(null);
   const [isVisible, setIsVisible] = useState(true);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   useImperativeHandle(ref, () => ({
     serialize: () => {
@@ -135,6 +140,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       fontFamily,
       theme: terminalTheme,
       onScrollPosition,
+      onOpenFileLink,
+      onOpenUrlInPane,
       setPaneCwd,
       setPaneLastExit,
     });
@@ -269,5 +276,40 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     };
   }, [handleResize]);
 
-  return <div ref={containerRef} className="terminal-container h-full w-full bg-bg-primary" />;
+  // T155: drop a file (from FileExplorer/GitPane) → paste as @path mention
+  const handleDragOver = useCallback(
+    (e: React.DragEvent) => {
+      if (readOnly || !hasFileDragData(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setIsDragOver(true);
+    },
+    [readOnly],
+  );
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      setIsDragOver(false);
+      if (readOnly) return;
+      const text = fileDragToPaste(e);
+      if (!text) return;
+      e.preventDefault();
+      terminalRef.current?.paste(text);
+      terminalRef.current?.focus();
+    },
+    [readOnly],
+  );
+
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drop target for file @mentions — xterm owns keyboard interaction
+    <div
+      ref={containerRef}
+      className={cn(
+        "terminal-container h-full w-full bg-bg-primary",
+        isDragOver && "ring-2 ring-inset ring-accent/60",
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={handleDrop}
+    />
+  );
 });

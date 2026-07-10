@@ -9,6 +9,7 @@ import {
 } from "./osc-handlers";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
+import { registerTerminalLinkProviders } from "./terminal-links";
 import type { TerminalInstanceProps } from "./terminal-types";
 
 export interface TerminalSessionDeps {
@@ -20,6 +21,8 @@ export interface TerminalSessionDeps {
   fontFamily: string;
   theme: ITerminalOptions["theme"];
   onScrollPosition: TerminalInstanceProps["onScrollPosition"];
+  onOpenFileLink?: TerminalInstanceProps["onOpenFileLink"];
+  onOpenUrlInPane?: TerminalInstanceProps["onOpenUrlInPane"];
   setPaneCwd: (paneId: string, cwd: string) => void;
   setPaneLastExit: (paneId: string, code: number | null) => void;
 }
@@ -82,10 +85,39 @@ export function setupTerminalSession(
   const disposables: Array<{ dispose: () => void }> = [];
   let unsubData: (() => void) | null = null;
 
+  // T155: Cmd+click file paths / bare URLs (works in read-only snapshots too)
+  disposables.push(
+    registerTerminalLinkProviders(terminal, {
+      onOpenFile: deps.onOpenFileLink,
+      onOpenUrlInPane: deps.onOpenUrlInPane,
+    }),
+  );
+
   if (!deps.readOnly) {
     terminal.attachCustomKeyEventHandler((e) => {
-      if (e.type === "keydown" && e.key === "Backspace" && (e.ctrlKey || e.metaKey)) {
+      if (e.type !== "keydown") return true;
+      if (e.key === "Backspace" && (e.ctrlKey || e.metaKey)) {
         window.api.terminal.write(deps.agentId, "\x17");
+        return false;
+      }
+      // T155 input QoL (klaudio patterns):
+      // Shift+Enter → ESC+CR: newline inside the CLI's prompt, not a submit
+      if (e.key === "Enter" && e.shiftKey) {
+        window.api.terminal.write(deps.agentId, "\x1b\r");
+        return false;
+      }
+      // Cmd+←/→ → Ctrl+A/Ctrl+E (line home/end, the macOS muscle memory)
+      if (e.metaKey && e.key === "ArrowLeft") {
+        window.api.terminal.write(deps.agentId, "\x01");
+        return false;
+      }
+      if (e.metaKey && e.key === "ArrowRight") {
+        window.api.terminal.write(deps.agentId, "\x05");
+        return false;
+      }
+      // Cmd+↓ → jump to newest output
+      if (e.metaKey && e.key === "ArrowDown") {
+        terminal.scrollToBottom();
         return false;
       }
       return true;
@@ -147,12 +179,12 @@ export function setupTerminalSession(
 
   if (deps.onScrollPosition) {
     const cb = deps.onScrollPosition;
-    const checkScroll = () => {
+    const checkScroll = (wrote: boolean) => {
       const { atTop, atBottom } = getScrollPosition(terminal);
-      cb(atTop, atBottom);
+      cb(atTop, atBottom, wrote);
     };
-    disposables.push(terminal.onScroll(checkScroll));
-    disposables.push(terminal.onWriteParsed(checkScroll));
+    disposables.push(terminal.onScroll(() => checkScroll(false)));
+    disposables.push(terminal.onWriteParsed(() => checkScroll(true)));
   }
 
   function dispose(): void {
