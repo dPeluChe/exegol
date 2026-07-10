@@ -1,14 +1,20 @@
+import type { NotificationMuteChannel, Settings } from "@exegol/shared";
 import { useEffect } from "react";
+import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAttentionItem, useAgentStore } from "../stores/agents";
+import { useNotificationPrefsStore } from "../stores/notification-prefs";
 import type { ToastType } from "../stores/toasts";
 import { useToastStore } from "../stores/toasts";
 
 // ─── Status → toast mapping ─────────────────────────────────────────────────
 
-const STATUS_TOAST_MAP: Record<string, { type: ToastType; label: string }> = {
-  completed: { type: "success", label: "completed" },
-  failed: { type: "error", label: "failed" },
-  crashed: { type: "error", label: "crashed" },
+const STATUS_TOAST_MAP: Record<
+  string,
+  { type: ToastType; label: string; channel: NotificationMuteChannel }
+> = {
+  completed: { type: "success", label: "completed", channel: "agent:finished" },
+  failed: { type: "error", label: "failed", channel: "agent:failed" },
+  crashed: { type: "error", label: "crashed", channel: "agent:failed" },
 };
 
 /** CLIs that frequently toggle waiting_input (interactive TUIs) — skip toast for these */
@@ -23,6 +29,16 @@ export function useToastEvents(): void {
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
+    // T155.7: reconcile per-channel mutes from the settings table once so a
+    // cleared localStorage doesn't silently diverge from the main process.
+    trpcInvoke<Settings>("settings.get")
+      .then((settings) => {
+        useNotificationPrefsStore
+          .getState()
+          .hydrateFromSettings(settings.mutedNotificationChannels ?? []);
+      })
+      .catch(() => {});
+
     // ── Agent status toasts (deduplicated + throttled per agent) ─────────
     const lastToasted = new Map<string, string>();
     const lastToastTime = new Map<string, number>();
@@ -31,6 +47,9 @@ export function useToastEvents(): void {
 
       const mapping = STATUS_TOAST_MAP[event.status];
       if (!mapping) return;
+
+      // T155.7: per-channel kill switch (renderer-side toast suppression)
+      if (useNotificationPrefsStore.getState().isMuted(mapping.channel)) return;
 
       // Skip waiting_input toasts for interactive CLIs (they toggle constantly)
       if (event.status === "waiting_input" && INTERACTIVE_CLI_TYPES.has(event.cliType)) return;

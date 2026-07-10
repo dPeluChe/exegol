@@ -45,6 +45,7 @@
     "window:maximize",
     "window:close",
     "notification:navigate",
+    "deeplink:open-path",
     "updater:check",
     "updater:install",
     "updater:status",

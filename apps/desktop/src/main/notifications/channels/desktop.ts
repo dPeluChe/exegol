@@ -1,5 +1,5 @@
 import type { NotificationEvent } from "@exegol/shared";
-import { DEFAULT_SETTINGS } from "@exegol/shared";
+import { DEFAULT_SETTINGS, muteChannelForEvent } from "@exegol/shared";
 import { BrowserWindow, Notification } from "electron";
 import type Database from "libsql";
 import { logger } from "../../lib/logger";
@@ -7,8 +7,13 @@ import type { NotificationChannel } from "../bus";
 
 // ─── Settings cache (avoid a DB hit on every event) ──────────────────────
 
+interface CachedPrefs {
+  enabled: boolean;
+  mutedChannels: string[];
+}
+
 let dbRef: Database.Database | null = null;
-let cachedEnabled: boolean | null = null;
+let cachedPrefs: CachedPrefs | null = null;
 let cacheTimestamp = 0;
 const CACHE_TTL_MS = 30_000;
 
@@ -17,23 +22,32 @@ export function setDesktopChannelDb(db: Database.Database): void {
   dbRef = db;
 }
 
-function isEnabled(): boolean {
+/** T155.7: settings.update calls this so a mute toggle applies immediately. */
+export function invalidateDesktopChannelCache(): void {
+  cachedPrefs = null;
+}
+
+function getPrefs(): CachedPrefs {
   const now = Date.now();
-  if (cachedEnabled !== null && now - cacheTimestamp < CACHE_TTL_MS) {
-    return cachedEnabled;
+  if (cachedPrefs !== null && now - cacheTimestamp < CACHE_TTL_MS) {
+    return cachedPrefs;
   }
   try {
     const row = dbRef?.prepare("SELECT value FROM settings WHERE key = 'app_settings'").get() as
       | { value: string }
       | undefined;
-    cachedEnabled = row
-      ? (JSON.parse(row.value).notificationsEnabled ?? DEFAULT_SETTINGS.notificationsEnabled)
-      : DEFAULT_SETTINGS.notificationsEnabled;
+    const parsed = row ? JSON.parse(row.value) : {};
+    cachedPrefs = {
+      enabled: parsed.notificationsEnabled ?? DEFAULT_SETTINGS.notificationsEnabled,
+      mutedChannels: Array.isArray(parsed.mutedNotificationChannels)
+        ? parsed.mutedNotificationChannels
+        : [],
+    };
   } catch {
-    cachedEnabled = DEFAULT_SETTINGS.notificationsEnabled;
+    cachedPrefs = { enabled: DEFAULT_SETTINGS.notificationsEnabled, mutedChannels: [] };
   }
   cacheTimestamp = now;
-  return cachedEnabled ?? true;
+  return cachedPrefs;
 }
 
 /**
@@ -47,7 +61,11 @@ export const desktopChannel: NotificationChannel = {
   deliver(event: NotificationEvent): void {
     try {
       if (!Notification.isSupported()) return;
-      if (!isEnabled()) return;
+      const prefs = getPrefs();
+      if (!prefs.enabled) return;
+      // T155.7: per-channel kill switch
+      const muteChannel = muteChannelForEvent(event.type);
+      if (muteChannel && prefs.mutedChannels.includes(muteChannel)) return;
       // Suppress-empty pattern (openclaw `shouldSkipHeartbeatOnlyDelivery`):
       // never show a blank notification.
       if (!event.title?.trim() && !event.body?.trim()) return;

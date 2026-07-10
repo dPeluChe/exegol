@@ -50,7 +50,16 @@ const config: Configuration = {
       to: "core-rust",
       filter: ["*.node", "index.js", "index.d.ts", "package.json"],
     },
+    // T155.6: `exegol` CLI opener script, symlinked onto PATH via the app menu
+    {
+      from: "resources/bin",
+      to: "bin",
+    },
   ],
+
+  // T155.6: exegol:// deep link (packaged registration; dev uses
+  // app.setAsDefaultProtocolClient with execPath args)
+  protocols: [{ name: "Exegol", schemes: ["exegol"] }],
 
   generateUpdatesFilesForAllChannels: true,
 

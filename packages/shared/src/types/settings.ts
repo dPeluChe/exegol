@@ -17,6 +17,8 @@ export type Settings = {
   terminalFontFamily: string;
   notificationsEnabled: boolean;
   toastsEnabled: boolean;
+  /** T155.7: per-channel notification kill switches (NotificationMuteChannel ids) */
+  mutedNotificationChannels: string[];
   /** Ollama server URL for local embeddings */
   ollamaUrl: string;
   /** Ollama embedding model name */
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalFontFamily: "Menlo, Monaco, monospace",
   notificationsEnabled: true,
   toastsEnabled: true,
+  mutedNotificationChannels: [],
   ollamaUrl: "http://localhost:11434",
   ollamaModel: "nomic-embed-text",
 };

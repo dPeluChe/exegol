@@ -19,6 +19,7 @@ export const settingsSchema = z.object({
   terminalFontFamily: z.string().default("Menlo, Monaco, monospace"),
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
+  mutedNotificationChannels: z.array(z.string()).default([]),
 });
 
 export type SettingsSchema = z.infer<typeof settingsSchema>;

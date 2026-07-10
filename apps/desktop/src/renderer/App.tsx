@@ -10,6 +10,7 @@ import { TitleBar } from "./components/layout/TitleBar";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
+import { useDeepLink } from "./hooks/use-deeplink";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { useSettingsSync } from "./hooks/use-settings-sync";
@@ -67,6 +68,7 @@ export default function App() {
   useToastEvents();
   useTheme();
   useAutoSelectProject();
+  useDeepLink();
   useFloatingPaneSync();
   useSettingsSync();
 

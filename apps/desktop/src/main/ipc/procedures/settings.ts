@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS, type Settings, settingsSchema } from "@exegol/shared";
 import { z } from "zod";
+import { invalidateDesktopChannelCache } from "../../notifications/channels/desktop";
 import type { Context } from "../context";
 import { publicProcedure, router } from "../trpc";
 
@@ -65,6 +66,9 @@ export const settingsRouter = router({
     const current = getSettingsFromDb(ctx.db);
     const updated: Settings = { ...current, ...input };
     saveSettingsToDb(ctx.db, updated);
+    // T155.7: notification prefs live in this row — drop the desktop
+    // channel's 30s cache so mute toggles apply immediately.
+    invalidateDesktopChannelCache();
     return updated;
   }),
 

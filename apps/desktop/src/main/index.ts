@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, shell, webContents } from "electron";
@@ -11,6 +11,7 @@ import { cleanupAgentWrappers, ensureAgentWrappers } from "./agents/wrappers";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { recoverStaleAgents } from "./db/queries";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
+import { findDeepLinkArg, parseDeepLink } from "./lib/deeplink";
 import { logger, markShutdown } from "./lib/logger";
 import { stopExegolMcpServer } from "./mcp/exegol-server";
 import { getMcpHost } from "./mcp/host";
@@ -43,6 +44,53 @@ import {
 } from "./windows/settings";
 
 let mainWindow: BrowserWindow | null = null;
+
+// ─── T155.6: exegol:// deep link (CLI opener) ─────────────────────────────
+
+let pendingDeepLinkPath: string | null = null;
+
+function deliverPendingDeepLink(win: BrowserWindow): void {
+  if (!pendingDeepLinkPath) return;
+  const path = pendingDeepLinkPath;
+  pendingDeepLinkPath = null;
+  win.webContents.send("deeplink:open-path", { path });
+}
+
+function handleDeepLinkUrl(url: string): void {
+  const parsed = parseDeepLink(url);
+  if (!parsed) {
+    logger.warn(`[DeepLink] Ignored malformed url: ${url}`);
+    return;
+  }
+  logger.info(`[DeepLink] open path: ${parsed.path}`);
+  pendingDeepLinkPath = parsed.path;
+
+  const win = mainWindow;
+  if (!win || win.isDestroyed()) {
+    // Cold start (whenReady creates the window and flushes on load) or
+    // tray-only mode — recreate the window; did-finish-load delivers.
+    if (app.isReady()) createWindow();
+    return;
+  }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  if (win.webContents.isLoading()) return; // did-finish-load flushes
+  deliverPendingDeepLink(win);
+}
+
+function registerDeepLinkProtocol(): void {
+  // Dev mode on macOS/Windows: without execPath + entry args the OS silently
+  // refuses to register the unpackaged Electron binary for the scheme.
+  const entryArg = process.argv[1];
+  if (process.defaultApp) {
+    if (entryArg) {
+      app.setAsDefaultProtocolClient("exegol", process.execPath, [resolve(entryArg)]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient("exegol");
+  }
+}
 
 // Startup timing: measure from app ready to first paint.
 // Logged once on ready-to-show to give us real numbers vs. competitors' claims.
@@ -103,6 +151,11 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
+  // T155.6: deliver a deep link that arrived before (or during) load
+  mainWindow.webContents.on("did-finish-load", () => {
+    if (mainWindow) deliverPendingDeepLink(mainWindow);
+  });
+
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
@@ -131,6 +184,31 @@ function registerGlobalHotkey(): void {
 }
 
 app.setName("Exegol");
+
+// T155.6: single-instance — a second launch (e.g. Windows/Linux deep link)
+// forwards its argv here and exits; macOS delivers URLs via open-url instead.
+// Dev instances share userData with packaged ones, so only a packaged app
+// hard-quits when it loses the lock.
+if (app.requestSingleInstanceLock()) {
+  app.on("second-instance", (_event, argv) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    const url = findDeepLinkArg(argv);
+    if (url) handleDeepLinkUrl(url);
+  });
+} else if (app.isPackaged) {
+  app.quit();
+}
+
+// Must be registered before app ready — macOS can deliver the URL at launch.
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  handleDeepLinkUrl(url);
+});
+registerDeepLinkProtocol();
 
 function registerIpcHandlers(): void {
   // Terminal write: renderer -> main -> pty
