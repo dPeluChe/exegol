@@ -341,11 +341,18 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
    Cmd+↓ + amber "new output below" pulse; image paste was already solved better via
    clipboard-to-file; single-SIGWINCH guard deferred — measure first, current resize path
    already coalesces via rAF)
-5. Claude session browser + resume: read `~/.claude/projects/*.jsonl` as a session library
-   in the launcher/empty pane (label = /rename → summary → first message; click = --resume)
-6. `exegol .` CLI opener + `exegol://` deep link (symlink installer with fallback)
-7. Notification hygiene: toast hover-pause, dismiss ≠ mark-read, per-channel kill switches
-   in the inbox popover
+5. [x] ~~Session browser + resume~~ — **SHIPPED PR #72**, upgraded per Antonio: cross-provider
+   from our own DB (`agents.listResumable` over T101 resume handles), mixed by date in the
+   empty pane, responsive 1/3/5 rows, collapsed by default. Follow-up idea: also import
+   Claude sessions born outside Exegol (`~/.claude/projects/*.jsonl`)
+6. [x] ~~`exegol .` CLI + deep link~~ — **SHIPPED PR #73** (worktree agent, diff-reviewed):
+   protocol + single-instance + delivery queue, deepest-ancestor project match, menu
+   install/uninstall. Pending live smoke: real `open` delivery + menu dialogs
+7. [x] ~~Notification hygiene~~ — **SHIPPED PR #73**: toast hover-pause (timers moved to
+   component), dismiss≠read audited (already correct), per-channel kill switches in the
+   bell popover enforced renderer- AND main-side
+
+**T155 COMPLETE (7/7) — 2026-07-10, PRs #68/#70/#72/#73. Archive to TASK_COMPLETED on next sweep.**
 
 **Cross-cutting rules to adopt while in there**
 - Focus discipline (their PRP 017): only explicit user action or per-project restore sets
