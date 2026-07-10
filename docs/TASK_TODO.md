@@ -171,6 +171,12 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - **Doctor: duplicate CLI installs check** (`which -a` per enabled provider; warn on >1
   binary or version mismatch) — source: live codex Homebrew-vs-bun self-update loop
   (2026-07-09): update installed to `~/.bun/bin` while Homebrew's older binary won PATH
+- **Doctor: stale worktree sweep** — `~/.exegol/worktrees` measured at **1.2 GB** on
+  Antonio's machine (2026-07-10): worktrees of long-dead agents accumulate (dirty ones are
+  preserved by design but never surfaced). Doctor action: list stale worktrees (no live
+  agent, N days old) with disk size → one-click clean via existing `projects.deleteWorktree`;
+  never auto-delete dirty ones without showing the diff. Dev-side artifacts covered by new
+  `bun run clean:dev` (turbo cache, cargo target, dist/out, coverage)
 
 **Likely files**
 - `apps/desktop/src/main/security/keystore.ts`, `system/doctor.ts`,
