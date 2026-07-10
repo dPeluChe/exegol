@@ -380,7 +380,11 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         "group/pane relative flex h-full flex-col",
         isFocused ? "border-2 border-accent/40" : "border-2 border-transparent",
       )}
-      onMouseDown={() => setFocusedPane(paneId)}
+      onMouseDown={() => {
+        setFocusedPane(paneId);
+        // T155.3: activating an agent's pane clears its attention state
+        if (pane.agentId) useAgentStore.getState().setFocusedAgent(pane.agentId);
+      }}
       onDragOver={handlePaneDragOver}
       onDrop={handlePaneDrop}
       onDragLeave={handlePaneDragLeave}

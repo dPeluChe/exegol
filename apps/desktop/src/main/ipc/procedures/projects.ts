@@ -12,6 +12,7 @@ import {
   createProject,
   deleteProject,
   getProject,
+  getWorktreeByAgentId,
   listProjects,
   listWorktrees,
   removeWorktree,
@@ -130,6 +131,8 @@ export const projectRouter = router({
         /** open a specific file (absolute or project-relative) instead of the project root */
         file: z.string().optional(),
         line: z.number().int().positive().optional(),
+        /** resolve relative `file` against this agent's worktree instead of the project root */
+        agentId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -158,7 +161,12 @@ export const projectRouter = router({
       ide = ide ?? project.defaultIde ?? "vscode";
       let target = project.path;
       if (input.file) {
-        const resolved = input.file.startsWith("/") ? input.file : `${project.path}/${input.file}`;
+        // Worktree agents print paths relative to their worktree — resolving
+        // against the project root would open the version without their edits.
+        const base =
+          (input.agentId ? getWorktreeByAgentId(ctx.db, input.agentId)?.path : undefined) ??
+          project.path;
+        const resolved = input.file.startsWith("/") ? input.file : `${base}/${input.file}`;
         if (!existsSync(resolved)) {
           throw new TRPCError({ code: "NOT_FOUND", message: `File not found: ${input.file}` });
         }

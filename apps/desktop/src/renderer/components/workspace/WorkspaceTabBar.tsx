@@ -37,6 +37,7 @@ export function WorkspaceTabBar() {
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const panes = useWorkspaceStore(selectPanes);
   const agents = useAgentStore((s) => s.agents);
+  const attentionItems = useAgentStore((s) => s.attentionItems);
   const { projectId } = useProjectContext();
 
   /** Close a tab — confirm first if it has running agents */
@@ -243,6 +244,9 @@ export function WorkspaceTabBar() {
               primaryAgentId,
             } = getTabMeta(tab.label, tab.layout, panes, agents);
             const tabActivity = primaryAgentId ? agents[primaryAgentId]?.activityLevel : undefined;
+            // T155.3: unread attention beats activity in the tab dot
+            const attentionItem = primaryAgentId ? attentionItems[primaryAgentId] : undefined;
+            const tabAttention = !!attentionItem && !attentionItem.read;
 
             return (
               <WorkspaceTabItem
@@ -253,6 +257,7 @@ export function WorkspaceTabBar() {
                 displayName={displayName}
                 TabIcon={TabIcon}
                 tabActivity={tabActivity}
+                tabAttention={tabAttention}
                 dragOverTabId={dragOverTabId}
                 editValue={editValue}
                 setEditValue={setEditValue}

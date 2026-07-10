@@ -12,6 +12,8 @@ interface WorkspaceTabItemProps {
   displayName: string;
   TabIcon: React.ComponentType<{ className?: string }> | null;
   tabActivity: AgentActivityLevel | undefined;
+  /** T155.3: the tab's agent has an unread attention item — amber pulse wins */
+  tabAttention?: boolean;
   dragOverTabId: string | null;
   editValue: string;
   setEditValue: Dispatch<SetStateAction<string>>;
@@ -35,6 +37,7 @@ export function WorkspaceTabItem({
   displayName,
   TabIcon,
   tabActivity,
+  tabAttention = false,
   dragOverTabId,
   editValue,
   setEditValue,
@@ -92,11 +95,20 @@ export function WorkspaceTabItem({
         <>
           {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
           <span className="max-w-[140px] truncate">{displayName}</span>
-          {tabActivity && ACTIVITY_DOT_CLASS[tabActivity] && (
+          {tabAttention ? (
             <span
-              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", ACTIVITY_DOT_CLASS[tabActivity])}
+              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400"
               aria-hidden="true"
+              title="Needs attention"
             />
+          ) : (
+            tabActivity &&
+            ACTIVITY_DOT_CLASS[tabActivity] && (
+              <span
+                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", ACTIVITY_DOT_CLASS[tabActivity])}
+                aria-hidden="true"
+              />
+            )
           )}
         </>
       )}

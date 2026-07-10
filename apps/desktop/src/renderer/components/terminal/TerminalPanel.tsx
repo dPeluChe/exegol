@@ -101,9 +101,11 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     (path: string, line?: number) => {
       const pid = agent?.projectId;
       if (!pid) return;
-      trpcMutate("projects.openInIde", { projectId: pid, file: path, line }).catch(() => {});
+      trpcMutate("projects.openInIde", { projectId: pid, file: path, line, agentId }).catch(
+        () => {},
+      );
     },
-    [agent?.projectId],
+    [agent?.projectId, agentId],
   );
 
   // T155: Cmd+click on a URL → in-app browser pane (plain click = external browser)
