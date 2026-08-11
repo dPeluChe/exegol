@@ -51,6 +51,14 @@ export function registerAgentMcpToken(agentId: string, projectId: string): strin
   return token;
 }
 
+/** Re-arm an EXISTING token after app restart (registry is in-memory only).
+ *  The reattached agent's shim/.mcp.json still hold the old secret — minting
+ *  a new one would orphan them; restoring keeps identity continuous. */
+export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): void {
+  tokensBySecret.set(token, { agentId, projectId });
+  tokensByAgent.set(agentId, token);
+}
+
 /** Revoke on agent exit — a leaked .mcp.json must not stay a live credential. */
 export function revokeAgentMcpToken(agentId: string): void {
   const token = tokensByAgent.get(agentId);

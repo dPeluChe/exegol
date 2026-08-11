@@ -74,6 +74,17 @@ export function writeAgentMcpConfig(
   }
 }
 
+/** Read the exegol token back from a cwd's .mcp.json — used on reattach to
+ *  re-arm the (in-memory) token registry after an app restart. */
+export function readAgentMcpToken(cwd: string): string | null {
+  const config = readMcpJson(join(cwd, ".mcp.json"));
+  const entry = config.mcpServers?.[EXEGOL_SERVER_KEY] as
+    | { env?: Record<string, unknown> }
+    | undefined;
+  const token = entry?.env?.EXEGOL_MCP_TOKEN;
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+
 /** Best-effort removal of the exegol entry on agent exit — the token is
  *  revoked anyway, but a dead entry pollutes the repo if committed. */
 export function removeAgentMcpConfig(cwd: string): void {
