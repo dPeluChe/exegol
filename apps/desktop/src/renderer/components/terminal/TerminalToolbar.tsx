@@ -18,6 +18,8 @@ interface TerminalToolbarProps {
   accessMode?: AgentAccessMode | null;
   isolationMode?: IsolationMode | null;
   branchName?: string | null;
+  /** Uncommitted files in the working tree (0 hides the chip) */
+  dirtyCount?: number;
   viewMode: "terminal" | "chat";
   onToggleView: () => void;
   previewUrl?: string | null;
@@ -29,6 +31,7 @@ export function TerminalToolbar({
   accessMode,
   isolationMode,
   branchName,
+  dirtyCount = 0,
   viewMode,
   onToggleView,
   previewUrl,
@@ -47,6 +50,14 @@ export function TerminalToolbar({
         >
           <GitBranch className="h-2.5 w-2.5 shrink-0" />
           <span className="max-w-36 truncate">{branchName}</span>
+        </span>
+      )}
+      {dirtyCount > 0 && (
+        <span
+          className="rounded bg-yellow-500/15 px-1 py-0.5 text-[9px] tabular-nums text-yellow-400"
+          title={`${dirtyCount} uncommitted file${dirtyCount === 1 ? "" : "s"}`}
+        >
+          ±{dirtyCount}
         </span>
       )}
       {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}

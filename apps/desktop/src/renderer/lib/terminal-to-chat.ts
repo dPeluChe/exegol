@@ -13,7 +13,13 @@ export interface ChatTurn {
   content: string;
   /** Approximate line index in the original scrollback */
   lineIndex: number;
+  /** Spinner timing ("Churned for 3s") lifted out of the body into the header */
+  meta?: string;
 }
+
+// Claude's spinner verbs are arbitrary (Baked/Churned/Brewed/Sautéed…) but the
+// shape is stable: `* <Verb> for <duration>` possibly with token counts after.
+const SPINNER_TIMING_RE = /^\W{0,3}([A-Z][\p{L}]+(?:…|\.{3})? for \d+[hms].*)$/u;
 
 // Prompt patterns that indicate user input
 const USER_PROMPT_PATTERNS = [
@@ -72,6 +78,7 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
   let currentRole: ChatRole = "agent";
   let currentLines: string[] = [];
   let currentLineIndex = 0;
+  let currentMeta: string | undefined;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
@@ -80,6 +87,14 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
     // Skip completely empty lines within a turn (but preserve them)
     if (!trimmed) {
       if (currentLines.length > 0) currentLines.push("");
+      continue;
+    }
+
+    // Spinner timing lines become turn metadata (shown in the header row)
+    // instead of body content — saves a line per turn (user request).
+    const spinner = trimmed.match(SPINNER_TIMING_RE);
+    if (spinner?.[1]) {
+      currentMeta = spinner[1];
       continue;
     }
 
@@ -97,7 +112,8 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
     if (detectedRole !== currentRole && currentLines.length > 0) {
       const content = currentLines.join("\n").trim();
       if (content) {
-        turns.push({ role: currentRole, content, lineIndex: currentLineIndex });
+        turns.push({ role: currentRole, content, lineIndex: currentLineIndex, meta: currentMeta });
+        currentMeta = undefined;
       }
       currentLines = [];
       currentLineIndex = i;
@@ -117,7 +133,7 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
   if (currentLines.length > 0) {
     const content = currentLines.join("\n").trim();
     if (content) {
-      turns.push({ role: currentRole, content, lineIndex: currentLineIndex });
+      turns.push({ role: currentRole, content, lineIndex: currentLineIndex, meta: currentMeta });
     }
   }
 

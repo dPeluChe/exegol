@@ -91,6 +91,24 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   const allAgents = useAgentStore((s) => s.agents);
 
+  // T155 (verify session): repo-root agents have no worktree branch — show the
+  // repo's current branch + dirty count instead. Query keys shared with
+  // GitPane, so this costs zero extra polling.
+  const toolbarProjectId = agent?.projectId ?? activeProjectId ?? undefined;
+  const { data: repoBranch } = useQuery({
+    queryKey: ["git", "branch", toolbarProjectId],
+    queryFn: () => trpcInvoke<string>("diff.branch", { projectId: toolbarProjectId }),
+    enabled: !!toolbarProjectId && !agent?.branchName,
+    staleTime: 30_000,
+  });
+  const { data: gitStatusFiles } = useQuery({
+    queryKey: ["git", "status", toolbarProjectId],
+    queryFn: () =>
+      trpcInvoke<Array<{ path: string }>>("diff.status", { projectId: toolbarProjectId }),
+    enabled: !!toolbarProjectId,
+    refetchInterval: 15_000,
+  });
+
   const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean, wrote?: boolean) => {
     setScrollAtTop(atTop);
     setScrollAtBottom(atBottom);
@@ -340,7 +358,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         <TerminalToolbar
           accessMode={agent?.accessMode}
           isolationMode={dbAgent ? deriveIsolationMode(dbAgent) : null}
-          branchName={agent?.branchName}
+          branchName={agent?.branchName ?? repoBranch ?? null}
+          dirtyCount={gitStatusFiles?.length ?? 0}
           viewMode={viewMode}
           onToggleView={handleToggleLiveView}
           previewUrl={previewUrl}
