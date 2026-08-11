@@ -468,6 +468,16 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T159 — Provider Registry Round 2 (pi, cursor-agent, copilot) `added: 2026-08-11`
+**Priority**: P2 | **Effort**: S | **Source**: engram's 12-provider registry (`RESEARCH/ENGRAM_2026_08.md`) + verified installed on Antonio's machine (`which -a`: pi via homebrew, cursor-agent + copilot via superset)
+
+- Add built-in providers like the agy/devin round (PR #65): inspect each CLI's `--help`
+  for prompt-arg/resume flags first, extend `AGENT_CLI_TYPES` + registry entries
+- Candidates NOT installed (skip until requested): qwen-code, windsurf
+- Pi bonus: `badlogic/pi-mono` is already studied in `_repos_2_learn` (Wave 2 review)
+
+---
+
 ### T158 — Memory Habit Protocol `added: 2026-08-11`
 **Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (engram's 5-layer habit stack, dogfooded at 906 memories)
 
