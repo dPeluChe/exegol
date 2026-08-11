@@ -103,12 +103,11 @@ export function setupTerminalSession(
       }
       // T155 input QoL (klaudio patterns):
       // Shift+Enter → newline inside the CLI's prompt, not a submit.
-      // Claude Code: backslash+CR (its documented line-continuation — what
-      // /terminal-setup binds). ESC+CR submits and CSI-u is ignored with text
-      // present (both observed live, verify session 2026-08-11).
+      // Bracketed-paste of "\n": TUIs treat pasted newlines as literal line
+      // breaks, never submit — version-independent, unlike raw ESC+CR /
+      // CSI-u / backslash+CR (all failed live on claude, 2026-08-11).
       if (e.key === "Enter" && e.shiftKey) {
-        const seq = deps.cliType === "claude-code" ? "\\\r" : "\x1b\r";
-        window.api.terminal.write(deps.agentId, seq);
+        terminal.paste("\n");
         return false;
       }
       // Cmd+←/→ → Ctrl+A/Ctrl+E (line home/end, the macOS muscle memory)
