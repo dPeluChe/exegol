@@ -20,9 +20,16 @@
 > Vibe Kanban/Terragon dead, first-party absorption): **Pipelines → Evidence → Undo → Scoring**
 > still uncontested — the risk is follow-through, not direction.
 
+**Execution plan decided 2026-08-11 (Antonio + Fable):**
+- A1 checklist → **dedicated joint verification session** (Antonio drives, Fable greps/checks)
+- T149 + T150 → **parallel claude-code agents in Exegol worktrees** — briefs ready:
+  `docs/AGENT_PROMPTS/WT_T149_CORE_TESTS.md` + `WT_T150_T80_PARITY.md` (supervisor reviews, no agent pushes)
+- Wave 3 order locked: **T156 → T157 → T153**
+- Exit criteria met → **release v0.5.0** (tag + changelog)
+
 **P0 — before any new feature:**
-1. **Manual verification backlog** (sections below) — **T123 OSC delivery FIRST** (critical:
-   decides whether deterministic status works at all), then the Wave 1+2 smoke-test list
+1. **Manual verification backlog** (sections below) — ✅ T123 done; next joint session:
+   attention signal, pipeline+evaluator+report, oplog v2, MCP live, then the rest
 2. **T149** — Orchestration-core tests (executor, manager, MCP server, **db/migrations**)
 3. **T150** — T80 closure (`withRetry` wire-in or delete) + Rust↔JS golden parity vectors
 
