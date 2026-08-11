@@ -103,10 +103,11 @@ export function setupTerminalSession(
       }
       // T155 input QoL (klaudio patterns):
       // Shift+Enter → newline inside the CLI's prompt, not a submit.
-      // Claude Code needs the CSI-u (kitty) encoding — plain ESC+CR submits
-      // (observed live, verify session 2026-08-11).
+      // Claude Code: backslash+CR (its documented line-continuation — what
+      // /terminal-setup binds). ESC+CR submits and CSI-u is ignored with text
+      // present (both observed live, verify session 2026-08-11).
       if (e.key === "Enter" && e.shiftKey) {
-        const seq = deps.cliType === "claude-code" ? "\x1b[13;2u" : "\x1b\r";
+        const seq = deps.cliType === "claude-code" ? "\\\r" : "\x1b\r";
         window.api.terminal.write(deps.agentId, seq);
         return false;
       }
