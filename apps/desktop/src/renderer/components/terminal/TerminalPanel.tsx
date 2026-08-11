@@ -2,6 +2,7 @@ import { type AgentProvider, deriveIsolationMode, type HandoffSummary } from "@e
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent, useScrollback, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -50,6 +51,7 @@ function useHandoff(agentId: string, enabled: boolean) {
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   // Use push-driven store for instant status updates (not 30s polling)
   const resumableCliTypes = useResumableCliTypes();
+  const { projectId: activeProjectId } = useProjectContext();
   const storeAgent = useAgentStore((s) => s.agents[agentId]);
   const { data: dbAgent } = useAgent(agentId);
   // Prefer store (push events) over DB query (polling fallback). Merge in
@@ -112,12 +114,14 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   // T155 (verify session): a "Failed to start" pane becomes a plain shell in
   // the same project so the user can diagnose (rerun the CLI by hand, etc.)
   const handleOpenShellHere = useCallback(async () => {
-    const pid = agent?.projectId;
+    // A "Failed to start" agent may already be gone from store+DB — fall back
+    // to the workspace's active project (the pane lives in its view anyway).
+    const pid = agent?.projectId ?? activeProjectId;
     if (!pid || !paneId) {
       useToastStore.getState().addToast({
         type: "error",
         title: "Open Terminal failed",
-        body: !pid ? "Agent has no project" : "Pane not resolved",
+        body: !pid ? "No active project" : "Pane not resolved",
       });
       return;
     }
@@ -154,7 +158,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         body: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [agent?.projectId, paneId, agentId, stopAgent, addAgent, createTerminal]);
+  }, [agent?.projectId, activeProjectId, paneId, agentId, stopAgent, addAgent, createTerminal]);
 
   // T155: Cmd+click on a URL → in-app browser pane (plain click = external browser)
   const handleOpenUrlInPane = useCallback(

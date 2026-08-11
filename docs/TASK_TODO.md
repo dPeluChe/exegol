@@ -96,6 +96,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Race promote & clean: dirty loser prompts; live-agent loser refuses cleanup
 - Onboarding wizard on fresh profile: CLIs detected (packaged build especially — PATH fix)
 - Monitor → Resources: eviction actually drops RSS; budget alert fires once per period
+- **🐛 FOUND 2026-08-11 (investigate): opencode TUI child dies across app quit** — the
+  wrapper shell survives in the sidecar (reattach OK, prompt shows `took 18m48s`) but the
+  opencode process exits, printing its `Continue: opencode -s ses_…` message; typing then
+  goes to the stale shell over a dead TUI screen. claude-code survives the identical flow.
+  Suspect: signal/EOF sensitivity difference in the TUI child when the app disconnects.
+  Recovery path exists by design: resume_command is captured (T101) → session browser
+  (T155.5) offers the resume. Mitigations shipped in verify session: Refresh Terminal
+  (repaint) + Open Terminal (dead panes).
 
 ### P3 — Strategic bets / larger scope (post Wave 2)
 - **SSH Remote Development** (T73)
