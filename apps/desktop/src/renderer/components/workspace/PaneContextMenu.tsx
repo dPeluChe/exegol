@@ -8,6 +8,7 @@ import {
   Globe,
   MoveRight,
   PictureInPicture2,
+  RefreshCw,
   Rows,
   Trash2,
   X,
@@ -73,6 +74,7 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
 
 export function PaneContextMenu({
   paneType,
+  agentId,
   isSplitPane,
   onSplit,
   onExtractToTab,
@@ -133,6 +135,16 @@ export function PaneContextMenu({
       items.push({ label: "Scroll to Top", icon: ArrowUpToLine, action: onScrollTop });
     if (onScrollBottom)
       items.push({ label: "Scroll to Bottom", icon: ArrowDownToLine, action: onScrollBottom });
+    // T155 (verify session): manual repaint escape hatch — refit + SIGWINCH
+    // jiggle for alt-screen TUIs that come back black after a reload.
+    if (agentId) {
+      items.push({
+        label: "Refresh Terminal",
+        icon: RefreshCw,
+        action: () =>
+          window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
+      });
+    }
     if (items.length > 0) sections.push({ items });
   }
 

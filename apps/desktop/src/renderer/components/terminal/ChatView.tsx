@@ -3,7 +3,7 @@
  * Read-only conversational representation parsed from scrollback.
  */
 
-import { cn, ScrollArea } from "@exegol/ui";
+import { cn } from "@exegol/ui";
 import { Bot, Terminal, User } from "lucide-react";
 import { useMemo } from "react";
 import { type ChatRole, type ChatTurn, parseTerminalToChat } from "../../lib/terminal-to-chat";
@@ -46,6 +46,11 @@ function ChatBubble({ turn }: { turn: ChatTurn }) {
           className={cn("text-[10px] font-semibold uppercase tracking-wider", config.textClass)}
         >
           {config.label}
+          {turn.meta && (
+            <span className="ml-2 font-normal normal-case tracking-normal text-text-muted">
+              · {turn.meta}
+            </span>
+          )}
         </span>
         <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-text-primary">
           {turn.content}
@@ -67,7 +72,9 @@ export function ChatView({ scrollback, cliType }: ChatViewProps) {
   }
 
   return (
-    <ScrollArea className="h-full">
+    // Plain overflow div — Radix ScrollArea never scrolled here (unbounded
+    // viewport inside the flex column; verify session 2026-08-11).
+    <div className="h-full min-h-0 overflow-y-auto">
       <div className="flex flex-col divide-y divide-border/30">
         {cliType && (
           <div className="px-4 py-2 text-[10px] font-medium text-text-muted">
@@ -78,6 +85,6 @@ export function ChatView({ scrollback, cliType }: ChatViewProps) {
           <ChatBubble key={`${turn.role}-${turn.lineIndex}`} turn={turn} />
         ))}
       </div>
-    </ScrollArea>
+    </div>
   );
 }

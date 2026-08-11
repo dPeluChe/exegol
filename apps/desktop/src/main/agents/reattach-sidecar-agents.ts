@@ -3,6 +3,8 @@ import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
+import { readAgentMcpToken } from "../mcp/exegol-mcp-config";
+import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
 import { createOutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
@@ -123,6 +125,30 @@ export async function reattachSidecarAgents(
           `[Reattach] Dead sidecar session for ${agentId} (${cliType}) — PTY not alive after reattach, will be marked crashed`,
         );
         continue;
+      }
+
+      // T145 restart continuity: the MCP server only started on SPAWN, so a
+      // restart with only reattached agents left the socket dead and the
+      // in-memory token registry empty (verify session 2026-08-11 — shim
+      // timeouts). Start the server and re-arm the on-disk token.
+      if (!isShell) {
+        try {
+          ensureExegolMcpServerStarted(db);
+          const wt = worktrees.get(agentId);
+          const projectPath = (
+            db.prepare("SELECT path FROM projects WHERE id = ?").get(projectId) as
+              | { path?: string }
+              | undefined
+          )?.path;
+          const cwd = wt?.worktreePath ?? projectPath;
+          const token = cwd ? readAgentMcpToken(cwd) : null;
+          if (token) {
+            restoreAgentMcpToken(agentId, projectId, token);
+            logger.info(`[Reattach] MCP token re-armed for ${agentId}`);
+          }
+        } catch (err) {
+          logger.warn(`[Reattach] MCP re-arm failed for ${agentId}:`, err);
+        }
       }
 
       updateAgentStatus(db, agentId, "running");

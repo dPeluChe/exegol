@@ -19,8 +19,10 @@ export interface IndexEntry {
 
 // ─── Query building ─────────────────────────────────────────────────────────
 
-/** Sanitize and build an FTS5 query string from user input. */
-function buildFts5Query(raw: string): string | null {
+/** Sanitize and build an FTS5 query string from user input.
+ *  AND = precision (default); OR = recall fallback for multi-term queries
+ *  where requiring every term returns nothing (verify session 2026-08-11). */
+function buildFts5Query(raw: string, operator: "AND" | "OR" = "AND"): string | null {
   // Extract quoted phrases and plain terms
   const tokens: string[] = [];
   const phraseRegex = /"([^"]+)"/g;
@@ -44,7 +46,7 @@ function buildFts5Query(raw: string): string | null {
   }
 
   if (tokens.length === 0) return null;
-  return tokens.join(" AND ");
+  return tokens.join(` ${operator} `);
 }
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
@@ -108,9 +110,14 @@ export function isIndexed(db: Database.Database, entityId: string): boolean {
 export function search(
   db: Database.Database,
   query: string,
-  opts?: { projectId?: string; entityType?: SearchEntityType; limit?: number },
+  opts?: {
+    projectId?: string;
+    entityType?: SearchEntityType;
+    limit?: number;
+    operator?: "AND" | "OR";
+  },
 ): SearchResult[] {
-  const ftsQuery = buildFts5Query(query);
+  const ftsQuery = buildFts5Query(query, opts?.operator ?? "AND");
   if (!ftsQuery) return [];
 
   const limit = opts?.limit ?? 50;
@@ -233,6 +240,8 @@ export interface HybridSearchOptions {
   limit?: number;
   /** Ollama config for the vector pass. Omit to run keyword-only (FTS5 stays authoritative). */
   ollamaConfig?: OllamaConfig;
+  /** FTS term joining — AND (default, precision) or OR (recall fallback). */
+  operator?: "AND" | "OR";
 }
 
 /**
@@ -250,6 +259,7 @@ export async function hybridSearch(
     projectId: opts?.projectId,
     entityType: opts?.entityType,
     limit: Math.max(limit, VECTOR_CANDIDATE_CAP),
+    operator: opts?.operator,
   });
   if (keywordResults.length === 0) return [];
 

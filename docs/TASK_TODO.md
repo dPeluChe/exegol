@@ -89,13 +89,33 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Desktop notification on agent finished/failed + attention (with pending-question body)
 - Attention Inbox: TitleBar queue, Cmd+J jump, unread badges
 - Knowledge tab: opt-in setup (no files written on tab open), digest refresh, MEMORY.md sync/import
-- Exegol MCP: agent calls memory_search/memory_save (read-mode agent denied memory_save)
+- [x] Exegol MCP — **VERIFIED 2026-08-11**: shim framing bug found+fixed; claude shows
+  `exegol · connected · 3 tools`; live memory_search (empty-correct) → 3× memory_save
+  (ids+categories) → retrieval ✅. Pending only: read-mode denial (spawn a read-mode agent,
+  memory_save must be refused). **Agent-sourced improvements filed**: (a) add `memory_list`
+  tool (recent N) — search-only is awkward for "what do you know?"; (b) multi-word recall
+  too literal ("Capacitador proyecto estado stack convex" → empty while single terms hit) —
+  likely no-Ollama fallback path; tune FTS OR-semantics / RRF and fold into the min-cosine
+  upgrade already queued in T153. **Follow-ups filed**: (a) opencode/other CLIs never see `.mcp.json`
+  (claude's convention) — extend exegol-mcp-config to inject opencode's own config
+  (`opencode.json` mcp section) + audit codex path; (b) MCP HOST StdioTransport has the
+  same LSP-framing bug as the shim had — external stdio servers likely can't connect
+- Polish note (verify session): shell/agent exit card duplicates the scrollback tail
+  visible right below it — slim the AgentStopReason card (keep actions, drop/collapse tail)
 - Pipeline evidence: score badge + AI summary per step, Export Report
 - Evaluator gate: template with gate step persists (zod fix), ship/retry routing works
 - Oplog v2: Turn Snapshots tab lists per-step snapshots; restore refuses cross-worktree
 - Race promote & clean: dirty loser prompts; live-agent loser refuses cleanup
 - Onboarding wizard on fresh profile: CLIs detected (packaged build especially — PATH fix)
 - Monitor → Resources: eviction actually drops RSS; budget alert fires once per period
+- **🐛 FOUND 2026-08-11 (investigate): opencode TUI child dies across app quit** — the
+  wrapper shell survives in the sidecar (reattach OK, prompt shows `took 18m48s`) but the
+  opencode process exits, printing its `Continue: opencode -s ses_…` message; typing then
+  goes to the stale shell over a dead TUI screen. claude-code survives the identical flow.
+  Suspect: signal/EOF sensitivity difference in the TUI child when the app disconnects.
+  Recovery path exists by design: resume_command is captured (T101) → session browser
+  (T155.5) offers the resume. Mitigations shipped in verify session: Refresh Terminal
+  (repaint) + Open Terminal (dead panes).
 
 ### P3 — Strategic bets / larger scope (post Wave 2)
 - **SSH Remote Development** (T73)

@@ -134,6 +134,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     const session = setupTerminalSession(container, {
       agentId,
       paneId,
+      cliType,
       readOnly,
       initialContent,
       fontSize,
@@ -164,6 +165,18 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, sync);
     }, 150);
 
+    // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to
+    // a black pane after window reload — the ring replay can't repaint an alt
+    // screen, only the app can. A one-shot resize jiggle forces the redraw.
+    let kickTimer2: ReturnType<typeof setTimeout> | null = null;
+    const kickTimer = setTimeout(() => {
+      if (readOnly) return;
+      const t = session.terminal;
+      if (t.cols < 3) return;
+      window.api.terminal.resize(agentId, t.cols - 1, t.rows);
+      kickTimer2 = setTimeout(() => window.api.terminal.resize(agentId, t.cols, t.rows), 60);
+    }, 350);
+
     setTerminalReady(agentId);
     onReady?.();
 
@@ -179,6 +192,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     return () => {
       clearTimeout(settleTimer);
+      clearTimeout(kickTimer);
+      if (kickTimer2) clearTimeout(kickTimer2);
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
       resizeObserver.disconnect();
       // WebGL context must be freed before the terminal itself is torn down.
@@ -254,6 +269,32 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       webglRef.current = null;
     }
   }, [isVisible]);
+
+  // T155 (verify session): manual "Refresh Terminal" from the pane menu —
+  // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
+  useEffect(() => {
+    const handleKick = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
+      if (detail?.agentId !== agentId) return;
+      const terminal = terminalRef.current;
+      const fit = fitAddonRef.current;
+      if (!terminal || !fit) return;
+      try {
+        fit.fit();
+        if (!readOnly && terminal.cols > 2) {
+          window.api.terminal.resize(agentId, terminal.cols - 1, terminal.rows);
+          setTimeout(() => {
+            window.api.terminal.resize(agentId, terminal.cols, terminal.rows);
+          }, 60);
+        }
+        terminal.refresh(0, terminal.rows - 1);
+      } catch {
+        /* not ready */
+      }
+    };
+    window.addEventListener("exegol:kick-terminal", handleKick);
+    return () => window.removeEventListener("exegol:kick-terminal", handleKick);
+  }, [agentId, readOnly]);
 
   useEffect(() => {
     const handleWindowResize = () => handleResize();

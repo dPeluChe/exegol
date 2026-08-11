@@ -2,10 +2,12 @@ import { type AgentProvider, deriveIsolationMode, type HandoffSummary } from "@e
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent, useScrollback, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { useToastStore } from "../../stores/toasts";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
@@ -49,6 +51,7 @@ function useHandoff(agentId: string, enabled: boolean) {
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   // Use push-driven store for instant status updates (not 30s polling)
   const resumableCliTypes = useResumableCliTypes();
+  const { projectId: activeProjectId } = useProjectContext();
   const storeAgent = useAgentStore((s) => s.agents[agentId]);
   const { data: dbAgent } = useAgent(agentId);
   // Prefer store (push events) over DB query (polling fallback). Merge in
@@ -88,6 +91,24 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   const allAgents = useAgentStore((s) => s.agents);
 
+  // T155 (verify session): repo-root agents have no worktree branch — show the
+  // repo's current branch + dirty count instead. Query keys shared with
+  // GitPane, so this costs zero extra polling.
+  const toolbarProjectId = agent?.projectId ?? activeProjectId ?? undefined;
+  const { data: repoBranch } = useQuery({
+    queryKey: ["git", "branch", toolbarProjectId],
+    queryFn: () => trpcInvoke<string>("diff.branch", { projectId: toolbarProjectId }),
+    enabled: !!toolbarProjectId && !agent?.branchName,
+    staleTime: 30_000,
+  });
+  const { data: gitStatusFiles } = useQuery({
+    queryKey: ["git", "status", toolbarProjectId],
+    queryFn: () =>
+      trpcInvoke<Array<{ path: string }>>("diff.status", { projectId: toolbarProjectId }),
+    enabled: !!toolbarProjectId,
+    refetchInterval: 15_000,
+  });
+
   const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean, wrote?: boolean) => {
     setScrollAtTop(atTop);
     setScrollAtBottom(atBottom);
@@ -107,6 +128,55 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     },
     [agent?.projectId, agentId],
   );
+
+  // T155 (verify session): a "Failed to start" pane becomes a plain shell in
+  // the same project so the user can diagnose (rerun the CLI by hand, etc.)
+  const handleOpenShellHere = useCallback(async () => {
+    // A "Failed to start" agent may already be gone from store+DB — fall back
+    // to the workspace's active project (the pane lives in its view anyway).
+    const pid = agent?.projectId ?? activeProjectId;
+    if (!pid || !paneId) {
+      useToastStore.getState().addToast({
+        type: "error",
+        title: "Open Terminal failed",
+        body: !pid ? "No active project" : "Pane not resolved",
+      });
+      return;
+    }
+    try {
+      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+      const shellAgent = await trpcMutate<any>("agents.spawn", {
+        projectId: pid,
+        cliType: "shell",
+        taskDescription: "Shell",
+      });
+      addAgent({
+        id: shellAgent.id,
+        projectId: pid,
+        cliType: shellAgent.cliType,
+        status: shellAgent.status,
+        currentStep: shellAgent.currentStep,
+        taskDescription: shellAgent.taskDescription,
+        branchName: shellAgent.branchName ?? null,
+        tokenUsage: { input: 0, output: 0, cost: 0 },
+        startedAt: shellAgent.startedAt,
+        accessMode: shellAgent.accessMode ?? null,
+        claudeSessionId: null,
+        activityLevel: "neutral",
+      });
+      createTerminal(shellAgent.id);
+      useWorkspaceStore.getState().updatePane(paneId, { type: "terminal", agentId: shellAgent.id });
+      // Stop the dead agent AFTER the pane swapped — stopping first raced the
+      // pane cleanup and the button appeared to do nothing.
+      stopAgent.mutate(agentId);
+    } catch (err) {
+      useToastStore.getState().addToast({
+        type: "error",
+        title: "Open Terminal failed",
+        body: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, [agent?.projectId, activeProjectId, paneId, agentId, stopAgent, addAgent, createTerminal]);
 
   // T155: Cmd+click on a URL → in-app browser pane (plain click = external browser)
   const handleOpenUrlInPane = useCallback(
@@ -278,6 +348,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           cliType={agent?.cliType}
           timedOut={startTimedOut}
           onDismiss={() => stopAgent.mutate(agentId)}
+          onOpenTerminal={handleOpenShellHere}
         />
       )}
       {resolvedHandoff && (
@@ -287,7 +358,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         <TerminalToolbar
           accessMode={agent?.accessMode}
           isolationMode={dbAgent ? deriveIsolationMode(dbAgent) : null}
-          branchName={agent?.branchName}
+          branchName={agent?.branchName ?? repoBranch ?? null}
+          dirtyCount={gitStatusFiles?.length ?? 0}
           viewMode={viewMode}
           onToggleView={handleToggleLiveView}
           previewUrl={previewUrl}

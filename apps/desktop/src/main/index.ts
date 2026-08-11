@@ -217,6 +217,11 @@ function registerIpcHandlers(): void {
     manager.write(agentId, data);
   });
 
+  // App DevTools from the TitleBar (whichever window asked)
+  ipcMain.on("app:toggle-devtools", (event) => {
+    event.sender.toggleDevTools();
+  });
+
   // Terminal resize: renderer -> main -> pty
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
     const manager = getAgentManager();

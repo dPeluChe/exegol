@@ -1,5 +1,5 @@
 import { cn } from "@exegol/ui";
-import { Minus, Square, X } from "lucide-react";
+import { Code, Minus, Square, X } from "lucide-react";
 import { useProject } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 import { AttentionQueue } from "./AttentionQueue";
@@ -18,8 +18,16 @@ export function TitleBar() {
       )}
     >
       {/* Left: spacer for macOS traffic lights, attention queue (T141) */}
-      <div className="flex items-center gap-2">
+      <div className="titlebar-no-drag flex items-center gap-2">
         <AttentionQueue />
+        <button
+          type="button"
+          onClick={() => window.api.toggleDevTools?.()}
+          className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+          title="Toggle app DevTools (⌥⌘I)"
+        >
+          <Code className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       {/* Center: Active project */}

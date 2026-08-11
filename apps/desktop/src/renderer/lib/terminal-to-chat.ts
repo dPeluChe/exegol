@@ -13,7 +13,13 @@ export interface ChatTurn {
   content: string;
   /** Approximate line index in the original scrollback */
   lineIndex: number;
+  /** Spinner timing ("Churned for 3s") lifted out of the body into the header */
+  meta?: string;
 }
+
+// Claude's spinner verbs are arbitrary (Baked/Churned/Brewed/Sautéed…) but the
+// shape is stable: `* <Verb> for <duration>` possibly with token counts after.
+const SPINNER_TIMING_RE = /^\W{0,3}([A-Z][\p{L}]+(?:…|\.{3})? for \d+[hms].*)$/u;
 
 // Prompt patterns that indicate user input
 const USER_PROMPT_PATTERNS = [
@@ -46,6 +52,20 @@ const SYSTEM_PATTERNS = [
   /^To resume this session/i,
 ];
 
+// Serialize output is raw terminal bytes — without stripping, the chat view
+// renders SGR soup (`[38;2;…m`, `[1C`). Covers CSI (any final byte, so cursor
+// moves like `1C` too), OSC, and single-char escapes; then compacts blank runs.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI parsing needs ESC/BEL
+const ANSI_SEQ_RE = /\][^]*(?:|\\)|\[[0-9;:?]*[ -/]*[@-~]|[@-_]/g;
+
+function stripAnsiForChat(text: string): string {
+  return text
+    .replace(ANSI_SEQ_RE, "")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 /**
  * Parse terminal text into chat turns.
  * Groups consecutive lines of the same role into single turns.
@@ -53,11 +73,12 @@ const SYSTEM_PATTERNS = [
 export function parseTerminalToChat(scrollback: string): ChatTurn[] {
   if (!scrollback.trim()) return [];
 
-  const lines = scrollback.split("\n");
+  const lines = stripAnsiForChat(scrollback).split("\n");
   const turns: ChatTurn[] = [];
   let currentRole: ChatRole = "agent";
   let currentLines: string[] = [];
   let currentLineIndex = 0;
+  let currentMeta: string | undefined;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
@@ -66,6 +87,14 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
     // Skip completely empty lines within a turn (but preserve them)
     if (!trimmed) {
       if (currentLines.length > 0) currentLines.push("");
+      continue;
+    }
+
+    // Spinner timing lines become turn metadata (shown in the header row)
+    // instead of body content — saves a line per turn (user request).
+    const spinner = trimmed.match(SPINNER_TIMING_RE);
+    if (spinner?.[1]) {
+      currentMeta = spinner[1];
       continue;
     }
 
@@ -83,7 +112,8 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
     if (detectedRole !== currentRole && currentLines.length > 0) {
       const content = currentLines.join("\n").trim();
       if (content) {
-        turns.push({ role: currentRole, content, lineIndex: currentLineIndex });
+        turns.push({ role: currentRole, content, lineIndex: currentLineIndex, meta: currentMeta });
+        currentMeta = undefined;
       }
       currentLines = [];
       currentLineIndex = i;
@@ -103,7 +133,7 @@ export function parseTerminalToChat(scrollback: string): ChatTurn[] {
   if (currentLines.length > 0) {
     const content = currentLines.join("\n").trim();
     if (content) {
-      turns.push({ role: currentRole, content, lineIndex: currentLineIndex });
+      turns.push({ role: currentRole, content, lineIndex: currentLineIndex, meta: currentMeta });
     }
   }
 

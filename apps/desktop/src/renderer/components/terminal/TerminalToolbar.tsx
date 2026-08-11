@@ -18,6 +18,8 @@ interface TerminalToolbarProps {
   accessMode?: AgentAccessMode | null;
   isolationMode?: IsolationMode | null;
   branchName?: string | null;
+  /** Uncommitted files in the working tree (0 hides the chip) */
+  dirtyCount?: number;
   viewMode: "terminal" | "chat";
   onToggleView: () => void;
   previewUrl?: string | null;
@@ -29,6 +31,7 @@ export function TerminalToolbar({
   accessMode,
   isolationMode,
   branchName,
+  dirtyCount = 0,
   viewMode,
   onToggleView,
   previewUrl,
@@ -36,13 +39,32 @@ export function TerminalToolbar({
   onDismissPreview,
 }: TerminalToolbarProps) {
   return (
-    <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border/40 px-2 py-0.5">
+    // Badges live on the LEFT — the pane's hover actions (float/split/close)
+    // occupy the right edge and were covering them (verify session 2026-08-11).
+    <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
+      {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
+      {branchName && (
+        <span
+          className="flex min-w-0 items-center gap-1 text-[9px] text-text-secondary"
+          title={`Branch: ${branchName}`}
+        >
+          <GitBranch className="h-2.5 w-2.5 shrink-0 text-accent/80" />
+          <span className="max-w-36 truncate">{branchName}</span>
+        </span>
+      )}
+      {dirtyCount > 0 && (
+        <span
+          className="rounded bg-yellow-500/15 px-1 py-0.5 text-[9px] tabular-nums text-yellow-400"
+          title={`${dirtyCount} uncommitted file${dirtyCount === 1 ? "" : "s"}`}
+        >
+          ±{dirtyCount}
+        </span>
+      )}
+      {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}
+      <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} />
       {previewUrl && onOpenPreview && onDismissPreview && (
         <PreviewUrlChip url={previewUrl} onOpen={onOpenPreview} onDismiss={onDismissPreview} />
       )}
-      {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
-      {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}
-      <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} />
     </div>
   );
 }
@@ -59,7 +81,7 @@ function PreviewUrlChip({
   onDismiss: () => void;
 }) {
   return (
-    <div className="mr-auto flex items-center gap-1 rounded bg-accent/10 px-1.5 py-0.5">
+    <div className="ml-auto flex items-center gap-1 rounded bg-accent/10 px-1.5 py-0.5">
       <button
         type="button"
         onClick={onOpen}
@@ -89,22 +111,23 @@ const ISOLATION_LABEL: Record<
   { label: string; className: string; icon: typeof Shield; tooltip: string }
 > = {
   isolated: {
-    label: "Isolated",
+    label: "Worktree",
     className: "bg-green-500/20 text-green-400",
     icon: Shield,
     tooltip: "Running in a dedicated git worktree — changes are isolated from project root.",
   },
   pipeline: {
-    label: "Pipeline",
+    label: "Pipeline WT",
     className: "bg-green-500/20 text-green-300",
     icon: GitBranch,
-    tooltip: "Running in a shared pipeline worktree.",
+    tooltip: "Running in the pipeline's shared worktree.",
   },
   "project-root": {
-    label: "Root",
+    label: "Repo root",
     className: "bg-yellow-500/20 text-yellow-400",
     icon: AlertTriangle,
-    tooltip: "Running directly in project root — changes affect the main checkout.",
+    tooltip:
+      "Running directly in the repo's main checkout — edits touch your working tree (no worktree isolation).",
   },
   fallback: {
     label: "Fallback",
@@ -204,10 +227,14 @@ export function LiveStartOverlay({
   cliType,
   timedOut,
   onDismiss,
+  onOpenTerminal,
 }: {
   cliType?: string;
   timedOut: boolean;
   onDismiss: () => void;
+  /** T155 (verify session): convert the dead pane into a plain shell so the
+   *  user can act (check the CLI, rerun by hand) without leaving the window. */
+  onOpenTerminal?: () => void;
 }) {
   return (
     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg-primary transition-opacity">
@@ -215,13 +242,24 @@ export function LiveStartOverlay({
         <>
           <AlertCircle className="h-5 w-5 text-text-muted" />
           <span className="text-[11px] text-text-muted">Failed to start</span>
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="rounded px-3 py-1 text-[11px] text-error hover:bg-error/10"
-          >
-            Dismiss
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenTerminal && (
+              <button
+                type="button"
+                onClick={onOpenTerminal}
+                className="rounded border border-border px-3 py-1 text-[11px] text-text-secondary hover:bg-white/10 hover:text-text-primary"
+              >
+                Open Terminal
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="rounded px-3 py-1 text-[11px] text-error hover:bg-error/10"
+            >
+              Dismiss
+            </button>
+          </div>
         </>
       ) : (
         <>
