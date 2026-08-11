@@ -177,11 +177,15 @@ export async function reattachSidecarAgents(
         }
       }
 
-      updateAgentStatus(db, agentId, "running");
+      // Reattach lands as IDLE, not running: an agent that survived a restart
+      // is almost always sitting at its prompt — blanket "running" left stale
+      // spinners on providers without live signals (codex, verify round 3).
+      // Real activity self-promotes via the first signal/scrape instantly.
+      updateAgentStatus(db, agentId, "waiting_input");
       broadcastAgentStatus({
         agentId,
         projectId,
-        status: "running",
+        status: "waiting_input",
         currentStep: row.current_step as string | null,
         cliType,
         timestamp: Date.now(),
