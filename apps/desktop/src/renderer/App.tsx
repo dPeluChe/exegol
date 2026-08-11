@@ -13,6 +13,7 @@ import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useDeepLink } from "./hooks/use-deeplink";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
+import { usePanelessAgentSweep } from "./hooks/use-paneless-agent-sweep";
 import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
@@ -70,6 +71,7 @@ export default function App() {
   useAutoSelectProject();
   useDeepLink();
   useFloatingPaneSync();
+  usePanelessAgentSweep();
   useSettingsSync();
 
   const showSidebar = activeView === "workspace";

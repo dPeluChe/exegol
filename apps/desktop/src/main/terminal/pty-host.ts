@@ -283,6 +283,12 @@ export class PtyHost {
     }
   }
 
+  /** Kill a sidecar session that has no local `sessions` entry (orphan sweep).
+   *  `kill()` no-ops for unmapped ids, which left zombies alive across restarts. */
+  killUnclaimed(id: string): void {
+    this.sidecarClient?.kill(id).catch(() => {});
+  }
+
   getSnapshot(id: string): string | null {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }

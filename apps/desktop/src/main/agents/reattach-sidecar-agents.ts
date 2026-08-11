@@ -9,12 +9,14 @@ import { getPtyHost } from "../terminal/pty-host";
 import { createOutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, hydrateTrackedWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { getProviderRegistry } from "./registry";
 import {
   type AgentContext,
   broadcastAgentStatus,
   DEFAULT_PTY_COLS,
   DEFAULT_PTY_ROWS,
 } from "./spawn-env";
+import { parseResumeCommandFromPattern, stripAnsi, stripOscSequences } from "./status-parser";
 
 export interface ReattachResult {
   /** Number of agents successfully reattached AND confirmed alive. */
@@ -59,6 +61,7 @@ export async function reattachSidecarAgents(
   };
   const ptyHost = getPtyHost();
   const sidecarSet = new Set(sidecarSessionIds);
+  const updateResumeCommand = db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?");
 
   for (const row of stale) {
     const agentId = row.id as string;
@@ -76,10 +79,12 @@ export async function reattachSidecarAgents(
       continue;
     }
 
+    const resumePattern = getProviderRegistry().get(cliType)?.capabilities?.resumeCommandPattern;
+
     try {
       hydrateTrackedWorktree(db, agentId, worktrees);
       if (!isShell) {
-        maps.outputProcessors.set(agentId, createOutputProcessor(agentId, cliType));
+        maps.outputProcessors.set(agentId, createOutputProcessor(agentId, cliType, resumePattern));
         maps.scrollbackBuffers.set(agentId, []);
         maps.scrollbackSizes.set(agentId, 0);
       }
@@ -151,11 +156,37 @@ export async function reattachSidecarAgents(
         }
       }
 
-      updateAgentStatus(db, agentId, "running");
+      // T101 gap (verify round 3): a TUI that died while the app was closed
+      // printed its resume banner into the ring with no parser attached —
+      // the session browser then respawned a bare CLI with no session id.
+      // Scan the ring tail on reattach so the resume handle isn't lost.
+      if (!isShell && resumePattern && !row.resume_command) {
+        try {
+          const snap = ptyHost.getSnapshot(agentId);
+          if (snap) {
+            // Slice before stripping: only the tail matters, no need to
+            // regex-clean the whole ring.
+            const tail = stripAnsi(stripOscSequences(snap.slice(-16_000))).slice(-4000);
+            const resumeCommand = parseResumeCommandFromPattern(resumePattern, tail);
+            if (resumeCommand) {
+              updateResumeCommand.run(resumeCommand, agentId);
+              logger.info(`[Reattach] Captured resume command from ring for ${agentId}`);
+            }
+          }
+        } catch {
+          /* non-fatal */
+        }
+      }
+
+      // Reattach lands as IDLE, not running: an agent that survived a restart
+      // is almost always sitting at its prompt — blanket "running" left stale
+      // spinners on providers without live signals (codex, verify round 3).
+      // Real activity self-promotes via the first signal/scrape instantly.
+      updateAgentStatus(db, agentId, "waiting_input");
       broadcastAgentStatus({
         agentId,
         projectId,
-        status: "running",
+        status: "waiting_input",
         currentStep: row.current_step as string | null,
         cliType,
         timestamp: Date.now(),

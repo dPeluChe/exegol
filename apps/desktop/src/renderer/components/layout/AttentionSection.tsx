@@ -220,26 +220,13 @@ export function AttentionSection() {
 
   return (
     <div className="space-y-2">
-      {/* Running agents grouped by project */}
-      {hasRunning && (
-        <div className="space-y-1.5">
-          {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
-            <ProjectAgentGroup
-              key={projectId}
-              projectId={projectId}
-              agents={projectAgents}
-              onNavigate={navigateToAgent}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Attention items — agents that finished and need review */}
+      {/* Attention FIRST (verify round 3, user request): sessions that need
+          you float above the passive running list. */}
       {hasAttention && (
         <div className="space-y-1">
           {hasRunning && (
             <div className="flex items-center gap-2 px-0.5 pt-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80">
                 Needs Attention
               </span>
               <div className="h-px flex-1 bg-border/50" />
@@ -264,6 +251,20 @@ export function AttentionSection() {
               Clear read
             </button>
           )}
+        </div>
+      )}
+
+      {/* Running agents grouped by project */}
+      {hasRunning && (
+        <div className="space-y-1.5">
+          {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
+            <ProjectAgentGroup
+              key={projectId}
+              projectId={projectId}
+              agents={projectAgents}
+              onNavigate={navigateToAgent}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -313,7 +314,11 @@ function ProjectAgentGroup({
 // ─── Running Agent Row ───────────────────────────────────────────────────
 
 function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () => void }) {
-  const isWaiting = agent.status === "waiting_input";
+  // waiting_input is just a turn boundary (T123) — the amber warning only
+  // belongs to agents with a live UNREAD attention item (verify round 3:
+  // the row kept its ⚠ after the user answered the prompt).
+  const hasUnreadAttention = useAgentStore((s) => s.isUnread(agent.id));
+  const isWaiting = agent.status === "waiting_input" && hasUnreadAttention;
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: nested structure prevents button usage
@@ -331,9 +336,15 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
       tabIndex={0}
       title={agent.taskDescription}
     >
-      {/* Animated spinner (unique per agent) or waiting indicator */}
+      {/* Attention warning / idle dot / busy spinner */}
       {isWaiting ? (
         <AlertTriangle className="h-3 w-3 shrink-0 animate-pulse text-amber-400" />
+      ) : agent.status === "waiting_input" ? (
+        <span
+          className="mx-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-zinc-500"
+          aria-hidden="true"
+          title="Idle — waiting for your next prompt"
+        />
       ) : (
         <AgentSpinner agentId={agent.id} />
       )}

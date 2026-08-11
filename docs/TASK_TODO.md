@@ -434,7 +434,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ### T157 — Cross-provider Inter-agent Messaging `added: 2026-08-11`
-**Priority**: P2 — **Wave 3 co-headliner** | **Effort**: M-L | **Source**: idea (Antonio: "hablar entre sesiones DURANTE el chat, no como flujo") + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude cross-session messaging = trust model to copy; herdr = the gap to exploit)
+**Priority**: P2 — **Wave 3 co-headliner** | **Effort**: M-L | **Source**: idea (Antonio: "hablar entre sesiones DURANTE el chat, no como flujo") + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude trust model; herdr gap) + **`RESEARCH/TRINITY_2026_08.md`** (typed human-gate items park-and-end-turn + expiry-as-denial; completion-event wake with triple loop-safety; zero-default agent_permissions checked at MCP layer, parent→child auto-grant)
 
 **Why**
 - The inter-agent-comms race is Anthropic (Claude-only, best trust design) vs herdr
@@ -468,6 +468,26 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T160 — Session Alias `added: 2026-08-11`
+**Priority**: P2 (prereq-lite for T157 addressing) | **Effort**: S | **Source**: idea (Antonio, verify round 3)
+
+- User-editable alias per agent session ("ClaudeTester") — new nullable `alias` column,
+  shown as an editable chip in the terminal toolbar (next to isolation/branch/Chat),
+  used in sidebar/attention/session-browser labels, and later as the **addressing name
+  for T157 inter-agent messaging** (mirrors Claude cross-session `/rename` and agent-teams
+  naming). Sessions get identity, not just windows.
+
+---
+
+### T161 — Resume Picker at Launch `added: 2026-08-11`
+**Priority**: P2 | **Effort**: S | **Source**: idea (Antonio, verify round 3)
+
+- When launching a provider from the grid/quick-bar, offer that path's resumable sessions
+  (same `agents.listResumable` data as T155.5) inline — "new session" vs "resume one of
+  these N" — instead of only surfacing them in the empty pane. Pairs with T160 aliases.
+
+---
+
 ### T159 — Provider Registry Round 2 (pi, cursor-agent, copilot) `added: 2026-08-11`
 **Priority**: P2 | **Effort**: S | **Source**: engram's 12-provider registry (`RESEARCH/ENGRAM_2026_08.md`) + verified installed on Antonio's machine (`which -a`: pi via homebrew, cursor-agent + copilot via superset)
 
@@ -479,7 +499,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ### T158 — Memory Habit Protocol `added: 2026-08-11`
-**Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (engram's 5-layer habit stack, dogfooded at 906 memories)
+**Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (5-layer habit stack) + `RESEARCH/TRINITY_2026_08.md` (platform_prompt_service: composed runtime-aware protocol-teacher block per spawn — production reference)
 
 **Why**
 - The MCP memory loop works (verified 2026-08-11) but agents only use it when told.
