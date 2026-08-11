@@ -45,10 +45,10 @@ export function TerminalToolbar({
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {branchName && (
         <span
-          className="flex min-w-0 items-center gap-1 text-[9px] text-text-muted"
+          className="flex min-w-0 items-center gap-1 text-[9px] text-text-secondary"
           title={`Branch: ${branchName}`}
         >
-          <GitBranch className="h-2.5 w-2.5 shrink-0" />
+          <GitBranch className="h-2.5 w-2.5 shrink-0 text-accent/80" />
           <span className="max-w-36 truncate">{branchName}</span>
         </span>
       )}
