@@ -165,6 +165,18 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, sync);
     }, 150);
 
+    // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to
+    // a black pane after window reload — the ring replay can't repaint an alt
+    // screen, only the app can. A one-shot resize jiggle forces the redraw.
+    let kickTimer2: ReturnType<typeof setTimeout> | null = null;
+    const kickTimer = setTimeout(() => {
+      if (readOnly) return;
+      const t = session.terminal;
+      if (t.cols < 3) return;
+      window.api.terminal.resize(agentId, t.cols - 1, t.rows);
+      kickTimer2 = setTimeout(() => window.api.terminal.resize(agentId, t.cols, t.rows), 60);
+    }, 350);
+
     setTerminalReady(agentId);
     onReady?.();
 
@@ -180,6 +192,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     return () => {
       clearTimeout(settleTimer);
+      clearTimeout(kickTimer);
+      if (kickTimer2) clearTimeout(kickTimer2);
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
       resizeObserver.disconnect();
       // WebGL context must be freed before the terminal itself is torn down.

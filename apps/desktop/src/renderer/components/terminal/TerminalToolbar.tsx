@@ -204,10 +204,14 @@ export function LiveStartOverlay({
   cliType,
   timedOut,
   onDismiss,
+  onOpenTerminal,
 }: {
   cliType?: string;
   timedOut: boolean;
   onDismiss: () => void;
+  /** T155 (verify session): convert the dead pane into a plain shell so the
+   *  user can act (check the CLI, rerun by hand) without leaving the window. */
+  onOpenTerminal?: () => void;
 }) {
   return (
     <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg-primary transition-opacity">
@@ -215,13 +219,24 @@ export function LiveStartOverlay({
         <>
           <AlertCircle className="h-5 w-5 text-text-muted" />
           <span className="text-[11px] text-text-muted">Failed to start</span>
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="rounded px-3 py-1 text-[11px] text-error hover:bg-error/10"
-          >
-            Dismiss
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenTerminal && (
+              <button
+                type="button"
+                onClick={onOpenTerminal}
+                className="rounded border border-border px-3 py-1 text-[11px] text-text-secondary hover:bg-white/10 hover:text-text-primary"
+              >
+                Open Terminal
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="rounded px-3 py-1 text-[11px] text-error hover:bg-error/10"
+            >
+              Dismiss
+            </button>
+          </div>
         </>
       ) : (
         <>

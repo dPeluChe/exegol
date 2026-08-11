@@ -96,13 +96,17 @@ export function setupTerminalSession(
 
   if (!deps.readOnly) {
     terminal.attachCustomKeyEventHandler((e) => {
-      // T155 input QoL: Shift+Enter → newline (bracketed-paste), not submit.
-      // Must swallow EVERY phase: Enter also fires a legacy keypress that
-      // xterm turns into '\r' even when keydown returned false — that stray
-      // CR was submitting the prompt behind all three escape-sequence
-      // attempts (verify session 2026-08-11).
+      // T155 input QoL: Shift+Enter → newline, not submit. Two traps found
+      // live (2026-08-11): (1) Enter fires a legacy keypress that xterm turns
+      // into a stray CR unless EVERY phase is swallowed; (2) a pasted lone
+      // "\n" is normalized to Enter by TUIs. Payload per CLI: claude uses its
+      // documented backslash+CR line continuation; bubbletea TUIs (opencode,
+      // crush) bind Ctrl+J (LF) as insert-newline.
       if (e.key === "Enter" && e.shiftKey) {
-        if (e.type === "keydown") terminal.paste("\n");
+        if (e.type === "keydown") {
+          const seq = deps.cliType === "claude-code" ? "\\\r" : "\n";
+          window.api.terminal.write(deps.agentId, seq);
+        }
         return false;
       }
       if (e.type !== "keydown") return true;

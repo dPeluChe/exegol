@@ -108,6 +108,40 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     [agent?.projectId, agentId],
   );
 
+  // T155 (verify session): a "Failed to start" pane becomes a plain shell in
+  // the same project so the user can diagnose (rerun the CLI by hand, etc.)
+  const handleOpenShellHere = useCallback(async () => {
+    const pid = agent?.projectId;
+    if (!pid || !paneId) return;
+    try {
+      stopAgent.mutate(agentId);
+      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
+      const shellAgent = await trpcMutate<any>("agents.spawn", {
+        projectId: pid,
+        cliType: "shell",
+        taskDescription: "Shell",
+      });
+      addAgent({
+        id: shellAgent.id,
+        projectId: pid,
+        cliType: shellAgent.cliType,
+        status: shellAgent.status,
+        currentStep: shellAgent.currentStep,
+        taskDescription: shellAgent.taskDescription,
+        branchName: shellAgent.branchName ?? null,
+        tokenUsage: { input: 0, output: 0, cost: 0 },
+        startedAt: shellAgent.startedAt,
+        accessMode: shellAgent.accessMode ?? null,
+        claudeSessionId: null,
+        activityLevel: "neutral",
+      });
+      createTerminal(shellAgent.id);
+      useWorkspaceStore.getState().updatePane(paneId, { type: "terminal", agentId: shellAgent.id });
+    } catch (err) {
+      console.error("[TerminalPanel] Open Terminal failed:", err);
+    }
+  }, [agent?.projectId, paneId, agentId, stopAgent, addAgent, createTerminal]);
+
   // T155: Cmd+click on a URL → in-app browser pane (plain click = external browser)
   const handleOpenUrlInPane = useCallback(
     (url: string) => {
@@ -278,6 +312,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           cliType={agent?.cliType}
           timedOut={startTimedOut}
           onDismiss={() => stopAgent.mutate(agentId)}
+          onOpenTerminal={handleOpenShellHere}
         />
       )}
       {resolvedHandoff && (
