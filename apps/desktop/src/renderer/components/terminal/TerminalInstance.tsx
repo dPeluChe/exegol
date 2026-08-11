@@ -134,6 +134,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     const session = setupTerminalSession(container, {
       agentId,
       paneId,
+      cliType,
       readOnly,
       initialContent,
       fontSize,

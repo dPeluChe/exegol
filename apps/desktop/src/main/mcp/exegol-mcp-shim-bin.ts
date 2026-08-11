@@ -25,9 +25,14 @@ import {
 const token = process.env.EXEGOL_MCP_TOKEN ?? "";
 const displayMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "read";
 
-// ─── stdio framing (Content-Length, mirrors host.ts's StdioTransport) ──────
+// ─── stdio framing ──────────────────────────────────────────────────────────
+// MCP-over-stdio is newline-delimited JSON (what Claude Code and every spec
+// client sends). The original shim spoke Content-Length/LSP framing, so
+// clients hung forever on "connecting". Auto-detect per message and reply in
+// whichever framing the client used (framed kept for host.ts-style clients).
 
 let stdinBuffer = "";
+let clientUsesFraming = false;
 process.stdin.on("data", (chunk: Buffer) => {
   stdinBuffer += chunk.toString("utf-8");
   processStdinBuffer();
@@ -35,28 +40,39 @@ process.stdin.on("data", (chunk: Buffer) => {
 
 function processStdinBuffer(): void {
   for (;;) {
-    const headerEnd = stdinBuffer.indexOf("\r\n\r\n");
-    if (headerEnd === -1) return;
+    const trimmed = stdinBuffer.replace(/^[\r\n\s]+/, "");
+    if (trimmed !== stdinBuffer) stdinBuffer = trimmed;
+    if (stdinBuffer.length === 0) return;
 
-    const header = stdinBuffer.slice(0, headerEnd);
-    const match = header.match(/Content-Length:\s*(\d+)/i);
-    if (!match) {
-      stdinBuffer = stdinBuffer.slice(headerEnd + 4);
+    if (stdinBuffer.startsWith("Content-Length:")) {
+      const headerEnd = stdinBuffer.indexOf("\r\n\r\n");
+      if (headerEnd === -1) return;
+      const match = stdinBuffer.slice(0, headerEnd).match(/Content-Length:\s*(\d+)/i);
+      const contentLength = Number.parseInt(match?.[1] ?? "0", 10);
+      const contentStart = headerEnd + 4;
+      if (stdinBuffer.length < contentStart + contentLength) return;
+      const content = stdinBuffer.slice(contentStart, contentStart + contentLength);
+      stdinBuffer = stdinBuffer.slice(contentStart + contentLength);
+      clientUsesFraming = true;
+      dispatchRaw(content);
       continue;
     }
 
-    const contentLength = Number.parseInt(match[1] ?? "0", 10);
-    const contentStart = headerEnd + 4;
-    if (stdinBuffer.length < contentStart + contentLength) return;
+    const nl = stdinBuffer.indexOf("\n");
+    if (nl === -1) return;
+    const line = stdinBuffer.slice(0, nl).trim();
+    stdinBuffer = stdinBuffer.slice(nl + 1);
+    if (line.length === 0) continue;
+    clientUsesFraming = false;
+    dispatchRaw(line);
+  }
+}
 
-    const content = stdinBuffer.slice(contentStart, contentStart + contentLength);
-    stdinBuffer = stdinBuffer.slice(contentStart + contentLength);
-
-    try {
-      handleClientMessage(JSON.parse(content));
-    } catch (err) {
-      process.stderr.write(`[exegol-mcp-shim] failed to parse client message: ${err}\n`);
-    }
+function dispatchRaw(content: string): void {
+  try {
+    handleClientMessage(JSON.parse(content));
+  } catch (err) {
+    process.stderr.write(`[exegol-mcp-shim] failed to parse client message: ${err}\n`);
   }
 }
 
@@ -69,7 +85,11 @@ function writeToClient(
     ? { jsonrpc: "2.0", id, error }
     : { jsonrpc: "2.0", id, result: result ?? null };
   const msg = JSON.stringify(body);
-  process.stdout.write(`Content-Length: ${Buffer.byteLength(msg, "utf-8")}\r\n\r\n${msg}`);
+  if (clientUsesFraming) {
+    process.stdout.write(`Content-Length: ${Buffer.byteLength(msg, "utf-8")}\r\n\r\n${msg}`);
+  } else {
+    process.stdout.write(`${msg}\n`);
+  }
 }
 
 // ─── Unix socket connection to the main process ────────────────────────────
@@ -129,12 +149,18 @@ function handleClientMessage(msg: {
   if (msg.id === undefined) return; // notification — nothing to reply to
 
   switch (msg.method) {
-    case "initialize":
+    case "initialize": {
+      const requested = (msg.params as { protocolVersion?: string } | undefined)?.protocolVersion;
       writeToClient(msg.id, {
-        protocolVersion: "2024-11-05",
+        protocolVersion: requested ?? "2024-11-05",
         capabilities: { tools: {} },
         serverInfo: { name: "exegol", version: "1.0.0" },
       });
+      return;
+    }
+
+    case "ping":
+      writeToClient(msg.id, {});
       return;
 
     case "tools/list": {

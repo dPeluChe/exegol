@@ -15,6 +15,7 @@ import type { TerminalInstanceProps } from "./terminal-types";
 export interface TerminalSessionDeps {
   agentId: string;
   paneId?: string;
+  cliType?: string;
   readOnly: boolean;
   initialContent?: string;
   fontSize: number;
@@ -101,9 +102,12 @@ export function setupTerminalSession(
         return false;
       }
       // T155 input QoL (klaudio patterns):
-      // Shift+Enter → ESC+CR: newline inside the CLI's prompt, not a submit
+      // Shift+Enter → newline inside the CLI's prompt, not a submit.
+      // Claude Code needs the CSI-u (kitty) encoding — plain ESC+CR submits
+      // (observed live, verify session 2026-08-11).
       if (e.key === "Enter" && e.shiftKey) {
-        window.api.terminal.write(deps.agentId, "\x1b\r");
+        const seq = deps.cliType === "claude-code" ? "\x1b[13;2u" : "\x1b\r";
+        window.api.terminal.write(deps.agentId, seq);
         return false;
       }
       // Cmd+←/→ → Ctrl+A/Ctrl+E (line home/end, the macOS muscle memory)
