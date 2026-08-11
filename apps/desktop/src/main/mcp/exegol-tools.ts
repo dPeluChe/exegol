@@ -13,7 +13,7 @@ import type Database from "libsql";
 import { getProject } from "../db/queries";
 import { readProjectBrief } from "../knowledge/brief";
 import { getDigestPath } from "../knowledge/paths";
-import { observeMemory, searchMemories } from "../memory/store";
+import { listMemories, observeMemory, searchMemories } from "../memory/store";
 import {
   EXEGOL_TOOL_NAMES,
   type ExegolToolContext,
@@ -58,6 +58,26 @@ async function handleMemorySearch(
 
   return {
     facts: filtered.map((m) => ({
+      id: m.id,
+      category: m.category,
+      content: m.content,
+      relevanceScore: m.relevanceScore,
+    })),
+  };
+}
+
+function handleMemoryList(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
+  const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 30);
+  const category = typeof args.category === "string" ? (args.category as MemoryCategory) : null;
+  const all = listMemories(db, context.projectId);
+  const filtered = category ? all.filter((m) => m.category === category) : all;
+  return {
+    total: filtered.length,
+    facts: filtered.slice(0, limit).map((m) => ({
       id: m.id,
       category: m.category,
       content: m.content,
@@ -131,6 +151,8 @@ export async function callExegolTool(
   switch (toolName) {
     case "memory_search":
       return handleMemorySearch(db, args, context);
+    case "memory_list":
+      return handleMemoryList(db, args, context);
     case "memory_save":
       return handleMemorySave(db, args, context);
     case "knowledge_get":

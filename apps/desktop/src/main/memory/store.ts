@@ -234,19 +234,46 @@ export async function searchMemories(
       limit: 20,
       ollamaConfig,
     });
+    // AND-semantics found nothing for a multi-term query → retry with OR.
+    // "Capacitador proyecto estado stack convex" must not return empty just
+    // because no single memory contains all five words (2026-08-11 finding).
+    if (hits.length === 0 && query.trim().split(/\s+/).length > 1) {
+      hits = await hybridSearch(db, query, {
+        projectId,
+        entityType: "memory",
+        limit: 20,
+        ollamaConfig,
+        operator: "OR",
+      });
+    }
   } catch (err) {
     logger.warn("[Memory] hybridSearch failed, falling back to LIKE:", err);
   }
 
   if (hits.length === 0) {
-    const pattern = `%${query}%`;
+    // LIKE fallback: any term may hit; rank by how many do.
+    const terms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .map((t) => t.replace(/[^\p{L}\p{N}]/gu, ""))
+      .filter((t) => t.length >= 2);
+    if (terms.length === 0) return [];
+    const conditions = terms.map(() => "content LIKE ?").join(" OR ");
     const rows = db
       .prepare(
-        `SELECT * FROM memories WHERE project_id = ? AND superseded_by IS NULL AND content LIKE ?
-         ORDER BY relevance_score DESC LIMIT 20`,
+        `SELECT * FROM memories WHERE project_id = ? AND superseded_by IS NULL AND (${conditions})
+         ORDER BY relevance_score DESC LIMIT 40`,
       )
-      .all(projectId, pattern);
-    return (rows as Record<string, unknown>[]).map(mapMemoryRow);
+      .all(projectId, ...terms.map((t) => `%${t}%`)) as Record<string, unknown>[];
+    return rows
+      .map(mapMemoryRow)
+      .map((m) => ({
+        m,
+        matches: terms.filter((t) => m.content.toLowerCase().includes(t)).length,
+      }))
+      .sort((a, b) => b.matches - a.matches)
+      .slice(0, 20)
+      .map((x) => x.m);
   }
 
   // T126: superseded rows are filtered here too — the search index may still

@@ -93,11 +93,20 @@ export interface ExegolToolCallParams {
 // Live here (dependency-free module) so the standalone shim can list tools
 // without dragging the memory/knowledge/db import graph into its bundle.
 
-export const EXEGOL_TOOL_NAMES = ["memory_search", "memory_save", "knowledge_get"] as const;
+export const EXEGOL_TOOL_NAMES = [
+  "memory_search",
+  "memory_list",
+  "memory_save",
+  "knowledge_get",
+] as const;
 export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
 
 /** Tools a read/plan agent may still call — everything else needs write access. */
-export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>(["memory_search", "knowledge_get"]);
+export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
+  "memory_search",
+  "memory_list",
+  "knowledge_get",
+]);
 
 export interface ExegolToolDef {
   name: ExegolToolName;
@@ -118,6 +127,19 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
         category: { type: "string", enum: MEMORY_CATEGORY_VALUES },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "memory_list",
+    description:
+      "List this project's most relevant memories (no query needed — use this to see " +
+      "what the store knows). Optional category filter and limit (default 10, max 30).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number" },
+        category: { type: "string", enum: MEMORY_CATEGORY_VALUES },
+      },
     },
   },
   {
