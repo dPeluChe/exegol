@@ -468,6 +468,17 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T160 — Session Alias `added: 2026-08-11`
+**Priority**: P2 (prereq-lite for T157 addressing) | **Effort**: S | **Source**: idea (Antonio, verify round 3)
+
+- User-editable alias per agent session ("ClaudeTester") — new nullable `alias` column,
+  shown as an editable chip in the terminal toolbar (next to isolation/branch/Chat),
+  used in sidebar/attention/session-browser labels, and later as the **addressing name
+  for T157 inter-agent messaging** (mirrors Claude cross-session `/rename` and agent-teams
+  naming). Sessions get identity, not just windows.
+
+---
+
 ### T159 — Provider Registry Round 2 (pi, cursor-agent, copilot) `added: 2026-08-11`
 **Priority**: P2 | **Effort**: S | **Source**: engram's 12-provider registry (`RESEARCH/ENGRAM_2026_08.md`) + verified installed on Antonio's machine (`which -a`: pi via homebrew, cursor-agent + copilot via superset)
 
