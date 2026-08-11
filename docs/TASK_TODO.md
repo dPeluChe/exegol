@@ -89,7 +89,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Desktop notification on agent finished/failed + attention (with pending-question body)
 - Attention Inbox: TitleBar queue, Cmd+J jump, unread badges
 - Knowledge tab: opt-in setup (no files written on tab open), digest refresh, MEMORY.md sync/import
-- Exegol MCP: agent calls memory_search/memory_save (read-mode agent denied memory_save)
+- [~] Exegol MCP: **shim framing bug found+fixed in verify session 2 — claude now shows
+  `exegol · connected · 3 tools`** ✅; still pending: live memory_search/memory_save call +
+  read-mode denial. **Follow-ups filed**: (a) opencode/other CLIs never see `.mcp.json`
+  (claude's convention) — extend exegol-mcp-config to inject opencode's own config
+  (`opencode.json` mcp section) + audit codex path; (b) MCP HOST StdioTransport has the
+  same LSP-framing bug as the shim had — external stdio servers likely can't connect
+- Polish note (verify session): shell/agent exit card duplicates the scrollback tail
+  visible right below it — slim the AgentStopReason card (keep actions, drop/collapse tail)
 - Pipeline evidence: score badge + AI summary per step, Export Report
 - Evaluator gate: template with gate step persists (zod fix), ship/retry routing works
 - Oplog v2: Turn Snapshots tab lists per-step snapshots; restore refuses cross-worktree
