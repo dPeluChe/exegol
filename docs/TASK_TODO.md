@@ -48,6 +48,11 @@ gap vs Omnara / Claude web / Codex Remote* · T132 automations catalog · T134 A
 T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
 T138 ModeTracker headless · T139 skills security scan · T144 dependency/library audit
 
+> **Docs to review before Wave 3 design** (merged with PR #82, pending review — Antonio 2026-08-11):
+> `docs/ARCHITECTURE/COUNCIL_BASE.md` (council mode / structured executions — absorbs the
+> standalone council-MCP idea, backs T158/T160) + `docs/ARCHITECTURE/OWL_FLEET_WATCH.md`
+> (fleet watch module — backs T156–T159). Reuse when designing T156/T157.
+
 **Wave 2.6 exit criteria (definition of done):**
 - [ ] Both manual-verification checklists below fully checked (T123 result recorded either way)
 - [ ] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green in CI
