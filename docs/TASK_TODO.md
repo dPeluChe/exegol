@@ -479,6 +479,15 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T161 — Resume Picker at Launch `added: 2026-08-11`
+**Priority**: P2 | **Effort**: S | **Source**: idea (Antonio, verify round 3)
+
+- When launching a provider from the grid/quick-bar, offer that path's resumable sessions
+  (same `agents.listResumable` data as T155.5) inline — "new session" vs "resume one of
+  these N" — instead of only surfacing them in the empty pane. Pairs with T160 aliases.
+
+---
+
 ### T159 — Provider Registry Round 2 (pi, cursor-agent, copilot) `added: 2026-08-11`
 **Priority**: P2 | **Effort**: S | **Source**: engram's 12-provider registry (`RESEARCH/ENGRAM_2026_08.md`) + verified installed on Antonio's machine (`which -a`: pi via homebrew, cursor-agent + copilot via superset)
 
