@@ -468,6 +468,36 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T158 — Memory Habit Protocol `added: 2026-08-11`
+**Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (engram's 5-layer habit stack, dogfooded at 906 memories)
+
+**Why**
+- The MCP memory loop works (verified 2026-08-11) but agents only use it when told.
+  engram proves the fix is environmental: saturate the session with triggers, nudges and
+  contracts — no auto-capture, the model does every save, but it never forgets to.
+
+**Scope (adapted to Exegol's architecture — main-process logic, no bash hooks)**
+1. **MCP server instructions**: add the PROACTIVE SAVE RULE + search-first triggers to our
+   server's instruction surface (shim initialize response / tool descriptions)
+2. **Spawn-context protocol block**: trigger list ("user confirms/rejects an approach →
+   memory_save"), self-check line, "memory_list at task start", session-summary-before-done
+   — appended to the existing memory injection in `buildSpawnContext`
+3. **Declarative per-provider instruction registry** (engram agents.go model): canonical
+   protocol + per-CLI native rules-file target written as a managed block (reuse T140
+   writer) — covers hook-less CLIs (gemini/agy/opencode/devin)
+4. **Turn-boundary save nudge**: main process tracks last memory_save per agent; if session
+   >5min and no save >15min, inject a one-line reminder at the next Stop signal (T123),
+   15-min cooldown debounce
+5. Memory store upgrades (can split): `topic_key` upsert slots + save-time conflict
+   surfacing with agent-as-judge (`judgment_required` → `memory_judge`, ask-user threshold)
+
+**Likely files**
+- `main/mcp/{exegol-protocol,exegol-tools,exegol-mcp-shim-bin}.ts`, `main/agents/spawn-context.ts`,
+  `main/agents/agent-session-callbacks.ts` (nudge on Stop), `main/knowledge/managed-block.ts`,
+  `main/memory/store.ts` (+migration for topic_key/relations)
+
+---
+
 ### T58 — Runtime Permission Modes (remaining delta) `added: 2026-04-01`
 **Priority**: P2 | **Effort**: S | **Source**: Anvil
 
