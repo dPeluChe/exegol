@@ -270,6 +270,32 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     }
   }, [isVisible]);
 
+  // T155 (verify session): manual "Refresh Terminal" from the pane menu —
+  // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
+  useEffect(() => {
+    const handleKick = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
+      if (detail?.agentId !== agentId) return;
+      const terminal = terminalRef.current;
+      const fit = fitAddonRef.current;
+      if (!terminal || !fit) return;
+      try {
+        fit.fit();
+        if (!readOnly && terminal.cols > 2) {
+          window.api.terminal.resize(agentId, terminal.cols - 1, terminal.rows);
+          setTimeout(() => {
+            window.api.terminal.resize(agentId, terminal.cols, terminal.rows);
+          }, 60);
+        }
+        terminal.refresh(0, terminal.rows - 1);
+      } catch {
+        /* not ready */
+      }
+    };
+    window.addEventListener("exegol:kick-terminal", handleKick);
+    return () => window.removeEventListener("exegol:kick-terminal", handleKick);
+  }, [agentId, readOnly]);
+
   useEffect(() => {
     const handleWindowResize = () => handleResize();
     const handleRefit = () => {

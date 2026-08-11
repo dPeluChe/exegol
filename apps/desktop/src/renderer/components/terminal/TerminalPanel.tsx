@@ -6,6 +6,7 @@ import { useAgent, useScrollback, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { useToastStore } from "../../stores/toasts";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
@@ -112,9 +113,15 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   // the same project so the user can diagnose (rerun the CLI by hand, etc.)
   const handleOpenShellHere = useCallback(async () => {
     const pid = agent?.projectId;
-    if (!pid || !paneId) return;
+    if (!pid || !paneId) {
+      useToastStore.getState().addToast({
+        type: "error",
+        title: "Open Terminal failed",
+        body: !pid ? "Agent has no project" : "Pane not resolved",
+      });
+      return;
+    }
     try {
-      stopAgent.mutate(agentId);
       // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
       const shellAgent = await trpcMutate<any>("agents.spawn", {
         projectId: pid,
@@ -137,8 +144,15 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       });
       createTerminal(shellAgent.id);
       useWorkspaceStore.getState().updatePane(paneId, { type: "terminal", agentId: shellAgent.id });
+      // Stop the dead agent AFTER the pane swapped — stopping first raced the
+      // pane cleanup and the button appeared to do nothing.
+      stopAgent.mutate(agentId);
     } catch (err) {
-      console.error("[TerminalPanel] Open Terminal failed:", err);
+      useToastStore.getState().addToast({
+        type: "error",
+        title: "Open Terminal failed",
+        body: err instanceof Error ? err.message : String(err),
+      });
     }
   }, [agent?.projectId, paneId, agentId, stopAgent, addAgent, createTerminal]);
 
