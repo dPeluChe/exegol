@@ -25,7 +25,12 @@
     "activities": "*",
     "search": "*",
     "github": "*",
-    "indexer": "*"
+    "indexer": "*",
+    "fsSearch": "*",
+    "knowledge": "*",
+    "doctor": "*",
+    "budgets": "*",
+    "projectGroups": "*"
   },
   "ipc": [
     "terminal:data",
@@ -61,6 +66,7 @@
     "settings:self-close",
     "settings:navigate",
     "settings:broadcast-changed",
-    "settings:changed"
+    "settings:changed",
+    "app:toggle-devtools"
   ]
 }

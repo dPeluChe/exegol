@@ -81,6 +81,8 @@ interface Window {
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
     onNotificationNavigate?: (callback: (data: { agentId: string }) => void) => () => void;
+    /** Toggle the app's own DevTools (TitleBar button) */
+    toggleDevTools?: () => void;
     onDeepLinkOpenPath?: (callback: (data: { path: string }) => void) => () => void;
     updater: {
       check: () => Promise<void>;

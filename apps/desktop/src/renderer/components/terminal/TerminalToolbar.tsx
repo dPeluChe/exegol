@@ -36,13 +36,24 @@ export function TerminalToolbar({
   onDismissPreview,
 }: TerminalToolbarProps) {
   return (
-    <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border/40 px-2 py-0.5">
+    // Badges live on the LEFT — the pane's hover actions (float/split/close)
+    // occupy the right edge and were covering them (verify session 2026-08-11).
+    <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
+      {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
+      {branchName && (
+        <span
+          className="flex min-w-0 items-center gap-1 text-[9px] text-text-muted"
+          title={`Branch: ${branchName}`}
+        >
+          <GitBranch className="h-2.5 w-2.5 shrink-0" />
+          <span className="max-w-36 truncate">{branchName}</span>
+        </span>
+      )}
+      {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}
+      <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} />
       {previewUrl && onOpenPreview && onDismissPreview && (
         <PreviewUrlChip url={previewUrl} onOpen={onOpenPreview} onDismiss={onDismissPreview} />
       )}
-      {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
-      {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}
-      <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} />
     </div>
   );
 }
@@ -59,7 +70,7 @@ function PreviewUrlChip({
   onDismiss: () => void;
 }) {
   return (
-    <div className="mr-auto flex items-center gap-1 rounded bg-accent/10 px-1.5 py-0.5">
+    <div className="ml-auto flex items-center gap-1 rounded bg-accent/10 px-1.5 py-0.5">
       <button
         type="button"
         onClick={onOpen}
