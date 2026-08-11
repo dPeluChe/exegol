@@ -314,7 +314,14 @@ function ProjectAgentGroup({
 // ─── Running Agent Row ───────────────────────────────────────────────────
 
 function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () => void }) {
-  const isWaiting = agent.status === "waiting_input";
+  // waiting_input is just a turn boundary (T123) — the amber warning only
+  // belongs to agents with a live UNREAD attention item (verify round 3:
+  // the row kept its ⚠ after the user answered the prompt).
+  const hasUnreadAttention = useAgentStore((s) => {
+    const item = s.attentionItems[agent.id];
+    return !!item && !item.read;
+  });
+  const isWaiting = agent.status === "waiting_input" && hasUnreadAttention;
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: nested structure prevents button usage
@@ -332,9 +339,15 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
       tabIndex={0}
       title={agent.taskDescription}
     >
-      {/* Animated spinner (unique per agent) or waiting indicator */}
+      {/* Attention warning / idle dot / busy spinner */}
       {isWaiting ? (
         <AlertTriangle className="h-3 w-3 shrink-0 animate-pulse text-amber-400" />
+      ) : agent.status === "waiting_input" ? (
+        <span
+          className="mx-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-zinc-500"
+          aria-hidden="true"
+          title="Idle — waiting for your next prompt"
+        />
       ) : (
         <AgentSpinner agentId={agent.id} />
       )}
