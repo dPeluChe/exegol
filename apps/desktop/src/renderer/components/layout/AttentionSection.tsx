@@ -220,26 +220,13 @@ export function AttentionSection() {
 
   return (
     <div className="space-y-2">
-      {/* Running agents grouped by project */}
-      {hasRunning && (
-        <div className="space-y-1.5">
-          {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
-            <ProjectAgentGroup
-              key={projectId}
-              projectId={projectId}
-              agents={projectAgents}
-              onNavigate={navigateToAgent}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* Attention items — agents that finished and need review */}
+      {/* Attention FIRST (verify round 3, user request): sessions that need
+          you float above the passive running list. */}
       {hasAttention && (
         <div className="space-y-1">
           {hasRunning && (
             <div className="flex items-center gap-2 px-0.5 pt-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-text-muted">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80">
                 Needs Attention
               </span>
               <div className="h-px flex-1 bg-border/50" />
@@ -264,6 +251,20 @@ export function AttentionSection() {
               Clear read
             </button>
           )}
+        </div>
+      )}
+
+      {/* Running agents grouped by project */}
+      {hasRunning && (
+        <div className="space-y-1.5">
+          {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
+            <ProjectAgentGroup
+              key={projectId}
+              projectId={projectId}
+              agents={projectAgents}
+              onNavigate={navigateToAgent}
+            />
+          ))}
         </div>
       )}
     </div>

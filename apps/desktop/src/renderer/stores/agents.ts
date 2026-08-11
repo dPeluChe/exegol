@@ -85,8 +85,12 @@ export function startAgentStatusPush(): void {
       if (event.claudeSessionId) update.claudeSessionId = event.claudeSessionId;
       store.updateAgent(event.agentId, update);
 
-      // Add to attention inbox (markUnread is now derived from this)
-      if (isFinalStatus || event.status === "waiting_input") {
+      // Add to attention inbox (markUnread is now derived from this).
+      // waiting_input alone is a TURN BOUNDARY (T123: every reply ends there)
+      // — only real attention (permission prompt/question) earns an inbox
+      // entry, or idle agents show amber dots forever (verify round 3).
+      const needsAttention = (event as { needsAttention?: boolean }).needsAttention === true;
+      if (isFinalStatus || (event.status === "waiting_input" && needsAttention)) {
         store.addAttentionItem(event.agentId);
       }
     }
