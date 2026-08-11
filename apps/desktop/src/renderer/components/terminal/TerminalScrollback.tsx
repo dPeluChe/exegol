@@ -1,8 +1,8 @@
 import type { Agent, HandoffSummary } from "@exegol/shared";
 import { Button } from "@exegol/ui";
-import { AlertCircle, ArrowRight, Play, RotateCcw } from "lucide-react";
+import { AlertCircle, ArrowRight, ChevronDown, Play, RotateCcw } from "lucide-react";
 import type { Ref } from "react";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -59,6 +59,7 @@ export function TerminalScrollback({
   onScrollPosition,
   floatingButtons,
 }: TerminalScrollbackProps) {
+  const [showOutput, setShowOutput] = useState(false);
   const spawnAgent = useSpawnAgent();
   const addAgent = useAgentStore((s) => s.addAgent);
   const removeAgent = useAgentStore((s) => s.removeAgent);
@@ -178,24 +179,40 @@ export function TerminalScrollback({
           }}
         />
       )}
-      <div className="relative flex-1">
-        {viewMode === "chat" ? (
-          <ChatView scrollback={scrollbackContent} cliType={agent?.cliType} />
-        ) : (
-          <>
-            <TerminalInstance
-              ref={terminalRef}
-              key={`scrollback-${agentId}`}
-              agentId={agentId}
-              cliType={agent?.cliType}
-              readOnly
-              initialContent={scrollbackContent}
-              onScrollPosition={onScrollPosition}
-            />
-            {floatingButtons}
-          </>
-        )}
-      </div>
+      {/* Ended sessions start with a CLEAN pane (verify session 2026-08-11) —
+          the stale terminal below the card read as confusion. Output is one
+          click away, and the Chat toggle still works when shown. */}
+      {!showOutput ? (
+        <div className="flex flex-1 items-start justify-center pt-6">
+          <button
+            type="button"
+            onClick={() => setShowOutput(true)}
+            className="flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-[11px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary"
+          >
+            <ChevronDown className="h-3 w-3" />
+            Show session output
+          </button>
+        </div>
+      ) : (
+        <div className="relative flex-1">
+          {viewMode === "chat" ? (
+            <ChatView scrollback={scrollbackContent} cliType={agent?.cliType} />
+          ) : (
+            <>
+              <TerminalInstance
+                ref={terminalRef}
+                key={`scrollback-${agentId}`}
+                agentId={agentId}
+                cliType={agent?.cliType}
+                readOnly
+                initialContent={scrollbackContent}
+                onScrollPosition={onScrollPosition}
+              />
+              {floatingButtons}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
