@@ -124,6 +124,13 @@ function mergeClaudeHooks(): void {
         event: "UserPromptSubmit",
         def: { hooks: [{ type: "command", command: `${notifyCmd} prompt_submit` }] },
       },
+      // The missing attention leg (verify session 2026-08-11): Notification
+      // fires on permission prompts/questions — without it, needsAttention
+      // never reached the signal pipeline through the file channel.
+      {
+        event: "Notification",
+        def: { hooks: [{ type: "command", command: `${notifyCmd} permission_needed` }] },
+      },
     ]);
 
     writeFileSync(CLAUDE_SETTINGS, JSON.stringify(settings, null, 2), "utf-8");

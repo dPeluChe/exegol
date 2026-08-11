@@ -53,7 +53,7 @@ export function AgentStopReason({
     staleTime: 30_000,
   });
 
-  const lastLines = useMemo(() => extractLastLines(scrollback, 12), [scrollback]);
+  void scrollback; // kept in the prop contract; tail extract removed (see below)
 
   const handleSpawnNew = useCallback(() => {
     onSpawnNew(agent.taskDescription);
@@ -85,14 +85,9 @@ export function AgentStopReason({
         )}
       </div>
 
-      {lastLines.length > 0 && (
-        <pre
-          className="max-h-24 overflow-hidden rounded bg-bg-primary/70 p-2 font-mono text-[9px] leading-tight text-text-muted"
-          title="Last lines of agent output"
-        >
-          {lastLines.join("\n")}
-        </pre>
-      )}
+      {/* Tail extract removed (verify session 2026-08-11): the full scrollback
+          renders right below this card — showing the same lines twice read as
+          a bug. `lastLines` still feeds the notification body elsewhere. */}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {canResume && (
