@@ -89,9 +89,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Desktop notification on agent finished/failed + attention (with pending-question body)
 - Attention Inbox: TitleBar queue, Cmd+J jump, unread badges
 - Knowledge tab: opt-in setup (no files written on tab open), digest refresh, MEMORY.md sync/import
-- [~] Exegol MCP: **shim framing bug found+fixed in verify session 2 — claude now shows
-  `exegol · connected · 3 tools`** ✅; still pending: live memory_search/memory_save call +
-  read-mode denial. **Follow-ups filed**: (a) opencode/other CLIs never see `.mcp.json`
+- [x] Exegol MCP — **VERIFIED 2026-08-11**: shim framing bug found+fixed; claude shows
+  `exegol · connected · 3 tools`; live memory_search (empty-correct) → 3× memory_save
+  (ids+categories) → retrieval ✅. Pending only: read-mode denial (spawn a read-mode agent,
+  memory_save must be refused). **Agent-sourced improvements filed**: (a) add `memory_list`
+  tool (recent N) — search-only is awkward for "what do you know?"; (b) multi-word recall
+  too literal ("Capacitador proyecto estado stack convex" → empty while single terms hit) —
+  likely no-Ollama fallback path; tune FTS OR-semantics / RRF and fold into the min-cosine
+  upgrade already queued in T153. **Follow-ups filed**: (a) opencode/other CLIs never see `.mcp.json`
   (claude's convention) — extend exegol-mcp-config to inject opencode's own config
   (`opencode.json` mcp section) + audit codex path; (b) MCP HOST StdioTransport has the
   same LSP-framing bug as the shim had — external stdio servers likely can't connect
