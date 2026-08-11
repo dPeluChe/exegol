@@ -100,22 +100,23 @@ const ISOLATION_LABEL: Record<
   { label: string; className: string; icon: typeof Shield; tooltip: string }
 > = {
   isolated: {
-    label: "Isolated",
+    label: "Worktree",
     className: "bg-green-500/20 text-green-400",
     icon: Shield,
     tooltip: "Running in a dedicated git worktree — changes are isolated from project root.",
   },
   pipeline: {
-    label: "Pipeline",
+    label: "Pipeline WT",
     className: "bg-green-500/20 text-green-300",
     icon: GitBranch,
-    tooltip: "Running in a shared pipeline worktree.",
+    tooltip: "Running in the pipeline's shared worktree.",
   },
   "project-root": {
-    label: "Root",
+    label: "Repo root",
     className: "bg-yellow-500/20 text-yellow-400",
     icon: AlertTriangle,
-    tooltip: "Running directly in project root — changes affect the main checkout.",
+    tooltip:
+      "Running directly in the repo's main checkout — edits touch your working tree (no worktree isolation).",
   },
   fallback: {
     label: "Fallback",

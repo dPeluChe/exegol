@@ -46,6 +46,20 @@ const SYSTEM_PATTERNS = [
   /^To resume this session/i,
 ];
 
+// Serialize output is raw terminal bytes — without stripping, the chat view
+// renders SGR soup (`[38;2;…m`, `[1C`). Covers CSI (any final byte, so cursor
+// moves like `1C` too), OSC, and single-char escapes; then compacts blank runs.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ANSI parsing needs ESC/BEL
+const ANSI_SEQ_RE = /\][^]*(?:|\\)|\[[0-9;:?]*[ -/]*[@-~]|[@-_]/g;
+
+function stripAnsiForChat(text: string): string {
+  return text
+    .replace(ANSI_SEQ_RE, "")
+    .replace(/\r/g, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 /**
  * Parse terminal text into chat turns.
  * Groups consecutive lines of the same role into single turns.
@@ -53,7 +67,7 @@ const SYSTEM_PATTERNS = [
 export function parseTerminalToChat(scrollback: string): ChatTurn[] {
   if (!scrollback.trim()) return [];
 
-  const lines = scrollback.split("\n");
+  const lines = stripAnsiForChat(scrollback).split("\n");
   const turns: ChatTurn[] = [];
   let currentRole: ChatRole = "agent";
   let currentLines: string[] = [];
