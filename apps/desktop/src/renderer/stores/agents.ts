@@ -260,7 +260,14 @@ export const useAgentStore = create<AgentStore>()(
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
-          return { agents: rest, focusedAgentId };
+          // Verify round 3: a removed agent must not haunt the attention
+          // inbox forever (persisted items lingered for closed tabs).
+          const { [id]: removedItem, ...attentionItems } = state.attentionItems;
+          const unreadAttentionCount =
+            removedItem && !removedItem.read
+              ? Math.max(0, state.unreadAttentionCount - 1)
+              : state.unreadAttentionCount;
+          return { agents: rest, focusedAgentId, attentionItems, unreadAttentionCount };
         }),
 
       syncFromDb: (_projectId, dbAgents) =>
@@ -306,7 +313,22 @@ export const useAgentStore = create<AgentStore>()(
               `[AgentStore] syncFromDb: ${added} added, ${merged} merged, total=${Object.keys(updated).length}`,
             );
           }
-          return { agents: updated };
+
+          // Verify round 3: prune persisted attention items whose agent no
+          // longer exists in this project's DB (deleted/closed tabs lingered
+          // in the inbox for hours). Other projects' items are untouched.
+          const dbIds = new Set(dbAgents.map((a) => a.id));
+          const attentionItems: typeof state.attentionItems = {};
+          let unreadAttentionCount = state.unreadAttentionCount;
+          for (const [id, item] of Object.entries(state.attentionItems)) {
+            if (item.projectId === _projectId && !dbIds.has(id)) {
+              if (!item.read) unreadAttentionCount = Math.max(0, unreadAttentionCount - 1);
+              continue;
+            }
+            attentionItems[id] = item;
+          }
+
+          return { agents: updated, attentionItems, unreadAttentionCount };
         }),
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────

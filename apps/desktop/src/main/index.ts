@@ -506,6 +506,19 @@ app.whenReady().then(async () => {
             `[Startup] Failed reattach attempts (will be marked crashed): ${Array.from(result.failedIds).join(", ")}`,
           );
         }
+        // Verify round 3: sidecar sessions whose DB agent is gone/terminal
+        // (closed tabs) survived forever as zombies — 6 alive vs 3 real
+        // agents observed. Kill anything the reattach didn't claim.
+        const ptyHost = getPtyHost();
+        for (const sessionId of aliveSessionIds) {
+          if (result.aliveIds.has(sessionId) || result.deadIds.has(sessionId)) continue;
+          try {
+            ptyHost.kill(sessionId);
+            logger.info(`[Startup] Killed orphan sidecar session ${sessionId} (no live DB agent)`);
+          } catch {
+            /* non-fatal */
+          }
+        }
       }
       const recovery = recoverStaleAgents(getDb(), aliveSkipIds);
       logger.info(
