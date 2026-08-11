@@ -434,7 +434,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ### T157 — Cross-provider Inter-agent Messaging `added: 2026-08-11`
-**Priority**: P2 — **Wave 3 co-headliner** | **Effort**: M-L | **Source**: idea (Antonio: "hablar entre sesiones DURANTE el chat, no como flujo") + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude cross-session messaging = trust model to copy; herdr = the gap to exploit)
+**Priority**: P2 — **Wave 3 co-headliner** | **Effort**: M-L | **Source**: idea (Antonio: "hablar entre sesiones DURANTE el chat, no como flujo") + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude trust model; herdr gap) + **`RESEARCH/TRINITY_2026_08.md`** (typed human-gate items park-and-end-turn + expiry-as-denial; completion-event wake with triple loop-safety; zero-default agent_permissions checked at MCP layer, parent→child auto-grant)
 
 **Why**
 - The inter-agent-comms race is Anthropic (Claude-only, best trust design) vs herdr
@@ -499,7 +499,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ### T158 — Memory Habit Protocol `added: 2026-08-11`
-**Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (engram's 5-layer habit stack, dogfooded at 906 memories)
+**Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (5-layer habit stack) + `RESEARCH/TRINITY_2026_08.md` (platform_prompt_service: composed runtime-aware protocol-teacher block per spawn — production reference)
 
 **Why**
 - The MCP memory loop works (verified 2026-08-11) but agents only use it when told.
