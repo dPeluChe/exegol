@@ -165,7 +165,6 @@ export function TerminalScrollback({
       {agent && (
         <AgentStopReason
           agent={agent}
-          scrollback={scrollbackContent}
           onResume={canResume && agent.resumeCommand ? handleResume : undefined}
           onSpawnNew={(task) => {
             window.dispatchEvent(

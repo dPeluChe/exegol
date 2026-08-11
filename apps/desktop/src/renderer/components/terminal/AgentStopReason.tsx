@@ -2,18 +2,8 @@ import type { Agent, AgentScoreRow, AgentStatus } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, FileDiff, PlayCircle, RotateCcw } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import { trpcInvoke } from "../../lib/trpc-client";
-
-// Compiled once: ANSI/OSC/CSI strip + residual single-byte controls.
-// Built with `new RegExp` so the source doesn't contain literal control
-// bytes (which `noControlCharactersInRegex` would reject in a regex literal).
-// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
-const STOP_OSC_RE = new RegExp("\\u001b\\][\\s\\S]*?(?:\\u0007|\\u001b\\\\)", "g");
-// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
-const STOP_CSI_RE = new RegExp("\\u001b\\[[0-9;?]*[ -\\/]*[@-~]", "g");
-// biome-ignore lint/complexity/useRegexLiterals: literal form would trip noControlCharactersInRegex
-const STOP_CTRL_RE = new RegExp("[\\u0000-\\u0008\\u000b-\\u001f\\u007f]", "g");
 
 const TERMINAL_STATUSES: ReadonlySet<AgentStatus> = new Set([
   "completed",
@@ -26,7 +16,6 @@ interface AgentStopReasonProps {
   agent: Pick<Agent, "id" | "status" | "cliType" | "taskDescription"> & {
     resumeCommand?: string | null;
   };
-  scrollback?: string | null;
   onResume?: () => void;
   onSpawnNew: (taskDescription: string) => void;
   onViewDiff: (agentId: string) => void;
@@ -38,13 +27,7 @@ interface AgentStopReasonProps {
  * CLI captured a resume command), New Agent (pre-fills the spawn modal),
  * and View Diff (jumps to the git pane scoped to this agent's worktree).
  */
-export function AgentStopReason({
-  agent,
-  scrollback,
-  onResume,
-  onSpawnNew,
-  onViewDiff,
-}: AgentStopReasonProps) {
+export function AgentStopReason({ agent, onResume, onSpawnNew, onViewDiff }: AgentStopReasonProps) {
   const isTerminal = TERMINAL_STATUSES.has(agent.status);
   const { data: score } = useQuery({
     queryKey: ["agentScore", agent.id],
@@ -52,8 +35,6 @@ export function AgentStopReason({
     enabled: isTerminal,
     staleTime: 30_000,
   });
-
-  void scrollback; // kept in the prop contract; tail extract removed (see below)
 
   const handleSpawnNew = useCallback(() => {
     onSpawnNew(agent.taskDescription);
@@ -123,18 +104,6 @@ export function AgentStopReason({
       </div>
     </div>
   );
-}
-
-function extractLastLines(content: string | null | undefined, count: number): string[] {
-  if (!content) return [];
-  const cleaned = content
-    .replace(STOP_OSC_RE, "")
-    .replace(STOP_CSI_RE, "")
-    .replace(STOP_CTRL_RE, "");
-  return cleaned
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .slice(-count);
 }
 
 const TONE_BY_STATUS: Record<

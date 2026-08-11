@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -6,6 +6,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 const LIVE_STATUSES = new Set(["running", "spawning", "waiting_input", "paused"]);
 const SWEEP_DELAY_MS = 6_000;
 const SWEEP_INTERVAL_MS = 60_000;
+const APP_START_MS = Date.now();
 
 /** Every pane holding an agent, across ALL projects' persisted workspaces. */
 function collectPanedAgentIds(): Set<string> {
@@ -28,6 +29,7 @@ function collectPanedAgentIds(): Set<string> {
  * attention item.
  */
 export function usePanelessAgentSweep(): void {
+  const attemptedStops = useRef(new Set<string>());
   useEffect(() => {
     const sweep = () => {
       const paned = collectPanedAgentIds();
@@ -35,6 +37,12 @@ export function usePanelessAgentSweep(): void {
       for (const agent of Object.values(agents)) {
         if (paned.has(agent.id)) continue;
         if (LIVE_STATUSES.has(agent.status)) {
+          // Only reap agents that PREDATE this app run: pipeline/scheduler/queue
+          // agents spawned headless this session are paneless by design.
+          const startedAt = agent.startedAt ? new Date(agent.startedAt).getTime() : 0;
+          if (startedAt >= APP_START_MS) continue;
+          if (attemptedStops.current.has(agent.id)) continue;
+          attemptedStops.current.add(agent.id);
           console.log(`[PanelessSweep] Stopping paneless live agent ${agent.id}`);
           trpcMutate("agents.stop", { id: agent.id }).catch(() => {});
         } else if (attentionItems[agent.id]) {

@@ -89,8 +89,18 @@ export function startAgentStatusPush(): void {
       // waiting_input alone is a TURN BOUNDARY (T123: every reply ends there)
       // — only real attention (permission prompt/question) earns an inbox
       // entry, or idle agents show amber dots forever (verify round 3).
-      const needsAttention = (event as { needsAttention?: boolean }).needsAttention === true;
-      if (isFinalStatus || (event.status === "waiting_input" && needsAttention)) {
+      const needsAttention = event.needsAttention === true;
+      // T123 hooks are claude-only: other CLIs never emit needsAttention, so
+      // their questions would never reach the inbox. Fall back to the scraped
+      // running→waiting transition for them — transition-gated so idle or
+      // reattached agents don't earn amber dots (verify round 3).
+      const scrapedAttention =
+        existing.cliType !== "claude-code" &&
+        (existing.status === "running" || existing.status === "spawning");
+      if (
+        isFinalStatus ||
+        (event.status === "waiting_input" && (needsAttention || scrapedAttention))
+      ) {
         store.addAttentionItem(event.agentId);
       } else if (newStatus === "running") {
         // Answering the prompt RESOLVES the attention (verify round 3: items
@@ -268,19 +278,16 @@ export const useAgentStore = create<AgentStore>()(
           agents: { ...state.agents, [agent.id]: agent },
         })),
 
-      removeAgent: (id) =>
+      removeAgent: (id) => {
+        // Verify round 3: a removed agent must not haunt the attention
+        // inbox forever (persisted items lingered for closed tabs).
+        get().dismissAttention(id);
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
-          // Verify round 3: a removed agent must not haunt the attention
-          // inbox forever (persisted items lingered for closed tabs).
-          const { [id]: removedItem, ...attentionItems } = state.attentionItems;
-          const unreadAttentionCount =
-            removedItem && !removedItem.read
-              ? Math.max(0, state.unreadAttentionCount - 1)
-              : state.unreadAttentionCount;
-          return { agents: rest, focusedAgentId, attentionItems, unreadAttentionCount };
-        }),
+          return { agents: rest, focusedAgentId };
+        });
+      },
 
       syncFromDb: (_projectId, dbAgents) =>
         set((state) => {
@@ -329,15 +336,21 @@ export const useAgentStore = create<AgentStore>()(
           // Verify round 3: prune persisted attention items whose agent no
           // longer exists in this project's DB (deleted/closed tabs lingered
           // in the inbox for hours). Other projects' items are untouched.
+          // Identity-stable: untouched state when nothing pruned, or this
+          // 30s poll re-renders every attention subscriber for no change.
           const dbIds = new Set(dbAgents.map((a) => a.id));
-          const attentionItems: typeof state.attentionItems = {};
+          const stale = Object.entries(state.attentionItems).filter(
+            ([id, item]) => item.projectId === _projectId && !dbIds.has(id),
+          );
+          if (stale.length === 0) return { agents: updated };
+
           let unreadAttentionCount = state.unreadAttentionCount;
-          for (const [id, item] of Object.entries(state.attentionItems)) {
-            if (item.projectId === _projectId && !dbIds.has(id)) {
-              if (!item.read) unreadAttentionCount = Math.max(0, unreadAttentionCount - 1);
-              continue;
+          const attentionItems = { ...state.attentionItems };
+          for (const [id, item] of stale) {
+            if (!item.read) {
+              unreadAttentionCount = Math.max(0, unreadAttentionCount - 1);
             }
-            attentionItems[id] = item;
+            delete attentionItems[id];
           }
 
           return { agents: updated, attentionItems, unreadAttentionCount };

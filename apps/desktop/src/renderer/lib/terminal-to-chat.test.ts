@@ -10,7 +10,8 @@ describe("parseTerminalToChat ANSI stripping", () => {
     const all = turns.map((t) => t.content).join("\n");
     expect(all).not.toMatch(/\[38;2/);
     expect(all).not.toMatch(/\[1C/);
-    expect(all).toContain("Baked for 1s");
+    // Spinner timings render as header meta, not message content (15fbcf7)
+    expect(turns.some((t) => t.meta?.includes("Baked for 1s"))).toBe(true);
     expect(all).toContain("hola");
   });
 

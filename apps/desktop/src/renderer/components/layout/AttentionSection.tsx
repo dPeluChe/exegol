@@ -317,10 +317,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
   // waiting_input is just a turn boundary (T123) — the amber warning only
   // belongs to agents with a live UNREAD attention item (verify round 3:
   // the row kept its ⚠ after the user answered the prompt).
-  const hasUnreadAttention = useAgentStore((s) => {
-    const item = s.attentionItems[agent.id];
-    return !!item && !item.read;
-  });
+  const hasUnreadAttention = useAgentStore((s) => s.isUnread(agent.id));
   const isWaiting = agent.status === "waiting_input" && hasUnreadAttention;
 
   return (

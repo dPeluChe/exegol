@@ -513,7 +513,7 @@ app.whenReady().then(async () => {
         for (const sessionId of aliveSessionIds) {
           if (result.aliveIds.has(sessionId) || result.deadIds.has(sessionId)) continue;
           try {
-            ptyHost.kill(sessionId);
+            ptyHost.killUnclaimed(sessionId);
             logger.info(`[Startup] Killed orphan sidecar session ${sessionId} (no live DB agent)`);
           } catch {
             /* non-fatal */

@@ -61,6 +61,7 @@ export async function reattachSidecarAgents(
   };
   const ptyHost = getPtyHost();
   const sidecarSet = new Set(sidecarSessionIds);
+  const updateResumeCommand = db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?");
 
   for (const row of stale) {
     const agentId = row.id as string;
@@ -78,10 +79,12 @@ export async function reattachSidecarAgents(
       continue;
     }
 
+    const resumePattern = getProviderRegistry().get(cliType)?.capabilities?.resumeCommandPattern;
+
     try {
       hydrateTrackedWorktree(db, agentId, worktrees);
       if (!isShell) {
-        maps.outputProcessors.set(agentId, createOutputProcessor(agentId, cliType));
+        maps.outputProcessors.set(agentId, createOutputProcessor(agentId, cliType, resumePattern));
         maps.scrollbackBuffers.set(agentId, []);
         maps.scrollbackSizes.set(agentId, 0);
       }
@@ -157,18 +160,16 @@ export async function reattachSidecarAgents(
       // printed its resume banner into the ring with no parser attached —
       // the session browser then respawned a bare CLI with no session id.
       // Scan the ring tail on reattach so the resume handle isn't lost.
-      if (!isShell && !(row.resume_command as string | null)) {
+      if (!isShell && resumePattern && !row.resume_command) {
         try {
-          const pattern = getProviderRegistry().get(cliType)?.capabilities?.resumeCommandPattern;
-          const snap = pattern ? ptyHost.getSnapshot(agentId) : null;
-          if (pattern && snap) {
-            const tail = stripAnsi(stripOscSequences(snap)).slice(-4000);
-            const resumeCommand = parseResumeCommandFromPattern(pattern, tail);
+          const snap = ptyHost.getSnapshot(agentId);
+          if (snap) {
+            // Slice before stripping: only the tail matters, no need to
+            // regex-clean the whole ring.
+            const tail = stripAnsi(stripOscSequences(snap.slice(-16_000))).slice(-4000);
+            const resumeCommand = parseResumeCommandFromPattern(resumePattern, tail);
             if (resumeCommand) {
-              db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?").run(
-                resumeCommand,
-                agentId,
-              );
+              updateResumeCommand.run(resumeCommand, agentId);
               logger.info(`[Reattach] Captured resume command from ring for ${agentId}`);
             }
           }
