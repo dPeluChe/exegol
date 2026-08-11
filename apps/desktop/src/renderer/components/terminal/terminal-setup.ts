@@ -96,18 +96,18 @@ export function setupTerminalSession(
 
   if (!deps.readOnly) {
     terminal.attachCustomKeyEventHandler((e) => {
+      // T155 input QoL: Shift+Enter → newline (bracketed-paste), not submit.
+      // Must swallow EVERY phase: Enter also fires a legacy keypress that
+      // xterm turns into '\r' even when keydown returned false — that stray
+      // CR was submitting the prompt behind all three escape-sequence
+      // attempts (verify session 2026-08-11).
+      if (e.key === "Enter" && e.shiftKey) {
+        if (e.type === "keydown") terminal.paste("\n");
+        return false;
+      }
       if (e.type !== "keydown") return true;
       if (e.key === "Backspace" && (e.ctrlKey || e.metaKey)) {
         window.api.terminal.write(deps.agentId, "\x17");
-        return false;
-      }
-      // T155 input QoL (klaudio patterns):
-      // Shift+Enter → newline inside the CLI's prompt, not a submit.
-      // Bracketed-paste of "\n": TUIs treat pasted newlines as literal line
-      // breaks, never submit — version-independent, unlike raw ESC+CR /
-      // CSI-u / backslash+CR (all failed live on claude, 2026-08-11).
-      if (e.key === "Enter" && e.shiftKey) {
-        terminal.paste("\n");
         return false;
       }
       // Cmd+←/→ → Ctrl+A/Ctrl+E (line home/end, the macOS muscle memory)
