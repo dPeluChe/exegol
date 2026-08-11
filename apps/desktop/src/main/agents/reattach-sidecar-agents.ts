@@ -9,12 +9,14 @@ import { getPtyHost } from "../terminal/pty-host";
 import { createOutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, hydrateTrackedWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { getProviderRegistry } from "./registry";
 import {
   type AgentContext,
   broadcastAgentStatus,
   DEFAULT_PTY_COLS,
   DEFAULT_PTY_ROWS,
 } from "./spawn-env";
+import { parseResumeCommandFromPattern, stripAnsi, stripOscSequences } from "./status-parser";
 
 export interface ReattachResult {
   /** Number of agents successfully reattached AND confirmed alive. */
@@ -148,6 +150,30 @@ export async function reattachSidecarAgents(
           }
         } catch (err) {
           logger.warn(`[Reattach] MCP re-arm failed for ${agentId}:`, err);
+        }
+      }
+
+      // T101 gap (verify round 3): a TUI that died while the app was closed
+      // printed its resume banner into the ring with no parser attached —
+      // the session browser then respawned a bare CLI with no session id.
+      // Scan the ring tail on reattach so the resume handle isn't lost.
+      if (!isShell && !(row.resume_command as string | null)) {
+        try {
+          const pattern = getProviderRegistry().get(cliType)?.capabilities?.resumeCommandPattern;
+          const snap = pattern ? ptyHost.getSnapshot(agentId) : null;
+          if (pattern && snap) {
+            const tail = stripAnsi(stripOscSequences(snap)).slice(-4000);
+            const resumeCommand = parseResumeCommandFromPattern(pattern, tail);
+            if (resumeCommand) {
+              db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?").run(
+                resumeCommand,
+                agentId,
+              );
+              logger.info(`[Reattach] Captured resume command from ring for ${agentId}`);
+            }
+          }
+        } catch {
+          /* non-fatal */
         }
       }
 
