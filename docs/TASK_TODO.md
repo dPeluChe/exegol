@@ -32,7 +32,9 @@
 6. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop) — last launch differentiator, unchanged
 
 **P2 — Post-launch bets (next round):**
-**T153 Project Awareness Engine — Wave 3 headline candidate** (absorbs T132 phase 1) ·
+**Wave 3 co-headliners: T153 Awareness Engine · T156 Global Sessions Dashboard · T157
+Cross-provider Inter-agent Messaging** (T156/T157 answer Claude Code's Aug absorption of
+dashboard+messaging — see `RESEARCH/COMPETITIVE_UPDATE_2026_08.md`) ·
 **T155 Terminal & Attention UX pack** (7 independently-shippable QoL wins — klaudio review) ·
 T133 remote channel (Telegram) — *candidate to elevate: remote continuity is the most visible
 gap vs Omnara / Claude web / Codex Remote* · T132 automations catalog · T134 ACP experimental ·
@@ -371,6 +373,71 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   `renderer/components/workspace/{FileExplorer,GitPane,WorkspaceTabBar}.tsx`,
   `renderer/components/layout/TitleBar.tsx` (bell), `main/notifications/*`,
   `main/index.ts` (deep link), new `resources/bin/exegol` CLI script
+
+---
+
+### T156 — Global Sessions Dashboard `added: 2026-08-11`
+**Priority**: P2 — **Wave 3 co-headliner** (with T153/T157; after Wave 2.6 exit criteria) | **Effort**: M | **Source**: idea (Antonio) + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude Code "agent view" is the UX benchmark — ours is cross-provider)
+
+**Why**
+- One place showing ALL active sessions across ALL projects, project badge per row, even
+  across different paths. Claude Code just shipped exactly this (`claude agents` + supervisor
+  daemon) — validating the need — but Claude-only. Exegol already has the primitives: the
+  agents store accumulates cross-project, `jumpToAttentionItem` does cross-project jump
+  (T141), and the attention pending-question tail is already extracted (T124).
+
+**Scope**
+- New Monitor sub-tab "Sessions" (or promoted top-level view): every non-terminal agent
+  across all projects — project badge (name + group color T146), provider icon, status +
+  activity dot, current step, uptime, cost (T147 data), attention state
+- **Group-by toggle**: by state (Needs input / Working / Ready-review / Completed-recent)
+  vs by project — mirror agent view's Ctrl+S
+- **Peek-and-reply** (the killer interaction, copied from agent view): expand a
+  needs-input row → show the pending question (attention tail already computed) → inline
+  one-line reply sent to the agent's PTY without leaving the dashboard
+- Row click → `jumpToAttentionItem` (exact pane, existing)
+- Needs: `agents.listActive` query (all projects, join project name/color) — the store
+  alone may miss projects never opened this session
+
+**Likely files**
+- New: `renderer/components/workspace/sections/SessionsSection.tsx`
+- `main/ipc/procedures/agents.ts` (listActive), `WorkspaceTabs` (sub-tab), reuse
+  StatusDot/AgentIcon/attention tail
+
+---
+
+### T157 — Cross-provider Inter-agent Messaging `added: 2026-08-11`
+**Priority**: P2 — **Wave 3 co-headliner** | **Effort**: M-L | **Source**: idea (Antonio: "hablar entre sesiones DURANTE el chat, no como flujo") + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude cross-session messaging = trust model to copy; herdr = the gap to exploit)
+
+**Why**
+- The inter-agent-comms race is Anthropic (Claude-only, best trust design) vs herdr
+  (cross-provider-ish but ZERO identity/trust — receiver can't tell agent from human).
+  **Nobody has cross-provider messaging with a real trust model.** Exegol is uniquely
+  positioned: MCP server with per-agent tokens (T145) = identity for free; deterministic
+  turn boundaries (T123) = safe delivery timing; messages table (T25, orphaned) = storage
+  already migrated.
+
+**Scope**
+- **MCP tools on the T145 server**: `agents_list` (visible agents + states, scoped by
+  accessMode), `agent_send(target, message)` — identity from the caller's token, NEVER
+  client-claimed (existing pattern)
+- **Delivery at turn boundaries** (Claude's rule, our T123 signals): queue per target;
+  inject into the PTY as a formatted prompt when the target hits `waiting_input`/turn end —
+  never mid-generation. Idle target → deliver immediately
+- **Trust model (copy Anthropic, fix herdr's gap)**: sender attribution in the injected
+  text ("[message from agent X — it cannot approve actions]"); inbound policy per agent
+  `accept/hold/refuse` with default HOLD for messages from YOLO/bypass agents (human
+  approves in Attention Inbox); loop throttling (dedup window + queue cap)
+- Persist via T25 `messages` table (types text/request/result already exist) — audit trail
+  in the oplog; conversation visible to the human in the agent pane toolbar
+- Optional ergonomic (herdr's good idea): `agent_send` with `wait_for: "turn_end"` —
+  send-and-wait as one call for scripted coordination
+- Human side: "Send to" (existing) grows into a small message composer with target picker
+
+**Likely files**
+- `main/mcp/exegol-tools.ts` (+2 tools), `main/agents/agent-session-callbacks.ts` (delivery
+  hook on turn boundary), new `main/agents/agent-messaging.ts` (queue + policy + throttle),
+  `ipc/procedures/messages.ts` (de-orphan), Attention Inbox (hold approvals)
 
 ---
 
@@ -753,6 +820,65 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
+
+---
+
+## Wave 3 candidate — Owl / Fleet Watch `added: 2026-07-28`
+
+> **Definition**: `docs/ARCHITECTURE/OWL_FLEET_WATCH.md` (agreed 2026-07-28). Owl is a
+> NATIVE Exegol feature: background fleet-watch over registered repos, surfacing what
+> Antonio has NOT seen/reviewed (attention tracking), consumed by the UI and by external
+> Claude sessions via the existing MCP layer. Deferred until Wave 2.6 (hardening) closes.
+> Salvage source: `_code_/_archive_/labs-cli-proman`.
+
+### T156 — Owl Phase 1: Collectors + store + raw digest `P2`
+**Why**: kills the manual "¿qué no he visto?" scan across active repos; useful with zero LLM.
+**Scope**: port cli-proman collector commands (`status`, `git-status`, `wip`, `blocked`,
+`review`, `next`...) as deterministic per-repo collectors → facts JSON; scheduler
+(interval/on-wake) over registered repos (start: henri ×2, walter ×2, skysset,
+dpeluche.dev); store in SQLite with per-item seen/unseen marks; raw digest view in UI.
+Owl is read-only toward repos — writes only to its own store.
+
+### T157 — Owl Phase 2: Small-model synthesis via InferenceProvider `P2` (depends: T156, T122)
+**Why**: turn facts into notable-or-noise + priority + 1-2 line summaries; seen items go
+quiet, unseen insist.
+**Scope**: generative small model (start Qwen3 4B; SmolLM3-3B/Gemma 3 4B interchangeable)
+through the T122 abstraction with Ollama backend — the LLM only ever sees structured facts,
+never raw diffs. Every digest line carries verifiable facts (SHA, PR#, timestamp). Model
+bake-off happens here. Note: `nomic-embed-text` stays embeddings-only; this is a second,
+generative model on the same runtime.
+
+### T158 — Owl Phase 3: MCP exposure + digest actions `P2` (depends: T157)
+**Scope**: `fleet_digest` / `repo_status` / `mark_seen` tools on `main/mcp/registry.ts`;
+digest actions: create task, open session, launch review agent (only Exegol can close this
+loop). External consumer #1: kickoff resume mode reading the digest instead of re-scanning.
+**Runtime requirement**: the MCP server ships in the build and runs as a **headless daemon**
+(`exegol watch`, launchd) — shared with T160's council/bus tools. The Electron window is a
+view, not the runtime. Definition: `docs/ARCHITECTURE/COUNCIL_BASE.md`.
+
+### T160 — Council base: structured executions + exchange bus `P2` (depends: T158)
+**Definition**: `docs/ARCHITECTURE/COUNCIL_BASE.md`. Absorbs the standalone "council MCP"
+project — one server, not two. NOT branded "rubber duck": cross-family review is one preset.
+**Why**: (a) relay-by-hand between session agents was friction #1 of the jul-2026
+conversation audit (henri front↔backend, walter client↔cloud); (b) "define prompt +
+structure, get result" executions are what live sessions don't cover.
+**Scope**:
+- Structured executions: spawn CLIs non-interactively (`claude -p`, `codex exec`, gemini)
+  with a prepared prompt/structure, run headless to completion, deliver result to the
+  project store. Preset #1: cross-family review of a just-built change (return discrepancies).
+- Bus tools on the same MCP server: `thread_create` / `message_post` / `message_list`
+  (since-last-read) / `status_update` / `handoff_get`, project-scoped. Content comes from
+  agents; the server is only the wire.
+- Per-project activity view in UI: new threads · council results · owl updates, with the
+  same seen/unseen marks as Owl (one feed, three producers).
+
+### T159 — Embedded inference backend `P3` (depends: T157 proven)
+**Why**: Ollama = shared server (contention) + keep_alive unload → multi-second reload each
+watcher cycle. Embedded = resident, always warm, app-managed resources.
+**Scope**: second `InferenceProvider` backend in-process (node-llama-cpp, or llama.cpp via
+existing Rust/napi); GGUF download management; single-flight queue with priorities
+(interactive UI > background digest); ~2.5–3 GB RAM budget for 4B Q4. Backend swap must be
+config, not rewrite (TERAX rule: ONE abstraction, not 4 cases).
 
 ---
 
