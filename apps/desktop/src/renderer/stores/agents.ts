@@ -92,6 +92,14 @@ export function startAgentStatusPush(): void {
       const needsAttention = (event as { needsAttention?: boolean }).needsAttention === true;
       if (isFinalStatus || (event.status === "waiting_input" && needsAttention)) {
         store.addAttentionItem(event.agentId);
+      } else if (newStatus === "running") {
+        // Answering the prompt RESOLVES the attention (verify round 3: items
+        // stayed amber for 54m after approval). Review items for finished
+        // agents stay until dismissed — only action_needed auto-clears.
+        const item = useAgentStore.getState().attentionItems[event.agentId];
+        if (item && item.level === "action_needed") {
+          store.dismissAttention(event.agentId);
+        }
       }
     }
   });
