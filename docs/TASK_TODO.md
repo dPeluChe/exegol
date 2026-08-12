@@ -439,6 +439,13 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   others per docs — each with the same shim command + per-agent token env, written at
   spawn into the agent cwd, removed/revoked on exit. Doctor check: which providers have
   MCP wiring available.
+- **Stale-shim gap (live incident 2026-08-12)**: long-lived CLI sessions keep the shim
+  binary spawned at THEIR start — new tools (agent_send) are invisible until the session
+  restarts (juanito/paco couldn't message). Fix candidates: shim forwards a server-pushed
+  `notifications/tools/list_changed` (needs persistent socket + stdout notification), or
+  shim re-fetches tool defs from the server per tools/list instead of its bundled copy
+  (cheapest — defs already live server-side). Until then: new MCP tools require agent
+  session restart.
 
 ---
 
