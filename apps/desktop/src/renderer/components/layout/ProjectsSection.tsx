@@ -1,4 +1,4 @@
-import type { Project } from "@exegol/shared";
+import { LIVE_STATUSES, type Project } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUp, FolderPlus } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
@@ -93,7 +93,11 @@ function ProjectListSection({
           onSelect={() => onSelect(project.id)}
           onToggle={() => onToggle(project.id)}
           onRename={onRename}
-          agents={Object.values(agentsById).filter((a) => a.projectId === project.id)}
+          agents={Object.values(agentsById).filter(
+            // Live agents only — finished/failed ones live in Recent Sessions,
+            // not the project tree (verify 2026-08-11: 4 shown, 2 real).
+            (a) => a.projectId === project.id && LIVE_STATUSES.has(a.status),
+          )}
           index={index}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
