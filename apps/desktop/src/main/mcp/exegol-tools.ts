@@ -10,7 +10,9 @@ import { existsSync, readFileSync } from "node:fs";
 import type { MemoryCategory } from "@exegol/shared";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
+import { AgentMessagingError, sendAgentMessage } from "../agents/agent-messaging";
 import { getProject } from "../db/queries";
+import { listActiveAgents } from "../db/queries/agents";
 import { readProjectBrief } from "../knowledge/brief";
 import { getDigestPath } from "../knowledge/paths";
 import { listMemories, observeMemory, searchMemories } from "../memory/store";
@@ -135,6 +137,46 @@ function handleKnowledgeGet(
   return result;
 }
 
+/** T157: other live agents the caller can message — the caller itself is excluded. */
+function handleAgentsList(db: Database.Database, context: ExegolToolContext) {
+  return {
+    agents: listActiveAgents(db)
+      .filter((a) => a.id !== context.agentId)
+      .map((a) => ({
+        id: a.id,
+        provider: a.cliType,
+        project: a.projectName,
+        status: a.status,
+        task: a.taskDescription.slice(0, 120),
+      })),
+  };
+}
+
+/** T157: sender identity comes from context (token-derived) — never from args. */
+function handleAgentSend(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
+  const targetId = String(args.target_id ?? "");
+  const message = String(args.message ?? "");
+  if (!targetId) throw new ExegolToolError("agent_send requires target_id", -32602);
+  try {
+    const result = sendAgentMessage(db, {
+      fromAgentId: context.agentId,
+      toAgentId: targetId,
+      text: message,
+    });
+    return {
+      messageId: result.messageId,
+      status: result.delivered ? "delivered" : "queued_for_next_turn_boundary",
+    };
+  } catch (err) {
+    if (err instanceof AgentMessagingError) throw new ExegolToolError(err.message, err.code);
+    throw err;
+  }
+}
+
 /** Dispatch a tool call, enforcing access-mode gating before running the handler. */
 export async function callExegolTool(
   db: Database.Database,
@@ -157,5 +199,9 @@ export async function callExegolTool(
       return handleMemorySave(db, args, context);
     case "knowledge_get":
       return handleKnowledgeGet(db, args, context);
+    case "agents_list":
+      return handleAgentsList(db, context);
+    case "agent_send":
+      return handleAgentSend(db, args, context);
   }
 }
