@@ -5,4 +5,5 @@ export { FilterChip } from "./FilterChip";
 export type { AgentRef, IssueBubbleProps } from "./IssueBubble";
 export { IssueBubble } from "./IssueBubble";
 export { LoadingSpinner } from "./LoadingSpinner";
+export { SessionAlias } from "./SessionAlias";
 export { StatusDot } from "./StatusDot";
