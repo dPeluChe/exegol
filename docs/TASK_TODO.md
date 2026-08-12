@@ -35,7 +35,7 @@
 
 **P1 — after P0:**
 4. ~~T151~~ — ✅ DONE 2026-08-11 (`TASK_COMPLETED/2608.md`): zero capability wildcards, keystore warn, Doctor duplicate-CLI + stale-worktree checks
-5. **T152** — God-module split (`workspace.ts` 698 LOC, `main/index.ts` 506 LOC)
+5. ~~T152~~ — ✅ DONE 2026-08-11 (PR #86): workspace.ts 698→77 (slices), index.ts 607→136 (`main/bootstrap/`) — pending live smoke (boot, deep link, layout persist)
 6. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop) — last launch differentiator, unchanged
 
 **P2 — Post-launch bets (next round):**
@@ -57,7 +57,7 @@ T138 ModeTracker headless · T139 skills security scan · T144 dependency/librar
 - [ ] Both manual-verification checklists below fully checked (T123 result recorded either way)
 - [x] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green (PR #84)
 - [x] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test (PR #85)
-- [ ] T151 ✅ (no `"*"` capability wildcards) + T152 merged: no file > 500 LOC in the flagged pair
+- [x] T151 + T152 merged: no `"*"` capability wildcards, no file > 500 LOC in the flagged pair (PRs #83/#86)
 - [ ] Then start T142 — and cut the next release from that point
 
 ### Shipped waves
@@ -139,29 +139,6 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ## Active Backlog
-
-### T152 — God-module Split `added: 2026-07-06`
-**Priority**: P1 (Wave 2.6) | **Effort**: S-M | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
-
-**Why**
-- Board rule is max 400-500 LOC/file; two files violate it and are central mutation hubs.
-  agents/ and terminal/ prove the codebase knows how to decompose — these are the exceptions.
-
-**Scope**
-- `renderer/stores/workspace.ts` (**698 LOC**): split by concern — tabs/panes slice,
-  custom-layouts slice, floating-panes slice, recovery slice — keeping one composed store
-  (no consumer API change)
-- `main/index.ts` (506 LOC): extract startup phases (window creation, protocol/menu setup,
-  recovery/reattach orchestration) into `main/bootstrap/*` modules
-- Behind T149 tests where they exist; pure mechanical moves otherwise
-- Radar (no action this wave): CommandPalette 498 · FileExplorer 493 · FloatingBrowser 468 ·
-  WorkspacePane 468 · pty-host 460 · ipc/procedures/agents 452 · resources 449
-
-**Likely files**
-- `apps/desktop/src/renderer/stores/workspace.ts` (+ new slice files)
-- `apps/desktop/src/main/index.ts` (+ new `main/bootstrap/*`)
-
----
 
 ### T153 — Project Awareness Engine `added: 2026-07-07`
 **Priority**: P2 — **Wave 3 headline candidate** (do NOT start before Wave 2.6 exit criteria) | **Effort**: L (phased) | **Source**: original idea (Antonio) + design analysis 2026-07-07 + **reference implementation study: `RESEARCH/CODEBASE_MEMORY_MCP_2026_07.md`** (adopt: index_coverage honesty table, FILE_CHANGES_WITH co-change drift, detect_changes hop-risk, source_hash caching, min-cosine multi-keyword recall; design spike must evaluate shelling out to the tool's CLI vs building file-level indexing in-house)
