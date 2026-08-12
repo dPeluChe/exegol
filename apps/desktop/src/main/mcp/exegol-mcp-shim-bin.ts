@@ -9,7 +9,9 @@
  * All diagnostics go to stderr; stdout is reserved for the framed protocol.
  */
 
+import { readFileSync } from "node:fs";
 import { connect } from "node:net";
+import { join } from "node:path";
 import {
   createNdjsonBuffer,
   type ExegolAccessMode,
@@ -22,7 +24,24 @@ import {
 // Identity is the token — the server maps it to agent/project and re-reads
 // access mode from the DB. The env mode below only shapes tools/list display;
 // it fails CLOSED to "read" (enforcement is server-side regardless).
-const token = process.env.EXEGOL_MCP_TOKEN ?? "";
+// Token fallback chain: env (claude/opencode/gemini pass it via their config
+// env) → <cwd>/.mcp.json (codex sanitizes MCP-server env, so Exegol drops the
+// token on disk in the session cwd instead — 2026-08-12).
+function resolveToken(): string {
+  const fromEnv = process.env.EXEGOL_MCP_TOKEN;
+  if (fromEnv) return fromEnv;
+  try {
+    const raw = readFileSync(join(process.cwd(), ".mcp.json"), "utf-8");
+    const parsed = JSON.parse(raw) as {
+      mcpServers?: { exegol?: { env?: { EXEGOL_MCP_TOKEN?: string } } };
+    };
+    return parsed.mcpServers?.exegol?.env?.EXEGOL_MCP_TOKEN ?? "";
+  } catch {
+    return "";
+  }
+}
+
+const token = resolveToken();
 const displayMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "read";
 
 // ─── stdio framing ──────────────────────────────────────────────────────────
