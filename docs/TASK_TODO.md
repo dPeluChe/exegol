@@ -403,7 +403,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ### T162 — Agent Links & Rooms `added: 2026-08-12`
-**Priority**: P1 (Wave 3 — next after T157 live verify) | **Effort**: M (phased) | **Source**: idea (Antonio 2026-08-12) + `ARCHITECTURE/COUNCIL_BASE.md` (exchange bus) + trinity human-gate patterns
+**Priority**: P1 (Wave 3 — next after T157 live verify) | **Effort**: M (phased) | **Source**: idea (Antonio 2026-08-12) + `ARCHITECTURE/COUNCIL_BASE.md` (exchange bus) + trinity human-gate patterns + **`RESEARCH/HERDR_2026_08.md` design requirements (2026-08-12): send-and-wait atomic (event cursor captured pre-write), `delivery_not_observed` error distinct from reply timeout, replies KEYED to message id + receiver-session pinning (never satisfied by a state transition or a successor session), reads never clear the human's seen-bit**
 
 **Why**
 - "Cuando termines avisale a revisor-api" works today only if the agent remembers to call
