@@ -24,12 +24,16 @@ const shellEnv = { ...process.env, PATH: _getFullPath() };
 
 export type DoctorStatus = "ok" | "warn" | "fail";
 
+/** Grouping for the Doctor UI: agent CLIs vs system services/deps vs configuration. */
+export type DoctorCategory = "agents" | "system" | "config";
+
 export interface DoctorCheck {
   id: string;
   label: string;
   status: DoctorStatus;
   detail: string;
   actionUrl?: string;
+  category: DoctorCategory;
 }
 
 export interface DoctorReport {
@@ -106,23 +110,26 @@ function readBinaryVersion(binPath: string): Promise<string | null> {
 }
 
 function checkPtySidecar(): DoctorCheck {
-  const pidFile = join(homedir(), ".exegol", "pty-sidecar.pid");
+  const pidFilePath = join(homedir(), ".exegol", "pty-sidecar.pid");
   try {
-    if (!existsSync(pidFile)) {
+    if (!existsSync(pidFilePath)) {
       return {
         id: "pty-sidecar",
         label: "PTY sidecar",
         status: "ok",
         detail: "Not running — starts on demand with the first terminal",
+        category: "system",
       };
     }
-    const pid = Number.parseInt(readFileSync(pidFile, "utf8").trim(), 10);
-    process.kill(pid, 0);
+    // Pid file is JSON: { pid, token, version, sock } (pty-sidecar-protocol.ts)
+    const meta = JSON.parse(readFileSync(pidFilePath, "utf8")) as { pid: number; version?: string };
+    process.kill(meta.pid, 0);
     return {
       id: "pty-sidecar",
       label: "PTY sidecar",
       status: "ok",
-      detail: `Alive (pid ${pid}) — terminals survive app restarts`,
+      detail: `Alive (pid ${meta.pid}${meta.version ? `, v${meta.version}` : ""}) — terminals survive app restarts`,
+      category: "system",
     };
   } catch {
     return {
@@ -130,6 +137,7 @@ function checkPtySidecar(): DoctorCheck {
       label: "PTY sidecar",
       status: "warn",
       detail: "Stale pid file — sidecar process is dead; next terminal spawn will restart it",
+      category: "system",
     };
   }
 }
@@ -142,13 +150,14 @@ function checkMcpSocket(): Promise<DoctorCheck> {
       label: "Exegol MCP server",
       status: "ok",
       detail: "Not running — starts with the first agent spawn",
+      category: "system",
     });
   }
   return new Promise((resolve) => {
     const sock = createConnection(sockPath);
     const done = (status: DoctorStatus, detail: string) => {
       sock.destroy();
-      resolve({ id: "exegol-mcp", label: "Exegol MCP server", status, detail });
+      resolve({ id: "exegol-mcp", label: "Exegol MCP server", status, detail, category: "system" });
     };
     sock.setTimeout(500);
     sock.on("connect", () => done("ok", "Listening — agents can reach memory/knowledge tools"));
@@ -190,6 +199,7 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
         status: installed ? (duplicated ? "warn" : "ok") : "warn",
         detail,
         actionUrl: installed ? undefined : CLI_INSTALL_LINKS[provider.id],
+        category: "agents",
       } satisfies DoctorCheck;
     }),
   );
@@ -206,6 +216,7 @@ function checkStaleWorktrees(db: Database.Database): DoctorCheck {
         label: "Worktree hygiene",
         status: "ok",
         detail: "No managed worktrees on disk",
+        category: "config",
       };
     }
     const livePaths = new Set(
@@ -240,6 +251,7 @@ function checkStaleWorktrees(db: Database.Database): DoctorCheck {
         stale > 0
           ? `${stale} of ${total} worktree(s) in ~/.exegol/worktrees have no live agent and are >${STALE_DAYS} days old — review in Project > worktrees (dirty ones are preserved by design)`
           : `${total} managed worktree(s), none stale`,
+      category: "config",
     };
   } catch (err) {
     return {
@@ -247,6 +259,7 @@ function checkStaleWorktrees(db: Database.Database): DoctorCheck {
       label: "Worktree hygiene",
       status: "warn",
       detail: `Could not scan ~/.exegol/worktrees: ${err instanceof Error ? err.message : String(err)}`,
+      category: "config",
     };
   }
 }
@@ -271,6 +284,7 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
     status: gitVersion ? "ok" : "fail",
     detail: gitVersion ?? "git not found on PATH — required for worktrees and version control",
     actionUrl: gitVersion ? undefined : "https://git-scm.com/downloads",
+    category: "system",
   });
 
   checks.push({
@@ -281,6 +295,7 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
       ? "Found 'gh' on PATH — Smart Git Button can create/merge PRs"
       : "Not found — PR creation/merge falls back to opening GitHub in the browser",
     actionUrl: ghAvailable ? undefined : "https://cli.github.com",
+    category: "system",
   });
 
   checks.push({
@@ -290,6 +305,7 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
     detail: coreRust
       ? "Rust native module loaded — worktrees, diff, and oplog are available"
       : "Native module failed to load — worktree isolation and fast diff are unavailable",
+    category: "system",
   });
 
   checks.push({
@@ -302,6 +318,7 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
         : `Reachable, but model '${ollamaConfig.model}' is missing — run: ollama pull ${ollamaConfig.model}`
       : "Not running — memory search falls back to keyword-only",
     actionUrl: ollama.available ? undefined : "https://ollama.com",
+    category: "system",
   });
 
   checks.push(checkPtySidecar());
@@ -314,6 +331,7 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
     detail: safeStorage.isEncryptionAvailable()
       ? "OS keychain encryption available — API keys stored encrypted"
       : "OS keychain encryption UNAVAILABLE — API keys are stored in plaintext in the local database",
+    category: "config",
   });
 
   checks.push(checkStaleWorktrees(db));
@@ -328,6 +346,7 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
       anthropicKey || openaiKey
         ? "At least one provider key is configured"
         : "No API keys configured yet — add one in Settings > API Keys",
+    category: "config",
   });
 
   return { checks, generatedAt: Date.now() };
