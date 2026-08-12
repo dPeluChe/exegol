@@ -5,6 +5,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
+import { clearAgentMessageQueue } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
@@ -299,6 +300,7 @@ export function createSpawnCallbacks(
       // T145: dead agents must not stay live credentials — revoke the MCP
       // token; a committed/leaked .mcp.json then authorizes nothing.
       revokeAgentMcpToken(agent.id);
+      clearAgentMessageQueue(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.
       handleParallelAgentExit(db, agent.id);

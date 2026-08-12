@@ -98,14 +98,19 @@ export const EXEGOL_TOOL_NAMES = [
   "memory_list",
   "memory_save",
   "knowledge_get",
+  "agents_list",
+  "agent_send",
 ] as const;
 export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
 
-/** Tools a read/plan agent may still call — everything else needs write access. */
+/** Tools a read/plan agent may still call — everything else needs write access.
+ *  Messaging (T157) is not a repo write: read/plan agents may coordinate too. */
 export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "memory_search",
   "memory_list",
   "knowledge_get",
+  "agents_list",
+  "agent_send",
 ]);
 
 export interface ExegolToolDef {
@@ -166,6 +171,28 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
       properties: {
         section: { type: "string", enum: ["brief", "digest"] },
       },
+    },
+  },
+  {
+    name: "agents_list",
+    description:
+      "List other live agents orchestrated by Exegol (all projects): id, provider, " +
+      "project, status and task. Use an id from here as agent_send target.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "agent_send",
+    description:
+      "Send a text message to another live agent. Exegol delivers it at the target's " +
+      "next turn boundary (never mid-generation) with your identity attached — the " +
+      "target knows it came from an agent, not the user. Returns delivered|queued.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target_id: { type: "string", description: "Agent id from agents_list" },
+        message: { type: "string", description: "Plain text, max 4000 chars" },
+      },
+      required: ["target_id", "message"],
     },
   },
 ];

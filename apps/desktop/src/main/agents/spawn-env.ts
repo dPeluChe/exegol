@@ -10,6 +10,7 @@ import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
 import { refreshTray } from "../system/tray";
+import { deliverPendingAgentMessages } from "./agent-messaging";
 import { scoreAgent } from "./scoring";
 
 export interface AgentContext {
@@ -44,6 +45,12 @@ export interface AgentStatusEvent {
 export function broadcastAgentStatus(event: AgentStatusEvent): void {
   broadcast("agent:status-changed", event);
   refreshTray();
+  // T157: waiting_input = turn boundary — the single choke point every status
+  // path (signals, scraper, reattach) flows through, so queued inter-agent
+  // messages deliver here regardless of which detector fired.
+  if (event.status === "waiting_input") {
+    deliverPendingAgentMessages(event.agentId);
+  }
 }
 
 // ─── Deterministic signal → status mapping (T123) ────────────────────────
