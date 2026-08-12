@@ -18,6 +18,8 @@ interface DoctorChecklistProps {
   isLoading?: boolean;
   onRefresh?: () => void;
   isRefreshing?: boolean;
+  /** Unix ms of the last completed run — visible proof that re-run did something. */
+  generatedAt?: number;
 }
 
 export function DoctorChecklist({
@@ -25,6 +27,7 @@ export function DoctorChecklist({
   isLoading,
   onRefresh,
   isRefreshing,
+  generatedAt,
 }: DoctorChecklistProps) {
   if (isLoading) {
     return <p className="text-xs text-text-muted">Running health checks...</p>;
@@ -33,15 +36,22 @@ export function DoctorChecklist({
   return (
     <div className="space-y-3">
       {onRefresh && (
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
-          Re-run checks
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 text-xs text-text-muted hover:text-text-secondary disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
+            {isRefreshing ? "Running checks..." : "Re-run checks"}
+          </button>
+          {generatedAt && !isRefreshing && (
+            <span className="text-[10px] text-text-muted">
+              Last run {new Date(generatedAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
       )}
       <div className="space-y-1.5">
         {checks.map((check) => {
