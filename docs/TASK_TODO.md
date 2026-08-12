@@ -495,6 +495,39 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T166 — MCP shim architecture (deferred from the 2026-08-12 shim review) `added: 2026-08-12`
+**Priority**: P2 | **Effort**: M-L | **Source**: 4-agent shim /simplify — security + correctness landed same day; these are the architectural residuals
+
+- **`hello` handshake on connect** (shim version, agentId, token source, pid): today the
+  server logs `shim #7` and cannot tell a returning shim from a stranger, nor a stale one
+  from a current one. With it: "3 agents on an outdated shim — restart those sessions"
+  becomes a surfaced, actionable state instead of an invisible failure. Also lets the shim
+  `report` its own state (outbox depth, outage duration, token source) into the activity
+  ring — today the shim is observability-dark (stderr is swallowed by the CLI).
+- **Shim as a thin pipe**: forward raw MCP messages (`mcp_message {token, msg}`) so
+  initialize/ping/tools-list/tools-call/result-encoding all run in the RUNNING app. What
+  stays frozen in a shim then is irreducible: framing, token resolve, reconnect (~60 LOC
+  vs ~270). Every future drift stops needing a per-method proxy.
+- **Descriptor table for the 4 per-provider config writers + token read chain**
+  (~174 → ~55 LOC; adding provider #6 is currently a 4-site hand-synced edit).
+- **Drop `EXEGOL_ACCESS_MODE`**: display-only, stale by construction (never rewritten when
+  the user changes mode), never delivered to codex; enforcement is 100% server-side.
+- **codex cwd→token 1:1**: two codex agents in one cwd still share a token file at runtime
+  (the restore/revoke guards close the restart paths, not the live one). Force a unique cwd
+  for on-disk-token flavors or refuse the second; persist cwd on the agent row while at it
+  (reattach + exit cleanup + pipeline agents all re-derive it today).
+- **Socket squat probe**: `connect()` succeeding is treated as "another Exegol owns it" —
+  verify `lstat` isSocket + uid, and handshake before trusting; surface "refused to start"
+  in the MCP panel instead of one log line.
+- **Caps**: NDJSON buffer per connection (a newline-less flood OOMs the main process),
+  `memory_save.fact` / `memory_search.query` sizes (agent_send is capped, these aren't).
+- **`.gitignore` upsert for written configs** (mirror `ensureDigestGitignored`) — they hold
+  a live token and `opencode.json` is a file users legitimately commit.
+- Extract `provisionAgentMcp`/`deprovision` out of `buildPtyInvocation` (a command builder
+  that writes files, mutates the token registry and starts a socket server).
+
+---
+
 ### T158 — Memory Habit Protocol `added: 2026-08-11`
 **Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (5-layer habit stack) + `RESEARCH/TRINITY_2026_08.md` (platform_prompt_service: composed runtime-aware protocol-teacher block per spawn — production reference)
 
