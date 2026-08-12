@@ -24,7 +24,7 @@
 - A1 checklist → **dedicated joint verification session** (Antonio drives, Fable greps/checks)
 - T149 + T150 → **parallel claude-code agents in Exegol worktrees** — briefs ready:
   `docs/AGENT_PROMPTS/WT_T149_CORE_TESTS.md` + `WT_T150_T80_PARITY.md` (supervisor reviews, no agent pushes)
-- Wave 3 order locked: **T156 ✅ (PR #90, 2026-08-11, pending live verify) → T157 next → T153**
+- Wave 3 order: **T156 ✅ (PRs #90-#92: fleet home + live peek terminal) → T157 core ✅ (PR #93, pending live verify) → T153**
 - Exit criteria met → **release v0.5.0** (tag + changelog)
 
 **P0 — before any new feature:**
