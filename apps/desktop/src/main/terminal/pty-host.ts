@@ -293,11 +293,6 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
-  /** Plain-text tail of the live screen buffer — cheap, no serialize (T156). */
-  getTailLines(id: string, maxLines: number): string | null {
-    return this.sessions.get(id)?.emulator.getTailLines(maxLines) ?? null;
-  }
-
   /** Full session snapshot for reattach protocol (modes + rehydrate sequences + CWD) */
   getSessionSnapshot(id: string): SessionSnapshot | null {
     return this.sessions.get(id)?.emulator.sessionSnapshot() ?? null;

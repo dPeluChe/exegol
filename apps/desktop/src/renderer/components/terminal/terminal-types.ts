@@ -13,6 +13,8 @@ export interface TerminalInstanceProps {
   paneId?: string;
   cliType?: string;
   readOnly?: boolean;
+  /** With readOnly: replay snapshot + stream live output (dashboard mini-terminal). */
+  liveFeed?: boolean;
   initialContent?: string;
   onReady?: () => void;
   /** `wrote` is true when triggered by new output landing (vs a user scroll). */

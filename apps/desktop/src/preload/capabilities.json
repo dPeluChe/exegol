@@ -29,7 +29,6 @@
       "listParallelRuns",
       "listProviders",
       "listResumable",
-      "peekTail",
       "preflight",
       "promoteParallelAgent",
       "recentSessions",

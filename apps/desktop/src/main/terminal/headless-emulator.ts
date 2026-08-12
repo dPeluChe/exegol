@@ -69,17 +69,6 @@ export class HeadlessEmulator {
   }
 
   /** Generate a serialized snapshot of the full terminal state */
-  /** Last N rendered lines as plain text — reads the screen buffer directly,
-   *  no serialize pass, no ANSI to strip (T156 peek-and-reply). */
-  getTailLines(maxLines: number): string {
-    const buf = this.terminal.buffer.active;
-    const lines: string[] = [];
-    for (let i = Math.max(0, buf.length - maxLines); i < buf.length; i++) {
-      lines.push(buf.getLine(i)?.translateToString(true) ?? "");
-    }
-    return lines.join("\n").replace(/\n+$/, "");
-  }
-
   snapshot(): string | null {
     try {
       const serialized = this.serializer.serialize({ excludeAltBuffer: true, excludeModes: true });

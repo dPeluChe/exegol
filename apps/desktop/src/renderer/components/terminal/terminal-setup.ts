@@ -17,6 +17,9 @@ export interface TerminalSessionDeps {
   paneId?: string;
   cliType?: string;
   readOnly: boolean;
+  /** With readOnly: still replay the snapshot + stream live PTY output
+   *  (T156 dashboard mini-terminal) — input stays disabled, PTY never resized. */
+  liveFeed?: boolean;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -157,6 +160,11 @@ export function setupTerminalSession(
     // write the snapshot directly to xterm (bypassing the dormant ring so a
     // large snapshot isn't truncated to its 256 KB cap when the pane mounts
     // hidden), and finally drain the live buffer in arrival order.
+  }
+
+  // Live feed runs for interactive terminals AND liveFeed viewers (T156):
+  // snapshot replay first, buffering any output that races it.
+  if (!deps.readOnly || deps.liveFeed) {
     let snapshotResolved = false;
     let liveDisposed = false;
     const liveBuffer: string[] = [];
