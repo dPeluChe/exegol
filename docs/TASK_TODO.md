@@ -430,7 +430,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ### T163 — MCP Config Injection: all providers `added: 2026-08-12`
-**Priority**: P1 (Wave 3 — blocker for cross-provider T157) | **Effort**: S-M | **Source**: verify 2026-08-11 follow-up, bumped by Antonio ("necesitaremos extender a todos los agentes")
+**Priority**: P1 | **Effort**: S-M | **STATUS: core SHIPPED 2026-08-12** (PR #96 stale-shim proxy + PR #97 codex/opencode/gemini injection) — pending live verify + remaining CLIs (aider/goose/amp/kiro/crush/agy/devin per docs)
 
 - Today only claude-code gets `.mcp.json` → only claude agents can use agents_list /
   agent_send / memory tools. Extend `mcp/exegol-mcp-config.ts` per provider:
