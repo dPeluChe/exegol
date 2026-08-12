@@ -10,7 +10,6 @@ import {
 } from "../../agents/handoff";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust } from "../../agents/spawn-env";
-import { stripAnsi, stripOscSequences } from "../../agents/status-parser";
 import {
   createAgent,
   getAgent,
@@ -19,6 +18,7 @@ import {
   listRecentSessions,
   updateAgentStatus,
 } from "../../db/queries";
+import { listActiveAgents } from "../../db/queries/agents";
 import {
   createParallelRun,
   enrichParallelRunForComparison,
@@ -28,6 +28,8 @@ import {
 } from "../../db/queries/parallel-runs";
 import { getPtyHost } from "../../terminal/pty-host";
 import { publicProcedure, router } from "../trpc";
+
+const PEEK_TAIL_LINES = 18;
 
 export const agentRouter = router({
   listProviders: publicProcedure.query(({ ctx }) => {
@@ -136,36 +138,13 @@ export const agentRouter = router({
     return listAgents(ctx.db, input.projectId);
   }),
 
-  /** T156: every non-terminal agent across ALL projects, with project name +
-   *  group color — the renderer store only knows projects opened this session. */
-  listActive: publicProcedure.query(({ ctx }) => {
-    return ctx.db
-      .prepare(
-        `SELECT a.id, a.project_id as projectId, a.cli_type as cliType, a.status,
-                a.current_step as currentStep, a.task_description as taskDescription,
-                a.branch_name as branchName, a.access_mode as accessMode,
-                a.started_at as startedAt,
-                p.name as projectName, g.color as groupColor
-         FROM agents a
-         JOIN projects p ON p.id = a.project_id
-         LEFT JOIN project_groups g ON g.id = p.group_id
-         WHERE a.status IN ('idle','spawning','running','waiting_input','paused')
-         ORDER BY a.started_at DESC`,
-      )
-      .all();
-  }),
+  /** T156: cross-project non-terminal agents (project name + group color). */
+  listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
 
-  /** T156 peek-and-reply: OSC/ANSI-stripped ring tail for a live agent. */
-  peekTail: publicProcedure
-    .input(z.object({ agentId: z.string(), chars: z.number().min(100).max(8000).default(1500) }))
-    .query(({ input }) => {
-      const snap = getPtyHost().getSnapshot(input.agentId);
-      if (!snap) return { tail: null };
-      const tail = stripAnsi(stripOscSequences(snap.slice(-input.chars * 4)))
-        .trim()
-        .slice(-input.chars);
-      return { tail };
-    }),
+  /** T156 peek-and-reply: plain-text tail of the live screen buffer. */
+  peekTail: publicProcedure.input(z.object({ agentId: z.string() })).query(({ input }) => {
+    return { tail: getPtyHost().getTailLines(input.agentId, PEEK_TAIL_LINES) };
+  }),
 
   // Returns null (not undefined) for consistency with TanStack Query v5,
   // which treats undefined from queryFn as a protocol error.

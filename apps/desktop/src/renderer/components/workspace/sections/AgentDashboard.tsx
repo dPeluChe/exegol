@@ -1,5 +1,6 @@
+import { type Agent, LIVE_STATUSES } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
   AlertTriangle,
@@ -16,6 +17,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { submitToAgent } from "../../../lib/agent-input";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
@@ -26,6 +28,7 @@ import {
   useWorkspaceStore,
 } from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
+import { FilterChip } from "../../common/FilterChip";
 
 const STATUS_CONFIG: Record<
   string,
@@ -95,7 +98,7 @@ function getSpinnerSet(id: string): string[] {
 }
 
 function Spinner({ agentId }: { agentId: string }) {
-  const frames = getSpinnerSet(agentId);
+  const frames = useMemo(() => getSpinnerSet(agentId), [agentId]);
   const [frame, setFrame] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), 100);
@@ -106,42 +109,46 @@ function Spinner({ agentId }: { agentId: string }) {
   );
 }
 
-function elapsedStr(startedAt: number | null): string {
-  if (!startedAt) return "";
+function elapsedStr(startedAt: number): string {
   const s = Math.floor(Date.now() / 1000 - startedAt);
   if (s < 60) return `${s}s`;
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 }
 
+/** Leaf timer: only this span re-renders as time passes, not the whole grid. */
+function Elapsed({ startedAt }: { startedAt: number }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="flex items-center gap-0.5">
+      <Clock className="h-2.5 w-2.5" />
+      {elapsedStr(startedAt)}
+    </span>
+  );
+}
+
 // ─── Data ───────────────────────────────────────────────────────────────
 
-/** agents.listActive row — DB truth across ALL projects (T156). */
-interface ActiveRow {
-  id: string;
-  projectId: string;
-  cliType: string;
-  status: string;
-  currentStep: string | null;
-  taskDescription: string;
-  branchName: string | null;
-  accessMode: string | null;
-  startedAt: number | null;
-  projectName: string;
-  groupColor: string | null;
-}
+/** agents.listActive row (db/queries/agents.ts#listActiveAgents). */
+type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
 
 interface ProjectInfo {
   id: string;
   name: string;
 }
 
-/** Store agent enriched with project metadata (DB rows fill store gaps). */
-type SessionAgent = AgentState & { projectName: string; groupColor: string | null };
+interface ProjectMeta {
+  name: string;
+  color: string | null;
+}
 
 type GroupBy = "state" | "project";
 
-const LIVE = ["running", "spawning", "waiting_input", "paused"];
+const isWorking = (a: AgentState) => a.status === "running" || a.status === "spawning";
 
 // ─── Component ──────────────────────────────────────────────────────────
 
@@ -150,11 +157,16 @@ export function AgentDashboard() {
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const [groupBy, setGroupBy] = useState<GroupBy>("state");
 
+  // DB truth for the whole fleet — hydrated INTO the store so every consumer
+  // (attention, badges) sees cross-project agents, not just this dashboard.
   const { data: activeRows } = useQuery({
     queryKey: ["agents", "listActive"],
-    queryFn: () => trpcInvoke<ActiveRow[]>("agents.listActive"),
-    refetchInterval: 15_000,
+    queryFn: () => trpcInvoke<ActiveAgent[]>("agents.listActive"),
+    refetchInterval: 60_000,
   });
+  useEffect(() => {
+    if (activeRows?.length) useAgentStore.getState().syncFromDb("__fleet__", activeRows);
+  }, [activeRows]);
 
   const { data: projects } = useQuery({
     queryKey: ["projects"],
@@ -162,60 +174,91 @@ export function AgentDashboard() {
     staleTime: 30_000,
   });
 
-  // Tick for elapsed time
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 5_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const projectMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of projects ?? []) m.set(p.id, p.name);
-    return m;
-  }, [projects]);
-
-  // Merge: store rows are freshest (push events); DB rows add agents from
-  // projects never opened this session + project name/group color.
-  const allAgents = useMemo((): SessionAgent[] => {
-    const dbById = new Map((activeRows ?? []).map((r) => [r.id, r]));
-    const merged: SessionAgent[] = Object.values(storeAgents).map((a) => {
-      const db = dbById.get(a.id);
-      return {
-        ...a,
-        projectName: db?.projectName ?? projectMap.get(a.projectId) ?? a.projectId.slice(0, 12),
-        groupColor: db?.groupColor ?? null,
-      };
-    });
-    const inStore = new Set(Object.keys(storeAgents));
+  // Project name/color per projectId — listActive rows carry it; projects.list
+  // fills in for Recent agents whose project has no live rows.
+  const projectMeta = useMemo(() => {
+    const m = new Map<string, ProjectMeta>();
+    for (const p of projects ?? []) m.set(p.id, { name: p.name, color: null });
     for (const r of activeRows ?? []) {
-      if (inStore.has(r.id)) continue;
-      merged.push({
-        id: r.id,
-        projectId: r.projectId,
-        cliType: r.cliType as AgentState["cliType"],
-        status: r.status as AgentState["status"],
-        currentStep: r.currentStep,
-        taskDescription: r.taskDescription,
-        branchName: r.branchName,
-        tokenUsage: { input: 0, output: 0, cost: 0 },
-        startedAt: r.startedAt ?? undefined,
-        accessMode: (r.accessMode as AgentState["accessMode"]) ?? null,
-        claudeSessionId: null,
-        activityLevel: "neutral",
-        projectName: r.projectName,
-        groupColor: r.groupColor,
-      } as SessionAgent);
+      m.set(r.projectId, { name: r.projectName, color: r.groupColor });
     }
-    return merged.sort((a, b) => {
-      const aActive = LIVE.includes(a.status) ? 0 : 1;
-      const bActive = LIVE.includes(b.status) ? 0 : 1;
+    return m;
+  }, [projects, activeRows]);
+
+  const { groups, total, runningCount, unreadCount } = useMemo(() => {
+    const all = Object.values(storeAgents).sort((a, b) => {
+      const aActive = LIVE_STATUSES.has(a.status) ? 0 : 1;
+      const bActive = LIVE_STATUSES.has(b.status) ? 0 : 1;
       if (aActive !== bActive) return aActive - bActive;
       return (b.startedAt ?? 0) - (a.startedAt ?? 0);
     });
-  }, [storeAgents, activeRows, projectMap]);
+    const unread = (id: string) => {
+      const item = attentionItems[id];
+      return !!item && !item.read;
+    };
 
-  const navigateToAgent = useCallback((agent: SessionAgent) => {
+    let running = 0;
+    let unreadTotal = 0;
+    const buckets: Record<string, AgentState[]> = { needs: [], working: [], idle: [], recent: [] };
+    const byProject = new Map<string, AgentState[]>();
+
+    for (const a of all) {
+      if (a.status === "running") running++;
+      const isUnread = unread(a.id);
+      if (isUnread) unreadTotal++;
+      if (groupBy === "state") {
+        const key = isUnread
+          ? "needs"
+          : isWorking(a)
+            ? "working"
+            : LIVE_STATUSES.has(a.status)
+              ? "idle"
+              : "recent";
+        buckets[key]?.push(a);
+      } else {
+        const list = byProject.get(a.projectId) ?? [];
+        list.push(a);
+        byProject.set(a.projectId, list);
+      }
+    }
+
+    const result: Array<{
+      key: string;
+      title: string;
+      color: string | null;
+      agents: AgentState[];
+      unread: Set<string>;
+    }> = [];
+    const unreadSet = new Set(all.filter((a) => unread(a.id)).map((a) => a.id));
+    if (groupBy === "state") {
+      const titles: Record<string, string> = {
+        needs: "Needs attention",
+        working: "Working",
+        idle: "Idle — at prompt",
+        recent: "Recent",
+      };
+      for (const key of ["needs", "working", "idle", "recent"]) {
+        const agents = buckets[key] ?? [];
+        if (agents.length) {
+          result.push({ key, title: titles[key] ?? key, color: null, agents, unread: unreadSet });
+        }
+      }
+    } else {
+      for (const [projectId, agents] of byProject) {
+        const meta = projectMeta.get(projectId);
+        result.push({
+          key: projectId,
+          title: meta?.name ?? projectId.slice(0, 12),
+          color: meta?.color ?? null,
+          agents,
+          unread: unreadSet,
+        });
+      }
+    }
+    return { groups: result, total: all.length, runningCount: running, unreadCount: unreadTotal };
+  }, [storeAgents, attentionItems, groupBy, projectMeta]);
+
+  const navigateToAgent = useCallback((agent: AgentState) => {
     const app = useAppStore.getState();
     const store = useAgentStore.getState();
     store.markAttentionRead(agent.id);
@@ -252,7 +295,7 @@ export function AgentDashboard() {
     }
   }, []);
 
-  if (allAgents.length === 0) {
+  if (total === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 bg-bg-primary p-8">
         <Cpu className="h-10 w-10 text-text-muted/30" />
@@ -266,48 +309,6 @@ export function AgentDashboard() {
     );
   }
 
-  // ── Grouping ──────────────────────────────────────────────────────────
-  const isUnread = (id: string) => {
-    const item = attentionItems[id];
-    return !!item && !item.read;
-  };
-
-  const groups: Array<{
-    key: string;
-    title: string;
-    dotColor?: string | null;
-    agents: SessionAgent[];
-  }> = [];
-  if (groupBy === "state") {
-    const needs = allAgents.filter((a) => isUnread(a.id));
-    const working = allAgents.filter(
-      (a) => !isUnread(a.id) && (a.status === "running" || a.status === "spawning"),
-    );
-    const idle = allAgents.filter(
-      (a) => !isUnread(a.id) && ["waiting_input", "paused", "idle"].includes(a.status),
-    );
-    const recent = allAgents.filter((a) => !LIVE.includes(a.status) && !isUnread(a.id));
-    if (needs.length) groups.push({ key: "needs", title: "Needs attention", agents: needs });
-    if (working.length) groups.push({ key: "working", title: "Working", agents: working });
-    if (idle.length) groups.push({ key: "idle", title: "Idle — at prompt", agents: idle });
-    if (recent.length) groups.push({ key: "recent", title: "Recent", agents: recent });
-  } else {
-    const byProject = new Map<string, SessionAgent[]>();
-    for (const agent of allAgents) {
-      const list = byProject.get(agent.projectId) ?? [];
-      list.push(agent);
-      byProject.set(agent.projectId, list);
-    }
-    for (const [projectId, agents] of byProject) {
-      groups.push({
-        key: projectId,
-        title: agents[0]?.projectName ?? projectId.slice(0, 12),
-        dotColor: agents[0]?.groupColor,
-        agents,
-      });
-    }
-  }
-
   return (
     <ScrollArea className="h-full">
       <div className="space-y-6 p-4">
@@ -315,23 +316,23 @@ export function AgentDashboard() {
         <div className="flex items-center gap-4 text-xs text-text-muted">
           <span className="flex items-center gap-1.5">
             <Cpu className="h-3.5 w-3.5" />
-            <span className="font-medium text-text-primary">{allAgents.length}</span> agents
+            <span className="font-medium text-text-primary">{total}</span> agents
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-green-500" />
-            {allAgents.filter((a) => a.status === "running").length} running
+            {runningCount} running
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-amber-500" />
-            {allAgents.filter((a) => isUnread(a.id)).length} need attention
+            {unreadCount} need attention
           </span>
           <div className="ml-auto flex items-center gap-1">
-            <ToggleChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
+            <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
               By state
-            </ToggleChip>
-            <ToggleChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
+            </FilterChip>
+            <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
               By project
-            </ToggleChip>
+            </FilterChip>
           </div>
         </div>
 
@@ -339,8 +340,8 @@ export function AgentDashboard() {
           <div key={group.key}>
             <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
               <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: group.dotColor ?? "var(--accent, #8b5cf6)" }}
+                className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
+                style={group.color ? { backgroundColor: group.color } : undefined}
               />
               {group.title}
               <span className="font-normal">({group.agents.length})</span>
@@ -350,8 +351,8 @@ export function AgentDashboard() {
                 <AgentCard
                   key={agent.id}
                   agent={agent}
-                  showProject={groupBy === "state"}
-                  hasUnread={isUnread(agent.id)}
+                  projectMeta={groupBy === "state" ? projectMeta.get(agent.projectId) : undefined}
+                  hasUnread={group.unread.has(agent.id)}
                   onClick={() => navigateToAgent(agent)}
                 />
               ))}
@@ -363,49 +364,25 @@ export function AgentDashboard() {
   );
 }
 
-function ToggleChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full px-2 py-0.5 text-[10px] transition-colors",
-        active
-          ? "bg-white/10 text-text-primary"
-          : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 function AgentCard({
   agent,
-  showProject,
+  projectMeta,
   hasUnread,
   onClick,
 }: {
-  agent: SessionAgent;
-  showProject: boolean;
+  agent: AgentState;
+  /** Set only in by-state grouping — shows which project the card belongs to. */
+  projectMeta?: ProjectMeta;
   hasUnread: boolean;
   onClick: () => void;
 }) {
   const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
   const StatusIcon = config.icon;
-  const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
-  const canPeek = LIVE.includes(agent.status);
+  const canPeek = LIVE_STATUSES.has(agent.status);
   const [peekOpen, setPeekOpen] = useState(false);
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: nested interactive children (peek button/input) prevent <button>
     <div
       className={cn(
         "group flex flex-col rounded-xl border p-3 transition-all",
@@ -423,9 +400,7 @@ function AgentCard({
         {/* Left: icon + spinner */}
         <div className="flex flex-col items-center gap-1.5 pt-0.5">
           <AgentIcon provider={agent.cliType} size={28} />
-          {isActive && !hasUnread && agent.status !== "waiting_input" && (
-            <Spinner agentId={agent.id} />
-          )}
+          {!hasUnread && isWorking(agent) && <Spinner agentId={agent.id} />}
         </div>
 
         {/* Center: info */}
@@ -436,16 +411,16 @@ function AgentCard({
               <StatusIcon className="h-3 w-3" />
               {hasUnread ? "Needs input" : config.label}
             </span>
-            {showProject && (
+            {projectMeta && (
               <span
                 className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] text-text-muted"
-                title={agent.projectName}
+                title={projectMeta.name}
               >
                 <span
-                  className="h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: agent.groupColor ?? "var(--accent, #8b5cf6)" }}
+                  className={cn("h-1.5 w-1.5 rounded-full", !projectMeta.color && "bg-accent")}
+                  style={projectMeta.color ? { backgroundColor: projectMeta.color } : undefined}
                 />
-                <span className="max-w-[90px] truncate">{agent.projectName}</span>
+                <span className="max-w-[90px] truncate">{projectMeta.name}</span>
               </span>
             )}
           </div>
@@ -456,12 +431,7 @@ function AgentCard({
             </p>
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
-            {agent.startedAt && (
-              <span className="flex items-center gap-0.5">
-                <Clock className="h-2.5 w-2.5" />
-                {elapsedStr(agent.startedAt)}
-              </span>
-            )}
+            {agent.startedAt && <Elapsed startedAt={agent.startedAt} />}
             {(agent.tokenUsage.input > 0 || agent.tokenUsage.output > 0) && (
               <span className="flex items-center gap-0.5">
                 <Coins className="h-2.5 w-2.5" />
@@ -508,40 +478,35 @@ function AgentCard({
         </div>
       </div>
 
-      {peekOpen && canPeek && <PeekPanel agent={agent} />}
+      {peekOpen && <PeekPanel agent={agent} />}
     </div>
   );
 }
 
-/** T156 peek-and-reply: stripped ring tail + one-line reply straight to the PTY. */
-function PeekPanel({ agent }: { agent: SessionAgent }) {
-  const queryClient = useQueryClient();
+/** T156 peek-and-reply: plain-text tail + one-line reply straight to the PTY. */
+function PeekPanel({ agent }: { agent: AgentState }) {
   const [reply, setReply] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["agents", "peekTail", agent.id],
-    queryFn: () =>
-      trpcInvoke<{ tail: string | null }>("agents.peekTail", { agentId: agent.id, chars: 1500 }),
+    queryFn: () => trpcInvoke<{ tail: string | null }>("agents.peekTail", { agentId: agent.id }),
     refetchInterval: 5_000,
+    staleTime: 5_000,
   });
 
   const send = () => {
     const text = reply.trim();
     if (!text) return;
-    window.api.terminal.write(agent.id, `${text}\r`);
-    useAgentStore.getState().markAttentionRead(agent.id);
+    submitToAgent(agent.id, text);
     setReply("");
-    setTimeout(
-      () => queryClient.invalidateQueries({ queryKey: ["agents", "peekTail", agent.id] }),
-      1_200,
-    );
   };
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: click shield so the card doesn't navigate
+    // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation-only handler, not an action
     <div className="mt-2 border-t border-border pt-2" onClick={(e) => e.stopPropagation()}>
       <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-text-secondary">
-        {isLoading ? "Loading…" : (data?.tail?.split("\n").slice(-18).join("\n") ?? "No output")}
+        {isLoading ? "Loading…" : (data?.tail ?? "No output — open the terminal pane")}
       </pre>
       <div className="mt-1.5 flex items-center gap-1.5">
         <input

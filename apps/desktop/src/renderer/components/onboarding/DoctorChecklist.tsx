@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
 import { useState } from "react";
+import { FilterChip } from "../common/FilterChip";
 import type { DoctorCategory, DoctorCheck, DoctorStatus } from "./use-doctor";
 
 const STATUS_ICON: Record<DoctorStatus, typeof CheckCircle2> = {
@@ -139,29 +140,5 @@ export function DoctorChecklist({
         );
       })}
     </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-2 py-0.5 text-[10px] transition-colors ${
-        active
-          ? "bg-white/10 text-text-primary"
-          : "text-text-muted hover:bg-white/5 hover:text-text-secondary"
-      }`}
-    >
-      {children}
-    </button>
   );
 }

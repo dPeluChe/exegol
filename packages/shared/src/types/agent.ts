@@ -32,6 +32,14 @@ export type AgentStatus = (typeof AGENT_STATUSES)[number];
 
 export const RUNNING_STATUSES = new Set<AgentStatus>(["running", "waiting_input"]);
 export const ACTIVE_STATUSES = new Set<AgentStatus>(["running", "spawning", "waiting_input"]);
+/** Non-terminal statuses — an agent that may still hold a PTY (T156). */
+export const LIVE_STATUSES = new Set<AgentStatus>([
+  "idle",
+  "spawning",
+  "running",
+  "waiting_input",
+  "paused",
+]);
 
 // ─── Activity Classification (T70) ─────────────────────────────────────────
 
