@@ -3,6 +3,7 @@ import {
   type EvaluatorGatePolicy,
   type EvaluatorVerdict,
 } from "@exegol/shared";
+import { callAnthropicMessage } from "../lib/anthropic";
 import { logger } from "../lib/logger";
 
 /**
@@ -26,29 +27,14 @@ interface HaikuUsage {
 }
 
 async function callHaiku(apiKey: string, prompt: string, maxTokens: number): Promise<HaikuUsage> {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: maxTokens,
-      messages: [{ role: "user", content: prompt }],
-    }),
-    signal: AbortSignal.timeout(30_000),
+  const { text, inputTokens, outputTokens } = await callAnthropicMessage({
+    apiKey,
+    model: "claude-haiku-4-5-20251001",
+    maxTokens,
+    prompt,
+    timeoutMs: 30_000,
+    label: "pipeline.evaluator",
   });
-  if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${res.statusText}`);
-
-  const data = (await res.json()) as {
-    content?: Array<{ text?: string }>;
-    usage?: { input_tokens?: number; output_tokens?: number };
-  };
-  const text = (data.content?.[0]?.text ?? "").trim();
-  const inputTokens = data.usage?.input_tokens ?? 0;
-  const outputTokens = data.usage?.output_tokens ?? 0;
   const costUsd =
     (inputTokens / 1_000_000) * HAIKU_PRICE_PER_MTOK_INPUT +
     (outputTokens / 1_000_000) * HAIKU_PRICE_PER_MTOK_OUTPUT;

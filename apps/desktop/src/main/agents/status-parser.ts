@@ -16,6 +16,7 @@ type StatusUpdate = {
  * Distinct from the pre-existing `777;exegol-shell-ready` marker (shell-wrappers.ts).
  * JS mirror of the Rust `OscNotifyScanner` (core-rust/src/processing/osc_notify.rs) — used
  * only when the native module is unavailable (JS fallback path).
+ * Parity is enforced by packages/core-rust/test-vectors/parser-vectors.json (T150).
  */
 const OSC777_NOTIFY_PREFIX = "\x1b]777;notify;Exegol;";
 const MAX_OSC_PAYLOAD_LEN = 256;
@@ -80,12 +81,17 @@ export class OscNotifyScanner {
   }
 }
 
+type LineUpdate = { status?: AgentStatus; currentStep?: string } | null;
+
+const MAX_BUFFER = 10240;
+
 /**
  * Parses agent CLI stdout to extract status information.
- * Each CLI tool has different output patterns that indicate what the agent is doing.
+ * JS mirror of the Rust `AgentOutputStream` + `status_matchers.rs` (T150 parity):
+ * strips ANSI per chunk, buffers clean text, skips lines shorter than 3 chars,
+ * and matches with the exact same contains/starts-with semantics as Rust.
  */
 export class AgentStatusParser {
-  private static readonly MAX_BUFFER = 10240;
   private cliType: AgentCliType;
   private resumePattern: string;
   private buffer: string = "";
@@ -104,231 +110,268 @@ export class AgentStatusParser {
     // OSC-777 notify signals must be scanned on the raw (pre-strip) stream.
     const signals = this.oscScanner.scan(data);
 
-    // Accumulate partial lines
-    this.buffer += data;
-
-    // Prevent unbounded buffer growth
-    if (this.buffer.length > AgentStatusParser.MAX_BUFFER) {
-      this.buffer = this.buffer.slice(-AgentStatusParser.MAX_BUFFER);
+    this.buffer += stripAnsi(data);
+    if (this.buffer.length > MAX_BUFFER) {
+      this.buffer = this.buffer.slice(-MAX_BUFFER);
     }
-
-    // Process complete lines
-    const lines = this.buffer.split("\n");
-    // Keep the last incomplete line in the buffer
-    this.buffer = lines.pop() ?? "";
 
     let lastUpdate: StatusUpdate | null = null;
 
-    for (const line of lines) {
-      const cleaned = stripAnsi(line).trim();
-      if (!cleaned) continue;
+    // Process complete lines; keep the last incomplete line in the buffer.
+    const lastNewline = this.buffer.lastIndexOf("\n");
+    if (lastNewline !== -1) {
+      const complete = this.buffer.slice(0, lastNewline);
+      this.buffer = this.buffer.slice(lastNewline + 1);
 
-      const update = this.parseLine(cleaned);
-      if (update) {
-        lastUpdate = update;
-      }
+      for (const line of complete.split("\n")) {
+        const cleaned = line.trim();
+        if (!cleaned || cleaned.length < 3) continue;
 
-      // Check for token limit warnings across all CLI types
-      if (detectTokenLimitWarning(cleaned)) {
-        lastUpdate = { ...lastUpdate, tokenLimitWarning: true };
-      }
+        // Check for token limit warnings across all CLI types
+        if (detectTokenLimitWarning(cleaned)) {
+          lastUpdate = { ...(lastUpdate ?? {}), tokenLimitWarning: true };
+        }
 
-      // Parse session ID for claude-code (T101, startup)
-      if (this.cliType === "claude-code" && !lastUpdate?.sessionId) {
-        const sessionId = parseSessionId(cleaned);
-        if (sessionId) lastUpdate = { ...lastUpdate, sessionId };
-      }
+        // Parse session ID for claude-code (T101, startup)
+        if (this.cliType === "claude-code" && !lastUpdate?.sessionId) {
+          const sessionId = parseSessionId(cleaned);
+          if (sessionId) lastUpdate = { ...(lastUpdate ?? {}), sessionId };
+        }
 
-      // Parse resume command from shutdown output (T101, all CLIs)
-      if (!lastUpdate?.resumeCommand && this.resumePattern) {
-        const resumeCommand = parseResumeCommandFromPattern(this.resumePattern, cleaned);
-        if (resumeCommand) lastUpdate = { ...lastUpdate, resumeCommand };
+        // Parse resume command from shutdown output (T101, all CLIs)
+        if (!lastUpdate?.resumeCommand && this.resumePattern) {
+          const resumeCommand = parseResumeCommandFromPattern(this.resumePattern, cleaned);
+          if (resumeCommand) lastUpdate = { ...(lastUpdate ?? {}), resumeCommand };
+        }
+
+        const update = parseLine(this.cliType, cleaned);
+        if (update) {
+          // Rust assigns both fields on every match — a later match with no
+          // status clears an earlier one, so overwrite (even with undefined).
+          lastUpdate = {
+            ...(lastUpdate ?? {}),
+            status: update.status,
+            currentStep: update.currentStep,
+          };
+        }
       }
     }
 
     if (signals.length > 0) {
-      lastUpdate = { ...lastUpdate, signals };
+      lastUpdate = { ...(lastUpdate ?? {}), signals };
     }
 
     return lastUpdate;
   }
+}
 
-  private parseLine(line: string): StatusUpdate | null {
-    switch (this.cliType) {
-      case "claude-code":
-        return this.parseClaudeCode(line);
-      case "codex":
-        return this.parseCodex(line);
-      case "aider":
-        return this.parseAider(line);
-      case "gemini":
-        return this.parseGemini(line);
-      default:
-        return this.parseGeneric(line);
+// ─── Line matchers (mirror of core-rust/src/processing/status_matchers.rs) ──
+
+const WAITING: LineUpdate = { status: "waiting_input", currentStep: "Waiting for user input" };
+
+function failed(line: string): LineUpdate {
+  return { status: "failed", currentStep: line.slice(0, 120) };
+}
+
+function parseLine(cliType: AgentCliType, line: string): LineUpdate {
+  switch (cliType) {
+    case "claude-code":
+      return parseClaudeCode(line);
+    case "codex":
+      return parseCodex(line);
+    case "aider":
+      return parseAider(line);
+    case "gemini":
+      return parseGemini(line);
+    default:
+      return parseGeneric(line);
+  }
+}
+
+const CLAUDE_TOOLS = [
+  "Read",
+  "Edit",
+  "Write",
+  "Bash",
+  "Agent",
+  "Glob",
+  "Grep",
+  "WebFetch",
+  "WebSearch",
+  "TodoWrite",
+];
+
+function takeWord(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    if (/[\p{L}\p{N}_]/u.test(ch)) out += ch;
+    else break;
+  }
+  return out;
+}
+
+function parseClaudeCode(line: string): LineUpdate {
+  for (const tool of CLAUDE_TOOLS) {
+    if (line.includes(tool) && line.includes("(")) {
+      return { currentStep: `Tool: ${tool}` };
     }
   }
 
-  /**
-   * Claude Code patterns:
-   * - Tool calls: "Read(file)", "Edit(file)", "Write(file)", "Bash(cmd)", "Agent(task)"
-   * - Waiting: "waiting for input", prompt indicators
-   * - Errors: "Error:", "error:"
-   */
-  private parseClaudeCode(line: string): StatusUpdate | null {
-    // Tool call detection
-    const toolMatch = line.match(
-      /\b(Read|Edit|Write|Bash|Agent|Glob|Grep|WebFetch|WebSearch|TodoWrite)\s*\(/i,
-    );
-    if (toolMatch) {
-      return { currentStep: `Tool: ${toolMatch[1]}` };
-    }
-
-    // File operations
-    const fileEditMatch = line.match(/(?:Editing|Writing|Reading)\s+(.+)/i);
-    if (fileEditMatch) {
-      return { currentStep: fileEditMatch[0] };
-    }
-
-    // Waiting for input
-    if (/waiting for input|do you want to|y\/n|\(yes\/no\)/i.test(line)) {
-      return { status: "waiting_input", currentStep: "Waiting for user input" };
-    }
-
-    // Error detection
-    if (/^error:|internal error|fatal:/i.test(line)) {
-      return { status: "failed", currentStep: line.slice(0, 120) };
-    }
-
-    // Thinking / processing
-    if (/thinking|analyzing|processing/i.test(line)) {
-      return { currentStep: "Thinking..." };
-    }
-
-    return null;
+  const lower = line.toLowerCase();
+  if (
+    lower.startsWith("editing ") ||
+    lower.startsWith("writing ") ||
+    lower.startsWith("reading ")
+  ) {
+    return { currentStep: line.slice(0, 120) };
   }
 
-  /**
-   * OpenAI Codex patterns:
-   * - Tool calls and function invocations
-   * - Thinking indicators
-   */
-  private parseCodex(line: string): StatusUpdate | null {
-    // Tool call patterns
-    const toolMatch = line.match(/(?:calling|running|executing)\s+(\w+)/i);
-    if (toolMatch) {
-      return { currentStep: `Tool: ${toolMatch[1]}` };
-    }
-
-    // File operations
-    const fileMatch = line.match(/(?:reading|writing|editing|creating)\s+(.+)/i);
-    if (fileMatch) {
-      return { currentStep: fileMatch[0] };
-    }
-
-    // Thinking
-    if (/thinking|reasoning/i.test(line)) {
-      return { currentStep: "Thinking..." };
-    }
-
-    // Waiting for input
-    if (/\?\s*$|confirm|y\/n/i.test(line)) {
-      return { status: "waiting_input", currentStep: "Waiting for user input" };
-    }
-
-    // Errors
-    if (/^error|failed|exception/i.test(line)) {
-      return { status: "failed", currentStep: line.slice(0, 120) };
-    }
-
-    return null;
+  if (
+    lower.includes("waiting for input") ||
+    lower.includes("do you want to") ||
+    lower.includes("y/n") ||
+    lower.includes("(yes/no)")
+  ) {
+    return WAITING;
   }
 
-  /**
-   * Aider patterns:
-   * - "Editing file..."
-   * - "Applied edit to..."
-   * - "Git diff" operations
-   */
-  private parseAider(line: string): StatusUpdate | null {
-    if (/editing\s+/i.test(line)) {
-      return { currentStep: line.slice(0, 120) };
-    }
-
-    if (/applied edit to\s+(.+)/i.test(line)) {
-      const match = line.match(/applied edit to\s+(.+)/i);
-      return { currentStep: `Applied edit: ${match?.[1] ?? ""}` };
-    }
-
-    if (/git diff/i.test(line)) {
-      return { currentStep: "Reviewing changes..." };
-    }
-
-    if (/searching/i.test(line)) {
-      return { currentStep: "Searching codebase..." };
-    }
-
-    // Waiting for input (aider prompt)
-    if (/^>\s*$|^\s*\?\s*$/i.test(line)) {
-      return { status: "waiting_input", currentStep: "Waiting for user input" };
-    }
-
-    if (/^error|traceback|exception/i.test(line)) {
-      return { status: "failed", currentStep: line.slice(0, 120) };
-    }
-
-    return null;
+  if (
+    lower.startsWith("error:") ||
+    lower.startsWith("internal error") ||
+    lower.startsWith("fatal:")
+  ) {
+    return failed(line);
   }
 
-  /**
-   * Google Gemini CLI patterns.
-   */
-  private parseGemini(line: string): StatusUpdate | null {
-    const toolMatch = line.match(/(?:using|calling|executing)\s+(\w+)/i);
-    if (toolMatch) {
-      return { currentStep: `Tool: ${toolMatch[1]}` };
-    }
-
-    if (/thinking|generating/i.test(line)) {
-      return { currentStep: "Thinking..." };
-    }
-
-    if (/\?\s*$|confirm|y\/n/i.test(line)) {
-      return { status: "waiting_input", currentStep: "Waiting for user input" };
-    }
-
-    if (/^error|failed/i.test(line)) {
-      return { status: "failed", currentStep: line.slice(0, 120) };
-    }
-
-    return null;
+  if (lower.includes("thinking") || lower.includes("analyzing") || lower.includes("processing")) {
+    return { currentStep: "Thinking..." };
   }
 
-  /**
-   * Generic fallback patterns for unknown CLI types.
-   */
-  private parseGeneric(line: string): StatusUpdate | null {
-    // Error patterns
-    if (/^error|^FAIL|^fatal|exception|traceback/i.test(line)) {
-      return { status: "failed", currentStep: line.slice(0, 120) };
-    }
+  return null;
+}
 
-    // Waiting for input patterns
-    if (/\?\s*$|\(y\/n\)|confirm|press enter/i.test(line)) {
-      return { status: "waiting_input", currentStep: "Waiting for user input" };
+function parseCodex(line: string): LineUpdate {
+  const lower = line.toLowerCase();
+  if (lower.includes("calling ") || lower.includes("running ") || lower.includes("executing ")) {
+    for (const prefix of ["calling ", "running ", "executing "]) {
+      const pos = lower.indexOf(prefix);
+      if (pos !== -1) {
+        const tool = takeWord(line.slice(pos + prefix.length));
+        if (tool) return { currentStep: `Tool: ${tool}` };
+      }
     }
-
-    // Test runner detection
-    if (/tests?\s+(?:passed|failed|running)/i.test(line)) {
-      return { currentStep: line.slice(0, 120) };
-    }
-
-    // File operation patterns
-    if (/(?:reading|writing|editing|creating|deleting)\s+/i.test(line)) {
-      return { currentStep: line.slice(0, 120) };
-    }
-
-    return null;
   }
+
+  if (lower.includes("thinking") || lower.includes("reasoning")) {
+    return { currentStep: "Thinking..." };
+  }
+
+  if (line.endsWith("?") || lower.includes("confirm") || lower.includes("y/n")) {
+    return WAITING;
+  }
+
+  if (lower.startsWith("error") || lower.startsWith("failed") || lower.startsWith("exception")) {
+    return failed(line);
+  }
+
+  return null;
+}
+
+function parseAider(line: string): LineUpdate {
+  const lower = line.toLowerCase();
+  if (lower.includes("editing ")) {
+    return { currentStep: line.slice(0, 120) };
+  }
+
+  const appliedPos = lower.indexOf("applied edit to ");
+  if (appliedPos !== -1) {
+    return { currentStep: `Applied edit: ${line.slice(appliedPos + 16)}` };
+  }
+
+  if (lower.includes("git diff")) {
+    return { currentStep: "Reviewing changes..." };
+  }
+
+  if (lower.includes("searching")) {
+    return { currentStep: "Searching codebase..." };
+  }
+
+  const trimmed = line.trim();
+  if (trimmed === ">" || trimmed === "?") {
+    return WAITING;
+  }
+
+  if (lower.startsWith("error") || lower.startsWith("traceback") || lower.startsWith("exception")) {
+    return failed(line);
+  }
+
+  return null;
+}
+
+function parseGemini(line: string): LineUpdate {
+  const lower = line.toLowerCase();
+  for (const prefix of ["using ", "calling ", "executing "]) {
+    const pos = lower.indexOf(prefix);
+    if (pos !== -1) {
+      const tool = takeWord(line.slice(pos + prefix.length));
+      if (tool) return { currentStep: `Tool: ${tool}` };
+    }
+  }
+
+  if (lower.includes("thinking") || lower.includes("generating")) {
+    return { currentStep: "Thinking..." };
+  }
+
+  if (line.endsWith("?") || lower.includes("confirm") || lower.includes("y/n")) {
+    return WAITING;
+  }
+
+  if (lower.startsWith("error") || lower.startsWith("failed")) {
+    return failed(line);
+  }
+
+  return null;
+}
+
+function parseGeneric(line: string): LineUpdate {
+  const lower = line.toLowerCase();
+  if (
+    lower.startsWith("error") ||
+    lower.startsWith("fail") ||
+    lower.startsWith("fatal") ||
+    lower.includes("exception") ||
+    lower.includes("traceback")
+  ) {
+    return failed(line);
+  }
+
+  if (
+    line.endsWith("?") ||
+    lower.includes("(y/n)") ||
+    lower.includes("confirm") ||
+    lower.includes("press enter")
+  ) {
+    return WAITING;
+  }
+
+  if (
+    lower.includes("test") &&
+    (lower.includes("passed") || lower.includes("failed") || lower.includes("running"))
+  ) {
+    return { currentStep: line.slice(0, 120) };
+  }
+
+  if (
+    lower.includes("reading ") ||
+    lower.includes("writing ") ||
+    lower.includes("editing ") ||
+    lower.includes("creating ") ||
+    lower.includes("deleting ")
+  ) {
+    return { currentStep: line.slice(0, 120) };
+  }
+
+  return null;
 }
 
 /**
@@ -336,8 +379,16 @@ export class AgentStatusParser {
  * Handles formats: "Session ID: abc123" and "│ Session ID: abc123 │"
  */
 export function parseSessionId(line: string): string | null {
-  const match = line.match(/session\s+id:\s*([a-zA-Z0-9_-]{8,})/i);
-  return match?.[1] ?? null;
+  const marker = "session id:";
+  const pos = line.toLowerCase().indexOf(marker);
+  if (pos === -1) return null;
+  const after = line.slice(pos + marker.length).trim();
+  let id = "";
+  for (const ch of after) {
+    if (/[\p{L}\p{N}]/u.test(ch) || ch === "-" || ch === "_") id += ch;
+    else break;
+  }
+  return id.length >= 8 ? id : null;
 }
 
 /**
@@ -360,16 +411,64 @@ export function parseResumeCommandFromPattern(pattern: string, line: string): st
 
 /**
  * Strip ANSI escape codes from terminal output.
+ * Char-level port of the Rust `strip_ansi_bytes` (core-rust/src/processing/strip_ansi.rs):
+ * CSI, full OSC (incl. BEL/ST payloads), simple escapes, and carriage returns.
  */
 export function stripAnsi(str: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence stripping
-  return str.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
+  if (!str.includes("\x1b") && !str.includes("\r")) return str;
+
+  let out = "";
+  let i = 0;
+  const len = str.length;
+
+  while (i < len) {
+    const c = str.charCodeAt(i);
+
+    if (c === 0x1b) {
+      i++;
+      if (i >= len) break;
+      const next = str.charCodeAt(i);
+
+      if (next === 0x5b) {
+        // CSI: ESC [ — skip parameter/intermediate bytes then the final byte
+        i++;
+        while (i < len && str.charCodeAt(i) >= 0x20 && str.charCodeAt(i) <= 0x3f) i++;
+        while (i < len && str.charCodeAt(i) >= 0x20 && str.charCodeAt(i) <= 0x2f) i++;
+        if (i < len && str.charCodeAt(i) >= 0x40 && str.charCodeAt(i) <= 0x7e) i++;
+      } else if (next === 0x5d) {
+        // OSC: ESC ] — read until BEL or ST (ESC \)
+        i++;
+        while (i < len) {
+          const b = str.charCodeAt(i);
+          if (b === 0x07) {
+            i++;
+            break;
+          }
+          if (b === 0x1b && i + 1 < len && str.charCodeAt(i + 1) === 0x5c) {
+            i += 2;
+            break;
+          }
+          i++;
+        }
+      } else if (next >= 0x40 && next <= 0x5f) {
+        // Simple escape: ESC + single byte
+        i++;
+      }
+      // Unknown escape — skip just the ESC
+    } else if (c === 0x0d) {
+      i++;
+    } else {
+      out += str[i];
+      i++;
+    }
+  }
+
+  return out;
 }
 
 /**
- * Strip OSC sequences (ESC ] ... BEL/ST) — stripAnsi's regex only removes
- * ESC + one char for non-CSI, leaving OSC payloads (e.g. our own
- * `777;notify;Exegol;...`) behind as literal text in scrollback tails.
+ * Strip OSC sequences (ESC ] ... BEL/ST). Kept for callers that clean stored
+ * scrollback tails which may predate the full-OSC stripAnsi above.
  */
 export function stripOscSequences(str: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional OSC sequence stripping

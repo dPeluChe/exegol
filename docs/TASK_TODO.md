@@ -30,8 +30,8 @@
 **P0 — before any new feature:**
 1. **Manual verification backlog** (sections below) — ✅ T123 done; next joint session:
    attention signal, pipeline+evaluator+report, oplog v2, MCP live, then the rest
-2. **T149** — Orchestration-core tests (executor, manager, MCP server, **db/migrations**)
-3. **T150** — T80 closure (`withRetry` wire-in or delete) + Rust↔JS golden parity vectors
+2. ~~T149~~ — ✅ DONE 2026-08-11 (PR #84, `TASK_COMPLETED/2608.md`): 42 tests + REAL BUG fixed (running→running missing — multi-step pipelines stalled after step 0)
+3. ~~T150~~ — ✅ DONE 2026-08-11 (PR #85): withRetry wired ×6 via `lib/anthropic.ts`, 65 parity vectors, 9 JS↔Rust divergences fixed
 
 **P1 — after P0:**
 4. ~~T151~~ — ✅ DONE 2026-08-11 (`TASK_COMPLETED/2608.md`): zero capability wildcards, keystore warn, Doctor duplicate-CLI + stale-worktree checks
@@ -55,8 +55,8 @@ T138 ModeTracker headless · T139 skills security scan · T144 dependency/librar
 
 **Wave 2.6 exit criteria (definition of done):**
 - [ ] Both manual-verification checklists below fully checked (T123 result recorded either way)
-- [ ] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green in CI
-- [ ] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test
+- [x] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green (PR #84)
+- [x] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test (PR #85)
 - [ ] T151 ✅ (no `"*"` capability wildcards) + T152 merged: no file > 500 LOC in the flagged pair
 - [ ] Then start T142 — and cut the next release from that point
 
@@ -139,56 +139,6 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ---
 
 ## Active Backlog
-
-### T149 — Orchestration-core Tests `added: 2026-07-06`
-**Priority**: P0 (Wave 2.6) | **Effort**: M | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
-
-**Why**
-- The untested set is exactly the crash/corruption-prone surface: subprocess lifecycle,
-  pipeline state transitions, socket auth, DB schema evolution. Renderer: 6 tests / 179 files;
-  main's existing tests cover only pure leaf logic.
-- Not chasing coverage % — surgically shielding the data-corruption surface.
-
-**Scope**
-- `db/migrations.ts` (**highest value**): run full 36-base + migration-sets chain against a
-  fixture DB; assert final schema + idempotent re-run
-- `pipeline/executor.ts`: run/pause/resume/cancel/loop-back transitions (state-machine already
-  has tests — this covers the executor's use of it, incl. evaluator gate routing)
-- `agents/manager.ts`: spawn lifecycle (context build → spawn → status → exit hooks non-fatal)
-- `mcp/exegol-server.ts`: token mint/revoke/reject (`-32002`), accessMode gating from DB
-- Nice-to-have if cheap: `agents/queue.ts`, `scheduler/engine.ts` happy path
-
-**Likely files**
-- New: `apps/desktop/src/main/{db,pipeline,agents,mcp}/__tests__/*`
-- Test seams may need small DI extractions in `manager.ts` / `executor.ts` (keep minimal)
-
----
-
-### T150 — T80 Closure + Rust↔JS Parity Vectors `added: 2026-07-06`
-**Priority**: P0 (Wave 2.6) | **Effort**: S-M | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
-
-**Why**
-- `withRetry()` (lib/errors.ts:72-105) has **zero call sites** — the error hierarchy was built
-  (T80) and never wired. 31 generic `throw new Error` on the critical path instead.
-- `agents/status-parser.ts` (377 LOC) is a hand-maintained JS mirror of the Rust
-  `status_parser.rs` + `strip_ansi.rs`; the JS fallback is what users hit when the native
-  build is missing, and nothing prevents silent drift.
-
-**Scope**
-- Decide per call site: wire `withRetry` + `Transient/PermanentError` into agent spawn,
-  git network ops (push/fetch), and Haiku calls (scoring, evaluator, diff summary) — or
-  delete the helper. No half-build left standing.
-- Golden test vectors shared by both implementations: one fixture set (ANSI streams + OSC-777
-  sequences + expected events/stripped output) consumed by a vitest suite (JS) and a
-  `#[cfg(test)]` suite (Rust). CI fails on divergence.
-
-**Likely files**
-- `apps/desktop/src/main/lib/errors.ts`, `agents/manager.ts`, `agents/scoring.ts`,
-  `pipeline/evaluator.ts`, `ipc/procedures/diff.ts`
-- New: shared fixtures dir (e.g. `packages/core-rust/test-vectors/*.json`) +
-  `agents/__tests__/status-parser-parity.test.ts` + Rust test loading the same JSON
-
----
 
 ### T152 — God-module Split `added: 2026-07-06`
 **Priority**: P1 (Wave 2.6) | **Effort**: S-M | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`

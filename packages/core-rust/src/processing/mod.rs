@@ -4,6 +4,8 @@ mod status_parser;
 mod strip_ansi;
 
 #[cfg(test)]
+mod parity_vectors_tests;
+#[cfg(test)]
 mod status_parser_tests;
 
 pub use osc_notify::*;
