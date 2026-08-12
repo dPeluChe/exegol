@@ -8,7 +8,7 @@ import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
-import { removeAgentMcpConfig } from "../mcp/exegol-mcp-config";
+import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
 import { clearAgentLinks, clearAgentMessageQueue } from "./agent-messaging";
@@ -310,6 +310,7 @@ export function createSpawnCallbacks(
       // The token also lives on disk (codex sanitizes env) — it must not
       // outlive the agent in the user's repo.
       if (!isShell) {
+        removePerAgentMcpConfig(agent.id);
         try {
           const row = db
             .prepare(

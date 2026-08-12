@@ -3,7 +3,7 @@ import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
-import { readAgentMcpToken } from "../mcp/exegol-mcp-config";
+import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
 import { createOutputProcessor } from "./agent-output-processor";
@@ -146,7 +146,8 @@ export async function reattachSidecarAgents(
               | undefined
           )?.path;
           const cwd = wt?.worktreePath ?? projectPath;
-          const token = cwd ? readAgentMcpToken(cwd) : null;
+          // Per-agent file first (no cwd guessing, no sibling collision).
+          const token = readPerAgentMcpToken(agentId) ?? (cwd ? readAgentMcpToken(cwd) : null);
           if (token) {
             const rearmed = restoreAgentMcpToken(agentId, projectId, token);
             logger.info(

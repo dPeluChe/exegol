@@ -14,6 +14,63 @@ import type { ExegolAccessMode } from "./exegol-protocol";
 
 const EXEGOL_SERVER_KEY = "exegol";
 
+/**
+ * T166: per-AGENT MCP config, outside the repo (~/.exegol/mcp/<agentId>.json).
+ * The cwd-scoped files are per-DIRECTORY, so two agents working the same repo
+ * (the build+review pair — the whole point of Exegol) shared one token and one
+ * identity. claude takes `--mcp-config <file>` and codex takes `-c key=value`,
+ * so each session can carry its own credential with no shared file at all.
+ */
+export function writePerAgentMcpConfig(
+  agentId: string,
+  shimPath: string,
+  token: string,
+  accessMode: ExegolAccessMode,
+): string | null {
+  try {
+    const dir = join(homedir(), ".exegol", "mcp");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const path = join(dir, `${agentId}.json`);
+    const body: McpJsonFile = {
+      mcpServers: {
+        [EXEGOL_SERVER_KEY]: {
+          command: process.execPath,
+          args: [shimPath],
+          env: {
+            ELECTRON_RUN_AS_NODE: "1",
+            EXEGOL_MCP_TOKEN: token,
+            EXEGOL_ACCESS_MODE: accessMode,
+          },
+        },
+      },
+    };
+    writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
+    return path;
+  } catch (err) {
+    logger.warn(`[ExegolMcp] Failed to write per-agent MCP config for ${agentId}:`, err);
+    return null;
+  }
+}
+
+/** Read an agent's own token — deterministic, no cwd guessing (reattach). */
+export function readPerAgentMcpToken(agentId: string): string | null {
+  const parsed = readMcpJson(join(homedir(), ".exegol", "mcp", `${agentId}.json`));
+  const entry = parsed?.mcpServers?.[EXEGOL_SERVER_KEY] as
+    | { env?: Record<string, unknown> }
+    | undefined;
+  const token = entry?.env?.EXEGOL_MCP_TOKEN;
+  return typeof token === "string" && token.length > 0 ? token : null;
+}
+
+export function removePerAgentMcpConfig(agentId: string): void {
+  try {
+    const path = join(homedir(), ".exegol", "mcp", `${agentId}.json`);
+    if (existsSync(path)) unlinkSync(path);
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** T163: which config each provider reads. Everything else falls back to the
  *  `.mcp.json` convention (Claude Code, Cursor, Windsurf all discover it). */
 type McpConfigFlavor = "mcp-json" | "opencode" | "gemini" | "codex-global" | "devin";

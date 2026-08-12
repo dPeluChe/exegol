@@ -10,7 +10,11 @@ import { runSetupHook } from "../hooks/project-hooks";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
-import { resolveMcpShimPath, writeAgentMcpConfigFor } from "../mcp/exegol-mcp-config";
+import {
+  resolveMcpShimPath,
+  writeAgentMcpConfigFor,
+  writePerAgentMcpConfig,
+} from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, registerAgentMcpToken } from "../mcp/exegol-server";
 import { inspectCommand } from "../security/command-guard";
 import {
@@ -299,6 +303,39 @@ export function buildPtyInvocation(
 
     // Spawn-boundary guard: refuse obviously destructive commands. Scans the
     // final string handed to the shell (prompt + resume + lifecycle included).
+    // T145/T166: mid-session MCP. Identity = per-agent secret token; the
+    // server never trusts client claims. Provisioned HERE (before args are
+    // built) because claude/codex take per-session flags that carry it.
+    let mcpToken: string | null = null;
+    try {
+      ensureExegolMcpServerStarted(db);
+      mcpToken = registerAgentMcpToken(agent.id, agent.projectId);
+      const shimPath = resolveMcpShimPath();
+      const accessMode = config.accessMode ?? "write";
+      // The cwd config files are per-DIRECTORY, so two agents on the same repo
+      // (the build+review pair) overwrote each other's token and swapped
+      // identities (live 2026-08-12). Where the CLI supports per-session MCP
+      // config, hand it a private file outside the repo instead.
+      const perAgentConfig =
+        agent.cliType === "claude-code"
+          ? writePerAgentMcpConfig(agent.id, shimPath, mcpToken, accessMode)
+          : null;
+      if (perAgentConfig) {
+        // No --strict-mcp-config: the user's own servers still load.
+        fullCommand = `${fullCommand} --mcp-config ${perAgentConfig}`;
+      } else {
+        writeAgentMcpConfigFor(agent.cliType, cwd, shimPath, mcpToken, accessMode);
+        if (agent.cliType === "codex") {
+          // codex sanitizes MCP-server env, so the token normally rides the
+          // shared cwd file. `-c` sets it per SESSION and wins over the file in
+          // the shim's resolve chain, keeping siblings distinct.
+          fullCommand = `${fullCommand} -c 'mcp_servers.exegol.env.ELECTRON_RUN_AS_NODE="1"' -c 'mcp_servers.exegol.env.EXEGOL_MCP_TOKEN="${mcpToken}"'`;
+        }
+      }
+    } catch (err) {
+      logger.warn("[AgentManager] Failed to wire Exegol MCP config:", err);
+    }
+
     const verdict = inspectCommand(fullCommand);
     if (!verdict.ok) {
       logger.error(
@@ -338,43 +375,7 @@ export function buildPtyInvocation(
       EXEGOL_AGENT_ID: agent.id,
       EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
     } as Record<string, string>;
-
-    // T145: give the agent mid-session access to memory/knowledge via MCP.
-    // Identity = per-agent secret token; the server never trusts client claims.
-    try {
-      ensureExegolMcpServerStarted(db);
-      const mcpToken = registerAgentMcpToken(agent.id, agent.projectId);
-      env.EXEGOL_MCP_TOKEN = mcpToken;
-      // The MCP config file is per-DIRECTORY but identity is per-AGENT: a
-      // sibling in the same cwd will have its entry (and token) overwritten
-      // here. Surface it — the fix is a worktree, not a silent overwrite.
-      const statuses = [...LIVE_STATUSES];
-      const sibling = db
-        .prepare(
-          `SELECT a.id, a.cli_type FROM agents a
-           LEFT JOIN worktrees w ON w.id = a.worktree_id
-           JOIN projects p ON p.id = a.project_id
-           WHERE COALESCE(w.path, p.path) = ?
-             AND a.id != ?
-             AND a.status IN (${statuses.map(() => "?").join(",")})
-           LIMIT 1`,
-        )
-        .get(cwd, agent.id, ...statuses) as { id?: string; cli_type?: string } | undefined;
-      if (sibling?.id) {
-        logger.warn(
-          `[AgentManager] ${agent.id} shares cwd with live agent ${sibling.id} (${sibling.cli_type}) — they share one MCP config file, so identity can be mixed. Give one a worktree.`,
-        );
-      }
-      writeAgentMcpConfigFor(
-        agent.cliType,
-        cwd,
-        resolveMcpShimPath(),
-        mcpToken,
-        config.accessMode ?? "write",
-      );
-    } catch (err) {
-      logger.warn("[AgentManager] Failed to wire Exegol MCP config:", err);
-    }
+    if (mcpToken) env.EXEGOL_MCP_TOKEN = mcpToken;
   }
 
   const shellName = userShell.split("/").pop() ?? "";
