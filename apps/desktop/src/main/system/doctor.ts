@@ -1,12 +1,15 @@
 import { exec } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
 import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
+import { checkOllamaStatus } from "../indexer/ollama-client";
 import { getApiKey } from "../security/keystore";
 
 const execAsync = promisify(exec);
@@ -76,16 +79,84 @@ async function checkGitVersion(): Promise<string | null> {
   }
 }
 
-async function checkOllamaRunning(): Promise<boolean> {
+function readOllamaConfig(db: Database.Database): { url: string; model: string } {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1_000);
-    const res = await fetch("http://127.0.0.1:11434/api/tags", { signal: controller.signal });
-    clearTimeout(timer);
-    return res.ok;
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'app_settings'").get() as
+      | { value: string }
+      | undefined;
+    const s = row ? (JSON.parse(row.value) as { ollamaUrl?: string; ollamaModel?: string }) : {};
+    return {
+      url: s.ollamaUrl ?? DEFAULT_SETTINGS.ollamaUrl,
+      model: s.ollamaModel ?? DEFAULT_SETTINGS.ollamaModel,
+    };
   } catch {
-    return false;
+    return { url: DEFAULT_SETTINGS.ollamaUrl, model: DEFAULT_SETTINGS.ollamaModel };
   }
+}
+
+/** Best-effort `--version` for a specific binary path (duplicate-install detail). */
+function readBinaryVersion(binPath: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    exec(`"${binPath}" --version`, { env: shellEnv, timeout: 3_000 }, (err, stdout) => {
+      if (err) return resolve(null);
+      const m = stdout.trim().match(/\d+\.\d+[.\w-]*/);
+      resolve(m ? m[0] : null);
+    });
+  });
+}
+
+function checkPtySidecar(): DoctorCheck {
+  const pidFile = join(homedir(), ".exegol", "pty-sidecar.pid");
+  try {
+    if (!existsSync(pidFile)) {
+      return {
+        id: "pty-sidecar",
+        label: "PTY sidecar",
+        status: "ok",
+        detail: "Not running — starts on demand with the first terminal",
+      };
+    }
+    const pid = Number.parseInt(readFileSync(pidFile, "utf8").trim(), 10);
+    process.kill(pid, 0);
+    return {
+      id: "pty-sidecar",
+      label: "PTY sidecar",
+      status: "ok",
+      detail: `Alive (pid ${pid}) — terminals survive app restarts`,
+    };
+  } catch {
+    return {
+      id: "pty-sidecar",
+      label: "PTY sidecar",
+      status: "warn",
+      detail: "Stale pid file — sidecar process is dead; next terminal spawn will restart it",
+    };
+  }
+}
+
+function checkMcpSocket(): Promise<DoctorCheck> {
+  const sockPath = join(homedir(), ".exegol", "mcp-server.sock");
+  if (!existsSync(sockPath)) {
+    return Promise.resolve({
+      id: "exegol-mcp",
+      label: "Exegol MCP server",
+      status: "ok",
+      detail: "Not running — starts with the first agent spawn",
+    });
+  }
+  return new Promise((resolve) => {
+    const sock = createConnection(sockPath);
+    const done = (status: DoctorStatus, detail: string) => {
+      sock.destroy();
+      resolve({ id: "exegol-mcp", label: "Exegol MCP server", status, detail });
+    };
+    sock.setTimeout(500);
+    sock.on("connect", () => done("ok", "Listening — agents can reach memory/knowledge tools"));
+    sock.on("timeout", () => done("warn", "Socket file present but not answering"));
+    sock.on("error", () =>
+      done("warn", "Stale socket file — server not listening; respawns with the next agent"),
+    );
+  });
 }
 
 async function runCliDetection(): Promise<DoctorCheck[]> {
@@ -101,15 +172,23 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
       // self-update loops: the update lands in one path while the other
       // wins PATH resolution — live incident 2026-07-09.
       const duplicated = paths.length > 1;
+      let detail: string;
+      if (duplicated) {
+        const versions = await Promise.all(paths.map(readBinaryVersion));
+        const labeled = paths.map((p, i) => (versions[i] ? `${p} (v${versions[i]})` : p));
+        const first = labeled[0];
+        const rest = labeled.slice(1).join(" · ");
+        detail = `Multiple installs — PATH resolves to ${first}; updates may land in the losing copy: ${rest}`;
+      } else {
+        detail = installed
+          ? `Found '${provider.command}' on PATH`
+          : `'${provider.command}' not found on PATH`;
+      }
       return {
         id: `cli:${provider.id}`,
         label: provider.name,
         status: installed ? (duplicated ? "warn" : "ok") : "warn",
-        detail: duplicated
-          ? `Multiple installs on PATH — updates may target the losing copy: ${paths.join(" · ")}`
-          : installed
-            ? `Found '${provider.command}' on PATH`
-            : `'${provider.command}' not found on PATH`,
+        detail,
         actionUrl: installed ? undefined : CLI_INSTALL_LINKS[provider.id],
       } satisfies DoctorCheck;
     }),
@@ -175,11 +254,13 @@ function checkStaleWorktrees(db: Database.Database): DoctorCheck {
 // ─── Main entry ─────────────────────────────────────────────────────────────
 
 export async function runDoctorChecks(db: Database.Database): Promise<DoctorReport> {
-  const [cliChecks, gitVersion, ghAvailable, ollamaRunning] = await Promise.all([
+  const ollamaConfig = readOllamaConfig(db);
+  const [cliChecks, gitVersion, ghAvailable, ollama, mcpCheck] = await Promise.all([
     runCliDetection(),
     checkGitVersion(),
     checkCommandAvailable("gh"),
-    checkOllamaRunning(),
+    checkOllamaStatus(ollamaConfig),
+    checkMcpSocket(),
   ]);
 
   const checks: DoctorCheck[] = [...cliChecks];
@@ -214,12 +295,17 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
   checks.push({
     id: "ollama",
     label: "Ollama (local embeddings)",
-    status: ollamaRunning ? "ok" : "warn",
-    detail: ollamaRunning
-      ? "Reachable at 127.0.0.1:11434 — hybrid memory search enabled"
+    status: ollama.available ? (ollama.modelInstalled ? "ok" : "warn") : "warn",
+    detail: ollama.available
+      ? ollama.modelInstalled
+        ? `Reachable at ${ollamaConfig.url} — model '${ollamaConfig.model}' ready, hybrid memory search enabled`
+        : `Reachable, but model '${ollamaConfig.model}' is missing — run: ollama pull ${ollamaConfig.model}`
       : "Not running — memory search falls back to keyword-only",
-    actionUrl: ollamaRunning ? undefined : "https://ollama.com",
+    actionUrl: ollama.available ? undefined : "https://ollama.com",
   });
+
+  checks.push(checkPtySidecar());
+  checks.push(mcpCheck);
 
   checks.push({
     id: "keystore",

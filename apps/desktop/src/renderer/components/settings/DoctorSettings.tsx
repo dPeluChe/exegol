@@ -14,6 +14,7 @@ export function DoctorSettings() {
         isLoading={isLoading}
         onRefresh={() => refetch()}
         isRefreshing={isFetching}
+        generatedAt={data?.generatedAt}
       />
     </div>
   );

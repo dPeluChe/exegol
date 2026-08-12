@@ -76,12 +76,13 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
 
   return (
     <div className="flex h-full flex-col bg-bg-primary">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
+      {/* Header — draggable (standalone hiddenInset window); pl-20 clears the
+          macOS traffic lights at x:16 which otherwise overlap the title */}
+      <div className="titlebar-drag flex items-center gap-3 border-b border-border py-3 pl-20 pr-4">
         <button
           type="button"
           onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
+          className="titlebar-no-drag flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
