@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpen, CheckCircle2, Circle, ExternalLink, Network } from "lucide-react";
 import { useState } from "react";
 import { trpcInvoke } from "../../lib/trpc-client";
-import { FilterChip } from "../common/FilterChip";
+import { SegmentedTabs } from "../common/SegmentedTabs";
 
 interface ProviderWiring {
   provider: string;
@@ -56,18 +56,17 @@ export function McpServerSettings() {
             {data.running ? "Listening" : "Stopped (starts with the first agent)"}
           </span>
         )}
-        <div className="ml-auto flex items-center gap-1">
-          <FilterChip active={tab === "server"} onClick={() => setTab("server")}>
-            Server
-          </FilterChip>
-          <FilterChip active={tab === "tools"} onClick={() => setTab("tools")}>
-            Tools ({data?.tools.length ?? 0})
-          </FilterChip>
-          <FilterChip active={tab === "providers"} onClick={() => setTab("providers")}>
-            Providers
-          </FilterChip>
-        </div>
       </div>
+
+      <SegmentedTabs
+        tabs={[
+          { id: "server", label: "Server" },
+          { id: "tools", label: "Tools", count: data?.tools.length },
+          { id: "providers", label: "Providers", count: data?.providers.length },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
 
       {tab === "server" && (
         <div className="space-y-4">

@@ -1,5 +1,5 @@
-import { cn } from "@exegol/ui";
 import { useState } from "react";
+import { type SegmentedTab, SegmentedTabs } from "../common/SegmentedTabs";
 
 type ShortcutCategory = "navigation" | "agents" | "terminal";
 
@@ -101,7 +101,7 @@ const DEFAULT_SHORTCUTS: Shortcut[] = [
   },
 ];
 
-const TABS: { id: ShortcutCategory; label: string; count: number }[] = [
+const TABS: SegmentedTab<ShortcutCategory>[] = [
   {
     id: "navigation",
     label: "Navigation",
@@ -141,25 +141,7 @@ export function KeyboardShortcuts() {
 
   return (
     <div className="space-y-4">
-      {/* Category tabs */}
-      <div className="flex gap-1 rounded-lg border border-border bg-bg-tertiary p-1">
-        {TABS.map((tab) => (
-          <button
-            type="button"
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              activeTab === tab.id
-                ? "bg-bg-secondary text-text-primary shadow-sm"
-                : "text-text-muted hover:text-text-secondary",
-            )}
-          >
-            {tab.label}
-            <span className="ml-1.5 text-[10px] text-text-muted">({tab.count})</span>
-          </button>
-        ))}
-      </div>
+      <SegmentedTabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
       {/* Shortcuts list */}
       <div className="space-y-1">
