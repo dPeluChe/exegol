@@ -34,7 +34,7 @@
 3. **T150** — T80 closure (`withRetry` wire-in or delete) + Rust↔JS golden parity vectors
 
 **P1 — after P0:**
-4. **T151** — Security & hygiene polish (keystore plaintext warning, capabilities allowlist, coverage/)
+4. ~~T151~~ — ✅ DONE 2026-08-11 (`TASK_COMPLETED/2608.md`): zero capability wildcards, keystore warn, Doctor duplicate-CLI + stale-worktree checks
 5. **T152** — God-module split (`workspace.ts` 698 LOC, `main/index.ts` 506 LOC)
 6. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop) — last launch differentiator, unchanged
 
@@ -57,7 +57,7 @@ T138 ModeTracker headless · T139 skills security scan · T144 dependency/librar
 - [ ] Both manual-verification checklists below fully checked (T123 result recorded either way)
 - [ ] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green in CI
 - [ ] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test
-- [ ] T151 + T152 merged: no `"*"` capability wildcards, no file > 500 LOC in the flagged pair
+- [ ] T151 ✅ (no `"*"` capability wildcards) + T152 merged: no file > 500 LOC in the flagged pair
 - [ ] Then start T142 — and cut the next release from that point
 
 ### Shipped waves
@@ -187,35 +187,6 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   `pipeline/evaluator.ts`, `ipc/procedures/diff.ts`
 - New: shared fixtures dir (e.g. `packages/core-rust/test-vectors/*.json`) +
   `agents/__tests__/status-parser-parity.test.ts` + Rust test loading the same JSON
-
----
-
-### T151 — Security & Hygiene Polish `added: 2026-07-06`
-**Priority**: P1 (Wave 2.6) | **Effort**: S | **Source**: `RESEARCH/CODE_HEALTH_AUDIT_2026_07.md`
-
-**Scope**
-- **Keystore plaintext fallback warning** (`security/keystore.ts:10-15`): when
-  `safeStorage.isEncryptionAvailable()` is false, keys land in the settings table in
-  plaintext with no user-facing notice → warn in ApiKeysSettings + Doctor check (T148)
-- **Tighten `preload/capabilities.json`**: replace `"*"` router wildcards with explicit
-  procedure allowlists (mechanism already built — finish it; cross-check against the
-  orphaned-procedures inventory in T144)
-- **Un-commit `coverage/`**: add to `.gitignore`, delete from repo; generate a whole-repo
-  number instead of the current partial artifact
-- **Doctor: duplicate CLI installs check** (`which -a` per enabled provider; warn on >1
-  binary or version mismatch) — source: live codex Homebrew-vs-bun self-update loop
-  (2026-07-09): update installed to `~/.bun/bin` while Homebrew's older binary won PATH
-- **Doctor: stale worktree sweep** — `~/.exegol/worktrees` measured at **1.2 GB** on
-  Antonio's machine (2026-07-10): worktrees of long-dead agents accumulate (dirty ones are
-  preserved by design but never surfaced). Doctor action: list stale worktrees (no live
-  agent, N days old) with disk size → one-click clean via existing `projects.deleteWorktree`;
-  never auto-delete dirty ones without showing the diff. Dev-side artifacts covered by new
-  `bun run clean:dev` (turbo cache, cargo target, dist/out, coverage)
-
-**Likely files**
-- `apps/desktop/src/main/security/keystore.ts`, `system/doctor.ts`,
-  `renderer/components/settings/ApiKeysSettings.tsx`
-- `apps/desktop/src/preload/capabilities.json`, `.gitignore`
 
 ---
 

@@ -9,6 +9,10 @@ describe("canTransition", () => {
     expect(canTransition("pending", "running")).toBe(true);
   });
 
+  it("allows running → running (step advance / loop-back)", () => {
+    expect(canTransition("running", "running")).toBe(true);
+  });
+
   it("allows running → paused", () => {
     expect(canTransition("running", "paused")).toBe(true);
   });

@@ -93,7 +93,7 @@ function resolveContext(
 
 // ─── Request handling ────────────────────────────────────────────────────────
 
-async function handleRequest(
+export async function handleRequest(
   db: Database.Database,
   socket: Socket,
   req: JsonRpcRequest,

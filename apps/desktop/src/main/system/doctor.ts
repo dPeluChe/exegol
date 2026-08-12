@@ -1,5 +1,9 @@
 import { exec } from "node:child_process";
+import { existsSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
+import { safeStorage } from "electron";
 import type Database from "libsql";
 import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
@@ -53,6 +57,16 @@ function checkCommandAvailable(command: string): Promise<boolean> {
   return new Promise((resolve) => exec(cmd, { env: shellEnv }, (err) => resolve(!err)));
 }
 
+/** All PATH hits for a command (`which -a` / `where` both list every match). */
+function findAllOnPath(command: string): Promise<string[]> {
+  const cmd = process.platform === "win32" ? `where "${command}"` : `which -a "${command}"`;
+  return new Promise((resolve) =>
+    exec(cmd, { env: shellEnv }, (err, stdout) =>
+      resolve(err ? [] : [...new Set(stdout.trim().split("\n").filter(Boolean))]),
+    ),
+  );
+}
+
 async function checkGitVersion(): Promise<string | null> {
   try {
     const { stdout } = await execAsync("git --version", { timeout: 3_000, env: shellEnv });
@@ -81,18 +95,81 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
 
   return Promise.all(
     providers.map(async (provider) => {
-      const installed = await checkCommandAvailable(provider.command);
+      const paths = await findAllOnPath(provider.command);
+      const installed = paths.length > 0;
+      // Duplicate installs (e.g. Homebrew + bun copies of codex) cause
+      // self-update loops: the update lands in one path while the other
+      // wins PATH resolution — live incident 2026-07-09.
+      const duplicated = paths.length > 1;
       return {
         id: `cli:${provider.id}`,
         label: provider.name,
-        status: installed ? "ok" : "warn",
-        detail: installed
-          ? `Found '${provider.command}' on PATH`
-          : `'${provider.command}' not found on PATH`,
+        status: installed ? (duplicated ? "warn" : "ok") : "warn",
+        detail: duplicated
+          ? `Multiple installs on PATH — updates may target the losing copy: ${paths.join(" · ")}`
+          : installed
+            ? `Found '${provider.command}' on PATH`
+            : `'${provider.command}' not found on PATH`,
         actionUrl: installed ? undefined : CLI_INSTALL_LINKS[provider.id],
       } satisfies DoctorCheck;
     }),
   );
+}
+
+/** Worktrees on disk whose agent is gone/terminal and untouched for N days. */
+function checkStaleWorktrees(db: Database.Database): DoctorCheck {
+  const root = join(homedir(), ".exegol", "worktrees");
+  const STALE_DAYS = 7;
+  try {
+    if (!existsSync(root)) {
+      return {
+        id: "stale-worktrees",
+        label: "Worktree hygiene",
+        status: "ok",
+        detail: "No managed worktrees on disk",
+      };
+    }
+    const livePaths = new Set(
+      (
+        db
+          .prepare(
+            `SELECT w.path FROM worktrees w
+             JOIN agents a ON a.worktree_id = w.id
+             WHERE a.status IN ('idle','spawning','running','waiting_input','paused')`,
+          )
+          .all() as Array<{ path: string }>
+      ).map((r) => r.path),
+    );
+    const cutoff = Date.now() - STALE_DAYS * 86_400_000;
+    let stale = 0;
+    let total = 0;
+    for (const project of readdirSync(root)) {
+      const projectDir = join(root, project);
+      if (!statSync(projectDir).isDirectory()) continue;
+      for (const wt of readdirSync(projectDir)) {
+        const wtPath = join(projectDir, wt);
+        if (!statSync(wtPath).isDirectory()) continue;
+        total++;
+        if (!livePaths.has(wtPath) && statSync(wtPath).mtimeMs < cutoff) stale++;
+      }
+    }
+    return {
+      id: "stale-worktrees",
+      label: "Worktree hygiene",
+      status: stale > 0 ? "warn" : "ok",
+      detail:
+        stale > 0
+          ? `${stale} of ${total} worktree(s) in ~/.exegol/worktrees have no live agent and are >${STALE_DAYS} days old — review in Project > worktrees (dirty ones are preserved by design)`
+          : `${total} managed worktree(s), none stale`,
+    };
+  } catch (err) {
+    return {
+      id: "stale-worktrees",
+      label: "Worktree hygiene",
+      status: "warn",
+      detail: `Could not scan ~/.exegol/worktrees: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
 }
 
 // ─── Main entry ─────────────────────────────────────────────────────────────
@@ -143,6 +220,17 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
       : "Not running — memory search falls back to keyword-only",
     actionUrl: ollamaRunning ? undefined : "https://ollama.com",
   });
+
+  checks.push({
+    id: "keystore",
+    label: "Keystore encryption",
+    status: safeStorage.isEncryptionAvailable() ? "ok" : "warn",
+    detail: safeStorage.isEncryptionAvailable()
+      ? "OS keychain encryption available — API keys stored encrypted"
+      : "OS keychain encryption UNAVAILABLE — API keys are stored in plaintext in the local database",
+  });
+
+  checks.push(checkStaleWorktrees(db));
 
   const anthropicKey = getApiKey(db, "anthropic") ?? process.env.ANTHROPIC_API_KEY;
   const openaiKey = getApiKey(db, "openai") ?? process.env.OPENAI_API_KEY;

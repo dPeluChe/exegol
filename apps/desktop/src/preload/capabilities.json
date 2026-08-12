@@ -1,36 +1,265 @@
 {
   "trpc": {
-    "projects": "*",
-    "agents": "*",
-    "settings": "*",
-    "tokenUsage": "*",
-    "resources": "*",
-    "apiKeys": "*",
-    "scheduler": "*",
-    "files": "*",
-    "prompts": "*",
-    "diff": "*",
-    "diffComments": "*",
-    "scrollback": "*",
-    "scoring": "*",
-    "oplog": "*",
-    "pipeline": "*",
-    "skills": "*",
-    "skillInstaller": "*",
-    "mcp": "*",
-    "memory": "*",
-    "messages": "*",
-    "queue": "*",
-    "qaTests": "*",
-    "activities": "*",
-    "search": "*",
-    "github": "*",
-    "indexer": "*",
-    "fsSearch": "*",
-    "knowledge": "*",
-    "doctor": "*",
-    "budgets": "*",
-    "projectGroups": "*"
+    "projects": [
+      "create",
+      "delete",
+      "deleteWorktree",
+      "get",
+      "list",
+      "listWorktrees",
+      "open",
+      "openInIde",
+      "rename",
+      "reorder",
+      "setGroup"
+    ],
+    "agents": [
+      "cancelParallelRun",
+      "continueWithHandoff",
+      "delete",
+      "get",
+      "getHandoff",
+      "getParallelRun",
+      "getParallelRunDetails",
+      "getStatus",
+      "getWorktreePath",
+      "list",
+      "listEnabledProviders",
+      "listParallelRuns",
+      "listProviders",
+      "listResumable",
+      "preflight",
+      "promoteParallelAgent",
+      "recentSessions",
+      "registerProvider",
+      "resetProviderArgs",
+      "spawn",
+      "spawnParallel",
+      "stop",
+      "swapProviders",
+      "toggleProviderEnabled",
+      "unregisterProvider",
+      "updateProviderArgs",
+      "updateStatus"
+    ],
+    "settings": [
+      "get",
+      "modelCatalog",
+      "update",
+      "updateModelCatalog"
+    ],
+    "tokenUsage": [
+      "agentCosts",
+      "dailyTrend",
+      "history",
+      "modelBreakdown",
+      "pipelineRunCost",
+      "scan",
+      "summary"
+    ],
+    "resources": [
+      "history",
+      "portConflicts",
+      "ports",
+      "preferredPort",
+      "project",
+      "scripts",
+      "setPreferredPort",
+      "sidecarMemory",
+      "system"
+    ],
+    "apiKeys": [
+      "delete",
+      "encryptionAvailable",
+      "list",
+      "set",
+      "test"
+    ],
+    "scheduler": [
+      "create",
+      "delete",
+      "get",
+      "list",
+      "results",
+      "runNow",
+      "toggle",
+      "update"
+    ],
+    "files": [
+      "create",
+      "delete",
+      "exists",
+      "listDirectory",
+      "pickFile",
+      "readFile",
+      "writeFile"
+    ],
+    "prompts": [
+      "create",
+      "delete",
+      "list",
+      "togglePin",
+      "update"
+    ],
+    "diff": [
+      "branch",
+      "commit",
+      "createPullRequest",
+      "gitState",
+      "mergePullRequest",
+      "projectDiff",
+      "push",
+      "reviewSummary",
+      "stage",
+      "stagedDiff",
+      "status",
+      "structuredDiff",
+      "suggestCommitMessage",
+      "unstage"
+    ],
+    "diffComments": [
+      "add",
+      "delete",
+      "list",
+      "toggleResolve"
+    ],
+    "scrollback": [
+      "exists",
+      "get",
+      "saveSerialized"
+    ],
+    "scoring": [
+      "getScore",
+      "listScores",
+      "stats"
+    ],
+    "oplog": [
+      "listAgent",
+      "listProject",
+      "listSnapshots",
+      "restoreSnapshot",
+      "undo"
+    ],
+    "pipeline": [
+      "cancelRun",
+      "checkGitSync",
+      "createTemplate",
+      "deleteRun",
+      "deleteTemplate",
+      "exportRunReport",
+      "getRun",
+      "getTemplate",
+      "listRuns",
+      "listTemplates",
+      "pauseRun",
+      "resumeRun",
+      "startRun",
+      "updateTemplate"
+    ],
+    "skills": [
+      "getContent",
+      "getEnabledForSpawn",
+      "list",
+      "toggle"
+    ],
+    "skillInstaller": [
+      "importSelected",
+      "install",
+      "lockFile",
+      "registry",
+      "scanImports",
+      "uninstall"
+    ],
+    "mcp": [
+      "callTool",
+      "connect",
+      "disconnect",
+      "getConfigs",
+      "listServers",
+      "listTools",
+      "saveConfigs"
+    ],
+    "memory": [
+      "create",
+      "delete",
+      "extract",
+      "getContext",
+      "list",
+      "search",
+      "updateRelevance"
+    ],
+    "messages": [
+      "conversation",
+      "list",
+      "markAllRead",
+      "markRead",
+      "send",
+      "unreadCount"
+    ],
+    "queue": [
+      "add",
+      "cancel",
+      "get",
+      "list",
+      "updateStatus"
+    ],
+    "qaTests": [
+      "delete",
+      "get",
+      "getLatestRun",
+      "list",
+      "save",
+      "saveRun"
+    ],
+    "activities": [
+      "list"
+    ],
+    "search": [
+      "indexAgent",
+      "query",
+      "rebuild"
+    ],
+    "github": [
+      "listIssues",
+      "updateIssueLabels",
+      "updateIssueState"
+    ],
+    "indexer": [
+      "ollamaStatus",
+      "projectStats",
+      "search",
+      "startIndexing"
+    ],
+    "fsSearch": [
+      "fuzzyFind",
+      "grep"
+    ],
+    "knowledge": [
+      "get",
+      "importMemoryBridgeAsSeed",
+      "initialize",
+      "refreshDigest",
+      "saveBrief",
+      "syncMemoryBridge"
+    ],
+    "doctor": [
+      "run"
+    ],
+    "budgets": [
+      "delete",
+      "list",
+      "status",
+      "upsert"
+    ],
+    "projectGroups": [
+      "create",
+      "delete",
+      "list",
+      "rename",
+      "reorder",
+      "setAppearance",
+      "setCollapsed"
+    ]
   },
   "ipc": [
     "terminal:data",

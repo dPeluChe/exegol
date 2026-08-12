@@ -1,5 +1,6 @@
 import { safeStorage } from "electron";
 import type Database from "libsql";
+import { logger } from "../lib/logger";
 
 // Session-level cache — decryptString is crypto-expensive and keys don't
 // change at runtime except through the Settings UI (store/delete clear it).
@@ -8,6 +9,9 @@ const apiKeyCache = new Map<string, string | null>();
 export function storeApiKey(db: Database.Database, provider: string, key: string): void {
   apiKeyCache.delete(provider);
   if (!safeStorage.isEncryptionAvailable()) {
+    logger.warn(
+      `[Keystore] OS encryption unavailable — storing '${provider}' API key in PLAINTEXT (surfaced in Settings > API Keys and Doctor)`,
+    );
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(
       `apikey_${provider}`,
       key,
