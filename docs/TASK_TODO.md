@@ -24,12 +24,13 @@
 - A1 checklist → **dedicated joint verification session** (Antonio drives, Fable greps/checks)
 - T149 + T150 → **parallel claude-code agents in Exegol worktrees** — briefs ready:
   `docs/AGENT_PROMPTS/WT_T149_CORE_TESTS.md` + `WT_T150_T80_PARITY.md` (supervisor reviews, no agent pushes)
-- Wave 3 order locked: **T156 → T157 → T153**
+- Wave 3 order locked: **T156 ✅ (PR #90, 2026-08-11, pending live verify) → T157 next → T153**
 - Exit criteria met → **release v0.5.0** (tag + changelog)
 
 **P0 — before any new feature:**
-1. **Manual verification backlog** (sections below) — ✅ T123 done; next joint session:
-   attention signal, pipeline+evaluator+report, oplog v2, MCP live, then the rest
+1. **Manual verification backlog** — DEFERRED by Antonio 2026-08-11: Wave 3 (T156/T157)
+   starts first because using the dashboard + messaging day-to-day exercises these same
+   surfaces; checklists get verified opportunistically during Wave 3 sessions
 2. ~~T149~~ — ✅ DONE 2026-08-11 (PR #84, `TASK_COMPLETED/2608.md`): 42 tests + REAL BUG fixed (running→running missing — multi-step pipelines stalled after step 0)
 3. ~~T150~~ — ✅ DONE 2026-08-11 (PR #85): withRetry wired ×6 via `lib/anthropic.ts`, 65 parity vectors, 9 JS↔Rust divergences fixed
 
@@ -58,7 +59,7 @@ T138 ModeTracker headless · T139 skills security scan · T144 dependency/librar
 - [x] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green (PR #84)
 - [x] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test (PR #85)
 - [x] T151 + T152 merged: no `"*"` capability wildcards, no file > 500 LOC in the flagged pair (PRs #83/#86)
-- [ ] Manual checklists done → cut **v0.5.0** (T142 postponed — no longer blocks the release)
+- [ ] Cut **v0.5.0** when T156 lands + opportunistic checklist passes (T142 postponed; full checklist sweep deferred per Antonio 2026-08-11)
 
 ### Shipped waves
 - **Wave 2 — Competitive Review (2026-07)**: T123-T131, T88v2, T140, T141, T143, T145-T148
