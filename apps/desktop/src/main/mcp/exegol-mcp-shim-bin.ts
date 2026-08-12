@@ -113,10 +113,18 @@ function writeToClient(
 
 // ─── Unix socket connection to the main process ────────────────────────────
 
-const socket = connect(MCP_SOCK_PATH);
 let nextSocketId = 1;
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 const CALL_TIMEOUT_MS = 30_000;
+const RECONNECT_DELAY_MS = 1_000;
+
+// The shim outlives app restarts (it's the CLI's child). A one-shot socket
+// left every call timing out after a restart until the user ran /mcp — live
+// incident 2026-08-12. Reconnect forever; calls made while down wait in the
+// outbox and flush on reconnect.
+let socket: ReturnType<typeof connect> | null = null;
+let reconnectScheduled = false;
+const outbox: string[] = [];
 
 function rejectAllPending(reason: string): void {
   for (const [id, waiter] of pending) {
@@ -125,26 +133,46 @@ function rejectAllPending(reason: string): void {
   }
 }
 
-socket.on(
-  "data",
-  createNdjsonBuffer<JsonRpcResponse>((res) => {
-    const waiter = pending.get(res.id);
-    if (!waiter) return;
-    pending.delete(res.id);
-    if (res.error) waiter.reject(new Error(res.error.message));
-    else waiter.resolve(res.result);
-  }),
-);
+function scheduleReconnect(): void {
+  if (reconnectScheduled) return;
+  reconnectScheduled = true;
+  const timer = setTimeout(() => {
+    reconnectScheduled = false;
+    connectSocket();
+  }, RECONNECT_DELAY_MS);
+  timer.unref?.();
+}
 
-// Exegol quitting or the socket dropping must not leave the agent CLI hung
-// on an MCP call forever — reject everything in flight.
-socket.on("error", (err) => {
-  process.stderr.write(`[exegol-mcp-shim] socket error: ${err.message}\n`);
-  rejectAllPending(`Exegol MCP socket error: ${err.message}`);
-});
-socket.on("close", () => {
-  rejectAllPending("Exegol MCP socket closed (app quit?)");
-});
+function connectSocket(): void {
+  const sock = connect(MCP_SOCK_PATH);
+  sock.on("connect", () => {
+    socket = sock;
+    for (const payload of outbox.splice(0)) sock.write(payload);
+  });
+  sock.on(
+    "data",
+    createNdjsonBuffer<JsonRpcResponse>((res) => {
+      const waiter = pending.get(res.id);
+      if (!waiter) return;
+      pending.delete(res.id);
+      if (res.error) waiter.reject(new Error(res.error.message));
+      else waiter.resolve(res.result);
+    }),
+  );
+  sock.on("error", (err) => {
+    process.stderr.write(`[exegol-mcp-shim] socket error: ${err.message}\n`);
+  });
+  sock.on("close", () => {
+    if (socket === sock) {
+      socket = null;
+      rejectAllPending("Exegol MCP disconnected (app restarting?) — reconnecting, retry shortly");
+    }
+    sock.destroy();
+    scheduleReconnect();
+  });
+}
+
+connectSocket();
 
 function callSocket(method: string, params: Record<string, unknown>): Promise<unknown> {
   const id = nextSocketId++;
@@ -154,7 +182,9 @@ function callSocket(method: string, params: Record<string, unknown>): Promise<un
       if (pending.delete(id)) reject(new Error(`Exegol MCP call timed out (${method})`));
     }, CALL_TIMEOUT_MS);
     timer.unref?.();
-    socket.write(encodeRequest(id, method, params));
+    const payload = encodeRequest(id, method, params);
+    if (socket) socket.write(payload);
+    else outbox.push(payload);
   });
 }
 

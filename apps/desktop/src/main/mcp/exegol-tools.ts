@@ -137,10 +137,19 @@ function handleKnowledgeGet(
   return result;
 }
 
-/** T157: other live agents the caller can message — the caller itself is excluded. */
+/** T157: other live agents the caller can message, plus the caller's OWN
+ *  identity (agents didn't know their own session name — "me llamó Juanito y
+ *  no sé de dónde salió", 2026-08-12). */
 function handleAgentsList(db: Database.Database, context: ExegolToolContext) {
+  const all = listActiveAgents(db);
+  const me = all.find((a) => a.id === context.agentId);
   return {
-    agents: listActiveAgents(db)
+    self: {
+      id: context.agentId,
+      name: me?.alias ?? null,
+      note: "This is YOU. Sign messages with this name; others reach you via agent_send with it.",
+    },
+    agents: all
       .filter((a) => a.id !== context.agentId)
       .map((a) => ({
         id: a.id,
@@ -168,6 +177,7 @@ function handleAgentSend(
       fromAgentId: context.agentId,
       toAgentId: targetId,
       text: message,
+      expectsReply: args.expects_reply !== false,
     });
     return {
       messageId: result.messageId,

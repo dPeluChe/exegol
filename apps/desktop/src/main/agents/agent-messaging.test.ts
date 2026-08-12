@@ -65,6 +65,8 @@ describe("sendAgentMessage", () => {
     expect(written?.id).toBe("a2");
     expect(written?.data).toContain("hola a2");
     expect(written?.data).toContain("NOT the user");
+    expect(written?.data).toContain("WAITING for your reply");
+    expect(written?.data).toContain('agent_send(target: "a1")');
     expect(written?.data).toContain('from agent "claude-code');
     expect(written?.data.endsWith("\r")).toBe(true);
     expect(written?.data).toContain("\x1b[200~");
@@ -145,7 +147,7 @@ describe("sendAgentMessage", () => {
     ).toThrowError(/matches 2 live agents/);
   });
 
-  it("uses the sender alias in the attribution header", () => {
+  it("uses the sender alias in the attribution header and as reply target", () => {
     insertAgent(db, "a1", "running");
     insertAgent(db, "a2", "waiting_input");
     db.prepare("UPDATE agents SET alias = 'builder-1' WHERE id = 'a1'").run();
@@ -153,6 +155,22 @@ describe("sendAgentMessage", () => {
 
     sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "ping" });
     expect(ptyMock.writes[0]?.data).toContain('from agent "builder-1"');
+    expect(ptyMock.writes[0]?.data).toContain('agent_send(target: "builder-1")');
+  });
+
+  it("expects_reply=false renders the closing framing instead", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: "gracias, cerramos",
+      expectsReply: false,
+    });
+    expect(ptyMock.writes[0]?.data).toContain("No reply expected");
+    expect(ptyMock.writes[0]?.data).not.toContain("WAITING for your reply");
   });
 
   it("caps the per-target queue", () => {
