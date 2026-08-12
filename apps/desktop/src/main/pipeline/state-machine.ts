@@ -5,7 +5,9 @@ import { logger } from "../lib/logger";
 
 const PIPELINE_TRANSITIONS: Record<PipelineRunStatus, readonly PipelineRunStatus[]> = {
   pending: ["running"],
-  running: ["paused", "completed", "failed", "cancelled"],
+  // running → running: step advance / loop-back re-enters advanceStep while
+  // the run stays running — without it every multi-step run stalls after step 0.
+  running: ["running", "paused", "completed", "failed", "cancelled"],
   paused: ["running", "cancelled"],
   completed: [],
   failed: [],
