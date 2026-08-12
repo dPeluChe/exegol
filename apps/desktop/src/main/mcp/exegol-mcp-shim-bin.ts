@@ -127,16 +127,20 @@ socket.on("close", () => {
   rejectAllPending("Exegol MCP socket closed (app quit?)");
 });
 
-function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
+function callSocket(method: string, params: Record<string, unknown>): Promise<unknown> {
   const id = nextSocketId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
     const timer = setTimeout(() => {
-      if (pending.delete(id)) reject(new Error(`Exegol MCP call timed out (${tool})`));
+      if (pending.delete(id)) reject(new Error(`Exegol MCP call timed out (${method})`));
     }, CALL_TIMEOUT_MS);
     timer.unref?.();
-    socket.write(encodeRequest(id, "call_tool", { tool, args, token }));
+    socket.write(encodeRequest(id, method, params));
   });
+}
+
+function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
+  return callSocket("call_tool", { tool, args, token });
 }
 
 // ─── MCP protocol handling ──────────────────────────────────────────────────
@@ -164,12 +168,23 @@ function handleClientMessage(msg: {
       return;
 
     case "tools/list": {
-      const tools = getToolDefsForAccessMode(displayMode).map((t) => ({
-        name: t.name,
-        description: t.description,
-        inputSchema: t.inputSchema,
-      }));
-      writeToClient(msg.id, { tools });
+      // T163 stale-shim fix: ask the RUNNING app for tool defs so a shim
+      // spawned by an old session still lists tools added since. The bundled
+      // defs are only the offline fallback.
+      const fallback = () =>
+        getToolDefsForAccessMode(displayMode).map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+        }));
+      callSocket("list_tools", { token })
+        .then((result) => {
+          const tools = (result as { tools?: unknown[] } | null)?.tools;
+          writeToClient(msg.id as number, { tools: tools?.length ? tools : fallback() });
+        })
+        .catch(() => {
+          writeToClient(msg.id as number, { tools: fallback() });
+        });
       return;
     }
 

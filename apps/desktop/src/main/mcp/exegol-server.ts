@@ -24,6 +24,7 @@ import {
   type ExegolToolCallParams,
   type ExegolToolContext,
   encodeResponse,
+  getToolDefsForAccessMode,
   type JsonRpcRequest,
   MCP_SOCK_PATH,
 } from "./exegol-protocol";
@@ -98,6 +99,16 @@ export async function handleRequest(
   socket: Socket,
   req: JsonRpcRequest,
 ): Promise<void> {
+  // T163 stale-shim fix: shims proxy tools/list here so tool definitions are
+  // always the RUNNING app's — a shim spawned weeks ago still lists new tools.
+  if (req.method === "list_tools") {
+    const params = req.params as { token?: string } | undefined;
+    const context = resolveContext(db, params?.token);
+    socket.write(
+      encodeResponse(req.id, { tools: getToolDefsForAccessMode(context?.accessMode ?? "read") }),
+    );
+    return;
+  }
   if (req.method !== "call_tool") {
     socket.write(
       encodeResponse(req.id, undefined, { code: -32601, message: `Unknown method: ${req.method}` }),
