@@ -176,9 +176,9 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
   {
     name: "agents_list",
     description:
-      "List other live agents orchestrated by Exegol (all projects): id, name (session " +
-      "alias, may be null), provider, project, status and task. Address agent_send by " +
-      "name when one is set, or by id.",
+      "List live agents orchestrated by Exegol (all projects). Returns `self` (YOUR " +
+      "session id + name — sign with it) and `agents` (the others: id, name, provider, " +
+      "project, status, task). Address agent_send by name when set, or by id.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -187,7 +187,8 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
       "Send a text message to another live agent, addressed by session name (alias) or " +
       "id. Exegol delivers it at the target's next turn boundary (never mid-generation) " +
       "with your identity attached — the target knows it came from an agent, not the " +
-      "user. Returns delivered|queued.",
+      "user. Set expects_reply=false on closing messages so the exchange can END instead " +
+      "of ping-ponging forever. Returns delivered|queued.",
     inputSchema: {
       type: "object",
       properties: {
@@ -196,6 +197,11 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
           description: "Session name (alias) or agent id from agents_list",
         },
         message: { type: "string", description: "Plain text, max 4000 chars" },
+        expects_reply: {
+          type: "boolean",
+          description:
+            "Default true: tells the receiver you await their reply. Use false for FYI/closing messages.",
+        },
       },
       required: ["target", "message"],
     },
