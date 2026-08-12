@@ -402,6 +402,46 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T162 — Agent Links & Rooms `added: 2026-08-12`
+**Priority**: P1 (Wave 3 — next after T157 live verify) | **Effort**: M (phased) | **Source**: idea (Antonio 2026-08-12) + `ARCHITECTURE/COUNCIL_BASE.md` (exchange bus) + trinity human-gate patterns
+
+**Why**
+- "Cuando termines avisale a revisor-api" works today only if the agent remembers to call
+  agent_send. A LINK makes Exegol enforce it: deterministic signals (T123) fire the notify
+  at the turn boundary even when the model forgets. Rooms generalize it to multi-agent
+  feedback (A builds, B+C review) — the council preset from COUNCIL_BASE.md.
+
+**Scope (phased — each useful alone)**
+1. **Directed link**: rule `on turn_end(A) → agent_send(A→B, template)` — created from the
+   dashboard (link icon on a card: "notify B when A finishes") or by an agent via a new
+   `agent_link` MCP tool. Persist links (new table or reuse scheduled_tasks pattern);
+   fire from the same broadcastAgentStatus choke point as T157 delivery; auto-expire when
+   either side exits.
+2. **Roles**: link carries a role framing injected with the message ("B acts as reviewer
+   of A's work — reply with discrepancies"). Presets: notify / reviewer / feedback.
+3. **Rooms**: N-agent membership; message to room fans out (still one per boundary per
+   member); human sees the thread. Build on T25 messages + a room_id column. This is the
+   COUNCIL_BASE exchange-bus MVP — do not build the headless council executions yet.
+
+**Likely files**
+- `main/agents/agent-messaging.ts` (links + fanout), `mcp/exegol-{protocol,tools}.ts`
+  (+agent_link), migration set wave3, dashboard card link UI, Attention/messages UI
+
+---
+
+### T163 — MCP Config Injection: all providers `added: 2026-08-12`
+**Priority**: P1 (Wave 3 — blocker for cross-provider T157) | **Effort**: S-M | **Source**: verify 2026-08-11 follow-up, bumped by Antonio ("necesitaremos extender a todos los agentes")
+
+- Today only claude-code gets `.mcp.json` → only claude agents can use agents_list /
+  agent_send / memory tools. Extend `mcp/exegol-mcp-config.ts` per provider:
+  codex (`~/.codex/config.toml` mcp_servers, or project `.codex/config.toml` — verify),
+  opencode (`opencode.json` mcp section), gemini (`.gemini/settings.json` mcpServers),
+  others per docs — each with the same shim command + per-agent token env, written at
+  spawn into the agent cwd, removed/revoked on exit. Doctor check: which providers have
+  MCP wiring available.
+
+---
+
 ### T158 — Memory Habit Protocol `added: 2026-08-11`
 **Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (5-layer habit stack) + `RESEARCH/TRINITY_2026_08.md` (platform_prompt_service: composed runtime-aware protocol-teacher block per spawn — production reference)
 
