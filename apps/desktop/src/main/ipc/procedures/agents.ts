@@ -18,6 +18,7 @@ import {
   listRecentSessions,
   updateAgentStatus,
 } from "../../db/queries";
+import { listActiveAgents } from "../../db/queries/agents";
 import {
   createParallelRun,
   enrichParallelRunForComparison,
@@ -25,7 +26,10 @@ import {
   listParallelRuns,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
+import { getPtyHost } from "../../terminal/pty-host";
 import { publicProcedure, router } from "../trpc";
+
+const PEEK_TAIL_LINES = 18;
 
 export const agentRouter = router({
   listProviders: publicProcedure.query(({ ctx }) => {
@@ -132,6 +136,14 @@ export const agentRouter = router({
 
   list: publicProcedure.input(z.object({ projectId: z.string() })).query(({ ctx, input }) => {
     return listAgents(ctx.db, input.projectId);
+  }),
+
+  /** T156: cross-project non-terminal agents (project name + group color). */
+  listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  /** T156 peek-and-reply: plain-text tail of the live screen buffer. */
+  peekTail: publicProcedure.input(z.object({ agentId: z.string() })).query(({ input }) => {
+    return { tail: getPtyHost().getTailLines(input.agentId, PEEK_TAIL_LINES) };
   }),
 
   // Returns null (not undefined) for consistency with TanStack Query v5,

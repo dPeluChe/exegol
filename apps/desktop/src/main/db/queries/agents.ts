@@ -1,7 +1,31 @@
-import type { Agent, AgentCreate, AgentStatus } from "@exegol/shared";
+import { type Agent, type AgentCreate, type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../../lib/logger";
 import { mapAgentRow, nanoid } from "./helpers";
+
+export type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
+
+/** T156: every non-terminal agent across ALL projects, with project name +
+ *  group color — the renderer store only knows projects opened this session. */
+export function listActiveAgents(db: Database.Database): ActiveAgent[] {
+  const statuses = [...LIVE_STATUSES];
+  const rows = db
+    .prepare(
+      `SELECT a.*, w.branch_name, p.name as project_name, g.color as group_color
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       JOIN projects p ON p.id = a.project_id
+       LEFT JOIN project_groups g ON g.id = p.group_id
+       WHERE a.status IN (${statuses.map(() => "?").join(",")})
+       ORDER BY a.started_at DESC`,
+    )
+    .all(...statuses) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    ...mapAgentRow(r),
+    projectName: r.project_name as string,
+    groupColor: (r.group_color as string | null) ?? null,
+  }));
+}
 
 export function listAgents(db: Database.Database, projectId: string): Agent[] {
   const rows = db
