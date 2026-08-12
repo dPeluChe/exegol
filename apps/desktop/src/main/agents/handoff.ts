@@ -74,28 +74,21 @@ function mapHandoffRow(row: Record<string, unknown>): HandoffSummary {
 // ─── Token Limit Detection ──────────────────────────────────────────────────
 
 /**
- * Patterns that indicate an agent has hit or is approaching its context window limit.
- * Inspired by TunaCode's threshold detection + Stoneforge's prompt-driven handoff.
+ * Substrings that indicate an agent has hit or is approaching its context
+ * window limit. Exact mirror of Rust `check_token_limit`
+ * (core-rust/src/processing/status_matchers.rs) — T150 parity.
  */
-const TOKEN_LIMIT_PATTERNS = [
-  // Claude Code
-  /context window/i,
-  /token limit/i,
-  /maximum context/i,
-  /conversation is getting long/i,
-  /running low on context/i,
-  // Aider
-  /token limit/i,
-  /truncating.*context/i,
-  /exceeded.*token/i,
-  // Generic
-  /context.*exceed/i,
-  /out of.*tokens/i,
-  /context.*full/i,
+const TOKEN_LIMIT_PHRASES = [
+  "context window",
+  "token limit",
+  "maximum context",
+  "conversation too long",
+  "truncating context",
 ];
 
 export function detectTokenLimitWarning(line: string): boolean {
-  return TOKEN_LIMIT_PATTERNS.some((pattern) => pattern.test(line));
+  const lower = line.toLowerCase();
+  return TOKEN_LIMIT_PHRASES.some((phrase) => lower.includes(phrase));
 }
 
 // ─── Handoff Summary Generation ─────────────────────────────────────────────

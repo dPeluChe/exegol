@@ -2,6 +2,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { TimeoutError, TransientError, withRetry } from "../../lib/errors";
 import { publicProcedure, router } from "../trpc";
 import { aiProcedures } from "./diff-ai";
 import {
@@ -15,6 +16,39 @@ import {
 import { prProcedures } from "./diff-pr";
 import { buildReviewSummary } from "./diff-review";
 import { buildGitState } from "./diff-state";
+
+// Network failure phrases in git stderr — only these are safe to retry;
+// rejections (non-fast-forward, auth, no-upstream) must fail immediately.
+const GIT_NETWORK_ERRORS = [
+  "could not resolve host",
+  "unable to access",
+  "connection refused",
+  "connection timed out",
+  "connection reset",
+  "network is unreachable",
+  "early eof",
+  "remote end hung up",
+];
+
+async function runGitPush(cwd: string, args: string[]): Promise<string> {
+  return withRetry(
+    async () => {
+      try {
+        const { stdout } = await execFileAsync("git", args, { cwd, timeout: 30_000 });
+        return stdout;
+      } catch (err) {
+        const e = err as Error & { killed?: boolean };
+        const msg = (e.message ?? String(err)).toLowerCase();
+        if (e.killed) throw new TimeoutError(`git ${args[0]} timed out`, err);
+        if (GIT_NETWORK_ERRORS.some((phrase) => msg.includes(phrase))) {
+          throw new TransientError(`git ${args[0]} network failure`, "GIT_NETWORK", err);
+        }
+        throw err;
+      }
+    },
+    { label: "diff.push", maxRetries: 2 },
+  );
+}
 
 // ─── Router ─────────────────────────────────────────────────────────────────
 
@@ -160,7 +194,7 @@ export const diffRouter = router({
     .mutation(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       try {
-        const { stdout } = await execFileAsync("git", ["push"], { cwd, timeout: 30_000 });
+        const stdout = await runGitPush(cwd, ["push"]);
         return { output: stdout.trim() };
       } catch (err) {
         // If no upstream, auto-set it and retry
@@ -169,11 +203,7 @@ export const diffRouter = router({
           const { stdout: branch } = await execFileAsync("git", ["branch", "--show-current"], {
             cwd,
           });
-          const { stdout: out } = await execFileAsync(
-            "git",
-            ["push", "--set-upstream", "origin", branch.trim()],
-            { cwd, timeout: 30_000 },
-          );
+          const out = await runGitPush(cwd, ["push", "--set-upstream", "origin", branch.trim()]);
           return { output: out.trim() || "Pushed with upstream set" };
         }
         throw err;

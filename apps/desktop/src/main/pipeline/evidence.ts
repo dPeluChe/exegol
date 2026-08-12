@@ -1,6 +1,7 @@
 import type { PipelineRun, PipelineTemplate } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgentScore } from "../db/queries";
+import { callAnthropicMessage } from "../lib/anthropic";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
 
@@ -45,23 +46,15 @@ Respond with 1-2 short sentences describing what changed and why, in plain prose
 No markdown, no bullet points, no preamble.`;
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 200,
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(20_000),
+    const { text } = await callAnthropicMessage({
+      apiKey,
+      model: "claude-haiku-4-5-20251001",
+      maxTokens: 200,
+      prompt,
+      timeoutMs: 20_000,
+      label: "pipeline.evidence",
     });
-    if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${res.statusText}`);
-    const data = (await res.json()) as { content?: Array<{ text?: string }> };
-    return (data.content?.[0]?.text ?? "").trim();
+    return text;
   } catch (err) {
     logger.warn("[Evidence] AI diff summary failed (non-fatal):", err);
     return "";
