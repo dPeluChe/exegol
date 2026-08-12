@@ -15,6 +15,7 @@ export function DoctorSettings() {
         onRefresh={() => refetch()}
         isRefreshing={isFetching}
         generatedAt={data?.generatedAt}
+        defaultOnlyIssues
       />
     </div>
   );

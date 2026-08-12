@@ -3,12 +3,16 @@ import { trpcInvoke } from "../../lib/trpc-client";
 
 export type DoctorStatus = "ok" | "warn" | "fail";
 
+export type DoctorCategory = "agents" | "system" | "config";
+
 export interface DoctorCheck {
   id: string;
   label: string;
   status: DoctorStatus;
   detail: string;
   actionUrl?: string;
+  /** Optional for backward compat with cached reports; UI defaults to "system". */
+  category?: DoctorCategory;
 }
 
 export interface DoctorReport {
