@@ -1,4 +1,9 @@
-import { type AgentSignalEvent, type AgentStatus, isKnownSignalType } from "@exegol/shared";
+import {
+  type AgentSignalEvent,
+  type AgentStatus,
+  isKnownSignalType,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
@@ -315,7 +320,30 @@ export function createSpawnCallbacks(
                WHERE a.id = ?`,
             )
             .get(agent.id) as { cwd?: string } | undefined;
-          if (row?.cwd) removeAgentMcpConfig(row.cwd);
+          if (row?.cwd) {
+            // The config file is per-DIRECTORY: agents sharing a cwd share it.
+            // Deleting on exit would strip a LIVE sibling's server entry and
+            // leave it with no MCP at all (live incident 2026-08-12).
+            const statuses = [...LIVE_STATUSES];
+            const sibling = db
+              .prepare(
+                `SELECT a.id FROM agents a
+                 LEFT JOIN worktrees w ON w.id = a.worktree_id
+                 JOIN projects p ON p.id = a.project_id
+                 WHERE COALESCE(w.path, p.path) = ?
+                   AND a.id != ?
+                   AND a.status IN (${statuses.map(() => "?").join(",")})
+                 LIMIT 1`,
+              )
+              .get(row.cwd, agent.id, ...statuses) as { id?: string } | undefined;
+            if (sibling?.id) {
+              logger.info(
+                `[AgentCallback] Keeping MCP config in ${row.cwd} — agent ${sibling.id} still lives there`,
+              );
+            } else {
+              removeAgentMcpConfig(row.cwd);
+            }
+          }
         } catch (err) {
           logger.warn(`[AgentCallback] MCP config cleanup failed for ${agent.id}:`, err);
         }

@@ -1,4 +1,4 @@
-import type { Agent, AgentCreate } from "@exegol/shared";
+import { type Agent, type AgentCreate, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import {
   createOplogEntry,
@@ -345,6 +345,26 @@ export function buildPtyInvocation(
       ensureExegolMcpServerStarted(db);
       const mcpToken = registerAgentMcpToken(agent.id, agent.projectId);
       env.EXEGOL_MCP_TOKEN = mcpToken;
+      // The MCP config file is per-DIRECTORY but identity is per-AGENT: a
+      // sibling in the same cwd will have its entry (and token) overwritten
+      // here. Surface it — the fix is a worktree, not a silent overwrite.
+      const statuses = [...LIVE_STATUSES];
+      const sibling = db
+        .prepare(
+          `SELECT a.id, a.cli_type FROM agents a
+           LEFT JOIN worktrees w ON w.id = a.worktree_id
+           JOIN projects p ON p.id = a.project_id
+           WHERE COALESCE(w.path, p.path) = ?
+             AND a.id != ?
+             AND a.status IN (${statuses.map(() => "?").join(",")})
+           LIMIT 1`,
+        )
+        .get(cwd, agent.id, ...statuses) as { id?: string; cli_type?: string } | undefined;
+      if (sibling?.id) {
+        logger.warn(
+          `[AgentManager] ${agent.id} shares cwd with live agent ${sibling.id} (${sibling.cli_type}) — they share one MCP config file, so identity can be mixed. Give one a worktree.`,
+        );
+      }
       writeAgentMcpConfigFor(
         agent.cliType,
         cwd,
