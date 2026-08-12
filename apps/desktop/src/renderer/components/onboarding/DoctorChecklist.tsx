@@ -16,6 +16,16 @@ const STATUS_COLOR: Record<DoctorStatus, string> = {
 
 const CATEGORY_ORDER: DoctorCategory[] = ["agents", "system", "config"];
 
+/** Reports from an older main process lack `category` — derive it from the id. */
+function resolveCategory(check: DoctorCheck): DoctorCategory {
+  if (check.category) return check.category;
+  if (check.id.startsWith("cli:")) return "agents";
+  if (check.id === "keystore" || check.id === "api-keys" || check.id === "stale-worktrees") {
+    return "config";
+  }
+  return "system";
+}
+
 const CATEGORY_META: Record<DoctorCategory, { label: string; badge: string }> = {
   agents: { label: "Agent CLIs", badge: "bg-accent/15 text-accent" },
   system: { label: "System & services", badge: "bg-blue-500/15 text-blue-300" },
@@ -88,7 +98,7 @@ export function DoctorChecklist({
       )}
 
       {CATEGORY_ORDER.map((category) => {
-        const group = visible.filter((c) => (c.category ?? "system") === category);
+        const group = visible.filter((c) => resolveCategory(c) === category);
         if (group.length === 0) return null;
         const meta = CATEGORY_META[category];
         return (
