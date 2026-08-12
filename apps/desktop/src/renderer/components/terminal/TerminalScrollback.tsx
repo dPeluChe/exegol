@@ -90,6 +90,7 @@ export function TerminalScrollback({
         currentStep: newAgent.currentStep,
         taskDescription: newAgent.taskDescription,
         branchName: newAgent.branchName ?? null,
+        alias: newAgent.alias ?? null,
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: newAgent.startedAt,
         accessMode: newAgent.accessMode ?? null,

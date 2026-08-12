@@ -197,6 +197,12 @@ export function writeAgentMcpConfigFor(
         return;
       case "codex-global":
         ensureCodexGlobalConfig(shimPath);
+        // codex launches MCP servers with a SANITIZED env (verified live
+        // 2026-08-12: shim got no EXEGOL_MCP_TOKEN → read-mode tools). The
+        // token must live on disk: codex ignores .mcp.json but the shim
+        // reads it from its cwd as a fallback — and reattach token re-arm
+        // works for codex again via readAgentMcpToken.
+        writeAgentMcpConfig(cwd, shimPath, token, accessMode);
         return;
       default:
         writeAgentMcpConfig(cwd, shimPath, token, accessMode);

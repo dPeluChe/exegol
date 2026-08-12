@@ -247,10 +247,19 @@ export function buildPtyInvocation(
     if (config.resumeSession) {
       const sourceAgentId = config.resumeFromAgentId ?? agent.id;
       const row = db
-        .prepare("SELECT resume_command, claude_session_id FROM agents WHERE id = ?")
+        .prepare("SELECT resume_command, claude_session_id, alias FROM agents WHERE id = ?")
         .get(sourceAgentId) as
-        | { resume_command: string | null; claude_session_id: string | null }
+        | { resume_command: string | null; claude_session_id: string | null; alias: string | null }
         | undefined;
+
+      // T160: resume spawns a NEW agent row — carry the session name over or
+      // agent_send targets die on every restart (paco lost his name, 2026-08-12).
+      if (row?.alias && sourceAgentId !== agent.id) {
+        db.prepare("UPDATE agents SET alias = ? WHERE id = ? AND alias IS NULL").run(
+          row.alias,
+          agent.id,
+        );
+      }
 
       if (row?.resume_command) {
         fullCommand = row.resume_command;
