@@ -10,8 +10,13 @@ import { existsSync, readFileSync } from "node:fs";
 import type { MemoryCategory } from "@exegol/shared";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
-import { AgentMessagingError, sendAgentMessage } from "../agents/agent-messaging";
+import {
+  AgentMessagingError,
+  resolveTargetAgent,
+  sendAgentMessage,
+} from "../agents/agent-messaging";
 import { getProject } from "../db/queries";
+import { type AgentLinkRole, createAgentLink } from "../db/queries/agent-links";
 import { listActiveAgents } from "../db/queries/agents";
 import { readProjectBrief } from "../knowledge/brief";
 import { getDigestPath } from "../knowledge/paths";
@@ -189,6 +194,42 @@ function handleAgentSend(
   }
 }
 
+/** T162: register an Exegol-enforced link FROM the caller (identity from token). */
+function handleAgentLink(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
+  const targetRaw = String(args.target ?? "");
+  if (!targetRaw) throw new ExegolToolError("agent_link requires target (name or id)", -32602);
+  const role = ["notify", "reviewer", "feedback"].includes(String(args.role))
+    ? (String(args.role) as AgentLinkRole)
+    : "notify";
+  try {
+    const target = resolveTargetAgent(db, targetRaw);
+    if (target.id === context.agentId) {
+      throw new AgentMessagingError("cannot link to yourself", -32602);
+    }
+    const link = createAgentLink(db, {
+      fromAgentId: context.agentId,
+      toAgentId: target.id,
+      role,
+      note: typeof args.note === "string" ? args.note.slice(0, 500) : null,
+      once: args.once !== false,
+    });
+    return {
+      linkId: link.id,
+      firesWhen: "your current turn ends",
+      target: target.alias ?? target.id,
+      role: link.role,
+      once: link.once,
+    };
+  } catch (err) {
+    if (err instanceof AgentMessagingError) throw new ExegolToolError(err.message, err.code);
+    throw err;
+  }
+}
+
 /** Dispatch a tool call, enforcing access-mode gating before running the handler. */
 export async function callExegolTool(
   db: Database.Database,
@@ -215,5 +256,7 @@ export async function callExegolTool(
       return handleAgentsList(db, context);
     case "agent_send":
       return handleAgentSend(db, args, context);
+    case "agent_link":
+      return handleAgentLink(db, args, context);
   }
 }

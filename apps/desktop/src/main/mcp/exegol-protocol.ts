@@ -100,6 +100,7 @@ export const EXEGOL_TOOL_NAMES = [
   "knowledge_get",
   "agents_list",
   "agent_send",
+  "agent_link",
 ] as const;
 export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
 
@@ -111,6 +112,7 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "knowledge_get",
   "agents_list",
   "agent_send",
+  "agent_link",
 ]);
 
 export interface ExegolToolDef {
@@ -204,6 +206,28 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
         },
       },
       required: ["target", "message"],
+    },
+  },
+  {
+    name: "agent_link",
+    description:
+      "Register an Exegol-ENFORCED link: when YOUR current turn ends, Exegol automatically " +
+      "notifies the target agent (with your identity attached) — use this for 'when I " +
+      "finish, tell X' so the notification happens even if you forget. Roles: notify " +
+      "(FYI), reviewer (target reviews your work), feedback. One-shot by default.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: { type: "string", description: "Session name (alias) or agent id" },
+        role: { type: "string", enum: ["notify", "reviewer", "feedback"] },
+        note: { type: "string", description: "Context included in the notification" },
+        once: {
+          type: "boolean",
+          description:
+            "Default true (fire on your next turn end, then expire). false = every turn.",
+        },
+      },
+      required: ["target"],
     },
   },
 ];

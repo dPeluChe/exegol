@@ -14,10 +14,13 @@ vi.mock("../terminal/pty-host", () => ({
   }),
 }));
 
+import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import {
   AgentMessagingError,
+  clearAgentLinks,
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
+  fireAgentLinks,
   sendAgentMessage,
 } from "./agent-messaging";
 
@@ -183,6 +186,68 @@ describe("sendAgentMessage", () => {
     expect(() =>
       sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "overflow" }),
     ).toThrowError(/queue is full/);
+  });
+
+  it("marks cross-project senders in the attribution header", () => {
+    db.prepare("INSERT INTO projects (id, name, path) VALUES ('p2', 'OtherProj', '/tmp/p2')").run();
+    insertAgent(db, "a1", "running");
+    db.prepare("UPDATE agents SET project_id = 'p2' WHERE id = 'a1'").run();
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "cross ping" });
+    expect(ptyMock.writes[0]?.data).toContain('DIFFERENT project: "OtherProj"');
+    expect(ptyMock.writes[0]?.data).toContain("/tmp/p2");
+  });
+
+  it("same-project senders show the shared project name", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "local ping" });
+    expect(ptyMock.writes[0]?.data).toContain('your same project ("Proj")');
+  });
+
+  it("fires one-shot links on the sender's turn boundary with role framing", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    db.prepare("UPDATE agents SET alias = 'juanito' WHERE id = 'a1'").run();
+    ptyMock.alive.add("a2");
+
+    createAgentLink(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      role: "reviewer",
+      note: "revisa el diff",
+    });
+    fireAgentLinks(db, "a1");
+
+    expect(ptyMock.writes).toHaveLength(1);
+    const data = ptyMock.writes[0]?.data ?? "";
+    expect(data).toContain("REVIEWER");
+    expect(data).toContain("revisa el diff");
+    expect(data).toContain('from agent "juanito"');
+    expect(data).toContain("WAITING for your reply");
+    // one-shot: expired after firing
+    expect(listLinksFrom(db, "a1")).toHaveLength(0);
+    fireAgentLinks(db, "a1");
+    expect(ptyMock.writes).toHaveLength(1);
+  });
+
+  it("notify-role links do not demand a reply and links die with the agent", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    createAgentLink(db, { fromAgentId: "a1", toAgentId: "a2", role: "notify" });
+    clearAgentLinks(db, "a2"); // receiver dies first → link must vanish
+    fireAgentLinks(db, "a1");
+    expect(ptyMock.writes).toHaveLength(0);
+
+    createAgentLink(db, { fromAgentId: "a1", toAgentId: "a2", role: "notify" });
+    fireAgentLinks(db, "a1");
+    expect(ptyMock.writes[0]?.data).toContain("No reply expected");
   });
 
   it("drops the runtime queue when the target PTY is gone, keeping DB records", () => {

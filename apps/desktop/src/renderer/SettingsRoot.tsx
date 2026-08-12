@@ -3,7 +3,15 @@ import { useEffect, useState } from "react";
 import { SettingsPanel, type SettingsTab } from "./components/settings/SettingsPanel";
 import { useTheme } from "./hooks/use-theme";
 
-const VALID_TABS: SettingsTab[] = ["general", "clis", "terminal", "shortcuts", "apikeys", "doctor"];
+const VALID_TABS: SettingsTab[] = [
+  "general",
+  "clis",
+  "terminal",
+  "shortcuts",
+  "apikeys",
+  "mcp",
+  "doctor",
+];
 
 function parseTab(): SettingsTab | undefined {
   const raw = new URLSearchParams(window.location.search).get("settingsTab");

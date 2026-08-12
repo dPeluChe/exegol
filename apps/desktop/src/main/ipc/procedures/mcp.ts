@@ -1,9 +1,73 @@
 import { mcpServerConfigSchema } from "@exegol/shared";
 import { z } from "zod";
+import { EXEGOL_TOOL_DEFS } from "../../mcp/exegol-protocol";
+import { getExegolMcpServerInfo } from "../../mcp/exegol-server";
 import type { McpServerConfig, McpServerState, McpTool } from "../../mcp/registry";
 import { publicProcedure, router } from "../trpc";
 
+/** T163: where each provider's MCP wiring lands — the settings panel renders
+ *  this so users can see (and debug) the injection per CLI. */
+const EXEGOL_MCP_PROVIDER_WIRING = [
+  {
+    provider: "Claude Code",
+    cliType: "claude-code",
+    config: "<cwd>/.mcp.json",
+    tokenVia: "config env",
+    status: "wired",
+  },
+  {
+    provider: "OpenCode",
+    cliType: "opencode",
+    config: "<cwd>/opencode.json (mcp.exegol)",
+    tokenVia: "config environment",
+    status: "wired",
+  },
+  {
+    provider: "Gemini",
+    cliType: "gemini",
+    config: "<cwd>/.gemini/settings.json",
+    tokenVia: "config env",
+    status: "wired",
+  },
+  {
+    provider: "Codex",
+    cliType: "codex",
+    config: "~/.codex/config.toml (managed block) + <cwd>/.mcp.json for the token",
+    tokenVia: "on-disk fallback (codex sanitizes env)",
+    status: "wired",
+  },
+  {
+    provider: "Devin",
+    cliType: "devin",
+    config: "<cwd>/.devin/mcp_config.local.json",
+    tokenVia: "config env",
+    status: "wired",
+  },
+  {
+    provider: "Antigravity",
+    cliType: "agy",
+    config: "plugin system (agy plugin install) — pending",
+    tokenVia: "n/a",
+    status: "receive-only",
+  },
+  {
+    provider: "Other CLIs",
+    cliType: "*",
+    config: "<cwd>/.mcp.json (convention — works if the CLI reads it)",
+    tokenVia: "config env",
+    status: "best-effort",
+  },
+] as const;
+
 export const mcpRouter = router({
+  /** T162/T163: Exegol's own MCP server — status, tools and per-provider wiring. */
+  exegolStatus: publicProcedure.query(() => {
+    return {
+      ...getExegolMcpServerInfo(),
+      tools: EXEGOL_TOOL_DEFS.map((t) => ({ name: t.name, description: t.description })),
+      providers: EXEGOL_MCP_PROVIDER_WIRING,
+    };
+  }),
   /**
    * List all MCP server states (connected + tools discovered).
    */

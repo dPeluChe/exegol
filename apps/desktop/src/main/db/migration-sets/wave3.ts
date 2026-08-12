@@ -10,4 +10,19 @@ export const wave3Migrations: Migration[] = [
     id: "w3_001_agent_alias",
     sql: "ALTER TABLE agents ADD COLUMN alias TEXT;",
   },
+  {
+    // T162 phase 1: directed links — Exegol-enforced "when A's turn ends,
+    // notify B (as role)". Fired from the turn-boundary choke point.
+    id: "w3_002_agent_links",
+    sql: `CREATE TABLE IF NOT EXISTS agent_links (
+      id TEXT PRIMARY KEY,
+      from_agent_id TEXT NOT NULL,
+      to_agent_id TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'notify' CHECK (role IN ('notify', 'reviewer', 'feedback')),
+      note TEXT,
+      once INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_links_from ON agent_links(from_agent_id);`,
+  },
 ];
