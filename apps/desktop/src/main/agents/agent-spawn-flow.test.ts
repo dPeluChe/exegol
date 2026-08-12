@@ -9,7 +9,7 @@ import type { AgentProviderRegistry } from "./registry";
 const mocks = vi.hoisted(() => ({
   hooksPath: "/tmp/exegol-hooks/agent.json" as string | null,
   lifecycle: null as { beforeAgent?: string } | null,
-  writeAgentMcpConfig: vi.fn(),
+  writeAgentMcpConfigFor: vi.fn(),
   ensureExegolMcpServerStarted: vi.fn(),
   buildClaudeCodeHooksFile: vi.fn((_agentId: string) => mocks.hooksPath),
 }));
@@ -42,7 +42,7 @@ vi.mock("../mcp/exegol-server", () => ({
 }));
 vi.mock("../mcp/exegol-mcp-config", () => ({
   resolveMcpShimPath: () => "/shim/exegol-mcp-shim.js",
-  writeAgentMcpConfig: mocks.writeAgentMcpConfig,
+  writeAgentMcpConfigFor: mocks.writeAgentMcpConfigFor,
 }));
 vi.mock("../terminal/shell-wrappers", () => ({
   shellSupportsMarker: () => false,
@@ -82,7 +82,7 @@ describe("buildPtyInvocation", () => {
     process.env.SHELL = "/bin/zsh";
     mocks.hooksPath = "/tmp/exegol-hooks/agent.json";
     mocks.lifecycle = null;
-    mocks.writeAgentMcpConfig.mockClear();
+    mocks.writeAgentMcpConfigFor.mockClear();
     mocks.buildClaudeCodeHooksFile.mockClear();
   });
 
@@ -102,7 +102,7 @@ describe("buildPtyInvocation", () => {
     expect(inv.env.DISABLE_AUTO_UPDATE).toBe("true");
     expect(inv.env.DISABLE_UPDATE_PROMPT).toBe("true");
     expect(inv.env.EXEGOL_MCP_TOKEN).toBeUndefined();
-    expect(mocks.writeAgentMcpConfig).not.toHaveBeenCalled();
+    expect(mocks.writeAgentMcpConfigFor).not.toHaveBeenCalled();
   });
 
   it("spawns a prompt-arg CLI via -ic with full env wiring", () => {
@@ -119,7 +119,8 @@ describe("buildPtyInvocation", () => {
     expect(inv.env.EXEGOL_AGENT_ID).toBe(agent.id);
     expect(inv.env.EXEGOL_ACCESS_MODE).toBe("write");
     expect(inv.env.EXEGOL_MCP_TOKEN).toBe("test-mcp-token");
-    expect(mocks.writeAgentMcpConfig).toHaveBeenCalledWith(
+    expect(mocks.writeAgentMcpConfigFor).toHaveBeenCalledWith(
+      "claude-code",
       "/tmp/cwd",
       "/shim/exegol-mcp-shim.js",
       "test-mcp-token",
