@@ -142,7 +142,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 ## Active Backlog
 
 ### T153 — Project Awareness Engine `added: 2026-07-07`
-**Priority**: P2 — **Wave 3 headline candidate** (do NOT start before Wave 2.6 exit criteria) | **Effort**: L (phased) | **Source**: original idea (Antonio) + design analysis 2026-07-07 + **reference implementation study: `RESEARCH/CODEBASE_MEMORY_MCP_2026_07.md`** (adopt: index_coverage honesty table, FILE_CHANGES_WITH co-change drift, detect_changes hop-risk, source_hash caching, min-cosine multi-keyword recall; design spike must evaluate shelling out to the tool's CLI vs building file-level indexing in-house)
+**Priority**: P2 — **Wave 3 headline candidate** (do NOT start before Wave 2.6 exit criteria) | **Effort**: L (phased) | **Source**: original idea (Antonio) + design analysis 2026-07-07 + **reference implementation studies: `RESEARCH/CODEBASE_MEMORY_MCP_2026_07.md` + `RESEARCH/COCOINDEX_2026_08.md`** (adopt: two-tier mtime/hash freshness, logic fingerprint per collector, model-id in cache keys, ownership-based reconcile, macOS watcher-recreation loop, AST-derived FTS terms, source views for context packs; verdict: patterns yes, crate no) (adopt: index_coverage honesty table, FILE_CHANGES_WITH co-change drift, detect_changes hop-risk, source_hash caching, min-cosine multi-keyword recall; design spike must evaluate shelling out to the tool's CLI vs building file-level indexing in-house)
 
 **Why**
 - A lightweight per-project local worker that maintains living code memory, detects small
@@ -446,6 +446,34 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   shim re-fetches tool defs from the server per tools/list instead of its bundled copy
   (cheapest — defs already live server-side). Until then: new MCP tools require agent
   session restart.
+
+---
+
+### T164 — Memory Anchors: memories addressed by the code index `added: 2026-08-12`
+**Priority**: P1-P2 (Wave 3 — pairs with T153 Phase 2; anchor table can land before the full engine) | **Effort**: M | **Source**: idea (Antonio: "las memorias serían alrededor del index") + **`RESEARCH/COCOINDEX_2026_08.md`** (full design in § "Hipótesis")
+
+**Why**
+- Antonio's hypothesis, validated with inverted framing: the index is the COORDINATE SYSTEM
+  memories are addressed in, not where they live. Memories get an address → staleness becomes
+  mechanical (drift ≠ supersede) → recall becomes location-aware (file/symbol/call-graph/
+  co-change before global RRF) — the concrete way MCP memories "get better".
+
+**Scope (from the research doc — see it for the schema)**
+1. `memory_anchor` table (anchor_kind file|symbol|range, symbol_qname, source_hash +
+   snippet_fp, confidence explicit|inferred, state fresh|drifted|orphaned|relocated)
+2. MCP `memory_save` accepts optional anchor (path + symbol/range resolved server-side
+   against extracted declarations — NEVER trust an LLM-freehand qname); infer from
+   turn-touched files when absent
+3. Anchor verifier runs in the SAME sweep as index updates (two-tier mtime/hash check;
+   symbol-level snippet_fp = "someone edited another function → still fresh")
+4. `drifted` = recall penalty + context-pack flag; `orphaned` = suppressed, never deleted
+5. Location-aware recall in context packs: anchored-to-file → referenced symbols →
+   co-change neighbors → global RRF fallback
+
+**Likely files**
+- migration set wave3 (memory_anchor), `memory/store.ts` (+anchor-aware recall),
+  `mcp/exegol-tools.ts` (memory_save anchor param), T153 worker (verifier), Rust core
+  (declaration extractor — see cocoindex `code_ast` as reference impl)
 
 ---
 
