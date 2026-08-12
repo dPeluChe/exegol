@@ -5,8 +5,12 @@ import { getExegolMcpServerInfo } from "../../mcp/exegol-server";
 import type { McpServerConfig, McpServerState, McpTool } from "../../mcp/registry";
 import { publicProcedure, router } from "../trpc";
 
+/** Official MCP spec/docs — shown once in the providers view. */
+const MCP_SPEC_URL = "https://modelcontextprotocol.io";
+
 /** T163: where each provider's MCP wiring lands — the settings panel renders
- *  this so users can see (and debug) the injection per CLI. */
+ *  this so users can see (and debug) the injection per CLI. `inspectCmd` is the
+ *  CLI's own way to check MCP wiring (verified against each binary's help). */
 const EXEGOL_MCP_PROVIDER_WIRING = [
   {
     provider: "Claude Code",
@@ -14,6 +18,8 @@ const EXEGOL_MCP_PROVIDER_WIRING = [
     config: "<cwd>/.mcp.json",
     tokenVia: "config env",
     status: "wired",
+    inspectCmd: "/mcp (inside the session)",
+    docsUrl: "https://docs.claude.com/en/docs/claude-code/mcp",
   },
   {
     provider: "OpenCode",
@@ -21,6 +27,8 @@ const EXEGOL_MCP_PROVIDER_WIRING = [
     config: "<cwd>/opencode.json (mcp.exegol)",
     tokenVia: "config environment",
     status: "wired",
+    inspectCmd: "opencode mcp list",
+    docsUrl: "https://opencode.ai/docs",
   },
   {
     provider: "Gemini",
@@ -28,6 +36,8 @@ const EXEGOL_MCP_PROVIDER_WIRING = [
     config: "<cwd>/.gemini/settings.json",
     tokenVia: "config env",
     status: "wired",
+    inspectCmd: "/mcp (inside the session)",
+    docsUrl: "https://github.com/google-gemini/gemini-cli",
   },
   {
     provider: "Codex",
@@ -35,6 +45,8 @@ const EXEGOL_MCP_PROVIDER_WIRING = [
     config: "~/.codex/config.toml (managed block) + <cwd>/.mcp.json for the token",
     tokenVia: "on-disk fallback (codex sanitizes env)",
     status: "wired",
+    inspectCmd: "/mcp (inside the session)",
+    docsUrl: "https://github.com/openai/codex",
   },
   {
     provider: "Devin",
@@ -42,13 +54,17 @@ const EXEGOL_MCP_PROVIDER_WIRING = [
     config: "<cwd>/.devin/mcp_config.local.json",
     tokenVia: "config env",
     status: "wired",
+    inspectCmd: "devin mcp list",
+    docsUrl: "https://factory.ai",
   },
   {
     provider: "Antigravity",
     cliType: "agy",
-    config: "plugin system (agy plugin install) — pending",
-    tokenVia: "n/a",
+    config: "plugin system — pending (agy plugin install)",
+    tokenVia: "n/a — receives messages via PTY injection only",
     status: "receive-only",
+    inspectCmd: "agy plugin list",
+    docsUrl: null,
   },
   {
     provider: "Other CLIs",
@@ -56,6 +72,8 @@ const EXEGOL_MCP_PROVIDER_WIRING = [
     config: "<cwd>/.mcp.json (convention — works if the CLI reads it)",
     tokenVia: "config env",
     status: "best-effort",
+    inspectCmd: null,
+    docsUrl: MCP_SPEC_URL,
   },
 ] as const;
 
@@ -66,6 +84,7 @@ export const mcpRouter = router({
       ...getExegolMcpServerInfo(),
       tools: EXEGOL_TOOL_DEFS.map((t) => ({ name: t.name, description: t.description })),
       providers: EXEGOL_MCP_PROVIDER_WIRING,
+      specUrl: MCP_SPEC_URL,
     };
   }),
   /**
