@@ -176,23 +176,28 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
   {
     name: "agents_list",
     description:
-      "List other live agents orchestrated by Exegol (all projects): id, provider, " +
-      "project, status and task. Use an id from here as agent_send target.",
+      "List other live agents orchestrated by Exegol (all projects): id, name (session " +
+      "alias, may be null), provider, project, status and task. Address agent_send by " +
+      "name when one is set, or by id.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "agent_send",
     description:
-      "Send a text message to another live agent. Exegol delivers it at the target's " +
-      "next turn boundary (never mid-generation) with your identity attached — the " +
-      "target knows it came from an agent, not the user. Returns delivered|queued.",
+      "Send a text message to another live agent, addressed by session name (alias) or " +
+      "id. Exegol delivers it at the target's next turn boundary (never mid-generation) " +
+      "with your identity attached — the target knows it came from an agent, not the " +
+      "user. Returns delivered|queued.",
     inputSchema: {
       type: "object",
       properties: {
-        target_id: { type: "string", description: "Agent id from agents_list" },
+        target: {
+          type: "string",
+          description: "Session name (alias) or agent id from agents_list",
+        },
         message: { type: "string", description: "Plain text, max 4000 chars" },
       },
-      required: ["target_id", "message"],
+      required: ["target", "message"],
     },
   },
 ];

@@ -127,6 +127,34 @@ describe("sendAgentMessage", () => {
     ).toThrowError(/not reachable/);
   });
 
+  it("resolves targets by session alias (case-insensitive), errors on ambiguity", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    db.prepare("UPDATE agents SET alias = 'Revisor-API' WHERE id = 'a2'").run();
+    ptyMock.alive.add("a2");
+
+    const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "revisor-api", text: "hey" });
+    expect(res.delivered).toBe(true);
+    expect(ptyMock.writes[0]?.id).toBe("a2");
+
+    // second live agent with the same alias → ambiguous
+    insertAgent(db, "a3", "running");
+    db.prepare("UPDATE agents SET alias = 'revisor-api' WHERE id = 'a3'").run();
+    expect(() =>
+      sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "Revisor-API", text: "again" }),
+    ).toThrowError(/matches 2 live agents/);
+  });
+
+  it("uses the sender alias in the attribution header", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    db.prepare("UPDATE agents SET alias = 'builder-1' WHERE id = 'a1'").run();
+    ptyMock.alive.add("a2");
+
+    sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "ping" });
+    expect(ptyMock.writes[0]?.data).toContain('from agent "builder-1"');
+  });
+
   it("caps the per-target queue", () => {
     insertAgent(db, "a1", "running");
     insertAgent(db, "a2", "running");

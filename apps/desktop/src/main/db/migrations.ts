@@ -2,6 +2,7 @@ import type Database from "libsql";
 import { wave2KnowledgeMigrations } from "./migration-sets/wave2-knowledge";
 import { wave2SignalMigrations } from "./migration-sets/wave2-signal";
 import { wave2SurfaceMigrations } from "./migration-sets/wave2-surface";
+import { wave3Migrations } from "./migration-sets/wave3";
 
 export type Migration = {
   id: string;
@@ -562,6 +563,7 @@ const migrations: Migration[] = [
   ...wave2SignalMigrations,
   ...wave2KnowledgeMigrations,
   ...wave2SurfaceMigrations,
+  ...wave3Migrations,
 ];
 
 export function runMigrations(db: Database.Database): void {

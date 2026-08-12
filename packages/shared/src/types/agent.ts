@@ -114,6 +114,8 @@ export type Agent = {
   id: string;
   projectId: string;
   worktreeId: string | null;
+  /** T160: user-editable session alias — addressing name for agent_send + UI labels. */
+  alias?: string | null;
   branchName?: string | null;
   cliType: AgentCliType;
   status: AgentStatus;

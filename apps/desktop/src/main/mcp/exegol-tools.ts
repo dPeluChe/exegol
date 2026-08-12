@@ -144,6 +144,7 @@ function handleAgentsList(db: Database.Database, context: ExegolToolContext) {
       .filter((a) => a.id !== context.agentId)
       .map((a) => ({
         id: a.id,
+        name: a.alias ?? null,
         provider: a.cliType,
         project: a.projectName,
         status: a.status,
@@ -158,9 +159,10 @@ function handleAgentSend(
   args: Record<string, unknown>,
   context: ExegolToolContext,
 ) {
-  const targetId = String(args.target_id ?? "");
+  // `target` (name or id) is canonical; `target_id` accepted for compatibility.
+  const targetId = String(args.target ?? args.target_id ?? "");
   const message = String(args.message ?? "");
-  if (!targetId) throw new ExegolToolError("agent_send requires target_id", -32602);
+  if (!targetId) throw new ExegolToolError("agent_send requires target (name or id)", -32602);
   try {
     const result = sendAgentMessage(db, {
       fromAgentId: context.agentId,

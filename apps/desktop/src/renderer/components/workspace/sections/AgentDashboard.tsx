@@ -12,13 +12,14 @@ import {
   Cpu,
   Eye,
   Map as MapIcon,
+  Pencil,
   Send,
   Square,
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { submitToAgent } from "../../../lib/agent-input";
-import { trpcInvoke } from "../../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
 import {
@@ -407,7 +408,7 @@ function AgentCard({
         {/* Center: info */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-text-primary">{agent.cliType}</span>
+            <AliasName agent={agent} />
             <span className={cn("flex items-center gap-1 text-[10px]", config.color)}>
               <StatusIcon className="h-3 w-3" />
               {hasUnread ? "Needs input" : config.label}
@@ -481,6 +482,62 @@ function AgentCard({
 
       {peekOpen && <PeekPanel agent={agent} />}
     </div>
+  );
+}
+
+/** T160: session name — alias when set (falls back to provider), pencil to rename.
+ *  The alias is the agent_send addressing name, so renames matter beyond looks. */
+function AliasName({ agent }: { agent: AgentState }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const commit = () => {
+    const alias = draft.trim() || null;
+    trpcMutate("agents.setAlias", { id: agent.id, alias }).catch(() => {});
+    useAgentStore.getState().updateAgent(agent.id, { alias });
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: click shield while editing
+      // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation-only handler
+      <span onClick={(e) => e.stopPropagation()}>
+        <input
+          value={draft}
+          autoFocus
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          maxLength={40}
+          placeholder={agent.cliType}
+          className="h-5 w-32 rounded border border-accent/50 bg-bg-primary px-1 text-sm font-medium text-text-primary focus:outline-none"
+        />
+      </span>
+    );
+  }
+
+  return (
+    <span className="group/alias flex min-w-0 items-center gap-1">
+      <span className="truncate text-sm font-medium text-text-primary">
+        {agent.alias ?? agent.cliType}
+      </span>
+      <button
+        type="button"
+        title="Rename session (addressing name for agent messages)"
+        onClick={(e) => {
+          e.stopPropagation();
+          setDraft(agent.alias ?? "");
+          setEditing(true);
+        }}
+        className="hidden shrink-0 text-text-muted hover:text-text-primary group-hover/alias:inline-block"
+      >
+        <Pencil className="h-2.5 w-2.5" />
+      </button>
+    </span>
   );
 }
 

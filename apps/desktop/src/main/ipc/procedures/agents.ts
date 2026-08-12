@@ -18,7 +18,7 @@ import {
   listRecentSessions,
   updateAgentStatus,
 } from "../../db/queries";
-import { listActiveAgents } from "../../db/queries/agents";
+import { listActiveAgents, setAgentAlias } from "../../db/queries/agents";
 import {
   createParallelRun,
   enrichParallelRunForComparison,
@@ -137,6 +137,14 @@ export const agentRouter = router({
 
   /** T156: cross-project non-terminal agents (project name + group color). */
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  /** T160: set/clear the session alias — the agent_send addressing name. */
+  setAlias: publicProcedure
+    .input(z.object({ id: z.string(), alias: z.string().trim().max(40).nullable() }))
+    .mutation(({ ctx, input }) => {
+      setAgentAlias(ctx.db, input.id, input.alias || null);
+      return { success: true };
+    }),
 
   // Returns null (not undefined) for consistency with TanStack Query v5,
   // which treats undefined from queryFn as a protocol error.
