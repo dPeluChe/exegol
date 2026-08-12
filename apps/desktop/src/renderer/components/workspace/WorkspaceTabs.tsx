@@ -1,11 +1,14 @@
 import { cn } from "@exegol/ui";
-import { BarChart3, Cpu, FolderKanban, type LucideIcon } from "lucide-react";
+import { BarChart3, Cpu, FolderKanban, LayoutDashboard, type LucideIcon } from "lucide-react";
 
-// ─── Main tabs (3 top-level) ────────────────────────────────────────────────
+// ─── Main tabs (4 top-level) ────────────────────────────────────────────────
 
-export type MainTab = "agents" | "project" | "monitor";
+// Dashboard is Exegol's HOME (Antonio 2026-08-11) — first-class, not a
+// Monitor sub-tab: the cross-project fleet view lands first.
+export type MainTab = "dashboard" | "agents" | "project" | "monitor";
 
 const MAIN_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "agents", label: "Agents", icon: Cpu },
   { id: "project", label: "Project", icon: FolderKanban },
   { id: "monitor", label: "Monitor", icon: BarChart3 },
@@ -21,7 +24,7 @@ export type ProjectSubTab =
   | "pipelines"
   | "parallel-runs"
   | "qa-tests";
-export type MonitorSubTab = "agent-dashboard" | "resources-tokens" | "scoring";
+export type MonitorSubTab = "resources-tokens" | "scoring";
 
 export type WorkspaceSection =
   | "agents"
@@ -47,7 +50,6 @@ const PROJECT_SUBS: { id: ProjectSubTab; label: string }[] = [
 ];
 
 const MONITOR_SUBS: { id: MonitorSubTab; label: string }[] = [
-  { id: "agent-dashboard", label: "Agent Dashboard" },
   { id: "resources-tokens", label: "Resources & Tokens" },
   { id: "scoring", label: "Scoring" },
 ];
@@ -55,6 +57,7 @@ const MONITOR_SUBS: { id: MonitorSubTab; label: string }[] = [
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 export function getMainTab(section: WorkspaceSection): MainTab {
+  if (section === "agent-dashboard") return "dashboard";
   if (section === "agents") return "agents";
   if (
     section === "tasks" ||
@@ -70,6 +73,7 @@ export function getMainTab(section: WorkspaceSection): MainTab {
 }
 
 export function getDefaultSubTab(tab: MainTab): WorkspaceSection {
+  if (tab === "dashboard") return "agent-dashboard";
   if (tab === "agents") return "agents";
   if (tab === "project") return "tasks";
   return "resources-tokens";
