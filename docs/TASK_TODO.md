@@ -412,13 +412,12 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   feedback (A builds, B+C review) — the council preset from COUNCIL_BASE.md.
 
 **Scope (phased — each useful alone)**
-1. **Directed link**: rule `on turn_end(A) → agent_send(A→B, template)` — created from the
-   dashboard (link icon on a card: "notify B when A finishes") or by an agent via a new
-   `agent_link` MCP tool. Persist links (new table or reuse scheduled_tasks pattern);
-   fire from the same broadcastAgentStatus choke point as T157 delivery; auto-expire when
-   either side exits.
-2. **Roles**: link carries a role framing injected with the message ("B acts as reviewer
-   of A's work — reply with discrepancies"). Presets: notify / reviewer / feedback.
+1. ✅ **Directed link — SHIPPED 2026-08-12 (PR #101)**: `agent_link` MCP tool + agent_links
+   table (w3_002), fired from the broadcastAgentStatus choke point, one-shot default,
+   dies with either endpoint. Roles notify/reviewer/feedback with framing + expects_reply.
+   Also shipped: cross-project origin in attribution headers + Settings > MCP Server panel.
+   Pending: dashboard link UI (link icon on cards), `once:false` recurring links live-verify.
+2. ✅ **Roles** — shipped with phase 1 (framing per role).
 3. **Rooms**: N-agent membership; message to room fans out (still one per boundary per
    member); human sees the thread. Build on T25 messages + a room_id column. This is the
    COUNCIL_BASE exchange-bus MVP — do not build the headless council executions yet.
