@@ -439,6 +439,13 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   others per docs — each with the same shim command + per-agent token env, written at
   spawn into the agent cwd, removed/revoked on exit. Doctor check: which providers have
   MCP wiring available.
+- **agy (Antigravity) MCP = via PLUGINS (discovered 2026-08-12)**: the CLI has `/mcp` in
+  the TUI but config only via its plugin system — `agy plugin install <target>` with a
+  plugin dir containing `plugin.json` + `mcp_config.json` (standard mcpServers shape;
+  binary strings confirm). Plan: ship an "exegol" plugin scaffold (generated under
+  ~/.exegol/agy-plugin/) + idempotent `agy plugin install` at spawn; token via
+  mcp_config env if agy forwards it (validate live — codex-style sanitization possible,
+  shim cwd fallback as plan B). Until then agy is receive-only (PTY injection works).
 - **Stale-shim gap (live incident 2026-08-12)**: long-lived CLI sessions keep the shim
   binary spawned at THEIR start — new tools (agent_send) are invisible until the session
   restarts (juanito/paco couldn't message). Fix candidates: shim forwards a server-pushed
