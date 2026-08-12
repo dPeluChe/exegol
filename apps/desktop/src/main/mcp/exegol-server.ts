@@ -56,7 +56,7 @@ export function registerAgentMcpToken(agentId: string, projectId: string): strin
 /** Re-arm an EXISTING token after app restart (registry is in-memory only).
  *  The reattached agent's shim/.mcp.json still hold the old secret — minting
  *  a new one would orphan them; restoring keeps identity continuous. */
-export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): void {
+export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): boolean {
   // Two agents sharing a cwd read the SAME token file; binding it twice would
   // let one impersonate the other (and one exit would revoke both).
   const owner = tokensBySecret.get(token);
@@ -64,10 +64,11 @@ export function restoreAgentMcpToken(agentId: string, projectId: string, token: 
     logger.warn(
       `[ExegolMcp] Refusing to re-arm a token already bound to ${owner.agentId} for ${agentId} — both agents share a cwd; give one a worktree`,
     );
-    return;
+    return false;
   }
   tokensBySecret.set(token, { agentId, projectId });
   tokensByAgent.set(agentId, token);
+  return true;
 }
 
 /** Revoke on agent exit — a leaked .mcp.json must not stay a live credential. */

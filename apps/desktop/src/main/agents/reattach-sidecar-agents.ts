@@ -148,8 +148,12 @@ export async function reattachSidecarAgents(
           const cwd = wt?.worktreePath ?? projectPath;
           const token = cwd ? readAgentMcpToken(cwd) : null;
           if (token) {
-            restoreAgentMcpToken(agentId, projectId, token);
-            logger.info(`[Reattach] MCP token re-armed for ${agentId}`);
+            const rearmed = restoreAgentMcpToken(agentId, projectId, token);
+            logger.info(
+              rearmed
+                ? `[Reattach] MCP token re-armed for ${agentId}`
+                : `[Reattach] MCP token NOT re-armed for ${agentId} (shared with another agent) — its MCP calls will be unauthorized until the session restarts`,
+            );
           }
         } catch (err) {
           logger.warn(`[Reattach] MCP re-arm failed for ${agentId}:`, err);
