@@ -353,7 +353,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
       <AgentIcon provider={agent.cliType} size={14} />
 
       {/* Agent info */}
-      <span className="font-medium text-text-primary">{agent.cliType}</span>
+      <span className="font-medium text-text-primary">{agent.alias ?? agent.cliType}</span>
       <span className="min-w-0 flex-1 truncate text-text-muted">
         {agent.currentStep ?? agent.taskDescription}
       </span>

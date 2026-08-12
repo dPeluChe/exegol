@@ -40,6 +40,26 @@ export function listAgents(db: Database.Database, projectId: string): Agent[] {
   return (rows as Record<string, unknown>[]).map(mapAgentRow);
 }
 
+/** T160: set/clear the session alias (addressing name for agent_send + UI). */
+export function setAgentAlias(db: Database.Database, id: string, alias: string | null): void {
+  db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(alias, id);
+}
+
+/** T160: live agents whose alias matches (case-insensitive) — for name addressing. */
+export function findLiveAgentsByAlias(db: Database.Database, alias: string): Agent[] {
+  const statuses = [...LIVE_STATUSES];
+  const rows = db
+    .prepare(
+      `SELECT a.*, w.branch_name
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       WHERE LOWER(a.alias) = LOWER(?)
+         AND a.status IN (${statuses.map(() => "?").join(",")})`,
+    )
+    .all(alias, ...statuses);
+  return (rows as Record<string, unknown>[]).map(mapAgentRow);
+}
+
 export function getAgent(db: Database.Database, id: string): Agent | null {
   const row = db
     .prepare(

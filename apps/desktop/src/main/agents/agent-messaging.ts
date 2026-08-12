@@ -12,7 +12,7 @@ import { LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 // Direct module imports (not the queries barrel): the barrel pulls
 // parallel-runs → spawn-env, which imports this module — cycle at init time.
-import { getAgent } from "../db/queries/agents";
+import { findLiveAgentsByAlias, getAgent } from "../db/queries/agents";
 import { sendMessage } from "../db/queries/messages";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
@@ -73,20 +73,39 @@ function injectNow(p: PendingMessage): boolean {
  * (MCP tool / UI) can tell the difference between "landed" and "queued for the
  * target's next turn boundary".
  */
+/** T160: resolve an agent_send target — exact id first, then unique
+ *  case-insensitive alias among LIVE agents. Ambiguity is an error, not a guess. */
+export function resolveTargetAgent(
+  db: Database.Database,
+  target: string,
+): NonNullable<ReturnType<typeof getAgent>> {
+  const byId = getAgent(db, target);
+  if (byId) return byId;
+  const byAlias = findLiveAgentsByAlias(db, target);
+  if (byAlias.length === 1 && byAlias[0]) return byAlias[0];
+  if (byAlias.length > 1) {
+    throw new AgentMessagingError(
+      `alias "${target}" matches ${byAlias.length} live agents (${byAlias.map((a) => a.id).join(", ")}) — use the id`,
+      -32014,
+    );
+  }
+  throw new AgentMessagingError(`unknown target agent: ${target}`, -32602);
+}
+
 export function sendAgentMessage(
   db: Database.Database,
   input: { fromAgentId: string; toAgentId: string; text: string },
 ): { messageId: string; delivered: boolean } {
-  const { fromAgentId, toAgentId } = input;
+  const { fromAgentId } = input;
   const text = input.text.trim();
   if (!text) throw new AgentMessagingError("message must not be empty", -32602);
   if (text.length > 4_000) throw new AgentMessagingError("message too long (max 4000)", -32602);
+
+  const target = resolveTargetAgent(db, input.toAgentId);
+  const toAgentId = target.id;
   if (toAgentId === fromAgentId) {
     throw new AgentMessagingError("cannot send a message to yourself", -32602);
   }
-
-  const target = getAgent(db, toAgentId);
-  if (!target) throw new AgentMessagingError(`unknown target agent: ${toAgentId}`, -32602);
   if (!LIVE_STATUSES.has(target.status)) {
     throw new AgentMessagingError(`target agent is ${target.status} — not reachable`, -32011);
   }
@@ -107,7 +126,9 @@ export function sendAgentMessage(
   recentSends.set(dedupKey, now);
   const sender = getAgent(db, fromAgentId);
   const senderTask = sender?.taskDescription?.slice(0, 60) ?? "";
-  const fromLabel = sender ? `${sender.cliType}${senderTask ? ` · ${senderTask}` : ""}` : "unknown";
+  const fromLabel = sender
+    ? (sender.alias ?? `${sender.cliType}${senderTask ? ` · ${senderTask}` : ""}`)
+    : "unknown";
 
   const record = sendMessage(db, { fromAgentId, toAgentId, type: "text", content: text });
   const pending: PendingMessage = {

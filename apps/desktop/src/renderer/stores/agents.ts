@@ -129,6 +129,8 @@ export interface AgentState {
   currentStep: string | null;
   taskDescription: string;
   branchName: string | null;
+  /** T160: session alias — addressing name for agent_send + display label. */
+  alias?: string | null;
   tokenUsage: { input: number; output: number; cost: number };
   startedAt: number | null;
   accessMode: AgentAccessMode | null;
@@ -304,6 +306,7 @@ export const useAgentStore = create<AgentStore>()(
                 ...existing,
                 status: dbAgent.status as AgentStatus,
                 branchName: dbAgent.branchName ?? existing.branchName ?? null,
+                alias: dbAgent.alias ?? existing.alias ?? null,
                 currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
               };
             } else {
@@ -318,6 +321,7 @@ export const useAgentStore = create<AgentStore>()(
                 currentStep: dbAgent.currentStep ?? null,
                 taskDescription: dbAgent.taskDescription,
                 branchName: dbAgent.branchName ?? null,
+                alias: dbAgent.alias ?? null,
                 tokenUsage: { input: 0, output: 0, cost: 0 },
                 startedAt: dbAgent.startedAt,
                 accessMode: dbAgent.accessMode ?? null,
