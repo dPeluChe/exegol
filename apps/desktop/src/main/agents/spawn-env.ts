@@ -42,16 +42,36 @@ export interface AgentStatusEvent {
   attentionDetail?: string;
 }
 
+// Last status we broadcast per agent — turn-boundary side effects fire on the
+// EDGE into waiting_input, never on the level. Without this: the scraper
+// re-emits waiting_input per PTY frame (flapping) → repeated delivery + link
+// SELECTs; and reattach synthesizes waiting_input at startup → premature link
+// firing. Undefined prev (first event, incl. reattach) is NOT an edge.
+const lastBroadcastStatus = new Map<string, AgentStatus>();
+
+export function forgetBroadcastStatus(agentId: string): void {
+  lastBroadcastStatus.delete(agentId);
+}
+
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
 export function broadcastAgentStatus(event: AgentStatusEvent): void {
   broadcast("agent:status-changed", event);
   refreshTray();
-  // T157: waiting_input = turn boundary — the single choke point every status
-  // path (signals, scraper, reattach) flows through, so queued inter-agent
-  // messages deliver here regardless of which detector fired.
-  if (event.status === "waiting_input") {
+
+  const prev = lastBroadcastStatus.get(event.agentId);
+  lastBroadcastStatus.set(event.agentId, event.status);
+
+  // T157/T162: turn boundary = a real transition INTO waiting_input that is NOT
+  // an attention prompt. Delivering on `needsAttention` would inject (with a
+  // trailing Enter) into a permission dialog and could auto-confirm it — the
+  // exact trust boundary the attribution header defends (simplify A2/A3/A4).
+  const enteredIdleBoundary =
+    event.status === "waiting_input" &&
+    prev !== undefined &&
+    prev !== "waiting_input" &&
+    !event.needsAttention;
+  if (enteredIdleBoundary) {
     deliverPendingAgentMessages(event.agentId);
-    // T162: Exegol-enforced links fire on the SENDER's boundary.
     try {
       fireAgentLinks(getDb(), event.agentId);
     } catch {

@@ -15,6 +15,7 @@ import type Database from "libsql";
 import { deleteAgentLink, deleteLinksForAgent, listLinksFrom } from "../db/queries/agent-links";
 import { findLiveAgentsByAlias, getAgent } from "../db/queries/agents";
 import { sendMessage } from "../db/queries/messages";
+import { getProject } from "../db/queries/projects";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 
@@ -113,7 +114,15 @@ export function resolveTargetAgent(
 
 export function sendAgentMessage(
   db: Database.Database,
-  input: { fromAgentId: string; toAgentId: string; text: string; expectsReply?: boolean },
+  input: {
+    fromAgentId: string;
+    toAgentId: string;
+    text: string;
+    expectsReply?: boolean;
+    /** System-originated (links): skip the LLM anti-spam dedup — recurrence is
+     *  governed by the turn-transition edge, not the 30s window (simplify A6). */
+    system?: boolean;
+  },
 ): { messageId: string; delivered: boolean } {
   const { fromAgentId } = input;
   const text = input.text.trim();
@@ -130,11 +139,13 @@ export function sendAgentMessage(
   }
 
   const now = Date.now();
-  pruneRecentSends(now);
   const dedupKey = `${fromAgentId}→${toAgentId}:${text}`;
-  const last = recentSends.get(dedupKey);
-  if (last && now - last < DEDUP_WINDOW_MS) {
-    throw new AgentMessagingError("duplicate message throttled (30s dedup window)", -32012);
+  if (!input.system) {
+    pruneRecentSends(now);
+    const last = recentSends.get(dedupKey);
+    if (last && now - last < DEDUP_WINDOW_MS) {
+      throw new AgentMessagingError("duplicate message throttled (30s dedup window)", -32012);
+    }
   }
 
   const queue = queues.get(toAgentId) ?? [];
@@ -142,20 +153,14 @@ export function sendAgentMessage(
     throw new AgentMessagingError("target's message queue is full", -32013);
   }
 
-  recentSends.set(dedupKey, now);
+  if (!input.system) recentSends.set(dedupKey, now);
   const sender = getAgent(db, fromAgentId);
   const senderTask = sender?.taskDescription?.slice(0, 60) ?? "";
   const fromLabel = sender
     ? (sender.alias ?? `${sender.cliType}${senderTask ? ` · ${senderTask}` : ""}`)
     : "unknown";
 
-  let senderProject: { name: string; path: string } | null = null;
-  if (sender) {
-    const row = db.prepare("SELECT name, path FROM projects WHERE id = ?").get(sender.projectId) as
-      | { name: string; path: string }
-      | undefined;
-    if (row) senderProject = row;
-  }
+  const senderProject = sender ? getProject(db, sender.projectId) : null;
 
   const record = sendMessage(db, { fromAgentId, toAgentId, type: "text", content: text });
   const pending: PendingMessage = {
@@ -166,7 +171,7 @@ export function sendAgentMessage(
     toAgentId,
     text,
     expectsReply: input.expectsReply ?? true,
-    senderProject,
+    senderProject: senderProject ? { name: senderProject.name, path: senderProject.path } : null,
     crossProject: !!sender && sender.projectId !== target.projectId,
   };
 
@@ -222,12 +227,33 @@ const LINK_ROLE_FRAMING: Record<string, string> = {
  * when the model forgets. One-shot links expire after firing; all links die with
  * either endpoint (agent exit) so a name reuse can never inherit them.
  */
-export function fireAgentLinks(db: Database.Database, agentId: string): void {
-  let links: ReturnType<typeof listLinksFrom>;
+// In-memory set of agents with outgoing links — the common case is ZERO, so
+// this skips a DB SELECT on every turn boundary (simplify: eff-1). Seeded at
+// startup; kept in sync by create/clear.
+const agentsWithLinks = new Set<string>();
+
+export function seedAgentLinkCache(db: Database.Database): void {
+  agentsWithLinks.clear();
   try {
-    links = listLinksFrom(db, agentId);
+    const rows = db.prepare("SELECT DISTINCT from_agent_id FROM agent_links").all() as Array<{
+      from_agent_id: string;
+    }>;
+    for (const r of rows) agentsWithLinks.add(r.from_agent_id);
   } catch {
-    return; // table missing mid-migration — non-fatal
+    /* table not ready — fine, cache stays empty */
+  }
+}
+
+export function noteAgentHasLink(fromAgentId: string): void {
+  agentsWithLinks.add(fromAgentId);
+}
+
+export function fireAgentLinks(db: Database.Database, agentId: string): void {
+  if (!agentsWithLinks.has(agentId)) return;
+  const links = listLinksFrom(db, agentId);
+  if (links.length === 0) {
+    agentsWithLinks.delete(agentId);
+    return;
   }
   for (const link of links) {
     const framing = LINK_ROLE_FRAMING[link.role] ?? LINK_ROLE_FRAMING.notify;
@@ -238,22 +264,24 @@ export function fireAgentLinks(db: Database.Database, agentId: string): void {
         toAgentId: link.toAgentId,
         text: `(automatic link notification) I just finished a turn. ${framing}${note}`,
         expectsReply: link.role !== "notify",
+        system: true,
       });
       logger.info(
         `[AgentLink] Fired ${link.id} (${link.role}) ${link.fromAgentId} → ${link.toAgentId}`,
       );
+      // Consume one-shot links ONLY on a successful send — a throttled/failed
+      // fire must survive to the next boundary (simplify A5: the exact loss
+      // T162 exists to prevent).
+      if (link.once) deleteAgentLink(db, link.id);
     } catch (err) {
-      logger.warn(`[AgentLink] Fire failed for ${link.id}: ${err}`);
+      logger.warn(`[AgentLink] Fire failed for ${link.id} (will retry next turn): ${err}`);
     }
-    if (link.once) deleteAgentLink(db, link.id);
   }
+  if (listLinksFrom(db, agentId).length === 0) agentsWithLinks.delete(agentId);
 }
 
 /** Remove links touching a dead agent (called next to queue/token cleanup). */
 export function clearAgentLinks(db: Database.Database, agentId: string): void {
-  try {
-    deleteLinksForAgent(db, agentId);
-  } catch {
-    /* non-fatal */
-  }
+  agentsWithLinks.delete(agentId);
+  deleteLinksForAgent(db, agentId);
 }

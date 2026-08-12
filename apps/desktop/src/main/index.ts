@@ -1,4 +1,5 @@
 import { app, BrowserWindow, globalShortcut } from "electron";
+import { seedAgentLinkCache } from "./agents/agent-messaging";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
@@ -37,6 +38,7 @@ app.whenReady().then(async () => {
   // ─── Critical path: everything the window needs before first paint ──
   await initializeDatabase();
   endMark("dbInit");
+  seedAgentLinkCache(getDb()); // T162: warm the in-memory has-links set
   setDesktopChannelDb(getDb()); // T124: NotificationBus desktop channel settings lookup
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
