@@ -483,6 +483,18 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T165 — Messaging stack hardening (simplify follow-ups) `added: 2026-08-12`
+**Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over T157–T162 (2026-08-12) — correctness landed in PR #102; these are the larger/architectural residuals
+
+- **Lifecycle event emitter**: `broadcastAgentStatus` (a transport fn) still owns delivery + link firing + `getDb()`, forcing the documented import-cycle workaround. Extract an in-main `agent:turn-ended {agentId, reason}` emitter (notifications/bus pattern) that agent-messaging subscribes to once at bootstrap; spawn-env goes back to broadcast+tray.
+- **Collapse the 4 per-provider MCP config writers** (exegol-mcp-config.ts) into one descriptor table (path, section, envKey, entry); token-read chain + removeAgentMcpConfig ride the same table. ~120→~50 LOC.
+- **Derive the MCP wiring panel from the registry** (procedures/mcp.ts EXEGOL_MCP_PROVIDER_WIRING duplicates flavorForCli + registry names) — `mcpConfigFlavor` on AgentProviderCapabilities; covers custom providers.
+- **codex cwd→token 1:1 hardening**: two codex agents sharing a cwd (no worktree) overwrite each other's token file → cross-agent impersonation on reattach. Force unique cwd for on-disk-token flavors OR refuse the 2nd; then wire removeAgentMcpConfig at exit (currently never called — token stays on disk).
+- **SessionAlias window-listener → store**: `renamingAgentId` field in the workspace/agents store instead of N window listeners.
+- **mapLinkRow → zod** (agentLinkRowSchema) to match every other table's validated mapping.
+
+---
+
 ### T158 — Memory Habit Protocol `added: 2026-08-11`
 **Priority**: P1-P2 (small, high-leverage — natural follow-up to the verified MCP loop) | **Effort**: S-M | **Source**: Antonio's question ("que el agente recuerde usar la memoria solo") + `RESEARCH/ENGRAM_2026_08.md` (5-layer habit stack) + `RESEARCH/TRINITY_2026_08.md` (platform_prompt_service: composed runtime-aware protocol-teacher block per spawn — production reference)
 
