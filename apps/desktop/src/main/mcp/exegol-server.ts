@@ -92,6 +92,52 @@ function resolveContext(
   return { agentId: entry.agentId, projectId: entry.projectId, accessMode };
 }
 
+// ─── Activity log (T163) ─────────────────────────────────────────────────────
+//
+// The ring buffer is ALWAYS on: it's capped, in-memory, and it's the only way
+// to see what agents are actually doing over the socket (Settings > MCP Server
+// > Activity). Backend-log lines are opt-in (`mcpVerboseLogging`) so a chatty
+// fleet doesn't drown the app log.
+
+export type McpActivityKind = "connect" | "disconnect" | "call" | "error";
+
+export interface McpActivityEntry {
+  at: number;
+  kind: McpActivityKind;
+  tool?: string;
+  agentId?: string;
+  ms?: number;
+  detail?: string;
+}
+
+const MAX_ACTIVITY = 100;
+const activity: McpActivityEntry[] = [];
+let verboseLogging = false;
+let connectionSeq = 0;
+
+export function setMcpVerboseLogging(enabled: boolean): void {
+  if (verboseLogging === enabled) return;
+  verboseLogging = enabled;
+  logger.info(`[ExegolMcp] Verbose logging ${enabled ? "ENABLED" : "disabled"}`);
+}
+
+function record(entry: Omit<McpActivityEntry, "at">): void {
+  activity.push({ ...entry, at: Date.now() });
+  if (activity.length > MAX_ACTIVITY) activity.shift();
+  if (!verboseLogging) return;
+  const who = entry.agentId ? ` agent=${entry.agentId}` : "";
+  const took = entry.ms !== undefined ? ` (${entry.ms}ms)` : "";
+  const what = entry.tool ? ` ${entry.tool}` : "";
+  const detail = entry.detail ? ` — ${entry.detail}` : "";
+  const line = `[ExegolMcp] ${entry.kind}${what}${who}${took}${detail}`;
+  if (entry.kind === "error") logger.warn(line);
+  else logger.info(line);
+}
+
+export function getRecentMcpActivity(): McpActivityEntry[] {
+  return [...activity].reverse();
+}
+
 // ─── Request handling ────────────────────────────────────────────────────────
 
 export async function handleRequest(
@@ -104,12 +150,19 @@ export async function handleRequest(
   if (req.method === "list_tools") {
     const params = req.params as { token?: string } | undefined;
     const context = resolveContext(db, params?.token);
+    record({
+      kind: "call",
+      tool: "tools/list",
+      agentId: context?.agentId,
+      detail: context ? undefined : "no valid token (listing read-mode tools)",
+    });
     socket.write(
       encodeResponse(req.id, { tools: getToolDefsForAccessMode(context?.accessMode ?? "read") }),
     );
     return;
   }
   if (req.method !== "call_tool") {
+    record({ kind: "error", detail: `unknown method: ${req.method}` });
     socket.write(
       encodeResponse(req.id, undefined, { code: -32601, message: `Unknown method: ${req.method}` }),
     );
@@ -119,6 +172,13 @@ export async function handleRequest(
   const params = req.params as ExegolToolCallParams;
   const context = resolveContext(db, params.token);
   if (!context) {
+    record({
+      kind: "error",
+      tool: params.tool,
+      detail: params.token
+        ? "unauthorized: token not in registry (agent exited, or app restarted without re-arming)"
+        : "unauthorized: no token sent by the shim",
+    });
     socket.write(
       encodeResponse(req.id, undefined, {
         code: -32002,
@@ -128,12 +188,26 @@ export async function handleRequest(
     return;
   }
 
+  const startedAt = Date.now();
   try {
     const result = await callExegolTool(db, params.tool, params.args, context);
+    record({
+      kind: "call",
+      tool: params.tool,
+      agentId: context.agentId,
+      ms: Date.now() - startedAt,
+    });
     socket.write(encodeResponse(req.id, result));
   } catch (err) {
     const code = err instanceof ExegolToolError ? err.code : -32000;
     const message = err instanceof Error ? err.message : String(err);
+    record({
+      kind: "error",
+      tool: params.tool,
+      agentId: context.agentId,
+      ms: Date.now() - startedAt,
+      detail: `${code}: ${message}`,
+    });
     socket.write(encodeResponse(req.id, undefined, { code, message }));
   }
 }
@@ -142,12 +216,18 @@ export async function handleRequest(
 
 function startListening(db: Database.Database): void {
   const srv = createServer((socket: Socket) => {
+    // Connection churn is the diagnostic that matters: a shim that never
+    // reconnects after an app restart shows up here as silence.
+    const connId = ++connectionSeq;
+    record({ kind: "connect", detail: `shim #${connId}` });
     const feed = createNdjsonBuffer<JsonRpcRequest>((msg) => {
       handleRequest(db, socket, msg).catch((err) => {
+        record({ kind: "error", detail: `unhandled: ${err instanceof Error ? err.message : err}` });
         logger.warn("[ExegolMcp] Unhandled request error:", err);
       });
     });
     socket.on("data", feed);
+    socket.on("close", () => record({ kind: "disconnect", detail: `shim #${connId}` }));
     socket.on("error", () => {
       /* client disconnects are routine — nothing to clean up per-connection */
     });

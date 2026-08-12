@@ -20,6 +20,7 @@ export const settingsSchema = z.object({
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   mutedNotificationChannels: z.array(z.string()).default([]),
+  mcpVerboseLogging: z.boolean().default(false),
 });
 
 export type SettingsSchema = z.infer<typeof settingsSchema>;

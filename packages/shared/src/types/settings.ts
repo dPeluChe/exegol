@@ -23,6 +23,9 @@ export type Settings = {
   ollamaUrl: string;
   /** Ollama embedding model name */
   ollamaModel: string;
+  /** T163: write per-call Exegol MCP server lines to the backend log. The
+   *  in-app activity view works regardless — this is the noisy channel. */
+  mcpVerboseLogging: boolean;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -43,4 +46,5 @@ export const DEFAULT_SETTINGS: Settings = {
   mutedNotificationChannels: [],
   ollamaUrl: "http://localhost:11434",
   ollamaModel: "nomic-embed-text",
+  mcpVerboseLogging: false,
 };

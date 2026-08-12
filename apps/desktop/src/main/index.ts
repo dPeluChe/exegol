@@ -13,7 +13,7 @@ import { createWindow, registerGlobalHotkey } from "./bootstrap/window";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { logger, markShutdown } from "./lib/logger";
-import { stopExegolMcpServer } from "./mcp/exegol-server";
+import { setMcpVerboseLogging, stopExegolMcpServer } from "./mcp/exegol-server";
 import { getMcpHost } from "./mcp/host";
 import { setDesktopChannelDb } from "./notifications/channels/desktop";
 import { getPipelineExecutor } from "./pipeline/executor";
@@ -39,6 +39,14 @@ app.whenReady().then(async () => {
   await initializeDatabase();
   endMark("dbInit");
   seedAgentLinkCache(getDb()); // T162: warm the in-memory has-links set
+  try {
+    const row = getDb().prepare("SELECT value FROM settings WHERE key = 'app_settings'").get() as
+      | { value: string }
+      | undefined;
+    if (row) setMcpVerboseLogging(JSON.parse(row.value)?.mcpVerboseLogging === true);
+  } catch {
+    /* settings not readable yet — verbose stays off */
+  }
   setDesktopChannelDb(getDb()); // T124: NotificationBus desktop channel settings lookup
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
