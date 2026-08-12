@@ -356,6 +356,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       )}
       {hasData && (
         <TerminalToolbar
+          agent={storeAgent ?? null}
           accessMode={agent?.accessMode}
           isolationMode={dbAgent ? deriveIsolationMode(dbAgent) : null}
           branchName={agent?.branchName ?? repoBranch ?? null}

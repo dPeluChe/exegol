@@ -7,6 +7,7 @@ import {
   Equal,
   Globe,
   MoveRight,
+  Pencil,
   PictureInPicture2,
   RefreshCw,
   Rows,
@@ -138,6 +139,14 @@ export function PaneContextMenu({
     // T155 (verify session): manual repaint escape hatch — refit + SIGWINCH
     // jiggle for alt-screen TUIs that come back black after a reload.
     if (agentId) {
+      // T160: alias = the agent_send addressing name; the SessionAlias chip in
+      // the toolbar listens for this event and enters edit mode.
+      items.push({
+        label: "Rename Session",
+        icon: Pencil,
+        action: () =>
+          window.dispatchEvent(new CustomEvent("exegol:rename-session", { detail: { agentId } })),
+      });
       items.push({
         label: "Refresh Terminal",
         icon: RefreshCw,

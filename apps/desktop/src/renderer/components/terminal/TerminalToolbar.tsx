@@ -13,8 +13,11 @@ import {
   TerminalSquare,
   X,
 } from "lucide-react";
+import { SessionAlias } from "../common/SessionAlias";
 
 interface TerminalToolbarProps {
+  /** T160: live agent identity for the session-name chip (omit for shells). */
+  agent?: { id: string; alias?: string | null; cliType: string } | null;
   accessMode?: AgentAccessMode | null;
   isolationMode?: IsolationMode | null;
   branchName?: string | null;
@@ -28,6 +31,7 @@ interface TerminalToolbarProps {
 }
 
 export function TerminalToolbar({
+  agent,
   accessMode,
   isolationMode,
   branchName,
@@ -42,6 +46,9 @@ export function TerminalToolbar({
     // Badges live on the LEFT — the pane's hover actions (float/split/close)
     // occupy the right edge and were covering them (verify session 2026-08-11).
     <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
+      {agent && agent.cliType !== "shell" && (
+        <SessionAlias agent={agent} textClassName="text-[10px]" />
+      )}
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {branchName && (
         <span
