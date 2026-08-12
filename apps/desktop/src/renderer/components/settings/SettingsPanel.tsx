@@ -1,7 +1,16 @@
 import type { Settings } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, Key, Keyboard, Monitor, Settings2, Stethoscope, Terminal } from "lucide-react";
+import {
+  ArrowLeft,
+  Key,
+  Keyboard,
+  Monitor,
+  Network,
+  Settings2,
+  Stethoscope,
+  Terminal,
+} from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { ApiKeysSettings } from "./ApiKeysSettings";
@@ -9,9 +18,17 @@ import { CliSettings } from "./CliSettings";
 import { DoctorSettings } from "./DoctorSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
+import { McpServerSettings } from "./McpServerSettings";
 import { TerminalSettings } from "./TerminalSettings";
 
-export type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys" | "doctor";
+export type SettingsTab =
+  | "general"
+  | "clis"
+  | "terminal"
+  | "shortcuts"
+  | "apikeys"
+  | "mcp"
+  | "doctor";
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: Settings2 },
@@ -19,6 +36,7 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "terminal", label: "Terminal", icon: Monitor },
   { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   { id: "apikeys", label: "API Keys", icon: Key },
+  { id: "mcp", label: "MCP Server", icon: Network },
   { id: "doctor", label: "Doctor", icon: Stethoscope },
 ];
 
@@ -119,6 +137,7 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
           {activeTab === "terminal" && <TerminalSettings settings={form} onChange={updateField} />}
           {activeTab === "shortcuts" && <KeyboardShortcuts />}
           {activeTab === "apikeys" && <ApiKeysSettings />}
+          {activeTab === "mcp" && <McpServerSettings />}
           {activeTab === "doctor" && <DoctorSettings />}
 
           {updateSettings.isError && (

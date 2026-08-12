@@ -4,13 +4,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
 import type Database from "libsql";
+import { getDb } from "../db/client";
 import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
 import { refreshTray } from "../system/tray";
-import { deliverPendingAgentMessages } from "./agent-messaging";
+import { deliverPendingAgentMessages, fireAgentLinks } from "./agent-messaging";
 import { scoreAgent } from "./scoring";
 
 export interface AgentContext {
@@ -50,6 +51,12 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
   // messages deliver here regardless of which detector fired.
   if (event.status === "waiting_input") {
     deliverPendingAgentMessages(event.agentId);
+    // T162: Exegol-enforced links fire on the SENDER's boundary.
+    try {
+      fireAgentLinks(getDb(), event.agentId);
+    } catch {
+      /* db not ready during early startup — non-fatal */
+    }
   }
 }
 

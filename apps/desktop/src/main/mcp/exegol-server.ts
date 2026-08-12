@@ -204,6 +204,15 @@ export function ensureExegolMcpServerStarted(db: Database.Database): void {
   probe.once("error", () => settle(true));
 }
 
+/** T162 settings surface: live server state + how many tokens are armed. */
+export function getExegolMcpServerInfo(): {
+  running: boolean;
+  sockPath: string;
+  activeTokens: number;
+} {
+  return { running: server !== null, sockPath: MCP_SOCK_PATH, activeTokens: tokensByAgent.size };
+}
+
 export function stopExegolMcpServer(): void {
   server?.close();
   server = null;
