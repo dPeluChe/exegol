@@ -36,7 +36,7 @@
 **P1 — after P0:**
 4. ~~T151~~ — ✅ DONE 2026-08-11 (`TASK_COMPLETED/2608.md`): zero capability wildcards, keystore warn, Doctor duplicate-CLI + stale-worktree checks
 5. ~~T152~~ — ✅ DONE 2026-08-11 (PR #86): workspace.ts 698→77 (slices), index.ts 607→136 (`main/bootstrap/`) — pending live smoke (boot, deep link, layout persist)
-6. **T142** — Integrations Hub: GitHub API (PR sync + review-comment → fix-agent loop) — last launch differentiator, unchanged
+6. **T142** — Integrations Hub: GitHub API — **POSTPONED by Antonio 2026-08-11**: v0.5.0 ships without it; pick up after the Wave 3 kickoff decision
 
 **P2 — Post-launch bets (next round):**
 **Wave 3 co-headliners: T153 Awareness Engine · T156 Global Sessions Dashboard · T157
@@ -58,7 +58,7 @@ T138 ModeTracker headless · T139 skills security scan · T144 dependency/librar
 - [x] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green (PR #84)
 - [x] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test (PR #85)
 - [x] T151 + T152 merged: no `"*"` capability wildcards, no file > 500 LOC in the flagged pair (PRs #83/#86)
-- [ ] Then start T142 — and cut the next release from that point
+- [ ] Manual checklists done → cut **v0.5.0** (T142 postponed — no longer blocks the release)
 
 ### Shipped waves
 - **Wave 2 — Competitive Review (2026-07)**: T123-T131, T88v2, T140, T141, T143, T145-T148
