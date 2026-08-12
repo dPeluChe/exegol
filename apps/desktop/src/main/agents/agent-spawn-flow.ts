@@ -10,7 +10,7 @@ import { runSetupHook } from "../hooks/project-hooks";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
-import { resolveMcpShimPath, writeAgentMcpConfig } from "../mcp/exegol-mcp-config";
+import { resolveMcpShimPath, writeAgentMcpConfigFor } from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, registerAgentMcpToken } from "../mcp/exegol-server";
 import { inspectCommand } from "../security/command-guard";
 import {
@@ -336,7 +336,13 @@ export function buildPtyInvocation(
       ensureExegolMcpServerStarted(db);
       const mcpToken = registerAgentMcpToken(agent.id, agent.projectId);
       env.EXEGOL_MCP_TOKEN = mcpToken;
-      writeAgentMcpConfig(cwd, resolveMcpShimPath(), mcpToken, config.accessMode ?? "write");
+      writeAgentMcpConfigFor(
+        agent.cliType,
+        cwd,
+        resolveMcpShimPath(),
+        mcpToken,
+        config.accessMode ?? "write",
+      );
     } catch (err) {
       logger.warn("[AgentManager] Failed to wire Exegol MCP config:", err);
     }
