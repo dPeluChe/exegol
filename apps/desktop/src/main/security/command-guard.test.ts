@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import { inspectCommand } from "./command-guard";
 
 describe("inspectCommand — refusals", () => {
-  it.each([[":(){ :|:& };:"], [": ( ) { : | : & } ; :"], ["echo hi; :(){ :|:& };:"]])(
-    "refuses fork bomb: %p",
-    (cmd) => {
-      const r = inspectCommand(cmd);
-      expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.reason).toBe("fork-bomb");
-    },
-  );
+  it.each([
+    [":(){ :|:& };:"],
+    [": ( ) { : | : & } ; :"],
+    ["echo hi; :(){ :|:& };:"],
+  ])("refuses fork bomb: %p", (cmd) => {
+    const r = inspectCommand(cmd);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("fork-bomb");
+  });
 
   it.each([
     ["rm -rf /"],
