@@ -48,6 +48,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     agentId,
     cliType,
     readOnly = false,
+    liveFeed = false,
     initialContent,
     onReady,
     onScrollPosition,
@@ -136,6 +137,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       paneId,
       cliType,
       readOnly,
+      liveFeed,
       initialContent,
       fontSize,
       fontFamily,
@@ -223,6 +225,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     fontFamily,
     fontSize,
     readOnly,
+    liveFeed,
     initialContent,
     isLight,
   ]);

@@ -29,6 +29,7 @@ import {
 } from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
+import { TerminalInstance } from "../../terminal/TerminalInstance";
 
 const STATUS_CONFIG: Record<
   string,
@@ -483,16 +484,11 @@ function AgentCard({
   );
 }
 
-/** T156 peek-and-reply: plain-text tail + one-line reply straight to the PTY. */
+/** T156 peek-and-reply: live read-only terminal + one-line reply to the PTY.
+ *  liveFeed streams real output (colors, TUIs) without stdin or PTY resize —
+ *  the pane in the Agents tab keeps sole ownership of the terminal size. */
 function PeekPanel({ agent }: { agent: AgentState }) {
   const [reply, setReply] = useState("");
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["agents", "peekTail", agent.id],
-    queryFn: () => trpcInvoke<{ tail: string | null }>("agents.peekTail", { agentId: agent.id }),
-    refetchInterval: 5_000,
-    staleTime: 5_000,
-  });
 
   const send = () => {
     const text = reply.trim();
@@ -505,9 +501,15 @@ function PeekPanel({ agent }: { agent: AgentState }) {
     // biome-ignore lint/a11y/noStaticElementInteractions: click shield so the card doesn't navigate
     // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation-only handler, not an action
     <div className="mt-2 border-t border-border pt-2" onClick={(e) => e.stopPropagation()}>
-      <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-black/40 p-2 font-mono text-[10px] leading-relaxed text-text-secondary">
-        {isLoading ? "Loading…" : (data?.tail ?? "No output — open the terminal pane")}
-      </pre>
+      <div className="h-52 overflow-hidden rounded-md border border-border bg-black/40 p-1">
+        <TerminalInstance
+          key={`peek-${agent.id}`}
+          agentId={agent.id}
+          cliType={agent.cliType}
+          readOnly
+          liveFeed
+        />
+      </div>
       <div className="mt-1.5 flex items-center gap-1.5">
         <input
           value={reply}

@@ -72,7 +72,9 @@ function SectionFallback() {
 
 export function WorkspaceView() {
   const { projectId } = useProjectContext();
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
+  // Home = the fleet dashboard (Antonio 2026-08-11): land on the cross-project
+  // control center; the Agents tab stays mounted underneath for its terminals.
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>("agent-dashboard");
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const [spawnInitialTask, setSpawnInitialTask] = useState<string | undefined>(undefined);
   const [spawnInitialCliType, setSpawnInitialCliType] = useState<string | undefined>(undefined);
