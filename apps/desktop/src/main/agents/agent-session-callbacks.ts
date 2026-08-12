@@ -3,6 +3,7 @@ import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { removeAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
 import { clearAgentLinks, clearAgentMessageQueue } from "./agent-messaging";
@@ -301,6 +302,24 @@ export function createSpawnCallbacks(
       // T145: dead agents must not stay live credentials — revoke the MCP
       // token; a committed/leaked .mcp.json then authorizes nothing.
       revokeAgentMcpToken(agent.id);
+      // The token also lives on disk (codex sanitizes env) — it must not
+      // outlive the agent in the user's repo.
+      if (!isShell) {
+        try {
+          const row = db
+            .prepare(
+              `SELECT COALESCE(w.path, p.path) AS cwd
+               FROM agents a
+               LEFT JOIN worktrees w ON w.id = a.worktree_id
+               JOIN projects p ON p.id = a.project_id
+               WHERE a.id = ?`,
+            )
+            .get(agent.id) as { cwd?: string } | undefined;
+          if (row?.cwd) removeAgentMcpConfig(row.cwd);
+        } catch (err) {
+          logger.warn(`[AgentCallback] MCP config cleanup failed for ${agent.id}:`, err);
+        }
+      }
       clearAgentMessageQueue(agent.id);
       clearAgentLinks(db, agent.id);
       forgetBroadcastStatus(agent.id);

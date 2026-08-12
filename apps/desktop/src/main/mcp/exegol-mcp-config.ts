@@ -41,13 +41,16 @@ interface McpJsonFile {
   [key: string]: unknown;
 }
 
-function readMcpJson(path: string): McpJsonFile {
+/** Returns null when the file exists but can't be parsed — callers must NOT
+ *  overwrite in that case or the user's other MCP servers are destroyed
+ *  (opencode.json / .gemini/settings.json are hand-edited and may be JSONC). */
+function readMcpJson(path: string): McpJsonFile | null {
   if (!existsSync(path)) return {};
   try {
     return JSON.parse(readFileSync(path, "utf-8")) as McpJsonFile;
   } catch (err) {
-    logger.warn("[ExegolMcp] Failed to parse existing .mcp.json, starting fresh:", err);
-    return {};
+    logger.warn(`[ExegolMcp] ${path} is not valid JSON — leaving it untouched:`, err);
+    return null;
   }
 }
 
@@ -63,6 +66,7 @@ export function writeAgentMcpConfig(
 ): void {
   const configPath = join(cwd, ".mcp.json");
   const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
 
   const updated: McpJsonFile = {
     ...existing,
@@ -84,7 +88,10 @@ export function writeAgentMcpConfig(
   };
 
   try {
-    writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+    writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
   } catch (err) {
     logger.warn("[ExegolMcp] Failed to write .mcp.json:", err);
   }
@@ -100,7 +107,9 @@ function writeOpencodeConfig(
   accessMode: ExegolAccessMode,
 ): void {
   const configPath = join(cwd, "opencode.json");
-  const existing = readMcpJson(configPath) as { mcp?: Record<string, unknown> };
+  const parsed = readMcpJson(configPath);
+  if (parsed === null) return; // unparseable — never clobber the user's servers
+  const existing = parsed as { mcp?: Record<string, unknown> };
   const updated = {
     ...existing,
     mcp: {
@@ -117,7 +126,10 @@ function writeOpencodeConfig(
       },
     },
   };
-  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 /** gemini-cli reads `<cwd>/.gemini/settings.json` — same mcpServers shape as .mcp.json. */
@@ -128,8 +140,9 @@ function writeGeminiConfig(
   accessMode: ExegolAccessMode,
 ): void {
   const configPath = join(cwd, ".gemini", "settings.json");
-  mkdirSync(dirname(configPath), { recursive: true });
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
   const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
   const updated: McpJsonFile = {
     ...existing,
     mcpServers: {
@@ -145,7 +158,10 @@ function writeGeminiConfig(
       },
     },
   };
-  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 /** devin reads `<cwd>/.devin/mcp_config.local.json` (project-local, uncommitted
@@ -158,8 +174,9 @@ function writeDevinConfig(
   accessMode: ExegolAccessMode,
 ): void {
   const configPath = join(cwd, ".devin", "mcp_config.local.json");
-  mkdirSync(dirname(configPath), { recursive: true });
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
   const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
   const updated: McpJsonFile = {
     ...existing,
     mcpServers: {
@@ -176,7 +193,10 @@ function writeDevinConfig(
       },
     },
   };
-  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 const CODEX_MARK_START = "# >>> exegol managed — do not edit >>>";
@@ -190,7 +210,7 @@ const CODEX_MARK_END = "# <<< exegol managed <<<";
  */
 function ensureCodexGlobalConfig(shimPath: string): void {
   const configPath = join(homedir(), ".codex", "config.toml");
-  mkdirSync(dirname(configPath), { recursive: true });
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
   const block = [
     CODEX_MARK_START,
     `[mcp_servers.${EXEGOL_SERVER_KEY}]`,
@@ -256,24 +276,25 @@ export function writeAgentMcpConfigFor(
  *  via registerAgentMcpToken... which their running shim can't know — codex
  *  loses MCP across app restarts until the session restarts (documented gap). */
 export function readAgentMcpToken(cwd: string): string | null {
-  const fromMcpJson = readMcpJson(join(cwd, ".mcp.json")).mcpServers?.[EXEGOL_SERVER_KEY] as
+  const fromMcpJson = readMcpJson(join(cwd, ".mcp.json"))?.mcpServers?.[EXEGOL_SERVER_KEY] as
     | { env?: Record<string, unknown> }
     | undefined;
   const t1 = fromMcpJson?.env?.EXEGOL_MCP_TOKEN;
   if (typeof t1 === "string" && t1.length > 0) return t1;
 
-  const opencode = (readMcpJson(join(cwd, "opencode.json")) as { mcp?: Record<string, unknown> })
-    .mcp?.[EXEGOL_SERVER_KEY] as { environment?: Record<string, unknown> } | undefined;
+  const opencode = (
+    readMcpJson(join(cwd, "opencode.json")) as { mcp?: Record<string, unknown> } | null
+  )?.mcp?.[EXEGOL_SERVER_KEY] as { environment?: Record<string, unknown> } | undefined;
   const t2 = opencode?.environment?.EXEGOL_MCP_TOKEN;
   if (typeof t2 === "string" && t2.length > 0) return t2;
 
-  const gemini = readMcpJson(join(cwd, ".gemini", "settings.json")).mcpServers?.[
+  const gemini = readMcpJson(join(cwd, ".gemini", "settings.json"))?.mcpServers?.[
     EXEGOL_SERVER_KEY
   ] as { env?: Record<string, unknown> } | undefined;
   const t3 = gemini?.env?.EXEGOL_MCP_TOKEN;
   if (typeof t3 === "string" && t3.length > 0) return t3;
 
-  const devin = readMcpJson(join(cwd, ".devin", "mcp_config.local.json")).mcpServers?.[
+  const devin = readMcpJson(join(cwd, ".devin", "mcp_config.local.json"))?.mcpServers?.[
     EXEGOL_SERVER_KEY
   ] as { env?: Record<string, unknown> } | undefined;
   const t4 = devin?.env?.EXEGOL_MCP_TOKEN;
@@ -294,7 +315,9 @@ export function removeAgentMcpConfig(cwd: string): void {
 function removeFromJsonConfig(configPath: string, sectionKey: string): void {
   if (!existsSync(configPath)) return;
   try {
-    const existing = readMcpJson(configPath) as Record<string, unknown>;
+    const parsedExisting = readMcpJson(configPath);
+    if (parsedExisting === null) return;
+    const existing = parsedExisting as Record<string, unknown>;
     const servers = existing[sectionKey] as Record<string, unknown> | undefined;
     if (!servers || !(EXEGOL_SERVER_KEY in servers)) return;
     const { [EXEGOL_SERVER_KEY]: _removed, ...rest } = servers;

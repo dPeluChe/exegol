@@ -141,14 +141,14 @@ describe("exegol MCP server token lifecycle", () => {
     expect(res.error?.code).toBe(-32001);
   });
 
-  it("fails closed to read mode when the agent row is missing", async () => {
+  it("rejects a token whose agent row is gone (leaked/stale secret is inert)", async () => {
     const token = registerAgentMcpToken("ghost", "p1");
     const res = await call(db, {
       tool: "memory_save",
       args: { fact: "no row", category: "convention" },
       token,
     });
-    expect(res.error?.code).toBe(-32001);
+    expect(res.error?.code).toBe(-32002);
     revokeAgentMcpToken("ghost");
   });
 

@@ -7,6 +7,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 
 export const EXEGOL_DIR = join(homedir(), ".exegol");
@@ -48,9 +49,13 @@ export function encodeResponse(
 export function createNdjsonBuffer<T>(
   onMessage: (msg: T) => void,
 ): (chunk: Buffer | string) => void {
+  // StringDecoder, not per-chunk toString: a multibyte character split across
+  // a chunk boundary would otherwise decode to U+FFFD on both sides and the
+  // message would fail to parse (tool results carry user prose — acentos).
+  const decoder = new StringDecoder("utf-8");
   let buffer = "";
   return (chunk) => {
-    buffer += chunk.toString("utf-8");
+    buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
     let newlineIdx = buffer.indexOf("\n");
     while (newlineIdx !== -1) {
       const line = buffer.slice(0, newlineIdx);

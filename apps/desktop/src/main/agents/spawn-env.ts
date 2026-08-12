@@ -11,7 +11,11 @@ import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
 import { refreshTray } from "../system/tray";
-import { deliverPendingAgentMessages, fireAgentLinks } from "./agent-messaging";
+import {
+  deliverPendingAgentMessages,
+  fireAgentLinks,
+  setAgentAwaitingApproval,
+} from "./agent-messaging";
 import { scoreAgent } from "./scoring";
 
 export interface AgentContext {
@@ -60,6 +64,10 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
 
   const prev = lastBroadcastStatus.get(event.agentId);
   lastBroadcastStatus.set(event.agentId, event.status);
+  // needsAttention is transient (never persisted), so messaging can't read it
+  // from the DB — mirror it here so a sender can't inject into a permission
+  // dialog and confirm it with the trailing Enter.
+  setAgentAwaitingApproval(event.agentId, event.needsAttention === true);
 
   // T157/T162: turn boundary = a real transition INTO waiting_input that is NOT
   // an attention prompt. Delivering on `needsAttention` would inject (with a

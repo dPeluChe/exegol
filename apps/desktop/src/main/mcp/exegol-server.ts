@@ -15,6 +15,7 @@
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
 import {
@@ -56,6 +57,15 @@ export function registerAgentMcpToken(agentId: string, projectId: string): strin
  *  The reattached agent's shim/.mcp.json still hold the old secret — minting
  *  a new one would orphan them; restoring keeps identity continuous. */
 export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): void {
+  // Two agents sharing a cwd read the SAME token file; binding it twice would
+  // let one impersonate the other (and one exit would revoke both).
+  const owner = tokensBySecret.get(token);
+  if (owner && owner.agentId !== agentId) {
+    logger.warn(
+      `[ExegolMcp] Refusing to re-arm a token already bound to ${owner.agentId} for ${agentId} — both agents share a cwd; give one a worktree`,
+    );
+    return;
+  }
   tokensBySecret.set(token, { agentId, projectId });
   tokensByAgent.set(agentId, token);
 }
@@ -63,7 +73,9 @@ export function restoreAgentMcpToken(agentId: string, projectId: string, token: 
 /** Revoke on agent exit — a leaked .mcp.json must not stay a live credential. */
 export function revokeAgentMcpToken(agentId: string): void {
   const token = tokensByAgent.get(agentId);
-  if (token) tokensBySecret.delete(token);
+  // Only drop the secret if it still maps to THIS agent — otherwise a shared
+  // token would kill a live sibling's MCP access.
+  if (token && tokensBySecret.get(token)?.agentId === agentId) tokensBySecret.delete(token);
   tokensByAgent.delete(agentId);
 }
 
@@ -79,10 +91,13 @@ function resolveContext(
   // fail-closed to "read" when the row is missing or the column is unset.
   let accessMode: ExegolAccessMode = "read";
   try {
-    const row = db.prepare("SELECT access_mode FROM agents WHERE id = ?").get(entry.agentId) as
-      | { access_mode?: string }
-      | undefined;
-    if (row?.access_mode === "write" || row?.access_mode === "plan") {
+    const row = db
+      .prepare("SELECT access_mode, status FROM agents WHERE id = ?")
+      .get(entry.agentId) as { access_mode?: string; status?: string } | undefined;
+    // A token whose agent is gone must not authorize anything, even if the
+    // secret is still on disk somewhere (leaked config, committed file).
+    if (!row || !LIVE_STATUSES.has(row.status as AgentStatus)) return null;
+    if (row.access_mode === "write" || row.access_mode === "plan") {
       accessMode = row.access_mode;
     }
   } catch (err) {

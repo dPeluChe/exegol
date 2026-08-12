@@ -41,7 +41,12 @@ function resolveToken(): string {
   }
 }
 
-const token = resolveToken();
+let token = resolveToken();
+if (!token) {
+  process.stderr.write(
+    `[exegol-mcp-shim] no EXEGOL_MCP_TOKEN in env or ${join(process.cwd(), ".mcp.json")} — calls will be unauthorized\n`,
+  );
+}
 const displayMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "read";
 
 // ─── stdio framing ──────────────────────────────────────────────────────────
@@ -50,46 +55,62 @@ const displayMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "rea
 // clients hung forever on "connecting". Auto-detect per message and reply in
 // whichever framing the client used (framed kept for host.ts-style clients).
 
-let stdinBuffer = "";
-let clientUsesFraming = false;
+// The buffer is BYTES, not a string: Content-Length counts bytes while a JS
+// string indexes UTF-16 units, so any non-ASCII body (español, emoji) made the
+// old string-sliced version cut mid-frame, desync, and silently flip the
+// client to the wrong framing forever.
+let stdinBuffer = Buffer.alloc(0);
+const HEADER_SEP = Buffer.from("\r\n\r\n");
+
 process.stdin.on("data", (chunk: Buffer) => {
-  stdinBuffer += chunk.toString("utf-8");
+  stdinBuffer = stdinBuffer.length === 0 ? Buffer.from(chunk) : Buffer.concat([stdinBuffer, chunk]);
   processStdinBuffer();
 });
+// The shim is the CLI's child: when the CLI goes away, so do we. Without this
+// the socket handle keeps the loop alive and orphans pile up across sessions.
+process.stdin.on("end", () => process.exit(0));
+process.stdout.on("error", () => process.exit(0));
 
 function processStdinBuffer(): void {
   for (;;) {
-    const trimmed = stdinBuffer.replace(/^[\r\n\s]+/, "");
-    if (trimmed !== stdinBuffer) stdinBuffer = trimmed;
+    // Skip leading whitespace/newlines between frames.
+    let start = 0;
+    while (start < stdinBuffer.length && stdinBuffer[start] !== undefined) {
+      const b = stdinBuffer[start] as number;
+      if (b === 0x20 || b === 0x09 || b === 0x0a || b === 0x0d) start++;
+      else break;
+    }
+    if (start > 0) stdinBuffer = stdinBuffer.subarray(start);
     if (stdinBuffer.length === 0) return;
 
-    if (stdinBuffer.startsWith("Content-Length:")) {
-      const headerEnd = stdinBuffer.indexOf("\r\n\r\n");
-      if (headerEnd === -1) return;
-      const match = stdinBuffer.slice(0, headerEnd).match(/Content-Length:\s*(\d+)/i);
+    // Header detection is case-insensitive: LSP allows `content-length:` and
+    // other headers before it.
+    const headerEnd = stdinBuffer.indexOf(HEADER_SEP);
+    const maybeHeader =
+      headerEnd === -1 ? null : stdinBuffer.subarray(0, headerEnd).toString("latin1").toLowerCase();
+    if (maybeHeader?.includes("content-length:")) {
+      const match = maybeHeader.match(/content-length:\s*(\d+)/);
       const contentLength = Number.parseInt(match?.[1] ?? "0", 10);
-      const contentStart = headerEnd + 4;
-      if (stdinBuffer.length < contentStart + contentLength) return;
-      const content = stdinBuffer.slice(contentStart, contentStart + contentLength);
-      stdinBuffer = stdinBuffer.slice(contentStart + contentLength);
-      clientUsesFraming = true;
-      dispatchRaw(content);
+      const contentStart = headerEnd + HEADER_SEP.length;
+      if (stdinBuffer.length < contentStart + contentLength) return; // wait for the rest
+      const content = stdinBuffer.subarray(contentStart, contentStart + contentLength).toString();
+      stdinBuffer = stdinBuffer.subarray(contentStart + contentLength);
+      dispatchRaw(content, true);
       continue;
     }
 
-    const nl = stdinBuffer.indexOf("\n");
+    const nl = stdinBuffer.indexOf(0x0a);
     if (nl === -1) return;
-    const line = stdinBuffer.slice(0, nl).trim();
-    stdinBuffer = stdinBuffer.slice(nl + 1);
+    const line = stdinBuffer.subarray(0, nl).toString().trim();
+    stdinBuffer = stdinBuffer.subarray(nl + 1);
     if (line.length === 0) continue;
-    clientUsesFraming = false;
-    dispatchRaw(line);
+    dispatchRaw(line, false);
   }
 }
 
-function dispatchRaw(content: string): void {
+function dispatchRaw(content: string, framed: boolean): void {
   try {
-    handleClientMessage(JSON.parse(content));
+    handleClientMessage(JSON.parse(content), framed);
   } catch (err) {
     process.stderr.write(`[exegol-mcp-shim] failed to parse client message: ${err}\n`);
   }
@@ -97,6 +118,9 @@ function dispatchRaw(content: string): void {
 
 function writeToClient(
   id: number | string,
+  // Captured per REQUEST: async replies (a 30s tool call) must not inherit the
+  // framing of whatever message happened to arrive meanwhile.
+  framed: boolean,
   result?: unknown,
   error?: { code: number; message: string },
 ): void {
@@ -104,7 +128,7 @@ function writeToClient(
     ? { jsonrpc: "2.0", id, error }
     : { jsonrpc: "2.0", id, result: result ?? null };
   const msg = JSON.stringify(body);
-  if (clientUsesFraming) {
+  if (framed) {
     process.stdout.write(`Content-Length: ${Buffer.byteLength(msg, "utf-8")}\r\n\r\n${msg}`);
   } else {
     process.stdout.write(`${msg}\n`);
@@ -117,7 +141,10 @@ let nextSocketId = 1;
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 const CALL_TIMEOUT_MS = 30_000;
 const RECONNECT_BASE_MS = 1_000;
-const RECONNECT_MAX_MS = 30_000;
+// Deliberately well under CALL_TIMEOUT_MS: at a 30s ceiling the first call after
+// an outage could time out before the socket even retried.
+const RECONNECT_MAX_MS = 5_000;
+const MAX_OUTBOX = 64;
 
 // The shim outlives app restarts (it's the CLI's child). A one-shot socket left
 // every call timing out after a restart until the user ran /mcp — live incident
@@ -169,6 +196,10 @@ function connectSocket(): void {
     }),
   );
   sock.on("error", (err) => {
+    // Null the socket HERE too: `error` precedes `close` asynchronously, and a
+    // call issued in that window would be written to a destroyed stream and
+    // silently lost instead of landing in the outbox.
+    if (socket === sock) socket = null;
     if (!loggedThisOutage) {
       process.stderr.write(`[exegol-mcp-shim] socket error: ${err.message} (retrying)\n`);
       loggedThisOutage = true;
@@ -177,7 +208,9 @@ function connectSocket(): void {
   sock.on("close", () => {
     if (socket === sock) {
       socket = null;
-      rejectAllPending("Exegol MCP disconnected (app restarting?) — reconnecting, retry shortly");
+      rejectAllPending(
+        "Exegol MCP disconnected (the app is restarting or was closed) — the call was NOT executed; retry in a moment",
+      );
     }
     sock.destroy();
     scheduleReconnect();
@@ -186,37 +219,78 @@ function connectSocket(): void {
 
 connectSocket();
 
-function callSocket(method: string, params: Record<string, unknown>): Promise<unknown> {
+function socketWritable(): boolean {
+  return !!socket && !socket.destroyed && socket.writable;
+}
+
+function callSocket(
+  method: string,
+  params: Record<string, unknown>,
+  label = method,
+): Promise<unknown> {
   const id = nextSocketId++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
     const timer = setTimeout(() => {
-      if (pending.delete(id)) reject(new Error(`Exegol MCP call timed out (${method})`));
+      if (pending.delete(id)) {
+        // Drop the queued payload too, or a reconnect would replay a call the
+        // caller already gave up on.
+        const idx = outbox.findIndex((e) => e.id === id);
+        if (idx !== -1) outbox.splice(idx, 1);
+        reject(
+          new Error(
+            socketWritable()
+              ? `Exegol MCP did not answer "${label}" in 30s (the app is running but the call stalled)`
+              : `Exegol MCP unreachable — is the Exegol app running? ("${label}" was not executed)`,
+          ),
+        );
+      }
     }, CALL_TIMEOUT_MS);
     timer.unref?.();
     const payload = encodeRequest(id, method, params);
-    if (socket) socket.write(payload);
-    else outbox.push({ id, payload });
+    if (socketWritable()) {
+      socket?.write(payload);
+      return;
+    }
+    if (outbox.length >= MAX_OUTBOX) {
+      const dropped = outbox.shift();
+      if (dropped) pending.get(dropped.id)?.reject(new Error("Exegol MCP outbox full — dropped"));
+    }
+    outbox.push({ id, payload });
   });
 }
 
-function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
-  return callSocket("call_tool", { tool, args, token });
+async function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
+  try {
+    return await callSocket("call_tool", { tool, args, token }, tool);
+  } catch (err) {
+    // A stale token (app restarted, config rewritten) is permanent for the rest
+    // of the session unless we re-read it: the file on disk may already hold a
+    // freshly re-armed one.
+    if (err instanceof Error && err.message.includes("EXEGOL_MCP_TOKEN")) {
+      const fresh = resolveToken();
+      if (fresh && fresh !== token) {
+        token = fresh;
+        process.stderr.write("[exegol-mcp-shim] token refreshed from disk, retrying\n");
+        return callSocket("call_tool", { tool, args, token }, tool);
+      }
+    }
+    throw err;
+  }
 }
 
 // ─── MCP protocol handling ──────────────────────────────────────────────────
 
-function handleClientMessage(msg: {
-  id?: number | string;
-  method: string;
-  params?: unknown;
-}): void {
+function handleClientMessage(
+  msg: { id?: number | string; method: string; params?: unknown },
+  framed: boolean,
+): void {
   if (msg.id === undefined) return; // notification — nothing to reply to
 
   switch (msg.method) {
     case "initialize": {
       const requested = (msg.params as { protocolVersion?: string } | undefined)?.protocolVersion;
-      writeToClient(msg.id, {
+      writeToClient(msg.id, framed, {
         protocolVersion: requested ?? "2024-11-05",
         capabilities: { tools: {} },
         serverInfo: { name: "exegol", version: "1.0.0" },
@@ -225,26 +299,29 @@ function handleClientMessage(msg: {
     }
 
     case "ping":
-      writeToClient(msg.id, {});
+      writeToClient(msg.id, framed, {});
       return;
 
     case "tools/list": {
       // T163 stale-shim fix: ask the RUNNING app for tool defs so a shim
       // spawned by an old session still lists tools added since. The bundled
       // defs are only the offline fallback.
-      const fallback = () =>
-        getToolDefsForAccessMode(displayMode).map((t) => ({
-          name: t.name,
-          description: t.description,
-          inputSchema: t.inputSchema,
-        }));
+      const fallback = () => getToolDefsForAccessMode(displayMode);
+      // Socket down (app closed / restarting): answer from the bundle NOW.
+      // Queuing this behind the 30s call timeout made the client sit through
+      // a silent initialization stall and mark the server failed — the exact
+      // "sigue conectando" symptom.
+      if (!socket) {
+        writeToClient(msg.id, framed, { tools: fallback() });
+        return;
+      }
       callSocket("list_tools", { token })
         .then((result) => {
           const tools = (result as { tools?: unknown[] } | null)?.tools;
-          writeToClient(msg.id as number, { tools: tools?.length ? tools : fallback() });
+          writeToClient(msg.id as number, framed, { tools: tools?.length ? tools : fallback() });
         })
         .catch(() => {
-          writeToClient(msg.id as number, { tools: fallback() });
+          writeToClient(msg.id as number, framed, { tools: fallback() });
         });
       return;
     }
@@ -253,12 +330,12 @@ function handleClientMessage(msg: {
       const params = msg.params as { name: string; arguments?: Record<string, unknown> };
       callTool(params.name, params.arguments ?? {})
         .then((result) => {
-          writeToClient(msg.id as number, {
+          writeToClient(msg.id as number, framed, {
             content: [{ type: "text", text: JSON.stringify(result) }],
           });
         })
         .catch((err: Error) => {
-          writeToClient(msg.id as number, {
+          writeToClient(msg.id as number, framed, {
             content: [{ type: "text", text: err.message }],
             isError: true,
           });
@@ -267,6 +344,9 @@ function handleClientMessage(msg: {
     }
 
     default:
-      writeToClient(msg.id, undefined, { code: -32601, message: `Unknown method: ${msg.method}` });
+      writeToClient(msg.id, framed, undefined, {
+        code: -32601,
+        message: `Unknown method: ${msg.method}`,
+      });
   }
 }

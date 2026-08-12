@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, BookOpen, CheckCircle2, Circle, ExternalLink, Network } from "lucide-react";
+import { BookOpen, CheckCircle2, Circle, ExternalLink, Network } from "lucide-react";
 import { useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { trpcInvoke } from "../../lib/trpc-client";
