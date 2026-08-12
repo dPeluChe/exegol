@@ -116,15 +116,19 @@ function writeToClient(
 let nextSocketId = 1;
 const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
 const CALL_TIMEOUT_MS = 30_000;
-const RECONNECT_DELAY_MS = 1_000;
+const RECONNECT_BASE_MS = 1_000;
+const RECONNECT_MAX_MS = 30_000;
 
-// The shim outlives app restarts (it's the CLI's child). A one-shot socket
-// left every call timing out after a restart until the user ran /mcp — live
-// incident 2026-08-12. Reconnect forever; calls made while down wait in the
-// outbox and flush on reconnect.
+// The shim outlives app restarts (it's the CLI's child). A one-shot socket left
+// every call timing out after a restart until the user ran /mcp — live incident
+// 2026-08-12. Reconnect with exponential backoff; calls made while down wait in
+// the outbox (keyed by id) and flush on reconnect — but only if still pending,
+// so a call that already timed out is NOT silently re-executed on reconnect.
 let socket: ReturnType<typeof connect> | null = null;
 let reconnectScheduled = false;
-const outbox: string[] = [];
+let reconnectDelay = RECONNECT_BASE_MS;
+let loggedThisOutage = false;
+const outbox: Array<{ id: number; payload: string }> = [];
 
 function rejectAllPending(reason: string): void {
   for (const [id, waiter] of pending) {
@@ -139,7 +143,8 @@ function scheduleReconnect(): void {
   const timer = setTimeout(() => {
     reconnectScheduled = false;
     connectSocket();
-  }, RECONNECT_DELAY_MS);
+  }, reconnectDelay);
+  reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
   timer.unref?.();
 }
 
@@ -147,7 +152,11 @@ function connectSocket(): void {
   const sock = connect(MCP_SOCK_PATH);
   sock.on("connect", () => {
     socket = sock;
-    for (const payload of outbox.splice(0)) sock.write(payload);
+    reconnectDelay = RECONNECT_BASE_MS;
+    loggedThisOutage = false;
+    for (const { id, payload } of outbox.splice(0)) {
+      if (pending.has(id)) sock.write(payload); // drop calls that already timed out
+    }
   });
   sock.on(
     "data",
@@ -160,7 +169,10 @@ function connectSocket(): void {
     }),
   );
   sock.on("error", (err) => {
-    process.stderr.write(`[exegol-mcp-shim] socket error: ${err.message}\n`);
+    if (!loggedThisOutage) {
+      process.stderr.write(`[exegol-mcp-shim] socket error: ${err.message} (retrying)\n`);
+      loggedThisOutage = true;
+    }
   });
   sock.on("close", () => {
     if (socket === sock) {
@@ -184,7 +196,7 @@ function callSocket(method: string, params: Record<string, unknown>): Promise<un
     timer.unref?.();
     const payload = encodeRequest(id, method, params);
     if (socket) socket.write(payload);
-    else outbox.push(payload);
+    else outbox.push({ id, payload });
   });
 }
 

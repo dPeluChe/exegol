@@ -1,7 +1,8 @@
 import type Database from "libsql";
 import { nanoid } from "./helpers";
 
-export type AgentLinkRole = "notify" | "reviewer" | "feedback";
+export const AGENT_LINK_ROLES = ["notify", "reviewer", "feedback"] as const;
+export type AgentLinkRole = (typeof AGENT_LINK_ROLES)[number];
 
 export interface AgentLink {
   id: string;
@@ -60,6 +61,18 @@ export function listLinksFrom(db: Database.Database, fromAgentId: string): Agent
     .prepare("SELECT * FROM agent_links WHERE from_agent_id = ?")
     .all(fromAgentId) as Record<string, unknown>[];
   return rows.map(mapLinkRow);
+}
+
+/** T162 cycle guard: is there already a link in the OTHER direction? */
+export function reverseLinkExists(
+  db: Database.Database,
+  fromAgentId: string,
+  toAgentId: string,
+): boolean {
+  const row = db
+    .prepare("SELECT 1 FROM agent_links WHERE from_agent_id = ? AND to_agent_id = ? LIMIT 1")
+    .get(toAgentId, fromAgentId);
+  return !!row;
 }
 
 export function deleteAgentLink(db: Database.Database, id: string): void {

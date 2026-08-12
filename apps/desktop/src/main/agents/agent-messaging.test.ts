@@ -21,6 +21,8 @@ import {
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
   fireAgentLinks,
+  noteAgentHasLink,
+  seedAgentLinkCache,
   sendAgentMessage,
 } from "./agent-messaging";
 
@@ -221,6 +223,7 @@ describe("sendAgentMessage", () => {
       role: "reviewer",
       note: "revisa el diff",
     });
+    noteAgentHasLink("a1");
     fireAgentLinks(db, "a1");
 
     expect(ptyMock.writes).toHaveLength(1);
@@ -241,11 +244,14 @@ describe("sendAgentMessage", () => {
     ptyMock.alive.add("a2");
 
     createAgentLink(db, { fromAgentId: "a1", toAgentId: "a2", role: "notify" });
-    clearAgentLinks(db, "a2"); // receiver dies first → link must vanish
+    noteAgentHasLink("a1");
+    clearAgentLinks(db, "a2"); // receiver dies first → link must vanish (cache-aware)
+    seedAgentLinkCache(db); // rebuild cache from the now-empty table
     fireAgentLinks(db, "a1");
     expect(ptyMock.writes).toHaveLength(0);
 
     createAgentLink(db, { fromAgentId: "a1", toAgentId: "a2", role: "notify" });
+    noteAgentHasLink("a1");
     fireAgentLinks(db, "a1");
     expect(ptyMock.writes[0]?.data).toContain("No reply expected");
   });

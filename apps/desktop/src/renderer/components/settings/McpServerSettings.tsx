@@ -88,8 +88,8 @@ export function McpServerSettings() {
       <div className="rounded-lg border border-border bg-bg-secondary p-4">
         <h3 className="text-sm font-semibold text-text-primary">Per-provider wiring</h3>
         <p className="mt-1 text-xs text-text-muted">
-          Written automatically when an agent spawns; removed on exit. This is where each CLI
-          discovers the exegol server.
+          Written automatically when an agent spawns (the token is revoked on exit). This is where
+          each CLI discovers the exegol server.
         </p>
         <div className="mt-2 space-y-1.5">
           {(data?.providers ?? []).map((p) => (

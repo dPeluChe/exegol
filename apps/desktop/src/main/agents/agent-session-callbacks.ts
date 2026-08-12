@@ -14,6 +14,7 @@ import {
   broadcastAgentStatus,
   deriveStatusFromSignal,
   finalizeAgentStatus,
+  forgetBroadcastStatus,
   scoreAndRecordOplog,
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
@@ -302,6 +303,7 @@ export function createSpawnCallbacks(
       revokeAgentMcpToken(agent.id);
       clearAgentMessageQueue(agent.id);
       clearAgentLinks(db, agent.id);
+      forgetBroadcastStatus(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.
       handleParallelAgentExit(db, agent.id);

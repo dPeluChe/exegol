@@ -12,11 +12,17 @@ import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import {
   AgentMessagingError,
+  noteAgentHasLink,
   resolveTargetAgent,
   sendAgentMessage,
 } from "../agents/agent-messaging";
 import { getProject } from "../db/queries";
-import { type AgentLinkRole, createAgentLink } from "../db/queries/agent-links";
+import {
+  AGENT_LINK_ROLES,
+  type AgentLinkRole,
+  createAgentLink,
+  reverseLinkExists,
+} from "../db/queries/agent-links";
 import { listActiveAgents } from "../db/queries/agents";
 import { readProjectBrief } from "../knowledge/brief";
 import { getDigestPath } from "../knowledge/paths";
@@ -174,24 +180,19 @@ function handleAgentSend(
   context: ExegolToolContext,
 ) {
   // `target` (name or id) is canonical; `target_id` accepted for compatibility.
-  const targetId = String(args.target ?? args.target_id ?? "");
+  const targetId = String(args.target ?? "");
   const message = String(args.message ?? "");
   if (!targetId) throw new ExegolToolError("agent_send requires target (name or id)", -32602);
-  try {
-    const result = sendAgentMessage(db, {
-      fromAgentId: context.agentId,
-      toAgentId: targetId,
-      text: message,
-      expectsReply: args.expects_reply !== false,
-    });
-    return {
-      messageId: result.messageId,
-      status: result.delivered ? "delivered" : "queued_for_next_turn_boundary",
-    };
-  } catch (err) {
-    if (err instanceof AgentMessagingError) throw new ExegolToolError(err.message, err.code);
-    throw err;
-  }
+  const result = sendAgentMessage(db, {
+    fromAgentId: context.agentId,
+    toAgentId: targetId,
+    text: message,
+    expectsReply: args.expects_reply !== false,
+  });
+  return {
+    messageId: result.messageId,
+    status: result.delivered ? "delivered" : "queued_for_next_turn_boundary",
+  };
 }
 
 /** T162: register an Exegol-enforced link FROM the caller (identity from token). */
@@ -202,32 +203,37 @@ function handleAgentLink(
 ) {
   const targetRaw = String(args.target ?? "");
   if (!targetRaw) throw new ExegolToolError("agent_link requires target (name or id)", -32602);
-  const role = ["notify", "reviewer", "feedback"].includes(String(args.role))
+  const role = (AGENT_LINK_ROLES as readonly string[]).includes(String(args.role))
     ? (String(args.role) as AgentLinkRole)
     : "notify";
-  try {
-    const target = resolveTargetAgent(db, targetRaw);
-    if (target.id === context.agentId) {
-      throw new AgentMessagingError("cannot link to yourself", -32602);
-    }
-    const link = createAgentLink(db, {
-      fromAgentId: context.agentId,
-      toAgentId: target.id,
-      role,
-      note: typeof args.note === "string" ? args.note.slice(0, 500) : null,
-      once: args.once !== false,
-    });
-    return {
-      linkId: link.id,
-      firesWhen: "your current turn ends",
-      target: target.alias ?? target.id,
-      role: link.role,
-      once: link.once,
-    };
-  } catch (err) {
-    if (err instanceof AgentMessagingError) throw new ExegolToolError(err.message, err.code);
-    throw err;
+  const target = resolveTargetAgent(db, targetRaw);
+  if (target.id === context.agentId) {
+    throw new ExegolToolError("cannot link to yourself", -32602);
   }
+  const once = args.once !== false;
+  // Cycle guard: a recurring (once:false) link whose reverse already exists is
+  // a perpetual A↔B notify machine (simplify A7). One-shots are self-limiting.
+  if (!once && reverseLinkExists(db, context.agentId, target.id)) {
+    throw new ExegolToolError(
+      "a recurring link in the reverse direction already exists — would loop forever",
+      -32015,
+    );
+  }
+  const link = createAgentLink(db, {
+    fromAgentId: context.agentId,
+    toAgentId: target.id,
+    role,
+    note: typeof args.note === "string" ? args.note.slice(0, 500) : null,
+    once,
+  });
+  noteAgentHasLink(context.agentId);
+  return {
+    linkId: link.id,
+    firesWhen: "your current turn ends",
+    target: target.alias ?? target.id,
+    role: link.role,
+    once: link.once,
+  };
 }
 
 /** Dispatch a tool call, enforcing access-mode gating before running the handler. */
@@ -243,20 +249,27 @@ export async function callExegolTool(
   const toolName = tool as ExegolToolName;
   requireWriteAccess(toolName, context);
 
-  switch (toolName) {
-    case "memory_search":
-      return handleMemorySearch(db, args, context);
-    case "memory_list":
-      return handleMemoryList(db, args, context);
-    case "memory_save":
-      return handleMemorySave(db, args, context);
-    case "knowledge_get":
-      return handleKnowledgeGet(db, args, context);
-    case "agents_list":
-      return handleAgentsList(db, context);
-    case "agent_send":
-      return handleAgentSend(db, args, context);
-    case "agent_link":
-      return handleAgentLink(db, args, context);
+  // Single translation point: messaging throws AgentMessagingError (its own
+  // JSON-RPC codes), which the socket layer surfaces to the agent verbatim.
+  try {
+    switch (toolName) {
+      case "memory_search":
+        return await handleMemorySearch(db, args, context);
+      case "memory_list":
+        return handleMemoryList(db, args, context);
+      case "memory_save":
+        return handleMemorySave(db, args, context);
+      case "knowledge_get":
+        return handleKnowledgeGet(db, args, context);
+      case "agents_list":
+        return handleAgentsList(db, context);
+      case "agent_send":
+        return handleAgentSend(db, args, context);
+      case "agent_link":
+        return handleAgentLink(db, args, context);
+    }
+  } catch (err) {
+    if (err instanceof AgentMessagingError) throw new ExegolToolError(err.message, err.code);
+    throw err;
   }
 }
