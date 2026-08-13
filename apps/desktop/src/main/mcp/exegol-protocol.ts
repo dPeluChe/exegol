@@ -109,6 +109,7 @@ export const EXEGOL_TOOL_NAMES = [
   "agent_send",
   "message_status",
   "message_cancel",
+  "messages_check",
   "agent_link",
   "claim_paths",
   "release_paths",
@@ -126,6 +127,7 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "agent_send",
   "message_status",
   "message_cancel",
+  "messages_check",
   "agent_link",
   // Claims are coordination, not repo writes: a read/plan agent must be able to
   // reserve the files it is about to report on.
@@ -269,6 +271,15 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
       },
       required: ["message_id"],
     },
+  },
+  {
+    name: "messages_check",
+    description:
+      "Fetch the full body of messages too long to paste into your terminal. When another " +
+      "agent sends you something large, Exegol delivers a one-line pointer and holds the body " +
+      "here — call this to read it. Reading DRAINS them, so process what you get; the sender " +
+      "sees the message as consumed once you do.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "claim_paths",

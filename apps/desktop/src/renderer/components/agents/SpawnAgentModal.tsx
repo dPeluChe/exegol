@@ -36,6 +36,27 @@ interface SpawnAgentModalProps {
   initialCliType?: string;
 }
 
+/** Per-project spawn preference. A UI default, deliberately not app config:
+ *  it is remembered, never synced, and a wrong value costs one checkbox click. */
+const WORKTREE_PREF_KEY = "exegol.spawn.useWorktree";
+
+function readWorktreePreference(projectId: string): boolean {
+  try {
+    const raw = localStorage.getItem(`${WORKTREE_PREF_KEY}.${projectId}`);
+    return raw === null ? true : raw === "1";
+  } catch {
+    return true;
+  }
+}
+
+function writeWorktreePreference(projectId: string, value: boolean): void {
+  try {
+    localStorage.setItem(`${WORKTREE_PREF_KEY}.${projectId}`, value ? "1" : "0");
+  } catch {
+    /* private mode / quota — the default just won't stick */
+  }
+}
+
 export function SpawnAgentModal({
   projectId,
   onClose,
@@ -48,7 +69,11 @@ export function SpawnAgentModal({
     initialCliType ?? initialProvider?.id ?? "",
   );
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
-  const [useWorktree, setUseWorktree] = useState(true);
+  // Remembered per project: whether a repo is worked in parallel branches or by
+  // several agents on ONE branch is a property of how that project is run, not
+  // a per-spawn decision. Defaulting to "isolated" every time meant unchecking
+  // it on every single launch for review-style work (Antonio, 2026-08-13).
+  const [useWorktree, setUseWorktree] = useState(() => readWorktreePreference(projectId));
   const [branchName, setBranchName] = useState("");
   const [branchEdited, setBranchEdited] = useState(false);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
@@ -319,12 +344,17 @@ export function SpawnAgentModal({
                 type="checkbox"
                 id="use-worktree"
                 checked={useWorktree}
-                onChange={(e) => setUseWorktree(e.target.checked)}
+                onChange={(e) => {
+                  setUseWorktree(e.target.checked);
+                  writeWorktreePreference(projectId, e.target.checked);
+                }}
                 className="h-3.5 w-3.5 rounded border-border accent-accent"
               />
               <GitBranch className="h-3.5 w-3.5 text-text-muted" />
               <span className="text-[11px] font-medium text-text-secondary">
-                Work in isolated branch (worktree)
+                {useWorktree
+                  ? "Isolated branch (worktree) — parallel work"
+                  : "Same branch as the project — shared tree"}
               </span>
             </label>
 

@@ -14,6 +14,7 @@ import type Database from "libsql";
 import {
   AgentMessagingError,
   cancelQueuedMessage,
+  checkAgentMessages,
   getMessageDeliveryState,
   noteAgentHasLink,
   resolveTargetAgent,
@@ -368,6 +369,8 @@ export async function callExegolTool(
         return handleMessageStatus(args, context);
       case "message_cancel":
         return handleMessageCancel(args, context);
+      case "messages_check":
+        return checkAgentMessages(context.agentId);
       case "claim_paths":
         return handleClaimPaths(db, args, context);
       case "release_paths":

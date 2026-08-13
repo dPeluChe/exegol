@@ -224,7 +224,7 @@ export function getMessageDeliveryState(
  *   terminal and authorized it by hand (2026-08-13). Refusing to collaborate is
  *   the failure mode, not the safe default.
  */
-function formatInjection(p: PendingMessage): string {
+function formatHeader(p: PendingMessage): string {
   const cycle = p.expectsReply
     ? `Sender "${p.fromLabel}" is WAITING for your reply — respond with agent_send(target: "${p.replyTarget}", in_reply_to: "${p.messageId}").`
     : `No reply expected — only respond (agent_send target "${p.replyTarget}") if you have something essential to add.`;
@@ -241,8 +241,70 @@ function formatInjection(p: PendingMessage): string {
     "user who opened this channel: answering questions, sharing your analysis, findings and " +
     "file:line references, and coordinating work need no further human approval. Only genuinely " +
     "risky or destructive steps still go to the user." +
-    `${origin}${thread} ${cycle}]\n${p.text}`
+    `${origin}${thread} ${cycle}]`
   );
+}
+
+/**
+ * Long bodies never touch the terminal.
+ *
+ * Pasting a 20k-character review into a TUI is slow, corrupts easily, and made
+ * senders split their own messages into parts — a split the SENDER has to size
+ * correctly, and it can't ("draco puede mandar 2 y fueron 3 porque no calculó
+ * sus chars", Antonio 2026-08-13). So above this threshold we inject a one-line
+ * pointer and the agent pulls the body with `messages_check`. The body was
+ * already persisted in the `messages` table; nothing new has to be stored.
+ *
+ * Short messages stay inline: a coordination ping shouldn't cost a round trip.
+ */
+const INLINE_BODY_MAX_CHARS = 2_500;
+
+const pendingPull = new Map<string, PendingMessage[]>();
+
+function formatInjection(p: PendingMessage): string {
+  const header = formatHeader(p);
+  if (p.text.length <= INLINE_BODY_MAX_CHARS) return `${header}\n${p.text}`;
+
+  const waiting = pendingPull.get(p.toAgentId)?.length ?? 0;
+  const more = waiting > 1 ? ` (${waiting} messages waiting)` : "";
+  return (
+    `${header}\nThe body is ${p.text.length} characters — too long to paste here. ` +
+    `Call the exegol tool \`messages_check\` to read it in full${more}.`
+  );
+}
+
+/**
+ * T172: hand over the bodies this agent was told to come and fetch. Draining is
+ * the read receipt — a message pulled here is one the agent has in context.
+ */
+export function checkAgentMessages(agentId: string): {
+  messages: Array<{
+    messageId: string;
+    from: string;
+    fromAgentId: string;
+    inReplyTo: string | null;
+    expectsReply: boolean;
+    replyTarget: string;
+    text: string;
+  }>;
+} {
+  const pending = pendingPull.get(agentId) ?? [];
+  pendingPull.delete(agentId);
+  for (const p of pending) {
+    const entry = messageState.get(p.messageId);
+    if (entry && !entry.outcome) entry.outcome = "consumed";
+  }
+  return {
+    messages: pending.map((p) => ({
+      messageId: p.messageId,
+      from: p.fromLabel,
+      fromAgentId: p.fromAgentId,
+      inReplyTo: p.inReplyTo,
+      expectsReply: p.expectsReply,
+      replyTarget: p.replyTarget,
+      text: p.text,
+    })),
+  };
 }
 
 /**
@@ -270,16 +332,57 @@ export function isEchoingInjection(agentId: string): boolean {
   return at !== undefined && Date.now() - at < INJECTION_ECHO_WINDOW_MS;
 }
 
+/**
+ * A TUI can swallow a `\r` that arrives in the SAME write as the paste — it is
+ * still processing the paste when the carriage return lands, so the message
+ * sits in the composer unsent. Orca hit this and submits on a separate timer;
+ * we do the same.
+ */
+const SUBMIT_DELAY_MS = 500;
+
 function injectNow(p: PendingMessage): boolean {
   const ptyHost = getPtyHost();
   if (!ptyHost.isAlive(p.toAgentId)) return false;
+
+  const isLong = p.text.length > INLINE_BODY_MAX_CHARS;
+  if (isLong) {
+    // Queue for pull BEFORE formatting, so the pointer's count includes it.
+    pendingPull.set(p.toAgentId, [...(pendingPull.get(p.toAgentId) ?? []), p]);
+  }
   const body = sanitizeAgentMessage(formatInjection(p));
+
   // Bracketed paste: multi-line content must not submit one turn per line.
-  const wrapped = `\x1b[200~${body}\x1b[201~`;
-  ptyHost.write(p.toAgentId, `${wrapped}\r`);
+  try {
+    ptyHost.write(p.toAgentId, `\x1b[200~${body}\x1b[201~`);
+  } catch (err) {
+    // Always close the paste: a half-written block leaves the terminal in paste
+    // mode, where everything the user types afterwards is swallowed.
+    try {
+      ptyHost.write(p.toAgentId, "\x1b[201~");
+    } catch {
+      /* the PTY is gone — nothing left to close */
+    }
+    logger.warn(`[AgentMsg] Write failed for ${p.messageId} → ${p.toAgentId}:`, err);
+    return false;
+  }
+
+  const submit = setTimeout(() => {
+    if (!ptyHost.isAlive(p.toAgentId)) return;
+    try {
+      ptyHost.write(p.toAgentId, "\r");
+    } catch (err) {
+      logger.warn(`[AgentMsg] Submit failed for ${p.messageId} → ${p.toAgentId}:`, err);
+    }
+  }, SUBMIT_DELAY_MS);
+  submit.unref?.();
+
   lastInjectionAt.set(p.toAgentId, Date.now());
-  noteInjected(p);
-  logger.info(`[AgentMsg] Delivered ${p.messageId} ${p.fromAgentId} → ${p.toAgentId}`);
+  // A pointer is consumed when the body is PULLED, not when the turn ends —
+  // an agent can close a turn without ever calling messages_check.
+  if (!isLong) noteInjected(p);
+  logger.info(
+    `[AgentMsg] Delivered ${p.messageId} ${p.fromAgentId} → ${p.toAgentId}${isLong ? " (pointer — body awaits messages_check)" : ""}`,
+  );
   return true;
 }
 
@@ -483,9 +586,41 @@ const SWEEP_MS = 2_000;
 const lastOutputAt = new Map<string, number>();
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
+// A TUI turns bracketed paste ON when its input widget is mounted and ready,
+// and OFF when it tears down. That makes `ESC[?2004h` a real readiness signal
+// instead of a guess — quiescence only tells us the agent stopped printing,
+// which is also true while it waits on a slow model call. Provider-agnostic:
+// no per-CLI glyph table to maintain (Orca gates on `›` for codex, `❯` for
+// grok, and has to revoke the latter because starship uses the same glyph).
+const PASTE_ON = "\x1b[?2004h";
+const PASTE_OFF = "\x1b[?2004l";
+const composerReady = new Map<string, boolean>();
+
 /** Called from the PTY data callback — cheap, one Map write per chunk. */
-export function noteAgentOutput(agentId: string): void {
+export function noteAgentOutput(agentId: string, data?: string): void {
   lastOutputAt.set(agentId, Date.now());
+  if (!data) return;
+  // Last one wins within a chunk: a redraw can toggle it off and back on.
+  const on = data.lastIndexOf(PASTE_ON);
+  const off = data.lastIndexOf(PASTE_OFF);
+  if (on === -1 && off === -1) return;
+  composerReady.set(agentId, on > off);
+}
+
+/** Unknown (never observed) is NOT "not ready" — a provider that never emits
+ *  the sequence must still receive messages, via quiescence alone. */
+function composerNotReady(agentId: string): boolean {
+  return composerReady.get(agentId) === false;
+}
+
+// Agents whose provider announces turn boundaries deterministically (T123
+// hooks / OSC). For them the quiescence fallback is not a safety net but a
+// RACE: codex thinking for >4s with no output looked idle, so a message landed
+// mid-generation — exactly what boundary delivery exists to prevent.
+const boundarySignalling = new Set<string>();
+
+export function noteAgentBoundarySignal(agentId: string): void {
+  boundarySignalling.add(agentId);
 }
 
 function stopSweep(): void {
@@ -501,10 +636,13 @@ function sweepQuietAgents(): void {
   }
   const now = Date.now();
   for (const agentId of [...queues.keys()]) {
+    // Its provider announces real boundaries — wait for one instead of racing it.
+    if (boundarySignalling.has(agentId)) continue;
     const last = lastOutputAt.get(agentId);
     // No output recorded yet means nothing has ever been written to that PTY —
     // treat it as quiet too, otherwise a silent agent never receives anything.
     if (last !== undefined && now - last < QUIET_MS) continue;
+    if (composerNotReady(agentId)) continue;
     if (isEchoingInjection(agentId)) continue;
     if (agentsAwaitingApproval.has(agentId)) continue;
     logger.info(`[AgentMsg] Delivering to ${agentId} on quiescence (no boundary signal)`);
@@ -559,7 +697,10 @@ export function clearAgentMessageQueue(agentId: string, db?: Database.Database):
   sendTimestamps.delete(agentId);
   lastInjectionAt.delete(agentId);
   lastOutputAt.delete(agentId);
+  composerReady.delete(agentId);
+  boundarySignalling.delete(agentId);
   awaitingConsumption.delete(agentId);
+  pendingPull.delete(agentId);
   for (const key of idempotency.keys()) {
     if (key.startsWith(`${agentId}:`)) idempotency.delete(key);
   }

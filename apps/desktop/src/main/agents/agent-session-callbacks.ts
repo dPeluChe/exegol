@@ -17,6 +17,7 @@ import {
   clearAgentLinks,
   clearAgentMessageQueue,
   isEchoingInjection,
+  noteAgentBoundarySignal,
   noteAgentOutput,
 } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
@@ -75,6 +76,7 @@ export function applyAgentSignals(
       continue;
     }
     const derived = deriveStatusFromSignal(sig.event);
+    if (derived.turnEnded) noteAgentBoundarySignal(agent.id);
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
     if (derived.turnEnded) turnEnded = derived.turnEnded;
@@ -189,7 +191,7 @@ export function createSpawnCallbacks(
   return {
     onData: (data: string) => {
       broadcast("terminal:data", agent.id, data);
-      noteAgentOutput(agent.id);
+      noteAgentOutput(agent.id, data);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 

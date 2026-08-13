@@ -495,6 +495,40 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T174 — Learnings from Orca (stablyai) `added: 2026-08-13`
+**Priority**: P2 | **Effort**: varies | **Source**: 2-agent code read of stablyai/orca, 2026-08-13
+(clone at `~/_repos_2_learn/github.com/stablyai/orca`)
+
+Orca is a mature Electron orchestrator (~311k LOC, ~1:1 test ratio). Read for how it solves what
+we solve. **It does not use MCP at all** — its agent-facing API is the `orca` CLI, invoked via
+Bash. Confirms MCP-vs-CLI is a genuine fork, not a right/wrong; we stay on MCP (schema-validated,
+no Bash permission needed), accepting that a provider without MCP can't participate.
+
+Already adopted 2026-08-13: pointer-not-body delivery for long messages, submit on a separate
+write, closing the paste on the failure path, boundary-signals-beat-quiescence.
+
+Still worth taking, roughly by value:
+- **Fair-share diff truncation** (`src/shared/commit-message-prompt.ts:36-130`): split a diff per
+  file, water-fill the byte budget so slack from small files goes to big ones, clip on line
+  boundaries with an explicit marker. ~90 lines of pure function; one generated lockfile can no
+  longer starve the human-authored changes. Applies to our Haiku commit messages and the T88v2
+  judges. **Cheapest high-value item in the list.**
+- **Per-provider composer-ready spec** (`src/shared/draft-paste-ready-scanner.ts:26-70`): each TUI
+  declares a marker + anchor (codex `›`, opencode `ESC[?25h`, grok `❯` anchored to alt-screen and
+  REVOKED on exit because starship uses the same glyph). We took the provider-agnostic half
+  (`ESC[?2004h`); the per-provider table is the precise version.
+- **One-outstanding-delivery-per-run enforced in DDL** + replay-until-ack — the durable form of
+  [[T170]] item 1.
+- **Preamble that bans the agent's native ask-user UI**: a worker opening its own TUI prompt hangs
+  the coordinator invisibly. Exactly the failure we hit with codex demanding authorization.
+- **Never collapse "can't tell" into "dead"** (`src/main/daemon/AGENTS.md`): only a positive signal
+  proves occupancy; a timeout proves nothing. Our crash-recovery alive/dead classification is that
+  bug class.
+- **Symlinked shared directories across worktrees** (one `node_modules` serves all) and background
+  worktree deletion — removing a `node_modules` tree synchronously blocked their IPC 8-35s.
+
+---
+
 ### T170 — Messaging durability + generalized idempotency `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over the T165/T168 round (2026-08-13)
 
