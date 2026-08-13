@@ -6,6 +6,7 @@
  * the user has configured.
  */
 
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -348,6 +349,28 @@ function ensureCodexGlobalConfig(shimPath: string): void {
  * T163 entry point: wire the exegol MCP server for the given provider.
  * Unknown/custom CLIs get the `.mcp.json` convention — harmless if unread.
  */
+/**
+ * These files live in the user's repo and carry a credential. We must NOT
+ * gitignore them ourselves — `opencode.json` and `.mcp.json` are legitimate
+ * project config a team may want committed, and Exegol only inserts its own
+ * `exegol` key. So: say it loudly instead, once per spawn, and let the user
+ * decide (Juanito, 2026-08-13: "es cuestión de tiempo hasta que alguien lo
+ * commitee"). The real fix is to stop writing the token here at all — see
+ * T170: wherever the CLI forwards its env, the per-session token already
+ * arrives through the PTY and this file needs no secret.
+ */
+function warnIfCommittable(cwd: string, relPath: string): void {
+  try {
+    execFileSync("git", ["check-ignore", "-q", relPath], { cwd, timeout: 1_000 });
+  } catch (err) {
+    // exit 1 = not ignored (a real answer); anything else = not a repo / no git.
+    if ((err as { status?: number }).status !== 1) return;
+    logger.warn(
+      `[ExegolMcp] ${relPath} holds an Exegol MCP token and is NOT gitignored in ${cwd} — add it to .gitignore so the credential can't be committed`,
+    );
+  }
+}
+
 export function writeAgentMcpConfigFor(
   cliType: string,
   cwd: string,
@@ -359,15 +382,19 @@ export function writeAgentMcpConfigFor(
     switch (flavorForCli(cliType)) {
       case "opencode":
         writeOpencodeConfig(cwd, shimPath, token, accessMode);
+        warnIfCommittable(cwd, "opencode.json");
         return;
       case "devin":
         writeDevinConfig(cwd, shimPath, token, accessMode);
+        warnIfCommittable(cwd, ".devin/mcp_config.local.json");
         return;
       case "agy":
         writeAgyConfig(cwd, shimPath, token, accessMode);
+        warnIfCommittable(cwd, ".agents/mcp_config.json");
         return;
       case "gemini":
         writeGeminiConfig(cwd, shimPath, token, accessMode);
+        warnIfCommittable(cwd, ".gemini/settings.json");
         return;
       case "codex-global":
         ensureCodexGlobalConfig(shimPath);
@@ -377,9 +404,11 @@ export function writeAgentMcpConfigFor(
         // reads it from its cwd as a fallback — and reattach token re-arm
         // works for codex again via readAgentMcpToken.
         writeAgentMcpConfig(cwd, shimPath, token, accessMode);
+        warnIfCommittable(cwd, ".mcp.json");
         return;
       default:
         writeAgentMcpConfig(cwd, shimPath, token, accessMode);
+        warnIfCommittable(cwd, ".mcp.json");
     }
   } catch (err) {
     logger.warn(`[ExegolMcp] Failed to write MCP config for ${cliType}:`, err);

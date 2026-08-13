@@ -569,6 +569,66 @@ question — who may act on which files while several agents coordinate.
 
 ---
 
+### T172 — Orchestration primitives (from a real coordinated round) `added: 2026-08-13`
+**Priority**: P1 | **Effort**: L (split before starting) | **Source**: Juanito's round-2 report,
+2026-08-13 — one claude coordinating a codex + an opencode across 3 tasks / 9 files / 0 collisions
+
+Validated first, so we don't undo it: stable identity, `message_id`/`in_reply_to`, and the
+pre-authorization clause all held for a full assign → work → report → review → feedback cycle.
+The gaps below are what the coordinator had to cover BY HAND.
+
+1. **File reservation — the biggest hole.** Two agents in one working tree have no protection;
+   the round only avoided a collision because the coordinator grepped before assigning and
+   found DB-002 touched a file already in another agent's lot. Wanted: `claim_paths(globs)`
+   that FAILS if another live agent holds an overlapping claim, plus release on exit. Today
+   this is a hand-written `owner:` field in a markdown file — a convention Exegol neither
+   knows nor enforces. Pairs with [[T169]].
+2. **Reports are claims, not evidence.** Both agents reported "lint clean, tsc exit 0" and both
+   were telling the truth — but the coordinator could only know by re-running everything. The
+   bus carries prose only. Note Exegol ALREADY observes the diff (T130 evidence, oplog, scoring):
+   the right altitude is Exegol ATTACHING what it verified (files touched, diff hash, exit codes)
+   to a message, not a self-reported `artifacts` field the agent fills in.
+3. **`status` is too coarse.** `running`/`waiting_input` doesn't say whether an agent is on MY
+   task, finished and idle, or off doing something else. Needs task-level state: who assigned
+   what, and where it is.
+4. **No broadcast / shared session context.** The same isolation rules were written twice, by
+   hand, worded differently — a divergence source at 2 agents and a guarantee of it at 6.
+   Overlaps [[T162]] phases 2-3 (rooms).
+5. **`delivered` is transport, not comprehension.** We know the message reached the terminal,
+   not that the agent processed it. Cheap improvement: the FIRST turn boundary after an
+   injection is observable — emit `consumed` from it.
+6. **4000-char cap is too small** for assignment briefs that carry scope + rules + validation
+   criteria (they should carry all three). Raise it.
+7. **No retract/update.** A wrong assignment already sent can't be cancelled — only followed by
+   another message and hope they're read in order. A queued message is still OURS: cancelling
+   one before delivery is nearly free.
+
+**Provider behaviour differs and the orchestrator can't know in advance**: codex demanded explicit
+human authorization before sharing repo findings; opencode asked nothing. Document expected
+behaviour per provider (registry capability), or a coordinator stalls for no visible reason.
+
+**Cheap subset worth doing first**: 6 (a constant), 7 (queued messages are ours), 5 (boundary
+already observed), 2-partial (attach the diff we already capture). 1, 3 and 4 are real design.
+
+---
+
+### T173 — MCP token must not sit in a repo file `added: 2026-08-13`
+**Priority**: P1 (security hygiene) | **Effort**: S | **Source**: Juanito, 2026-08-13
+
+`opencode.json` (repo root) carries `EXEGOL_MCP_TOKEN_FILE`; `.mcp.json`, `.gemini/settings.json`,
+`.devin/`, `.agents/` are the same shape. The credential is bounded — per session, revoked on
+exit, and the server rejects tokens whose agent isn't live — but it should not be committable at
+all. Exegol must NOT gitignore these itself: they are legitimate project config a team may want
+versioned, and we only insert the `exegol` key. Shipped for now: a warning at spawn when the
+file isn't ignored.
+
+Real fix, and it deletes code rather than adding it ([[T170]] item 3): wherever the CLI forwards
+its env to MCP servers, the per-session token already arrives via the PTY and the file needs no
+secret at all. Verify per provider with TWO sessions of the same provider in one cwd — the
+single-session case looks identical either way and proves nothing.
+
+---
+
 ### T169 — Worktree coordination model (coordinator + workers) `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: Antonio's working pattern, 2026-08-13
 
