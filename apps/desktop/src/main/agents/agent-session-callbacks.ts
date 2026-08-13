@@ -11,6 +11,7 @@ import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
+import { getPtyHost } from "../terminal/pty-host";
 import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
@@ -258,6 +259,17 @@ export function createSpawnCallbacks(
       if (echoingOwnMessage && (scrapedStatus === "failed" || scrapedStatus === "waiting_input")) {
         logger.info(
           `[AgentCallback] Ignoring scraped "${scrapedStatus}" for ${agent.id} — matches our just-injected message echo`,
+        );
+        scrapedStatus = undefined;
+      }
+      // A CLI printing an error line is NOT a dead session: claude and codex
+      // both print "Error: …" / "rejected due to unacceptable risk" and keep
+      // going. Only the process exit decides failure (onExit → finalize), so a
+      // scraped `failed` on a LIVE pty would strand a working agent behind an
+      // "Ended" card with no way back (live 2026-08-12).
+      if (scrapedStatus === "failed" && getPtyHost().isAlive(agent.id)) {
+        logger.info(
+          `[AgentCallback] ${agent.id} printed an error but its PTY is alive — keeping the session (was: ${result.currentStep ?? "no detail"})`,
         );
         scrapedStatus = undefined;
       }

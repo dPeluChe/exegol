@@ -21,6 +21,8 @@ export type ScrollbackAgent = Pick<
 > & {
   accessMode?: Agent["accessMode"] | null;
   resumeCommand?: string | null;
+  /** Last scraped line — the only readable trace of why a spawn died. */
+  currentStep?: string | null;
 };
 
 interface TerminalScrollbackProps {

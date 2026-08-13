@@ -312,6 +312,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
   const pane = useWorkspaceStore((s) => selectPanes(s)[paneId]);
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
   const mergeTabIntoSplit = useWorkspaceStore((s) => s.mergeTabIntoSplit);
+  const movePaneBeside = useWorkspaceStore((s) => s.movePaneBeside);
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFloating = useWorkspaceStore((s) => !!s.floatingPanes[paneId]);
   const isFocused = focusedPaneId === paneId;
@@ -355,8 +356,28 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         });
         return;
       }
+
+      // Pane dropped on another pane: rearrange. The indicator has always been
+      // drawn here, but nothing acted on it — the drop silently did nothing.
+      const panePayload = e.dataTransfer.getData("application/exegol-pane");
+      if (panePayload && dropSide) {
+        try {
+          const { paneId: sourcePaneId, tabId: sourceTabId2 } = JSON.parse(panePayload) as {
+            paneId: string;
+            tabId: string;
+          };
+          if (sourceTabId2 === tabId && sourcePaneId !== paneId) {
+            movePaneBeside(tabId, sourcePaneId, paneId, dropSide);
+            requestAnimationFrame(() => {
+              window.dispatchEvent(new Event("exegol:refit-terminals"));
+            });
+          }
+        } catch {
+          /* malformed payload — ignore */
+        }
+      }
     },
-    [tabId, dropSide, mergeTabIntoSplit],
+    [tabId, paneId, dropSide, mergeTabIntoSplit, movePaneBeside],
   );
 
   // Only clear drop indicator when truly leaving the pane (not entering a child)

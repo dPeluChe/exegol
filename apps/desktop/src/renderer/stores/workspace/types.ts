@@ -73,6 +73,12 @@ export interface WorkspaceStore {
 
   // Pane actions
   removePane: (tabId: string, paneId: string) => void;
+  movePaneBeside: (
+    tabId: string,
+    sourcePaneId: string,
+    targetPaneId: string,
+    side: "left" | "right" | "top" | "bottom",
+  ) => void;
   splitPane: (
     tabId: string,
     paneId: string | null,
