@@ -2,7 +2,6 @@ import { exec } from "node:child_process";
 import { access, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentCliType } from "@exegol/shared";
-import type Database from "libsql";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,10 +53,7 @@ export interface PreflightOptions {
   coreRustLoaded?: boolean;
 }
 
-export async function runPreflight(
-  _db: Database.Database,
-  opts: PreflightOptions,
-): Promise<PreflightResult> {
+export async function runPreflight(opts: PreflightOptions): Promise<PreflightResult> {
   const errors: PreflightIssue[] = [];
   const warnings: PreflightIssue[] = [];
 

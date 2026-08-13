@@ -1,13 +1,10 @@
 import type { AgentCliType } from "@exegol/shared";
-import type Database from "libsql";
 import { describe, expect, it } from "vitest";
 import { runPreflight } from "./preflight";
 
-const db = {} as Database.Database;
-
 describe("runPreflight", () => {
   it("skips the PATH check for the __shell__ sentinel", async () => {
-    const result = await runPreflight(db, {
+    const result = await runPreflight({
       cliType: "shell" as AgentCliType,
       command: "__shell__",
       projectPath: process.cwd(),
@@ -17,7 +14,7 @@ describe("runPreflight", () => {
   });
 
   it("blocks when the CLI command is not on PATH", async () => {
-    const result = await runPreflight(db, {
+    const result = await runPreflight({
       cliType: "shell" as AgentCliType,
       command: "definitely-not-a-real-command-xyz",
       projectPath: process.cwd(),
@@ -27,7 +24,7 @@ describe("runPreflight", () => {
   });
 
   it("blocks when the project path does not exist", async () => {
-    const result = await runPreflight(db, {
+    const result = await runPreflight({
       cliType: "shell" as AgentCliType,
       command: "__shell__",
       projectPath: "/nonexistent/path/for/preflight/test",

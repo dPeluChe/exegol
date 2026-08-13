@@ -52,6 +52,14 @@ const tokensBySecret = new Map<string, TokenEntry[]>();
 const tokensByAgent = new Map<string, string>();
 
 function bindToken(token: string, entry: TokenEntry): void {
+  // Rebinding to a different secret must release the old one, or the stale
+  // entry keeps the agent resolvable through a token it no longer uses.
+  const previous = tokensByAgent.get(entry.agentId);
+  if (previous && previous !== token) {
+    const rest = (tokensBySecret.get(previous) ?? []).filter((e) => e.agentId !== entry.agentId);
+    if (rest.length === 0) tokensBySecret.delete(previous);
+    else tokensBySecret.set(previous, rest);
+  }
   const entries = tokensBySecret.get(token) ?? [];
   if (!entries.some((e) => e.agentId === entry.agentId)) entries.push(entry);
   tokensBySecret.set(token, entries);
@@ -70,9 +78,8 @@ export function registerAgentMcpToken(agentId: string, projectId: string): strin
 /** Re-arm an EXISTING token after app restart (registry is in-memory only).
  *  The reattached agent's shim/.mcp.json still hold the old secret — minting
  *  a new one would orphan them; restoring keeps identity continuous. */
-export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): boolean {
+export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): void {
   bindToken(token, { agentId, projectId });
-  return true;
 }
 
 /** Revoke on agent exit — a leaked .mcp.json must not stay a live credential. */
@@ -117,27 +124,50 @@ const PID_WALK_MAX_HOPS = 4;
  * credential: a caller still needs a token we minted, and a pid match only
  * counts inside that token's own project.
  */
+/** The shim's ancestry never changes, so walk it ONCE per connection. Without
+ *  the cache an unresolvable token re-forked `ps` on every single call, forever,
+ *  blocking the main process that also drives PTY output and the UI. */
+function ancestorPids(conn: McpConnectionState | undefined, ppid: number | undefined): number[] {
+  if (conn?.ancestors) return conn.ancestors;
+  const chain: number[] = [];
+  let pid: number | null = ppid ?? null;
+  while (pid !== null && chain.length < PID_WALK_MAX_HOPS) {
+    chain.push(pid);
+    pid = chain.length < PID_WALK_MAX_HOPS ? parentOf(pid) : null;
+  }
+  if (conn) conn.ancestors = chain;
+  return chain;
+}
+
 function resolveByParentPid(
   db: Database.Database,
-  ppid: number | undefined,
-  projectId: string,
-): string | null {
-  if (!ppid) return null;
-  let pid: number | null = ppid;
-  for (let hop = 0; pid !== null && hop < PID_WALK_MAX_HOPS; hop++) {
-    try {
-      const row = db
-        .prepare(
-          "SELECT id FROM agents WHERE pid = ? AND project_id = ? AND status IN ('idle','spawning','running','waiting_input','paused') LIMIT 1",
-        )
-        .get(pid, projectId) as { id?: string } | undefined;
-      if (row?.id) return row.id;
-    } catch {
-      return null;
-    }
-    pid = parentOf(pid);
+  ancestors: number[],
+  projectIds: string[],
+): { agentId: string; projectId: string; accessMode: ExegolAccessMode } | null {
+  if (ancestors.length === 0 || projectIds.length === 0) return null;
+  const statuses = [...LIVE_STATUSES];
+  try {
+    const row = db
+      .prepare(
+        `SELECT id, project_id, access_mode FROM agents
+         WHERE pid IN (${ancestors.map(() => "?").join(",")})
+           AND project_id IN (${projectIds.map(() => "?").join(",")})
+           AND status IN (${statuses.map(() => "?").join(",")})
+         LIMIT 1`,
+      )
+      .get(...ancestors, ...projectIds, ...statuses) as
+      | { id: string; project_id: string; access_mode?: string }
+      | undefined;
+    if (!row) return null;
+    return {
+      agentId: row.id,
+      projectId: row.project_id,
+      accessMode:
+        row.access_mode === "write" || row.access_mode === "plan" ? row.access_mode : "read",
+    };
+  } catch {
+    return null;
   }
-  return null;
 }
 
 function readLiveAccessMode(db: Database.Database, agentId: string): ExegolAccessMode | null {
@@ -164,6 +194,8 @@ function readLiveAccessMode(db: Database.Database, agentId: string): ExegolAcces
  */
 export interface McpConnectionState {
   pinnedAgentId?: string;
+  /** Cached `ps` walk — the shim's ancestry is fixed for the connection. */
+  ancestors?: number[];
 }
 
 type Resolution =
@@ -191,7 +223,7 @@ function resolveContext(
   // Sticky first: a pinned identity only expires when that agent stops being live.
   if (conn?.pinnedAgentId) {
     const entry = bound.find((e) => e.agentId === conn.pinnedAgentId);
-    const accessMode = entry && readLiveAccessMode(db, entry.agentId);
+    const accessMode = entry ? readLiveAccessMode(db, entry.agentId) : null;
     if (entry && accessMode) {
       return {
         ok: true,
@@ -201,7 +233,11 @@ function resolveContext(
     conn.pinnedAgentId = undefined;
   }
 
-  const live = bound.filter((e) => readLiveAccessMode(db, e.agentId) !== null);
+  // Keep the access mode the liveness check already computed — re-reading it
+  // downstream was a second query for a row we just looked at.
+  const live = bound
+    .map((e) => ({ ...e, accessMode: readLiveAccessMode(db, e.agentId) }))
+    .filter((e): e is TokenEntry & { accessMode: ExegolAccessMode } => e.accessMode !== null);
   if (live.length === 0) {
     return {
       ok: false,
@@ -214,25 +250,31 @@ function resolveContext(
   // `exec`d, so the PTY process IS the CLI and the shim descends from it. This
   // is a DISAMBIGUATOR, never a credential — a valid token is still required,
   // and we only accept a pid match inside the token's own project.
-  for (const projectId of new Set(live.map((e) => e.projectId))) {
-    const byPid = resolveByParentPid(db, ppid, projectId);
-    if (!byPid) continue;
-    const accessMode = readLiveAccessMode(db, byPid);
-    if (!accessMode) continue;
-    if (conn) conn.pinnedAgentId = byPid;
-    if (!live.some((e) => e.agentId === byPid)) {
+  //
+  // Deliberately BEFORE the single-binding shortcut: when a sibling overwrites a
+  // shared config file, the surviving session presents the sibling's token, so
+  // `live` is legitimately length 1 and only the process tree gives the right
+  // answer. Skipping the walk here would reintroduce the identity swap.
+  const byPid = resolveByParentPid(db, ancestorPids(conn, ppid), [
+    ...new Set(live.map((e) => e.projectId)),
+  ]);
+  if (byPid) {
+    if (conn) conn.pinnedAgentId = byPid.agentId;
+    if (!live.some((e) => e.agentId === byPid.agentId)) {
       logger.info(
-        `[ExegolMcp] Caller's process tree belongs to ${byPid}, which is not the token's own binding — trusting the process tree (shared config file)`,
+        `[ExegolMcp] Caller's process tree belongs to ${byPid.agentId}, which is not the token's own binding — trusting the process tree (shared config file)`,
       );
     }
-    return { ok: true, context: { agentId: byPid, projectId, accessMode } };
+    return { ok: true, context: byPid };
   }
 
   const only = live[0];
   if (live.length === 1 && only) {
-    const accessMode = readLiveAccessMode(db, only.agentId) ?? "read";
     if (conn) conn.pinnedAgentId = only.agentId;
-    return { ok: true, context: { agentId: only.agentId, projectId: only.projectId, accessMode } };
+    return {
+      ok: true,
+      context: { agentId: only.agentId, projectId: only.projectId, accessMode: only.accessMode },
+    };
   }
 
   // Several live sessions share this token and the process tree didn't settle

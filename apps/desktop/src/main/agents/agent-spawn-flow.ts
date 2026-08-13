@@ -1,4 +1,4 @@
-import { type Agent, type AgentCreate, LIVE_STATUSES } from "@exegol/shared";
+import type { Agent, AgentCreate } from "@exegol/shared";
 import type Database from "libsql";
 import {
   createOplogEntry,

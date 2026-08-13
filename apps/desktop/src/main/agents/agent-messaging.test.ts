@@ -16,7 +16,6 @@ vi.mock("../terminal/pty-host", () => ({
 
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import {
-  AgentMessagingError,
   clearAgentLinks,
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
@@ -106,19 +105,24 @@ describe("sendAgentMessage", () => {
     expect(ptyMock.writes).toHaveLength(2);
   });
 
-  it("throttles duplicate sends inside the dedup window, allows after it", () => {
+  it("collapses an identical re-send inside the dedup window onto the original, and allows it after", () => {
     insertAgent(db, "a1", "running");
     insertAgent(db, "a2", "waiting_input");
     ptyMock.alive.add("a2");
 
-    sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "same" });
-    expect(() =>
-      sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "same" }),
-    ).toThrowError(AgentMessagingError);
+    const first = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "same" });
+    // Answering (rather than throwing) is the point: a sender retrying an
+    // ambiguous timeout learns the original landed instead of getting an error
+    // it can't act on.
+    const again = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "same" });
+    expect(again).toEqual({ messageId: first.messageId, delivered: true, duplicate: true });
+    expect(ptyMock.writes).toHaveLength(1);
+    expect(messageCount(db)).toBe(1);
 
     vi.advanceTimersByTime(31_000);
     const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "same" });
     expect(res.delivered).toBe(true);
+    expect(res.duplicate).toBeUndefined();
   });
 
   it("rejects self-send, unknown target, empty text and terminal targets", () => {

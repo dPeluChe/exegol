@@ -24,18 +24,27 @@ import {
 // Identity is the token — the server maps it to agent/project and re-reads
 // access mode from the DB. The env mode below only shapes tools/list display;
 // it fails CLOSED to "read" (enforcement is server-side regardless).
-// Token fallback chain: env (claude/opencode/gemini pass it via their config
-// env) → <cwd>/.mcp.json (codex sanitizes MCP-server env, so Exegol drops the
-// token on disk in the session cwd instead — 2026-08-12).
+//
+// Order matters, and it is the whole identity fix: EXEGOL_MCP_TOKEN is set on
+// the CLI's PTY at spawn and inherited down to us, so it is per SESSION.
+// EXEGOL_MCP_TOKEN_FILE comes from a config file that every session in the
+// directory shares — using it when a per-session token exists is what made two
+// agents present the same identity. Disk is the last resort, for CLIs that
+// sanitize the env they hand to MCP servers (codex).
 function resolveToken(): string {
-  const fromEnv = process.env.EXEGOL_MCP_TOKEN;
-  if (fromEnv) return fromEnv;
+  const perSession = process.env.EXEGOL_MCP_TOKEN;
+  if (perSession) return perSession;
+  const fromConfigEnv = process.env.EXEGOL_MCP_TOKEN_FILE;
+  if (fromConfigEnv) return fromConfigEnv;
   try {
     const raw = readFileSync(join(process.cwd(), ".mcp.json"), "utf-8");
     const parsed = JSON.parse(raw) as {
-      mcpServers?: { exegol?: { env?: { EXEGOL_MCP_TOKEN?: string } } };
+      mcpServers?: {
+        exegol?: { env?: { EXEGOL_MCP_TOKEN_FILE?: string; EXEGOL_MCP_TOKEN?: string } };
+      };
     };
-    return parsed.mcpServers?.exegol?.env?.EXEGOL_MCP_TOKEN ?? "";
+    const env = parsed.mcpServers?.exegol?.env;
+    return env?.EXEGOL_MCP_TOKEN_FILE ?? env?.EXEGOL_MCP_TOKEN ?? "";
   } catch {
     return "";
   }
@@ -144,6 +153,17 @@ interface PendingCall {
   /** Did this request actually reach the socket? Decides whether a failure
    *  means "never ran" or "unknown" — see callSocket. */
   sent: boolean;
+  /** What the agent can do about an ambiguous outcome. Per-tool, because the
+   *  transport has no business knowing agent_send's idempotency protocol. */
+  recoveryHint: string;
+}
+
+/** Only agent_send can be replayed safely today (it takes an idempotency key
+ *  and exposes message_status); everything else gets no false promise. */
+function recoveryHintFor(tool: string): string {
+  return tool === "agent_send"
+    ? " Check message_status, or retry with the same message_id — identical keys are never delivered twice."
+    : " Verify the outcome before retrying.";
 }
 const pending = new Map<number, PendingCall>();
 const CALL_TIMEOUT_MS = 30_000;
@@ -170,7 +190,7 @@ function rejectAllPending(): void {
     waiter.reject(
       new Error(
         waiter.sent
-          ? "Exegol MCP disconnected while your call was in flight — it may or may not have run. Check message_status, or retry with the same message_id."
+          ? `Exegol MCP disconnected while your call was in flight — it may or may not have run.${waiter.recoveryHint}`
           : "Exegol MCP disconnected (the app is restarting or was closed) — the call was NOT executed; retry in a moment",
       ),
     );
@@ -248,10 +268,14 @@ function callSocket(
   // have run and lost the ack. Reporting the second as the first is what made
   // an agent re-send a message it had already delivered (2026-08-13).
   return new Promise((resolve, reject) => {
-    const entry: PendingCall = { resolve, reject, sent: false };
+    const entry: PendingCall = {
+      resolve,
+      reject,
+      sent: false,
+      recoveryHint: recoveryHintFor(label),
+    };
     pending.set(id, entry);
     const timer = setTimeout(() => {
-      const sentOnWire = entry.sent;
       if (pending.delete(id)) {
         // Drop the queued payload too, or a reconnect would replay a call the
         // caller already gave up on.
@@ -259,8 +283,8 @@ function callSocket(
         if (idx !== -1) outbox.splice(idx, 1);
         reject(
           new Error(
-            sentOnWire
-              ? `Exegol MCP did not answer "${label}" in 30s. The call REACHED the app, so it may or may not have run — do NOT blindly retry: check with message_status, or retry with the same message_id (retries with an identical message_id are safe).`
+            entry.sent
+              ? `Exegol MCP did not answer "${label}" in 30s. The call REACHED the app, so it may or may not have run — do NOT blindly retry.${entry.recoveryHint}`
               : `Exegol MCP unreachable — is the Exegol app running? ("${label}" was NOT executed; retrying is safe.)`,
           ),
         );
