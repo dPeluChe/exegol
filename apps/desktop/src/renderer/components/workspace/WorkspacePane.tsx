@@ -252,7 +252,12 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 
   // Agent in terminal state with no live store entry — stale pane from previous session
   // (store only has agents that were spawned or reattached in this session)
-  const isStaleFromPreviousSession = agent && TERMINAL_STATUSES.has(agent.status) && !storeAgent;
+  // Gated on the store having actually synced: panes mount first, so before
+  // that "not in store" only means "not loaded yet". Converting on it wiped a
+  // crashed session's pane — and its resume card — on every restart.
+  const hasSynced = useAgentStore((s) => s.hasSyncedFromDb);
+  const isStaleFromPreviousSession =
+    hasSynced && agent && TERMINAL_STATUSES.has(agent.status) && !storeAgent;
 
   useEffect(() => {
     if (isStaleFromPreviousSession && agent) {
