@@ -16,6 +16,7 @@ vi.mock("../terminal/pty-host", () => ({
 
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import {
+  cancelQueuedMessage,
   clearAgentLinks,
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
@@ -457,5 +458,43 @@ describe("delivery is idempotent and observable", () => {
     // Target's session ends before its next turn.
     clearAgentMessageQueue("a2", db);
     expect(getMessageDeliveryState(queued.messageId, "a1").state).toBe("undeliverable");
+  });
+
+  it("reports consumed once the target closes a turn after the injection", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "review this" });
+    // Delivered = it reached the terminal. Not the same as read.
+    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("delivered");
+
+    // The next turn boundary is the observable moment it was processed.
+    deliverPendingAgentMessages("a2");
+    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("consumed");
+  });
+
+  it("cancels a queued message, but refuses once it has been delivered", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "running"); // busy → queued, not injected
+    ptyMock.alive.add("a2");
+
+    const queued = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "wrong task" });
+    expect(cancelQueuedMessage(queued.messageId, "a1")).toEqual({
+      cancelled: true,
+      state: "cancelled",
+    });
+    // Cancelled means never injected — not "recalled after the fact".
+    deliverPendingAgentMessages("a2");
+    expect(ptyMock.writes).toHaveLength(0);
+
+    const landed = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "real task" });
+    deliverPendingAgentMessages("a2");
+    const late = cancelQueuedMessage(landed.messageId, "a1");
+    expect(late.cancelled).toBe(false);
+    expect(late.reason).toContain("already left the queue");
+
+    // Only the sender may withdraw its own message.
+    expect(cancelQueuedMessage(queued.messageId, "a2").cancelled).toBe(false);
   });
 });

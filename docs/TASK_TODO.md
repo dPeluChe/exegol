@@ -577,12 +577,12 @@ Validated first, so we don't undo it: stable identity, `message_id`/`in_reply_to
 pre-authorization clause all held for a full assign → work → report → review → feedback cycle.
 The gaps below are what the coordinator had to cover BY HAND.
 
-1. **File reservation — the biggest hole.** Two agents in one working tree have no protection;
-   the round only avoided a collision because the coordinator grepped before assigning and
-   found DB-002 touched a file already in another agent's lot. Wanted: `claim_paths(globs)`
-   that FAILS if another live agent holds an overlapping claim, plus release on exit. Today
-   this is a hand-written `owner:` field in a markdown file — a convention Exegol neither
-   knows nor enforces. Pairs with [[T169]].
+1. ~~**File reservation**~~ — DONE 2026-08-13: `claim_paths` / `release_paths` / `list_claims`
+   over a `path_claims` table. All-or-nothing (a partial grant reads as success and sends the
+   agent into the collision it asked us to prevent), directory claims cover their tree, paths
+   stored absolute so separate worktrees never conflict, claims released on agent exit, and the
+   protocol is in the managed AGENTS.md block so agents know to claim before editing. NOT globs
+   — see the module header for why. Ownership across worktrees stays with [[T169]].
 2. **Reports are claims, not evidence.** Both agents reported "lint clean, tsc exit 0" and both
    were telling the truth — but the coordinator could only know by re-running everything. The
    bus carries prose only. Note Exegol ALREADY observes the diff (T130 evidence, oplog, scoring):
@@ -594,21 +594,18 @@ The gaps below are what the coordinator had to cover BY HAND.
 4. **No broadcast / shared session context.** The same isolation rules were written twice, by
    hand, worded differently — a divergence source at 2 agents and a guarantee of it at 6.
    Overlaps [[T162]] phases 2-3 (rooms).
-5. **`delivered` is transport, not comprehension.** We know the message reached the terminal,
-   not that the agent processed it. Cheap improvement: the FIRST turn boundary after an
-   injection is observable — emit `consumed` from it.
-6. **4000-char cap is too small** for assignment briefs that carry scope + rules + validation
-   criteria (they should carry all three). Raise it.
-7. **No retract/update.** A wrong assignment already sent can't be cancelled — only followed by
-   another message and hope they're read in order. A queued message is still OURS: cancelling
-   one before delivery is nearly free.
+5. ~~**`delivered` is transport, not comprehension**~~ — DONE: `message_status` now reports
+   `consumed` once the target closes a turn after the injection.
+6. ~~**4000-char cap**~~ — DONE: raised to 12 000.
+7. ~~**No retract**~~ — DONE: `message_cancel` withdraws a message still in our queue; it
+   refuses honestly once the text has reached the terminal.
 
 **Provider behaviour differs and the orchestrator can't know in advance**: codex demanded explicit
 human authorization before sharing repo findings; opencode asked nothing. Document expected
 behaviour per provider (registry capability), or a coordinator stalls for no visible reason.
 
-**Cheap subset worth doing first**: 6 (a constant), 7 (queued messages are ours), 5 (boundary
-already observed), 2-partial (attach the diff we already capture). 1, 3 and 4 are real design.
+**Remaining**: 2 (attach the diff Exegol already captures — highest value of what's left),
+3 (task-level state) and 4 (broadcast / shared session context, overlaps [[T162]]).
 
 ---
 

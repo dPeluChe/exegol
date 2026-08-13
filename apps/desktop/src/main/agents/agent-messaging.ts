@@ -20,6 +20,10 @@ import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 
 const MAX_QUEUE_PER_TARGET = 10;
+// An assignment brief has to carry scope, rules AND validation criteria — at
+// 4000 the coordinator's briefs were already brushing the ceiling and the
+// pressure is to drop the criteria, which is the part that makes work reviewable.
+const MAX_MESSAGE_CHARS = 12_000;
 const DEDUP_WINDOW_MS = 30_000;
 // N-agent rooms: dedup is per (sender, target, text), so a ring A→B→C→A never
 // repeats a pair and would circulate forever. These bound the fleet as a whole.
@@ -67,7 +71,16 @@ const recentSends = new Map<string, { at: number; messageId: string }>();
 // makes a retry return the ORIGINAL result, and message_status makes delivery
 // observable instead of inferred.
 
-export type MessageDeliveryState = "queued" | "delivered" | "undeliverable";
+// `delivered` means the text reached the terminal; `consumed` means the agent
+// finished a turn afterwards, i.e. it actually processed it. The sender used to
+// have no visibility between "queued" and a reply arriving (Juanito, 2026-08-13:
+// "delivered es transporte, no lectura").
+export type MessageDeliveryState =
+  | "queued"
+  | "delivered"
+  | "consumed"
+  | "cancelled"
+  | "undeliverable";
 
 const MESSAGE_STATE_TTL_MS = 60 * 60_000;
 const IDEMPOTENCY_TTL_MS = 10 * 60_000;
@@ -77,7 +90,13 @@ const IDEMPOTENCY_TTL_MS = 10 * 60_000;
 // "delivered" — the two tools disagreeing in the very case they exist for.
 const messageState = new Map<
   string,
-  { toAgentId: string; fromAgentId: string; at: number; undeliverable?: boolean }
+  {
+    toAgentId: string;
+    fromAgentId: string;
+    at: number;
+    /** Terminal states, stored because they can't be derived from the queue. */
+    outcome?: "undeliverable" | "cancelled" | "consumed";
+  }
 >();
 const idempotency = new Map<string, { messageId: string; at: number }>();
 
@@ -108,10 +127,60 @@ function trackMessage(p: PendingMessage): void {
   });
 }
 
-function markUndeliverable(p: PendingMessage): void {
+function markOutcome(p: PendingMessage, outcome: "undeliverable" | "cancelled"): void {
   const entry = messageState.get(p.messageId);
-  if (entry) entry.undeliverable = true;
-  else messageState.set(p.messageId, { ...p, at: Date.now(), undeliverable: true });
+  if (entry) entry.outcome = outcome;
+  else messageState.set(p.messageId, { ...p, at: Date.now(), outcome });
+}
+
+// Messages injected into an agent that has not yet closed a turn. The next
+// boundary is the observable moment it processed them.
+const awaitingConsumption = new Map<string, string[]>();
+
+function noteInjected(p: PendingMessage): void {
+  const ids = awaitingConsumption.get(p.toAgentId) ?? [];
+  ids.push(p.messageId);
+  awaitingConsumption.set(p.toAgentId, ids);
+}
+
+/** Called at a turn boundary: everything injected before it has now been read. */
+function markConsumed(agentId: string): void {
+  const ids = awaitingConsumption.get(agentId);
+  if (!ids?.length) return;
+  awaitingConsumption.delete(agentId);
+  for (const id of ids) {
+    const entry = messageState.get(id);
+    if (entry && !entry.outcome) entry.outcome = "consumed";
+  }
+}
+
+/**
+ * T172: withdraw a message that has not been delivered yet. Only the sender may
+ * cancel, and only while it is still in our queue — once the text is in the
+ * target's terminal it is out of our hands, and saying otherwise would be a lie.
+ */
+export function cancelQueuedMessage(
+  messageId: string,
+  senderAgentId: string,
+): { cancelled: boolean; state: MessageDeliveryState | "unknown"; reason?: string } {
+  const entry = messageState.get(messageId);
+  if (!entry || entry.fromAgentId !== senderAgentId) {
+    return { cancelled: false, state: "unknown", reason: "no message of yours with that id" };
+  }
+  const queue = queues.get(entry.toAgentId);
+  const idx = queue?.findIndex((p) => p.messageId === messageId) ?? -1;
+  if (!queue || idx === -1) {
+    const state = getMessageDeliveryState(messageId, senderAgentId).state;
+    return {
+      cancelled: false,
+      state,
+      reason: "already left the queue — send a follow-up message instead",
+    };
+  }
+  const [removed] = queue.splice(idx, 1);
+  if (removed) markOutcome(removed, "cancelled");
+  if (queue.length === 0) queues.delete(entry.toAgentId);
+  return { cancelled: true, state: "cancelled" };
 }
 
 /** A re-send resolves to the original message, with its CURRENT delivery state
@@ -138,7 +207,7 @@ export function getMessageDeliveryState(
   if (!entry || (entry.fromAgentId !== askerAgentId && entry.toAgentId !== askerAgentId)) {
     return { state: "unknown" };
   }
-  if (entry.undeliverable) return { state: "undeliverable" };
+  if (entry.outcome) return { state: entry.outcome };
   const idx = (queues.get(entry.toAgentId) ?? []).findIndex((p) => p.messageId === messageId);
   return idx === -1 ? { state: "delivered" } : { state: "queued", queuePosition: idx + 1 };
 }
@@ -209,6 +278,7 @@ function injectNow(p: PendingMessage): boolean {
   const wrapped = `\x1b[200~${body}\x1b[201~`;
   ptyHost.write(p.toAgentId, `${wrapped}\r`);
   lastInjectionAt.set(p.toAgentId, Date.now());
+  noteInjected(p);
   logger.info(`[AgentMsg] Delivered ${p.messageId} ${p.fromAgentId} → ${p.toAgentId}`);
   return true;
 }
@@ -274,7 +344,9 @@ export function sendAgentMessage(
   const { fromAgentId } = input;
   const text = sanitizeAgentMessage(input.text).trim();
   if (!text) throw new AgentMessagingError("message must not be empty", -32602);
-  if (text.length > 4_000) throw new AgentMessagingError("message too long (max 4000)", -32602);
+  if (text.length > MAX_MESSAGE_CHARS) {
+    throw new AgentMessagingError(`message too long (max ${MAX_MESSAGE_CHARS})`, -32602);
+  }
 
   // Before ANY validation or rate accounting: a retry of a call that already
   // succeeded must be a no-op that reports the original outcome.
@@ -380,14 +452,16 @@ export function sendAgentMessage(
  * next boundary so replies interleave naturally instead of flooding the prompt.
  */
 export function deliverPendingAgentMessages(agentId: string): void {
+  // This IS the boundary: anything injected before it has now been read.
+  markConsumed(agentId);
   const queue = queues.get(agentId);
   if (!queue?.length) return;
   const next = queue.shift();
   if (!next) return;
   if (!injectNow(next)) {
     // PTY gone — drop the queue; the messages stay persisted in the DB.
-    markUndeliverable(next);
-    for (const p of queue) markUndeliverable(p);
+    markOutcome(next, "undeliverable");
+    for (const p of queue) markOutcome(p, "undeliverable");
     queues.delete(agentId);
     logger.warn(
       `[AgentMsg] Target ${agentId} PTY gone — ${queue.length + 1} message(s) undeliverable`,
@@ -456,7 +530,7 @@ export function clearAgentMessageQueue(agentId: string, db?: Database.Database):
   // Independent of the notification below: without `db` the states would stay
   // "queued" and message_status would then derive them as delivered — the map
   // lying about messages that were dropped.
-  for (const p of pending ?? []) markUndeliverable(p);
+  for (const p of pending ?? []) markOutcome(p, "undeliverable");
   if (db && pending?.length) {
     const gone = getAgent(db, agentId);
     const goneLabel = gone?.alias ?? agentId;
@@ -485,6 +559,7 @@ export function clearAgentMessageQueue(agentId: string, db?: Database.Database):
   sendTimestamps.delete(agentId);
   lastInjectionAt.delete(agentId);
   lastOutputAt.delete(agentId);
+  awaitingConsumption.delete(agentId);
   for (const key of idempotency.keys()) {
     if (key.startsWith(`${agentId}:`)) idempotency.delete(key);
   }

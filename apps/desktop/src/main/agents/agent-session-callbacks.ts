@@ -6,6 +6,7 @@ import {
 } from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
+import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
@@ -390,6 +391,13 @@ export function createSpawnCallbacks(
       }
       clearAgentMessageQueue(agent.id, db);
       clearAgentLinks(db, agent.id);
+      // T172: a dead agent must not keep files reserved — the next one would be
+      // blocked by a claim nobody is working on.
+      try {
+        releasePaths(db, agent.id);
+      } catch (err) {
+        logger.warn(`[AgentCallback] Failed to release path claims for ${agent.id}:`, err);
+      }
       forgetBroadcastStatus(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.

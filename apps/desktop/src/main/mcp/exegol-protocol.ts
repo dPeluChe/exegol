@@ -108,7 +108,11 @@ export const EXEGOL_TOOL_NAMES = [
   "agents_list",
   "agent_send",
   "message_status",
+  "message_cancel",
   "agent_link",
+  "claim_paths",
+  "release_paths",
+  "list_claims",
 ] as const;
 export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
 
@@ -121,7 +125,13 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "agents_list",
   "agent_send",
   "message_status",
+  "message_cancel",
   "agent_link",
+  // Claims are coordination, not repo writes: a read/plan agent must be able to
+  // reserve the files it is about to report on.
+  "claim_paths",
+  "release_paths",
+  "list_claims",
 ]);
 
 export interface ExegolToolDef {
@@ -245,6 +255,62 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
       },
       required: ["message_id"],
     },
+  },
+  {
+    name: "message_cancel",
+    description:
+      "Withdraw a message you sent that has NOT been delivered yet (still queued for the " +
+      "target's next turn boundary). Use it when an assignment turns out to be wrong instead " +
+      "of sending a correction and hoping both are read in order. Fails if it already landed.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_id: { type: "string", description: "The messageId returned by agent_send" },
+      },
+      required: ["message_id"],
+    },
+  },
+  {
+    name: "claim_paths",
+    description:
+      "Reserve files or directories before editing them, so two agents never write the same " +
+      "file. ALL-OR-NOTHING: if any path overlaps another live agent's claim, nothing is " +
+      "granted and you get the conflicts (who holds what) — pick different files or negotiate " +
+      "via agent_send. A directory claim covers everything under it. Re-claiming what you " +
+      "already hold succeeds. Paths may be relative to your working directory. Your claims are " +
+      "released automatically when your session ends.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "Files or directories, e.g. ['src/auth/login.ts', 'convex/']",
+        },
+        note: {
+          type: "string",
+          description: "Why you need them — shown to an agent that hits the conflict",
+        },
+      },
+      required: ["paths"],
+    },
+  },
+  {
+    name: "release_paths",
+    description:
+      "Give back path claims once you are done, so another agent can take them. Omit `paths` " +
+      "to release everything you hold.",
+    inputSchema: {
+      type: "object",
+      properties: { paths: { type: "array", items: { type: "string" } } },
+    },
+  },
+  {
+    name: "list_claims",
+    description:
+      "Who currently holds which paths in this project. Call it BEFORE handing out work: it " +
+      "turns 'hope nobody else is in this file' into a fact.",
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "agent_link",
