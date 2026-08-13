@@ -724,29 +724,6 @@ single-session case looks identical either way and proves nothing.
 
 ---
 
-### T177 — Choose the branch a worktree is cut from `added: 2026-08-13`
-**Priority**: P2 | **Effort**: M (touches Rust) | **Source**: Antonio, 2026-08-13
-
-Every worktree is branched from the repo's current HEAD — `git/mod.rs:101` peels `repo.head()`
-to a commit and branches from it, with no base parameter anywhere in the chain. So an agent
-sent to work on a feature always starts from whatever the main checkout happens to be on,
-which is wrong the moment the user is mid-branch (and invisible, because nothing states the
-base).
-
-Not a UI change. The chain to thread:
-1. `create_worktree(repo_path, worktree_name, branch_name, target_path)` gains `base_ref:
-   Option<String>`; resolve it via `repo.revparse_single` and fall back to HEAD. Rust rebuild.
-2. `createManagedWorktree` (agents/worktrees.ts:44) and `setupAgentCwd` pass it through.
-3. `AgentCreate.baseBranch` in the shared schema + type.
-4. A `git.listBranches` procedure for the picker (check whether one already exists).
-5. Launch modal: base-branch select next to the branch name, defaulting to the project's
-   current branch — and SHOW it, since the whole point is that the base stops being implicit.
-
-Pairs with [[T169]]: a coordinator handing out worktrees needs them cut from the branch the
-round is happening on, not from main.
-
----
-
 ### T169 — Worktree coordination model (coordinator + workers) `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: Antonio's working pattern, 2026-08-13
 

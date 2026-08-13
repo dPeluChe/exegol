@@ -53,6 +53,30 @@ async function runGitPush(cwd: string, args: string[]): Promise<string> {
 // ─── Router ─────────────────────────────────────────────────────────────────
 
 export const diffRouter = router({
+  /** T177: branches a worktree can be cut from. Current branch first — it is
+   *  what the user is looking at and the base they usually mean. */
+  listBranches: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      const current = await execFileAsync("git", ["branch", "--show-current"], { cwd })
+        .then((r) => r.stdout.trim())
+        .catch(() => "");
+      const all = await execFileAsync(
+        "git",
+        ["for-each-ref", "--format=%(refname:short)", "--sort=-committerdate", "refs/heads"],
+        { cwd },
+      )
+        .then((r) =>
+          r.stdout
+            .split("\n")
+            .map((b) => b.trim())
+            .filter(Boolean),
+        )
+        .catch(() => [] as string[]);
+      return { current, branches: [current, ...all.filter((b) => b !== current)].filter(Boolean) };
+    }),
+
   /** Structured diff via Rust git2 — returns FileDiff[] */
   structuredDiff: publicProcedure
     .input(z.object({ projectId: z.string(), staged: z.boolean().default(false) }))

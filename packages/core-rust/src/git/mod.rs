@@ -73,12 +73,17 @@ pub fn get_repo_info(path: String) -> Result<RepoInfo, Error> {
 /// If `target_path` is provided, the worktree is placed there.
 /// Otherwise falls back to `<repo_path>/../<worktree_name>`.
 /// A new branch `branch_name` is created pointing at the current HEAD.
+/// `base_ref` is the branch/commit the new branch is cut from — a branch name,
+/// a tag or a sha. Omitted means HEAD, which is what this always did: an agent
+/// sent to work on a feature silently inherited whatever the main checkout
+/// happened to be on, with nothing stating the base.
 #[napi]
 pub fn create_worktree(
   repo_path: String,
   worktree_name: String,
   branch_name: String,
   target_path: Option<String>,
+  base_ref: Option<String>,
 ) -> Result<WorktreeInfo, Error> {
   let repo = open_repo(&repo_path)?;
 
@@ -100,17 +105,25 @@ pub fn create_worktree(
     .ok_or_else(|| Error::from_reason("Invalid worktree path (non-UTF-8)"))?
     .to_string();
 
-  // Get HEAD commit to base the new branch on
-  let head = repo
-    .head()
-    .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {e}")))?;
-  let head_commit = head
-    .peel_to_commit()
-    .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {e}")))?;
+  // Commit the new branch is cut from. An explicit base that cannot be resolved
+  // FAILS rather than falling back to HEAD: silently branching from somewhere
+  // else is the bug this parameter exists to fix.
+  let base_commit = match base_ref.as_deref().map(str::trim).filter(|r| !r.is_empty()) {
+    Some(reference) => repo
+      .revparse_single(reference)
+      .map_err(|e| Error::from_reason(format!("Base ref '{reference}' not found: {e}")))?
+      .peel_to_commit()
+      .map_err(|e| Error::from_reason(format!("Base ref '{reference}' is not a commit: {e}")))?,
+    None => repo
+      .head()
+      .map_err(|e| Error::from_reason(format!("Failed to get HEAD: {e}")))?
+      .peel_to_commit()
+      .map_err(|e| Error::from_reason(format!("Failed to peel HEAD to commit: {e}")))?,
+  };
 
   // Create the new branch
   let branch = repo
-    .branch(&branch_name, &head_commit, false)
+    .branch(&branch_name, &base_commit, false)
     .map_err(|e| Error::from_reason(format!("Failed to create branch '{branch_name}': {e}")))?;
 
   let branch_ref = branch

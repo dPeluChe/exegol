@@ -46,6 +46,10 @@ export function createManagedWorktree(
   projectName: string,
   branchName: string,
   rootKind: RootKind = "worktrees",
+  /** T177: branch/ref to cut from. Undefined = the repo's HEAD, which is what
+   *  this always did — and silently, so an agent inherited whatever branch the
+   *  main checkout happened to be on. */
+  baseRef?: string,
 ): ManagedWorktreeInfo {
   if (!coreRust) {
     throw new Error("Native git worktree support is unavailable");
@@ -58,7 +62,13 @@ export function createManagedWorktree(
     const targetPath = buildTargetPath(rootKind, projectName, worktreeName);
 
     try {
-      const info = coreRust.createWorktree(repoPath, worktreeName, candidateBranch, targetPath);
+      const info = coreRust.createWorktree(
+        repoPath,
+        worktreeName,
+        candidateBranch,
+        targetPath,
+        baseRef,
+      );
       return {
         branchName: candidateBranch,
         requestedBranchName: branchName,

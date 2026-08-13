@@ -163,6 +163,8 @@ export type AgentCreate = {
   accessMode?: AgentAccessMode;
   /** T161: per-launch YOLO override; undefined keeps the provider's setting. */
   yolo?: boolean;
+  /** T177: branch/ref the worktree is cut from; undefined means the repo's HEAD. */
+  baseBranch?: string;
 };
 
 // ─── Provider Registry ──────────────────────────────────────────────────────

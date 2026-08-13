@@ -123,6 +123,8 @@ export function SpawnAgentModal({
   /** Resume the provider's OWN most recent session via its resume flag. */
   const [continueLast, setContinueLast] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
+  /** T177: ref the worktree is cut from. Empty = the project's current branch. */
+  const [baseBranch, setBaseBranch] = useState("");
   const [spawning, setSpawning] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -143,6 +145,14 @@ export function SpawnAgentModal({
   });
   // Only this provider's sessions: `claude --resume` cannot open a codex session.
   const resumableHere = resumable.filter((r) => r.cliType === selectedProviderId);
+
+  const { data: branchInfo } = useQuery({
+    queryKey: ["projectBranches", projectId],
+    queryFn: () =>
+      trpcInvoke<{ current: string; branches: string[] }>("diff.listBranches", { projectId }),
+    enabled: useWorktree,
+    staleTime: 30_000,
+  });
 
   const { data: project } = useProject(projectId);
   const { data: skills = [] } = useSkills(projectId, project?.path ?? null);
@@ -199,6 +209,7 @@ export function SpawnAgentModal({
         accessMode,
         skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
         yolo: yoloFlag ? yolo : undefined,
+        baseBranch: useWorktree && baseBranch ? baseBranch : undefined,
         ...(resumeOf
           ? { resumeSession: true, resumeFromAgentId: resumeOf.agentId }
           : continueLast
@@ -267,6 +278,7 @@ export function SpawnAgentModal({
     continueLast,
     yolo,
     yoloFlag,
+    baseBranch,
     selectedProvider,
     projectId,
     addAgent,
@@ -555,18 +567,38 @@ export function SpawnAgentModal({
             </div>
 
             {useWorktree && (
-              <div className="flex items-center gap-2">
-                <GitBranch className="h-3 w-3 shrink-0 text-text-muted" />
-                <input
-                  type="text"
-                  value={branchName}
-                  onChange={(e) => {
-                    setBranchName(e.target.value);
-                    setBranchEdited(true);
-                  }}
-                  placeholder="exegol/branch-name"
-                  className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
-                />
+              <div className="flex flex-col gap-1.5">
+                {/* Which branch it is CUT FROM. Was always the repo's HEAD and
+                    never stated, so an agent silently inherited whatever the
+                    main checkout was on (T177). */}
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-[10px] text-text-muted">from</span>
+                  <select
+                    value={baseBranch || branchInfo?.current || ""}
+                    onChange={(e) => setBaseBranch(e.target.value)}
+                    className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none focus:border-accent/50"
+                  >
+                    {(branchInfo?.branches ?? []).map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                        {b === branchInfo?.current ? " (current)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-10 shrink-0 text-[10px] text-text-muted">new</span>
+                  <input
+                    type="text"
+                    value={branchName}
+                    onChange={(e) => {
+                      setBranchName(e.target.value);
+                      setBranchEdited(true);
+                    }}
+                    placeholder="exegol/branch-name"
+                    className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
+                  />
+                </div>
               </div>
             )}
           </div>
