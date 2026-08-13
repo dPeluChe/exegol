@@ -10,9 +10,18 @@ Electron 41 · React 18 · TailwindCSS 4 · Rust (napi-rs + memchr) · libSQL ·
 
 ```bash
 bun run dev              # Build Rust + start Electron (full pipeline)
+bun run dev:fresh        # + restart the PTY sidecar (see below)
 bun run dev:ui           # Electron only (JS fallback, faster)
 bun run build:rust       # Build Rust native module only
 bun run rebuild:native   # Rust + rebuild node-pty for Electron
+
+# The PTY sidecar is DETACHED: it survives app restarts on purpose, which is
+# what keeps agent terminals alive across a reload. It therefore also survives
+# a rebuild — plain `dev` recompiles the bundle but the running process keeps
+# the old code. Use `dev:fresh` after touching anything the sidecar bundles:
+#   terminal/pty-sidecar-entry.ts, pty-sidecar-eviction.ts, pty-sidecar-flusher.ts,
+#   pty-sidecar-protocol.ts, ring-buffer.ts
+# It kills every live PTY, so agents come back as "crashed" with resume cards.
 
 # Lint + typecheck:
 npx @biomejs/biome check apps/ packages/shared/src/ packages/ui/src/
