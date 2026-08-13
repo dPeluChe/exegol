@@ -22,8 +22,15 @@ export function getWorktreeName(branchName: string): string {
   return branchName.replace(/\//g, "-");
 }
 
+/** Where this project's worktrees live. Outside the repo on purpose: next to
+ *  the checkout they would need gitignore entries in every repo, and a stray
+ *  one would look like project content. */
+export function worktreeRootFor(projectName: string, rootKind: RootKind = "worktrees"): string {
+  return join(homedir(), ".exegol", rootKind, slugifyProjectName(projectName));
+}
+
 function buildTargetPath(rootKind: RootKind, projectName: string, worktreeName: string): string {
-  return join(homedir(), ".exegol", rootKind, slugifyProjectName(projectName), worktreeName);
+  return join(worktreeRootFor(projectName, rootKind), worktreeName);
 }
 
 function withNumericSuffix(branchName: string, attempt: number): string {

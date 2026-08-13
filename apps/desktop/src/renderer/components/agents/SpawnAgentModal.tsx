@@ -167,6 +167,14 @@ export function SpawnAgentModal({
     });
   }, []);
 
+  // Worktrees live under ~/.exegol, never beside the checkout: next to it they
+  // would need a gitignore entry in every repo and a stray one would read as
+  // project content.
+  const worktreeRoot = (project as { worktreeRoot?: string } | undefined)?.worktreeRoot;
+  const workingPath = useWorktree
+    ? `${worktreeRoot ?? "…"}/${(branchName || "branch").replace(/\//g, "-")}`
+    : (project?.path ?? "");
+
   const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
   const yoloFlag = YOLO_FLAGS[selectedProviderId];
   const resumeFlag = selectedProvider?.capabilities?.resumeFlag;
@@ -549,15 +557,16 @@ export function SpawnAgentModal({
               ))}
             </div>
 
-            {/* The path is shown, never edited — only the branch is yours to
-                name. Knowing where the work lands beats being able to move it. */}
+            {/* WHERE the agent will actually run — the project checkout, or the
+                Exegol-owned worktree root, which is not the same directory. Shown,
+                never edited: only the branch is yours to name. */}
             <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
               <span className="shrink-0">Path</span>
-              <code title={project?.path ?? ""}>{tailPath(project?.path)}</code>
-              {project?.path && (
+              <code title={workingPath}>{tailPath(workingPath)}</code>
+              {workingPath && (
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard.writeText(project.path)}
+                  onClick={() => navigator.clipboard.writeText(workingPath)}
                   title="Copy full path"
                   className="text-text-muted hover:text-text-secondary"
                 >

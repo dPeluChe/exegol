@@ -7,7 +7,7 @@ import { z } from "zod";
 const execFileAsync = promisify(execFile);
 
 import { projectCreateSchema } from "@exegol/shared";
-import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
+import { getWorktreeName, removeManagedWorktree, worktreeRootFor } from "../../agents/worktrees";
 import {
   createProject,
   deleteProject,
@@ -55,7 +55,12 @@ export const projectRouter = router({
   // Returns null (not throws) when project not found: stale persisted
   // activeProjectId is a normal state to recover from, not an error.
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    return getProject(ctx.db, input.id) ?? null;
+    const project = getProject(ctx.db, input.id);
+    if (!project) return null;
+    // T177: the launch modal shows where an agent will actually work, and for a
+    // worktree that is NOT the project path. Computed here so the renderer never
+    // reimplements the slug rule.
+    return { ...project, worktreeRoot: worktreeRootFor(project.name) };
   }),
 
   create: publicProcedure.input(projectCreateSchema).mutation(async ({ ctx, input }) => {
