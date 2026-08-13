@@ -92,6 +92,8 @@ export interface ExegolToolCallParams {
   tool: string;
   args: Record<string, unknown>;
   token?: string;
+  /** Shim's parent pid — disambiguates agents that share a config file. */
+  ppid?: number;
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────────────

@@ -23,7 +23,7 @@ function fakeSocket(): { socket: Socket; responses: JsonRpcResponse[] } {
 
 async function call(
   db: Database.Database,
-  params: { tool: string; args: Record<string, unknown>; token?: string },
+  params: { tool: string; args: Record<string, unknown>; token?: string; ppid?: number },
   method = "call_tool",
 ): Promise<JsonRpcResponse> {
   const { socket, responses } = fakeSocket();
@@ -139,6 +139,30 @@ describe("exegol MCP server token lifecycle", () => {
       token,
     });
     expect(res.error?.code).toBe(-32001);
+  });
+
+  it("resolves identity by parent process when two agents share a config file", async () => {
+    // opencode/gemini/devin write ONE config per directory, so a sibling
+    // session's token can be the one on disk. The OS knows who the caller is.
+    db.prepare(
+      `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, pid, access_mode)
+       VALUES ('twin', 'p1', 'opencode', 'running', 'second opencode', unixepoch(), 4242, 'write')`,
+    ).run();
+    const tokenOfSibling = registerAgentMcpToken("writer", "p1");
+
+    const res = await call(db, {
+      tool: "memory_save",
+      args: { fact: "written by the twin", category: "convention" },
+      token: tokenOfSibling,
+      ppid: 4242,
+    });
+
+    expect(res.error).toBeUndefined();
+    const row = db
+      .prepare("SELECT source_agent_id FROM memories WHERE content = 'written by the twin'")
+      .get() as { source_agent_id?: string } | undefined;
+    expect(row?.source_agent_id).toBe("twin");
+    revokeAgentMcpToken("writer");
   });
 
   it("rejects a token whose agent row is gone (leaked/stale secret is inert)", async () => {

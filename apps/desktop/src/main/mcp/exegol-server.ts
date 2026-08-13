@@ -80,9 +80,40 @@ export function revokeAgentMcpToken(agentId: string): void {
   tokensByAgent.delete(agentId);
 }
 
+/**
+ * T166: which agent is this shim? The token authenticates, but providers whose
+ * MCP config is per-DIRECTORY (opencode, gemini, devin) share one file, so two
+ * sessions in the same repo — a legitimate setup: same code, different models —
+ * would present the same token and collapse into one identity.
+ *
+ * The OS knows better. Interactive CLIs are `exec`d, so the PTY process IS the
+ * CLI, and the shim it spawns has that pid as its parent. Matching ppid against
+ * the live agents' pids resolves the ambiguity. It is a DISAMBIGUATOR, never a
+ * credential: a caller still needs a token we minted, and we only switch to the
+ * ppid identity within the same project.
+ */
+function resolveByParentPid(
+  db: Database.Database,
+  ppid: number | undefined,
+  projectId: string,
+): string | null {
+  if (!ppid) return null;
+  try {
+    const row = db
+      .prepare(
+        "SELECT id FROM agents WHERE pid = ? AND project_id = ? AND status IN ('idle','spawning','running','waiting_input','paused') LIMIT 1",
+      )
+      .get(ppid, projectId) as { id?: string } | undefined;
+    return row?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveContext(
   db: Database.Database,
   token: string | undefined,
+  ppid?: number,
 ): ExegolToolContext | null {
   if (!token) return null;
   const entry = tokensBySecret.get(token);
@@ -103,6 +134,16 @@ function resolveContext(
     }
   } catch (err) {
     logger.warn("[ExegolMcp] Failed to read agent access mode (defaulting to read):", err);
+  }
+
+  // Prefer the OS-derived identity when it disagrees: the token may come from a
+  // config file a sibling session overwrote.
+  const byPid = resolveByParentPid(db, ppid, entry.projectId);
+  if (byPid && byPid !== entry.agentId) {
+    logger.info(
+      `[ExegolMcp] Token maps to ${entry.agentId} but the caller's parent process belongs to ${byPid} — trusting the process tree (shared config file)`,
+    );
+    return { agentId: byPid, projectId: entry.projectId, accessMode };
   }
 
   return { agentId: entry.agentId, projectId: entry.projectId, accessMode };
@@ -164,8 +205,8 @@ export async function handleRequest(
   // T163 stale-shim fix: shims proxy tools/list here so tool definitions are
   // always the RUNNING app's — a shim spawned weeks ago still lists new tools.
   if (req.method === "list_tools") {
-    const params = req.params as { token?: string } | undefined;
-    const context = resolveContext(db, params?.token);
+    const params = req.params as { token?: string; ppid?: number } | undefined;
+    const context = resolveContext(db, params?.token, params?.ppid);
     record({
       kind: "call",
       tool: "tools/list",
@@ -186,7 +227,7 @@ export async function handleRequest(
   }
 
   const params = req.params as ExegolToolCallParams;
-  const context = resolveContext(db, params.token);
+  const context = resolveContext(db, params.token, params.ppid);
   if (!context) {
     record({
       kind: "error",

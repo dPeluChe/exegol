@@ -262,7 +262,7 @@ function callSocket(
 
 async function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
   try {
-    return await callSocket("call_tool", { tool, args, token }, tool);
+    return await callSocket("call_tool", { tool, args, token, ppid: process.ppid }, tool);
   } catch (err) {
     // A stale token (app restarted, config rewritten) is permanent for the rest
     // of the session unless we re-read it: the file on disk may already hold a
@@ -272,7 +272,7 @@ async function callTool(tool: string, args: Record<string, unknown>): Promise<un
       if (fresh && fresh !== token) {
         token = fresh;
         process.stderr.write("[exegol-mcp-shim] token refreshed from disk, retrying\n");
-        return callSocket("call_tool", { tool, args, token }, tool);
+        return callSocket("call_tool", { tool, args, token, ppid: process.ppid }, tool);
       }
     }
     throw err;
@@ -315,7 +315,7 @@ function handleClientMessage(
         writeToClient(msg.id, framed, { tools: fallback() });
         return;
       }
-      callSocket("list_tools", { token })
+      callSocket("list_tools", { token, ppid: process.ppid })
         .then((result) => {
           const tools = (result as { tools?: unknown[] } | null)?.tools;
           writeToClient(msg.id as number, framed, { tools: tools?.length ? tools : fallback() });

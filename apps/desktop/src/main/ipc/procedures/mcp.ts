@@ -60,11 +60,11 @@ const EXEGOL_MCP_PROVIDER_WIRING = [
   {
     provider: "Antigravity",
     cliType: "agy",
-    config: "plugin system — pending (agy plugin install)",
-    tokenVia: "n/a — receives messages via PTY injection only",
-    status: "receive-only",
-    inspectCmd: "agy plugin list",
-    docsUrl: null,
+    config: "<cwd>/.agents/mcp_config.json",
+    tokenVia: "config env",
+    status: "wired",
+    inspectCmd: "/mcp (inside the session)",
+    docsUrl: "https://antigravity.google/docs/cli/mcp",
   },
   {
     provider: "Other CLIs",

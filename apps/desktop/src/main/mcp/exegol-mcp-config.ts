@@ -73,16 +73,14 @@ export function removePerAgentMcpConfig(agentId: string): void {
 
 /** T163: which config each provider reads. Everything else falls back to the
  *  `.mcp.json` convention (Claude Code, Cursor, Windsurf all discover it). */
-type McpConfigFlavor = "mcp-json" | "opencode" | "gemini" | "codex-global" | "devin";
+type McpConfigFlavor = "mcp-json" | "opencode" | "gemini" | "codex-global" | "devin" | "agy";
 
 function flavorForCli(cliType: string): McpConfigFlavor {
   if (cliType === "opencode") return "opencode";
   if (cliType === "gemini") return "gemini";
   if (cliType === "codex") return "codex-global";
   if (cliType === "devin") return "devin";
-  // agy (Antigravity CLI) has NO MCP support as of 2026-08 (no mcp subcommand,
-  // no config surface) — it can still RECEIVE agent messages via PTY injection.
-  // Recheck on agy updates. Everything else gets the .mcp.json convention.
+  if (cliType === "agy") return "agy";
   return "mcp-json";
 }
 
@@ -256,6 +254,40 @@ function writeDevinConfig(
   });
 }
 
+/** agy (Antigravity CLI) reads `<cwd>/.agents/mcp_config.json` — workspace-local,
+ *  standard mcpServers shape (docs: antigravity.google/docs/cli/mcp). It has no
+ *  `mcp add` command: the file is the interface, and `/mcp` reloads it. */
+function writeAgyConfig(
+  cwd: string,
+  shimPath: string,
+  token: string,
+  accessMode: ExegolAccessMode,
+): void {
+  const configPath = join(cwd, ".agents", "mcp_config.json");
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
+  const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
+  const updated: McpJsonFile = {
+    ...existing,
+    mcpServers: {
+      ...existing.mcpServers,
+      [EXEGOL_SERVER_KEY]: {
+        command: process.execPath,
+        args: [shimPath],
+        env: {
+          ELECTRON_RUN_AS_NODE: "1",
+          EXEGOL_MCP_TOKEN: token,
+          EXEGOL_ACCESS_MODE: accessMode,
+        },
+      },
+    },
+  };
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
+}
+
 const CODEX_MARK_START = "# >>> exegol managed — do not edit >>>";
 const CODEX_MARK_END = "# <<< exegol managed <<<";
 
@@ -307,6 +339,9 @@ export function writeAgentMcpConfigFor(
       case "devin":
         writeDevinConfig(cwd, shimPath, token, accessMode);
         return;
+      case "agy":
+        writeAgyConfig(cwd, shimPath, token, accessMode);
+        return;
       case "gemini":
         writeGeminiConfig(cwd, shimPath, token, accessMode);
         return;
@@ -355,7 +390,13 @@ export function readAgentMcpToken(cwd: string): string | null {
     EXEGOL_SERVER_KEY
   ] as { env?: Record<string, unknown> } | undefined;
   const t4 = devin?.env?.EXEGOL_MCP_TOKEN;
-  return typeof t4 === "string" && t4.length > 0 ? t4 : null;
+  if (typeof t4 === "string" && t4.length > 0) return t4;
+
+  const agy = readMcpJson(join(cwd, ".agents", "mcp_config.json"))?.mcpServers?.[
+    EXEGOL_SERVER_KEY
+  ] as { env?: Record<string, unknown> } | undefined;
+  const t5 = agy?.env?.EXEGOL_MCP_TOKEN;
+  return typeof t5 === "string" && t5.length > 0 ? t5 : null;
 }
 
 /** Best-effort removal of the exegol entry on agent exit — the token is
@@ -367,6 +408,7 @@ export function removeAgentMcpConfig(cwd: string): void {
   removeFromJsonConfig(join(cwd, "opencode.json"), "mcp");
   removeFromJsonConfig(join(cwd, ".gemini", "settings.json"), "mcpServers");
   removeFromJsonConfig(join(cwd, ".devin", "mcp_config.local.json"), "mcpServers");
+  removeFromJsonConfig(join(cwd, ".agents", "mcp_config.json"), "mcpServers");
 }
 
 function removeFromJsonConfig(configPath: string, sectionKey: string): void {
