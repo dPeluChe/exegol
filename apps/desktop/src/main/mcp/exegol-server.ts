@@ -12,6 +12,7 @@
  * without a live token gets -32002 on every call.
  */
 
+import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
@@ -40,16 +41,29 @@ interface TokenEntry {
   projectId: string;
 }
 
-const tokensBySecret = new Map<string, TokenEntry>();
+// A token may bind MORE THAN ONE agent: providers whose MCP config is
+// per-DIRECTORY (opencode, gemini, devin, agy) share one file, so two sessions
+// in the same repo present the same secret. Refusing the second binding left
+// that agent permanently unauthorized; picking one silently made `self` flip
+// between them mid-session (Juanito, 2026-08-13: "self.name = paco … minutos
+// después estaba invertido"). We keep every binding and disambiguate below —
+// and when we cannot, we say so instead of guessing.
+const tokensBySecret = new Map<string, TokenEntry[]>();
 const tokensByAgent = new Map<string, string>();
+
+function bindToken(token: string, entry: TokenEntry): void {
+  const entries = tokensBySecret.get(token) ?? [];
+  if (!entries.some((e) => e.agentId === entry.agentId)) entries.push(entry);
+  tokensBySecret.set(token, entries);
+  tokensByAgent.set(entry.agentId, token);
+}
 
 /** Mint (or reuse) the MCP token for an agent at spawn time. */
 export function registerAgentMcpToken(agentId: string, projectId: string): string {
   const existing = tokensByAgent.get(agentId);
   if (existing) return existing;
   const token = randomBytes(24).toString("hex");
-  tokensBySecret.set(token, { agentId, projectId });
-  tokensByAgent.set(agentId, token);
+  bindToken(token, { agentId, projectId });
   return token;
 }
 
@@ -57,40 +71,51 @@ export function registerAgentMcpToken(agentId: string, projectId: string): strin
  *  The reattached agent's shim/.mcp.json still hold the old secret — minting
  *  a new one would orphan them; restoring keeps identity continuous. */
 export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): boolean {
-  // Two agents sharing a cwd read the SAME token file; binding it twice would
-  // let one impersonate the other (and one exit would revoke both).
-  const owner = tokensBySecret.get(token);
-  if (owner && owner.agentId !== agentId) {
-    logger.warn(
-      `[ExegolMcp] Refusing to re-arm a token already bound to ${owner.agentId} for ${agentId} — both agents share a cwd; give one a worktree`,
-    );
-    return false;
-  }
-  tokensBySecret.set(token, { agentId, projectId });
-  tokensByAgent.set(agentId, token);
+  bindToken(token, { agentId, projectId });
   return true;
 }
 
 /** Revoke on agent exit — a leaked .mcp.json must not stay a live credential. */
 export function revokeAgentMcpToken(agentId: string): void {
   const token = tokensByAgent.get(agentId);
-  // Only drop the secret if it still maps to THIS agent — otherwise a shared
-  // token would kill a live sibling's MCP access.
-  if (token && tokensBySecret.get(token)?.agentId === agentId) tokensBySecret.delete(token);
+  if (token) {
+    // Drop only THIS agent's binding: a shared token must keep working for the
+    // siblings still alive.
+    const rest = (tokensBySecret.get(token) ?? []).filter((e) => e.agentId !== agentId);
+    if (rest.length === 0) tokensBySecret.delete(token);
+    else tokensBySecret.set(token, rest);
+  }
   tokensByAgent.delete(agentId);
 }
 
+/** One `ps` hop. The shim is usually a direct child of the CLI (hop 0 needs no
+ *  `ps` at all), but some CLIs interpose a wrapper — walking a couple of levels
+ *  finds the PTY process anyway. Kept short: this blocks the main process. */
+function parentOf(pid: number): number | null {
+  try {
+    const out = execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], {
+      encoding: "utf-8",
+      timeout: 500,
+    });
+    const parsed = Number.parseInt(out.trim(), 10);
+    return Number.isFinite(parsed) && parsed > 1 ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+const PID_WALK_MAX_HOPS = 4;
+
 /**
  * T166: which agent is this shim? The token authenticates, but providers whose
- * MCP config is per-DIRECTORY (opencode, gemini, devin) share one file, so two
- * sessions in the same repo — a legitimate setup: same code, different models —
- * would present the same token and collapse into one identity.
+ * MCP config is per-DIRECTORY (opencode, gemini, devin, agy) share one file, so
+ * two sessions in the same repo — a legitimate setup: same code, different
+ * models — present the same token.
  *
  * The OS knows better. Interactive CLIs are `exec`d, so the PTY process IS the
- * CLI, and the shim it spawns has that pid as its parent. Matching ppid against
- * the live agents' pids resolves the ambiguity. It is a DISAMBIGUATOR, never a
- * credential: a caller still needs a token we minted, and we only switch to the
- * ppid identity within the same project.
+ * CLI, and the shim it spawns descends from it. It is a DISAMBIGUATOR, never a
+ * credential: a caller still needs a token we minted, and a pid match only
+ * counts inside that token's own project.
  */
 function resolveByParentPid(
   db: Database.Database,
@@ -98,55 +123,128 @@ function resolveByParentPid(
   projectId: string,
 ): string | null {
   if (!ppid) return null;
+  let pid: number | null = ppid;
+  for (let hop = 0; pid !== null && hop < PID_WALK_MAX_HOPS; hop++) {
+    try {
+      const row = db
+        .prepare(
+          "SELECT id FROM agents WHERE pid = ? AND project_id = ? AND status IN ('idle','spawning','running','waiting_input','paused') LIMIT 1",
+        )
+        .get(pid, projectId) as { id?: string } | undefined;
+      if (row?.id) return row.id;
+    } catch {
+      return null;
+    }
+    pid = parentOf(pid);
+  }
+  return null;
+}
+
+function readLiveAccessMode(db: Database.Database, agentId: string): ExegolAccessMode | null {
   try {
-    const row = db
-      .prepare(
-        "SELECT id FROM agents WHERE pid = ? AND project_id = ? AND status IN ('idle','spawning','running','waiting_input','paused') LIMIT 1",
-      )
-      .get(ppid, projectId) as { id?: string } | undefined;
-    return row?.id ?? null;
-  } catch {
-    return null;
+    const row = db.prepare("SELECT access_mode, status FROM agents WHERE id = ?").get(agentId) as
+      | { access_mode?: string; status?: string }
+      | undefined;
+    // A token whose agent is gone must not authorize anything, even if the
+    // secret is still on disk somewhere (leaked config, committed file).
+    if (!row || !LIVE_STATUSES.has(row.status as AgentStatus)) return null;
+    return row.access_mode === "write" || row.access_mode === "plan" ? row.access_mode : "read";
+  } catch (err) {
+    logger.warn("[ExegolMcp] Failed to read agent access mode (defaulting to read):", err);
+    return "read";
   }
 }
+
+/**
+ * Per-connection identity. Each CLI runs its own shim process, hence its own
+ * socket — so once we know who is on the other end, that answer holds for the
+ * connection's life. Without this pin, resolution re-raced on every call and an
+ * agent saw its own name and id change between two consecutive `agents_list`
+ * calls, which is how a reply came back addressed to the sender itself.
+ */
+export interface McpConnectionState {
+  pinnedAgentId?: string;
+}
+
+type Resolution =
+  | { ok: true; context: ExegolToolContext }
+  | { ok: false; code: number; message: string };
 
 function resolveContext(
   db: Database.Database,
   token: string | undefined,
   ppid?: number,
-): ExegolToolContext | null {
-  if (!token) return null;
-  const entry = tokensBySecret.get(token);
-  if (!entry) return null;
+  conn?: McpConnectionState,
+): Resolution {
+  if (!token) {
+    return { ok: false, code: -32002, message: "Unauthorized: no EXEGOL_MCP_TOKEN sent" };
+  }
+  const bound = tokensBySecret.get(token);
+  if (!bound?.length) {
+    return {
+      ok: false,
+      code: -32002,
+      message: "Unauthorized: missing or revoked EXEGOL_MCP_TOKEN",
+    };
+  }
 
-  // Access mode is re-read from the DB per call (T58 source of truth) —
-  // fail-closed to "read" when the row is missing or the column is unset.
-  let accessMode: ExegolAccessMode = "read";
-  try {
-    const row = db
-      .prepare("SELECT access_mode, status FROM agents WHERE id = ?")
-      .get(entry.agentId) as { access_mode?: string; status?: string } | undefined;
-    // A token whose agent is gone must not authorize anything, even if the
-    // secret is still on disk somewhere (leaked config, committed file).
-    if (!row || !LIVE_STATUSES.has(row.status as AgentStatus)) return null;
-    if (row.access_mode === "write" || row.access_mode === "plan") {
-      accessMode = row.access_mode;
+  // Sticky first: a pinned identity only expires when that agent stops being live.
+  if (conn?.pinnedAgentId) {
+    const entry = bound.find((e) => e.agentId === conn.pinnedAgentId);
+    const accessMode = entry && readLiveAccessMode(db, entry.agentId);
+    if (entry && accessMode) {
+      return {
+        ok: true,
+        context: { agentId: entry.agentId, projectId: entry.projectId, accessMode },
+      };
     }
-  } catch (err) {
-    logger.warn("[ExegolMcp] Failed to read agent access mode (defaulting to read):", err);
+    conn.pinnedAgentId = undefined;
   }
 
-  // Prefer the OS-derived identity when it disagrees: the token may come from a
-  // config file a sibling session overwrote.
-  const byPid = resolveByParentPid(db, ppid, entry.projectId);
-  if (byPid && byPid !== entry.agentId) {
-    logger.info(
-      `[ExegolMcp] Token maps to ${entry.agentId} but the caller's parent process belongs to ${byPid} — trusting the process tree (shared config file)`,
-    );
-    return { agentId: byPid, projectId: entry.projectId, accessMode };
+  const live = bound.filter((e) => readLiveAccessMode(db, e.agentId) !== null);
+  if (live.length === 0) {
+    return {
+      ok: false,
+      code: -32002,
+      message: "Unauthorized: this token's session is no longer running",
+    };
   }
 
-  return { agentId: entry.agentId, projectId: entry.projectId, accessMode };
+  // The OS knows which session actually spawned this shim. Interactive CLIs are
+  // `exec`d, so the PTY process IS the CLI and the shim descends from it. This
+  // is a DISAMBIGUATOR, never a credential — a valid token is still required,
+  // and we only accept a pid match inside the token's own project.
+  for (const projectId of new Set(live.map((e) => e.projectId))) {
+    const byPid = resolveByParentPid(db, ppid, projectId);
+    if (!byPid) continue;
+    const accessMode = readLiveAccessMode(db, byPid);
+    if (!accessMode) continue;
+    if (conn) conn.pinnedAgentId = byPid;
+    if (!live.some((e) => e.agentId === byPid)) {
+      logger.info(
+        `[ExegolMcp] Caller's process tree belongs to ${byPid}, which is not the token's own binding — trusting the process tree (shared config file)`,
+      );
+    }
+    return { ok: true, context: { agentId: byPid, projectId, accessMode } };
+  }
+
+  const only = live[0];
+  if (live.length === 1 && only) {
+    const accessMode = readLiveAccessMode(db, only.agentId) ?? "read";
+    if (conn) conn.pinnedAgentId = only.agentId;
+    return { ok: true, context: { agentId: only.agentId, projectId: only.projectId, accessMode } };
+  }
+
+  // Several live sessions share this token and the process tree didn't settle
+  // it. Guessing here is what swapped two agents' identities — refuse instead.
+  return {
+    ok: false,
+    code: -32003,
+    message:
+      `Ambiguous identity: ${live.length} live sessions share this MCP config file ` +
+      `(${live.map((e) => e.agentId).join(", ")}) and Exegol could not tell which one is calling. ` +
+      "Ask the user to give one of them its own worktree, or use a CLI that supports per-session MCP config.",
+  };
 }
 
 // ─── Activity log (T163) ─────────────────────────────────────────────────────
@@ -201,20 +299,23 @@ export async function handleRequest(
   db: Database.Database,
   socket: Socket,
   req: JsonRpcRequest,
+  conn?: McpConnectionState,
 ): Promise<void> {
   // T163 stale-shim fix: shims proxy tools/list here so tool definitions are
   // always the RUNNING app's — a shim spawned weeks ago still lists new tools.
   if (req.method === "list_tools") {
     const params = req.params as { token?: string; ppid?: number } | undefined;
-    const context = resolveContext(db, params?.token, params?.ppid);
+    const resolved = resolveContext(db, params?.token, params?.ppid, conn);
     record({
       kind: "call",
       tool: "tools/list",
-      agentId: context?.agentId,
-      detail: context ? undefined : "no valid token (listing read-mode tools)",
+      agentId: resolved.ok ? resolved.context.agentId : undefined,
+      detail: resolved.ok ? undefined : "no valid identity (listing read-mode tools)",
     });
     socket.write(
-      encodeResponse(req.id, { tools: getToolDefsForAccessMode(context?.accessMode ?? "read") }),
+      encodeResponse(req.id, {
+        tools: getToolDefsForAccessMode(resolved.ok ? resolved.context.accessMode : "read"),
+      }),
     );
     return;
   }
@@ -227,23 +328,15 @@ export async function handleRequest(
   }
 
   const params = req.params as ExegolToolCallParams;
-  const context = resolveContext(db, params.token, params.ppid);
-  if (!context) {
-    record({
-      kind: "error",
-      tool: params.tool,
-      detail: params.token
-        ? "unauthorized: token not in registry (agent exited, or app restarted without re-arming)"
-        : "unauthorized: no token sent by the shim",
-    });
+  const resolved = resolveContext(db, params.token, params.ppid, conn);
+  if (!resolved.ok) {
+    record({ kind: "error", tool: params.tool, detail: resolved.message });
     socket.write(
-      encodeResponse(req.id, undefined, {
-        code: -32002,
-        message: "Unauthorized: missing or revoked EXEGOL_MCP_TOKEN",
-      }),
+      encodeResponse(req.id, undefined, { code: resolved.code, message: resolved.message }),
     );
     return;
   }
+  const context = resolved.context;
 
   const startedAt = Date.now();
   try {
@@ -277,8 +370,9 @@ function startListening(db: Database.Database): void {
     // reconnects after an app restart shows up here as silence.
     const connId = ++connectionSeq;
     record({ kind: "connect", detail: `shim #${connId}` });
+    const conn: McpConnectionState = {};
     const feed = createNdjsonBuffer<JsonRpcRequest>((msg) => {
-      handleRequest(db, socket, msg).catch((err) => {
+      handleRequest(db, socket, msg, conn).catch((err) => {
         record({ kind: "error", detail: `unhandled: ${err instanceof Error ? err.message : err}` });
         logger.warn("[ExegolMcp] Unhandled request error:", err);
       });

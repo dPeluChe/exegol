@@ -315,11 +315,12 @@ export function buildPtyInvocation(
       // (the build+review pair) overwrote each other's token and swapped
       // identities (live 2026-08-12). Where the CLI supports per-session MCP
       // config, hand it a private file outside the repo instead.
-      const perAgentConfig =
-        agent.cliType === "claude-code"
-          ? writePerAgentMcpConfig(agent.id, shimPath, mcpToken, accessMode)
-          : null;
-      if (perAgentConfig) {
+      // Written for EVERY provider, even those that never read it: it is also
+      // Exegol's own record of which token belongs to which agent, so reattach
+      // after a restart re-arms each session with its own credential instead of
+      // reading whichever token a sibling last left in the shared cwd file.
+      const perAgentConfig = writePerAgentMcpConfig(agent.id, shimPath, mcpToken, accessMode);
+      if (perAgentConfig && agent.cliType === "claude-code") {
         // No --strict-mcp-config: the user's own servers still load.
         fullCommand = `${fullCommand} --mcp-config ${perAgentConfig}`;
       } else {

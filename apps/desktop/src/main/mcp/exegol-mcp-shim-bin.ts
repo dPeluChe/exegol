@@ -138,7 +138,14 @@ function writeToClient(
 // ─── Unix socket connection to the main process ────────────────────────────
 
 let nextSocketId = 1;
-const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+interface PendingCall {
+  resolve: (v: unknown) => void;
+  reject: (e: Error) => void;
+  /** Did this request actually reach the socket? Decides whether a failure
+   *  means "never ran" or "unknown" — see callSocket. */
+  sent: boolean;
+}
+const pending = new Map<number, PendingCall>();
 const CALL_TIMEOUT_MS = 30_000;
 const RECONNECT_BASE_MS = 1_000;
 // Deliberately well under CALL_TIMEOUT_MS: at a 30s ceiling the first call after
@@ -157,10 +164,16 @@ let reconnectDelay = RECONNECT_BASE_MS;
 let loggedThisOutage = false;
 const outbox: Array<{ id: number; payload: string }> = [];
 
-function rejectAllPending(reason: string): void {
+function rejectAllPending(): void {
   for (const [id, waiter] of pending) {
     pending.delete(id);
-    waiter.reject(new Error(reason));
+    waiter.reject(
+      new Error(
+        waiter.sent
+          ? "Exegol MCP disconnected while your call was in flight — it may or may not have run. Check message_status, or retry with the same message_id."
+          : "Exegol MCP disconnected (the app is restarting or was closed) — the call was NOT executed; retry in a moment",
+      ),
+    );
   }
 }
 
@@ -182,7 +195,10 @@ function connectSocket(): void {
     reconnectDelay = RECONNECT_BASE_MS;
     loggedThisOutage = false;
     for (const { id, payload } of outbox.splice(0)) {
-      if (pending.has(id)) sock.write(payload); // drop calls that already timed out
+      const waiter = pending.get(id);
+      if (!waiter) continue; // dropped: the caller already timed out
+      sock.write(payload);
+      waiter.sent = true;
     }
   });
   sock.on(
@@ -208,9 +224,7 @@ function connectSocket(): void {
   sock.on("close", () => {
     if (socket === sock) {
       socket = null;
-      rejectAllPending(
-        "Exegol MCP disconnected (the app is restarting or was closed) — the call was NOT executed; retry in a moment",
-      );
+      rejectAllPending();
     }
     sock.destroy();
     scheduleReconnect();
@@ -229,9 +243,15 @@ function callSocket(
   label = method,
 ): Promise<unknown> {
   const id = nextSocketId++;
+  // Whether the request reached the wire decides what a timeout MEANS: still in
+  // the outbox = definitely not executed; already written = unknown, it may
+  // have run and lost the ack. Reporting the second as the first is what made
+  // an agent re-send a message it had already delivered (2026-08-13).
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    const entry: PendingCall = { resolve, reject, sent: false };
+    pending.set(id, entry);
     const timer = setTimeout(() => {
+      const sentOnWire = entry.sent;
       if (pending.delete(id)) {
         // Drop the queued payload too, or a reconnect would replay a call the
         // caller already gave up on.
@@ -239,9 +259,9 @@ function callSocket(
         if (idx !== -1) outbox.splice(idx, 1);
         reject(
           new Error(
-            socketWritable()
-              ? `Exegol MCP did not answer "${label}" in 30s (the app is running but the call stalled)`
-              : `Exegol MCP unreachable — is the Exegol app running? ("${label}" was not executed)`,
+            sentOnWire
+              ? `Exegol MCP did not answer "${label}" in 30s. The call REACHED the app, so it may or may not have run — do NOT blindly retry: check with message_status, or retry with the same message_id (retries with an identical message_id are safe).`
+              : `Exegol MCP unreachable — is the Exegol app running? ("${label}" was NOT executed; retrying is safe.)`,
           ),
         );
       }
@@ -250,6 +270,7 @@ function callSocket(
     const payload = encodeRequest(id, method, params);
     if (socketWritable()) {
       socket?.write(payload);
+      entry.sent = true;
       return;
     }
     if (outbox.length >= MAX_OUTBOX) {

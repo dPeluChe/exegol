@@ -5,6 +5,7 @@ import { runMigrations } from "../db/migrations";
 import type { JsonRpcResponse } from "./exegol-protocol";
 import {
   handleRequest,
+  type McpConnectionState,
   registerAgentMcpToken,
   restoreAgentMcpToken,
   revokeAgentMcpToken,
@@ -25,9 +26,10 @@ async function call(
   db: Database.Database,
   params: { tool: string; args: Record<string, unknown>; token?: string; ppid?: number },
   method = "call_tool",
+  conn?: McpConnectionState,
 ): Promise<JsonRpcResponse> {
   const { socket, responses } = fakeSocket();
-  await handleRequest(db, socket, { jsonrpc: "2.0", id: 1, method, params });
+  await handleRequest(db, socket, { jsonrpc: "2.0", id: 1, method, params }, conn);
   expect(responses).toHaveLength(1);
   const res = responses[0];
   if (!res) throw new Error("no response written");
@@ -186,5 +188,60 @@ describe("exegol MCP server token lifecycle", () => {
     const token = registerAgentMcpToken("writer", "p1");
     const res = await call(db, { tool: "rm_rf", args: {}, token });
     expect(res.error?.code).toBe(-32601);
+  });
+});
+
+// The identity bug that swapped two sessions mid-conversation: a shared config
+// file binds one token to several agents, and resolving it per call let `self`
+// flip between them ("self.name = paco … minutos después estaba invertido").
+describe("identity is stable and never guessed", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = setupDb();
+    for (const id of ["writer", "reader", "twin"]) revokeAgentMcpToken(id);
+    db.prepare(
+      `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, pid, access_mode)
+       VALUES ('twin', 'p1', 'opencode', 'running', 'second opencode', unixepoch(), 4242, 'write')`,
+    ).run();
+  });
+
+  /** Two sessions in one directory read the same file, hence the same secret. */
+  function shareOneToken(): string {
+    const token = registerAgentMcpToken("writer", "p1");
+    restoreAgentMcpToken("twin", "p1", token);
+    return token;
+  }
+
+  it("refuses to pick an identity when a shared token is ambiguous", async () => {
+    const res = await call(db, { tool: "agents_list", args: {}, token: shareOneToken() });
+    expect(res.error?.code).toBe(-32003);
+    expect(res.error?.message).toContain("Ambiguous identity");
+  });
+
+  it("pins the process-tree identity for the rest of the connection", async () => {
+    const token = shareOneToken();
+    const conn = {};
+
+    const first = await call(
+      db,
+      { tool: "agents_list", args: {}, token, ppid: 4242 },
+      "call_tool",
+      conn,
+    );
+    expect((first.result as { self: { id: string } }).self.id).toBe("twin");
+
+    // Same connection, no ppid this time: identity must NOT re-race.
+    const second = await call(db, { tool: "agents_list", args: {}, token }, "call_tool", conn);
+    expect((second.result as { self: { id: string } }).self.id).toBe("twin");
+  });
+
+  it("keeps a shared token working for the siblings still alive", async () => {
+    const token = shareOneToken();
+    revokeAgentMcpToken("twin"); // one session exits
+
+    const res = await call(db, { tool: "agents_list", args: {}, token });
+    expect(res.error).toBeUndefined();
+    expect((res.result as { self: { id: string } }).self.id).toBe("writer");
   });
 });

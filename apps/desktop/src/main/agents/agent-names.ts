@@ -85,9 +85,18 @@ const NAME_POOL = [
 ] as const;
 
 /**
- * Pick a codename no LIVE agent is using. Uniqueness is fleet-wide, not
- * per-project: `agents_list` and `agent_send` both resolve across projects, so
- * a second "juno" in another repo would be exactly the ambiguity this prevents.
+ * How long a name stays reserved after its session ends. Handing "draco" to a
+ * new session minutes after the old one died sends anything still addressed to
+ * draco — a queued reply, a note in a doc — to the wrong agent. An hour is far
+ * longer than any in-flight exchange.
+ */
+const NAME_COOLDOWN_SECONDS = 3_600;
+
+/**
+ * Pick a codename no LIVE (or recently ended) agent is using. Uniqueness is
+ * fleet-wide, not per-project: `agents_list` and `agent_send` both resolve
+ * across projects, so a second "juno" in another repo would be exactly the
+ * ambiguity this prevents.
  */
 export function pickAgentCodename(db: Database.Database): string {
   const statuses = [...LIVE_STATUSES];
@@ -96,9 +105,11 @@ export function pickAgentCodename(db: Database.Database): string {
     const rows = db
       .prepare(
         `SELECT LOWER(alias) AS alias FROM agents
-         WHERE alias IS NOT NULL AND status IN (${statuses.map(() => "?").join(",")})`,
+         WHERE alias IS NOT NULL
+           AND (status IN (${statuses.map(() => "?").join(",")})
+                OR ended_at > unixepoch() - ?)`,
       )
-      .all(...statuses) as Array<{ alias: string }>;
+      .all(...statuses, NAME_COOLDOWN_SECONDS) as Array<{ alias: string }>;
     taken = new Set(rows.map((r) => r.alias));
   } catch {
     taken = new Set();

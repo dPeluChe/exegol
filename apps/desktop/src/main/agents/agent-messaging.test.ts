@@ -21,6 +21,7 @@ import {
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
   fireAgentLinks,
+  getMessageDeliveryState,
   isEchoingInjection,
   noteAgentHasLink,
   seedAgentLinkCache,
@@ -73,7 +74,9 @@ describe("sendAgentMessage", () => {
     expect(written?.data).toContain("hola a2");
     expect(written?.data).toContain("NOT the user");
     expect(written?.data).toContain("WAITING for your reply");
-    expect(written?.data).toContain('agent_send(target: "a1")');
+    expect(written?.data).toContain('agent_send(target: "a1"');
+    // The framing must authorize collaboration, not just deny authority (T168).
+    expect(written?.data).toContain("pre-authorized");
     expect(written?.data).toContain('from agent "claude-code');
     expect(written?.data.endsWith("\r")).toBe(true);
     expect(written?.data).toContain("\x1b[200~");
@@ -127,7 +130,7 @@ describe("sendAgentMessage", () => {
     ).toThrowError(/yourself/);
     expect(() =>
       sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "ghost", text: "x" }),
-    ).toThrowError(/unknown target/);
+    ).toThrowError(/no live agent/);
     expect(() =>
       sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a3", text: "  " }),
     ).toThrowError(/empty/);
@@ -162,7 +165,7 @@ describe("sendAgentMessage", () => {
 
     sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "ping" });
     expect(ptyMock.writes[0]?.data).toContain('from agent "builder-1"');
-    expect(ptyMock.writes[0]?.data).toContain('agent_send(target: "builder-1")');
+    expect(ptyMock.writes[0]?.data).toContain('agent_send(target: "builder-1"');
   });
 
   it("expects_reply=false renders the closing framing instead", () => {
@@ -385,5 +388,70 @@ describe("sendAgentMessage", () => {
     ptyMock.alive.add("a2");
     deliverPendingAgentMessages("a2");
     expect(ptyMock.writes).toHaveLength(0);
+  });
+});
+
+// T165 — a timed-out call can't tell "never sent" from "sent, ack lost", so a
+// retry must be safe and delivery must be observable instead of inferred.
+describe("delivery is idempotent and observable", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = setupDb();
+    ptyMock.writes.length = 0;
+    ptyMock.alive.clear();
+    for (const id of ["a1", "a2"]) clearAgentMessageQueue(id);
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-13T12:00:00Z"));
+  });
+
+  it("returns the original result for a retry with the same message_id", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    const first = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: "review please",
+      clientKey: "k-1",
+    });
+    const retry = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: "review please",
+      clientKey: "k-1",
+    });
+
+    expect(retry.messageId).toBe(first.messageId);
+    expect(retry.duplicate).toBe(true);
+    // The point: exactly ONE injection and ONE persisted row.
+    expect(ptyMock.writes).toHaveLength(1);
+    expect(messageCount(db)).toBe(1);
+  });
+
+  it("reports delivered / queued-with-position / undeliverable, and hides other agents' traffic", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    const delivered = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "one" });
+    expect(getMessageDeliveryState(delivered.messageId, "a1").state).toBe("delivered");
+
+    // Busy target → queued behind nothing yet, so position 1.
+    db.prepare("UPDATE agents SET status = 'running' WHERE id = 'a2'").run();
+    const queued = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "two" });
+    expect(getMessageDeliveryState(queued.messageId, "a1")).toEqual({
+      state: "queued",
+      queuePosition: 1,
+    });
+
+    // A message id is not a licence to inspect someone else's conversation.
+    expect(getMessageDeliveryState(queued.messageId, "a3").state).toBe("unknown");
+    expect(getMessageDeliveryState("no-such-id", "a1").state).toBe("unknown");
+
+    // Target's session ends before its next turn.
+    clearAgentMessageQueue("a2", db);
+    expect(getMessageDeliveryState(queued.messageId, "a1").state).toBe("undeliverable");
   });
 });
