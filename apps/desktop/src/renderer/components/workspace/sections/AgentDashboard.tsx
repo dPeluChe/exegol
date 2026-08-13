@@ -409,6 +409,9 @@ function AgentCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <SessionAlias agent={agent} />
+            {agent.alias && (
+              <span className="shrink-0 text-[10px] text-text-muted">{agent.cliType}</span>
+            )}
             <span className={cn("flex items-center gap-1 text-[10px]", config.color)}>
               <StatusIcon className="h-3 w-3" />
               {hasUnread ? "Needs input" : config.label}

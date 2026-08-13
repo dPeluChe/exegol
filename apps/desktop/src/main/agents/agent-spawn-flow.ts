@@ -258,11 +258,10 @@ export function buildPtyInvocation(
 
       // T160: resume spawns a NEW agent row — carry the session name over or
       // agent_send targets die on every restart (paco lost his name, 2026-08-12).
+      // Overwrites the codename createAgent just assigned: continuing a session
+      // must keep the name others already address it by.
       if (row?.alias && sourceAgentId !== agent.id) {
-        db.prepare("UPDATE agents SET alias = ? WHERE id = ? AND alias IS NULL").run(
-          row.alias,
-          agent.id,
-        );
+        db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(row.alias, agent.id);
       }
 
       if (row?.resume_command) {
