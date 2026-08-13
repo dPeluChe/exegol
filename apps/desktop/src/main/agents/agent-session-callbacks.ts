@@ -76,11 +76,14 @@ export function applyAgentSignals(
       continue;
     }
     const derived = deriveStatusFromSignal(sig.event);
-    if (derived.turnEnded) noteAgentBoundarySignal(agent.id);
+
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
     if (derived.turnEnded) turnEnded = derived.turnEnded;
     if (derived.needsAttention) needsAttention = true;
+    // A permission prompt ends a turn too — latching on it would let an
+    // attention signal disable the delivery fallback.
+    if (derived.turnEnded && !derived.needsAttention) noteAgentBoundarySignal(agent.id);
 
     const signalEvent: AgentSignalEvent = {
       agentId: agent.id,
@@ -191,7 +194,7 @@ export function createSpawnCallbacks(
   return {
     onData: (data: string) => {
       broadcast("terminal:data", agent.id, data);
-      noteAgentOutput(agent.id, data);
+      noteAgentOutput(agent.id);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 

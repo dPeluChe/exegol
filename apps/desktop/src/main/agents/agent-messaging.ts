@@ -14,7 +14,7 @@ import type Database from "libsql";
 // parallel-runs → spawn-env, which imports this module — cycle at init time.
 import { deleteAgentLink, deleteLinksForAgent, listLinksFrom } from "../db/queries/agent-links";
 import { findLiveAgentsByAlias, getAgent } from "../db/queries/agents";
-import { sendMessage } from "../db/queries/messages";
+import { getMessage, listMessages, markMessageRead, sendMessage } from "../db/queries/messages";
 import { getProject } from "../db/queries/projects";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
@@ -127,10 +127,14 @@ function trackMessage(p: PendingMessage): void {
   });
 }
 
-function markOutcome(p: PendingMessage, outcome: "undeliverable" | "cancelled"): void {
-  const entry = messageState.get(p.messageId);
-  if (entry) entry.outcome = outcome;
-  else messageState.set(p.messageId, { ...p, at: Date.now(), outcome });
+type MessageOutcome = NonNullable<ReturnType<typeof messageState.get>>["outcome"];
+
+/** The one place an outcome is written. A terminal outcome (cancelled /
+ *  undeliverable) is never overwritten — reporting a cancelled message as read
+ *  would be worse than reporting nothing. */
+function setOutcome(messageId: string, outcome: NonNullable<MessageOutcome>): void {
+  const entry = messageState.get(messageId);
+  if (entry && !entry.outcome) entry.outcome = outcome;
 }
 
 // Messages injected into an agent that has not yet closed a turn. The next
@@ -148,10 +152,7 @@ function markConsumed(agentId: string): void {
   const ids = awaitingConsumption.get(agentId);
   if (!ids?.length) return;
   awaitingConsumption.delete(agentId);
-  for (const id of ids) {
-    const entry = messageState.get(id);
-    if (entry && !entry.outcome) entry.outcome = "consumed";
-  }
+  for (const id of ids) setOutcome(id, "consumed");
 }
 
 /**
@@ -178,7 +179,7 @@ export function cancelQueuedMessage(
     };
   }
   const [removed] = queue.splice(idx, 1);
-  if (removed) markOutcome(removed, "cancelled");
+  if (removed) setOutcome(messageId, "cancelled");
   if (queue.length === 0) queues.delete(entry.toAgentId);
   return { cancelled: true, state: "cancelled" };
 }
@@ -189,9 +190,14 @@ function duplicateResult(
   messageId: string,
   fromAgentId: string,
 ): { messageId: string; delivered: boolean; duplicate: true } {
+  const { state } = getMessageDeliveryState(messageId, fromAgentId);
   return {
     messageId,
-    delivered: getMessageDeliveryState(messageId, fromAgentId).state === "delivered",
+    // `consumed` is delivery that ALSO got read. Comparing against "delivered"
+    // alone told a retry the message never landed precisely when it had landed
+    // and been processed — the common case, since a delivered message flips to
+    // consumed at the target's very next boundary.
+    delivered: state === "delivered" || state === "consumed",
     duplicate: true,
   };
 }
@@ -259,7 +265,26 @@ function formatHeader(p: PendingMessage): string {
  */
 const INLINE_BODY_MAX_CHARS = 2_500;
 
-const pendingPull = new Map<string, PendingMessage[]>();
+/**
+ * What a pointer promises the agent it can come and fetch.
+ *
+ * Deliberately NOT the body: `messages.content` already holds it and
+ * `messages.read_at` already models "delivered, not yet read". Keeping a copy
+ * here retained up to 12 KB per message in the main process for as long as the
+ * agent ignored the pointer — and lost it entirely on restart, leaving the
+ * injected "call messages_check" as a promise nothing could honour.
+ * Only the framing that has no column lives here.
+ */
+interface PointerRef {
+  messageId: string;
+  fromAgentId: string;
+  fromLabel: string;
+  replyTarget: string;
+  expectsReply: boolean;
+  inReplyTo: string | null;
+}
+
+const pendingPull = new Map<string, PointerRef[]>();
 
 function formatInjection(p: PendingMessage): string {
   const header = formatHeader(p);
@@ -277,7 +302,10 @@ function formatInjection(p: PendingMessage): string {
  * T172: hand over the bodies this agent was told to come and fetch. Draining is
  * the read receipt — a message pulled here is one the agent has in context.
  */
-export function checkAgentMessages(agentId: string): {
+export function checkAgentMessages(
+  db: Database.Database,
+  agentId: string,
+): {
   messages: Array<{
     messageId: string;
     from: string;
@@ -288,23 +316,50 @@ export function checkAgentMessages(agentId: string): {
     text: string;
   }>;
 } {
-  const pending = pendingPull.get(agentId) ?? [];
+  const refs = pendingPull.get(agentId) ?? [];
   pendingPull.delete(agentId);
-  for (const p of pending) {
-    const entry = messageState.get(p.messageId);
-    if (entry && !entry.outcome) entry.outcome = "consumed";
+
+  // A restart drops the in-memory refs while the pointer stays in the agent's
+  // scrollback. The rows survive, so honour the promise from the table — the
+  // framing is lost, the content is not.
+  const rows =
+    refs.length > 0
+      ? refs.map((r) => ({ ref: r, body: getMessage(db, r.messageId)?.content ?? null }))
+      : listMessages(db, { agentId, unreadOnly: true })
+          .filter((m) => m.toAgentId === agentId)
+          .map((m) => {
+            // System messages have no sender; the framing degrades, not the body.
+            const from = m.fromAgentId ?? "unknown";
+            const label = (m.fromAgentId && getAgent(db, m.fromAgentId)?.alias) || from;
+            return {
+              ref: {
+                messageId: m.id,
+                fromAgentId: from,
+                fromLabel: label,
+                replyTarget: label,
+                expectsReply: true,
+                inReplyTo: null,
+              } satisfies PointerRef,
+              body: m.content,
+            };
+          });
+
+  const messages = [];
+  for (const { ref, body } of rows) {
+    if (body === null) continue; // row gone — nothing to hand over
+    markMessageRead(db, ref.messageId);
+    setOutcome(ref.messageId, "consumed");
+    messages.push({
+      messageId: ref.messageId,
+      from: ref.fromLabel,
+      fromAgentId: ref.fromAgentId,
+      inReplyTo: ref.inReplyTo,
+      expectsReply: ref.expectsReply,
+      replyTarget: ref.replyTarget,
+      text: body,
+    });
   }
-  return {
-    messages: pending.map((p) => ({
-      messageId: p.messageId,
-      from: p.fromLabel,
-      fromAgentId: p.fromAgentId,
-      inReplyTo: p.inReplyTo,
-      expectsReply: p.expectsReply,
-      replyTarget: p.replyTarget,
-      text: p.text,
-    })),
-  };
+  return { messages };
 }
 
 /**
@@ -347,7 +402,16 @@ function injectNow(p: PendingMessage): boolean {
   const isLong = p.text.length > INLINE_BODY_MAX_CHARS;
   if (isLong) {
     // Queue for pull BEFORE formatting, so the pointer's count includes it.
-    pendingPull.set(p.toAgentId, [...(pendingPull.get(p.toAgentId) ?? []), p]);
+    const refs = pendingPull.get(p.toAgentId) ?? [];
+    refs.push({
+      messageId: p.messageId,
+      fromAgentId: p.fromAgentId,
+      fromLabel: p.fromLabel,
+      replyTarget: p.replyTarget,
+      expectsReply: p.expectsReply,
+      inReplyTo: p.inReplyTo,
+    });
+    pendingPull.set(p.toAgentId, refs);
   }
   const body = sanitizeAgentMessage(formatInjection(p));
 
@@ -563,8 +627,8 @@ export function deliverPendingAgentMessages(agentId: string): void {
   if (!next) return;
   if (!injectNow(next)) {
     // PTY gone — drop the queue; the messages stay persisted in the DB.
-    markOutcome(next, "undeliverable");
-    for (const p of queue) markOutcome(p, "undeliverable");
+    setOutcome(next.messageId, "undeliverable");
+    for (const p of queue) setOutcome(p.messageId, "undeliverable");
     queues.delete(agentId);
     logger.warn(
       `[AgentMsg] Target ${agentId} PTY gone — ${queue.length + 1} message(s) undeliverable`,
@@ -582,41 +646,27 @@ export function deliverPendingAgentMessages(agentId: string): void {
 // that has been silent for a few seconds is at its prompt: that's a boundary
 // too, just observed instead of announced.
 const QUIET_MS = 4_000;
+// Long enough that a real boundary signal virtually always wins the race, short
+// enough that a stalled queue is noticed within one coffee sip.
+const BOUNDARY_STALL_MS = 60_000;
 const SWEEP_MS = 2_000;
 const lastOutputAt = new Map<string, number>();
 let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
-// A TUI turns bracketed paste ON when its input widget is mounted and ready,
-// and OFF when it tears down. That makes `ESC[?2004h` a real readiness signal
-// instead of a guess — quiescence only tells us the agent stopped printing,
-// which is also true while it waits on a slow model call. Provider-agnostic:
-// no per-CLI glyph table to maintain (Orca gates on `›` for codex, `❯` for
-// grok, and has to revoke the latter because starship uses the same glyph).
-const PASTE_ON = "\x1b[?2004h";
-const PASTE_OFF = "\x1b[?2004l";
-const composerReady = new Map<string, boolean>();
-
 /** Called from the PTY data callback — cheap, one Map write per chunk. */
-export function noteAgentOutput(agentId: string, data?: string): void {
+export function noteAgentOutput(agentId: string): void {
   lastOutputAt.set(agentId, Date.now());
-  if (!data) return;
-  // Last one wins within a chunk: a redraw can toggle it off and back on.
-  const on = data.lastIndexOf(PASTE_ON);
-  const off = data.lastIndexOf(PASTE_OFF);
-  if (on === -1 && off === -1) return;
-  composerReady.set(agentId, on > off);
-}
-
-/** Unknown (never observed) is NOT "not ready" — a provider that never emits
- *  the sequence must still receive messages, via quiescence alone. */
-function composerNotReady(agentId: string): boolean {
-  return composerReady.get(agentId) === false;
 }
 
 // Agents whose provider announces turn boundaries deterministically (T123
 // hooks / OSC). For them the quiescence fallback is not a safety net but a
 // RACE: codex thinking for >4s with no output looked idle, so a message landed
 // mid-generation — exactly what boundary delivery exists to prevent.
+//
+// It only DELAYS the fallback, never cancels it (see BOUNDARY_STALL_MS): a
+// safety net you can switch off permanently is not a safety net, and there are
+// real paths where the announced boundary never arrives — a permission prompt
+// ends a turn too, and the following `finished` produces no idle transition.
 const boundarySignalling = new Set<string>();
 
 export function noteAgentBoundarySignal(agentId: string): void {
@@ -636,16 +686,24 @@ function sweepQuietAgents(): void {
   }
   const now = Date.now();
   for (const agentId of [...queues.keys()]) {
-    // Its provider announces real boundaries — wait for one instead of racing it.
-    if (boundarySignalling.has(agentId)) continue;
     const last = lastOutputAt.get(agentId);
     // No output recorded yet means nothing has ever been written to that PTY —
     // treat it as quiet too, otherwise a silent agent never receives anything.
-    if (last !== undefined && now - last < QUIET_MS) continue;
-    if (composerNotReady(agentId)) continue;
+    const quietFor = last === undefined ? Number.POSITIVE_INFINITY : now - last;
+    // Providers that announce boundaries get a long grace instead of an
+    // exemption: normally their signal arrives first, but if it never does the
+    // queue must not stall forever.
+    const announces = boundarySignalling.has(agentId);
+    if (quietFor < (announces ? BOUNDARY_STALL_MS : QUIET_MS)) continue;
     if (isEchoingInjection(agentId)) continue;
     if (agentsAwaitingApproval.has(agentId)) continue;
-    logger.info(`[AgentMsg] Delivering to ${agentId} on quiescence (no boundary signal)`);
+    if (announces) {
+      logger.warn(
+        `[AgentMsg] ${agentId} announces turn boundaries but none arrived in ${BOUNDARY_STALL_MS / 1000}s — delivering anyway`,
+      );
+    } else {
+      logger.info(`[AgentMsg] Delivering to ${agentId} on quiescence (no boundary signal)`);
+    }
     deliverPendingAgentMessages(agentId);
   }
 }
@@ -655,6 +713,19 @@ function ensureSweep(): void {
   sweepTimer = setInterval(sweepQuietAgents, SWEEP_MS);
   sweepTimer.unref?.();
 }
+
+// Every per-agent structure in one place. The hand-written delete list had
+// already forgotten `agentsAwaitingApproval`, which leaked for each dead agent.
+const PER_AGENT_STATE: Array<{ delete(key: string): unknown }> = [
+  queues,
+  awaitingConsumption,
+  pendingPull,
+  boundarySignalling,
+  agentsAwaitingApproval,
+  sendTimestamps,
+  lastInjectionAt,
+  lastOutputAt,
+];
 
 /**
  * Drop runtime state for a stopped/removed agent (messages stay in the DB as
@@ -668,7 +739,7 @@ export function clearAgentMessageQueue(agentId: string, db?: Database.Database):
   // Independent of the notification below: without `db` the states would stay
   // "queued" and message_status would then derive them as delivered — the map
   // lying about messages that were dropped.
-  for (const p of pending ?? []) markOutcome(p, "undeliverable");
+  for (const p of pending ?? []) setOutcome(p.messageId, "undeliverable");
   if (db && pending?.length) {
     const gone = getAgent(db, agentId);
     const goneLabel = gone?.alias ?? agentId;
@@ -694,13 +765,7 @@ export function clearAgentMessageQueue(agentId: string, db?: Database.Database):
   if (queues.size === 0) stopSweep();
   // Its rate history and echo window die with it too — a new agent reusing the
   // id must not inherit them.
-  sendTimestamps.delete(agentId);
-  lastInjectionAt.delete(agentId);
-  lastOutputAt.delete(agentId);
-  composerReady.delete(agentId);
-  boundarySignalling.delete(agentId);
-  awaitingConsumption.delete(agentId);
-  pendingPull.delete(agentId);
+  for (const store of PER_AGENT_STATE) store.delete(agentId);
   for (const key of idempotency.keys()) {
     if (key.startsWith(`${agentId}:`)) idempotency.delete(key);
   }

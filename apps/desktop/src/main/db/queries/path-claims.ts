@@ -47,24 +47,6 @@ function overlaps(a: string, b: string): boolean {
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 }
 
-/** Claims held by OTHER live agents in this project. */
-function liveClaimsExcept(
-  db: Database.Database,
-  projectId: string,
-  agentId: string,
-): Array<PathClaim & { heldByName: string | null }> {
-  const statuses = [...LIVE_STATUSES];
-  const rows = db
-    .prepare(
-      `SELECT c.*, a.alias FROM path_claims c
-       JOIN agents a ON a.id = c.agent_id
-       WHERE c.project_id = ? AND c.agent_id != ?
-         AND a.status IN (${statuses.map(() => "?").join(",")})`,
-    )
-    .all(projectId, agentId, ...statuses) as Record<string, unknown>[];
-  return rows.map((r) => ({ ...mapRow(r), heldByName: (r.alias as string) ?? null }));
-}
-
 /**
  * All-or-nothing: if ANY requested path overlaps another live agent's claim,
  * nothing is granted. A partial grant would read as success and send the agent
@@ -77,7 +59,9 @@ export function claimPaths(
   db: Database.Database,
   input: { agentId: string; projectId: string; paths: string[]; note?: string | null },
 ): { granted: string[]; conflicts: ClaimConflict[] } {
-  const existing = liveClaimsExcept(db, input.projectId, input.agentId);
+  // One query answers both halves: who else holds what, and what I already hold.
+  const all = listProjectClaims(db, input.projectId);
+  const existing = all.filter((c) => c.agentId !== input.agentId);
   const conflicts: ClaimConflict[] = [];
   for (const path of input.paths) {
     for (const claim of existing) {
@@ -93,13 +77,7 @@ export function claimPaths(
   }
   if (conflicts.length > 0) return { granted: [], conflicts };
 
-  const mine = new Set(
-    (
-      db.prepare("SELECT path FROM path_claims WHERE agent_id = ?").all(input.agentId) as Array<{
-        path: string;
-      }>
-    ).map((r) => r.path),
-  );
+  const mine = new Set(all.filter((c) => c.agentId === input.agentId).map((c) => c.path));
   const insert = db.prepare(
     "INSERT INTO path_claims (id, agent_id, project_id, path, note) VALUES (?, ?, ?, ?, ?)",
   );
@@ -122,12 +100,12 @@ export function releasePaths(
     const info = db.prepare("DELETE FROM path_claims WHERE agent_id = ?").run(agentId);
     return { released: Number(info.changes ?? 0) };
   }
-  const stmt = db.prepare("DELETE FROM path_claims WHERE agent_id = ? AND path = ?");
-  let released = 0;
-  db.transaction(() => {
-    for (const path of paths) released += Number(stmt.run(agentId, path).changes ?? 0);
-  })();
-  return { released };
+  const info = db
+    .prepare(
+      `DELETE FROM path_claims WHERE agent_id = ? AND path IN (${paths.map(() => "?").join(",")})`,
+    )
+    .run(agentId, ...paths);
+  return { released: Number(info.changes ?? 0) };
 }
 
 /** Every live claim in a project — what a coordinator needs before assigning. */

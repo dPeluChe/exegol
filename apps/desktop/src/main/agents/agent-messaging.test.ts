@@ -534,20 +534,52 @@ describe("long messages are delivered as a pointer", () => {
     // The whole point: what reaches the terminal stays small.
     expect(written.length).toBeLessThan(1_500);
 
-    const pulled = checkAgentMessages("a2");
+    const pulled = checkAgentMessages(db, "a2");
     expect(pulled.messages).toHaveLength(1);
     expect(pulled.messages[0]?.text).toBe(LONG);
     expect(pulled.messages[0]?.messageId).toBe(res.messageId);
 
     // Pulling IS the read receipt, and it drains.
     expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("consumed");
-    expect(checkAgentMessages("a2").messages).toHaveLength(0);
+    expect(checkAgentMessages(db, "a2").messages).toHaveLength(0);
   });
 
   it("does not count a pointer as read just because a turn ended", () => {
     const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: `${LONG}-2` });
     deliverPendingAgentMessages("a2"); // a turn boundary, but no pull
     expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("delivered");
+  });
+
+  it("still reports a retry as delivered once the target has read it", () => {
+    const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: `${LONG}-read` });
+    checkAgentMessages(db, "a2");
+    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("consumed");
+
+    // `consumed` is delivery that also got read. Answering delivered:false here
+    // told the sender its message never landed at the moment it most clearly had.
+    const retry = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: `${LONG}-read`,
+    });
+    expect(retry).toMatchObject({ messageId: res.messageId, delivered: true, duplicate: true });
+  });
+
+  it("honours the pointer from the database after the in-memory refs are gone", () => {
+    const res = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: `${LONG}-restart`,
+    });
+    // Simulate a main-process restart: the pointer is in the agent's scrollback
+    // but our refs died with the process.
+    clearAgentMessageQueue("a2");
+
+    const pulled = checkAgentMessages(db, "a2");
+    expect(pulled.messages.map((m) => m.messageId)).toContain(res.messageId);
+    expect(pulled.messages.find((m) => m.messageId === res.messageId)?.text).toBe(
+      `${LONG}-restart`,
+    );
   });
 
   it("submits with a separate carriage return after the paste", () => {

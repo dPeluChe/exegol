@@ -495,6 +495,46 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T175 — Coordination follow-ups deferred from the round-7 simplify `added: 2026-08-13`
+**Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over `test/agent-collab-round6`
+
+Real findings that needed more than a cleanup, so they were not folded into that branch:
+
+1. **Claims are advisory AND unobserved.** A violation can never surface: nothing compares what an
+   agent touched against who holds it. Exegol already has the ingredients — oplog git-tree
+   snapshots, per-step diffs, and a turn-boundary hook. At each boundary, diff the tree and compare
+   touched paths against `listProjectClaims`; on a violation, inject a warning into the offender and
+   emit a NotificationBus event. That turns advisory into *advisory + audited*, which is where the
+   value is. Hard enforcement is affordable for claude-code only: T123 already writes a per-agent
+   settings file, so a `PreToolUse` matcher on Edit/Write consulting `path_claims` is real.
+2. **`consumed` means two different things.** Pull-consumed is a receipt (the agent's own
+   authenticated call); turn-consumed is an inference ("a boundary happened after we wrote bytes")
+   that a swallowed submit would report as read. Either add provenance (`via: "pull" | "turn"`) or
+   reserve `consumed` for evidenced reads and call the inferred one `presumed_read`.
+3. **`MAX_MESSAGE_CHARS` (12 000) is now incoherent with pointer delivery.** The cap existed because
+   of the paste; bodies now travel as JSON over a socket. The cap is exactly what forces senders to
+   split at send time — the bug pointer delivery was built to kill. Raise it hard, or drop it and
+   bound total queued bytes instead.
+4. **The worktree preference is honoured by 1 of 4 launchers.** `SpawnAgentModal` reads it;
+   `QuickLaunchBar` and `EmptyPaneContent` omit `useWorktree` entirely (→ shared tree) and
+   `ParallelSpawnModal` hardcodes `true`. If it is a project property it belongs in
+   `projects.default_isolation` (that table already has `default_branch`/`default_ide`) and should
+   be read in `agent-spawn-flow`, not per call site. Matters more now: whether a spawn shares the
+   tree decides whether path claims are load-bearing or dead code.
+5. **No human surface for claims.** Zero tRPC/UI references — the user arbitrates a stuck claim but
+   cannot see or break one, and a stuck `waiting_input` agent holds its files with no TTL or steal.
+6. **`warnIfCommittable` is a log line nobody reads** for a credential in the user's repo. The
+   NotificationBus already carries `resource:warning`/`budget:warning`; this deserves the same.
+   (Made async in round 7 so it no longer blocks the spawn path.)
+7. **Composer-ready from the PTY emulator, not a second parser.** The round-7 `ESC[?2004h` sniff was
+   removed (most TUIs enable it once at startup, so it never fired, and it cost a hot-path scan).
+   The `HeadlessEmulator` already parses this mode; a `getBracketedPaste(id): boolean | null`
+   accessor on PtyHost would give the tri-state properly if readiness detection is wanted later.
+   Better still: `emitsTurnBoundaries` as a declared `AgentProviderCapabilities` field rather than
+   learned at runtime.
+
+---
+
 ### T174 — Learnings from Orca (stablyai) `added: 2026-08-13`
 **Priority**: P2 | **Effort**: varies | **Source**: 2-agent code read of stablyai/orca, 2026-08-13
 (clone at `~/_repos_2_learn/github.com/stablyai/orca`)

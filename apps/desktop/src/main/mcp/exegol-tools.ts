@@ -243,9 +243,14 @@ function resolveAgentPaths(
   return raw.map((p) => {
     const path = String(p).trim();
     if (!path) throw new ExegolToolError("paths must not contain empty entries", -32602);
-    // Normalize away trailing slashes and "..", so `src/` and `src` are one
-    // claim and a traversal can't quietly widen a claim's reach.
-    return resolve(base, path);
+    // Normalize away trailing slashes and ".." so `src/` and `src` are one
+    // claim — then refuse anything that escaped: `../..` resolves above the
+    // project and, under the prefix rule, would overlap every path in it.
+    const resolved = resolve(base, path);
+    if (resolved !== base && !resolved.startsWith(`${base}/`)) {
+      throw new ExegolToolError(`path is outside your working directory: ${path}`, -32602);
+    }
+    return resolved;
   });
 }
 
@@ -280,7 +285,10 @@ function handleReleasePaths(
   args: Record<string, unknown>,
   context: ExegolToolContext,
 ) {
-  const paths = args.paths === undefined ? undefined : resolveAgentPaths(db, context, args.paths);
+  // An empty array means the same as omitting it — the description promises
+  // "omit `paths` to release everything", and a caller passing [] means that.
+  const requested = Array.isArray(args.paths) && args.paths.length === 0 ? undefined : args.paths;
+  const paths = requested === undefined ? undefined : resolveAgentPaths(db, context, requested);
   return releasePaths(db, context.agentId, paths);
 }
 
@@ -370,7 +378,7 @@ export async function callExegolTool(
       case "message_cancel":
         return handleMessageCancel(args, context);
       case "messages_check":
-        return checkAgentMessages(context.agentId);
+        return checkAgentMessages(db, context.agentId);
       case "claim_paths":
         return handleClaimPaths(db, args, context);
       case "release_paths":

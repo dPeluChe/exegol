@@ -6,7 +6,7 @@
  * the user has configured.
  */
 
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -360,15 +360,15 @@ function ensureCodexGlobalConfig(shimPath: string): void {
  * arrives through the PTY and this file needs no secret.
  */
 function warnIfCommittable(cwd: string, relPath: string): void {
-  try {
-    execFileSync("git", ["check-ignore", "-q", relPath], { cwd, timeout: 1_000 });
-  } catch (err) {
+  // Async: this rides the spawn path, and a blocking `git` call there would
+  // stall the main process (and every PTY it pumps) for a log line.
+  execFile("git", ["check-ignore", "-q", relPath], { cwd, timeout: 1_000 }, (err) => {
     // exit 1 = not ignored (a real answer); anything else = not a repo / no git.
-    if ((err as { status?: number }).status !== 1) return;
+    if (!err || (err as { code?: number }).code !== 1) return;
     logger.warn(
       `[ExegolMcp] ${relPath} holds an Exegol MCP token and is NOT gitignored in ${cwd} — add it to .gitignore so the credential can't be committed`,
     );
-  }
+  });
 }
 
 export function writeAgentMcpConfigFor(

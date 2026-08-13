@@ -17,7 +17,7 @@ const FILE_BOUNDARY = "\ndiff --git ";
 
 /** Default budget in characters. Roughly 5k tokens — enough for a real review,
  *  small enough that a judge call stays cheap. */
-export const DEFAULT_DIFF_BUDGET = 20_000;
+const DEFAULT_DIFF_BUDGET = 20_000;
 
 function splitIntoFileSections(diff: string): string[] {
   const sections: string[] = [];
@@ -46,8 +46,7 @@ function clipOnLineBoundary(section: string, limit: number): string {
   // Only honour the line boundary if it doesn't throw away most of the budget —
   // one very long line would otherwise collapse the section to nothing.
   const cut = lineBreak > target / 2 ? lineBreak : target;
-  const marker = markerFor(section.length - cut);
-  return `${section.slice(0, Math.min(cut, Math.max(0, limit - marker.length)))}${marker}`;
+  return `${section.slice(0, cut)}${markerFor(section.length - cut)}`;
 }
 
 /**
@@ -81,7 +80,6 @@ function allocateFairly(sizes: number[], budget: number): number[] {
 export function truncateDiffForPrompt(diff: string, budget = DEFAULT_DIFF_BUDGET): string {
   if (diff.length <= budget) return diff;
   const sections = splitIntoFileSections(diff);
-  if (sections.length <= 1) return clipOnLineBoundary(diff, budget);
   const allocations = allocateFairly(
     sections.map((s) => s.length),
     budget,
