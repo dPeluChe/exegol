@@ -259,6 +259,41 @@ describe("sendAgentMessage", () => {
     for (const id of ["r1", "r2", "r3", "r4"]) clearAgentMessageQueue(id);
   });
 
+  it("delivers on quiescence when the provider emits no boundary signal", () => {
+    insertAgent(db, "q1", "running");
+    insertAgent(db, "q2", "running"); // e.g. opencode: no hooks, TUI says nothing parseable
+    ptyMock.alive.add("q2");
+
+    const res = sendAgentMessage(db, { fromAgentId: "q1", toAgentId: "q2", text: "ping" });
+    expect(res.delivered).toBe(false);
+    expect(ptyMock.writes).toHaveLength(0);
+
+    // A PTY silent for a few seconds IS at its prompt.
+    vi.advanceTimersByTime(7_000);
+    expect(ptyMock.writes).toHaveLength(1);
+    expect(ptyMock.writes[0]?.data).toContain("ping");
+    clearAgentMessageQueue("q1");
+    clearAgentMessageQueue("q2");
+  });
+
+  it("tells the sender when the target dies with messages still queued", () => {
+    insertAgent(db, "d1", "waiting_input");
+    insertAgent(db, "d2", "running");
+    ptyMock.alive.add("d1");
+
+    sendAgentMessage(db, { fromAgentId: "d1", toAgentId: "d2", text: "¿me revisas esto?" });
+    expect(ptyMock.writes).toHaveLength(0); // queued: d2 is busy
+
+    clearAgentMessageQueue("d2", db); // d2's session ends
+
+    // d1 is told instead of waiting forever for a reply.
+    expect(ptyMock.writes).toHaveLength(1);
+    const notice = ptyMock.writes[0]?.data ?? "";
+    expect(notice).toContain("never reached");
+    expect(notice).toContain("No reply expected");
+    clearAgentMessageQueue("d1");
+  });
+
   it("caps the per-target queue", () => {
     insertAgent(db, "a1", "running");
     insertAgent(db, "a2", "running");

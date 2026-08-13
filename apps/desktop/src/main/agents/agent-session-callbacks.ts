@@ -12,7 +12,12 @@ import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
-import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./agent-messaging";
+import {
+  clearAgentLinks,
+  clearAgentMessageQueue,
+  isEchoingInjection,
+  noteAgentOutput,
+} from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
@@ -183,6 +188,7 @@ export function createSpawnCallbacks(
   return {
     onData: (data: string) => {
       broadcast("terminal:data", agent.id, data);
+      noteAgentOutput(agent.id);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
@@ -382,7 +388,7 @@ export function createSpawnCallbacks(
           logger.warn(`[AgentCallback] MCP config cleanup failed for ${agent.id}:`, err);
         }
       }
-      clearAgentMessageQueue(agent.id);
+      clearAgentMessageQueue(agent.id, db);
       clearAgentLinks(db, agent.id);
       forgetBroadcastStatus(agent.id);
 
