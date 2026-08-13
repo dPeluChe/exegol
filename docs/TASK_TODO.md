@@ -383,22 +383,23 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
-### T161 — Resume Picker at Launch `added: 2026-08-11`
-**Priority**: P2 | **Effort**: S | **Source**: idea (Antonio, verify round 3)
+### T161 — Session naming ↔ CLI session identity `added: 2026-08-11` `updated: 2026-08-13`
+**Priority**: P2 | **Effort**: M | **Source**: Antonio, during the multi-agent rounds
 
-- When launching a provider from the grid/quick-bar, offer that path's resumable sessions
-  (same `agents.listResumable` data as T155.5) inline — "new session" vs "resume one of
-  these N" — instead of only surfacing them in the empty pane. Pairs with T160 aliases.
+Shipped 2026-08-13: the spawn modal now offers this provider's resumable sessions ("New
+session" vs a codename chip with how long ago it ended) and a per-launch YOLO checkbox.
+`listResumable` carries the alias, so a session is picked by the name the user knew it by.
 
----
+Still open, and it is the interesting half: **claude and codex can NAME a session** (their
+own `rename` command) and resume it BY that name — `claude --resume "<name>"` opens it
+directly. Exegol currently keeps a separate identity (its codename) from the CLI's own, so
+after a restart the user renames by hand in each terminal to line them back up.
 
-### T159 — Provider Registry Round 2 (pi, cursor-agent, copilot) `added: 2026-08-11`
-**Priority**: P2 | **Effort**: S | **Source**: engram's 12-provider registry (`RESEARCH/ENGRAM_2026_08.md`) + verified installed on Antonio's machine (`which -a`: pi via homebrew, cursor-agent + copilot via superset)
-
-- Add built-in providers like the agy/devin round (PR #65): inspect each CLI's `--help`
-  for prompt-arg/resume flags first, extend `AGENT_CLI_TYPES` + registry entries
-- Candidates NOT installed (skip until requested): qwen-code, windsurf
-- Pi bonus: `badlogic/pi-mono` is already studied in `_repos_2_learn` (Wave 2 review)
+Wanted: when Exegol assigns a codename, push it INTO the CLI's session name where the
+provider supports it, and prefer name-based resume over the captured resume command. One
+identity instead of two, and `agents_list` names then survive outside Exegol. Needs a
+per-provider capability (`supportsSessionRename`, `resumeByName`) rather than a special
+case — see [[T174]] on declaring provider behaviour instead of learning it.
 
 ---
 

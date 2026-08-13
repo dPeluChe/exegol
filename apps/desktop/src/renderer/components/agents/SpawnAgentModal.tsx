@@ -1,7 +1,22 @@
-import type { AgentAccessMode, AgentCliType, AgentProvider } from "@exegol/shared";
+import {
+  type AgentAccessMode,
+  type AgentCliType,
+  type AgentProvider,
+  YOLO_FLAGS,
+} from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, FileEdit, GitBranch, Layers, Map as MapIcon, Sparkles, X } from "lucide-react";
+import {
+  Eye,
+  FileEdit,
+  GitBranch,
+  History,
+  Layers,
+  Map as MapIcon,
+  Sparkles,
+  X,
+  Zap,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
@@ -15,6 +30,17 @@ import {
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
+import type { ResumableSession } from "../workspace/EmptyPaneContent";
+
+function relativeEnded(epoch: number | null): string {
+  if (!epoch) return "";
+  const ms = epoch > 1e12 ? epoch : epoch * 1000;
+  const mins = Math.round((Date.now() - ms) / 60_000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 24 ? `${hrs}h` : `${Math.round(hrs / 24)}d`;
+}
 
 function slugify(text: string): string {
   return `exegol/${text
@@ -77,6 +103,9 @@ export function SpawnAgentModal({
   const [branchName, setBranchName] = useState("");
   const [branchEdited, setBranchEdited] = useState(false);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
+  /** null = start a new session; otherwise the past session to resume. */
+  const [resumeOf, setResumeOf] = useState<ResumableSession | null>(null);
+  const [yolo, setYolo] = useState(false);
   const [spawning, setSpawning] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -89,6 +118,14 @@ export function SpawnAgentModal({
     queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
     staleTime: 30_000,
   });
+
+  const { data: resumable = [] } = useQuery({
+    queryKey: ["resumableSessions", projectId],
+    queryFn: () => trpcInvoke<ResumableSession[]>("agents.listResumable", { projectId, limit: 20 }),
+    staleTime: 10_000,
+  });
+  // Only this provider's sessions: `claude --resume` cannot open a codex session.
+  const resumableHere = resumable.filter((r) => r.cliType === selectedProviderId);
 
   const { data: project } = useProject(projectId);
   const { data: skills = [] } = useSkills(projectId, project?.path ?? null);
@@ -104,6 +141,12 @@ export function SpawnAgentModal({
   }, []);
 
   const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
+  const yoloFlag = YOLO_FLAGS[selectedProviderId];
+
+  // Switching provider must drop a selection that belongs to the old one.
+  useEffect(() => {
+    setResumeOf((current) => (current && current.cliType !== selectedProviderId ? null : current));
+  }, [selectedProviderId]);
 
   // Auto-select first provider if none selected
   useEffect(() => {
@@ -137,6 +180,8 @@ export function SpawnAgentModal({
         branchName: useWorktree && branchName ? branchName : undefined,
         accessMode,
         skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
+        yolo: yoloFlag ? yolo : undefined,
+        ...(resumeOf ? { resumeSession: true, resumeFromAgentId: resumeOf.agentId } : {}),
       });
       addAgent({
         id: agent.id,
@@ -191,6 +236,9 @@ export function SpawnAgentModal({
     useWorktree,
     branchName,
     selectedSkills,
+    resumeOf,
+    yolo,
+    yoloFlag,
     projectId,
     addAgent,
     createTerminal,
@@ -335,6 +383,65 @@ export function SpawnAgentModal({
                 ))}
               </div>
             </div>
+          )}
+
+          {/* T161: resume a past session of THIS provider, or start fresh */}
+          {resumableHere.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium text-text-secondary">Session</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setResumeOf(null)}
+                  className={cn(
+                    "rounded border px-2 py-1 text-[11px] transition-colors",
+                    resumeOf === null
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                  )}
+                >
+                  New session
+                </button>
+                {resumableHere.slice(0, 6).map((s) => (
+                  <button
+                    key={s.agentId}
+                    type="button"
+                    onClick={() => setResumeOf(s)}
+                    title={s.taskDescription}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] transition-colors",
+                      resumeOf?.agentId === s.agentId
+                        ? "border-accent bg-accent/10 text-accent"
+                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                    )}
+                  >
+                    <History className="h-3 w-3 shrink-0" />
+                    {/* The codename is how the user knew it; task text is the fallback. */}
+                    <span className="max-w-[160px] truncate">
+                      {s.alias ?? s.taskDescription.slice(0, 28)}
+                    </span>
+                    <span className="text-text-muted">{relativeEnded(s.endedAt)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* T161: skip this CLI's permission prompts, for THIS launch only */}
+          {yoloFlag && (
+            <label className="flex cursor-pointer items-center gap-2" htmlFor="yolo-mode">
+              <input
+                type="checkbox"
+                id="yolo-mode"
+                checked={yolo}
+                onChange={(e) => setYolo(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-border accent-accent"
+              />
+              <Zap className="h-3.5 w-3.5 text-text-muted" />
+              <span className="text-[11px] font-medium text-text-secondary">
+                YOLO mode — skip permission prompts (<code>{yoloFlag}</code>)
+              </span>
+            </label>
           )}
 
           {/* Worktree toggle + branch name */}

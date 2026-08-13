@@ -2,16 +2,11 @@ import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import type { PipelineStatusEvent } from "@exegol/shared";
 import { stripAnsi } from "../agents/status-parser";
+
+export { YOLO_FLAGS } from "@exegol/shared";
+
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { broadcast } from "../lib/event-bus";
-
-export const YOLO_FLAGS: Record<string, string> = {
-  "claude-code": "--dangerously-skip-permissions",
-  codex: "--full-auto",
-  aider: "--yes-always",
-  goose: "--no-confirm",
-  crush: "--yolo",
-};
 
 export function broadcastPipelineStatus(event: PipelineStatusEvent): void {
   broadcast("pipeline:status-changed", event);

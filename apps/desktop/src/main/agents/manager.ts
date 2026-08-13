@@ -1,4 +1,4 @@
-import type { Agent, AgentCreate } from "@exegol/shared";
+import { type Agent, type AgentCreate, YOLO_FLAGS } from "@exegol/shared";
 import type Database from "libsql";
 import { activateAgent, getAgent, insertActivity, stopAgent } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
@@ -79,6 +79,16 @@ export class AgentManager {
     const cliConfig = registry.resolveCliConfig(agent.cliType);
     if (!cliConfig) {
       throw new Error(`No CLI configuration found for agent type: ${agent.cliType}`);
+    }
+
+    // T161: per-launch YOLO override. Undefined keeps the provider's configured
+    // args; an explicit value wins for THIS session only, so "just this once,
+    // skip the prompts" doesn't mean editing settings and remembering to undo it.
+    const yoloFlag = YOLO_FLAGS[agent.cliType];
+    if (yoloFlag && config.yolo !== undefined) {
+      const has = cliConfig.args.includes(yoloFlag);
+      if (config.yolo && !has) cliConfig.args = [...cliConfig.args, yoloFlag];
+      else if (!config.yolo && has) cliConfig.args = cliConfig.args.filter((a) => a !== yoloFlag);
     }
 
     const project = db

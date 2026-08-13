@@ -34,6 +34,9 @@ export const agentCreateSchema = z.object({
   resumeFromAgentId: z.string().optional(),
   /** T58: read = explore-only, write = full access (default), plan = analysis-only */
   accessMode: agentAccessModeSchema.optional(),
+  /** T161: per-launch override of the provider's YOLO setting. Undefined keeps
+   *  whatever Settings > CLIs has configured. */
+  yolo: z.boolean().optional(),
 });
 
 export type AgentSchema = z.infer<typeof agentSchema>;

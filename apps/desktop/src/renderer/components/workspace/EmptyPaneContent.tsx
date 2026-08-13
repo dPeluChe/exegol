@@ -25,9 +25,11 @@ import { AgentIcon } from "../common";
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
 
-interface ResumableSession {
+export interface ResumableSession {
   agentId: string;
   cliType: string;
+  /** Session codename, when it had one — how the user knew this session. */
+  alias: string | null;
   taskDescription: string;
   status: string;
   endedAt: number | null;

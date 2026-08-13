@@ -163,7 +163,7 @@ export const agentRouter = router({
     .query(({ ctx, input }) => {
       const rows = ctx.db
         .prepare(
-          `SELECT id, cli_type, task_description, status, started_at, stopped_at
+          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias
            FROM agents
            WHERE project_id = ?
              AND status IN ('completed', 'failed', 'stopped', 'crashed')
@@ -178,10 +178,14 @@ export const agentRouter = router({
         status: string;
         started_at: number | null;
         stopped_at: number | null;
+        alias: string | null;
       }>;
       return rows.map((r) => ({
         agentId: r.id,
         cliType: r.cli_type,
+        // The codename is how the user (and other agents) knew this session —
+        // a resume picker listing only task text makes them re-identify it.
+        alias: r.alias,
         taskDescription: r.task_description,
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,
