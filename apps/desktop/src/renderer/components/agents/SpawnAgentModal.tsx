@@ -302,22 +302,6 @@ export function SpawnAgentModal({
 
         {/* Body */}
         <div className="flex flex-col gap-4 p-4">
-          {/* Task prompt */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium text-text-muted" htmlFor="task-prompt">
-              Task
-            </label>
-            <textarea
-              ref={textareaRef}
-              id="task-prompt"
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
-              placeholder="Describe what the agent should do… (optional)"
-              rows={3}
-              className="resize-none rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
-            />
-          </div>
-
           {/* Agent selector */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium text-text-muted" htmlFor="agent-select">
@@ -510,30 +494,53 @@ export function SpawnAgentModal({
             </div>
           )}
 
-          {/* Worktree toggle + branch name */}
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 cursor-pointer" htmlFor="use-worktree">
-              <input
-                type="checkbox"
-                id="use-worktree"
-                checked={useWorktree}
-                onChange={(e) => {
-                  setUseWorktree(e.target.checked);
-                  writeWorktreePreference(projectId, e.target.checked);
-                }}
-                className="h-3.5 w-3.5 rounded border-border accent-accent"
-              />
-              <GitBranch className="h-3.5 w-3.5 text-text-muted" />
-              <span className="text-[11px] font-medium text-text-secondary">
-                {useWorktree
-                  ? "Isolated branch (worktree) — parallel work"
-                  : "Same branch as the project — shared tree"}
-              </span>
-            </label>
+          {/* Where the agent works. Framed as a place, not a git feature: the
+              question the user is answering is "which directory will this touch",
+              and the answer should always be visible — never inferred. */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] font-medium text-text-muted">Where to work</span>
+            <div className="flex gap-1.5">
+              {[
+                {
+                  isolated: false,
+                  label: "Here",
+                  hint: "The project checkout, shared with others",
+                },
+                { isolated: true, label: "Worktree", hint: "Its own branch, for parallel work" },
+              ].map(({ isolated, label, hint }) => (
+                <button
+                  key={label}
+                  type="button"
+                  title={hint}
+                  onClick={() => {
+                    setUseWorktree(isolated);
+                    writeWorktreePreference(projectId, isolated);
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
+                    useWorktree === isolated
+                      ? "border-accent/50 bg-accent/10 text-accent"
+                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                  )}
+                >
+                  {isolated ? <GitBranch className="h-3 w-3" /> : <Layers className="h-3 w-3" />}
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* The path is shown, never edited — only the branch is yours to
+                name. Knowing where the work lands beats being able to move it. */}
+            <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
+              <span className="shrink-0">Path</span>
+              <code className="truncate" title={project?.path ?? ""}>
+                {project?.path ?? "…"}
+              </code>
+            </div>
 
             {useWorktree && (
-              <div className="ml-6 flex items-center gap-2">
-                <Layers className="h-3 w-3 shrink-0 text-text-muted" />
+              <div className="flex items-center gap-2">
+                <GitBranch className="h-3 w-3 shrink-0 text-text-muted" />
                 <input
                   type="text"
                   value={branchName}
@@ -546,6 +553,21 @@ export function SpawnAgentModal({
                 />
               </div>
             )}
+          </div>
+          {/* Task prompt */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[11px] font-medium text-text-muted" htmlFor="task-prompt">
+              Task
+            </label>
+            <textarea
+              ref={textareaRef}
+              id="task-prompt"
+              value={task}
+              onChange={(e) => setTask(e.target.value)}
+              placeholder="Describe what the agent should do… (optional)"
+              rows={3}
+              className="resize-none rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
+            />
           </div>
         </div>
 

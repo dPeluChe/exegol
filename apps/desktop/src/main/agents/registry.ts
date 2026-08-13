@@ -109,8 +109,8 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     color: "#F43F5E",
     capabilities: {
       supportsWorktree: true,
-      supportsResume: false,
-      resumeFlag: "",
+      supportsResume: true,
+      resumeFlag: "-r",
       resumeCommandPattern: "",
       supportsRPC: false,
       supportsVision: false,
