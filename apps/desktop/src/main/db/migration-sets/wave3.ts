@@ -67,4 +67,12 @@ export const wave3Migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_path_claims_project ON path_claims(project_id, path);
     CREATE INDEX IF NOT EXISTS idx_path_claims_agent ON path_claims(agent_id);`,
   },
+  {
+    // T176: dismiss an ended session from the dashboard without losing it.
+    // Archiving rather than deleting: the row carries the scoring, the oplog
+    // attribution and the resume handle, and a list you cannot clear is a list
+    // you stop reading.
+    id: "w3_005_agent_archived_at",
+    sql: "ALTER TABLE agents ADD COLUMN archived_at INTEGER;",
+  },
 ];

@@ -164,6 +164,7 @@ export function listRecentSessions(db: Database.Database, limit = 10): RecentSes
        FROM agents a
        JOIN projects p ON a.project_id = p.id
        WHERE a.status IN ('completed', 'failed', 'stopped')
+         AND a.archived_at IS NULL
        ORDER BY a.stopped_at DESC
        LIMIT ?`,
     )
@@ -226,4 +227,32 @@ export function recoverStaleAgents(
   }
 
   return { crashed, alive };
+}
+
+/** T176: hide an ended session from the dashboard. Live agents are refused —
+ *  archiving one would make a running session invisible. */
+export function archiveAgent(db: Database.Database, id: string): boolean {
+  const statuses = [...LIVE_STATUSES];
+  const info = db
+    .prepare(
+      `UPDATE agents SET archived_at = unixepoch()
+       WHERE id = ? AND archived_at IS NULL
+         AND status NOT IN (${statuses.map(() => "?").join(",")})`,
+    )
+    .run(id, ...statuses);
+  return Number(info.changes ?? 0) > 0;
+}
+
+/** Archive every ended session, optionally scoped to one project. */
+export function archiveEndedAgents(db: Database.Database, projectId?: string): number {
+  const statuses = [...LIVE_STATUSES];
+  const info = db
+    .prepare(
+      `UPDATE agents SET archived_at = unixepoch()
+       WHERE archived_at IS NULL
+         AND status NOT IN (${statuses.map(() => "?").join(",")})
+         ${projectId ? "AND project_id = ?" : ""}`,
+    )
+    .run(...statuses, ...(projectId ? [projectId] : []));
+  return Number(info.changes ?? 0);
 }

@@ -1,9 +1,10 @@
 import { type Agent, LIVE_STATUSES } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   AlertTriangle,
+  Archive,
   CheckCircle,
   ChevronDown,
   ChevronUp,
@@ -18,7 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { submitToAgent } from "../../../lib/agent-input";
-import { trpcInvoke } from "../../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
 import {
@@ -31,6 +32,7 @@ import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
+import { WorktreesCard } from "./WorktreesCard";
 
 const STATUS_CONFIG: Record<
   string,
@@ -169,6 +171,24 @@ export function AgentDashboard() {
   useEffect(() => {
     if (activeRows?.length) useAgentStore.getState().syncFromDb("__fleet__", activeRows);
   }, [activeRows]);
+
+  const queryClient = useQueryClient();
+  const [archiving, setArchiving] = useState(false);
+  const archiveEnded = useCallback(async () => {
+    setArchiving(true);
+    try {
+      await trpcMutate("agents.archiveEnded", {});
+      // The dashboard renders from the store, so the rows must leave it too —
+      // invalidating the query alone would leave them on screen.
+      const store = useAgentStore.getState();
+      for (const a of Object.values(store.agents)) {
+        if (!LIVE_STATUSES.has(a.status)) store.removeAgent(a.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
+    } finally {
+      setArchiving(false);
+    }
+  }, [queryClient]);
 
   const { data: projects } = useQuery({
     queryKey: ["projects"],
@@ -338,6 +358,8 @@ export function AgentDashboard() {
           </div>
         </div>
 
+        <WorktreesCard />
+
         {groups.map((group) => (
           <div key={group.key}>
             <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -347,6 +369,20 @@ export function AgentDashboard() {
               />
               {group.title}
               <span className="font-normal">({group.agents.length})</span>
+              {/* Ended sessions pile up forever — a list you cannot clear is a
+                  list you stop reading. Archive keeps the row (scoring, oplog,
+                  resume handle); it only leaves the view. */}
+              {group.key === "recent" && (
+                <button
+                  type="button"
+                  onClick={archiveEnded}
+                  disabled={archiving}
+                  className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
+                >
+                  <Archive className="h-3 w-3" />
+                  Archive all
+                </button>
+              )}
             </h3>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {group.agents.map((agent) => (

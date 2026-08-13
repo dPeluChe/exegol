@@ -18,7 +18,12 @@ import {
   listRecentSessions,
   updateAgentStatus,
 } from "../../db/queries";
-import { listActiveAgents, setAgentAlias } from "../../db/queries/agents";
+import {
+  archiveAgent,
+  archiveEndedAgents,
+  listActiveAgents,
+  setAgentAlias,
+} from "../../db/queries/agents";
 import {
   createParallelRun,
   enrichParallelRunForComparison,
@@ -137,6 +142,16 @@ export const agentRouter = router({
 
   /** T156: cross-project non-terminal agents (project name + group color). */
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  /** T176: dismiss ended sessions from the dashboard. Archive, not delete —
+   *  the row keeps its scoring, oplog attribution and resume handle. */
+  archive: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ ctx, input }) => ({ archived: archiveAgent(ctx.db, input.id) })),
+
+  archiveEnded: publicProcedure
+    .input(z.object({ projectId: z.string().optional() }).optional())
+    .mutation(({ ctx, input }) => ({ archived: archiveEndedAgents(ctx.db, input?.projectId) })),
 
   /** T160: set/clear the session alias — the agent_send addressing name. */
   setAlias: publicProcedure

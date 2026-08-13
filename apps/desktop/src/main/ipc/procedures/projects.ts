@@ -204,6 +204,55 @@ export const projectRouter = router({
     }),
 
   /** Delete a worktree (runs archive hook, removes from disk + DB) */
+  /** T176: every worktree Exegol owns, across projects — the view you need when
+   *  a round ends and you want the disk back. Dirty ones are flagged because
+   *  deleting them loses work, which is the only reason to hesitate. */
+  listAllWorktrees: publicProcedure.query(async ({ ctx }) => {
+    const rows = ctx.db
+      .prepare(
+        `SELECT w.id, w.path, w.branch_name, w.project_id, p.name AS project_name,
+                (SELECT COUNT(*) FROM agents a
+                  WHERE a.worktree_id = w.id AND a.status IN
+                    ('idle','spawning','running','waiting_input','paused')) AS live_agents
+         FROM worktrees w JOIN projects p ON p.id = w.project_id
+         ORDER BY p.name, w.branch_name`,
+      )
+      .all() as Array<{
+      id: string;
+      path: string;
+      branch_name: string;
+      project_id: string;
+      project_name: string;
+      live_agents: number;
+    }>;
+
+    return Promise.all(
+      rows.map(async (r) => {
+        const exists = existsSync(r.path);
+        // A worktree with uncommitted work is the one you must not delete
+        // blindly, so it is worth a git call per row.
+        const dirty = exists
+          ? await execFileAsync("git", ["status", "--porcelain"], {
+              cwd: r.path,
+              timeout: 5_000,
+            })
+              .then((out) => out.stdout.trim().length > 0)
+              .catch(() => false)
+          : false;
+        return {
+          id: r.id,
+          path: r.path,
+          branchName: r.branch_name,
+          projectId: r.project_id,
+          projectName: r.project_name,
+          liveAgents: r.live_agents,
+          exists,
+          dirty,
+        };
+      }),
+    );
+  }),
+
   deleteWorktree: publicProcedure
     .input(
       z.object({ worktreeId: z.string(), projectId: z.string(), force: z.boolean().optional() }),

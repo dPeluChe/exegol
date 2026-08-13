@@ -567,21 +567,12 @@ Still worth taking, roughly by value:
 
 ---
 
-### T176 — Archive ended sessions + a quit that actually quits `added: 2026-08-13`
-**Priority**: P2 | **Effort**: S-M | **Source**: Antonio, live testing 2026-08-13
+### T176 — A quit that actually quits `added: 2026-08-13` `updated: 2026-08-13`
+**Priority**: P2 | **Effort**: S | **Source**: Antonio, live testing 2026-08-13
 
-**1. Nothing clears the session list.** RECENT accumulates every crashed/failed agent
-forever — 8 dead cards after one afternoon, all of them "Session interrupted", none of which
-open anything. The user needs to clear or archive them from the dashboard.
+Session archiving and the worktree fleet view shipped 2026-08-13. What remains:
 
-Archive, not delete: `agents.delete` exists but drops the row, and with it the scoring, the
-oplog attribution and the resume handle. A `archived_at` column (wave3 migration) + a filter
-in the RECENT query keeps history intact while the list stays useful. Offer both "Archive
-ended sessions" (bulk, the common case) and per-card dismissal. Note the codex cards whose
-resume ALREADY fails ("Failed to resume session from …") are the strongest case: they are
-guaranteed-dead entries the UI still presents as actionable.
-
-**2. Quit hangs.** The app ignored SIGTERM and needed `kill -9`; claude sessions had to be
+**Quit hangs.** The app ignored SIGTERM and needed `kill -9`; claude sessions had to be
 Ctrl+C'd or closed by hand first, and an orphaned sidecar from an earlier run survived
 alongside the current one (its version-mismatch shutdown did not take). Suspects: the exit
 path awaiting a scrollback flush or socket teardown with no deadline.
