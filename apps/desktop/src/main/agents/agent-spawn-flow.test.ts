@@ -174,6 +174,9 @@ describe("buildPtyInvocation", () => {
 
     expect(inv.args).toEqual(["-i"]);
     expect(inv.stdinCommand).toContain("gemini");
+    // `exec` so the PTY dies with the CLI — otherwise the shell outlives it and
+    // Exegol never shows the Ended/Resume card (verify 2026-08-12).
+    expect(inv.stdinCommand?.startsWith("exec ")).toBe(true);
   });
 
   it("appends the claude-code hooks file via --settings", () => {

@@ -360,7 +360,12 @@ export function buildPtyInvocation(
     shell = userShell;
     if (isInteractiveCli) {
       args = ["-i"];
-      stdinCommand = fullCommand;
+      // `exec` replaces the shell with the CLI, so the PTY dies WITH the agent.
+      // Without it the shell survives the CLI's exit: Exegol never sees onExit,
+      // the pane keeps a live shell prompt, and the session ends with no
+      // "Ended" card and no Resume — opencode/gemini/kiro all behaved this way
+      // (verify 2026-08-12: "en opencode ctrl-C cierra directo, sin resume").
+      stdinCommand = `exec ${fullCommand}`;
     } else {
       args = ["-ic", fullCommand];
     }
