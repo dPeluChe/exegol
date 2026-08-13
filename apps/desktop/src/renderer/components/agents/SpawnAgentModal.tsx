@@ -60,6 +60,9 @@ interface SpawnAgentModalProps {
   initialTask?: string;
   /** Pre-select a CLI by id (overrides initialProvider when both are passed). */
   initialCliType?: string;
+  /** Place the spawned agent in THIS pane instead of guessing from focus —
+   *  the launcher grid lives inside a specific pane and must fill that one. */
+  targetPaneId?: string;
 }
 
 /** Per-project spawn preference. A UI default, deliberately not app config:
@@ -89,6 +92,7 @@ export function SpawnAgentModal({
   initialProvider,
   initialTask,
   initialCliType,
+  targetPaneId,
 }: SpawnAgentModalProps) {
   const [task, setTask] = useState(initialTask ?? "");
   const [selectedProviderId, setSelectedProviderId] = useState(
@@ -206,6 +210,11 @@ export function SpawnAgentModal({
       );
       // T95: Reuse focused empty pane, otherwise create a new tab
       const store = useWorkspaceStore.getState();
+      if (targetPaneId) {
+        store.updatePane(targetPaneId, { type: "terminal", agentId: agent.id });
+        onClose();
+        return;
+      }
       const freshPw = getProjectState();
       const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
       const focusedId = activeTab ? getFocusedOrFirstPaneId(activeTab) : null;
@@ -245,6 +254,7 @@ export function SpawnAgentModal({
     setFocusedAgent,
     onClose,
     spawning,
+    targetPaneId,
   ]);
 
   const handleKeyDown = useCallback(

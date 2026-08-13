@@ -21,6 +21,7 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { AgentIcon } from "../common";
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
@@ -50,6 +51,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const { projectId, project } = useProjectContext();
   const { data: scripts } = useProjectScripts(project?.path ?? null);
   const [launching, setLaunching] = useState<string | null>(null);
+  const [modalProvider, setModalProvider] = useState<AgentProvider | null>(null);
   const [search, setSearch] = useState("");
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const addAgent = useAgentStore((s) => s.addAgent);
@@ -99,46 +101,13 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     return () => ro.disconnect();
   }, []);
 
-  const handleLaunchAgent = useCallback(
-    async (cli: AgentProvider) => {
-      if (!projectId) return;
-      setLaunching(cli.id);
-      try {
-        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-        const agent = await trpcMutate<any>("agents.spawn", {
-          projectId,
-          cliType: cli.id as AgentCliType,
-          taskDescription: cli.name,
-          accessMode,
-        });
-
-        addAgent({
-          id: agent.id,
-          projectId,
-          cliType: agent.cliType,
-          status: agent.status,
-          currentStep: agent.currentStep,
-          taskDescription: agent.taskDescription,
-          branchName: agent.branchName ?? null,
-          alias: agent.alias ?? null,
-          tokenUsage: { input: 0, output: 0, cost: 0 },
-          startedAt: agent.startedAt,
-          accessMode: agent.accessMode ?? null,
-          claudeSessionId: null,
-          activityLevel: "busy",
-        });
-        createTerminal(agent.id);
-
-        // Convert this empty pane to a terminal pane
-        updatePane(paneId, { type: "terminal", agentId: agent.id });
-      } catch (err) {
-        console.error("[EmptyPane] Spawn failed:", err);
-      } finally {
-        setLaunching(null);
-      }
-    },
-    [projectId, paneId, accessMode, addAgent, createTerminal, updatePane],
-  );
+  // Opens the spawn modal instead of launching immediately. This grid used to
+  // fire a bare `cli.name` task with no session choice, no worktree decision
+  // and no YOLO — so every launch from here had to be fixed up inside the
+  // terminal afterwards (Antonio, 2026-08-13). The modal fills THIS pane.
+  const handleLaunchAgent = useCallback((cli: AgentProvider) => {
+    setModalProvider(cli);
+  }, []);
 
   // T155.5: relaunch a past session with the provider's own resume mechanism
   const handleResumeSession = useCallback(
@@ -485,6 +454,15 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           </button>
         ))}
       </div>
+      {modalProvider && (
+        <SpawnAgentModal
+          projectId={projectId ?? ""}
+          initialProvider={modalProvider}
+          initialCliType={modalProvider.id}
+          targetPaneId={paneId}
+          onClose={() => setModalProvider(null)}
+        />
+      )}
     </div>
   );
 }
