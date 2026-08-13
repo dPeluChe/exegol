@@ -7,6 +7,8 @@ import {
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ChevronDown,
+  ChevronRight,
   Eye,
   FileEdit,
   GitBranch,
@@ -110,6 +112,9 @@ export function SpawnAgentModal({
   /** null = start a new session; otherwise the past session to resume. */
   const [resumeOf, setResumeOf] = useState<ResumableSession | null>(null);
   const [yolo, setYolo] = useState(false);
+  /** Resume the provider's OWN most recent session via its resume flag. */
+  const [continueLast, setContinueLast] = useState(false);
+  const [showSkills, setShowSkills] = useState(false);
   const [spawning, setSpawning] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -146,6 +151,7 @@ export function SpawnAgentModal({
 
   const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
   const yoloFlag = YOLO_FLAGS[selectedProviderId];
+  const resumeFlag = selectedProvider?.capabilities?.resumeFlag;
 
   // Switching provider must drop a selection that belongs to the old one.
   useEffect(() => {
@@ -172,20 +178,24 @@ export function SpawnAgentModal({
   }, []);
 
   const handleSpawn = useCallback(async () => {
-    if (!task.trim() || !selectedProviderId || spawning) return;
+    if (!selectedProviderId || spawning) return;
     setSpawning(true);
     try {
       // biome-ignore lint/suspicious/noExplicitAny: tRPC proxy returns dynamic shape
       const agent = await trpcMutate<any>("agents.spawn", {
         projectId,
         cliType: selectedProviderId as AgentCliType,
-        taskDescription: task.trim(),
+        taskDescription: task.trim() || selectedProvider?.name || selectedProviderId,
         useWorktree,
         branchName: useWorktree && branchName ? branchName : undefined,
         accessMode,
         skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
         yolo: yoloFlag ? yolo : undefined,
-        ...(resumeOf ? { resumeSession: true, resumeFromAgentId: resumeOf.agentId } : {}),
+        ...(resumeOf
+          ? { resumeSession: true, resumeFromAgentId: resumeOf.agentId }
+          : continueLast
+            ? { resumeSession: true }
+            : {}),
       });
       addAgent({
         id: agent.id,
@@ -246,8 +256,10 @@ export function SpawnAgentModal({
     branchName,
     selectedSkills,
     resumeOf,
+    continueLast,
     yolo,
     yoloFlag,
+    selectedProvider,
     projectId,
     addAgent,
     createTerminal,
@@ -300,7 +312,7 @@ export function SpawnAgentModal({
               id="task-prompt"
               value={task}
               onChange={(e) => setTask(e.target.value)}
-              placeholder="Describe what the agent should do..."
+              placeholder="Describe what the agent should do… (optional)"
               rows={3}
               className="resize-none rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
             />
@@ -330,6 +342,76 @@ export function SpawnAgentModal({
               ))}
             </div>
           </div>
+
+          {/* T161: start fresh, continue the CLI's own last session, or pick one */}
+          {(resumableHere.length > 0 || resumeFlag) && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium text-text-muted">Session</span>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResumeOf(null);
+                    setContinueLast(false);
+                  }}
+                  className={cn(
+                    "rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
+                    resumeOf === null && !continueLast
+                      ? "border-accent/50 bg-accent/10 text-accent"
+                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                  )}
+                >
+                  New
+                </button>
+                {/* Works without a captured handle: it is the provider's own
+                    flag, which is what the user would type by hand. */}
+                {resumeFlag && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResumeOf(null);
+                      setContinueLast(true);
+                    }}
+                    title={`Launches with ${resumeFlag}`}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
+                      continueLast
+                        ? "border-accent/50 bg-accent/10 text-accent"
+                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                    )}
+                  >
+                    <History className="h-3 w-3" />
+                    Continue last
+                    <code className="text-text-muted">{resumeFlag}</code>
+                  </button>
+                )}
+                {resumableHere.slice(0, 5).map((session) => (
+                  <button
+                    key={session.agentId}
+                    type="button"
+                    onClick={() => {
+                      setResumeOf(session);
+                      setContinueLast(false);
+                    }}
+                    title={session.taskDescription}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
+                      resumeOf?.agentId === session.agentId
+                        ? "border-accent/50 bg-accent/10 text-accent"
+                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+                    )}
+                  >
+                    <History className="h-3 w-3 shrink-0" />
+                    {/* The codename is how the user knew it; task text is the fallback. */}
+                    <span className="max-w-[150px] truncate">
+                      {session.alias ?? session.taskDescription.slice(0, 24)}
+                    </span>
+                    <span className="text-text-muted">{relativeEnded(session.endedAt)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Access mode selector (T58) */}
           <div className="flex flex-col gap-1.5">
@@ -367,13 +449,46 @@ export function SpawnAgentModal({
                 </button>
               ))}
             </div>
+            {/* Exegol's access mode instructs the agent; this bypasses the CLI's
+                OWN confirmation prompts. Same question, two layers — so they
+                belong together rather than as a second thing called "mode". */}
+            {yoloFlag && (
+              <label className="mt-0.5 flex cursor-pointer items-center gap-2" htmlFor="yolo-mode">
+                <input
+                  type="checkbox"
+                  id="yolo-mode"
+                  checked={yolo}
+                  onChange={(e) => setYolo(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border accent-accent"
+                />
+                <Zap className="h-3.5 w-3.5 text-text-muted" />
+                <span className="text-[11px] text-text-secondary">
+                  Also skip this CLI's own confirmations{" "}
+                  <code className="text-text-muted">{yoloFlag}</code>
+                </span>
+              </label>
+            )}
           </div>
 
           {/* Skill picker — injected into the agent prompt via buildSpawnContext */}
           {availableSkills.length > 0 && (
             <div className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-medium text-text-muted">Skills (optional)</span>
-              <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowSkills((v) => !v)}
+                className="flex w-fit items-center gap-1 text-[11px] font-medium text-text-muted hover:text-text-secondary"
+              >
+                {showSkills ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronRight className="h-3 w-3" />
+                )}
+                Skills (optional)
+                {selectedSkills.size > 0 && (
+                  <span className="text-accent">· {selectedSkills.size} selected</span>
+                )}
+              </button>
+              <div className={cn("flex-wrap gap-1.5", showSkills ? "flex" : "hidden")}>
                 {availableSkills.map((s) => (
                   <button
                     key={s.name}
@@ -393,65 +508,6 @@ export function SpawnAgentModal({
                 ))}
               </div>
             </div>
-          )}
-
-          {/* T161: resume a past session of THIS provider, or start fresh */}
-          {resumableHere.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-medium text-text-secondary">Session</span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setResumeOf(null)}
-                  className={cn(
-                    "rounded border px-2 py-1 text-[11px] transition-colors",
-                    resumeOf === null
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                  )}
-                >
-                  New session
-                </button>
-                {resumableHere.slice(0, 6).map((s) => (
-                  <button
-                    key={s.agentId}
-                    type="button"
-                    onClick={() => setResumeOf(s)}
-                    title={s.taskDescription}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded border px-2 py-1 text-[11px] transition-colors",
-                      resumeOf?.agentId === s.agentId
-                        ? "border-accent bg-accent/10 text-accent"
-                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                    )}
-                  >
-                    <History className="h-3 w-3 shrink-0" />
-                    {/* The codename is how the user knew it; task text is the fallback. */}
-                    <span className="max-w-[160px] truncate">
-                      {s.alias ?? s.taskDescription.slice(0, 28)}
-                    </span>
-                    <span className="text-text-muted">{relativeEnded(s.endedAt)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* T161: skip this CLI's permission prompts, for THIS launch only */}
-          {yoloFlag && (
-            <label className="flex cursor-pointer items-center gap-2" htmlFor="yolo-mode">
-              <input
-                type="checkbox"
-                id="yolo-mode"
-                checked={yolo}
-                onChange={(e) => setYolo(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-border accent-accent"
-              />
-              <Zap className="h-3.5 w-3.5 text-text-muted" />
-              <span className="text-[11px] font-medium text-text-secondary">
-                YOLO mode — skip permission prompts (<code>{yoloFlag}</code>)
-              </span>
-            </label>
           )}
 
           {/* Worktree toggle + branch name */}
@@ -513,7 +569,7 @@ export function SpawnAgentModal({
             </button>
             <button
               type="button"
-              disabled={!task.trim() || !selectedProviderId || spawning}
+              disabled={!selectedProviderId || spawning}
               onClick={handleSpawn}
               className={cn(
                 "rounded-lg px-4 py-1.5 text-[11px] font-semibold transition-all",
