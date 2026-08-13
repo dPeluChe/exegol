@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
   Eye,
   FileEdit,
   GitBranch,
@@ -33,6 +34,13 @@ import {
 } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import type { ResumableSession } from "../workspace/EmptyPaneContent";
+
+/** Last few segments — enough to recognise the repo without the modal wrapping. */
+function tailPath(path: string | undefined, segments = 3): string {
+  if (!path) return "…";
+  const parts = path.split("/").filter(Boolean);
+  return parts.length <= segments ? path : `…/${parts.slice(-segments).join("/")}`;
+}
 
 function relativeEnded(epoch: number | null): string {
   if (!epoch) return "";
@@ -74,9 +82,9 @@ const WORKTREE_PREF_KEY = "exegol.spawn.useWorktree";
 function readWorktreePreference(projectId: string): boolean {
   try {
     const raw = localStorage.getItem(`${WORKTREE_PREF_KEY}.${projectId}`);
-    return raw === null ? true : raw === "1";
+    return raw === null ? false : raw === "1";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -533,9 +541,17 @@ export function SpawnAgentModal({
                 name. Knowing where the work lands beats being able to move it. */}
             <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
               <span className="shrink-0">Path</span>
-              <code className="truncate" title={project?.path ?? ""}>
-                {project?.path ?? "…"}
-              </code>
+              <code title={project?.path ?? ""}>{tailPath(project?.path)}</code>
+              {project?.path && (
+                <button
+                  type="button"
+                  onClick={() => navigator.clipboard.writeText(project.path)}
+                  title="Copy full path"
+                  className="text-text-muted hover:text-text-secondary"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              )}
             </div>
 
             {useWorktree && (
@@ -557,14 +573,14 @@ export function SpawnAgentModal({
           {/* Task prompt */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium text-text-muted" htmlFor="task-prompt">
-              Task
+              Task · prompt · greeting <span className="text-text-muted">(optional)</span>
             </label>
             <textarea
               ref={textareaRef}
               id="task-prompt"
               value={task}
               onChange={(e) => setTask(e.target.value)}
-              placeholder="Describe what the agent should do… (optional)"
+              placeholder="Sent to the agent as its first message — a task, a prompt, or just a hello"
               rows={3}
               className="resize-none rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
             />
