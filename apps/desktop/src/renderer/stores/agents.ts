@@ -121,6 +121,30 @@ export function stopAgentStatusPush(): void {
   pushCleanup = null;
 }
 
+/**
+ * Build the store shape from a spawn/DB agent. Nine call sites used to hand-copy
+ * these fields, so every new column (alias, T167) silently stopped reaching the
+ * UI — panes kept showing the provider instead of the session name.
+ */
+export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): AgentState {
+  return {
+    id: agent.id,
+    projectId: agent.projectId,
+    cliType: agent.cliType,
+    status: agent.status,
+    currentStep: agent.currentStep,
+    taskDescription: agent.taskDescription,
+    branchName: agent.branchName ?? null,
+    alias: agent.alias ?? null,
+    tokenUsage: { input: 0, output: 0, cost: 0 },
+    startedAt: agent.startedAt,
+    accessMode: agent.accessMode ?? null,
+    claudeSessionId: null,
+    activityLevel: classifyActivity(agent.status, agent.currentStep),
+    ...overrides,
+  };
+}
+
 export interface AgentState {
   id: string;
   projectId: string;

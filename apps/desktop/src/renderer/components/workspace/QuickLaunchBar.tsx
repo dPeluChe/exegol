@@ -48,6 +48,7 @@ export function QuickLaunchBar() {
           currentStep: agent.currentStep,
           taskDescription: agent.taskDescription,
           branchName: agent.branchName ?? null,
+          alias: agent.alias ?? null,
           tokenUsage: { input: 0, output: 0, cost: 0 },
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,

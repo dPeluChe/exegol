@@ -305,6 +305,7 @@ export function CommandPalette() {
           currentStep: null,
           taskDescription: `! ${cmd}`,
           branchName: null,
+          alias: agent.alias ?? null,
           tokenUsage: { input: 0, output: 0, cost: 0 },
           startedAt: agent.startedAt,
           accessMode: agent.accessMode ?? null,
