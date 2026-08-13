@@ -265,11 +265,20 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 
   // Log unexpected state: agent exists in DB but not in store (no callbacks wired)
   useEffect(() => {
-    if (agent && !storeAgent && !TERMINAL_STATUSES.has(agent.status) && agent.status !== "idle") {
-      console.warn(
-        `[PaneRecovery] Agent ${agentId} is status=${agent.status} in DB but NOT in store — this pane will render but the terminal will likely be broken (no callbacks wired). Check main process [Reattach] logs.`,
-      );
+    if (!agent || storeAgent || TERMINAL_STATUSES.has(agent.status) || agent.status === "idle") {
+      return;
     }
+    // Panes mount before the store's first syncFromDb lands, so warning
+    // immediately reports the startup race rather than a broken pane — and sent
+    // us reading reattach logs for a non-problem. Only complain if the agent is
+    // STILL missing once the sync has had time to arrive; if it shows up, this
+    // effect re-runs with storeAgent set and the timer is cleared.
+    const timer = setTimeout(() => {
+      console.warn(
+        `[PaneRecovery] Agent ${agentId} is status=${agent.status} in DB but still NOT in store after sync — this pane will render but the terminal will likely be broken (no callbacks wired). Check main process [Reattach] logs.`,
+      );
+    }, 3_000);
+    return () => clearTimeout(timer);
   }, [agent, storeAgent, agentId]);
 
   if (isError || isStaleFromPreviousSession) return null;
