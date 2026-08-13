@@ -21,6 +21,7 @@ import {
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
   fireAgentLinks,
+  isEchoingInjection,
   noteAgentHasLink,
   seedAgentLinkCache,
   sendAgentMessage,
@@ -53,7 +54,7 @@ describe("sendAgentMessage", () => {
     ptyMock.writes.length = 0;
     ptyMock.alive.clear();
     // Runtime queues/dedup are module-level: isolate tests by clearing targets.
-    for (const id of ["a1", "a2", "a3"]) clearAgentMessageQueue(id);
+    for (const id of ["a1", "a2", "a3", "e1", "e2"]) clearAgentMessageQueue(id);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-11T12:00:00Z"));
   });
@@ -216,6 +217,46 @@ describe("sendAgentMessage", () => {
     setAgentAwaitingApproval("a2", false);
     deliverPendingAgentMessages("a2");
     expect(ptyMock.writes).toHaveLength(1);
+  });
+
+  it("flags the echo window after injecting so our own text can't fail the agent", () => {
+    insertAgent(db, "e1", "running");
+    insertAgent(db, "e2", "waiting_input");
+    ptyMock.alive.add("e2");
+
+    expect(isEchoingInjection("e2")).toBe(false);
+    sendAgentMessage(db, {
+      fromAgentId: "e1",
+      toAgentId: "e2",
+      text: "revisá esto (error), feedback en tiempo real",
+    });
+    // The TUI echoes the injected text back into the output scraper; a wrapped
+    // line starting with "error" must not mark the receiver as failed.
+    expect(isEchoingInjection("e2")).toBe(true);
+
+    vi.advanceTimersByTime(7_000);
+    expect(isEchoingInjection("e2")).toBe(false);
+  });
+
+  it("rate-limits a chatty sender so an A→B→C→A ring burns out", () => {
+    // Spread across targets so the per-TARGET queue cap isn't what fires.
+    insertAgent(db, "r1", "running");
+    for (const t of ["r2", "r3", "r4"]) insertAgent(db, t, "running");
+    for (let i = 0; i < 12; i++) {
+      const target = ["r2", "r3", "r4"][i % 3] as string;
+      sendAgentMessage(db, { fromAgentId: "r1", toAgentId: target, text: `msg ${i}` });
+    }
+    // 13th within the same minute is refused — dedup can't catch a rotating
+    // cycle (every hop is a new sender/target/text triple).
+    expect(() =>
+      sendAgentMessage(db, { fromAgentId: "r1", toAgentId: "r2", text: "one more" }),
+    ).toThrowError(/rate limit/);
+
+    vi.advanceTimersByTime(61_000);
+    expect(() =>
+      sendAgentMessage(db, { fromAgentId: "r1", toAgentId: "r2", text: "after the window" }),
+    ).not.toThrow();
+    for (const id of ["r1", "r2", "r3", "r4"]) clearAgentMessageQueue(id);
   });
 
   it("caps the per-target queue", () => {

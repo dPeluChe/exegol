@@ -11,7 +11,7 @@ import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
-import { clearAgentLinks, clearAgentMessageQueue } from "./agent-messaging";
+import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
@@ -207,9 +207,17 @@ export function createSpawnCallbacks(
         applyAgentSignals(db, agent, maps, result.signals, result.currentStep ?? null);
       }
 
+      // Everything below is SCRAPED from terminal output — and our own injected
+      // messages are echoed back into that same stream. While the echo window
+      // is open, no scraped signal about this agent can be trusted: a wrapped
+      // line starting with "error" failed a live session, a quoted resume
+      // command would overwrite the real one, and a trailing "?" would fake a
+      // turn boundary and flush the whole queue at once (2026-08-12).
+      const echoingOwnMessage = isEchoingInjection(agent.id);
+
       // T101: store session ID (claude startup) or resume command (all CLIs shutdown)
       // Both use sessionIdsCaptured to avoid redundant DB writes per agent.
-      const sessionPayload = result.resumeCommand ?? result.sessionId;
+      const sessionPayload = echoingOwnMessage ? null : (result.resumeCommand ?? result.sessionId);
       if (sessionPayload && !maps.sessionIdsCaptured.has(agent.id)) {
         maps.sessionIdsCaptured.add(agent.id);
         try {
@@ -244,16 +252,25 @@ export function createSpawnCallbacks(
         });
       }
 
-      if (result.status || result.currentStep) {
-        if (result.status) {
+      // `failed` kills the session; `waiting_input` fakes a turn boundary and
+      // flushes the pending queue in one burst. Both are common in prose.
+      let scrapedStatus = result.status;
+      if (echoingOwnMessage && (scrapedStatus === "failed" || scrapedStatus === "waiting_input")) {
+        logger.info(
+          `[AgentCallback] Ignoring scraped "${scrapedStatus}" for ${agent.id} — matches our just-injected message echo`,
+        );
+        scrapedStatus = undefined;
+      }
+      if (scrapedStatus || result.currentStep) {
+        if (scrapedStatus) {
           logger.info(
-            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${result.status}${result.currentStep ? ` [${result.currentStep}]` : ""}`,
+            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${result.currentStep ? ` [${result.currentStep}]` : ""}`,
           );
-          updateAgentStatus(db, agent.id, result.status as AgentStatus, result.currentStep);
+          updateAgentStatus(db, agent.id, scrapedStatus as AgentStatus, result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
             projectId: agent.projectId,
-            status: result.status as AgentStatus,
+            status: scrapedStatus as AgentStatus,
             currentStep: result.currentStep ?? null,
             cliType: agent.cliType,
             timestamp: Date.now(),
@@ -271,7 +288,11 @@ export function createSpawnCallbacks(
         }
       }
 
-      if (result.tokenLimitWarning && !maps.tokenLimitDetected.has(agent.id)) {
+      if (
+        result.tokenLimitWarning &&
+        !echoingOwnMessage &&
+        !maps.tokenLimitDetected.has(agent.id)
+      ) {
         maps.tokenLimitDetected.add(agent.id);
         try {
           const scrollback = maps.scrollbackBuffers.get(agent.id)?.join("") ?? "";
