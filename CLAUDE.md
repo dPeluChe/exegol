@@ -15,13 +15,19 @@ bun run dev:ui           # Electron only (JS fallback, faster)
 bun run build:rust       # Build Rust native module only
 bun run rebuild:native   # Rust + rebuild node-pty for Electron
 
-# The PTY sidecar is DETACHED: it survives app restarts on purpose, which is
-# what keeps agent terminals alive across a reload. It therefore also survives
-# a rebuild — plain `dev` recompiles the bundle but the running process keeps
-# the old code. Use `dev:fresh` after touching anything the sidecar bundles:
-#   terminal/pty-sidecar-entry.ts, pty-sidecar-eviction.ts, pty-sidecar-flusher.ts,
-#   pty-sidecar-protocol.ts, ring-buffer.ts
-# It kills every live PTY, so agents come back as "crashed" with resume cards.
+# The PTY sidecar is DETACHED: it survives app restarts on purpose (that is what
+# keeps agent terminals alive across a reload) and therefore survives a rebuild
+# and an app UPDATE too — the running process keeps the old code.
+#
+# The mechanism that handles this is SIDECAR_VERSION in pty-sidecar-protocol.ts:
+# on a mismatch, discovery shuts the old sidecar down and spawns a fresh one.
+# So after changing anything the sidecar bundles — pty-sidecar-entry.ts,
+# pty-sidecar-eviction.ts, pty-sidecar-flusher.ts, pty-sidecar-protocol.ts,
+# ring-buffer.ts — BUMP SIDECAR_VERSION. Skip it and the fix never loads, for
+# released users as well as in dev.
+#
+# `dev:fresh` is only the manual escape hatch for when you don't want to bump
+# (mid-debugging). Either way every live PTY dies and agents return as crashed.
 
 # Lint + typecheck:
 npx @biomejs/biome check apps/ packages/shared/src/ packages/ui/src/
