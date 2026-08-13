@@ -508,11 +508,8 @@ Already adopted 2026-08-13: pointer-not-body delivery for long messages, submit 
 write, closing the paste on the failure path, boundary-signals-beat-quiescence.
 
 Still worth taking, roughly by value:
-- **Fair-share diff truncation** (`src/shared/commit-message-prompt.ts:36-130`): split a diff per
-  file, water-fill the byte budget so slack from small files goes to big ones, clip on line
-  boundaries with an explicit marker. ~90 lines of pure function; one generated lockfile can no
-  longer starve the human-authored changes. Applies to our Haiku commit messages and the T88v2
-  judges. **Cheapest high-value item in the list.**
+- ~~**Fair-share diff truncation**~~ — DONE 2026-08-13: `main/lib/diff-budget.ts`, wired into all
+  three head-truncating call sites (commit messages, evaluator judges, evidence summaries).
 - **Per-provider composer-ready spec** (`src/shared/draft-paste-ready-scanner.ts:26-70`): each TUI
   declares a marker + anchor (codex `›`, opencode `ESC[?25h`, grok `❯` anchored to alt-screen and
   REVOKED on exit because starship uses the same glyph). We took the provider-agnostic half

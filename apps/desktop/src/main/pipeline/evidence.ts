@@ -2,6 +2,7 @@ import type { PipelineRun, PipelineTemplate } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgentScore } from "../db/queries";
 import { callAnthropicMessage } from "../lib/anthropic";
+import { truncateDiffForPrompt } from "../lib/diff-budget";
 import { logger } from "../lib/logger";
 import { getApiKey } from "../security/keystore";
 
@@ -12,8 +13,6 @@ import { getApiKey } from "../security/keystore";
  * pattern) and a markdown run report for PR descriptions. Both are
  * best-effort — evidence gaps must never break pipeline execution.
  */
-
-const MAX_DIFF_CHARS = 20_000;
 
 // captureGitDiff resolves these literal placeholders instead of empty string —
 // they must never reach the paid summary call or render as a "diff".
@@ -35,7 +34,7 @@ export async function summarizeStepDiff(
   const apiKey = getApiKey(db, "anthropic");
   if (!apiKey) return "";
 
-  const truncated = diff.slice(0, MAX_DIFF_CHARS);
+  const truncated = truncateDiffForPrompt(diff);
   const prompt = `You are summarizing what a pipeline step ("${stepLabel}") changed, for a reviewer scanning a PR.
 
 Diff:

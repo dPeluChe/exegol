@@ -4,6 +4,7 @@ import {
   type EvaluatorVerdict,
 } from "@exegol/shared";
 import { callAnthropicMessage } from "../lib/anthropic";
+import { truncateDiffForPrompt } from "../lib/diff-budget";
 import { logger } from "../lib/logger";
 
 /**
@@ -18,7 +19,6 @@ import { logger } from "../lib/logger";
 const HAIKU_PRICE_PER_MTOK_INPUT = 1.0;
 const HAIKU_PRICE_PER_MTOK_OUTPUT = 5.0;
 
-const MAX_DIFF_CHARS = 20_000;
 const DEFAULT_JUDGE_CALLS = 3;
 
 interface HaikuUsage {
@@ -54,7 +54,7 @@ async function judgeOnce(
   diff: string,
   acceptanceCriteria: string,
 ): Promise<JudgeCallResult> {
-  const truncated = diff.slice(0, MAX_DIFF_CHARS);
+  const truncated = truncateDiffForPrompt(diff);
 
   const describePrompt = `You are adversarially reviewing a code diff — assume it is broken or incomplete until proven otherwise. Describe factually what it actually changes, any gaps versus what it claims to do, and anything suspicious. Do not render a verdict yet.
 

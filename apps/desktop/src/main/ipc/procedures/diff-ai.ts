@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { callAnthropicMessage } from "../../lib/anthropic";
+import { truncateDiffForPrompt } from "../../lib/diff-budget";
 import { logger } from "../../lib/logger";
 import { getApiKey } from "../../security/keystore";
 import { publicProcedure } from "../trpc";
@@ -33,8 +34,9 @@ export const aiProcedures = {
           message: "No changes to summarize.",
         });
       }
-      // Truncate to keep the request cheap — Haiku handles ~200KB fine but we cap at 20KB
-      const truncated = diff.slice(0, 20_000);
+      // Budgeted per file, not head-truncated: a regenerated lockfile must not
+      // push the hand-written change out of the prompt.
+      const truncated = truncateDiffForPrompt(diff);
 
       const prompt = `You are writing a conventional-commit-style git commit message.
 
