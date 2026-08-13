@@ -1,5 +1,6 @@
 import { DEFAULT_SETTINGS, type Settings, settingsSchema } from "@exegol/shared";
 import { z } from "zod";
+import { setMcpVerboseLogging } from "../../mcp/exegol-server";
 import { invalidateDesktopChannelCache } from "../../notifications/channels/desktop";
 import type { Context } from "../context";
 import { publicProcedure, router } from "../trpc";
@@ -69,6 +70,7 @@ export const settingsRouter = router({
     // T155.7: notification prefs live in this row — drop the desktop
     // channel's 30s cache so mute toggles apply immediately.
     invalidateDesktopChannelCache();
+    setMcpVerboseLogging(updated.mcpVerboseLogging === true);
     return updated;
   }),
 

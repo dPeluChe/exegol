@@ -489,9 +489,100 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - **Lifecycle event emitter**: `broadcastAgentStatus` (a transport fn) still owns delivery + link firing + `getDb()`, forcing the documented import-cycle workaround. Extract an in-main `agent:turn-ended {agentId, reason}` emitter (notifications/bus pattern) that agent-messaging subscribes to once at bootstrap; spawn-env goes back to broadcast+tray.
 - **Collapse the 4 per-provider MCP config writers** (exegol-mcp-config.ts) into one descriptor table (path, section, envKey, entry); token-read chain + removeAgentMcpConfig ride the same table. ~120→~50 LOC.
 - **Derive the MCP wiring panel from the registry** (procedures/mcp.ts EXEGOL_MCP_PROVIDER_WIRING duplicates flavorForCli + registry names) — `mcpConfigFlavor` on AgentProviderCapabilities; covers custom providers.
-- **codex cwd→token 1:1 hardening**: two codex agents sharing a cwd (no worktree) overwrite each other's token file → cross-agent impersonation on reattach. Force unique cwd for on-disk-token flavors OR refuse the 2nd; then wire removeAgentMcpConfig at exit (currently never called — token stays on disk).
+- ~~**codex cwd→token 1:1 hardening**~~ — DONE 2026-08-13: a token now binds N agents and identity is resolved per CONNECTION (process tree first, pinned for the socket's life); an unresolvable share returns -32003 instead of guessing. Per-agent token record written for every provider, so reattach re-arms each session with its own credential.
 - **SessionAlias window-listener → store**: `renamingAgentId` field in the workspace/agents store instead of N window listeners.
 - **mapLinkRow → zod** (agentLinkRowSchema) to match every other table's validated mapping.
+
+---
+
+### T170 — Messaging durability + generalized idempotency `added: 2026-08-13`
+**Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over the T165/T168 round (2026-08-13)
+
+Three follow-ups the review flagged as right-but-bigger than that commit:
+
+1. **Delivery state belongs in the DB, not a Map.** `messageState`/`idempotency` are
+   in-memory, so after an app restart `message_status` answers `unknown` for everything and
+   a retry with the same `message_id` re-delivers — precisely when a sender most needs the
+   answer. Add `delivered_at` / `state` / `client_key` (+ unique index on
+   `(from_agent_id, client_key)`) via a wave migration-set; `getMessageDeliveryState` then
+   reads the row, idempotency becomes a unique-constraint lookup, and a startup sweep marks
+   still-queued messages undeliverable (correct: the in-memory queue died with the process).
+   Reviewers called this the highest value-per-line item.
+2. **Generalize idempotency to the RPC layer.** Today only `agent_send` is safely
+   retryable, and the retry is performed by the MODEL following prose. The shim already has
+   a per-call id — make it stable across reconnects and have the server replay the recorded
+   response for a repeated id. Then every tool is retryable and the shim can retry itself.
+   Build it when the SECOND tool needs it, not with another bespoke key.
+3. **Finish the tokenless-config move.** `EXEGOL_MCP_TOKEN_FILE` + shim env-preference
+   already makes per-session identity win wherever the CLI forwards its env. Verify
+   empirically per CLI (two opencode sessions in one repo, ~30 min); for every CLI that
+   forwards, the file token can be dropped entirely and the multi-binding registry, the
+   `ps` walk and the `-32003` ambiguity path all get deleted rather than optimized.
+
+---
+
+### T171 — Human authorization over the agent bus `added: 2026-08-13`
+**Priority**: P2 | **Effort**: M | **Source**: live 3-agent session + Juanito's field report (2026-08-13)
+
+[[T168]] fixed the common case (collaboration is pre-authorized, so no permission is needed
+to share analysis). This is the remaining half: when a step GENUINELY needs the user, the bus
+has no way to carry an authorization the receiver can verify. draco was right to refuse
+Juanito's word for it — and stayed blocked until Antonio went to its terminal by hand.
+
+Wanted: an agent can escalate through the channel; the user approves once from Exegol
+(NotificationBus + Attention Inbox already exist); the receiver gets an authorization
+**signed by Exegol**, never relayed by the requesting agent. Pairs with T169's ownership
+question — who may act on which files while several agents coordinate.
+
+---
+
+### T166 — MCP shim architecture (deferred from the 2026-08-12 shim review) `added: 2026-08-12`
+**Priority**: P2 | **Effort**: M-L | **Source**: 4-agent shim /simplify — security + correctness landed same day; these are the architectural residuals
+
+- **`hello` handshake on connect** (shim version, agentId, token source, pid): today the
+  server logs `shim #7` and cannot tell a returning shim from a stranger, nor a stale one
+  from a current one. With it: "3 agents on an outdated shim — restart those sessions"
+  becomes a surfaced, actionable state instead of an invisible failure. Also lets the shim
+  `report` its own state (outbox depth, outage duration, token source) into the activity
+  ring — today the shim is observability-dark (stderr is swallowed by the CLI).
+- **Shim as a thin pipe**: forward raw MCP messages (`mcp_message {token, msg}`) so
+  initialize/ping/tools-list/tools-call/result-encoding all run in the RUNNING app. What
+  stays frozen in a shim then is irreducible: framing, token resolve, reconnect (~60 LOC
+  vs ~270). Every future drift stops needing a per-method proxy.
+- **Descriptor table for the 4 per-provider config writers + token read chain**
+  (~174 → ~55 LOC; adding provider #6 is currently a 4-site hand-synced edit).
+- **Drop `EXEGOL_ACCESS_MODE`**: display-only, stale by construction (never rewritten when
+  the user changes mode), never delivered to codex; enforcement is 100% server-side.
+- **codex cwd→token 1:1**: two codex agents in one cwd still share a token file at runtime
+  (the restore/revoke guards close the restart paths, not the live one). Force a unique cwd
+  for on-disk-token flavors or refuse the second; persist cwd on the agent row while at it
+  (reattach + exit cleanup + pipeline agents all re-derive it today).
+- **Socket squat probe**: `connect()` succeeding is treated as "another Exegol owns it" —
+  verify `lstat` isSocket + uid, and handshake before trusting; surface "refused to start"
+  in the MCP panel instead of one log line.
+- **Caps**: NDJSON buffer per connection (a newline-less flood OOMs the main process),
+  `memory_save.fact` / `memory_search.query` sizes (agent_send is capped, these aren't).
+- **`.gitignore` upsert for written configs** (mirror `ensureDigestGitignored`) — they hold
+  a live token and `opencode.json` is a file users legitimately commit.
+- Extract `provisionAgentMcp`/`deprovision` out of `buildPtyInvocation` (a command builder
+  that writes files, mutates the token registry and starts a socket server).
+
+---
+
+### T169 — Worktree coordination model (coordinator + workers) `added: 2026-08-13`
+**Priority**: P2 | **Effort**: M | **Source**: Antonio's working pattern, 2026-08-13
+
+Two shapes, both real, and messaging should serve each:
+- **One repo, one folder**: the coordinator (e.g. Juanito) holds the main checkout; helpers
+  get their own temporary worktrees so parallel edits don't collide, and hand work back as
+  commits/PRs the coordinator reviews. Needs: spawn-with-worktree from a link/room, and the
+  coordinator being told the branch/PR to review.
+- **Front + back (separate folders)**: no worktree needed — the folders already isolate.
+  The coordinator's value is sequencing and review, not conflict avoidance. This is the
+  cross-project case, so the origin line in the message header matters.
+
+Depends on the T162 link roles (reviewer/feedback) and pairs with T166's per-agent MCP
+identity, which is what makes several agents in one cwd viable at all.
 
 ---
 

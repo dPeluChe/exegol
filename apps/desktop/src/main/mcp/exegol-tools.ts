@@ -12,6 +12,7 @@ import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import {
   AgentMessagingError,
+  getMessageDeliveryState,
   noteAgentHasLink,
   resolveTargetAgent,
   sendAgentMessage,
@@ -154,11 +155,14 @@ function handleKnowledgeGet(
 function handleAgentsList(db: Database.Database, context: ExegolToolContext) {
   const all = listActiveAgents(db);
   const me = all.find((a) => a.id === context.agentId);
+  // Shape is a CONTRACT: `self` and `agents` are always present, so a client
+  // can destructure without guarding (a caller crashed when an early response
+  // omitted `self` — Juanito, 2026-08-13).
   return {
     self: {
       id: context.agentId,
       name: me?.alias ?? null,
-      note: "This is YOU. Sign messages with this name; others reach you via agent_send with it.",
+      note: "This is YOU. Sign messages with this name; others reach you via agent_send with it. Your id and name do not change for the rest of this session.",
     },
     agents: all
       .filter((a) => a.id !== context.agentId)
@@ -188,11 +192,23 @@ function handleAgentSend(
     toAgentId: targetId,
     text: message,
     expectsReply: args.expects_reply !== false,
+    clientKey: typeof args.message_id === "string" ? args.message_id.slice(0, 200) : undefined,
+    inReplyTo: typeof args.in_reply_to === "string" ? args.in_reply_to : undefined,
   });
   return {
     messageId: result.messageId,
     status: result.delivered ? "delivered" : "queued_for_next_turn_boundary",
+    ...(result.duplicate
+      ? { duplicate: true, note: "Already sent earlier with this message_id — not re-sent." }
+      : {}),
   };
+}
+
+/** T165: make delivery observable, so an ambiguous timeout isn't guessed at. */
+function handleMessageStatus(args: Record<string, unknown>, context: ExegolToolContext) {
+  const messageId = String(args.message_id ?? "");
+  if (!messageId) throw new ExegolToolError("message_status requires message_id", -32602);
+  return getMessageDeliveryState(messageId, context.agentId);
 }
 
 /** T162: register an Exegol-enforced link FROM the caller (identity from token). */
@@ -265,6 +281,8 @@ export async function callExegolTool(
         return handleAgentsList(db, context);
       case "agent_send":
         return handleAgentSend(db, args, context);
+      case "message_status":
+        return handleMessageStatus(args, context);
       case "agent_link":
         return handleAgentLink(db, args, context);
     }

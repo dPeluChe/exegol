@@ -10,7 +10,11 @@ import { runSetupHook } from "../hooks/project-hooks";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
-import { resolveMcpShimPath, writeAgentMcpConfigFor } from "../mcp/exegol-mcp-config";
+import {
+  resolveMcpShimPath,
+  writeAgentMcpConfigFor,
+  writePerAgentMcpConfig,
+} from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, registerAgentMcpToken } from "../mcp/exegol-server";
 import { inspectCommand } from "../security/command-guard";
 import {
@@ -254,11 +258,10 @@ export function buildPtyInvocation(
 
       // T160: resume spawns a NEW agent row — carry the session name over or
       // agent_send targets die on every restart (paco lost his name, 2026-08-12).
+      // Overwrites the codename createAgent just assigned: continuing a session
+      // must keep the name others already address it by.
       if (row?.alias && sourceAgentId !== agent.id) {
-        db.prepare("UPDATE agents SET alias = ? WHERE id = ? AND alias IS NULL").run(
-          row.alias,
-          agent.id,
-        );
+        db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(row.alias, agent.id);
       }
 
       if (row?.resume_command) {
@@ -299,6 +302,40 @@ export function buildPtyInvocation(
 
     // Spawn-boundary guard: refuse obviously destructive commands. Scans the
     // final string handed to the shell (prompt + resume + lifecycle included).
+    // T145/T166: mid-session MCP. Identity = per-agent secret token; the
+    // server never trusts client claims. Provisioned HERE (before args are
+    // built) because claude/codex take per-session flags that carry it.
+    let mcpToken: string | null = null;
+    try {
+      ensureExegolMcpServerStarted(db);
+      mcpToken = registerAgentMcpToken(agent.id, agent.projectId);
+      const shimPath = resolveMcpShimPath();
+      const accessMode = config.accessMode ?? "write";
+      // The cwd config files are per-DIRECTORY, so two agents on the same repo
+      // (the build+review pair) overwrote each other's token and swapped
+      // identities (live 2026-08-12). Where the CLI supports per-session MCP
+      // config, hand it a private file outside the repo instead.
+      // Written for EVERY provider, even those that never read it: it is also
+      // Exegol's own record of which token belongs to which agent, so reattach
+      // after a restart re-arms each session with its own credential instead of
+      // reading whichever token a sibling last left in the shared cwd file.
+      const perAgentConfig = writePerAgentMcpConfig(agent.id, shimPath, mcpToken, accessMode);
+      if (perAgentConfig && agent.cliType === "claude-code") {
+        // No --strict-mcp-config: the user's own servers still load.
+        fullCommand = `${fullCommand} --mcp-config ${perAgentConfig}`;
+      } else {
+        writeAgentMcpConfigFor(agent.cliType, cwd, shimPath, mcpToken, accessMode);
+        if (agent.cliType === "codex") {
+          // codex sanitizes MCP-server env, so the token normally rides the
+          // shared cwd file. `-c` sets it per SESSION and wins over the file in
+          // the shim's resolve chain, keeping siblings distinct.
+          fullCommand = `${fullCommand} -c 'mcp_servers.exegol.env.ELECTRON_RUN_AS_NODE="1"' -c 'mcp_servers.exegol.env.EXEGOL_MCP_TOKEN="${mcpToken}"'`;
+        }
+      }
+    } catch (err) {
+      logger.warn("[AgentManager] Failed to wire Exegol MCP config:", err);
+    }
+
     const verdict = inspectCommand(fullCommand);
     if (!verdict.ok) {
       logger.error(
@@ -324,7 +361,12 @@ export function buildPtyInvocation(
     shell = userShell;
     if (isInteractiveCli) {
       args = ["-i"];
-      stdinCommand = fullCommand;
+      // `exec` replaces the shell with the CLI, so the PTY dies WITH the agent.
+      // Without it the shell survives the CLI's exit: Exegol never sees onExit,
+      // the pane keeps a live shell prompt, and the session ends with no
+      // "Ended" card and no Resume — opencode/gemini/kiro all behaved this way
+      // (verify 2026-08-12: "en opencode ctrl-C cierra directo, sin resume").
+      stdinCommand = `exec ${fullCommand}`;
     } else {
       args = ["-ic", fullCommand];
     }
@@ -338,23 +380,7 @@ export function buildPtyInvocation(
       EXEGOL_AGENT_ID: agent.id,
       EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
     } as Record<string, string>;
-
-    // T145: give the agent mid-session access to memory/knowledge via MCP.
-    // Identity = per-agent secret token; the server never trusts client claims.
-    try {
-      ensureExegolMcpServerStarted(db);
-      const mcpToken = registerAgentMcpToken(agent.id, agent.projectId);
-      env.EXEGOL_MCP_TOKEN = mcpToken;
-      writeAgentMcpConfigFor(
-        agent.cliType,
-        cwd,
-        resolveMcpShimPath(),
-        mcpToken,
-        config.accessMode ?? "write",
-      );
-    } catch (err) {
-      logger.warn("[AgentManager] Failed to wire Exegol MCP config:", err);
-    }
+    if (mcpToken) env.EXEGOL_MCP_TOKEN = mcpToken;
   }
 
   const shellName = userShell.split("/").pop() ?? "";

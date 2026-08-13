@@ -354,6 +354,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
 
       {/* Agent info */}
       <span className="font-medium text-text-primary">{agent.alias ?? agent.cliType}</span>
+      {agent.alias && <span className="text-[10px] text-text-muted">{agent.cliType}</span>}
       <span className="min-w-0 flex-1 truncate text-text-muted">
         {agent.currentStep ?? agent.taskDescription}
       </span>

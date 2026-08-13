@@ -76,6 +76,7 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
         currentStep: agent.currentStep,
         taskDescription: agent.taskDescription,
         branchName: agent.branchName ?? null,
+        alias: agent.alias ?? null,
         tokenUsage: { input: 0, output: 0, cost: 0 },
         startedAt: agent.startedAt,
         accessMode: agent.accessMode ?? null,

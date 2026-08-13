@@ -1,5 +1,6 @@
 import { type Agent, type AgentCreate, type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
+import { pickAgentCodename } from "../../agents/agent-names";
 import { logger } from "../../lib/logger";
 import { mapAgentRow, nanoid } from "./helpers";
 
@@ -77,10 +78,15 @@ export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   const now = Math.floor(Date.now() / 1000);
   const accessMode = data.accessMode ?? "write";
 
+  // T167: a session without a name shows up as its provider ("opencode"), so
+  // two of the same CLI are indistinguishable in the UI and un-addressable by
+  // agent_send. Shells are excluded — they're not messaging participants.
+  const alias = data.cliType === "shell" ? null : pickAgentCodename(db);
+
   db.prepare(
-    `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, access_mode)
-     VALUES (?, ?, ?, 'spawning', ?, ?, ?)`,
-  ).run(id, data.projectId, data.cliType, data.taskDescription, now, accessMode);
+    `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, access_mode, alias)
+     VALUES (?, ?, ?, 'spawning', ?, ?, ?, ?)`,
+  ).run(id, data.projectId, data.cliType, data.taskDescription, now, accessMode, alias);
 
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getAgent(db, id)!;

@@ -15,6 +15,8 @@ const TERMINAL_STATUSES: ReadonlySet<AgentStatus> = new Set([
 interface AgentStopReasonProps {
   agent: Pick<Agent, "id" | "status" | "cliType" | "taskDescription"> & {
     resumeCommand?: string | null;
+    currentStep?: string | null;
+    branchName?: string | null;
   };
   onResume?: () => void;
   onSpawnNew: (taskDescription: string) => void;
@@ -66,9 +68,14 @@ export function AgentStopReason({ agent, onResume, onSpawnNew, onViewDiff }: Age
         )}
       </div>
 
-      {/* Tail extract removed (verify session 2026-08-11): the full scrollback
-          renders right below this card — showing the same lines twice read as
-          a bug. `lastLines` still feeds the notification body elsewhere. */}
+      {/* The failure detail (last scraped line: "Failed to resume session from
+          …") used to live only in the app log — a spawn that died immediately
+          showed "Failed" and nothing readable (verify 2026-08-12). */}
+      {agent.status !== "completed" && agent.currentStep && (
+        <p className="rounded border border-border/60 bg-black/20 px-2 py-1 font-mono text-[10px] leading-relaxed text-text-secondary">
+          {agent.currentStep}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {canResume && (
@@ -92,15 +99,19 @@ export function AgentStopReason({ agent, onResume, onSpawnNew, onViewDiff }: Age
           <RotateCcw className="h-3 w-3" />
           New agent with same task
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 gap-1 rounded-md border border-border px-2 text-[10px] text-text-secondary hover:bg-white/5"
-          onClick={() => onViewDiff(agent.id)}
-        >
-          <FileDiff className="h-3 w-3" />
-          View diff
-        </Button>
+        {/* A session that died on startup changed nothing — offering a diff
+            sends the user to an empty screen. */}
+        {(agent.branchName || (score?.filesChanged ?? 0) > 0) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 rounded-md border border-border px-2 text-[10px] text-text-secondary hover:bg-white/5"
+            onClick={() => onViewDiff(agent.id)}
+          >
+            <FileDiff className="h-3 w-3" />
+            View diff
+          </Button>
+        )}
       </div>
     </div>
   );

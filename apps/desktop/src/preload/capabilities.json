@@ -176,6 +176,7 @@
       "callTool",
       "connect",
       "disconnect",
+      "exegolActivity",
       "exegolStatus",
       "getConfigs",
       "listServers",

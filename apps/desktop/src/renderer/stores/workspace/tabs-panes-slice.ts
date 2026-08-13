@@ -32,6 +32,7 @@ export type TabsPanesSlice = Pick<
   | "reorderTab"
   | "mergeTabIntoSplit"
   | "removePane"
+  | "movePaneBeside"
   | "splitPane"
   | "updatePane"
   | "setFocusedPane"
@@ -222,6 +223,36 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       return setPw(s, {
         tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
         panes: { ...pw.panes, [newPane.id]: newPane },
+      });
+    }),
+
+  /** T40b completion: drop a pane on another pane's edge to rearrange the
+   *  layout. The drop indicator already existed and computed the side — only
+   *  the action was missing, so the UI promised a move and did nothing. */
+  movePaneBeside: (tabId, sourcePaneId, targetPaneId, side) =>
+    set((s) => {
+      if (sourcePaneId === targetPaneId) return s;
+      const pw = getPw(s);
+      const tab = pw.tabs.find((t) => t.id === tabId);
+      if (!tab) return s;
+
+      const withoutSource = removeNodeByPaneId(tab.layout, sourcePaneId);
+      // Removing the source can collapse its parent split; if the target went
+      // with it (it was the only sibling) there is nothing to attach to.
+      if (!withoutSource || !collectPaneIds(withoutSource).includes(targetPaneId)) return s;
+
+      const direction = side === "left" || side === "right" ? "horizontal" : "vertical";
+      const sourceFirst = side === "left" || side === "top";
+      const newLayout = splitNodeByPaneId(
+        withoutSource,
+        targetPaneId,
+        direction,
+        sourcePaneId,
+        sourceFirst,
+      );
+
+      return setPw(s, {
+        tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
       });
     }),
 

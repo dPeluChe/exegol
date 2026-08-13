@@ -14,18 +14,97 @@ import type { ExegolAccessMode } from "./exegol-protocol";
 
 const EXEGOL_SERVER_KEY = "exegol";
 
+/**
+ * Env var the per-DIRECTORY configs carry the token in — deliberately NOT
+ * `EXEGOL_MCP_TOKEN`.
+ *
+ * Exegol already puts a per-SESSION `EXEGOL_MCP_TOKEN` in the PTY env
+ * (agent-spawn-flow), which the CLI passes down to the MCP servers it spawns.
+ * Writing the same var into a file that is shared by every session in a
+ * directory OVERRODE that per-session value, so two agents in one repo
+ * presented the same secret — Exegol created the identity collision it then
+ * had to disambiguate. Under a different name the inherited per-session token
+ * wins, and this one is only consulted when the CLI sanitizes its env (codex),
+ * where a shared identity is still better than none.
+ */
+const FILE_TOKEN_ENV = "EXEGOL_MCP_TOKEN_FILE";
+
+/** Token from a config file's env block, newest key first. The legacy key is
+ *  still read so sessions spawned by an older build keep working. */
+function tokenFromEnvBlock(env: Record<string, unknown> | undefined): string | null {
+  for (const key of [FILE_TOKEN_ENV, "EXEGOL_MCP_TOKEN"]) {
+    const value = env?.[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return null;
+}
+
+/**
+ * T166: per-AGENT MCP config, outside the repo (~/.exegol/mcp/<agentId>.json).
+ * The cwd-scoped files are per-DIRECTORY, so two agents working the same repo
+ * (the build+review pair — the whole point of Exegol) shared one token and one
+ * identity. claude takes `--mcp-config <file>` and codex takes `-c key=value`,
+ * so each session can carry its own credential with no shared file at all.
+ */
+export function writePerAgentMcpConfig(
+  agentId: string,
+  shimPath: string,
+  token: string,
+  accessMode: ExegolAccessMode,
+): string | null {
+  try {
+    const dir = join(homedir(), ".exegol", "mcp");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const path = join(dir, `${agentId}.json`);
+    const body: McpJsonFile = {
+      mcpServers: {
+        [EXEGOL_SERVER_KEY]: {
+          command: process.execPath,
+          args: [shimPath],
+          env: {
+            ELECTRON_RUN_AS_NODE: "1",
+            [FILE_TOKEN_ENV]: token,
+            EXEGOL_ACCESS_MODE: accessMode,
+          },
+        },
+      },
+    };
+    writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`, { encoding: "utf-8", mode: 0o600 });
+    return path;
+  } catch (err) {
+    logger.warn(`[ExegolMcp] Failed to write per-agent MCP config for ${agentId}:`, err);
+    return null;
+  }
+}
+
+/** Read an agent's own token — deterministic, no cwd guessing (reattach). */
+export function readPerAgentMcpToken(agentId: string): string | null {
+  const parsed = readMcpJson(join(homedir(), ".exegol", "mcp", `${agentId}.json`));
+  const entry = parsed?.mcpServers?.[EXEGOL_SERVER_KEY] as
+    | { env?: Record<string, unknown> }
+    | undefined;
+  return tokenFromEnvBlock(entry?.env);
+}
+
+export function removePerAgentMcpConfig(agentId: string): void {
+  try {
+    const path = join(homedir(), ".exegol", "mcp", `${agentId}.json`);
+    if (existsSync(path)) unlinkSync(path);
+  } catch {
+    /* best-effort */
+  }
+}
+
 /** T163: which config each provider reads. Everything else falls back to the
  *  `.mcp.json` convention (Claude Code, Cursor, Windsurf all discover it). */
-type McpConfigFlavor = "mcp-json" | "opencode" | "gemini" | "codex-global" | "devin";
+type McpConfigFlavor = "mcp-json" | "opencode" | "gemini" | "codex-global" | "devin" | "agy";
 
 function flavorForCli(cliType: string): McpConfigFlavor {
   if (cliType === "opencode") return "opencode";
   if (cliType === "gemini") return "gemini";
   if (cliType === "codex") return "codex-global";
   if (cliType === "devin") return "devin";
-  // agy (Antigravity CLI) has NO MCP support as of 2026-08 (no mcp subcommand,
-  // no config surface) — it can still RECEIVE agent messages via PTY injection.
-  // Recheck on agy updates. Everything else gets the .mcp.json convention.
+  if (cliType === "agy") return "agy";
   return "mcp-json";
 }
 
@@ -41,13 +120,16 @@ interface McpJsonFile {
   [key: string]: unknown;
 }
 
-function readMcpJson(path: string): McpJsonFile {
+/** Returns null when the file exists but can't be parsed — callers must NOT
+ *  overwrite in that case or the user's other MCP servers are destroyed
+ *  (opencode.json / .gemini/settings.json are hand-edited and may be JSONC). */
+function readMcpJson(path: string): McpJsonFile | null {
   if (!existsSync(path)) return {};
   try {
     return JSON.parse(readFileSync(path, "utf-8")) as McpJsonFile;
   } catch (err) {
-    logger.warn("[ExegolMcp] Failed to parse existing .mcp.json, starting fresh:", err);
-    return {};
+    logger.warn(`[ExegolMcp] ${path} is not valid JSON — leaving it untouched:`, err);
+    return null;
   }
 }
 
@@ -63,6 +145,7 @@ export function writeAgentMcpConfig(
 ): void {
   const configPath = join(cwd, ".mcp.json");
   const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
 
   const updated: McpJsonFile = {
     ...existing,
@@ -76,7 +159,7 @@ export function writeAgentMcpConfig(
           // The token IS the identity: the server maps it to agent/project
           // and re-reads access mode from the DB per call. EXEGOL_ACCESS_MODE
           // is a display-only hint for the shim's tools/list.
-          EXEGOL_MCP_TOKEN: token,
+          [FILE_TOKEN_ENV]: token,
           EXEGOL_ACCESS_MODE: accessMode,
         },
       },
@@ -84,7 +167,10 @@ export function writeAgentMcpConfig(
   };
 
   try {
-    writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+    writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
   } catch (err) {
     logger.warn("[ExegolMcp] Failed to write .mcp.json:", err);
   }
@@ -100,7 +186,9 @@ function writeOpencodeConfig(
   accessMode: ExegolAccessMode,
 ): void {
   const configPath = join(cwd, "opencode.json");
-  const existing = readMcpJson(configPath) as { mcp?: Record<string, unknown> };
+  const parsed = readMcpJson(configPath);
+  if (parsed === null) return; // unparseable — never clobber the user's servers
+  const existing = parsed as { mcp?: Record<string, unknown> };
   const updated = {
     ...existing,
     mcp: {
@@ -111,13 +199,16 @@ function writeOpencodeConfig(
         enabled: true,
         environment: {
           ELECTRON_RUN_AS_NODE: "1",
-          EXEGOL_MCP_TOKEN: token,
+          [FILE_TOKEN_ENV]: token,
           EXEGOL_ACCESS_MODE: accessMode,
         },
       },
     },
   };
-  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 /** gemini-cli reads `<cwd>/.gemini/settings.json` — same mcpServers shape as .mcp.json. */
@@ -128,8 +219,9 @@ function writeGeminiConfig(
   accessMode: ExegolAccessMode,
 ): void {
   const configPath = join(cwd, ".gemini", "settings.json");
-  mkdirSync(dirname(configPath), { recursive: true });
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
   const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
   const updated: McpJsonFile = {
     ...existing,
     mcpServers: {
@@ -139,13 +231,16 @@ function writeGeminiConfig(
         args: [shimPath],
         env: {
           ELECTRON_RUN_AS_NODE: "1",
-          EXEGOL_MCP_TOKEN: token,
+          [FILE_TOKEN_ENV]: token,
           EXEGOL_ACCESS_MODE: accessMode,
         },
       },
     },
   };
-  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 /** devin reads `<cwd>/.devin/mcp_config.local.json` (project-local, uncommitted
@@ -158,8 +253,9 @@ function writeDevinConfig(
   accessMode: ExegolAccessMode,
 ): void {
   const configPath = join(cwd, ".devin", "mcp_config.local.json");
-  mkdirSync(dirname(configPath), { recursive: true });
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
   const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
   const updated: McpJsonFile = {
     ...existing,
     mcpServers: {
@@ -170,13 +266,50 @@ function writeDevinConfig(
         disabled: false,
         env: {
           ELECTRON_RUN_AS_NODE: "1",
-          EXEGOL_MCP_TOKEN: token,
+          [FILE_TOKEN_ENV]: token,
           EXEGOL_ACCESS_MODE: accessMode,
         },
       },
     },
   };
-  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, "utf-8");
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
+}
+
+/** agy (Antigravity CLI) reads `<cwd>/.agents/mcp_config.json` — workspace-local,
+ *  standard mcpServers shape (docs: antigravity.google/docs/cli/mcp). It has no
+ *  `mcp add` command: the file is the interface, and `/mcp` reloads it. */
+function writeAgyConfig(
+  cwd: string,
+  shimPath: string,
+  token: string,
+  accessMode: ExegolAccessMode,
+): void {
+  const configPath = join(cwd, ".agents", "mcp_config.json");
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
+  const existing = readMcpJson(configPath);
+  if (existing === null) return; // unparseable — never clobber the user's servers
+  const updated: McpJsonFile = {
+    ...existing,
+    mcpServers: {
+      ...existing.mcpServers,
+      [EXEGOL_SERVER_KEY]: {
+        command: process.execPath,
+        args: [shimPath],
+        env: {
+          ELECTRON_RUN_AS_NODE: "1",
+          [FILE_TOKEN_ENV]: token,
+          EXEGOL_ACCESS_MODE: accessMode,
+        },
+      },
+    },
+  };
+  writeFileSync(configPath, `${JSON.stringify(updated, null, 2)}\n`, {
+    encoding: "utf-8",
+    mode: 0o600,
+  });
 }
 
 const CODEX_MARK_START = "# >>> exegol managed — do not edit >>>";
@@ -190,7 +323,7 @@ const CODEX_MARK_END = "# <<< exegol managed <<<";
  */
 function ensureCodexGlobalConfig(shimPath: string): void {
   const configPath = join(homedir(), ".codex", "config.toml");
-  mkdirSync(dirname(configPath), { recursive: true });
+  mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
   const block = [
     CODEX_MARK_START,
     `[mcp_servers.${EXEGOL_SERVER_KEY}]`,
@@ -230,6 +363,9 @@ export function writeAgentMcpConfigFor(
       case "devin":
         writeDevinConfig(cwd, shimPath, token, accessMode);
         return;
+      case "agy":
+        writeAgyConfig(cwd, shimPath, token, accessMode);
+        return;
       case "gemini":
         writeGeminiConfig(cwd, shimPath, token, accessMode);
         return;
@@ -256,28 +392,27 @@ export function writeAgentMcpConfigFor(
  *  via registerAgentMcpToken... which their running shim can't know — codex
  *  loses MCP across app restarts until the session restarts (documented gap). */
 export function readAgentMcpToken(cwd: string): string | null {
-  const fromMcpJson = readMcpJson(join(cwd, ".mcp.json")).mcpServers?.[EXEGOL_SERVER_KEY] as
+  const mcpJson = readMcpJson(join(cwd, ".mcp.json"))?.mcpServers?.[EXEGOL_SERVER_KEY] as
     | { env?: Record<string, unknown> }
     | undefined;
-  const t1 = fromMcpJson?.env?.EXEGOL_MCP_TOKEN;
-  if (typeof t1 === "string" && t1.length > 0) return t1;
-
-  const opencode = (readMcpJson(join(cwd, "opencode.json")) as { mcp?: Record<string, unknown> })
-    .mcp?.[EXEGOL_SERVER_KEY] as { environment?: Record<string, unknown> } | undefined;
-  const t2 = opencode?.environment?.EXEGOL_MCP_TOKEN;
-  if (typeof t2 === "string" && t2.length > 0) return t2;
-
-  const gemini = readMcpJson(join(cwd, ".gemini", "settings.json")).mcpServers?.[
+  const opencode = (
+    readMcpJson(join(cwd, "opencode.json")) as { mcp?: Record<string, unknown> } | null
+  )?.mcp?.[EXEGOL_SERVER_KEY] as { environment?: Record<string, unknown> } | undefined;
+  const gemini = readMcpJson(join(cwd, ".gemini", "settings.json"))?.mcpServers?.[
     EXEGOL_SERVER_KEY
   ] as { env?: Record<string, unknown> } | undefined;
-  const t3 = gemini?.env?.EXEGOL_MCP_TOKEN;
-  if (typeof t3 === "string" && t3.length > 0) return t3;
-
-  const devin = readMcpJson(join(cwd, ".devin", "mcp_config.local.json")).mcpServers?.[
+  const devin = readMcpJson(join(cwd, ".devin", "mcp_config.local.json"))?.mcpServers?.[
     EXEGOL_SERVER_KEY
   ] as { env?: Record<string, unknown> } | undefined;
-  const t4 = devin?.env?.EXEGOL_MCP_TOKEN;
-  return typeof t4 === "string" && t4.length > 0 ? t4 : null;
+  const agy = readMcpJson(join(cwd, ".agents", "mcp_config.json"))?.mcpServers?.[
+    EXEGOL_SERVER_KEY
+  ] as { env?: Record<string, unknown> } | undefined;
+
+  for (const env of [mcpJson?.env, opencode?.environment, gemini?.env, devin?.env, agy?.env]) {
+    const token = tokenFromEnvBlock(env);
+    if (token) return token;
+  }
+  return null;
 }
 
 /** Best-effort removal of the exegol entry on agent exit — the token is
@@ -289,12 +424,15 @@ export function removeAgentMcpConfig(cwd: string): void {
   removeFromJsonConfig(join(cwd, "opencode.json"), "mcp");
   removeFromJsonConfig(join(cwd, ".gemini", "settings.json"), "mcpServers");
   removeFromJsonConfig(join(cwd, ".devin", "mcp_config.local.json"), "mcpServers");
+  removeFromJsonConfig(join(cwd, ".agents", "mcp_config.json"), "mcpServers");
 }
 
 function removeFromJsonConfig(configPath: string, sectionKey: string): void {
   if (!existsSync(configPath)) return;
   try {
-    const existing = readMcpJson(configPath) as Record<string, unknown>;
+    const parsedExisting = readMcpJson(configPath);
+    if (parsedExisting === null) return;
+    const existing = parsedExisting as Record<string, unknown>;
     const servers = existing[sectionKey] as Record<string, unknown> | undefined;
     if (!servers || !(EXEGOL_SERVER_KEY in servers)) return;
     const { [EXEGOL_SERVER_KEY]: _removed, ...rest } = servers;

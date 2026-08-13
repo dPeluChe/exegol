@@ -88,7 +88,7 @@ export class AgentManager {
       throw new Error(`Project ${agent.projectId} not found`);
     }
 
-    const preflight = await runPreflight(db, {
+    const preflight = await runPreflight({
       cliType: agent.cliType,
       command: cliConfig.command,
       projectPath: project.path,

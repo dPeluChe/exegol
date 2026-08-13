@@ -1,11 +1,23 @@
-import { type AgentSignalEvent, type AgentStatus, isKnownSignalType } from "@exegol/shared";
+import {
+  type AgentSignalEvent,
+  type AgentStatus,
+  isKnownSignalType,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
-import { clearAgentLinks, clearAgentMessageQueue } from "./agent-messaging";
+import { getPtyHost } from "../terminal/pty-host";
+import {
+  clearAgentLinks,
+  clearAgentMessageQueue,
+  isEchoingInjection,
+  noteAgentOutput,
+} from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { createHandoff, generateHandoffFromScrollback } from "./handoff";
@@ -176,6 +188,7 @@ export function createSpawnCallbacks(
   return {
     onData: (data: string) => {
       broadcast("terminal:data", agent.id, data);
+      noteAgentOutput(agent.id);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
@@ -201,9 +214,17 @@ export function createSpawnCallbacks(
         applyAgentSignals(db, agent, maps, result.signals, result.currentStep ?? null);
       }
 
+      // Everything below is SCRAPED from terminal output — and our own injected
+      // messages are echoed back into that same stream. While the echo window
+      // is open, no scraped signal about this agent can be trusted: a wrapped
+      // line starting with "error" failed a live session, a quoted resume
+      // command would overwrite the real one, and a trailing "?" would fake a
+      // turn boundary and flush the whole queue at once (2026-08-12).
+      const echoingOwnMessage = isEchoingInjection(agent.id);
+
       // T101: store session ID (claude startup) or resume command (all CLIs shutdown)
       // Both use sessionIdsCaptured to avoid redundant DB writes per agent.
-      const sessionPayload = result.resumeCommand ?? result.sessionId;
+      const sessionPayload = echoingOwnMessage ? null : (result.resumeCommand ?? result.sessionId);
       if (sessionPayload && !maps.sessionIdsCaptured.has(agent.id)) {
         maps.sessionIdsCaptured.add(agent.id);
         try {
@@ -238,16 +259,36 @@ export function createSpawnCallbacks(
         });
       }
 
-      if (result.status || result.currentStep) {
-        if (result.status) {
+      // `failed` kills the session; `waiting_input` fakes a turn boundary and
+      // flushes the pending queue in one burst. Both are common in prose.
+      let scrapedStatus = result.status;
+      if (echoingOwnMessage && (scrapedStatus === "failed" || scrapedStatus === "waiting_input")) {
+        logger.info(
+          `[AgentCallback] Ignoring scraped "${scrapedStatus}" for ${agent.id} — matches our just-injected message echo`,
+        );
+        scrapedStatus = undefined;
+      }
+      // A CLI printing an error line is NOT a dead session: claude and codex
+      // both print "Error: …" / "rejected due to unacceptable risk" and keep
+      // going. Only the process exit decides failure (onExit → finalize), so a
+      // scraped `failed` on a LIVE pty would strand a working agent behind an
+      // "Ended" card with no way back (live 2026-08-12).
+      if (scrapedStatus === "failed" && getPtyHost().isAlive(agent.id)) {
+        logger.info(
+          `[AgentCallback] ${agent.id} printed an error but its PTY is alive — keeping the session (was: ${result.currentStep ?? "no detail"})`,
+        );
+        scrapedStatus = undefined;
+      }
+      if (scrapedStatus || result.currentStep) {
+        if (scrapedStatus) {
           logger.info(
-            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${result.status}${result.currentStep ? ` [${result.currentStep}]` : ""}`,
+            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${result.currentStep ? ` [${result.currentStep}]` : ""}`,
           );
-          updateAgentStatus(db, agent.id, result.status as AgentStatus, result.currentStep);
+          updateAgentStatus(db, agent.id, scrapedStatus as AgentStatus, result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
             projectId: agent.projectId,
-            status: result.status as AgentStatus,
+            status: scrapedStatus as AgentStatus,
             currentStep: result.currentStep ?? null,
             cliType: agent.cliType,
             timestamp: Date.now(),
@@ -265,7 +306,11 @@ export function createSpawnCallbacks(
         }
       }
 
-      if (result.tokenLimitWarning && !maps.tokenLimitDetected.has(agent.id)) {
+      if (
+        result.tokenLimitWarning &&
+        !echoingOwnMessage &&
+        !maps.tokenLimitDetected.has(agent.id)
+      ) {
         maps.tokenLimitDetected.add(agent.id);
         try {
           const scrollback = maps.scrollbackBuffers.get(agent.id)?.join("") ?? "";
@@ -301,7 +346,49 @@ export function createSpawnCallbacks(
       // T145: dead agents must not stay live credentials — revoke the MCP
       // token; a committed/leaked .mcp.json then authorizes nothing.
       revokeAgentMcpToken(agent.id);
-      clearAgentMessageQueue(agent.id);
+      // The token also lives on disk (codex sanitizes env) — it must not
+      // outlive the agent in the user's repo.
+      if (!isShell) {
+        removePerAgentMcpConfig(agent.id);
+        try {
+          const row = db
+            .prepare(
+              `SELECT COALESCE(w.path, p.path) AS cwd
+               FROM agents a
+               LEFT JOIN worktrees w ON w.id = a.worktree_id
+               JOIN projects p ON p.id = a.project_id
+               WHERE a.id = ?`,
+            )
+            .get(agent.id) as { cwd?: string } | undefined;
+          if (row?.cwd) {
+            // The config file is per-DIRECTORY: agents sharing a cwd share it.
+            // Deleting on exit would strip a LIVE sibling's server entry and
+            // leave it with no MCP at all (live incident 2026-08-12).
+            const statuses = [...LIVE_STATUSES];
+            const sibling = db
+              .prepare(
+                `SELECT a.id FROM agents a
+                 LEFT JOIN worktrees w ON w.id = a.worktree_id
+                 JOIN projects p ON p.id = a.project_id
+                 WHERE COALESCE(w.path, p.path) = ?
+                   AND a.id != ?
+                   AND a.status IN (${statuses.map(() => "?").join(",")})
+                 LIMIT 1`,
+              )
+              .get(row.cwd, agent.id, ...statuses) as { id?: string } | undefined;
+            if (sibling?.id) {
+              logger.info(
+                `[AgentCallback] Keeping MCP config in ${row.cwd} — agent ${sibling.id} still lives there`,
+              );
+            } else {
+              removeAgentMcpConfig(row.cwd);
+            }
+          }
+        } catch (err) {
+          logger.warn(`[AgentCallback] MCP config cleanup failed for ${agent.id}:`, err);
+        }
+      }
+      clearAgentMessageQueue(agent.id, db);
       clearAgentLinks(db, agent.id);
       forgetBroadcastStatus(agent.id);
 

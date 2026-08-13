@@ -7,6 +7,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { StringDecoder } from "node:string_decoder";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 
 export const EXEGOL_DIR = join(homedir(), ".exegol");
@@ -48,9 +49,13 @@ export function encodeResponse(
 export function createNdjsonBuffer<T>(
   onMessage: (msg: T) => void,
 ): (chunk: Buffer | string) => void {
+  // StringDecoder, not per-chunk toString: a multibyte character split across
+  // a chunk boundary would otherwise decode to U+FFFD on both sides and the
+  // message would fail to parse (tool results carry user prose — acentos).
+  const decoder = new StringDecoder("utf-8");
   let buffer = "";
   return (chunk) => {
-    buffer += chunk.toString("utf-8");
+    buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
     let newlineIdx = buffer.indexOf("\n");
     while (newlineIdx !== -1) {
       const line = buffer.slice(0, newlineIdx);
@@ -87,6 +92,8 @@ export interface ExegolToolCallParams {
   tool: string;
   args: Record<string, unknown>;
   token?: string;
+  /** Shim's parent pid — disambiguates agents that share a config file. */
+  ppid?: number;
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
@@ -100,6 +107,7 @@ export const EXEGOL_TOOL_NAMES = [
   "knowledge_get",
   "agents_list",
   "agent_send",
+  "message_status",
   "agent_link",
 ] as const;
 export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
@@ -112,6 +120,7 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "knowledge_get",
   "agents_list",
   "agent_send",
+  "message_status",
   "agent_link",
 ]);
 
@@ -178,9 +187,11 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
   {
     name: "agents_list",
     description:
-      "List live agents orchestrated by Exegol (all projects). Returns `self` (YOUR " +
-      "session id + name — sign with it) and `agents` (the others: id, name, provider, " +
-      "project, status, task). Address agent_send by name when set, or by id.",
+      "List live agents orchestrated by Exegol (all projects). The response ALWAYS has " +
+      "both keys: `self` (YOUR session id + name — sign with it; `name` may be null) and " +
+      "`agents` (the others: id, name, provider, project, status, task; may be an empty " +
+      "array). Ids and names are stable for the whole session — cache them. Address " +
+      "agent_send by name when set, or by id.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -190,7 +201,9 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
       "id. Exegol delivers it at the target's next turn boundary (never mid-generation) " +
       "with your identity attached — the target knows it came from an agent, not the " +
       "user. Set expects_reply=false on closing messages so the exchange can END instead " +
-      "of ping-ponging forever. Returns delivered|queued.",
+      "of ping-ponging forever. Pass message_id (any unique string you make up) so that " +
+      "retrying after a timeout can never deliver the same message twice. Returns " +
+      "{messageId, status: delivered|queued_for_next_turn_boundary, duplicate?}.",
     inputSchema: {
       type: "object",
       properties: {
@@ -204,8 +217,33 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
           description:
             "Default true: tells the receiver you await their reply. Use false for FYI/closing messages.",
         },
+        message_id: {
+          type: "string",
+          description:
+            "Idempotency key you generate. If a call times out, retry with the SAME value: " +
+            "Exegol returns the original result (duplicate:true) instead of sending again.",
+        },
+        in_reply_to: {
+          type: "string",
+          description:
+            "Id of the Exegol message you are answering (shown in its header) — threads the exchange.",
+        },
       },
       required: ["target", "message"],
+    },
+  },
+  {
+    name: "message_status",
+    description:
+      "Check what happened to a message you sent (or received) when a call timed out and " +
+      "you can't tell whether it went through. Returns state: delivered | queued " +
+      "(with queuePosition) | undeliverable (the target's session ended) | unknown.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message_id: { type: "string", description: "The messageId returned by agent_send" },
+      },
+      required: ["message_id"],
     },
   },
   {

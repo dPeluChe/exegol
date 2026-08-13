@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   hooksPath: "/tmp/exegol-hooks/agent.json" as string | null,
   lifecycle: null as { beforeAgent?: string } | null,
   writeAgentMcpConfigFor: vi.fn(),
+  writePerAgentMcpConfig: vi.fn(() => "/tmp/exegol-mcp/agent.json"),
   ensureExegolMcpServerStarted: vi.fn(),
   buildClaudeCodeHooksFile: vi.fn((_agentId: string) => mocks.hooksPath),
 }));
@@ -43,6 +44,7 @@ vi.mock("../mcp/exegol-server", () => ({
 vi.mock("../mcp/exegol-mcp-config", () => ({
   resolveMcpShimPath: () => "/shim/exegol-mcp-shim.js",
   writeAgentMcpConfigFor: mocks.writeAgentMcpConfigFor,
+  writePerAgentMcpConfig: mocks.writePerAgentMcpConfig,
 }));
 vi.mock("../terminal/shell-wrappers", () => ({
   shellSupportsMarker: () => false,
@@ -83,6 +85,7 @@ describe("buildPtyInvocation", () => {
     mocks.hooksPath = "/tmp/exegol-hooks/agent.json";
     mocks.lifecycle = null;
     mocks.writeAgentMcpConfigFor.mockClear();
+    mocks.writePerAgentMcpConfig.mockClear();
     mocks.buildClaudeCodeHooksFile.mockClear();
   });
 
@@ -119,13 +122,16 @@ describe("buildPtyInvocation", () => {
     expect(inv.env.EXEGOL_AGENT_ID).toBe(agent.id);
     expect(inv.env.EXEGOL_ACCESS_MODE).toBe("write");
     expect(inv.env.EXEGOL_MCP_TOKEN).toBe("test-mcp-token");
-    expect(mocks.writeAgentMcpConfigFor).toHaveBeenCalledWith(
-      "claude-code",
-      "/tmp/cwd",
+    // claude-code gets a PRIVATE per-agent config (outside the repo) passed
+    // via --mcp-config, so siblings in one cwd keep distinct identities.
+    expect(mocks.writePerAgentMcpConfig).toHaveBeenCalledWith(
+      expect.any(String),
       "/shim/exegol-mcp-shim.js",
       "test-mcp-token",
       "write",
     );
+    expect(mocks.writeAgentMcpConfigFor).not.toHaveBeenCalled();
+    expect(inv.args.join(" ")).toContain("--mcp-config /tmp/exegol-mcp/agent.json");
   });
 
   it("defaults EXEGOL_ACCESS_MODE to write and honors an explicit read mode", () => {
@@ -168,6 +174,9 @@ describe("buildPtyInvocation", () => {
 
     expect(inv.args).toEqual(["-i"]);
     expect(inv.stdinCommand).toContain("gemini");
+    // `exec` so the PTY dies with the CLI — otherwise the shell outlives it and
+    // Exegol never shows the Ended/Resume card (verify 2026-08-12).
+    expect(inv.stdinCommand?.startsWith("exec ")).toBe(true);
   });
 
   it("appends the claude-code hooks file via --settings", () => {

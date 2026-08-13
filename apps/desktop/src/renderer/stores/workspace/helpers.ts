@@ -73,13 +73,16 @@ export function splitNodeByPaneId(
   paneId: string,
   direction: "horizontal" | "vertical",
   newPaneId: string,
+  /** Place the new pane BEFORE the target (drop on its left/top edge). */
+  newPaneFirst = false,
 ): LayoutNode {
   if (node.type === "pane") {
     if (node.paneId === paneId) {
+      const incoming: LayoutNode = { type: "pane", paneId: newPaneId };
       return {
         type: "split",
         direction,
-        children: [node, { type: "pane", paneId: newPaneId }],
+        children: newPaneFirst ? [incoming, node] : [node, incoming],
         sizes: [50, 50],
       };
     }
@@ -87,7 +90,7 @@ export function splitNodeByPaneId(
   }
 
   const newChildren = node.children.map((child) =>
-    splitNodeByPaneId(child, paneId, direction, newPaneId),
+    splitNodeByPaneId(child, paneId, direction, newPaneId, newPaneFirst),
   );
   const changed = newChildren.some((c, i) => c !== node.children[i]);
   return changed ? { ...node, children: newChildren } : node;

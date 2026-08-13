@@ -489,8 +489,8 @@ export const agentRouter = router({
           warnings: [],
         };
       }
-      return runPreflight(ctx.db, {
-        cliType: input.cliType as Parameters<typeof runPreflight>[1]["cliType"],
+      return runPreflight({
+        cliType: input.cliType as Parameters<typeof runPreflight>[0]["cliType"],
         command: provider.command,
         projectPath: project.path,
         useWorktree: input.useWorktree,

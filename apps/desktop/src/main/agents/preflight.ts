@@ -2,8 +2,6 @@ import { exec } from "node:child_process";
 import { access, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentCliType } from "@exegol/shared";
-import type Database from "libsql";
-import { getApiKey } from "../security/keystore";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,13 +17,6 @@ export interface PreflightResult {
   /** Non-blocking — spawn proceeds but user should be informed */
   warnings: PreflightIssue[];
 }
-
-// ─── CLI → API key mapping ────────────────────────────────────────────────────
-
-const CLI_KEY_REQUIREMENTS: Partial<Record<AgentCliType, { provider: string; envVar: string }>> = {
-  "claude-code": { provider: "anthropic", envVar: "ANTHROPIC_API_KEY" },
-  codex: { provider: "openai", envVar: "OPENAI_API_KEY" },
-};
 
 // ─── Individual checks ────────────────────────────────────────────────────────
 
@@ -62,10 +53,7 @@ export interface PreflightOptions {
   coreRustLoaded?: boolean;
 }
 
-export async function runPreflight(
-  db: Database.Database,
-  opts: PreflightOptions,
-): Promise<PreflightResult> {
+export async function runPreflight(opts: PreflightOptions): Promise<PreflightResult> {
   const errors: PreflightIssue[] = [];
   const warnings: PreflightIssue[] = [];
 
@@ -98,18 +86,11 @@ export async function runPreflight(
     });
   }
 
-  // ── Warning: API key missing from keystore ────────────────────────────────
-  const keyReq = CLI_KEY_REQUIREMENTS[opts.cliType];
-  if (keyReq) {
-    const inKeystore = getApiKey(db, keyReq.provider);
-    const inEnv = process.env[keyReq.envVar];
-    if (!inKeystore && !inEnv) {
-      warnings.push({
-        code: "API_KEY_MISSING",
-        message: `No ${keyReq.envVar} in keystore or environment — fine if the CLI is logged in via subscription. A key in Settings > API Keys is only needed for Exegol-side AI features (commit messages, scoring, evaluator gates).`,
-      });
-    }
-  }
+  // No API-key check here on purpose: claude and codex authenticate through the
+  // user's subscription, so warning about a missing OPENAI_API_KEY on every
+  // codex spawn was pure noise for a non-problem. Exegol's OWN AI features
+  // (commit messages, scoring, evaluator gates) do need keys — Doctor checks
+  // those, where the finding is actionable.
 
   // ── Warning: worktree requested but git repo not detected ─────────────────
   if (opts.useWorktree && pathStatus === "ok" && !isGitRepo) {
