@@ -557,6 +557,26 @@ Still worth taking, roughly by value:
   (`ESC[?2004h`); the per-provider table is the precise version.
 - **One-outstanding-delivery-per-run enforced in DDL** + replay-until-ack — the durable form of
   [[T170]] item 1.
+- **Declare which signal is authoritative and which is fallback.** We run THREE paths for one
+  job — OSC-777 through the PTY, hook events dropped as files, and the scraped output parser —
+  with the precedence living implicitly in the order of `if`s. That has already cost us: the
+  `oscDeliveredAgents` guard exists because two paths applied the same signal twice, and the
+  `ESC[?2004h` composer sniff was added and removed the same day for the same reason. Orca types
+  it (`pane-agent-evidence.ts:80-117` returns `source: 'hook'|'title'|'none'` with
+  `confidence: 'authoritative'|'fallback'`, hooks going stale after 30 min); Superset runs a
+  SINGLE path. Either discipline beats three mechanisms racing. Cheapest version: one resolver
+  returning `{status, source, confidence}` instead of scattered `continue`s.
+
+  Comparison that prompted this (Superset, via Antonio 2026-08-13): one shared `notify.sh`
+  registered in each CLI's own config, identity via `SUPERSET_AGENT_ID`, an early `exit 0` when
+  not inside a Superset terminal, POSTing to the host. Our `agents/wrappers.ts` is the same
+  design arrived at independently, guard included — so the hook itself needs nothing. Two
+  differences worth weighing: they hook `SessionStart`/`SessionEnd` (we infer session start),
+  and both Superset AND Orca chose HTTP where we drop files. File-drop needs no port or token
+  and survives the app being down; HTTP gives the hook a status code and does not depend on
+  `fs.watch`, which loses events under load on macOS. Our events dir being empty proves we
+  consume, not that nothing was missed.
+
 - **Preamble that bans the agent's native ask-user UI**: a worker opening its own TUI prompt hangs
   the coordinator invisibly. Exactly the failure we hit with codex demanding authorization.
 - **Never collapse "can't tell" into "dead"** (`src/main/daemon/AGENTS.md`): only a positive signal
