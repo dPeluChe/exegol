@@ -587,6 +587,36 @@ Still worth taking, roughly by value:
 
 ---
 
+### T179 — Complements from Athas (athasdev/athas) `added: 2026-08-13`
+**Priority**: P2 | **Effort**: S-M each | **Source**: competitor read, clone at
+`~/_repos_2_learn/github.com/athasdev/athas`
+
+Checked first: **the WebAssembly terminal engine is not for us.** Athas ships `ghostty-web`
+behind a feature flag with `status: "experimental"`, `default: false`, and keeps the FULL
+xterm.js addon suite alongside it — an alternative engine, not a replacement. Because the wasm
+engine has no addon ecosystem they hand-rolled search and serialize, and their serialize
+returns PLAIN TEXT (`translateToString(true)`). Our reattach depends on ANSI-preserving
+serialization (`headless-emulator.snapshot()` via SerializeAddon) — plain text would destroy
+exactly the fidelity we fixed on 2026-08-13. Revisit only for VT correctness, never for speed.
+
+Worth taking:
+1. **Feature flags as a system.** Every Athas feature carries id/name/description/icon and an
+   optional `status: "experimental"`, plus a settings search index. The ghostty case is the
+   argument: it lets you LAND something risky off-by-default instead of not landing it. We have
+   been shipping large changes with no flag at all.
+2. **Local history.** Per-file snapshots with `reason: save | auto-save | restore | manual`,
+   content hash, size, and restore-with-diff (`local-history-api.ts`). More valuable for us than
+   for a normal IDE because AGENTS edit the files: the oplog stores git trees per operation, so
+   there is no way to open one file and see its timeline. That is exactly the question after an
+   agent touches something.
+3. **Run actions — complement, not replacement.** We already detect npm scripts with framework
+   inference, Python, Cargo and Go (`system/scripts.ts`). Athas adds `make`, `just`, and LSP
+   code lens, all source-labelled and merged with user-defined custom actions. Take Makefile +
+   justfile (cheap) and the custom-action idea; code lens needs an LSP we do not have.
+4. **`persistentCommands`** — last-used commands float to the top of the palette. Tiny.
+
+---
+
 ### T176 — A quit that actually quits `added: 2026-08-13` `updated: 2026-08-13`
 **Priority**: P2 | **Effort**: S | **Source**: Antonio, live testing 2026-08-13
 

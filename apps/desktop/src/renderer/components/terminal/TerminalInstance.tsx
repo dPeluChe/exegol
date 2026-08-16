@@ -254,6 +254,29 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
   // Route visibility changes to the dormant pipe so hidden writes get
   // buffered into the ring and replayed on un-hide (T115).
+  // T178: tell main whether this view can draw, so it stops shipping bytes
+  // across IPC to a pane nobody is looking at. When output was dropped while
+  // hidden, main answers with a snapshot and we repaint from it — resuming
+  // mid-stream would paint onto a screen the app has already moved past.
+  useEffect(() => {
+    let cancelled = false;
+    window.api.terminal
+      .setVisible(agentId, isVisible)
+      .then((snapshot) => {
+        if (cancelled || !snapshot) return;
+        const terminal = terminalRef.current;
+        if (!terminal) return;
+        terminal.reset();
+        terminal.write(snapshot);
+      })
+      .catch(() => {
+        /* main is gone or the channel is unavailable — the gate fails open */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, isVisible]);
+
   useEffect(() => {
     dormantPipeRef.current?.setVisible(isVisible);
   }, [isVisible]);

@@ -2,6 +2,7 @@ import { app, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
 import { getPtyHost } from "../terminal/pty-host";
+import { consumeMissedOutput, setTerminalViewerVisible } from "../terminal/pty-visibility";
 import { getMainWindow } from "./window";
 
 export function registerIpcHandlers(): void {
@@ -24,6 +25,15 @@ export function registerIpcHandlers(): void {
 
   // Terminal snapshot: replay ring buffer content for late-mounting terminals
   ipcMain.handle("terminal:get-snapshot", (_event, agentId: string) => {
+    return getPtyHost().getSnapshot(agentId);
+  });
+
+  /** T178: a view reports whether it can currently draw this agent. Returns a
+   *  snapshot when output was dropped while hidden, so the view repaints from
+   *  the model instead of resuming mid-stream on a screen that moved on. */
+  ipcMain.handle("terminal:set-visible", (_event, agentId: string, visible: boolean) => {
+    setTerminalViewerVisible(agentId, visible);
+    if (!visible || !consumeMissedOutput(agentId)) return null;
     return getPtyHost().getSnapshot(agentId);
   });
 

@@ -14,6 +14,11 @@ import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import {
+  forgetTerminalViewers,
+  hasVisibleViewer,
+  noteOutputDropped,
+} from "../terminal/pty-visibility";
+import {
   clearAgentLinks,
   clearAgentMessageQueue,
   isEchoingInjection,
@@ -193,7 +198,11 @@ export function createSpawnCallbacks(
 ) {
   return {
     onData: (data: string) => {
-      broadcast("terminal:data", agent.id, data);
+      // T178: the renderer only needs bytes it can draw. Everything below this
+      // line runs regardless — the model, the parser and the delivery clock
+      // must never depend on whether a pane happens to be on screen.
+      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data);
+      else noteOutputDropped(agent.id);
       noteAgentOutput(agent.id);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
@@ -404,6 +413,7 @@ export function createSpawnCallbacks(
         logger.warn(`[AgentCallback] Failed to release path claims for ${agent.id}:`, err);
       }
       forgetBroadcastStatus(agent.id);
+      forgetTerminalViewers(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.
       handleParallelAgentExit(db, agent.id);
