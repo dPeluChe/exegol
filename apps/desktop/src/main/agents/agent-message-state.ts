@@ -1,19 +1,21 @@
 /**
  * T165 — where every inter-agent message is, and what became of it.
  *
- * Split out of agent-messaging.ts: this module OWNS the bookkeeping (who sent
- * what to whom, idempotency keys, content dedup, terminal outcomes) and knows
- * nothing about queues or terminals. The queued-vs-delivered DERIVATION lives
- * with the queue, in agent-messaging.ts, because only that module has both
- * halves — duplicating the answer here is what once made agent_send and
- * message_status contradict each other.
+ * Split out of agent-messaging.ts: this module knows nothing about queues or
+ * terminals. Since T170.1 the durable half (outcomes, idempotency) lives on the
+ * `messages` row — what is left here is the short-lived bookkeeping that SHOULD
+ * die with the process: the 30s content-dedup window and which injections are
+ * still waiting on a turn boundary.
+ *
+ * The queued-vs-delivered DERIVATION stays with the queue, in agent-messaging.ts,
+ * because only that module has both halves — duplicating the answer is what once
+ * made agent_send and message_status contradict each other.
  */
 
-import { getDb } from "../db/client";
+import type Database from "libsql";
 import {
-  type MessageDeliveryState as DbDeliveryState,
-  findMessageByClientKey,
   getMessageDelivery,
+  type MessageDeliveryState,
   setMessageDeliveryState,
 } from "../db/queries/messages";
 
@@ -42,16 +44,7 @@ export interface PendingMessage {
   inReplyTo: string | null;
 }
 
-// `delivered` means the text reached the terminal; `consumed` means the agent
-// finished a turn afterwards, i.e. it actually processed it. The sender used to
-// have no visibility between "queued" and a reply arriving (Juanito, 2026-08-13:
-// "delivered es transporte, no lectura").
-export type MessageDeliveryState = DbDeliveryState;
-
-// T170.1: state and idempotency live in the `messages` row, not in a Map. They
-// died with the process before, so after a restart `message_status` answered
-// "unknown" for everything and a retry with the same client_key re-delivered —
-// exactly when a sender most needs the answer.
+export type { MessageDeliveryState };
 
 // The dedup window stays in memory on purpose: it is a 30s "the model sent the
 // same sentence twice" guard, not a durability promise.
@@ -66,18 +59,15 @@ export function pruneExpiring(now: number): void {
   }
 }
 
-/** The row is written at send time; this records the state it starts in. */
-export function trackMessage(p: PendingMessage): void {
-  setMessageDeliveryState(getDb(), p.messageId, "queued");
-}
+/** Everything after the send. `queued` is the INSERT's own business. */
+type MessageOutcome = Exclude<MessageDeliveryState, "queued">;
 
-type MessageOutcome = "undeliverable" | "cancelled" | "consumed" | "delivered";
-
-/** The one place an outcome is written. A terminal outcome (cancelled /
- *  undeliverable / consumed) is never overwritten — reporting a cancelled
- *  message as read would be worse than reporting nothing. */
-export function setOutcome(messageId: string, outcome: MessageOutcome): void {
-  setMessageDeliveryState(getDb(), messageId, outcome);
+export function setOutcome(
+  db: Database.Database,
+  messageId: string,
+  outcome: MessageOutcome,
+): void {
+  setMessageDeliveryState(db, messageId, outcome);
 }
 
 // Messages injected into an agent that has not yet closed a turn. The next
@@ -91,29 +81,25 @@ export function noteInjected(p: PendingMessage): void {
 }
 
 /** Called at a turn boundary: everything injected before it has now been read. */
-export function markConsumed(agentId: string): void {
+export function markConsumed(db: Database.Database, agentId: string): void {
   const ids = awaitingConsumption.get(agentId);
   if (!ids?.length) return;
   awaitingConsumption.delete(agentId);
-  for (const id of ids) setOutcome(id, "consumed");
+  for (const id of ids) setOutcome(db, id, "consumed");
 }
 
 /** Read-only view for the queue module's delivery-state derivation. */
 export function getMessageEntry(
+  db: Database.Database,
   messageId: string,
 ): { fromAgentId: string; toAgentId: string; outcome?: MessageDeliveryState } | undefined {
-  const row = getMessageDelivery(getDb(), messageId);
+  const row = getMessageDelivery(db, messageId);
   if (!row?.fromAgentId || !row.toAgentId) return undefined;
   return {
     fromAgentId: row.fromAgentId,
     toAgentId: row.toAgentId,
     outcome: row.state ?? undefined,
   };
-}
-
-/** A repeated client key resolves to the message the first send produced. */
-export function findIdempotent(fromAgentId: string, clientKey: string): string | undefined {
-  return findMessageByClientKey(getDb(), fromAgentId, clientKey) ?? undefined;
 }
 
 export function rememberSend(dedupKey: string, messageId: string, at: number): void {

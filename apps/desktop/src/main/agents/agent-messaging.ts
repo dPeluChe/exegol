@@ -10,10 +10,15 @@
 
 import { LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
+import { getDb } from "../db/client";
 // Direct module imports (not the queries barrel): the barrel pulls
 // parallel-runs → spawn-env, which imports this module — cycle at init time.
 import { findLiveAgentsByAlias, getAgent } from "../db/queries/agents";
-import { sendMessage } from "../db/queries/messages";
+import {
+  findMessageByClientKey,
+  markMessagesUndeliverable,
+  sendMessage,
+} from "../db/queries/messages";
 import { getProject } from "../db/queries/projects";
 import { logger } from "../lib/logger";
 import {
@@ -23,7 +28,6 @@ import {
   sanitizeAgentMessage as sanitize,
 } from "./agent-message-injection";
 import {
-  findIdempotent,
   findRecentSend,
   forgetAgentMessageState,
   getMessageEntry,
@@ -33,7 +37,6 @@ import {
   pruneExpiring,
   rememberSend,
   setOutcome,
-  trackMessage,
 } from "./agent-message-state";
 
 export {
@@ -78,17 +81,18 @@ const queues = new Map<string, PendingMessage[]>();
  * target's terminal it is out of our hands, and saying otherwise would be a lie.
  */
 export function cancelQueuedMessage(
+  db: Database.Database,
   messageId: string,
   senderAgentId: string,
 ): { cancelled: boolean; state: MessageDeliveryState | "unknown"; reason?: string } {
-  const entry = getMessageEntry(messageId);
+  const entry = getMessageEntry(db, messageId);
   if (!entry || entry.fromAgentId !== senderAgentId) {
     return { cancelled: false, state: "unknown", reason: "no message of yours with that id" };
   }
   const queue = queues.get(entry.toAgentId);
   const idx = queue?.findIndex((p) => p.messageId === messageId) ?? -1;
   if (!queue || idx === -1) {
-    const state = getMessageDeliveryState(messageId, senderAgentId).state;
+    const { state } = deriveState(entry, messageId);
     return {
       cancelled: false,
       state,
@@ -96,7 +100,7 @@ export function cancelQueuedMessage(
     };
   }
   const [removed] = queue.splice(idx, 1);
-  if (removed) setOutcome(messageId, "cancelled");
+  if (removed) setOutcome(db, messageId, "cancelled");
   if (queue.length === 0) queues.delete(entry.toAgentId);
   return { cancelled: true, state: "cancelled" };
 }
@@ -104,10 +108,11 @@ export function cancelQueuedMessage(
 /** A re-send resolves to the original message, with its CURRENT delivery state
  *  (the first attempt may have been queued then delivered since). */
 function duplicateResult(
+  db: Database.Database,
   messageId: string,
   fromAgentId: string,
 ): { messageId: string; delivered: boolean; duplicate: true } {
-  const { state } = getMessageDeliveryState(messageId, fromAgentId);
+  const { state } = getMessageDeliveryState(db, messageId, fromAgentId);
   return {
     messageId,
     // `consumed` is delivery that ALSO got read. Comparing against "delivered"
@@ -121,22 +126,32 @@ function duplicateResult(
 
 /** T165: answer "did my message actually land?" without re-sending it. */
 export function getMessageDeliveryState(
+  db: Database.Database,
   messageId: string,
   askerAgentId: string,
 ): { state: MessageDeliveryState | "unknown"; queuePosition?: number } {
-  const entry = getMessageEntry(messageId);
+  const entry = getMessageEntry(db, messageId);
   // Scoped to the asker's own conversations: a message id is not a capability
-  // to inspect traffic between two other agents.
+  // to inspect traffic between two other agents. (The sender/receiver ids go
+  // NULL when an agent row is pruned, so an old message becomes unknown to
+  // everyone — by which point nobody is left to ask.)
   if (!entry || (entry.fromAgentId !== askerAgentId && entry.toAgentId !== askerAgentId)) {
     return { state: "unknown" };
   }
-  // The LIVE queue stays authoritative for queued-vs-delivered — storing that
-  // twice is how agent_send once answered "queued" for a message message_status
-  // called "delivered". The row answers for everything else, which is what
-  // survives a restart.
+  return deriveState(entry, messageId);
+}
+
+/** The LIVE queue stays authoritative for queued-vs-delivered — storing that
+ *  twice is how agent_send once answered "queued" for a message message_status
+ *  called "delivered". The row answers for everything else, which is what
+ *  survives a restart. */
+function deriveState(
+  entry: { toAgentId: string; outcome?: MessageDeliveryState },
+  messageId: string,
+): { state: MessageDeliveryState; queuePosition?: number } {
   const idx = (queues.get(entry.toAgentId) ?? []).findIndex((p) => p.messageId === messageId);
   if (idx !== -1) return { state: "queued", queuePosition: idx + 1 };
-  return { state: entry.outcome && entry.outcome !== "queued" ? entry.outcome : "delivered" };
+  return { state: entry.outcome ?? "delivered" };
 }
 
 // Agents blocked on a permission dialog are `waiting_input` in the DB exactly
@@ -210,8 +225,8 @@ export function sendAgentMessage(
   // The key is scoped to the sender by the unique index, so a new agent that
   // reuses an id can never inherit another's keys.
   if (input.clientKey) {
-    const prior = findIdempotent(fromAgentId, input.clientKey);
-    if (prior) return duplicateResult(prior, fromAgentId);
+    const prior = findMessageByClientKey(db, fromAgentId, input.clientKey);
+    if (prior) return duplicateResult(db, prior, fromAgentId);
   }
 
   const target = resolveTargetAgent(db, input.toAgentId);
@@ -231,7 +246,7 @@ export function sendAgentMessage(
     // ambiguous timeout left it exactly where it started — unable to tell
     // whether the original landed. Same answer as an explicit message_id.
     const prior = findRecentSend(dedupKey, now);
-    if (prior) return duplicateResult(prior, fromAgentId);
+    if (prior) return duplicateResult(db, prior, fromAgentId);
   }
 
   // Per-sender rate limit: one chatty agent can't flood a room, and a cycle
@@ -287,7 +302,6 @@ export function sendAgentMessage(
     inReplyTo: input.inReplyTo ?? null,
   };
 
-  trackMessage(pending);
   if (!input.system) rememberSend(dedupKey, record.id, now);
 
   // Target at its prompt → inject immediately; otherwise queue for the boundary.
@@ -296,7 +310,7 @@ export function sendAgentMessage(
     (target.status === "waiting_input" || target.status === "idle") &&
     !agentsAwaitingApproval.has(toAgentId);
   if (atIdlePrompt && injectNow(pending)) {
-    setOutcome(record.id, "delivered");
+    setOutcome(db, record.id, "delivered");
     return { messageId: record.id, delivered: true };
   }
   queue.push(pending);
@@ -313,24 +327,23 @@ export function sendAgentMessage(
  * on `waiting_input`): deliver ONE pending message — the rest wait for the
  * next boundary so replies interleave naturally instead of flooding the prompt.
  */
-export function deliverPendingAgentMessages(agentId: string): void {
+export function deliverPendingAgentMessages(db: Database.Database, agentId: string): void {
   // This IS the boundary: anything injected before it has now been read.
-  markConsumed(agentId);
+  markConsumed(db, agentId);
   const queue = queues.get(agentId);
   if (!queue?.length) return;
   const next = queue.shift();
   if (!next) return;
   if (!injectNow(next)) {
     // PTY gone — drop the queue; the messages stay persisted in the DB.
-    setOutcome(next.messageId, "undeliverable");
-    for (const p of queue) setOutcome(p.messageId, "undeliverable");
+    markUndeliverable(db, [next, ...queue]);
     queues.delete(agentId);
     logger.warn(
       `[AgentMsg] Target ${agentId} PTY gone — ${queue.length + 1} message(s) undeliverable`,
     );
     return;
   }
-  setOutcome(next.messageId, "delivered");
+  setOutcome(db, next.messageId, "delivered");
   if (queue.length === 0) queues.delete(agentId);
 }
 
@@ -369,7 +382,8 @@ export function noteAgentBoundarySignal(agentId: string): void {
   boundarySignalling.add(agentId);
 }
 
-function stopSweep(): void {
+/** Also the shutdown hook: nothing should keep a 2s interval alive past teardown. */
+export function stopSweep(): void {
   if (!sweepTimer) return;
   clearInterval(sweepTimer);
   sweepTimer = null;
@@ -400,8 +414,17 @@ function sweepQuietAgents(): void {
     } else {
       logger.info(`[AgentMsg] Delivering to ${agentId} on quiescence (no boundary signal)`);
     }
-    deliverPendingAgentMessages(agentId);
+    deliverPendingAgentMessages(getDb(), agentId);
   }
+}
+
+// The one ambient db in this module: a 2s timer owns no caller to thread it from.
+/** The queue died; the row is where the sender can still learn that. */
+function markUndeliverable(db: Database.Database, pending: PendingMessage[]): void {
+  markMessagesUndeliverable(
+    db,
+    pending.map((p) => p.messageId),
+  );
 }
 
 function ensureSweep(): void {
@@ -422,18 +445,15 @@ const PER_AGENT_STATE: Array<{ delete(key: string): unknown }> = [
 
 /**
  * Drop runtime state for a stopped/removed agent (messages stay in the DB as
- * an audit trail). With `db`, each sender waiting on an undelivered message is
- * told the session ended — otherwise it keeps waiting for a reply that can
- * never come (Antonio 2026-08-12: "si cerramos draco ya no debe tener en queue
- * peticiones a él").
+ * an audit trail). Each sender waiting on an undelivered message is told the
+ * session ended — otherwise it keeps waiting for a reply that can never come
+ * (Antonio 2026-08-12: "si cerramos draco ya no debe tener en queue peticiones
+ * a él").
  */
-export function clearAgentMessageQueue(agentId: string, db?: Database.Database): void {
+export function clearAgentMessageQueue(db: Database.Database, agentId: string): void {
   const pending = queues.get(agentId);
-  // Independent of the notification below: without `db` the states would stay
-  // "queued" and message_status would then derive them as delivered — the map
-  // lying about messages that were dropped.
-  for (const p of pending ?? []) setOutcome(p.messageId, "undeliverable");
-  if (db && pending?.length) {
+  markUndeliverable(db, pending ?? []);
+  if (pending?.length) {
     const gone = getAgent(db, agentId);
     const goneLabel = gone?.alias ?? agentId;
     const notified = new Set<string>();

@@ -83,9 +83,12 @@ export const wave3Migrations: Migration[] = [
     // than a lookup that a process death forgets.
     id: "w3_006_message_delivery",
     sql: `ALTER TABLE messages ADD COLUMN delivery_state TEXT;
-    ALTER TABLE messages ADD COLUMN delivered_at INTEGER;
     ALTER TABLE messages ADD COLUMN client_key TEXT;
     CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_key
-      ON messages(from_agent_id, client_key) WHERE client_key IS NOT NULL;`,
+      ON messages(from_agent_id, client_key) WHERE client_key IS NOT NULL;
+    /* Messages are never deleted, so the startup sweep would scan a table that
+       only grows. Partial: it indexes the handful that are actually stranded. */
+    CREATE INDEX IF NOT EXISTS idx_messages_queued
+      ON messages(delivery_state) WHERE delivery_state = 'queued';`,
   },
 ];

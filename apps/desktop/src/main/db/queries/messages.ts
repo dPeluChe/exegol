@@ -137,8 +137,6 @@ export type MessageDeliveryState =
   | "cancelled"
   | "undeliverable";
 
-const TERMINAL_STATES: MessageDeliveryState[] = ["consumed", "cancelled", "undeliverable"];
-
 export interface MessageDelivery {
   fromAgentId: string | null;
   toAgentId: string | null;
@@ -164,11 +162,23 @@ export function setMessageDeliveryState(
   id: string,
   state: MessageDeliveryState,
 ): void {
-  const stamp = state === "delivered" ? "delivered_at = unixepoch(), " : "";
   db.prepare(
-    `UPDATE messages SET ${stamp}delivery_state = ?
-     WHERE id = ? AND (delivery_state IS NULL OR delivery_state NOT IN (${TERMINAL_STATES.map(() => "?").join(",")}))`,
-  ).run(state, id, ...TERMINAL_STATES);
+    `UPDATE messages SET delivery_state = ?
+     WHERE id = ?
+       AND (delivery_state IS NULL
+            OR delivery_state NOT IN ('consumed', 'cancelled', 'undeliverable'))`,
+  ).run(state, id);
+}
+
+/** One statement for a whole dropped queue — an agent exit can strand ten. */
+export function markMessagesUndeliverable(db: Database.Database, ids: string[]): void {
+  if (ids.length === 0) return;
+  db.prepare(
+    `UPDATE messages SET delivery_state = 'undeliverable'
+     WHERE id IN (${ids.map(() => "?").join(",")})
+       AND (delivery_state IS NULL
+            OR delivery_state NOT IN ('consumed', 'cancelled', 'undeliverable'))`,
+  ).run(...ids);
 }
 
 /** The message a previous send with this key produced, if any. */

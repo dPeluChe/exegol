@@ -403,7 +403,7 @@ export function createSpawnCallbacks(
           logger.warn(`[AgentCallback] MCP config cleanup failed for ${agent.id}:`, err);
         }
       }
-      clearAgentMessageQueue(agent.id, db);
+      clearAgentMessageQueue(db, agent.id);
       clearAgentLinks(db, agent.id);
       // T172: a dead agent must not keep files reserved — the next one would be
       // blocked by a claim nobody is working on.

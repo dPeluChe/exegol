@@ -9,17 +9,6 @@ import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
 // Background: stale data cleanup (not needed before first paint)
 export function cleanupStaleData(): void {
   try {
-    // T170.1: the in-memory queue died with the process, so anything still
-    // marked queued was never going to arrive. A sender asking message_status
-    // gets an answer instead of a message that exists nowhere.
-    const stranded = markStaleQueuedUndeliverable(getDb());
-    if (stranded > 0) {
-      logger.info(`[Startup] ${stranded} queued message(s) marked undeliverable`);
-    }
-  } catch (err) {
-    logger.warn("[Startup] Could not sweep stranded messages:", err);
-  }
-  try {
     const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
     const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
     const staleCleanup = getDb()
@@ -76,6 +65,18 @@ export async function runStartupRecovery(): Promise<void> {
     }
   } catch (err) {
     logger.warn("[Startup] Could not snapshot DB agents:", err);
+  }
+
+  // T170.1: before ANY queue can exist again. The in-memory queue died with the
+  // process, so a message still marked queued was never going to arrive — the
+  // sender gets an answer instead of waiting on something that exists nowhere.
+  try {
+    const stranded = markStaleQueuedUndeliverable(getDb());
+    if (stranded > 0) {
+      logger.info(`[Recovery] ${stranded} queued message(s) marked undeliverable`);
+    }
+  } catch (err) {
+    logger.warn("[Recovery] Could not sweep stranded messages:", err);
   }
 
   let aliveSessionIds: string[] = [];
