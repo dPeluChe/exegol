@@ -648,6 +648,10 @@ question — who may act on which files while several agents coordinate.
 ### T166 — MCP shim architecture (deferred from the 2026-08-12 shim review) `added: 2026-08-12`
 **Priority**: P2 | **Effort**: M-L | **Source**: 4-agent shim /simplify — security + correctness landed same day; these are the architectural residuals
 
+(Input caps and the credential warning shipped 2026-08-16; see `TASK_COMPLETED/2608.md`.
+The `.gitignore` upsert bullet was DROPPED: [[T173]] settled that Exegol must not gitignore
+files a team may legitimately version — the warning goes to the human instead.)
+
 - **`hello` handshake on connect** (shim version, agentId, token source, pid): today the
   server logs `shim #7` and cannot tell a returning shim from a stranger, nor a stale one
   from a current one. With it: "3 agents on an outdated shim — restart those sessions"
@@ -669,10 +673,6 @@ question — who may act on which files while several agents coordinate.
 - **Socket squat probe**: `connect()` succeeding is treated as "another Exegol owns it" —
   verify `lstat` isSocket + uid, and handshake before trusting; surface "refused to start"
   in the MCP panel instead of one log line.
-- **Caps**: NDJSON buffer per connection (a newline-less flood OOMs the main process),
-  `memory_save.fact` / `memory_search.query` sizes (agent_send is capped, these aren't).
-- **`.gitignore` upsert for written configs** (mirror `ensureDigestGitignored`) — they hold
-  a live token and `opencode.json` is a file users legitimately commit.
 - Extract `provisionAgentMcp`/`deprovision` out of `buildPtyInvocation` (a command builder
   that writes files, mutates the token registry and starts a socket server).
 

@@ -42,20 +42,38 @@ export function encodeResponse(
   return `${JSON.stringify({ jsonrpc: "2.0", id, result: result ?? null })}\n`;
 }
 
+/** A newline-less stream would grow the frame buffer without bound — and in the
+ *  main process that is the whole app. Nothing legitimate approaches it: the
+ *  largest message is a tool result, and agent_send caps its body far below. */
+export const MAX_NDJSON_LINE_CHARS = 8 * 1024 * 1024;
+
 /**
  * Buffers arbitrary chunks and yields complete newline-delimited JSON messages.
  * Shared by the server and both bin scripts so socket framing stays in one place.
  */
 export function createNdjsonBuffer<T>(
   onMessage: (msg: T) => void,
+  onOverflow?: () => void,
 ): (chunk: Buffer | string) => void {
   // StringDecoder, not per-chunk toString: a multibyte character split across
   // a chunk boundary would otherwise decode to U+FFFD on both sides and the
   // message would fail to parse (tool results carry user prose — acentos).
   const decoder = new StringDecoder("utf-8");
   let buffer = "";
+  let overflowed = false;
   return (chunk) => {
     buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
+    if (buffer.length > MAX_NDJSON_LINE_CHARS) {
+      // Drop what we hold and stay in the discard state until a newline gives
+      // us a fresh frame boundary — resuming mid-message would parse garbage.
+      const resumeAt = buffer.lastIndexOf("\n");
+      buffer = resumeAt === -1 ? "" : buffer.slice(resumeAt + 1);
+      if (!overflowed) {
+        overflowed = true;
+        onOverflow?.();
+      }
+      if (resumeAt === -1) return;
+    }
     let newlineIdx = buffer.indexOf("\n");
     while (newlineIdx !== -1) {
       const line = buffer.slice(0, newlineIdx);
@@ -63,6 +81,9 @@ export function createNdjsonBuffer<T>(
       if (line.trim().length > 0) {
         try {
           onMessage(JSON.parse(line) as T);
+          // A parsed message means the framing recovered; the next flood is a
+          // new incident and worth reporting again.
+          overflowed = false;
         } catch {
           // Malformed line — drop it, don't crash the connection.
         }

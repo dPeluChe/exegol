@@ -63,6 +63,12 @@ function requireWriteAccess(tool: ExegolToolName, context: ExegolToolContext): v
   }
 }
 
+// agent_send has been capped since T157; these two were not, so an agent could
+// paste a whole file into the memory store or into an FTS5 query. A fact is one
+// sentence by design and a query is a phrase — both caps are far above real use.
+const MAX_FACT_CHARS = 4_000;
+const MAX_QUERY_CHARS = 500;
+
 async function handleMemorySearch(
   db: Database.Database,
   args: Record<string, unknown>,
@@ -70,6 +76,9 @@ async function handleMemorySearch(
 ) {
   const query = String(args.query ?? "");
   if (!query) throw new ExegolToolError("memory_search requires a non-empty query", -32602);
+  if (query.length > MAX_QUERY_CHARS) {
+    throw new ExegolToolError(`memory_search query too long (max ${MAX_QUERY_CHARS})`, -32602);
+  }
 
   const category = typeof args.category === "string" ? (args.category as MemoryCategory) : null;
   const results = await searchMemories(db, context.projectId, query);
@@ -113,6 +122,9 @@ function handleMemorySave(
   const fact = String(args.fact ?? "");
   const category = args.category as MemoryCategory;
   if (!fact) throw new ExegolToolError("memory_save requires a non-empty fact", -32602);
+  if (fact.length > MAX_FACT_CHARS) {
+    throw new ExegolToolError(`memory_save fact too long (max ${MAX_FACT_CHARS})`, -32602);
+  }
   if (!MEMORY_CATEGORIES.includes(category)) {
     throw new ExegolToolError(
       `memory_save requires a valid category (one of ${MEMORY_CATEGORIES.join(", ")})`,

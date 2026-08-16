@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { logger } from "../lib/logger";
+import { getNotificationBus } from "../notifications/bus";
 import type { ExegolAccessMode } from "./exegol-protocol";
 
 const EXEGOL_SERVER_KEY = "exegol";
@@ -372,6 +373,11 @@ function ensureCodexGlobalConfig(shimPath: string): void {
  * T170: wherever the CLI forwards its env, the per-session token already
  * arrives through the PTY and this file needs no secret.
  */
+/**
+ * Exegol deliberately does NOT gitignore these itself: they are legitimate
+ * project config a team may want versioned, and we only insert the `exegol`
+ * key. So the answer has to reach the person who decides — a log line does not.
+ */
 function warnIfCommittable(cwd: string, relPath: string): void {
   // Async: this rides the spawn path, and a blocking `git` call there would
   // stall the main process (and every PTY it pumps) for a log line.
@@ -381,6 +387,17 @@ function warnIfCommittable(cwd: string, relPath: string): void {
     logger.warn(
       `[ExegolMcp] ${relPath} holds an Exegol MCP token and is NOT gitignored in ${cwd} — add it to .gitignore so the credential can't be committed`,
     );
+    try {
+      getNotificationBus().emit({
+        type: "security:warning",
+        title: "A credential was written to a committable file",
+        body: `${relPath} carries an Exegol MCP token and is not gitignored. Add it to .gitignore before committing.`,
+        at: Date.now(),
+        meta: { cwd, relPath },
+      });
+    } catch {
+      /* notifications are best-effort — the log line already landed */
+    }
   });
 }
 

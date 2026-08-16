@@ -488,16 +488,27 @@ function startListening(db: Database.Database): void {
     // Announced lazily: the claim guard opens a fresh connection per write, and
     // announcing those would evict every real agent call from a 100-entry ring.
     let announced = false;
-    const feed = createNdjsonBuffer<JsonRpcRequest>((msg) => {
-      if (!announced && msg.method !== "check_path") {
-        announced = true;
-        record({ kind: "connect", detail: `shim #${connId}` });
-      }
-      handleRequest(db, socket, msg, conn).catch((err) => {
-        record({ kind: "error", detail: `unhandled: ${err instanceof Error ? err.message : err}` });
-        logger.warn("[ExegolMcp] Unhandled request error:", err);
-      });
-    });
+    const feed = createNdjsonBuffer<JsonRpcRequest>(
+      (msg) => {
+        if (!announced && msg.method !== "check_path") {
+          announced = true;
+          record({ kind: "connect", detail: `shim #${connId}` });
+        }
+        handleRequest(db, socket, msg, conn).catch((err) => {
+          record({
+            kind: "error",
+            detail: `unhandled: ${err instanceof Error ? err.message : err}`,
+          });
+          logger.warn("[ExegolMcp] Unhandled request error:", err);
+        });
+      },
+      () => {
+        // Visible, not just survived: a client sending an unframed flood is
+        // broken or hostile, and either way its next messages are being dropped.
+        record({ kind: "error", detail: `shim #${connId} exceeded the frame limit` });
+        logger.warn(`[ExegolMcp] shim #${connId} sent an oversized frame — discarding`);
+      },
+    );
     socket.on("data", feed);
     socket.on("close", () => {
       if (announced) record({ kind: "disconnect", detail: `shim #${connId}` });
