@@ -42,24 +42,45 @@ export function encodeResponse(
   return `${JSON.stringify({ jsonrpc: "2.0", id, result: result ?? null })}\n`;
 }
 
+/** A newline-less stream would grow the frame buffer without bound — and in the
+ *  main process that is the whole app. Counted in UTF-16 chars (~16 MB of heap),
+ *  per connection. Nothing legitimate approaches it: the largest message is a
+ *  tool result, and agent_send caps its body far below. */
+export const MAX_NDJSON_LINE_CHARS = 8 * 1024 * 1024;
+
 /**
  * Buffers arbitrary chunks and yields complete newline-delimited JSON messages.
  * Shared by the server and both bin scripts so socket framing stays in one place.
  */
 export function createNdjsonBuffer<T>(
   onMessage: (msg: T) => void,
+  onOverflow?: () => void,
 ): (chunk: Buffer | string) => void {
   // StringDecoder, not per-chunk toString: a multibyte character split across
   // a chunk boundary would otherwise decode to U+FFFD on both sides and the
   // message would fail to parse (tool results carry user prose — acentos).
   const decoder = new StringDecoder("utf-8");
   let buffer = "";
+  let overflowed = false;
   return (chunk) => {
     buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
+    if (buffer.length > MAX_NDJSON_LINE_CHARS) {
+      // Drop what we hold and stay in the discard state until a newline gives
+      // us a fresh frame boundary — resuming mid-message would parse garbage.
+      const resumeAt = buffer.lastIndexOf("\n");
+      buffer = resumeAt === -1 ? "" : buffer.slice(resumeAt + 1);
+      if (!overflowed) {
+        overflowed = true;
+        onOverflow?.();
+      }
+    }
     let newlineIdx = buffer.indexOf("\n");
     while (newlineIdx !== -1) {
       const line = buffer.slice(0, newlineIdx);
       buffer = buffer.slice(newlineIdx + 1);
+      // A newline IS the framing recovering — independent of whether this
+      // particular line parses, or of what the handler does with it.
+      overflowed = false;
       if (line.trim().length > 0) {
         try {
           onMessage(JSON.parse(line) as T);
@@ -178,7 +199,7 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
-        fact: { type: "string" },
+        fact: { type: "string", maxLength: 4_000 },
         category: { type: "string", enum: MEMORY_CATEGORY_VALUES },
       },
       required: ["fact", "category"],
@@ -223,7 +244,7 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
           type: "string",
           description: "Session name (alias) or agent id from agents_list",
         },
-        message: { type: "string", description: "Plain text, max 4000 chars" },
+        message: { type: "string", maxLength: 12_000, description: "Plain text" },
         expects_reply: {
           type: "boolean",
           description:

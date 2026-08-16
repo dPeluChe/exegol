@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createNdjsonBuffer, encodeRequest, encodeResponse } from "./exegol-protocol";
+import {
+  createNdjsonBuffer,
+  encodeRequest,
+  encodeResponse,
+  MAX_NDJSON_LINE_CHARS,
+} from "./exegol-protocol";
 
 describe("createNdjsonBuffer", () => {
   it("parses a single complete line", () => {
@@ -57,5 +62,40 @@ describe("encodeRequest / encodeResponse", () => {
       id: 3,
       error: { code: -32001, message: "nope" },
     });
+  });
+});
+
+// A socket client that never sends a newline would otherwise grow this buffer
+// without bound — and this runs in the main process, so that is the whole app.
+describe("frame limit", () => {
+  it("discards an unframed flood and recovers at the next newline", () => {
+    const seen: unknown[] = [];
+    let overflows = 0;
+    const feed = createNdjsonBuffer(
+      (m) => seen.push(m),
+      () => overflows++,
+    );
+
+    const chunk = "x".repeat(1024 * 1024);
+    for (let i = 0; i <= MAX_NDJSON_LINE_CHARS / chunk.length; i++) feed(chunk);
+    expect(overflows).toBe(1);
+    expect(seen).toHaveLength(0);
+
+    // The newline ends the garbage frame; the connection keeps working.
+    feed(`\n${encodeRequest(1, "call_tool", { tool: "memory_list" })}`);
+    expect(seen).toEqual([
+      { jsonrpc: "2.0", id: 1, method: "call_tool", params: { tool: "memory_list" } },
+    ]);
+  });
+
+  it("reports one incident, not one per 8M chars of garbage", () => {
+    let overflows = 0;
+    const feed = createNdjsonBuffer(
+      () => {},
+      () => overflows++,
+    );
+    const chunk = "x".repeat(1024 * 1024);
+    for (let i = 0; i < 20; i++) feed(chunk);
+    expect(overflows).toBe(1);
   });
 });

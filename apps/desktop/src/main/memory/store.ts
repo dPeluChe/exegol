@@ -185,12 +185,21 @@ export function supersedeMemory(
   return created;
 }
 
+/** A fact is one sentence by design and a query is a phrase. Enforced HERE, not
+ *  at the MCP door: the extractor is the highest-volume writer and never went
+ *  through it. Both sit far above real use and below "an agent pasted a file". */
+export const MAX_FACT_CHARS = 4_000;
+export const MAX_QUERY_CHARS = 500;
+
 /**
  * Record an observed fact, deciding among reinforce / supersede / create by
  * comparing it against active (non-superseded) memories in the same project
  * + category. Returns the id of the row that now represents this fact.
  */
 export function observeMemory(db: Database.Database, data: MemoryCreate): string {
+  if (data.content.length > MAX_FACT_CHARS) {
+    throw new Error(`memory fact too long (max ${MAX_FACT_CHARS} chars)`);
+  }
   const candidates = db
     .prepare(
       "SELECT id, content FROM memories WHERE project_id = ? AND category = ? AND superseded_by IS NULL",
@@ -222,6 +231,9 @@ export async function searchMemories(
   query: string,
   ollamaConfig?: OllamaConfig,
 ): Promise<MemoryEntry[]> {
+  if (query.length > MAX_QUERY_CHARS) {
+    throw new Error(`memory query too long (max ${MAX_QUERY_CHARS} chars)`);
+  }
   ensureMemoriesIndexed(db);
 
   // Structural guarantee: memory recall never hard-fails — any hybrid-search

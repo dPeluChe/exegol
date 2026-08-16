@@ -53,7 +53,8 @@ export type NotificationEventType =
   | "pipeline:completed"
   | "run:failed"
   | "resource:warning" // T143
-  | "budget:warning"; // T147
+  | "budget:warning" // T147
+  | "security:warning"; // T166 — a credential written where it could be committed
 
 export interface NotificationEvent {
   type: NotificationEventType;
@@ -91,6 +92,9 @@ export function muteChannelForEvent(type: NotificationEventType): NotificationMu
     case "resource:warning":
     case "budget:warning":
       return "warnings";
+    // security:warning is deliberately absent: a credential written somewhere it
+    // could be committed is not a preference, and muting it silently is the one
+    // outcome that costs the user something they cannot undo.
     default:
       return null;
   }

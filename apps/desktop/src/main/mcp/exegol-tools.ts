@@ -32,7 +32,13 @@ import { claimPaths, listProjectClaims, releasePaths } from "../db/queries/path-
 import { getWorktreeByAgentId } from "../db/queries/worktrees";
 import { readProjectBrief } from "../knowledge/brief";
 import { getDigestPath } from "../knowledge/paths";
-import { listMemories, observeMemory, searchMemories } from "../memory/store";
+import {
+  listMemories,
+  MAX_FACT_CHARS,
+  MAX_QUERY_CHARS,
+  observeMemory,
+  searchMemories,
+} from "../memory/store";
 import {
   EXEGOL_TOOL_NAMES,
   type ExegolToolContext,
@@ -70,6 +76,11 @@ async function handleMemorySearch(
 ) {
   const query = String(args.query ?? "");
   if (!query) throw new ExegolToolError("memory_search requires a non-empty query", -32602);
+  if (query.length > MAX_QUERY_CHARS) {
+    // The store enforces it too; translating here keeps the agent's error a
+    // "your input was invalid" instead of an opaque internal failure.
+    throw new ExegolToolError(`memory_search query too long (max ${MAX_QUERY_CHARS})`, -32602);
+  }
 
   const category = typeof args.category === "string" ? (args.category as MemoryCategory) : null;
   const results = await searchMemories(db, context.projectId, query);
@@ -113,6 +124,9 @@ function handleMemorySave(
   const fact = String(args.fact ?? "");
   const category = args.category as MemoryCategory;
   if (!fact) throw new ExegolToolError("memory_save requires a non-empty fact", -32602);
+  if (fact.length > MAX_FACT_CHARS) {
+    throw new ExegolToolError(`memory_save fact too long (max ${MAX_FACT_CHARS})`, -32602);
+  }
   if (!MEMORY_CATEGORIES.includes(category)) {
     throw new ExegolToolError(
       `memory_save requires a valid category (one of ${MEMORY_CATEGORIES.join(", ")})`,
