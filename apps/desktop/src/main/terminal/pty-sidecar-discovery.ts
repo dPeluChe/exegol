@@ -91,6 +91,29 @@ function waitForPidFile(token: string, timeoutMs: number): Promise<PidFile> {
  * Ensure a sidecar is running and return a connected client.
  * Reuses existing sidecar if version matches, otherwise spawns a new one.
  */
+/** The sidecar gives itself ~2s to drain before exiting; allow a little more,
+ *  then stop waiting — a predecessor that will not die must not block startup. */
+const EXIT_WAIT_MS = 3_000;
+const EXIT_POLL_MS = 100;
+
+async function waitForExit(pid: number): Promise<void> {
+  const deadline = Date.now() + EXIT_WAIT_MS;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return; // gone
+    }
+    await new Promise((r) => setTimeout(r, EXIT_POLL_MS));
+  }
+  // Still alive: escalate rather than race it for the socket.
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    /* */
+  }
+}
+
 export async function ensureSidecar(): Promise<SidecarClient> {
   // Step 1: Check for existing sidecar
   const pidFile = readPidFile();
@@ -99,11 +122,14 @@ export async function ensureSidecar(): Promise<SidecarClient> {
     if (await tryConnect(client, pidFile)) {
       return client;
     }
-    // Stale sidecar — clean up
+    // Stale sidecar — shut it down, and WAIT. Spawning a replacement while the
+    // predecessor is still exiting is how the old process ended up deleting the
+    // new one's socket and pid file (see cleanup() in pty-sidecar-entry).
     try {
       process.kill(pidFile.pid, "SIGTERM");
+      await waitForExit(pidFile.pid);
     } catch {
-      /* */
+      /* already gone */
     }
   }
 

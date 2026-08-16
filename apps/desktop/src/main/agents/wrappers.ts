@@ -2,7 +2,14 @@
 // Creates ~/.exegol/hooks/notify.sh for lifecycle event notification.
 // Merges hooks into ~/.claude/settings.json and ~/.codex/hooks.json.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { logger } from "../lib/logger";
@@ -28,10 +35,18 @@ export function ensureAgentWrappers(): void {
   }
 }
 
-/** Clean up stale event files on app quit. */
-export function cleanupAgentWrappers(): void {
+/**
+ * Sweep leftover hook events.
+ *
+ * Runs at STARTUP, not at quit. The hook writes one file per tool_use, so a
+ * fleet whose watcher missed events can leave thousands behind — and an
+ * unbounded synchronous unlink loop on the quit path is exactly the kind of
+ * work that makes an app take seconds to close. Capping it there instead would
+ * have traded a slow quit for an unbounded disk leak, since nothing else sweeps
+ * this directory (`cleanupOldEvents` prunes a DB table, not these files).
+ */
+export function sweepStaleAgentEvents(): void {
   try {
-    const { readdirSync, unlinkSync } = require("node:fs") as typeof import("node:fs");
     for (const file of readdirSync(EVENTS_DIR)) {
       try {
         unlinkSync(join(EVENTS_DIR, file));

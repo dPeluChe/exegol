@@ -2,7 +2,7 @@
 // Runs with ELECTRON_RUN_AS_NODE=1, survives window reloads.
 // Manages all PTY sessions via JSON-RPC over Unix domain socket.
 
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import * as pty from "node-pty";
@@ -353,18 +353,37 @@ const server = createServer((client: Socket) => {
 
 // ─── Startup ────────────────────────────────────────────────────────────
 
+/**
+ * Remove OUR socket and pid file — never someone else's.
+ *
+ * A shutting-down sidecar used to unlink both unconditionally, and discovery
+ * spawns the replacement without waiting for the predecessor to die. So the old
+ * process, exiting a few hundred ms later, deleted the NEW sidecar's files: it
+ * kept serving on an unlinked inode with no pid file, and the next launch found
+ * nothing, spawned a third, and left the second alive holding the previous
+ * run's PTYs. That is the "orphaned sidecar from an earlier run" (2026-08-13) —
+ * the version-mismatch shutdown did take, and its exit is what broke the
+ * replacement's identity.
+ */
 function cleanup(): void {
+  try {
+    const owner = (JSON.parse(readFileSync(SIDECAR_PID_PATH, "utf-8")) as PidFile).pid;
+    if (owner === process.pid) unlinkSync(SIDECAR_PID_PATH);
+  } catch {
+    /* no pid file, or not ours to remove */
+  }
+  // Only the process that bound the socket may unlink it; after a rebind the
+  // path belongs to whoever is listening now.
+  if (!ownsSocket) return;
   try {
     unlinkSync(SIDECAR_SOCK_PATH);
   } catch {
     /* */
   }
-  try {
-    unlinkSync(SIDECAR_PID_PATH);
-  } catch {
-    /* */
-  }
 }
+
+/** True between our own listen() and the moment we give the socket up. */
+let ownsSocket = false;
 
 function start(): void {
   // Ensure directory exists
@@ -383,6 +402,7 @@ function start(): void {
   mkdirSync(dirname(SIDECAR_SOCK_PATH), { recursive: true });
 
   server.listen(SIDECAR_SOCK_PATH, () => {
+    ownsSocket = true;
     // Write PID file
     const token = process.env.EXEGOL_SIDECAR_TOKEN ?? "";
     const pidFile: PidFile = {
