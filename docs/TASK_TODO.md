@@ -603,11 +603,10 @@ Worth taking:
    for a normal IDE because AGENTS edit the files: the oplog stores git trees per operation, so
    there is no way to open one file and see its timeline. That is exactly the question after an
    agent touches something.
-3. **Run actions — complement, not replacement.** We already detect npm scripts with framework
-   inference, Python, Cargo and Go (`system/scripts.ts`). Athas adds `make`, `just`, and LSP
-   code lens, all source-labelled and merged with user-defined custom actions. Take Makefile +
-   justfile (cheap) and the custom-action idea; code lens needs an LSP we do not have.
-4. **`persistentCommands`** — last-used commands float to the top of the palette. Tiny.
+3. **`persistentCommands`** — last-used commands float to the top of the palette. Tiny.
+
+(Item 3, run actions, shipped 2026-08-16; see `TASK_COMPLETED/2608.md`. LSP code lens stays
+out — it needs an LSP we do not have.)
 
 ---
 

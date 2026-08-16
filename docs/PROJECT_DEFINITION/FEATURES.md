@@ -41,6 +41,7 @@
 | Crash recovery: dead sidecar sessions detected and marked crashed on restart | DONE |
 | Session resume: ring buffer replayed into xterm on reattach | DONE |
 | Lifecycle scripts per repo (`.exegol/lifecycle.yaml` — setup / beforeAgent / afterCommit / teardown) | DONE |
+| Run actions (`Makefile` / `justfile` targets + `.exegol/actions.yaml`) in the launcher | DONE |
 | Structured errors: `ExegolError` hierarchy + `withRetry()` exponential backoff | DONE |
 | Agent spawn performance: PATH pre-captured, single DB write (`activateAgent`), no login-shell flag | DONE |
 | Shell agents bypass scoring, memory, scrollback buffering | DONE |

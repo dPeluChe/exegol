@@ -9,6 +9,7 @@
 import { exec } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseFlatConfig } from "../lib/flat-config";
 import { logger } from "../lib/logger";
 import { inspectCommand } from "../security/command-guard";
 
@@ -92,37 +93,11 @@ export function parseLifecycleYaml(content: string): LifecycleConfig | null {
   const config: LifecycleConfig = {};
   let hasKeys = false;
 
-  for (const line of content.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    // Match key: value (with optional quotes)
-    const match = trimmed.match(/^([a-zA-Z_]+)\s*:\s*(.+)$/);
-    if (!match?.[1] || !match[2]) continue;
-
-    const rawKey = match[1].toLowerCase();
-    const canonicalKey = KEY_ALIASES[rawKey];
+  for (const [rawKey, value] of parseFlatConfig(content)) {
+    const canonicalKey = KEY_ALIASES[rawKey.toLowerCase()];
     if (!canonicalKey) continue;
-
-    // Strip surrounding quotes and trailing comments
-    let value = match[2].trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    } else {
-      // Strip trailing comment (not inside quotes)
-      const commentIdx = value.indexOf(" #");
-      if (commentIdx !== -1) {
-        value = value.slice(0, commentIdx).trim();
-      }
-    }
-
-    if (value) {
-      config[canonicalKey] = value;
-      hasKeys = true;
-    }
+    config[canonicalKey] = value;
+    hasKeys = true;
   }
 
   return hasKeys ? config : null;
