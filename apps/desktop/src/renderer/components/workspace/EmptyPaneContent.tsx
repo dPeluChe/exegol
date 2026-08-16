@@ -368,8 +368,10 @@ export function EmptyPane({ paneId }: { paneId: string }) {
               >
                 <Terminal className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
                 {s.name}
-                {!isMini && s.framework && (
-                  <span className="text-[9px] text-text-muted">({s.framework})</span>
+                {/* `build` from package.json and `build` from a Makefile are
+                    different commands with the same label — say which. */}
+                {!isMini && (s.framework || s.source) && (
+                  <span className="text-[9px] text-text-muted">({s.framework ?? s.source})</span>
                 )}
               </button>
             ))}

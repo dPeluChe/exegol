@@ -176,12 +176,129 @@ async function detectOtherScripts(projectPath: string): Promise<DetectedScript[]
 
 // ─── Main Export ────────────────────────────────────────────────────────────
 
+/**
+ * T179 — Makefile / justfile / user-defined actions.
+ *
+ * A Makefile can carry sixty targets, and the launcher renders every script it
+ * is given, so detection ranks the ones a person actually runs and stops. The
+ * order below IS the ranking; anything unlisted keeps file order behind it.
+ */
+const COMMON_TARGETS = [
+  "dev",
+  "run",
+  "start",
+  "serve",
+  "build",
+  "test",
+  "lint",
+  "fmt",
+  "format",
+  "check",
+  "install",
+  "setup",
+  "clean",
+];
+const MAX_TARGETS_PER_FILE = 12;
+
+function rankTargets(names: string[]): string[] {
+  const known = COMMON_TARGETS.filter((t) => names.includes(t));
+  const rest = names.filter((n) => !COMMON_TARGETS.includes(n));
+  return [...known, ...rest].slice(0, MAX_TARGETS_PER_FILE);
+}
+
+async function readIfExists(path: string): Promise<string | null> {
+  if (!existsSync(path)) return null;
+  try {
+    return await readFile(path, "utf-8");
+  } catch {
+    return null;
+  }
+}
+
+/** Target lines only: no `.PHONY`, no `%` pattern rules, no `VAR := value`. */
+export function parseMakeTargets(content: string): string[] {
+  const names: string[] = [];
+  for (const line of content.split("\n")) {
+    const match = line.match(/^([A-Za-z0-9_][A-Za-z0-9_.-]*)\s*:(?!=)/);
+    const name = match?.[1];
+    if (!name || names.includes(name)) continue;
+    names.push(name);
+  }
+  return names;
+}
+
+/** Recipes start at column 0 and end in `:`; `x := y` is an assignment. */
+export function parseJustRecipes(content: string): string[] {
+  const names: string[] = [];
+  for (const line of content.split("\n")) {
+    if (!line || /^\s/.test(line) || line.startsWith("#")) continue;
+    const match = line.match(/^([A-Za-z0-9_][A-Za-z0-9_-]*)(?:\s+[^:]*)?:(?!=)/);
+    const name = match?.[1];
+    if (!name || names.includes(name)) continue;
+    names.push(name);
+  }
+  return names;
+}
+
+/** `.exegol/actions.yaml`: `name: command`, same line-based shape as lifecycle.yaml. */
+export function parseCustomActions(content: string): Array<{ name: string; command: string }> {
+  const actions: Array<{ name: string; command: string }> = [];
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const match = trimmed.match(/^([A-Za-z0-9_][A-Za-z0-9 _-]*?)\s*:\s*(.+)$/);
+    const name = match?.[1]?.trim();
+    let command = match?.[2]?.trim();
+    if (!name || !command) continue;
+    if (
+      (command.startsWith('"') && command.endsWith('"')) ||
+      (command.startsWith("'") && command.endsWith("'"))
+    ) {
+      command = command.slice(1, -1);
+    }
+    actions.push({ name, command });
+  }
+  return actions;
+}
+
+async function detectRunActions(projectPath: string): Promise<DetectedScript[]> {
+  const results: DetectedScript[] = [];
+
+  for (const file of ["Makefile", "makefile", "GNUmakefile"]) {
+    const content = await readIfExists(join(projectPath, file));
+    if (!content) continue;
+    for (const name of rankTargets(parseMakeTargets(content))) {
+      results.push({ name, command: `make ${name}`, source: file });
+    }
+    break; // one makefile per project — the first that exists is the real one
+  }
+
+  for (const file of ["justfile", "Justfile", ".justfile"]) {
+    const content = await readIfExists(join(projectPath, file));
+    if (!content) continue;
+    for (const name of rankTargets(parseJustRecipes(content))) {
+      results.push({ name, command: `just ${name}`, source: file });
+    }
+    break;
+  }
+
+  // User-defined actions come LAST but are never truncated: someone wrote them
+  // down on purpose, which is a stronger signal than any heuristic above.
+  const custom = await readIfExists(join(projectPath, ".exegol", "actions.yaml"));
+  for (const action of custom ? parseCustomActions(custom) : []) {
+    results.push({ ...action, source: ".exegol/actions.yaml" });
+  }
+
+  return results;
+}
+
 export async function detectProjectScripts(projectPath: string): Promise<DetectedScript[]> {
-  const [node, python, other] = await Promise.all([
+  const [node, python, other, actions] = await Promise.all([
     detectNodeScripts(projectPath),
     detectPythonScripts(projectPath),
     detectOtherScripts(projectPath),
+    detectRunActions(projectPath),
   ]);
 
-  return [...node, ...python, ...other];
+  return [...node, ...python, ...other, ...actions];
 }
