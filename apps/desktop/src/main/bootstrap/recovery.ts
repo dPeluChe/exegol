@@ -1,12 +1,24 @@
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { recoverStaleAgents } from "../db/queries";
+import { markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
 
 // Background: stale data cleanup (not needed before first paint)
 export function cleanupStaleData(): void {
+  try {
+    // T170.1: the in-memory queue died with the process, so anything still
+    // marked queued was never going to arrive. A sender asking message_status
+    // gets an answer instead of a message that exists nowhere.
+    const stranded = markStaleQueuedUndeliverable(getDb());
+    if (stranded > 0) {
+      logger.info(`[Startup] ${stranded} queued message(s) marked undeliverable`);
+    }
+  } catch (err) {
+    logger.warn("[Startup] Could not sweep stranded messages:", err);
+  }
   try {
     const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
     const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;

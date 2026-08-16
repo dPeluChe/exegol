@@ -26,13 +26,11 @@ import {
   findIdempotent,
   findRecentSend,
   forgetAgentMessageState,
-  forgetSenderIdempotency,
   getMessageEntry,
   type MessageDeliveryState,
   markConsumed,
   type PendingMessage,
   pruneExpiring,
-  rememberIdempotency,
   rememberSend,
   setOutcome,
   trackMessage,
@@ -132,9 +130,13 @@ export function getMessageDeliveryState(
   if (!entry || (entry.fromAgentId !== askerAgentId && entry.toAgentId !== askerAgentId)) {
     return { state: "unknown" };
   }
-  if (entry.outcome) return { state: entry.outcome };
+  // The LIVE queue stays authoritative for queued-vs-delivered — storing that
+  // twice is how agent_send once answered "queued" for a message message_status
+  // called "delivered". The row answers for everything else, which is what
+  // survives a restart.
   const idx = (queues.get(entry.toAgentId) ?? []).findIndex((p) => p.messageId === messageId);
-  return idx === -1 ? { state: "delivered" } : { state: "queued", queuePosition: idx + 1 };
+  if (idx !== -1) return { state: "queued", queuePosition: idx + 1 };
+  return { state: entry.outcome && entry.outcome !== "queued" ? entry.outcome : "delivered" };
 }
 
 // Agents blocked on a permission dialog are `waiting_input` in the DB exactly
@@ -205,9 +207,10 @@ export function sendAgentMessage(
   // Before ANY validation or rate accounting: a retry of a call that already
   // succeeded must be a no-op that reports the original outcome.
   pruneExpiring(Date.now());
-  const idemKey = input.clientKey ? `${fromAgentId}:${input.clientKey}` : null;
-  if (idemKey) {
-    const prior = findIdempotent(idemKey);
+  // The key is scoped to the sender by the unique index, so a new agent that
+  // reuses an id can never inherit another's keys.
+  if (input.clientKey) {
+    const prior = findIdempotent(fromAgentId, input.clientKey);
     if (prior) return duplicateResult(prior, fromAgentId);
   }
 
@@ -263,7 +266,14 @@ export function sendAgentMessage(
 
   const senderProject = sender ? getProject(db, sender.projectId) : null;
 
-  const record = sendMessage(db, { fromAgentId, toAgentId, type: "text", content: text });
+  const record = sendMessage(db, {
+    fromAgentId,
+    toAgentId,
+    type: "text",
+    content: text,
+    clientKey: input.clientKey ?? null,
+    deliveryState: "queued",
+  });
   const pending: PendingMessage = {
     messageId: record.id,
     fromAgentId,
@@ -278,7 +288,6 @@ export function sendAgentMessage(
   };
 
   trackMessage(pending);
-  if (idemKey) rememberIdempotency(idemKey, record.id, now);
   if (!input.system) rememberSend(dedupKey, record.id, now);
 
   // Target at its prompt → inject immediately; otherwise queue for the boundary.
@@ -287,6 +296,7 @@ export function sendAgentMessage(
     (target.status === "waiting_input" || target.status === "idle") &&
     !agentsAwaitingApproval.has(toAgentId);
   if (atIdlePrompt && injectNow(pending)) {
+    setOutcome(record.id, "delivered");
     return { messageId: record.id, delivered: true };
   }
   queue.push(pending);
@@ -320,6 +330,7 @@ export function deliverPendingAgentMessages(agentId: string): void {
     );
     return;
   }
+  setOutcome(next.messageId, "delivered");
   if (queue.length === 0) queues.delete(agentId);
 }
 
@@ -450,5 +461,4 @@ export function clearAgentMessageQueue(agentId: string, db?: Database.Database):
   for (const store of PER_AGENT_STATE) store.delete(agentId);
   forgetAgentMessageState(agentId);
   forgetAgentInjectionState(agentId);
-  forgetSenderIdempotency(agentId);
 }

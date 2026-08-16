@@ -7,6 +7,11 @@ const ptyMock = vi.hoisted(() => ({
   alive: new Set<string>(),
 }));
 
+// T170.1: delivery state lives in the messages row now, and the turn-boundary
+// and exit paths that write it have no db in hand.
+const dbHolder = vi.hoisted(() => ({ db: null as unknown as Database.Database }));
+vi.mock("../db/client", () => ({ getDb: () => dbHolder.db }));
+
 vi.mock("../terminal/pty-host", () => ({
   getPtyHost: () => ({
     isAlive: (id: string) => ptyMock.alive.has(id),
@@ -15,6 +20,7 @@ vi.mock("../terminal/pty-host", () => ({
 }));
 
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
+import { getMessageDelivery, markStaleQueuedUndeliverable } from "../db/queries/messages";
 import {
   cancelQueuedMessage,
   checkAgentMessages,
@@ -34,6 +40,7 @@ function setupDb(): Database.Database {
   const db = new Database(":memory:");
   runMigrations(db);
   db.prepare("INSERT INTO projects (id, name, path) VALUES ('p1', 'Proj', '/tmp/p1')").run();
+  dbHolder.db = db;
   return db;
 }
 
@@ -439,6 +446,49 @@ describe("delivery is idempotent and observable", () => {
     // The point: exactly ONE injection and ONE persisted row.
     expect(ptyMock.writes).toHaveLength(1);
     expect(messageCount(db)).toBe(1);
+  });
+
+  // The whole point of T170.1: the answer used to live in a Map, so a relaunch
+  // said "unknown" for everything and the same client_key delivered twice.
+  it("survives a restart: state is answered from the row, and the key still dedups", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    const first = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: "review please after the restart",
+      clientKey: "k-restart",
+    });
+    expect(getMessageDeliveryState(first.messageId, "a1").state).toBe("delivered");
+
+    // Everything in memory is gone; only the database came back.
+    clearAgentMessageQueue("a1");
+    clearAgentMessageQueue("a2");
+
+    expect(getMessageDeliveryState(first.messageId, "a1").state).toBe("delivered");
+    const retry = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: "review please after the restart",
+      clientKey: "k-restart",
+    });
+    expect(retry.messageId).toBe(first.messageId);
+    expect(retry.duplicate).toBe(true);
+    expect(messageCount(db)).toBe(1);
+  });
+
+  it("marks messages stranded in a dead queue undeliverable on the next start", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "running"); // busy → queued, never delivered
+    const queued = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "hola" });
+    expect(getMessageDeliveryState(queued.messageId, "a1").state).toBe("queued");
+
+    // The queue that would have delivered it died with the process, so the
+    // startup sweep is the only thing that can answer the sender.
+    expect(markStaleQueuedUndeliverable(db)).toBe(1);
+    expect(getMessageDelivery(db, queued.messageId)?.state).toBe("undeliverable");
   });
 
   it("reports delivered / queued-with-position / undeliverable, and hides other agents' traffic", () => {

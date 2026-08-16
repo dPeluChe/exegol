@@ -75,4 +75,17 @@ export const wave3Migrations: Migration[] = [
     id: "w3_005_agent_archived_at",
     sql: "ALTER TABLE agents ADD COLUMN archived_at INTEGER;",
   },
+  {
+    // T170.1: delivery state survives a restart. It lived in a Map, so after a
+    // relaunch `message_status` answered "unknown" for everything and a retry
+    // with the same client_key re-delivered — precisely when a sender most
+    // needs the answer. The unique index makes idempotency a constraint rather
+    // than a lookup that a process death forgets.
+    id: "w3_006_message_delivery",
+    sql: `ALTER TABLE messages ADD COLUMN delivery_state TEXT;
+    ALTER TABLE messages ADD COLUMN delivered_at INTEGER;
+    ALTER TABLE messages ADD COLUMN client_key TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_client_key
+      ON messages(from_agent_id, client_key) WHERE client_key IS NOT NULL;`,
+  },
 ];
