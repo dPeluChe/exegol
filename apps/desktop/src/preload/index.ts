@@ -90,9 +90,9 @@ contextBridge.exposeInMainWorld("api", {
       safe.send("terminal:resize", id, cols, rows),
     /** Get ring buffer snapshot for late-mounting terminals */
     getSnapshot: (id: string): Promise<string | null> => safe.invoke("terminal:get-snapshot", id),
-    /** T178: report whether this view can draw the agent. Resolves to a snapshot
-     *  to repaint from when output was dropped while it was hidden. */
-    setVisible: (id: string, visible: boolean): Promise<string | null> =>
+    /** T178: report whether this view can draw the agent. A repaint, when one is
+     *  needed, arrives on terminal:data so it stays ordered with live output. */
+    setVisible: (id: string, visible: boolean): Promise<void> =>
       safe.invoke("terminal:set-visible", id, visible),
     /** Save clipboard image as temp file, returns file path or null */
     saveClipboardImage: (): Promise<string | null> => safe.invoke("terminal:save-clipboard-image"),

@@ -1,5 +1,6 @@
 import { app, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
+import { broadcast } from "../lib/event-bus";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
 import { getPtyHost } from "../terminal/pty-host";
 import {
@@ -51,8 +52,14 @@ export function registerIpcHandlers(): void {
       });
     }
     setTerminalViewerVisible(agentId, viewerId, visible);
-    if (!visible || !consumeMissedOutput(agentId)) return null;
-    return getPtyHost().getSnapshot(agentId);
+    if (!visible || !consumeMissedOutput(agentId)) return;
+    const snapshot = getPtyHost().getSnapshot(agentId);
+    if (!snapshot) return;
+    // Pushed through terminal:data rather than returned, so the repaint is
+    // ORDERED with live output. Returning it raced: bytes arriving between the
+    // gate opening and the reply landing were applied, then wiped by the
+    // renderer's reset. RIS (ESC c) makes the reset part of the same stream.
+    broadcast("terminal:data", agentId, `\x1bc${snapshot}`);
   });
 
   // Save clipboard image as temp file for terminal paste

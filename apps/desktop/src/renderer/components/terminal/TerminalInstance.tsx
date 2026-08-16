@@ -29,6 +29,10 @@ import { createWebglController, type WebglController } from "./terminal-webgl";
 
 export type { TerminalInstanceHandle, TerminalInstanceProps } from "./terminal-types";
 
+/** Long enough that scrolling past a pane costs nothing; short enough that a
+ *  backgrounded agent stops paying IPC almost immediately. */
+const HIDE_DEBOUNCE_MS = 1_500;
+
 function paneIdForAgentSelector(
   state: ReturnType<typeof useWorkspaceStore.getState>,
   agentId: string,
@@ -259,27 +263,20 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   // hidden, main answers with a snapshot and we repaint from it — resuming
   // mid-stream would paint onto a screen the app has already moved past.
   useEffect(() => {
+    // Revealing costs a full serialize in main, so a pane flicking past during
+    // a scroll must not pay for it. Hiding is debounced; showing is immediate,
+    // because a late reveal is a visibly stale terminal.
     if (!isVisible) {
-      window.api.terminal.setVisible(agentId, false).catch(() => {});
-      return;
+      const timer = setTimeout(() => {
+        window.api.terminal.setVisible(agentId, false).catch(() => {});
+      }, HIDE_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
     }
-    let cancelled = false;
-    window.api.terminal
-      .setVisible(agentId, true)
-      .then((snapshot) => {
-        if (cancelled || !snapshot) return;
-        const terminal = terminalRef.current;
-        if (!terminal) return;
-        terminal.reset();
-        terminal.write(snapshot);
-      })
-      .catch(() => {
-        /* main is gone or the channel is unavailable — the gate fails open */
-      });
-    // Acquire/release: unmounting while visible must release too, or the view
-    // stays registered forever and the gate never engages again.
+    // The repaint arrives on terminal:data, in order with live output — this
+    // call only reports. Acquire/release: unmounting while visible must release
+    // too, or the view stays registered and the gate never engages again.
+    window.api.terminal.setVisible(agentId, true).catch(() => {});
     return () => {
-      cancelled = true;
       window.api.terminal.setVisible(agentId, false).catch(() => {});
     };
   }, [agentId, isVisible]);
