@@ -26,6 +26,10 @@ import { AgentIcon } from "../common";
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
 
+/** Stable identity while the providers query loads — a fresh [] each render
+ *  invalidates every callback that depends on it. */
+const NO_PROVIDERS: AgentProvider[] = [];
+
 function relativeTime(epoch: number | null): string {
   if (!epoch) return "";
   const ms = epoch > 1e12 ? epoch : epoch * 1000;
@@ -63,7 +67,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     enabled: !!projectId,
     staleTime: 15_000,
   });
-  const cliOptions = providers ?? [];
+  const cliOptions = providers ?? NO_PROVIDERS;
   // Only offer resume for providers still enabled (e.g. gemini sessions hide once retired)
   const sessions = (resumableSessions ?? []).filter((s) =>
     cliOptions.some((c) => c.id === s.cliType),
@@ -144,15 +148,15 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     updatePane(paneId, { type: "git" });
   }, [paneId, updatePane]);
 
-  const handleShell = useCallback(async () => {
-    if (!projectId) return;
-    setLaunching("shell");
-    try {
+  /** Spawn a shell into THIS pane. Both callers below did this verbatim. */
+  const spawnShellInPane = useCallback(
+    async (taskDescription: string): Promise<string | null> => {
+      if (!projectId) return null;
       // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
       const agent = await trpcMutate<any>("agents.spawn", {
         projectId,
         cliType: "shell",
-        taskDescription: "Terminal",
+        taskDescription,
       });
       addAgent({
         id: agent.id,
@@ -171,50 +175,33 @@ export function EmptyPane({ paneId }: { paneId: string }) {
       });
       createTerminal(agent.id);
       updatePane(paneId, { type: "terminal", agentId: agent.id });
+      return agent.id as string;
+    },
+    [projectId, paneId, addAgent, createTerminal, updatePane],
+  );
+
+  const handleShell = useCallback(async () => {
+    try {
+      await spawnShellInPane("Terminal");
     } catch (err) {
       console.error("[EmptyPane] Shell spawn failed:", err);
-    } finally {
-      setLaunching(null);
     }
-  }, [projectId, paneId, addAgent, createTerminal, updatePane]);
+  }, [spawnShellInPane]);
 
   const handleRunScript = useCallback(
     async (command: string, label: string) => {
-      if (!projectId) return;
       setLaunching(`script-${label}`);
       try {
-        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-        const agent = await trpcMutate<any>("agents.spawn", {
-          projectId,
-          cliType: "shell",
-          taskDescription: label,
-        });
-        addAgent({
-          id: agent.id,
-          projectId,
-          cliType: agent.cliType,
-          status: agent.status,
-          currentStep: agent.currentStep,
-          taskDescription: agent.taskDescription,
-          branchName: agent.branchName ?? null,
-          alias: agent.alias ?? null,
-          tokenUsage: { input: 0, output: 0, cost: 0 },
-          startedAt: agent.startedAt,
-          accessMode: agent.accessMode ?? null,
-          claudeSessionId: null,
-          activityLevel: "busy",
-        });
-        createTerminal(agent.id);
-        updatePane(paneId, { type: "terminal", agentId: agent.id });
+        const agentId = await spawnShellInPane(label);
         // Inject command into shell (queued until PTY is ready)
-        window.api.terminal.write(agent.id, `${command}\n`);
+        if (agentId) window.api.terminal.write(agentId, `${command}\n`);
       } catch (err) {
         console.error("[EmptyPane] Script launch failed:", err);
       } finally {
         setLaunching(null);
       }
     },
-    [projectId, paneId, addAgent, createTerminal, updatePane],
+    [spawnShellInPane],
   );
 
   const isMini = size === "mini";
@@ -268,7 +255,6 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           <button
             key={cli.id}
             type="button"
-            disabled={launching === cli.id}
             onClick={() => handleLaunchAgent(cli)}
             className={cn(
               "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",

@@ -1,4 +1,4 @@
-import type { Worktree } from "@exegol/shared";
+import { type FleetWorktree, LIVE_STATUSES, type Worktree } from "@exegol/shared";
 import type Database from "libsql";
 import { mapWorktreeRow, nanoid } from "./helpers";
 
@@ -9,46 +9,27 @@ export function listWorktrees(db: Database.Database, projectId: string): Worktre
   return (rows as Record<string, unknown>[]).map(mapWorktreeRow);
 }
 
-export interface WorktreeFleetRow {
-  id: string;
-  path: string;
-  branchName: string;
-  projectId: string;
-  projectName: string;
-  liveAgents: number;
-}
-
 /** T176: every worktree Exegol owns, across projects, with how many agents are
  *  still live in each — the view you need when a round ends and you want the
  *  disk back. Disk/git state is added by the caller, which can do I/O. */
 export function listAllWorktreeRows(
   db: Database.Database,
-  liveStatuses: readonly string[],
-): WorktreeFleetRow[] {
+): Omit<FleetWorktree, "exists" | "dirty">[] {
+  const statuses = [...LIVE_STATUSES];
   const rows = db
     .prepare(
-      `SELECT w.id, w.path, w.branch_name, w.project_id, p.name AS project_name,
+      `SELECT w.*, p.name AS project_name,
               (SELECT COUNT(*) FROM agents a
                 WHERE a.worktree_id = w.id
-                  AND a.status IN (${liveStatuses.map(() => "?").join(",")})) AS live_agents
+                  AND a.status IN (${statuses.map(() => "?").join(",")})) AS live_agents
        FROM worktrees w JOIN projects p ON p.id = w.project_id
        ORDER BY p.name, w.branch_name`,
     )
-    .all(...liveStatuses) as Array<{
-    id: string;
-    path: string;
-    branch_name: string;
-    project_id: string;
-    project_name: string;
-    live_agents: number;
-  }>;
+    .all(...statuses) as Record<string, unknown>[];
   return rows.map((r) => ({
-    id: r.id,
-    path: r.path,
-    branchName: r.branch_name,
-    projectId: r.project_id,
-    projectName: r.project_name,
-    liveAgents: r.live_agents,
+    ...mapWorktreeRow(r),
+    projectName: r.project_name as string,
+    liveAgents: r.live_agents as number,
   }));
 }
 

@@ -149,7 +149,8 @@ export type Agent = {
 export type AgentCreate = {
   projectId: string;
   cliType: AgentCliType;
-  taskDescription: string;
+  /** Optional: `createAgent` labels a blank one with the provider name. */
+  taskDescription?: string;
   useWorktree?: boolean;
   branchName?: string;
   skillNames?: string[];
@@ -391,4 +392,6 @@ export type SpawnPreview = {
   cwd: string;
   /** The branch that will be created, suffixed if the requested one is taken. */
   branchName: string | null;
+  /** True when an existing worktree already holds that branch and is reused. */
+  reused: boolean;
 };

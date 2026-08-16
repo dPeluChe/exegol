@@ -10,7 +10,7 @@ import {
 } from "../../agents/handoff";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust } from "../../agents/spawn-env";
-import { previewManagedWorktree } from "../../agents/worktrees";
+import { resolveSpawnTarget } from "../../agents/spawn-target";
 import {
   createAgent,
   getAgent,
@@ -210,23 +210,24 @@ export const agentRouter = router({
       }));
     }),
 
-  /** Where a spawn would actually run. Resolved HERE because only this side
-   *  knows the worktree root and the collision suffix; the modal used to
-   *  half-reimplement the rule and promise a directory the agent never got. */
+  /** Where a spawn would actually run — the same resolver the spawn path uses,
+   *  so the modal cannot promise a directory the agent never gets. */
   previewSpawn: publicProcedure
     .input(
       z.object({
         projectId: z.string(),
         useWorktree: z.boolean(),
         branchName: z.string().optional(),
+        taskDescription: z.string().optional(),
       }),
     )
     .query(({ ctx, input }): SpawnPreview => {
       const project = getProject(ctx.db, input.projectId);
-      if (!project) return { cwd: "", branchName: null };
-      if (!input.useWorktree) return { cwd: project.path, branchName: null };
-      const preview = previewManagedWorktree(project.name, input.branchName || "exegol/branch");
-      return { cwd: preview.path, branchName: preview.branchName };
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.projectId} not found` });
+      }
+      const target = resolveSpawnTarget(ctx.db, project, input);
+      return { cwd: target.cwd, branchName: target.branchName, reused: target.reused };
     }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {

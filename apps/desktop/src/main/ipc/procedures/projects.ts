@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 
 import { LIVE_STATUSES, projectCreateSchema } from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
-import { getWorktreeName, removeManagedWorktree, worktreeRootFor } from "../../agents/worktrees";
+import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import {
   createProject,
   deleteProject,
@@ -58,12 +58,7 @@ export const projectRouter = router({
   // Returns null (not throws) when project not found: stale persisted
   // activeProjectId is a normal state to recover from, not an error.
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    const project = getProject(ctx.db, input.id);
-    if (!project) return null;
-    // T177: the launch modal shows where an agent will actually work, and for a
-    // worktree that is NOT the project path. Computed here so the renderer never
-    // reimplements the slug rule.
-    return { ...project, worktreeRoot: worktreeRootFor(project.name) };
+    return getProject(ctx.db, input.id) ?? null;
   }),
 
   create: publicProcedure.input(projectCreateSchema).mutation(async ({ ctx, input }) => {
@@ -209,7 +204,7 @@ export const projectRouter = router({
   /** T176: dirty worktrees are flagged because deleting them loses work, which
    *  is the only reason to hesitate. */
   listAllWorktrees: publicProcedure.query(({ ctx }) => {
-    return listAllWorktreeRows(ctx.db, [...LIVE_STATUSES]).map((r) => {
+    return listAllWorktreeRows(ctx.db).map((r) => {
       const exists = existsSync(r.path);
       // git2 in-process, not a `git status` subprocess per row: this renders on
       // every dashboard mount, and 20 spawns each rewriting .git/index would

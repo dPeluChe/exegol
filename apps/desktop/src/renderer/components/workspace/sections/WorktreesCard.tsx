@@ -1,20 +1,10 @@
+import type { FleetWorktree } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, FolderGit2, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
-
-interface FleetWorktree {
-  id: string;
-  path: string;
-  branchName: string;
-  projectId: string;
-  projectName: string;
-  liveAgents: number;
-  exists: boolean;
-  dirty: boolean;
-}
 
 /**
  * T176 — every worktree Exegol owns, in one place.

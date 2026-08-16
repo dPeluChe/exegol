@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { logger } from "../lib/logger";
@@ -38,6 +38,25 @@ function withNumericSuffix(branchName: string, attempt: number): string {
   return `${branchName}-${attempt + 1}`;
 }
 
+/** The nth name/place this branch would take. The ONE definition of the
+ *  collision rule — the preview and the create loop must never disagree. */
+function candidate(
+  rootKind: RootKind,
+  projectName: string,
+  branchName: string,
+  attempt: number,
+): { branchName: string; worktreeName: string; path: string } {
+  const candidateBranch = withNumericSuffix(branchName, attempt);
+  const worktreeName = getWorktreeName(candidateBranch);
+  return {
+    branchName: candidateBranch,
+    worktreeName,
+    path: buildTargetPath(rootKind, projectName, worktreeName),
+  };
+}
+
+const MAX_COLLISION_ATTEMPTS = 20;
+
 /** What `createManagedWorktree` would pick if called right now. The launch modal
  *  has to show the directory the agent ACTUALLY gets, and a renderer cannot
  *  reproduce the collision suffix — it would promise `…/exegol-foo` while the
@@ -47,16 +66,18 @@ export function previewManagedWorktree(
   branchName: string,
   rootKind: RootKind = "worktrees",
 ): { branchName: string; path: string } {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const candidateBranch = withNumericSuffix(branchName, attempt);
-    const path = buildTargetPath(rootKind, projectName, getWorktreeName(candidateBranch));
-    if (!existsSync(path)) return { branchName: candidateBranch, path };
+  // One directory read, not 20 stats: this runs on the main thread that pumps
+  // PTY output, and the modal asks again as the user types a branch name.
+  let taken: Set<string>;
+  try {
+    taken = new Set(readdirSync(worktreeRootFor(projectName, rootKind)));
+  } catch {
+    taken = new Set();
   }
-  const fallback = withNumericSuffix(branchName, 20);
-  return {
-    branchName: fallback,
-    path: buildTargetPath(rootKind, projectName, getWorktreeName(fallback)),
-  };
+  for (let attempt = 0; ; attempt++) {
+    const next = candidate(rootKind, projectName, branchName, attempt);
+    if (attempt === MAX_COLLISION_ATTEMPTS || !taken.has(next.worktreeName)) return next;
+  }
 }
 
 function isRecoverableCreateError(err: unknown): boolean {
@@ -84,10 +105,12 @@ export function createManagedWorktree(
   }
 
   let lastError: unknown;
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const candidateBranch = withNumericSuffix(branchName, attempt);
-    const worktreeName = getWorktreeName(candidateBranch);
-    const targetPath = buildTargetPath(rootKind, projectName, worktreeName);
+  for (let attempt = 0; attempt < MAX_COLLISION_ATTEMPTS; attempt++) {
+    const {
+      branchName: candidateBranch,
+      worktreeName,
+      path: targetPath,
+    } = candidate(rootKind, projectName, branchName, attempt);
 
     try {
       const info = coreRust.createWorktree(

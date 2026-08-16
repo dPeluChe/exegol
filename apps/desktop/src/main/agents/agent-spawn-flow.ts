@@ -3,7 +3,6 @@ import type Database from "libsql";
 import {
   createOplogEntry,
   createWorktree as dbCreateWorktree,
-  listWorktrees,
   setAgentWorktree,
 } from "../db/queries";
 import { runSetupHook } from "../hooks/project-hooks";
@@ -26,13 +25,8 @@ import {
 import type { WorktreeRecord } from "./agent-worktree-ops";
 import type { AgentProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
-import {
-  _getFullPath,
-  buildApiKeyEnv,
-  buildClaudeCodeHooksFile,
-  coreRust,
-  slugifyBranchName,
-} from "./spawn-env";
+import { _getFullPath, buildApiKeyEnv, buildClaudeCodeHooksFile, coreRust } from "./spawn-env";
+import { findReusableWorktree, requestedBranchFor } from "./spawn-target";
 import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
 
 export interface PtyInvocation {
@@ -85,10 +79,8 @@ export function setupAgentCwd(
     return cwd;
   }
 
-  const requestedBranchName = config.branchName?.trim() || slugifyBranchName(agent.taskDescription);
-
-  const existingWts = listWorktrees(db, agent.projectId);
-  const reuseWt = existingWts.find((w) => w.branchName === requestedBranchName);
+  const requestedBranchName = requestedBranchFor(config.branchName, agent.taskDescription);
+  const reuseWt = findReusableWorktree(db, agent.projectId, requestedBranchName);
   if (reuseWt) {
     cwd = reuseWt.path;
     setAgentWorktree(db, agent.id, reuseWt.id);

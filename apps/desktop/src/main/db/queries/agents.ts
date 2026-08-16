@@ -1,7 +1,7 @@
 import { type Agent, type AgentCreate, type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { pickAgentCodename } from "../../agents/agent-names";
-import { getProviderRegistry } from "../../agents/registry";
+import { resolveTaskLabel } from "../../agents/task-label";
 import { logger } from "../../lib/logger";
 import { mapAgentRow, nanoid } from "./helpers";
 
@@ -83,11 +83,7 @@ export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   // two of the same CLI are indistinguishable in the UI and un-addressable by
   // agent_send. Shells are excluded — they're not messaging participants.
   const alias = data.cliType === "shell" ? null : pickAgentCodename(db);
-  // The task is optional (a launch can be just "say hi"), but a blank label
-  // makes an agent unidentifiable everywhere it is listed. The modal filled this
-  // in itself, so pipelines, the scheduler and the queue got nothing.
-  const task =
-    data.taskDescription?.trim() || getProviderRegistry().get(data.cliType)?.name || data.cliType;
+  const task = resolveTaskLabel(data.cliType, data.taskDescription);
 
   db.prepare(
     `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, access_mode, alias)

@@ -23,7 +23,10 @@ export const agentSchema = z.object({
 export const agentCreateSchema = z.object({
   projectId: z.string().min(1),
   cliType: agentCliTypeSchema,
-  taskDescription: z.string().min(1, "Task description is required"),
+  /** Optional on the way IN — a launch can be just "say hello". `createAgent`
+   *  fills a label so no agent is nameless in the UI; the stored row is never
+   *  blank, which is why `agentSchema` still requires it. */
+  taskDescription: z.string().optional(),
   useWorktree: z.boolean().optional(),
   branchName: z.string().optional(),
   skillNames: z.array(z.string()).optional(),

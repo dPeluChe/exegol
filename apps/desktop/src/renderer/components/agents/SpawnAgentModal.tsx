@@ -44,16 +44,6 @@ function tailPath(path: string | undefined, segments = 3): string {
   return parts.length <= segments ? path : `…/${parts.slice(-segments).join("/")}`;
 }
 
-function slugify(text: string): string {
-  return `exegol/${text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .slice(0, 50)
-    .replace(/-$/, "")}`;
-}
-
 interface SpawnAgentModalProps {
   projectId: string;
   onClose: () => void;
@@ -167,17 +157,33 @@ export function SpawnAgentModal({
     });
   }, []);
 
-  // Resolved by the code that will create it: worktrees live under ~/.exegol
-  // (never beside the checkout), and a name collision appends a numeric suffix
-  // the renderer cannot predict — so it would show a directory nobody runs in.
+  // Debounced because both inputs change per keystroke, and each ask is an IPC
+  // round-trip plus a directory read on the thread that pumps PTY output.
+  const [settled, setSettled] = useState({ task: "", branch: "" });
+  useEffect(() => {
+    const t = setTimeout(() => setSettled({ task, branch: branchName }), 300);
+    return () => clearTimeout(t);
+  }, [task, branchName]);
+
+  // Only the worktree path needs resolving, and only the main process can: the
+  // branch may already have a worktree (reused as-is) or collide (suffixed), and
+  // the default branch name is derived from the task by the spawn path itself.
   const { data: preview } = useQuery({
-    queryKey: ["spawnPreview", projectId, useWorktree, branchName],
+    queryKey: ["spawnPreview", projectId, settled.task, settled.branch],
     queryFn: () =>
-      trpcInvoke<SpawnPreview>("agents.previewSpawn", { projectId, useWorktree, branchName }),
-    enabled: !!projectId,
+      trpcInvoke<SpawnPreview>("agents.previewSpawn", {
+        projectId,
+        useWorktree: true,
+        taskDescription: settled.task,
+        branchName: settled.branch || undefined,
+      }),
+    enabled: !!projectId && useWorktree,
+    placeholderData: (prev) => prev,
     staleTime: 5_000,
   });
-  const workingPath = preview?.cwd ?? "";
+  const workingPath = useWorktree ? (preview?.cwd ?? "") : (project?.path ?? "");
+  // Empty until edited: the field shows what the spawn resolved, not a guess.
+  const shownBranch = branchEdited ? branchName : (preview?.branchName ?? "");
 
   const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
   const yoloFlag = YOLO_FLAGS[selectedProviderId];
@@ -204,13 +210,6 @@ export function SpawnAgentModal({
     }
   }, [selectedProviderId, enabledProviders]);
 
-  // Auto-derive branch name from task
-  useEffect(() => {
-    if (!branchEdited && task.trim()) {
-      setBranchName(slugify(task.trim()));
-    }
-  }, [task, branchEdited]);
-
   // Focus textarea on mount
   useEffect(() => {
     textareaRef.current?.focus();
@@ -226,7 +225,7 @@ export function SpawnAgentModal({
       const agent = await trpcMutate<any>("agents.spawn", {
         projectId,
         cliType: selectedProviderId as AgentCliType,
-        taskDescription: task.trim() || selectedProvider?.name || selectedProviderId,
+        taskDescription: task.trim(),
         useWorktree,
         branchName: useWorktree && branchName ? branchName : undefined,
         accessMode,
@@ -301,7 +300,6 @@ export function SpawnAgentModal({
     yolo,
     yoloFlag,
     baseBranch,
-    selectedProvider,
     projectId,
     addAgent,
     createTerminal,
@@ -413,7 +411,7 @@ export function SpawnAgentModal({
                     title={past.taskDescription}
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                      typeof session === "object" && session?.agentId === past.agentId
+                      session !== "last" && session?.agentId === past.agentId
                         ? "border-accent/50 bg-accent/10 text-accent"
                         : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
                     )}
@@ -604,7 +602,7 @@ export function SpawnAgentModal({
                   <span className="w-10 shrink-0 text-[10px] text-text-muted">new</span>
                   <input
                     type="text"
-                    value={branchName}
+                    value={shownBranch}
                     onChange={(e) => {
                       setBranchName(e.target.value);
                       setBranchEdited(true);
@@ -613,13 +611,21 @@ export function SpawnAgentModal({
                     className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
                   />
                 </div>
-                {/* The name is taken, so the spawn will suffix it. Silently
-                    landing on a different branch is how work gets lost. */}
-                {preview?.branchName && branchName && preview.branchName !== branchName && (
+                {/* Landing somewhere other than the name on screen is how work
+                    gets lost, so both surprises are stated. */}
+                {preview?.reused && (
                   <span className="pl-12 text-[10px] text-warning">
-                    taken — will create <code>{preview.branchName}</code>
+                    a worktree already exists on this branch — it will be reused
                   </span>
                 )}
+                {!preview?.reused &&
+                  preview?.branchName &&
+                  settled.branch &&
+                  preview.branchName !== settled.branch && (
+                    <span className="pl-12 text-[10px] text-warning">
+                      taken — will create <code>{preview.branchName}</code>
+                    </span>
+                  )}
               </div>
             )}
           </div>

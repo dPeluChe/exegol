@@ -8,3 +8,12 @@ export type Worktree = {
   diskUsageBytes: number;
   createdAt: number;
 };
+
+/** T176: a worktree as the fleet view needs it — the row plus who is still in
+ *  it and what the disk says. */
+export type FleetWorktree = Worktree & {
+  projectName: string;
+  liveAgents: number;
+  exists: boolean;
+  dirty: boolean;
+};
