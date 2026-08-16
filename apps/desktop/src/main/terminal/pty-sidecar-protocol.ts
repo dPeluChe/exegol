@@ -20,8 +20,9 @@ export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
  * user still running the old sidecar, not just a stale dev process.
  *
  * 1.3.0 — snapshots carry the alternate-screen mode (2026-08-13)
+ * 1.4.0 — cleanup() only removes files this process owns (2026-08-13)
  */
-export const SIDECAR_VERSION = "1.3.0";
+export const SIDECAR_VERSION = "1.4.0";
 export const SIDECAR_MIN_COMPATIBLE_VERSION = "1.1.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────

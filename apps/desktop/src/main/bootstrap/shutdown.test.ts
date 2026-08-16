@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const electronMock = vi.hoisted(() => ({ exit: vi.fn(), quit: vi.fn() }));
 vi.mock("electron", () => ({ app: electronMock }));
 
-import { runTeardown } from "./shutdown";
+const warn = vi.hoisted(() => vi.fn());
+vi.mock("../lib/logger", () => ({ logger: { warn, info: vi.fn() } }));
 
 describe("runTeardown", () => {
   beforeEach(() => {
     electronMock.exit.mockClear();
+    warn.mockClear();
     vi.resetModules();
   });
 
@@ -40,8 +42,11 @@ describe("runTeardown", () => {
     expect(calls).toBe(1);
   });
 
-  it("does not force-exit when teardown completes", () => {
-    runTeardown([{ name: "quick", run: () => {} }]);
-    expect(electronMock.exit).not.toHaveBeenCalled();
+  it("warns instead of pretending an async step finished", async () => {
+    const { runTeardown: fresh } = await import("./shutdown");
+    // Void-return assignability lets an async step compile; teardown cannot
+    // await it, so the only honest thing is to say so.
+    fresh([{ name: "async", run: (() => Promise.resolve()) as unknown as () => void }]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("does not await"));
   });
 });

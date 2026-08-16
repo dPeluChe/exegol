@@ -13,12 +13,12 @@
  * 2. **Every step is timed and named.** We did not know WHICH call hung — the
  *    log now says so the next time it happens, instead of us guessing from a
  *    process tree.
- * 3. **There is a deadline.** If teardown has not finished, the process exits
- *    anyway. Honest limitation: a JS timer cannot interrupt a *synchronous*
- *    block, so this saves us from async stalls and from a slow-but-progressing
- *    teardown — not from a blocking syscall. That is why step 2 matters: the
- *    real fix for a sync hang is to stop doing that work here, and the log is
- *    what tells us which work it is.
+ * 3. **Steps stay synchronous.** Deliberately: `will-quit` does not await, and
+ *    pre-ready there is no message loop to return to, so an async step would
+ *    simply not finish. That also means a deadline HERE would be theatre — a
+ *    timer cannot fire while a synchronous loop holds the thread, and nothing
+ *    in the loop yields. The deadline lives where it can actually run, in
+ *    `installSignalHandlers`, and the timing log is what identifies a hang.
  */
 
 import { app } from "electron";
@@ -29,8 +29,8 @@ export interface TeardownStep {
   run: () => void;
 }
 
-/** Past this, something is wrong and staying alive helps nobody. */
-const DEADLINE_MS = 8_000;
+/** Past this, the quit is not coming and staying alive helps nobody. */
+const FORCE_EXIT_MS = 8_000;
 /** A step slower than this gets named in the log even on a clean exit. */
 const SLOW_STEP_MS = 250;
 
@@ -42,17 +42,17 @@ export function runTeardown(steps: TeardownStep[]): void {
   if (alreadyRan) return;
   alreadyRan = true;
 
-  const deadline = setTimeout(() => {
-    logger.warn(`[Shutdown] teardown exceeded ${DEADLINE_MS}ms — forcing exit`);
-    app.exit(0);
-  }, DEADLINE_MS);
-  deadline.unref?.();
-
   const startedAt = Date.now();
   for (const step of steps) {
     const stepStart = Date.now();
     try {
-      step.run();
+      // Void-return assignability lets an async step compile here, and its
+      // promise would be neither awaited nor caught. Say so rather than let it
+      // look like it worked.
+      const result = step.run() as unknown;
+      if (result && typeof (result as Promise<void>).then === "function") {
+        logger.warn(`[Shutdown] ${step.name} returned a promise — teardown does not await`);
+      }
     } catch (err) {
       logger.warn(`[Shutdown] ${step.name} failed (continuing):`, err);
     }
@@ -60,7 +60,6 @@ export function runTeardown(steps: TeardownStep[]): void {
     if (took >= SLOW_STEP_MS) logger.warn(`[Shutdown] ${step.name} took ${took}ms`);
   }
 
-  clearTimeout(deadline);
   logger.info(`[Shutdown] teardown complete in ${Date.now() - startedAt}ms`);
 }
 
@@ -70,13 +69,31 @@ export function runTeardown(steps: TeardownStep[]): void {
  * still runs — and hard-exit if the app is still here shortly after, since a
  * second SIGTERM that also does nothing is worse than an abrupt exit.
  */
-export function installSignalHandlers(): void {
+let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function installSignalHandlers(onForceExit: () => void): void {
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.on(signal, () => {
       logger.info(`[Shutdown] ${signal} received — quitting`);
       app.quit();
-      const force = setTimeout(() => app.exit(0), DEADLINE_MS);
-      force.unref?.();
+      // app.quit() returns immediately, so this timer CAN fire — unlike one
+      // wrapped around the synchronous teardown. Armed once: repeated signals
+      // should not stack exits. NOT unref'd: it is the last resort, so it must
+      // be able to hold the loop open long enough to run.
+      if (forceExitTimer) return;
+      forceExitTimer = setTimeout(() => {
+        // app.exit() emits neither before-quit nor will-quit, so forcing
+        // without this would leave the database open — the outcome this whole
+        // module argues against. runTeardown's guard makes it safe to call
+        // even if will-quit already ran.
+        logger.warn(`[Shutdown] quit did not complete in ${FORCE_EXIT_MS}ms — forcing exit`);
+        try {
+          onForceExit();
+        } catch (err) {
+          logger.warn("[Shutdown] forced teardown failed:", err);
+        }
+        app.exit(0);
+      }, FORCE_EXIT_MS);
     });
   }
 }

@@ -4,7 +4,7 @@ import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
-import { cleanupAgentWrappers, ensureAgentWrappers } from "./agents/wrappers";
+import { ensureAgentWrappers, sweepStaleAgentEvents } from "./agents/wrappers";
 import { installDeepLinkHandling } from "./bootstrap/deep-link";
 import { registerIpcHandlers } from "./bootstrap/ipc-handlers";
 import { cleanupStaleData, runStartupRecovery } from "./bootstrap/recovery";
@@ -77,6 +77,8 @@ app.whenReady().then(async () => {
       ensureShellWrappers();
       ensureShellIntegration();
       ensureAgentWrappers();
+      // Off the quit path on purpose — see sweepStaleAgentEvents.
+      sweepStaleAgentEvents();
     } catch (err) {
       logger.error("[Startup] FS init failed (non-fatal):", err);
     }
@@ -120,14 +122,18 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught exception:", err);
 });
 
-installSignalHandlers();
+installSignalHandlers(() => runTeardown(teardownSteps()));
 
 app.on("will-quit", () => {
-  markShutdown();
   // Ordered by consequence: detach from the outside world, then stop our own
-  // machinery, then close the database LAST — it is the step whose absence is
-  // felt on the next launch, so nothing before it may be able to skip it.
-  runTeardown([
+  // machinery, then close the database after every producer that can write to
+  // it — notifyHandler, scheduler and queueExecutor all reach for the db from
+  // callbacks, so closing earlier would let an in-flight one hit a dead handle.
+  runTeardown(teardownSteps());
+});
+
+function teardownSteps() {
+  return [
     { name: "globalShortcut", run: () => globalShortcut.unregisterAll() },
     { name: "floatingPanes", run: closeAllFloatingPanes },
     { name: "settingsWindow", run: closeSettingsWindow },
@@ -147,11 +153,14 @@ app.on("will-quit", () => {
     { name: "tray", run: destroyTray },
     { name: "autoUpdater", run: stopAutoUpdater },
     { name: "notifyHandler", run: stopNotifyHandler },
-    { name: "agentWrappers", run: cleanupAgentWrappers },
     { name: "mcpHost", run: () => getMcpHost().disconnectAll() },
     { name: "scheduler", run: () => getSchedulerEngine().stop() },
     { name: "queueExecutor", run: () => getQueueExecutor().stop() },
     { name: "metrics", run: stopMetricsCollector },
     { name: "database", run: closeDatabase },
-  ]);
-});
+    // Last: it silences console output, and until now it ran FIRST — hiding
+    // every [Shutdown] line in the dev terminal, the one place someone chasing
+    // a hang would look.
+    { name: "logger", run: markShutdown },
+  ];
+}
