@@ -24,7 +24,7 @@ import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput, getRetryFeedback } from "./context";
 import { handleEvaluatorStep } from "./evaluator-step-handler";
 import { prepareStepSnapshot } from "./oplog-snapshots";
-import { broadcastPipelineStatus, captureGitDiff, now, YOLO_FLAGS } from "./pipeline-helpers";
+import { broadcastPipelineStatus, captureGitDiff, now } from "./pipeline-helpers";
 import {
   handleStepComplete,
   type StepHandlerDeps,
@@ -209,9 +209,6 @@ export class PipelineExecutor {
 
     const registry = getProviderRegistry();
     const provider = registry.get(stepDef.cliType);
-    const yoloFlag = YOLO_FLAGS[stepDef.cliType];
-    const addedYolo = yoloFlag && provider && !provider.args.includes(yoloFlag);
-    if (addedYolo && provider) provider.args.push(yoloFlag);
 
     try {
       await manager.spawn(db, agent, {
@@ -220,14 +217,16 @@ export class PipelineExecutor {
         taskDescription: prompt,
         cwdOverride: run.worktreePath ?? undefined,
         accessMode: stepDef.accessMode,
+        // Pipeline steps run unattended, so they cannot answer a permission
+        // prompt. This used to push the flag onto the SHARED registry provider
+        // and strip it in `finally` — two concurrent spawns could remove each
+        // other's flag. The per-spawn override (T161) is the same intent
+        // without the global mutation.
+        yolo: true,
       });
     } catch (err) {
       logger.error("[Pipeline] Failed to spawn agent for step:", err);
       handleStepComplete(this.getStepDeps(), db, runId, stepIndex, agent.id, 1, template);
-    } finally {
-      if (addedYolo && provider) {
-        provider.args = provider.args.filter((a) => a !== yoloFlag);
-      }
     }
 
     const idleSeconds = provider?.capabilities?.pipelineIdleCloseSeconds ?? 0;

@@ -18,7 +18,12 @@ import {
   listRecentSessions,
   updateAgentStatus,
 } from "../../db/queries";
-import { listActiveAgents, setAgentAlias } from "../../db/queries/agents";
+import {
+  archiveAgent,
+  archiveEndedAgents,
+  listActiveAgents,
+  setAgentAlias,
+} from "../../db/queries/agents";
 import {
   createParallelRun,
   enrichParallelRunForComparison,
@@ -138,6 +143,16 @@ export const agentRouter = router({
   /** T156: cross-project non-terminal agents (project name + group color). */
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
 
+  /** T176: dismiss ended sessions from the dashboard. Archive, not delete —
+   *  the row keeps its scoring, oplog attribution and resume handle. */
+  archive: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ ctx, input }) => ({ archived: archiveAgent(ctx.db, input.id) })),
+
+  archiveEnded: publicProcedure
+    .input(z.object({ projectId: z.string().optional() }).optional())
+    .mutation(({ ctx, input }) => ({ archived: archiveEndedAgents(ctx.db, input?.projectId) })),
+
   /** T160: set/clear the session alias — the agent_send addressing name. */
   setAlias: publicProcedure
     .input(z.object({ id: z.string(), alias: z.string().trim().max(40).nullable() }))
@@ -163,11 +178,12 @@ export const agentRouter = router({
     .query(({ ctx, input }) => {
       const rows = ctx.db
         .prepare(
-          `SELECT id, cli_type, task_description, status, started_at, stopped_at
+          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias
            FROM agents
            WHERE project_id = ?
              AND status IN ('completed', 'failed', 'stopped', 'crashed')
-             AND (resume_command IS NOT NULL OR claude_session_id IS NOT NULL)
+             AND archived_at IS NULL
+           AND (resume_command IS NOT NULL OR claude_session_id IS NOT NULL)
            ORDER BY COALESCE(stopped_at, started_at) DESC
            LIMIT ?`,
         )
@@ -178,10 +194,14 @@ export const agentRouter = router({
         status: string;
         started_at: number | null;
         stopped_at: number | null;
+        alias: string | null;
       }>;
       return rows.map((r) => ({
         agentId: r.id,
         cliType: r.cli_type,
+        // The codename is how the user (and other agents) knew this session —
+        // a resume picker listing only task text makes them re-identify it.
+        alias: r.alias,
         taskDescription: r.task_description,
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,

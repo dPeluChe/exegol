@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "bun run build:rust && turbo run dev",
     "dev:clean": "bun run clean:dev && bun run dev",
+    "dev:fresh": "bun run kill:sidecar && bun run dev",
     "dev:ui": "turbo run dev",
     "build": "turbo run build",
     "build:rust": "cd packages/core-rust && npx napi build --platform --release",
@@ -13,7 +14,8 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "clean": "turbo run clean && rm -rf node_modules .turbo",
-    "clean:dev": "rm -rf .turbo apps/desktop/dist apps/desktop/out coverage && (cd packages/core-rust && cargo clean) && git worktree prune",
+    "clean:dev": "bun run kill:sidecar && rm -rf .turbo apps/desktop/dist apps/desktop/out coverage && (cd packages/core-rust && cargo clean) && git worktree prune",
+    "kill:sidecar": "pkill -f pty-sidecar-entry.js || true",
     "typecheck": "turbo run typecheck",
     "test": "cd apps/desktop && vitest run",
     "test:watch": "cd apps/desktop && vitest",

@@ -185,6 +185,15 @@ interface AgentStore {
   syncFromDb: (projectId: string, dbAgents: Agent[]) => void;
 
   /**
+   * False until the first syncFromDb lands. Panes mount before it does, so
+   * "agent not in store" means "not loaded yet", not "gone" — and acting on
+   * that distinction destructively (converting a pane to empty) threw away
+   * crashed sessions with their resume affordance on every restart.
+   * Not persisted: a fresh process has not synced, whatever the last one did.
+   */
+  hasSyncedFromDb: boolean;
+
+  /**
    * Whether an agent is "unread" — derived from attentionItems.
    * An agent is unread if it has an attention item that hasn't been read.
    */
@@ -257,6 +266,7 @@ export const useAgentStore = create<AgentStore>()(
   persist(
     (set, get) => ({
       agents: {},
+      hasSyncedFromDb: false,
       focusedAgentId: null,
       attentionItems: {},
       unreadAttentionCount: 0,
@@ -318,6 +328,7 @@ export const useAgentStore = create<AgentStore>()(
       syncFromDb: (_projectId, dbAgents) =>
         set((state) => {
           const updated = { ...state.agents };
+          const hasSyncedFromDb = true;
           let added = 0;
           let merged = 0;
 
@@ -370,7 +381,7 @@ export const useAgentStore = create<AgentStore>()(
           const stale = Object.entries(state.attentionItems).filter(
             ([id, item]) => item.projectId === _projectId && !dbIds.has(id),
           );
-          if (stale.length === 0) return { agents: updated };
+          if (stale.length === 0) return { agents: updated, hasSyncedFromDb };
 
           let unreadAttentionCount = state.unreadAttentionCount;
           const attentionItems = { ...state.attentionItems };
@@ -381,7 +392,7 @@ export const useAgentStore = create<AgentStore>()(
             delete attentionItems[id];
           }
 
-          return { agents: updated, attentionItems, unreadAttentionCount };
+          return { agents: updated, attentionItems, unreadAttentionCount, hasSyncedFromDb };
         }),
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────

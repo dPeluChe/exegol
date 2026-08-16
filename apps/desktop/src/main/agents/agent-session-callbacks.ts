@@ -6,6 +6,7 @@ import {
 } from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
+import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
@@ -13,9 +14,15 @@ import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import {
+  forgetTerminalViewers,
+  hasVisibleViewer,
+  noteOutputDropped,
+} from "../terminal/pty-visibility";
+import {
   clearAgentLinks,
   clearAgentMessageQueue,
   isEchoingInjection,
+  noteAgentBoundarySignal,
   noteAgentOutput,
 } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
@@ -74,10 +81,14 @@ export function applyAgentSignals(
       continue;
     }
     const derived = deriveStatusFromSignal(sig.event);
+
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
     if (derived.turnEnded) turnEnded = derived.turnEnded;
     if (derived.needsAttention) needsAttention = true;
+    // A permission prompt ends a turn too — latching on it would let an
+    // attention signal disable the delivery fallback.
+    if (derived.turnEnded && !derived.needsAttention) noteAgentBoundarySignal(agent.id);
 
     const signalEvent: AgentSignalEvent = {
       agentId: agent.id,
@@ -187,7 +198,11 @@ export function createSpawnCallbacks(
 ) {
   return {
     onData: (data: string) => {
-      broadcast("terminal:data", agent.id, data);
+      // T178: the renderer only needs bytes it can draw. Everything below this
+      // line runs regardless — the model, the parser and the delivery clock
+      // must never depend on whether a pane happens to be on screen.
+      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data);
+      else noteOutputDropped(agent.id);
       noteAgentOutput(agent.id);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
@@ -390,7 +405,15 @@ export function createSpawnCallbacks(
       }
       clearAgentMessageQueue(agent.id, db);
       clearAgentLinks(db, agent.id);
+      // T172: a dead agent must not keep files reserved — the next one would be
+      // blocked by a claim nobody is working on.
+      try {
+        releasePaths(db, agent.id);
+      } catch (err) {
+        logger.warn(`[AgentCallback] Failed to release path claims for ${agent.id}:`, err);
+      }
       forgetBroadcastStatus(agent.id);
+      forgetTerminalViewers(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.
       handleParallelAgentExit(db, agent.id);

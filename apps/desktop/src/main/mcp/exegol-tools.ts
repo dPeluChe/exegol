@@ -7,11 +7,14 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { MemoryCategory } from "@exegol/shared";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import {
   AgentMessagingError,
+  cancelQueuedMessage,
+  checkAgentMessages,
   getMessageDeliveryState,
   noteAgentHasLink,
   resolveTargetAgent,
@@ -25,6 +28,8 @@ import {
   reverseLinkExists,
 } from "../db/queries/agent-links";
 import { listActiveAgents } from "../db/queries/agents";
+import { claimPaths, listProjectClaims, releasePaths } from "../db/queries/path-claims";
+import { getWorktreeByAgentId } from "../db/queries/worktrees";
 import { readProjectBrief } from "../knowledge/brief";
 import { getDigestPath } from "../knowledge/paths";
 import { listMemories, observeMemory, searchMemories } from "../memory/store";
@@ -211,6 +216,93 @@ function handleMessageStatus(args: Record<string, unknown>, context: ExegolToolC
   return getMessageDeliveryState(messageId, context.agentId);
 }
 
+/** T172: a queued message is still ours — withdrawing it beats sending a
+ *  correction and hoping both are read in order. */
+function handleMessageCancel(args: Record<string, unknown>, context: ExegolToolContext) {
+  const messageId = String(args.message_id ?? "");
+  if (!messageId) throw new ExegolToolError("message_cancel requires message_id", -32602);
+  return cancelQueuedMessage(messageId, context.agentId);
+}
+
+// ─── T172: path claims ───────────────────────────────────────────────────────
+
+/** Claims are stored absolute so agents in separate worktrees never collide;
+ *  agents think in paths relative to where they are working. */
+function resolveAgentPaths(
+  db: Database.Database,
+  context: ExegolToolContext,
+  raw: unknown,
+): string[] {
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new ExegolToolError("paths must be a non-empty array of files or directories", -32602);
+  }
+  const worktree = getWorktreeByAgentId(db, context.agentId);
+  const project = getProject(db, context.projectId);
+  const base = worktree?.path ?? project?.path;
+  if (!base) throw new ExegolToolError("cannot resolve this agent's working directory", -32603);
+  return raw.map((p) => {
+    const path = String(p).trim();
+    if (!path) throw new ExegolToolError("paths must not contain empty entries", -32602);
+    // Normalize away trailing slashes and ".." so `src/` and `src` are one
+    // claim — then refuse anything that escaped: `../..` resolves above the
+    // project and, under the prefix rule, would overlap every path in it.
+    const resolved = resolve(base, path);
+    if (resolved !== base && !resolved.startsWith(`${base}/`)) {
+      throw new ExegolToolError(`path is outside your working directory: ${path}`, -32602);
+    }
+    return resolved;
+  });
+}
+
+function handleClaimPaths(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
+  const paths = resolveAgentPaths(db, context, args.paths);
+  const result = claimPaths(db, {
+    agentId: context.agentId,
+    projectId: context.projectId,
+    paths,
+    note: typeof args.note === "string" ? args.note.slice(0, 300) : null,
+  });
+  if (result.conflicts.length > 0) {
+    return {
+      granted: false,
+      conflicts: result.conflicts.map((c) => ({
+        path: c.path,
+        heldBy: c.heldByName ?? c.heldBy,
+        note: c.note,
+      })),
+      hint: "Nothing was claimed. Pick different files, or message the holder with agent_send to agree who takes what.",
+    };
+  }
+  return { granted: true, paths: result.granted };
+}
+
+function handleReleasePaths(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
+  // An empty array means the same as omitting it — the description promises
+  // "omit `paths` to release everything", and a caller passing [] means that.
+  const requested = Array.isArray(args.paths) && args.paths.length === 0 ? undefined : args.paths;
+  const paths = requested === undefined ? undefined : resolveAgentPaths(db, context, requested);
+  return releasePaths(db, context.agentId, paths);
+}
+
+function handleListClaims(db: Database.Database, context: ExegolToolContext) {
+  return {
+    claims: listProjectClaims(db, context.projectId).map((c) => ({
+      path: c.path,
+      heldBy: c.heldByName ?? c.agentId,
+      isYours: c.agentId === context.agentId,
+      note: c.note,
+    })),
+  };
+}
+
 /** T162: register an Exegol-enforced link FROM the caller (identity from token). */
 function handleAgentLink(
   db: Database.Database,
@@ -283,6 +375,16 @@ export async function callExegolTool(
         return handleAgentSend(db, args, context);
       case "message_status":
         return handleMessageStatus(args, context);
+      case "message_cancel":
+        return handleMessageCancel(args, context);
+      case "messages_check":
+        return checkAgentMessages(db, context.agentId);
+      case "claim_paths":
+        return handleClaimPaths(db, args, context);
+      case "release_paths":
+        return handleReleasePaths(db, args, context);
+      case "list_claims":
+        return handleListClaims(db, context);
       case "agent_link":
         return handleAgentLink(db, args, context);
     }

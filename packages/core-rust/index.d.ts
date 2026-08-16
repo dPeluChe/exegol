@@ -39,8 +39,12 @@ export declare function commitTurnSnapshot(repoPath: string, treeSha: string, op
  * If `target_path` is provided, the worktree is placed there.
  * Otherwise falls back to `<repo_path>/../<worktree_name>`.
  * A new branch `branch_name` is created pointing at the current HEAD.
+ * `base_ref` is the branch/commit the new branch is cut from — a branch name,
+ * a tag or a sha. Omitted means HEAD, which is what this always did: an agent
+ * sent to work on a feature silently inherited whatever the main checkout
+ * happened to be on, with nothing stating the base.
  */
-export declare function createWorktree(repoPath: string, worktreeName: string, branchName: string, targetPath?: string | undefined | null): WorktreeInfo
+export declare function createWorktree(repoPath: string, worktreeName: string, branchName: string, targetPath?: string | undefined | null, baseRef?: string | undefined | null): WorktreeInfo
 
 /**
  * Delete a local branch. Used by race mode (T131) to clean up loser

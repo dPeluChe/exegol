@@ -68,10 +68,20 @@ export class HeadlessEmulator {
     this.terminal.write(data);
   }
 
-  /** Generate a serialized snapshot of the full terminal state */
+  /**
+   * Serialized terminal state, replayable into a fresh xterm.
+   *
+   * When the session is on the ALTERNATE screen the alt buffer IS the content —
+   * excluding it hands back the primary buffer, i.e. the shell prompt from
+   * before the TUI launched, and the caller paints that over a live opencode.
+   * That is the reattach bug of 2026-08-13 arriving through a second door, so
+   * the switch is emitted here rather than left to each consumer.
+   */
   snapshot(): string | null {
     try {
-      const serialized = this.serializer.serialize({ excludeAltBuffer: true, excludeModes: true });
+      const alt = this._modes.alternateScreen;
+      const body = this.serializer.serialize({ excludeAltBuffer: !alt, excludeModes: true });
+      const serialized = alt ? `\x1b[?1049h${body}` : body;
       const buf = Buffer.from(serialized, "utf-8");
       if (buf.byteLength <= MAX_SNAPSHOT_BYTES) return serialized;
       // Keep the most recent bytes — old scrollback is less useful than a
@@ -129,7 +139,8 @@ export class HeadlessEmulator {
     add(1006, m.mouseSgr, false);
     add(1004, m.focusReporting, false);
     add(2004, m.bracketedPaste, false);
-    // Note: alternate screen (1049) not restored — snapshot contains correct buffer
+    // 1049 is emitted by snapshot() itself, which is the only place that
+    // knows whether the serialized body came from the alt buffer.
     return seqs.join("");
   }
 

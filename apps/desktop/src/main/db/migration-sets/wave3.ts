@@ -46,4 +46,33 @@ export const wave3Migrations: Migration[] = [
     );
     CREATE INDEX IF NOT EXISTS idx_agent_links_from ON agent_links(from_agent_id);`,
   },
+  {
+    // T172: path claims. Two agents in one working tree had NO protection —
+    // a coordinated round only avoided a collision because the human-facing
+    // coordinator grepped before assigning (2026-08-13). Claims are held by a
+    // live agent and die with it, exactly like links.
+    id: "w3_004_path_claims",
+    sql: `CREATE TABLE IF NOT EXISTS path_claims (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      project_id TEXT NOT NULL,
+      /* Absolute, normalized path of a single concrete file or directory. A
+         claim on globs is expanded before insert so overlap is a string
+         comparison instead of glob-vs-glob reasoning. */
+      path TEXT NOT NULL,
+      note TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_path_claims_project ON path_claims(project_id, path);
+    CREATE INDEX IF NOT EXISTS idx_path_claims_agent ON path_claims(agent_id);`,
+  },
+  {
+    // T176: dismiss an ended session from the dashboard without losing it.
+    // Archiving rather than deleting: the row carries the scoring, the oplog
+    // attribution and the resume handle, and a list you cannot clear is a list
+    // you stop reading.
+    id: "w3_005_agent_archived_at",
+    sql: "ALTER TABLE agents ADD COLUMN archived_at INTEGER;",
+  },
 ];

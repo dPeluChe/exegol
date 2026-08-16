@@ -79,6 +79,20 @@ export function classifyActivity(
   }
 }
 
+/**
+ * Flag that makes each CLI skip its own permission prompts. Single source of
+ * truth: the settings toggle, the pipeline executor and the spawn modal all
+ * read this. The two former copies had already drifted — crush's flag existed
+ * in the pipeline but not in settings, so its toggle silently did nothing.
+ */
+export const YOLO_FLAGS: Record<string, string> = {
+  "claude-code": "--dangerously-skip-permissions",
+  codex: "--full-auto",
+  aider: "--yes-always",
+  goose: "--no-confirm",
+  crush: "--yolo",
+};
+
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 
@@ -147,6 +161,10 @@ export type AgentCreate = {
   resumeFromAgentId?: string;
   /** T58: access mode — "read" for explore-only, "write" for full access (default), "plan" for analysis-only */
   accessMode?: AgentAccessMode;
+  /** T161: per-launch YOLO override; undefined keeps the provider's setting. */
+  yolo?: boolean;
+  /** T177: branch/ref the worktree is cut from; undefined means the repo's HEAD. */
+  baseBranch?: string;
 };
 
 // ─── Provider Registry ──────────────────────────────────────────────────────

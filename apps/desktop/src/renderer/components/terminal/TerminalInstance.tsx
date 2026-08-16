@@ -29,6 +29,10 @@ import { createWebglController, type WebglController } from "./terminal-webgl";
 
 export type { TerminalInstanceHandle, TerminalInstanceProps } from "./terminal-types";
 
+/** Long enough that scrolling past a pane costs nothing; short enough that a
+ *  backgrounded agent stops paying IPC almost immediately. */
+const HIDE_DEBOUNCE_MS = 1_500;
+
 function paneIdForAgentSelector(
   state: ReturnType<typeof useWorkspaceStore.getState>,
   agentId: string,
@@ -254,6 +258,29 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
   // Route visibility changes to the dormant pipe so hidden writes get
   // buffered into the ring and replayed on un-hide (T115).
+  // T178: tell main whether this view can draw, so it stops shipping bytes
+  // across IPC to a pane nobody is looking at. When output was dropped while
+  // hidden, main answers with a snapshot and we repaint from it — resuming
+  // mid-stream would paint onto a screen the app has already moved past.
+  useEffect(() => {
+    // Revealing costs a full serialize in main, so a pane flicking past during
+    // a scroll must not pay for it. Hiding is debounced; showing is immediate,
+    // because a late reveal is a visibly stale terminal.
+    if (!isVisible) {
+      const timer = setTimeout(() => {
+        window.api.terminal.setVisible(agentId, false).catch(() => {});
+      }, HIDE_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    }
+    // The repaint arrives on terminal:data, in order with live output — this
+    // call only reports. Acquire/release: unmounting while visible must release
+    // too, or the view stays registered and the gate never engages again.
+    window.api.terminal.setVisible(agentId, true).catch(() => {});
+    return () => {
+      window.api.terminal.setVisible(agentId, false).catch(() => {});
+    };
+  }, [agentId, isVisible]);
+
   useEffect(() => {
     dormantPipeRef.current?.setVisible(isVisible);
   }, [isVisible]);

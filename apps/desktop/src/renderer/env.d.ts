@@ -59,6 +59,9 @@ interface Window {
       write: (id: string, data: string) => void;
       resize: (id: string, cols: number, rows: number) => void;
       getSnapshot: (id: string) => Promise<string | null>;
+      /** T178: report whether this view can draw the agent. A repaint, when one
+       *  is needed, arrives on terminal:data so it stays ordered. */
+      setVisible: (id: string, visible: boolean) => Promise<void>;
       saveClipboardImage: () => Promise<string | null>;
     };
     app: {

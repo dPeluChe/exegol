@@ -67,3 +67,44 @@ describe("RingBuffer", () => {
     expect(rb.byteLength).toBe(8);
   });
 });
+
+describe("RingBuffer alternate-screen stickiness", () => {
+  const ALT_ON = "\x1b[?1049h";
+  const ALT_OFF = "\x1b[?1049l";
+
+  it("re-arms the alternate screen even after the switch has been evicted", () => {
+    // A full-screen TUI enables it once at startup, then floods the ring.
+    const rb = new RingBuffer(64);
+    rb.write(Buffer.from(`${ALT_ON}opencode starting`));
+    rb.write(Buffer.from("x".repeat(200)));
+
+    const snap = rb.snapshot().toString("latin1");
+    expect(snap).not.toContain("opencode starting"); // genuinely evicted
+    expect(snap.startsWith(ALT_ON)).toBe(true); // …but the screen is restored
+  });
+
+  it("does not re-arm once the app has left the alternate screen", () => {
+    const rb = new RingBuffer(64);
+    rb.write(Buffer.from(ALT_ON));
+    rb.write(Buffer.from(`${ALT_OFF}back at the shell`));
+    expect(rb.isAltScreen).toBe(false);
+    // The raw content still holds the original switch; what must not happen is
+    // us adding a SECOND one on top of it.
+    const snap = rb.snapshot().toString("latin1");
+    expect(snap.split(ALT_ON).length - 1).toBe(1);
+  });
+
+  it("sees a toggle split across two writes", () => {
+    const rb = new RingBuffer(64);
+    rb.write(Buffer.from("\x1b[?10"));
+    rb.write(Buffer.from("49h"));
+    expect(rb.isAltScreen).toBe(true);
+  });
+
+  it("forgets the mode on clear", () => {
+    const rb = new RingBuffer(64);
+    rb.write(Buffer.from(ALT_ON));
+    rb.clear();
+    expect(rb.isAltScreen).toBe(false);
+  });
+});

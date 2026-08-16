@@ -1,4 +1,4 @@
-import type { AgentProvider } from "@exegol/shared";
+import { type AgentProvider, YOLO_FLAGS } from "@exegol/shared";
 import { Button, cn, Input } from "@exegol/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,15 +15,6 @@ import {
 import { useCallback, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
-
-// ─── Known yolo mode flags per CLI ──────────────────────────────────────────
-
-const YOLO_FLAGS: Record<string, string> = {
-  "claude-code": "--dangerously-skip-permissions",
-  codex: "--full-auto",
-  aider: "--yes-always",
-  goose: "--no-confirm",
-};
 
 function useProviders() {
   return useQuery({

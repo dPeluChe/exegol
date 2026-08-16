@@ -22,8 +22,15 @@ export function getWorktreeName(branchName: string): string {
   return branchName.replace(/\//g, "-");
 }
 
+/** Where this project's worktrees live. Outside the repo on purpose: next to
+ *  the checkout they would need gitignore entries in every repo, and a stray
+ *  one would look like project content. */
+export function worktreeRootFor(projectName: string, rootKind: RootKind = "worktrees"): string {
+  return join(homedir(), ".exegol", rootKind, slugifyProjectName(projectName));
+}
+
 function buildTargetPath(rootKind: RootKind, projectName: string, worktreeName: string): string {
-  return join(homedir(), ".exegol", rootKind, slugifyProjectName(projectName), worktreeName);
+  return join(worktreeRootFor(projectName, rootKind), worktreeName);
 }
 
 function withNumericSuffix(branchName: string, attempt: number): string {
@@ -46,6 +53,10 @@ export function createManagedWorktree(
   projectName: string,
   branchName: string,
   rootKind: RootKind = "worktrees",
+  /** T177: branch/ref to cut from. Undefined = the repo's HEAD, which is what
+   *  this always did — and silently, so an agent inherited whatever branch the
+   *  main checkout happened to be on. */
+  baseRef?: string,
 ): ManagedWorktreeInfo {
   if (!coreRust) {
     throw new Error("Native git worktree support is unavailable");
@@ -58,7 +69,13 @@ export function createManagedWorktree(
     const targetPath = buildTargetPath(rootKind, projectName, worktreeName);
 
     try {
-      const info = coreRust.createWorktree(repoPath, worktreeName, candidateBranch, targetPath);
+      const info = coreRust.createWorktree(
+        repoPath,
+        worktreeName,
+        candidateBranch,
+        targetPath,
+        baseRef,
+      );
       return {
         branchName: candidateBranch,
         requestedBranchName: branchName,

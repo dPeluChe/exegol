@@ -383,22 +383,23 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
-### T161 — Resume Picker at Launch `added: 2026-08-11`
-**Priority**: P2 | **Effort**: S | **Source**: idea (Antonio, verify round 3)
+### T161 — Session naming ↔ CLI session identity `added: 2026-08-11` `updated: 2026-08-13`
+**Priority**: P2 | **Effort**: M | **Source**: Antonio, during the multi-agent rounds
 
-- When launching a provider from the grid/quick-bar, offer that path's resumable sessions
-  (same `agents.listResumable` data as T155.5) inline — "new session" vs "resume one of
-  these N" — instead of only surfacing them in the empty pane. Pairs with T160 aliases.
+Shipped 2026-08-13: the spawn modal now offers this provider's resumable sessions ("New
+session" vs a codename chip with how long ago it ended) and a per-launch YOLO checkbox.
+`listResumable` carries the alias, so a session is picked by the name the user knew it by.
 
----
+Still open, and it is the interesting half: **claude and codex can NAME a session** (their
+own `rename` command) and resume it BY that name — `claude --resume "<name>"` opens it
+directly. Exegol currently keeps a separate identity (its codename) from the CLI's own, so
+after a restart the user renames by hand in each terminal to line them back up.
 
-### T159 — Provider Registry Round 2 (pi, cursor-agent, copilot) `added: 2026-08-11`
-**Priority**: P2 | **Effort**: S | **Source**: engram's 12-provider registry (`RESEARCH/ENGRAM_2026_08.md`) + verified installed on Antonio's machine (`which -a`: pi via homebrew, cursor-agent + copilot via superset)
-
-- Add built-in providers like the agy/devin round (PR #65): inspect each CLI's `--help`
-  for prompt-arg/resume flags first, extend `AGENT_CLI_TYPES` + registry entries
-- Candidates NOT installed (skip until requested): qwen-code, windsurf
-- Pi bonus: `badlogic/pi-mono` is already studied in `_repos_2_learn` (Wave 2 review)
+Wanted: when Exegol assigns a codename, push it INTO the CLI's session name where the
+provider supports it, and prefer name-based resume over the captured resume command. One
+identity instead of two, and `agents_list` names then survive outside Exegol. Needs a
+per-provider capability (`supportsSessionRename`, `resumeByName`) rather than a special
+case — see [[T174]] on declaring provider behaviour instead of learning it.
 
 ---
 
@@ -495,6 +496,181 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
+### T175 — Coordination follow-ups deferred from the round-7 simplify `added: 2026-08-13`
+**Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over `test/agent-collab-round6`
+
+Real findings that needed more than a cleanup, so they were not folded into that branch:
+
+1. **Claims are advisory AND unobserved.** A violation can never surface: nothing compares what an
+   agent touched against who holds it. Exegol already has the ingredients — oplog git-tree
+   snapshots, per-step diffs, and a turn-boundary hook. At each boundary, diff the tree and compare
+   touched paths against `listProjectClaims`; on a violation, inject a warning into the offender and
+   emit a NotificationBus event. That turns advisory into *advisory + audited*, which is where the
+   value is. Hard enforcement is affordable for claude-code only: T123 already writes a per-agent
+   settings file, so a `PreToolUse` matcher on Edit/Write consulting `path_claims` is real.
+2. **`consumed` means two different things.** Pull-consumed is a receipt (the agent's own
+   authenticated call); turn-consumed is an inference ("a boundary happened after we wrote bytes")
+   that a swallowed submit would report as read. Either add provenance (`via: "pull" | "turn"`) or
+   reserve `consumed` for evidenced reads and call the inferred one `presumed_read`.
+3. **`MAX_MESSAGE_CHARS` (12 000) is now incoherent with pointer delivery.** The cap existed because
+   of the paste; bodies now travel as JSON over a socket. The cap is exactly what forces senders to
+   split at send time — the bug pointer delivery was built to kill. Raise it hard, or drop it and
+   bound total queued bytes instead.
+4. **The worktree preference is honoured by 1 of 4 launchers.** `SpawnAgentModal` reads it;
+   `QuickLaunchBar` and `EmptyPaneContent` omit `useWorktree` entirely (→ shared tree) and
+   `ParallelSpawnModal` hardcodes `true`. If it is a project property it belongs in
+   `projects.default_isolation` (that table already has `default_branch`/`default_ide`) and should
+   be read in `agent-spawn-flow`, not per call site. Matters more now: whether a spawn shares the
+   tree decides whether path claims are load-bearing or dead code.
+5. **No human surface for claims.** Zero tRPC/UI references — the user arbitrates a stuck claim but
+   cannot see or break one, and a stuck `waiting_input` agent holds its files with no TTL or steal.
+6. **`warnIfCommittable` is a log line nobody reads** for a credential in the user's repo. The
+   NotificationBus already carries `resource:warning`/`budget:warning`; this deserves the same.
+   (Made async in round 7 so it no longer blocks the spawn path.)
+7. **Composer-ready from the PTY emulator, not a second parser.** The round-7 `ESC[?2004h` sniff was
+   removed (most TUIs enable it once at startup, so it never fired, and it cost a hot-path scan).
+   The `HeadlessEmulator` already parses this mode; a `getBracketedPaste(id): boolean | null`
+   accessor on PtyHost would give the tri-state properly if readiness detection is wanted later.
+   Better still: `emitsTurnBoundaries` as a declared `AgentProviderCapabilities` field rather than
+   learned at runtime.
+
+---
+
+### T174 — Learnings from Orca (stablyai) `added: 2026-08-13`
+**Priority**: P2 | **Effort**: varies | **Source**: 2-agent code read of stablyai/orca, 2026-08-13
+(clone at `~/_repos_2_learn/github.com/stablyai/orca`)
+
+Orca is a mature Electron orchestrator (~311k LOC, ~1:1 test ratio). Read for how it solves what
+we solve. **It does not use MCP at all** — its agent-facing API is the `orca` CLI, invoked via
+Bash. Confirms MCP-vs-CLI is a genuine fork, not a right/wrong; we stay on MCP (schema-validated,
+no Bash permission needed), accepting that a provider without MCP can't participate.
+
+Already adopted 2026-08-13: pointer-not-body delivery for long messages, submit on a separate
+write, closing the paste on the failure path, boundary-signals-beat-quiescence.
+
+Still worth taking, roughly by value:
+- ~~**Fair-share diff truncation**~~ — DONE 2026-08-13: `main/lib/diff-budget.ts`, wired into all
+  three head-truncating call sites (commit messages, evaluator judges, evidence summaries).
+- **Per-provider composer-ready spec** (`src/shared/draft-paste-ready-scanner.ts:26-70`): each TUI
+  declares a marker + anchor (codex `›`, opencode `ESC[?25h`, grok `❯` anchored to alt-screen and
+  REVOKED on exit because starship uses the same glyph). We took the provider-agnostic half
+  (`ESC[?2004h`); the per-provider table is the precise version.
+- **One-outstanding-delivery-per-run enforced in DDL** + replay-until-ack — the durable form of
+  [[T170]] item 1.
+- **Declare which signal is authoritative and which is fallback.** We run THREE paths for one
+  job — OSC-777 through the PTY, hook events dropped as files, and the scraped output parser —
+  with the precedence living implicitly in the order of `if`s. That has already cost us: the
+  `oscDeliveredAgents` guard exists because two paths applied the same signal twice, and the
+  `ESC[?2004h` composer sniff was added and removed the same day for the same reason. Orca types
+  it (`pane-agent-evidence.ts:80-117` returns `source: 'hook'|'title'|'none'` with
+  `confidence: 'authoritative'|'fallback'`, hooks going stale after 30 min); Superset runs a
+  SINGLE path. Either discipline beats three mechanisms racing. Cheapest version: one resolver
+  returning `{status, source, confidence}` instead of scattered `continue`s.
+
+  Comparison that prompted this (Superset, via Antonio 2026-08-13): one shared `notify.sh`
+  registered in each CLI's own config, identity via `SUPERSET_AGENT_ID`, an early `exit 0` when
+  not inside a Superset terminal, POSTing to the host. Our `agents/wrappers.ts` is the same
+  design arrived at independently, guard included — so the hook itself needs nothing. Two
+  differences worth weighing: they hook `SessionStart`/`SessionEnd` (we infer session start),
+  and both Superset AND Orca chose HTTP where we drop files. File-drop needs no port or token
+  and survives the app being down; HTTP gives the hook a status code and does not depend on
+  `fs.watch`, which loses events under load on macOS. Our events dir being empty proves we
+  consume, not that nothing was missed.
+
+- **Preamble that bans the agent's native ask-user UI**: a worker opening its own TUI prompt hangs
+  the coordinator invisibly. Exactly the failure we hit with codex demanding authorization.
+- **Never collapse "can't tell" into "dead"** (`src/main/daemon/AGENTS.md`): only a positive signal
+  proves occupancy; a timeout proves nothing. Our crash-recovery alive/dead classification is that
+  bug class.
+- **Symlinked shared directories across worktrees** (one `node_modules` serves all) and background
+  worktree deletion — removing a `node_modules` tree synchronously blocked their IPC 8-35s.
+
+---
+
+### T179 — Complements from Athas (athasdev/athas) `added: 2026-08-13`
+**Priority**: P2 | **Effort**: S-M each | **Source**: competitor read, clone at
+`~/_repos_2_learn/github.com/athasdev/athas`
+
+Checked first: **the WebAssembly terminal engine is not for us.** Athas ships `ghostty-web`
+behind a feature flag with `status: "experimental"`, `default: false`, and keeps the FULL
+xterm.js addon suite alongside it — an alternative engine, not a replacement. Because the wasm
+engine has no addon ecosystem they hand-rolled search and serialize, and their serialize
+returns PLAIN TEXT (`translateToString(true)`). Our reattach depends on ANSI-preserving
+serialization (`headless-emulator.snapshot()` via SerializeAddon) — plain text would destroy
+exactly the fidelity we fixed on 2026-08-13. Revisit only for VT correctness, never for speed.
+
+Worth taking:
+1. **Feature flags as a system.** Every Athas feature carries id/name/description/icon and an
+   optional `status: "experimental"`, plus a settings search index. The ghostty case is the
+   argument: it lets you LAND something risky off-by-default instead of not landing it. We have
+   been shipping large changes with no flag at all.
+2. **Local history.** Per-file snapshots with `reason: save | auto-save | restore | manual`,
+   content hash, size, and restore-with-diff (`local-history-api.ts`). More valuable for us than
+   for a normal IDE because AGENTS edit the files: the oplog stores git trees per operation, so
+   there is no way to open one file and see its timeline. That is exactly the question after an
+   agent touches something.
+3. **Run actions — complement, not replacement.** We already detect npm scripts with framework
+   inference, Python, Cargo and Go (`system/scripts.ts`). Athas adds `make`, `just`, and LSP
+   code lens, all source-labelled and merged with user-defined custom actions. Take Makefile +
+   justfile (cheap) and the custom-action idea; code lens needs an LSP we do not have.
+4. **`persistentCommands`** — last-used commands float to the top of the palette. Tiny.
+
+---
+
+### T180 — Polish deferred from the round-8 simplify `added: 2026-08-13`
+**Priority**: P3 | **Effort**: S each | **Source**: 4-agent /simplify over `test/agent-collab-round6`
+
+Real findings, none of them load-bearing enough to hold the PR:
+
+- **`ResumableSession` lives in `EmptyPaneContent.tsx`** and `SpawnAgentModal` imports it back,
+  closing a component↔component cycle (type-only, so erased at build). It belongs next to
+  `RecentSession` in `packages/shared/src/types/agent.ts`, where the procedure that produces it
+  can share it instead of redeclaring the row shape inline.
+- **The modal reimplements half of the worktree path rule.** `projects.get` ships
+  `worktreeRoot`, but the renderer still does `branchName.replace(/\//g, "-")` — that is
+  `getWorktreeName()` — and cannot reproduce `withNumericSuffix`, so on a branch-name collision
+  it displays `…/exegol-foo` while the agent runs in `…/exegol-foo-2`. The whole point of the
+  field was "show where it will actually work". Deeper: one `agents.previewSpawn` returning the
+  resolved `{ cwd, branchName }`, typed in shared — which also removes the
+  `project as { worktreeRoot?: string }` cast.
+- **`resumeOf` + `continueLast` encode one 3-way choice in two states** and can represent the
+  impossible pair. `useState<ResumableSession | "last" | null>` collapses it. (The reset bug
+  this caused is fixed; the shape is not.)
+- **`archiveAgent` + the `agents.archive` procedure have no caller** — only "Archive all" is
+  wired. Either add per-card dismissal (there is an obvious slot) or drop them.
+- **`WorktreesCard` uses `window.confirm`** where `BranchGroup.tsx` confirms the same delete
+  through `ConfirmDialog` with the path spelled out; the native dialog also blocks the renderer.
+- **`EmptyPane`'s resume flow was not migrated with its launch flow.** Clicking an agent opens
+  the modal, but the session chips below still run their own spawn block — so resuming from
+  there still cannot pick a worktree, YOLO or base branch, which is the complaint the launch
+  migration existed to fix. Same file: its access-mode picker no longer affects the button next
+  to it, since the modal defaults to `write` and takes no `initialAccessMode`.
+- **`listAllWorktrees` is raw SQL inside an IPC procedure** while every other worktree query
+  lives in `db/queries/worktrees.ts` behind `mapWorktreeRow`.
+- **`taskDescription` defaulting to the provider name lives in the modal**, but pipelines, the
+  scheduler and the queue call `spawn` too and get none of it. Belongs in `AgentManager.spawn`.
+- **`SIDECAR_MIN_COMPATIBLE_VERSION` has no readers** — discovery compares with strict equality.
+  The constant and its "auto-upgraded when safe" comment are stale.
+
+---
+
+### T176 — A quit that actually quits `added: 2026-08-13` `updated: 2026-08-13`
+**Priority**: P2 | **Effort**: S | **Source**: Antonio, live testing 2026-08-13
+
+Session archiving and the worktree fleet view shipped 2026-08-13. What remains:
+
+**Quit hangs.** The app ignored SIGTERM and needed `kill -9`; claude sessions had to be
+Ctrl+C'd or closed by hand first, and an orphaned sidecar from an earlier run survived
+alongside the current one (its version-mismatch shutdown did not take). Suspects: the exit
+path awaiting a scrollback flush or socket teardown with no deadline.
+
+Orca has the scar tissue here (see [[T174]]): their quit is fully async raced against a 20s
+deadline, added specifically because a synchronous flush parked the main thread on a stalled
+network mount and broke Force Quit. Worth copying the shape — a teardown step must never be
+able to hold the process hostage.
+
+---
+
 ### T170 — Messaging durability + generalized idempotency `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over the T165/T168 round (2026-08-13)
 
@@ -566,6 +742,63 @@ question — who may act on which files while several agents coordinate.
   a live token and `opencode.json` is a file users legitimately commit.
 - Extract `provisionAgentMcp`/`deprovision` out of `buildPtyInvocation` (a command builder
   that writes files, mutates the token registry and starts a socket server).
+
+---
+
+### T172 — Orchestration primitives (from a real coordinated round) `added: 2026-08-13`
+**Priority**: P1 | **Effort**: L (split before starting) | **Source**: Juanito's round-2 report,
+2026-08-13 — one claude coordinating a codex + an opencode across 3 tasks / 9 files / 0 collisions
+
+Validated first, so we don't undo it: stable identity, `message_id`/`in_reply_to`, and the
+pre-authorization clause all held for a full assign → work → report → review → feedback cycle.
+The gaps below are what the coordinator had to cover BY HAND.
+
+1. ~~**File reservation**~~ — DONE 2026-08-13: `claim_paths` / `release_paths` / `list_claims`
+   over a `path_claims` table. All-or-nothing (a partial grant reads as success and sends the
+   agent into the collision it asked us to prevent), directory claims cover their tree, paths
+   stored absolute so separate worktrees never conflict, claims released on agent exit, and the
+   protocol is in the managed AGENTS.md block so agents know to claim before editing. NOT globs
+   — see the module header for why. Ownership across worktrees stays with [[T169]].
+2. **Reports are claims, not evidence.** Both agents reported "lint clean, tsc exit 0" and both
+   were telling the truth — but the coordinator could only know by re-running everything. The
+   bus carries prose only. Note Exegol ALREADY observes the diff (T130 evidence, oplog, scoring):
+   the right altitude is Exegol ATTACHING what it verified (files touched, diff hash, exit codes)
+   to a message, not a self-reported `artifacts` field the agent fills in.
+3. **`status` is too coarse.** `running`/`waiting_input` doesn't say whether an agent is on MY
+   task, finished and idle, or off doing something else. Needs task-level state: who assigned
+   what, and where it is.
+4. **No broadcast / shared session context.** The same isolation rules were written twice, by
+   hand, worded differently — a divergence source at 2 agents and a guarantee of it at 6.
+   Overlaps [[T162]] phases 2-3 (rooms).
+5. ~~**`delivered` is transport, not comprehension**~~ — DONE: `message_status` now reports
+   `consumed` once the target closes a turn after the injection.
+6. ~~**4000-char cap**~~ — DONE: raised to 12 000.
+7. ~~**No retract**~~ — DONE: `message_cancel` withdraws a message still in our queue; it
+   refuses honestly once the text has reached the terminal.
+
+**Provider behaviour differs and the orchestrator can't know in advance**: codex demanded explicit
+human authorization before sharing repo findings; opencode asked nothing. Document expected
+behaviour per provider (registry capability), or a coordinator stalls for no visible reason.
+
+**Remaining**: 2 (attach the diff Exegol already captures — highest value of what's left),
+3 (task-level state) and 4 (broadcast / shared session context, overlaps [[T162]]).
+
+---
+
+### T173 — MCP token must not sit in a repo file `added: 2026-08-13`
+**Priority**: P1 (security hygiene) | **Effort**: S | **Source**: Juanito, 2026-08-13
+
+`opencode.json` (repo root) carries `EXEGOL_MCP_TOKEN_FILE`; `.mcp.json`, `.gemini/settings.json`,
+`.devin/`, `.agents/` are the same shape. The credential is bounded — per session, revoked on
+exit, and the server rejects tokens whose agent isn't live — but it should not be committable at
+all. Exegol must NOT gitignore these itself: they are legitimate project config a team may want
+versioned, and we only insert the `exegol` key. Shipped for now: a warning at spawn when the
+file isn't ignored.
+
+Real fix, and it deletes code rather than adding it ([[T170]] item 3): wherever the CLI forwards
+its env to MCP servers, the per-session token already arrives via the PTY and the file needs no
+secret at all. Verify per provider with TWO sessions of the same provider in one cwd — the
+single-session case looks identical either way and proves nothing.
 
 ---
 

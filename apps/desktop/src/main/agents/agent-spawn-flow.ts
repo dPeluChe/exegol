@@ -109,7 +109,13 @@ export function setupAgentCwd(
 
   let createdWtInfo: { worktreeName: string; path: string; branchName: string } | null = null;
   try {
-    const wtInfo = createManagedWorktree(project.path, project.name, requestedBranchName);
+    const wtInfo = createManagedWorktree(
+      project.path,
+      project.name,
+      requestedBranchName,
+      "worktrees",
+      config.baseBranch,
+    );
     createdWtInfo = wtInfo;
     cwd = wtInfo.path;
 

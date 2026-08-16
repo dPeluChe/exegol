@@ -54,7 +54,9 @@ function evictToDisk(s: EvictableSession): void {
   if (s.evictedPath) return; // already evicted
   try {
     mkdirSync(RING_EVICT_DIR, { recursive: true });
-    writeFileSync(evictedPathFor(s.id), s.ringBuffer.snapshot());
+    // rawSnapshot: the alt-screen prefix is presentation. Persisting it would
+    // store a forged escape as real content and re-prefix it on reload.
+    writeFileSync(evictedPathFor(s.id), s.ringBuffer.rawSnapshot());
     // release(), not clear(): clear only resets pointers and keeps the 8MB
     // allocation resident — eviction would free zero actual memory.
     s.ringBuffer.release();

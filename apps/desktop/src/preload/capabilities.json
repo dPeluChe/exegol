@@ -300,6 +300,7 @@
     "settings:navigate",
     "settings:broadcast-changed",
     "settings:changed",
-    "app:toggle-devtools"
+    "app:toggle-devtools",
+    "terminal:set-visible"
   ]
 }

@@ -144,4 +144,29 @@ describe("exegol-tools", () => {
       expect(result.digest).toBeUndefined();
     });
   });
+
+  describe("claim_paths", () => {
+    const claim = (paths: string[]) => callExegolTool(db, "claim_paths", { paths }, makeContext());
+
+    it("resolves relative paths against the agent's working directory", async () => {
+      const res = (await claim(["src/auth.ts"])) as { granted: boolean; paths: string[] };
+      expect(res.granted).toBe(true);
+      expect(res.paths).toEqual([join(projectPath, "src/auth.ts")]);
+    });
+
+    it("refuses a path that escapes the working directory", async () => {
+      // `../..` resolves above the project and, under the prefix-overlap rule,
+      // would collide with every path in it — one agent locking the whole fleet.
+      await expect(claim(["../../etc"])).rejects.toThrow(/outside your working directory/);
+      await expect(claim(["/etc/passwd"])).rejects.toThrow(/outside your working directory/);
+    });
+
+    it("release_paths with an empty array releases everything, as documented", async () => {
+      await claim(["a.ts", "b.ts"]);
+      const res = (await callExegolTool(db, "release_paths", { paths: [] }, makeContext())) as {
+        released: number;
+      };
+      expect(res.released).toBe(2);
+    });
+  });
 });
