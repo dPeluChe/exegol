@@ -18,6 +18,7 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
+import { listProjectClaims, pathsOverlap } from "../db/queries/path-claims";
 import { logger } from "../lib/logger";
 import {
   createNdjsonBuffer,
@@ -361,6 +362,41 @@ export async function handleRequest(
     );
     return;
   }
+  // T175: enforcement, not audit. A shared working tree gives git no way to
+  // attribute a change to an agent, so a violation can only be caught BEFORE
+  // the write — which is exactly what a PreToolUse hook is. Identity comes from
+  // the same token the shim uses, so an agent cannot ask on someone's behalf.
+  if (req.method === "check_path") {
+    const params = req.params as { token?: string; ppid?: number; path?: string };
+    const resolved = resolveContext(db, params.token, params.ppid, conn);
+    if (!resolved.ok || !params.path) {
+      // Fail OPEN: a guard that blocks when it cannot identify the caller would
+      // stop an agent from working over an app restart or a revoked token.
+      socket.write(encodeResponse(req.id, { allowed: true }));
+      return;
+    }
+    const { agentId, projectId } = resolved.context;
+    let holder: { heldBy: string; note: string | null } | null = null;
+    try {
+      const conflict = listProjectClaims(db, projectId).find(
+        (c) => c.agentId !== agentId && pathsOverlap(params.path as string, c.path),
+      );
+      if (conflict) {
+        holder = { heldBy: conflict.heldByName ?? conflict.agentId, note: conflict.note };
+      }
+    } catch (err) {
+      logger.warn("[ExegolMcp] check_path failed (allowing):", err);
+    }
+    record({
+      kind: holder ? "error" : "call",
+      tool: "check_path",
+      agentId,
+      detail: holder ? `blocked ${params.path} — held by ${holder.heldBy}` : undefined,
+    });
+    socket.write(encodeResponse(req.id, { allowed: !holder, ...holder }));
+    return;
+  }
+
   if (req.method !== "call_tool") {
     record({ kind: "error", detail: `unknown method: ${req.method}` });
     socket.write(

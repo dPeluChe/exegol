@@ -43,7 +43,7 @@ function mapRow(row: Record<string, unknown>): PathClaim {
 }
 
 /** Same file, or one contains the other — a directory claim covers its tree. */
-function overlaps(a: string, b: string): boolean {
+export function pathsOverlap(a: string, b: string): boolean {
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 }
 
@@ -65,7 +65,7 @@ export function claimPaths(
   const conflicts: ClaimConflict[] = [];
   for (const path of input.paths) {
     for (const claim of existing) {
-      if (!overlaps(path, claim.path)) continue;
+      if (!pathsOverlap(path, claim.path)) continue;
       conflicts.push({
         path,
         heldBy: claim.agentId,

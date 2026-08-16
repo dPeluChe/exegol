@@ -116,6 +116,16 @@ export function resolveMcpShimPath(): string {
   return join(__dirname, "mcp", "exegol-mcp-shim-bin.js");
 }
 
+/** T175: the PreToolUse claim guard, resolved like the shim. Null when the
+ *  bundle is missing, which simply means no enforcement rather than a broken
+ *  hook command in the agent's settings file. */
+export function resolveClaimGuardPath(): string | null {
+  const primary = join(__dirname, "exegol-claim-guard-bin.js");
+  if (existsSync(primary)) return primary;
+  const nested = join(__dirname, "mcp", "exegol-claim-guard-bin.js");
+  return existsSync(nested) ? nested : null;
+}
+
 interface McpJsonFile {
   mcpServers?: Record<string, unknown>;
   [key: string]: unknown;

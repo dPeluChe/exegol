@@ -245,3 +245,69 @@ describe("identity is stable and never guessed", () => {
     expect((res.result as { self: { id: string } }).self.id).toBe("writer");
   });
 });
+
+// T175: claims were advisory AND unobservable — in a shared tree git cannot say
+// which agent dirtied a file. The write is the last moment attribution exists.
+describe("check_path guard", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = setupDb();
+    for (const id of ["writer", "reader"]) revokeAgentMcpToken(id);
+  });
+
+  async function checkPath(token: string | undefined, path: string) {
+    const { socket, responses } = fakeSocket();
+    await handleRequest(db, socket, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "check_path",
+      params: { token, path },
+    });
+    return responses[0]?.result as { allowed: boolean; heldBy?: string };
+  }
+
+  it("blocks a write to a path another live agent holds", async () => {
+    db.prepare(
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/src/auth.ts')",
+    ).run();
+    const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/src/auth.ts");
+    expect(res.allowed).toBe(false);
+    expect(res.heldBy).toBe("reader");
+  });
+
+  it("allows an agent to write what it claimed itself", async () => {
+    db.prepare(
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','writer','p1','/repo/src/auth.ts')",
+    ).run();
+    const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/src/auth.ts");
+    expect(res.allowed).toBe(true);
+  });
+
+  it("blocks a file inside a claimed directory", async () => {
+    db.prepare(
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/convex')",
+    ).run();
+    const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/convex/ai.ts");
+    expect(res.allowed).toBe(false);
+  });
+
+  it("fails OPEN when the caller cannot be identified", async () => {
+    db.prepare(
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/src/auth.ts')",
+    ).run();
+    // Blocking an unidentifiable caller would stop an agent working across an
+    // app restart — far worse than a missed collision.
+    expect((await checkPath(undefined, "/repo/src/auth.ts")).allowed).toBe(true);
+    expect((await checkPath("not-a-token", "/repo/src/auth.ts")).allowed).toBe(true);
+  });
+
+  it("allows when the claim holder is no longer live", async () => {
+    db.prepare("UPDATE agents SET status = 'completed' WHERE id = 'reader'").run();
+    db.prepare(
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/src/auth.ts')",
+    ).run();
+    const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/src/auth.ts");
+    expect(res.allowed).toBe(true);
+  });
+});

@@ -21,6 +21,7 @@ export default defineConfig({
           "pty-subprocess": resolve("src/main/terminal/pty-subprocess.ts"),
           "pty-sidecar-entry": resolve("src/main/terminal/pty-sidecar-entry.ts"),
           "exegol-mcp-shim-bin": resolve("src/main/mcp/exegol-mcp-shim-bin.ts"),
+          "exegol-claim-guard-bin": resolve("src/main/mcp/exegol-claim-guard-bin.ts"),
         },
       },
     },

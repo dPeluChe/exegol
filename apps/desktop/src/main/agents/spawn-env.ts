@@ -8,6 +8,7 @@ import { getDb } from "../db/client";
 import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
 import { refreshTray } from "../system/tray";
@@ -154,9 +155,28 @@ export function buildClaudeCodeHooksFile(agentId: string): string | null {
     const hookEntry = (event: AgentSignalType) => ({
       hooks: [{ type: "command", command: oscNotifyCommand(agentId, event) }],
     });
+    // T175: the claim guard runs on write-shaped tools only, and BEFORE the
+    // write — the one moment where "which agent touched this" is still known.
+    // It fails open, so a missing socket or token costs the check, not the turn.
+    const guardPath = resolveClaimGuardPath();
     const settings = {
       hooks: {
-        PreToolUse: [hookEntry("working")],
+        PreToolUse: [
+          hookEntry("working"),
+          ...(guardPath
+            ? [
+                {
+                  matcher: "Edit|Write|MultiEdit|NotebookEdit",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${guardPath}"`,
+                    },
+                  ],
+                },
+              ]
+            : []),
+        ],
         Notification: [hookEntry("attention")],
         Stop: [hookEntry("finished")],
       },
