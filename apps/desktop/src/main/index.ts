@@ -8,6 +8,7 @@ import { cleanupAgentWrappers, ensureAgentWrappers } from "./agents/wrappers";
 import { installDeepLinkHandling } from "./bootstrap/deep-link";
 import { registerIpcHandlers } from "./bootstrap/ipc-handlers";
 import { cleanupStaleData, runStartupRecovery } from "./bootstrap/recovery";
+import { installSignalHandlers, runTeardown } from "./bootstrap/shutdown";
 import { endMark, startMark } from "./bootstrap/startup-timings";
 import { createWindow, registerGlobalHotkey } from "./bootstrap/window";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
@@ -119,33 +120,38 @@ process.on("uncaughtException", (err) => {
   console.error("Uncaught exception:", err);
 });
 
+installSignalHandlers();
+
 app.on("will-quit", () => {
   markShutdown();
-  globalShortcut.unregisterAll();
-
-  closeAllFloatingPanes();
-  closeSettingsWindow();
-
-  // T145: close the MCP socket + revoke all tokens so shim calls fail fast
-  // instead of hanging, and the socket file doesn't go stale on disk.
-  stopExegolMcpServer();
-
-  // Sidecar mode: disconnect (sessions survive for reconnect on next launch)
-  // Legacy mode: kill all subprocess PTY sessions
-  const ptyHost = getPtyHost();
-  if (ptyHost.isUsingSidecar()) {
-    ptyHost.disconnectSidecar();
-  } else {
-    ptyHost.destroyAll();
-  }
-
-  destroyTray();
-  stopAutoUpdater();
-  stopNotifyHandler();
-  cleanupAgentWrappers();
-  getMcpHost().disconnectAll();
-  getSchedulerEngine().stop();
-  getQueueExecutor().stop();
-  stopMetricsCollector();
-  closeDatabase();
+  // Ordered by consequence: detach from the outside world, then stop our own
+  // machinery, then close the database LAST — it is the step whose absence is
+  // felt on the next launch, so nothing before it may be able to skip it.
+  runTeardown([
+    { name: "globalShortcut", run: () => globalShortcut.unregisterAll() },
+    { name: "floatingPanes", run: closeAllFloatingPanes },
+    { name: "settingsWindow", run: closeSettingsWindow },
+    // T145: close the MCP socket + revoke all tokens so shim calls fail fast
+    // instead of hanging, and the socket file doesn't go stale on disk.
+    { name: "mcpServer", run: stopExegolMcpServer },
+    {
+      name: "ptyHost",
+      run: () => {
+        // Sidecar mode: disconnect (sessions survive for reconnect on next
+        // launch). Legacy mode: kill all subprocess PTY sessions.
+        const ptyHost = getPtyHost();
+        if (ptyHost.isUsingSidecar()) ptyHost.disconnectSidecar();
+        else ptyHost.destroyAll();
+      },
+    },
+    { name: "tray", run: destroyTray },
+    { name: "autoUpdater", run: stopAutoUpdater },
+    { name: "notifyHandler", run: stopNotifyHandler },
+    { name: "agentWrappers", run: cleanupAgentWrappers },
+    { name: "mcpHost", run: () => getMcpHost().disconnectAll() },
+    { name: "scheduler", run: () => getSchedulerEngine().stop() },
+    { name: "queueExecutor", run: () => getQueueExecutor().stop() },
+    { name: "metrics", run: stopMetricsCollector },
+    { name: "database", run: closeDatabase },
+  ]);
 });

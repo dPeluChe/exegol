@@ -29,10 +29,21 @@ export function ensureAgentWrappers(): void {
 }
 
 /** Clean up stale event files on app quit. */
+/**
+ * Best-effort sweep of leftover hook events at quit.
+ *
+ * Bounded on purpose: the hook writes one file per tool_use, so a busy fleet
+ * can leave thousands behind, and this is a synchronous unlink loop running on
+ * the quit path — where a JS timer cannot interrupt it. Housekeeping must never
+ * be the reason an app takes seconds to close; whatever is left is swept on the
+ * next start (`cleanupOldEvents`).
+ */
+const MAX_EVENT_CLEANUP = 500;
+
 export function cleanupAgentWrappers(): void {
   try {
     const { readdirSync, unlinkSync } = require("node:fs") as typeof import("node:fs");
-    for (const file of readdirSync(EVENTS_DIR)) {
+    for (const file of readdirSync(EVENTS_DIR).slice(0, MAX_EVENT_CLEANUP)) {
       try {
         unlinkSync(join(EVENTS_DIR, file));
       } catch {

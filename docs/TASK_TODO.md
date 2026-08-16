@@ -654,23 +654,6 @@ Real findings, none of them load-bearing enough to hold the PR:
 
 ---
 
-### T176 — A quit that actually quits `added: 2026-08-13` `updated: 2026-08-13`
-**Priority**: P2 | **Effort**: S | **Source**: Antonio, live testing 2026-08-13
-
-Session archiving and the worktree fleet view shipped 2026-08-13. What remains:
-
-**Quit hangs.** The app ignored SIGTERM and needed `kill -9`; claude sessions had to be
-Ctrl+C'd or closed by hand first, and an orphaned sidecar from an earlier run survived
-alongside the current one (its version-mismatch shutdown did not take). Suspects: the exit
-path awaiting a scrollback flush or socket teardown with no deadline.
-
-Orca has the scar tissue here (see [[T174]]): their quit is fully async raced against a 20s
-deadline, added specifically because a synchronous flush parked the main thread on a stalled
-network mount and broke Force Quit. Worth copying the shape — a teardown step must never be
-able to hold the process hostage.
-
----
-
 ### T170 — Messaging durability + generalized idempotency `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over the T165/T168 round (2026-08-13)
 
