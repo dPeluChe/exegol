@@ -32,7 +32,13 @@ import { claimPaths, listProjectClaims, releasePaths } from "../db/queries/path-
 import { getWorktreeByAgentId } from "../db/queries/worktrees";
 import { readProjectBrief } from "../knowledge/brief";
 import { getDigestPath } from "../knowledge/paths";
-import { listMemories, observeMemory, searchMemories } from "../memory/store";
+import {
+  listMemories,
+  MAX_FACT_CHARS,
+  MAX_QUERY_CHARS,
+  observeMemory,
+  searchMemories,
+} from "../memory/store";
 import {
   EXEGOL_TOOL_NAMES,
   type ExegolToolContext,
@@ -63,12 +69,6 @@ function requireWriteAccess(tool: ExegolToolName, context: ExegolToolContext): v
   }
 }
 
-// agent_send has been capped since T157; these two were not, so an agent could
-// paste a whole file into the memory store or into an FTS5 query. A fact is one
-// sentence by design and a query is a phrase — both caps are far above real use.
-const MAX_FACT_CHARS = 4_000;
-const MAX_QUERY_CHARS = 500;
-
 async function handleMemorySearch(
   db: Database.Database,
   args: Record<string, unknown>,
@@ -77,6 +77,8 @@ async function handleMemorySearch(
   const query = String(args.query ?? "");
   if (!query) throw new ExegolToolError("memory_search requires a non-empty query", -32602);
   if (query.length > MAX_QUERY_CHARS) {
+    // The store enforces it too; translating here keeps the agent's error a
+    // "your input was invalid" instead of an opaque internal failure.
     throw new ExegolToolError(`memory_search query too long (max ${MAX_QUERY_CHARS})`, -32602);
   }
 

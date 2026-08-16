@@ -88,7 +88,7 @@ describe("frame limit", () => {
     ]);
   });
 
-  it("reports the flood once, not once per chunk", () => {
+  it("reports one incident, not one per 8M chars of garbage", () => {
     let overflows = 0;
     const feed = createNdjsonBuffer(
       () => {},

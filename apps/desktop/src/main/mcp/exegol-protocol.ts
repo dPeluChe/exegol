@@ -43,8 +43,9 @@ export function encodeResponse(
 }
 
 /** A newline-less stream would grow the frame buffer without bound — and in the
- *  main process that is the whole app. Nothing legitimate approaches it: the
- *  largest message is a tool result, and agent_send caps its body far below. */
+ *  main process that is the whole app. Counted in UTF-16 chars (~16 MB of heap),
+ *  per connection. Nothing legitimate approaches it: the largest message is a
+ *  tool result, and agent_send caps its body far below. */
 export const MAX_NDJSON_LINE_CHARS = 8 * 1024 * 1024;
 
 /**
@@ -72,18 +73,17 @@ export function createNdjsonBuffer<T>(
         overflowed = true;
         onOverflow?.();
       }
-      if (resumeAt === -1) return;
     }
     let newlineIdx = buffer.indexOf("\n");
     while (newlineIdx !== -1) {
       const line = buffer.slice(0, newlineIdx);
       buffer = buffer.slice(newlineIdx + 1);
+      // A newline IS the framing recovering — independent of whether this
+      // particular line parses, or of what the handler does with it.
+      overflowed = false;
       if (line.trim().length > 0) {
         try {
           onMessage(JSON.parse(line) as T);
-          // A parsed message means the framing recovered; the next flood is a
-          // new incident and worth reporting again.
-          overflowed = false;
         } catch {
           // Malformed line — drop it, don't crash the connection.
         }
@@ -199,7 +199,7 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
     inputSchema: {
       type: "object",
       properties: {
-        fact: { type: "string" },
+        fact: { type: "string", maxLength: 4_000 },
         category: { type: "string", enum: MEMORY_CATEGORY_VALUES },
       },
       required: ["fact", "category"],
@@ -244,7 +244,7 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
           type: "string",
           description: "Session name (alias) or agent id from agents_list",
         },
-        message: { type: "string", description: "Plain text, max 4000 chars" },
+        message: { type: "string", maxLength: 12_000, description: "Plain text" },
         expects_reply: {
           type: "boolean",
           description:

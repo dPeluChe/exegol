@@ -2,6 +2,8 @@
 // JSON-RPC over Unix domain socket (NDJSON framing).
 
 import { connect, type Socket } from "node:net";
+import { logger } from "../lib/logger";
+import { createNdjsonBuffer } from "../mcp/exegol-protocol";
 import {
   type JsonRpcMessage,
   type JsonRpcResponse,
@@ -25,7 +27,13 @@ type ErrorCallback = (id: string, message: string) => void;
 
 export class SidecarClient {
   private socket: Socket | null = null;
-  private buffer = "";
+  /** Shared framing: the cap and the multibyte-safe decoder live in one place —
+   *  this socket carries far more traffic than the MCP one and runs in the same
+   *  main process, so an unbounded buffer here is the same OOM. */
+  private feed = createNdjsonBuffer<JsonRpcMessage>(
+    (msg) => this.handleMessage(msg),
+    () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
+  );
   private pendingRequests = new Map<
     number,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -51,10 +59,7 @@ export class SidecarClient {
         resolve();
       });
 
-      sock.on("data", (chunk: Buffer) => {
-        this.buffer += chunk.toString("utf-8");
-        this.processBuffer();
-      });
+      sock.on("data", (chunk: Buffer) => this.feed(chunk));
 
       sock.on("close", () => {
         this.connected = false;
@@ -187,22 +192,6 @@ export class SidecarClient {
         reject(err as Error);
       }
     });
-  }
-
-  private processBuffer(): void {
-    for (;;) {
-      const newlineIdx = this.buffer.indexOf("\n");
-      if (newlineIdx === -1) break;
-      const line = this.buffer.slice(0, newlineIdx);
-      this.buffer = this.buffer.slice(newlineIdx + 1);
-      if (!line.trim()) continue;
-      try {
-        const msg = JSON.parse(line) as JsonRpcMessage;
-        this.handleMessage(msg);
-      } catch {
-        // Malformed — skip
-      }
-    }
   }
 
   private handleMessage(msg: JsonRpcMessage): void {

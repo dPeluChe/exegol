@@ -652,6 +652,18 @@ question — who may act on which files while several agents coordinate.
 The `.gitignore` upsert bullet was DROPPED: [[T173]] settled that Exegol must not gitignore
 files a team may legitimately version — the warning goes to the human instead.)
 
+- **Third NDJSON framing copy in `pty-sidecar-entry.ts`** — the server and the sidecar
+  client now share `createNdjsonBuffer` (cap + multibyte decoder); the sidecar's own reader
+  is still hand-rolled and unbounded. Deferred only because it is bundled into the sidecar,
+  so fixing it requires a `SIDECAR_VERSION` bump — every live PTY dies on the next launch.
+  Fold it into the next change that has to bump anyway.
+- **`buffer.indexOf("\n")` rescans from 0 on every chunk** in `createNdjsonBuffer`: a 7 MB
+  tool result arriving in 64 KB chunks scans ~110× up to 7 MB. The cap bounds each scan but
+  not the quadratic; a `searchFrom` offset carried across calls makes it linear.
+- **MCP recall is FTS-only**: `exegol-tools.ts` calls `searchMemories` without
+  `ollamaConfig`, while `ipc/procedures/memory.ts` passes it — agents get worse recall than
+  the UI for the same store.
+
 - **`hello` handshake on connect** (shim version, agentId, token source, pid): today the
   server logs `shim #7` and cannot tell a returning shim from a stranger, nor a stale one
   from a current one. With it: "3 agents on an outdated shim — restart those sessions"

@@ -387,17 +387,13 @@ function warnIfCommittable(cwd: string, relPath: string): void {
     logger.warn(
       `[ExegolMcp] ${relPath} holds an Exegol MCP token and is NOT gitignored in ${cwd} — add it to .gitignore so the credential can't be committed`,
     );
-    try {
-      getNotificationBus().emit({
-        type: "security:warning",
-        title: "A credential was written to a committable file",
-        body: `${relPath} carries an Exegol MCP token and is not gitignored. Add it to .gitignore before committing.`,
-        at: Date.now(),
-        meta: { cwd, relPath },
-      });
-    } catch {
-      /* notifications are best-effort — the log line already landed */
-    }
+    getNotificationBus().emit({
+      type: "security:warning",
+      title: "A credential was written to a committable file",
+      body: `${relPath} carries an Exegol MCP token and is not gitignored. Add it to .gitignore before committing.`,
+      at: Date.now(),
+      meta: { cwd, relPath },
+    });
   });
 }
 
