@@ -149,7 +149,8 @@ export type Agent = {
 export type AgentCreate = {
   projectId: string;
   cliType: AgentCliType;
-  taskDescription: string;
+  /** Optional: `createAgent` labels a blank one with the provider name. */
+  taskDescription?: string;
   useWorktree?: boolean;
   branchName?: string;
   skillNames?: string[];
@@ -372,4 +373,25 @@ export type RecentSession = {
   stoppedAt: number | null;
   projectName: string;
   projectId: string;
+};
+
+/** A past session a provider can reopen with its own resume flag (`agents.listResumable`). */
+export type ResumableSession = {
+  agentId: string;
+  cliType: string;
+  /** Session codename, when it had one — how the user knew this session. */
+  alias: string | null;
+  taskDescription: string;
+  status: string;
+  endedAt: number | null;
+};
+
+/** Where a spawn WOULD run, resolved by the same code that will create it —
+ *  the renderer cannot reproduce the worktree collision suffix. */
+export type SpawnPreview = {
+  cwd: string;
+  /** The branch that will be created, suffixed if the requested one is taken. */
+  branchName: string | null;
+  /** True when an existing worktree already holds that branch and is reused. */
+  reused: boolean;
 };

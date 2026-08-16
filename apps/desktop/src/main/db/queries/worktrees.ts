@@ -1,4 +1,4 @@
-import type { Worktree } from "@exegol/shared";
+import { type FleetWorktree, LIVE_STATUSES, type Worktree } from "@exegol/shared";
 import type Database from "libsql";
 import { mapWorktreeRow, nanoid } from "./helpers";
 
@@ -7,6 +7,30 @@ export function listWorktrees(db: Database.Database, projectId: string): Worktre
     .prepare("SELECT * FROM worktrees WHERE project_id = ? ORDER BY created_at DESC")
     .all(projectId);
   return (rows as Record<string, unknown>[]).map(mapWorktreeRow);
+}
+
+/** T176: every worktree Exegol owns, across projects, with how many agents are
+ *  still live in each — the view you need when a round ends and you want the
+ *  disk back. Disk/git state is added by the caller, which can do I/O. */
+export function listAllWorktreeRows(
+  db: Database.Database,
+): Omit<FleetWorktree, "exists" | "dirty">[] {
+  const statuses = [...LIVE_STATUSES];
+  const rows = db
+    .prepare(
+      `SELECT w.*, p.name AS project_name,
+              (SELECT COUNT(*) FROM agents a
+                WHERE a.worktree_id = w.id
+                  AND a.status IN (${statuses.map(() => "?").join(",")})) AS live_agents
+       FROM worktrees w JOIN projects p ON p.id = w.project_id
+       ORDER BY p.name, w.branch_name`,
+    )
+    .all(...statuses) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    ...mapWorktreeRow(r),
+    projectName: r.project_name as string,
+    liveAgents: r.live_agents as number,
+  }));
 }
 
 export function createWorktree(

@@ -190,6 +190,17 @@ export function AgentDashboard() {
     }
   }, [queryClient]);
 
+  /** One card at a time: "Archive all" is the bulk broom, this is the shrug at a
+   *  single finished session you have already read. */
+  const archiveOne = useCallback(
+    async (agentId: string) => {
+      await trpcMutate("agents.archive", { id: agentId });
+      useAgentStore.getState().removeAgent(agentId);
+      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
+    },
+    [queryClient],
+  );
+
   const { data: projects } = useQuery({
     queryKey: ["projects"],
     queryFn: () => trpcInvoke<ProjectInfo[]>("projects.list"),
@@ -392,6 +403,9 @@ export function AgentDashboard() {
                   projectMeta={groupBy === "state" ? projectMeta.get(agent.projectId) : undefined}
                   hasUnread={group.unread.has(agent.id)}
                   onClick={() => navigateToAgent(agent)}
+                  onArchive={
+                    LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
+                  }
                 />
               ))}
             </div>
@@ -407,12 +421,15 @@ function AgentCard({
   projectMeta,
   hasUnread,
   onClick,
+  onArchive,
 }: {
   agent: AgentState;
   /** Set only in by-state grouping — shows which project the card belongs to. */
   projectMeta?: ProjectMeta;
   hasUnread: boolean;
   onClick: () => void;
+  /** Set only for ended sessions — a live agent has nothing to dismiss. */
+  onArchive?: () => void;
 }) {
   const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
   const StatusIcon = config.icon;
@@ -513,6 +530,19 @@ function AgentCard({
               >
                 {peekOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                 Peek
+              </button>
+            )}
+            {onArchive && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArchive();
+                }}
+                className="ml-auto flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
+                title="Archive — keeps the session, removes the card"
+              >
+                <Archive className="h-3 w-3" />
               </button>
             )}
           </div>

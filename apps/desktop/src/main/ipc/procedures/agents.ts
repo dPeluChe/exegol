@@ -1,4 +1,4 @@
-import type { AgentCliType } from "@exegol/shared";
+import type { AgentCliType, ResumableSession, SpawnPreview } from "@exegol/shared";
 import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -10,9 +10,11 @@ import {
 } from "../../agents/handoff";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust } from "../../agents/spawn-env";
+import { resolveSpawnTarget } from "../../agents/spawn-target";
 import {
   createAgent,
   getAgent,
+  getProject,
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
@@ -196,7 +198,7 @@ export const agentRouter = router({
         stopped_at: number | null;
         alias: string | null;
       }>;
-      return rows.map((r) => ({
+      return rows.map<ResumableSession>((r) => ({
         agentId: r.id,
         cliType: r.cli_type,
         // The codename is how the user (and other agents) knew this session —
@@ -206,6 +208,26 @@ export const agentRouter = router({
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,
       }));
+    }),
+
+  /** Where a spawn would actually run — the same resolver the spawn path uses,
+   *  so the modal cannot promise a directory the agent never gets. */
+  previewSpawn: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        useWorktree: z.boolean(),
+        branchName: z.string().optional(),
+        taskDescription: z.string().optional(),
+      }),
+    )
+    .query(({ ctx, input }): SpawnPreview => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.projectId} not found` });
+      }
+      const target = resolveSpawnTarget(ctx.db, project, input);
+      return { cwd: target.cwd, branchName: target.branchName, reused: target.reused };
     }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {

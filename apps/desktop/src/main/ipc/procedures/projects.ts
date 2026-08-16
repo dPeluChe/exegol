@@ -8,12 +8,13 @@ const execFileAsync = promisify(execFile);
 
 import { LIVE_STATUSES, projectCreateSchema } from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
-import { getWorktreeName, removeManagedWorktree, worktreeRootFor } from "../../agents/worktrees";
+import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import {
   createProject,
   deleteProject,
   getProject,
   getWorktreeByAgentId,
+  listAllWorktreeRows,
   listProjects,
   listWorktrees,
   removeWorktree,
@@ -57,12 +58,7 @@ export const projectRouter = router({
   // Returns null (not throws) when project not found: stale persisted
   // activeProjectId is a normal state to recover from, not an error.
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    const project = getProject(ctx.db, input.id);
-    if (!project) return null;
-    // T177: the launch modal shows where an agent will actually work, and for a
-    // worktree that is NOT the project path. Computed here so the renderer never
-    // reimplements the slug rule.
-    return { ...project, worktreeRoot: worktreeRootFor(project.name) };
+    return getProject(ctx.db, input.id) ?? null;
   }),
 
   create: publicProcedure.input(projectCreateSchema).mutation(async ({ ctx, input }) => {
@@ -205,31 +201,10 @@ export const projectRouter = router({
       return listWorktrees(ctx.db, input.projectId);
     }),
 
-  /** Delete a worktree (runs archive hook, removes from disk + DB) */
-  /** T176: every worktree Exegol owns, across projects — the view you need when
-   *  a round ends and you want the disk back. Dirty ones are flagged because
-   *  deleting them loses work, which is the only reason to hesitate. */
+  /** T176: dirty worktrees are flagged because deleting them loses work, which
+   *  is the only reason to hesitate. */
   listAllWorktrees: publicProcedure.query(({ ctx }) => {
-    const statuses = [...LIVE_STATUSES];
-    const rows = ctx.db
-      .prepare(
-        `SELECT w.id, w.path, w.branch_name, w.project_id, p.name AS project_name,
-                (SELECT COUNT(*) FROM agents a
-                  WHERE a.worktree_id = w.id
-                    AND a.status IN (${statuses.map(() => "?").join(",")})) AS live_agents
-         FROM worktrees w JOIN projects p ON p.id = w.project_id
-         ORDER BY p.name, w.branch_name`,
-      )
-      .all(...statuses) as Array<{
-      id: string;
-      path: string;
-      branch_name: string;
-      project_id: string;
-      project_name: string;
-      live_agents: number;
-    }>;
-
-    return rows.map((r) => {
+    return listAllWorktreeRows(ctx.db).map((r) => {
       const exists = existsSync(r.path);
       // git2 in-process, not a `git status` subprocess per row: this renders on
       // every dashboard mount, and 20 spawns each rewriting .git/index would
@@ -245,16 +220,7 @@ export const projectRouter = router({
           dirty = true;
         }
       }
-      return {
-        id: r.id,
-        path: r.path,
-        branchName: r.branch_name,
-        projectId: r.project_id,
-        projectName: r.project_name,
-        liveAgents: r.live_agents,
-        exists,
-        dirty,
-      };
+      return { ...r, exists, dirty };
     });
   }),
 

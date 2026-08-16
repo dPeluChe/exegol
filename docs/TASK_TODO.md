@@ -611,43 +611,6 @@ Worth taking:
 
 ---
 
-### T180 — Polish deferred from the round-8 simplify `added: 2026-08-13`
-**Priority**: P3 | **Effort**: S each | **Source**: 4-agent /simplify over `test/agent-collab-round6`
-
-Real findings, none of them load-bearing enough to hold the PR:
-
-- **`ResumableSession` lives in `EmptyPaneContent.tsx`** and `SpawnAgentModal` imports it back,
-  closing a component↔component cycle (type-only, so erased at build). It belongs next to
-  `RecentSession` in `packages/shared/src/types/agent.ts`, where the procedure that produces it
-  can share it instead of redeclaring the row shape inline.
-- **The modal reimplements half of the worktree path rule.** `projects.get` ships
-  `worktreeRoot`, but the renderer still does `branchName.replace(/\//g, "-")` — that is
-  `getWorktreeName()` — and cannot reproduce `withNumericSuffix`, so on a branch-name collision
-  it displays `…/exegol-foo` while the agent runs in `…/exegol-foo-2`. The whole point of the
-  field was "show where it will actually work". Deeper: one `agents.previewSpawn` returning the
-  resolved `{ cwd, branchName }`, typed in shared — which also removes the
-  `project as { worktreeRoot?: string }` cast.
-- **`resumeOf` + `continueLast` encode one 3-way choice in two states** and can represent the
-  impossible pair. `useState<ResumableSession | "last" | null>` collapses it. (The reset bug
-  this caused is fixed; the shape is not.)
-- **`archiveAgent` + the `agents.archive` procedure have no caller** — only "Archive all" is
-  wired. Either add per-card dismissal (there is an obvious slot) or drop them.
-- **`WorktreesCard` uses `window.confirm`** where `BranchGroup.tsx` confirms the same delete
-  through `ConfirmDialog` with the path spelled out; the native dialog also blocks the renderer.
-- **`EmptyPane`'s resume flow was not migrated with its launch flow.** Clicking an agent opens
-  the modal, but the session chips below still run their own spawn block — so resuming from
-  there still cannot pick a worktree, YOLO or base branch, which is the complaint the launch
-  migration existed to fix. Same file: its access-mode picker no longer affects the button next
-  to it, since the modal defaults to `write` and takes no `initialAccessMode`.
-- **`listAllWorktrees` is raw SQL inside an IPC procedure** while every other worktree query
-  lives in `db/queries/worktrees.ts` behind `mapWorktreeRow`.
-- **`taskDescription` defaulting to the provider name lives in the modal**, but pipelines, the
-  scheduler and the queue call `spawn` too and get none of it. Belongs in `AgentManager.spawn`.
-- **`SIDECAR_MIN_COMPATIBLE_VERSION` has no readers** — discovery compares with strict equality.
-  The constant and its "auto-upgraded when safe" comment are stale.
-
----
-
 ### T170 — Messaging durability + generalized idempotency `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over the T165/T168 round (2026-08-13)
 

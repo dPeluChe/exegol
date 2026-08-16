@@ -1,6 +1,7 @@
 import { type Agent, type AgentCreate, type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { pickAgentCodename } from "../../agents/agent-names";
+import { resolveTaskLabel } from "../../agents/task-label";
 import { logger } from "../../lib/logger";
 import { mapAgentRow, nanoid } from "./helpers";
 
@@ -82,11 +83,12 @@ export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   // two of the same CLI are indistinguishable in the UI and un-addressable by
   // agent_send. Shells are excluded — they're not messaging participants.
   const alias = data.cliType === "shell" ? null : pickAgentCodename(db);
+  const task = resolveTaskLabel(data.cliType, data.taskDescription);
 
   db.prepare(
     `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, access_mode, alias)
      VALUES (?, ?, ?, 'spawning', ?, ?, ?, ?)`,
-  ).run(id, data.projectId, data.cliType, data.taskDescription, now, accessMode, alias);
+  ).run(id, data.projectId, data.cliType, task, now, accessMode, alias);
 
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getAgent(db, id)!;
