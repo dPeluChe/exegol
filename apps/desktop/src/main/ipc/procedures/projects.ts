@@ -6,7 +6,8 @@ import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
 
-import { projectCreateSchema } from "@exegol/shared";
+import { LIVE_STATUSES, projectCreateSchema } from "@exegol/shared";
+import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree, worktreeRootFor } from "../../agents/worktrees";
 import {
   createProject,
@@ -22,6 +23,7 @@ import {
   updateProjectSortOrder,
 } from "../../db/queries";
 import { openInIde } from "../../ide/opener";
+import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
 
 async function isGitRepo(path: string): Promise<boolean> {
@@ -207,17 +209,18 @@ export const projectRouter = router({
   /** T176: every worktree Exegol owns, across projects — the view you need when
    *  a round ends and you want the disk back. Dirty ones are flagged because
    *  deleting them loses work, which is the only reason to hesitate. */
-  listAllWorktrees: publicProcedure.query(async ({ ctx }) => {
+  listAllWorktrees: publicProcedure.query(({ ctx }) => {
+    const statuses = [...LIVE_STATUSES];
     const rows = ctx.db
       .prepare(
         `SELECT w.id, w.path, w.branch_name, w.project_id, p.name AS project_name,
                 (SELECT COUNT(*) FROM agents a
-                  WHERE a.worktree_id = w.id AND a.status IN
-                    ('idle','spawning','running','waiting_input','paused')) AS live_agents
+                  WHERE a.worktree_id = w.id
+                    AND a.status IN (${statuses.map(() => "?").join(",")})) AS live_agents
          FROM worktrees w JOIN projects p ON p.id = w.project_id
          ORDER BY p.name, w.branch_name`,
       )
-      .all() as Array<{
+      .all(...statuses) as Array<{
       id: string;
       path: string;
       branch_name: string;
@@ -226,31 +229,33 @@ export const projectRouter = router({
       live_agents: number;
     }>;
 
-    return Promise.all(
-      rows.map(async (r) => {
-        const exists = existsSync(r.path);
-        // A worktree with uncommitted work is the one you must not delete
-        // blindly, so it is worth a git call per row.
-        const dirty = exists
-          ? await execFileAsync("git", ["status", "--porcelain"], {
-              cwd: r.path,
-              timeout: 5_000,
-            })
-              .then((out) => out.stdout.trim().length > 0)
-              .catch(() => false)
-          : false;
-        return {
-          id: r.id,
-          path: r.path,
-          branchName: r.branch_name,
-          projectId: r.project_id,
-          projectName: r.project_name,
-          liveAgents: r.live_agents,
-          exists,
-          dirty,
-        };
-      }),
-    );
+    return rows.map((r) => {
+      const exists = existsSync(r.path);
+      // git2 in-process, not a `git status` subprocess per row: this renders on
+      // every dashboard mount, and 20 spawns each rewriting .git/index would
+      // contend with the agents working in those very worktrees.
+      let dirty = false;
+      if (exists) {
+        try {
+          dirty = coreRust?.worktreeHasChanges(r.path) ?? true;
+        } catch (err) {
+          // Treat an unreadable worktree as DIRTY, matching race-mode: guessing
+          // "clean" is what authorises a destructive delete.
+          logger.warn(`[Worktrees] dirty check failed for ${r.path}, treating as DIRTY:`, err);
+          dirty = true;
+        }
+      }
+      return {
+        id: r.id,
+        path: r.path,
+        branchName: r.branch_name,
+        projectId: r.project_id,
+        projectName: r.project_name,
+        liveAgents: r.live_agents,
+        exists,
+        dirty,
+      };
+    });
   }),
 
   deleteWorktree: publicProcedure
@@ -265,6 +270,17 @@ export const projectRouter = router({
 
       const project = getProject(ctx.db, input.projectId);
       if (!project) return { success: false, message: "Project not found" };
+
+      const statuses = [...LIVE_STATUSES];
+      const live = ctx.db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM agents
+           WHERE worktree_id = ? AND status IN (${statuses.map(() => "?").join(",")})`,
+        )
+        .get(input.worktreeId, ...statuses) as { n: number };
+      if (live.n > 0) {
+        return { success: false, message: "An agent is still working in this worktree" };
+      }
 
       // Run archive hook before deletion (T60: exegol.yaml)
       try {

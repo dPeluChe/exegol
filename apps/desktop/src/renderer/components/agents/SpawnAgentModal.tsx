@@ -23,6 +23,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
+import { formatTimeAgo } from "../../lib/format";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -40,16 +41,6 @@ function tailPath(path: string | undefined, segments = 3): string {
   if (!path) return "…";
   const parts = path.split("/").filter(Boolean);
   return parts.length <= segments ? path : `…/${parts.slice(-segments).join("/")}`;
-}
-
-function relativeEnded(epoch: number | null): string {
-  if (!epoch) return "";
-  const ms = epoch > 1e12 ? epoch : epoch * 1000;
-  const mins = Math.round((Date.now() - ms) / 60_000);
-  if (mins < 1) return "now";
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.round(mins / 60);
-  return hrs < 24 ? `${hrs}h` : `${Math.round(hrs / 24)}d`;
 }
 
 function slugify(text: string): string {
@@ -119,7 +110,8 @@ export function SpawnAgentModal({
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   /** null = start a new session; otherwise the past session to resume. */
   const [resumeOf, setResumeOf] = useState<ResumableSession | null>(null);
-  const [yolo, setYolo] = useState(false);
+  /** null = inherit the provider's configured args; a boolean overrides it. */
+  const [yolo, setYolo] = useState<boolean | null>(null);
   /** Resume the provider's OWN most recent session via its resume flag. */
   const [continueLast, setContinueLast] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
@@ -178,10 +170,18 @@ export function SpawnAgentModal({
   const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
   const yoloFlag = YOLO_FLAGS[selectedProviderId];
   const resumeFlag = selectedProvider?.capabilities?.resumeFlag;
+  // What Settings > CLIs has configured for this provider — the checkbox shows
+  // that until the user actually changes it, so an untouched launch inherits
+  // rather than silently overriding.
+  const providerYolo = !!yoloFlag && !!selectedProvider?.args.includes(yoloFlag);
+  const yoloChecked = yolo ?? providerYolo;
 
   // Switching provider must drop a selection that belongs to the old one.
   useEffect(() => {
     setResumeOf((current) => (current && current.cliType !== selectedProviderId ? null : current));
+    // …and "Continue last" belongs to the old provider too. Left set, it hid its
+    // own button while still sending resumeSession for a CLI with no flag.
+    setContinueLast(false);
   }, [selectedProviderId]);
 
   // Auto-select first provider if none selected
@@ -203,8 +203,10 @@ export function SpawnAgentModal({
     textareaRef.current?.focus();
   }, []);
 
+  const canLaunch = !!selectedProviderId && !spawning;
+
   const handleSpawn = useCallback(async () => {
-    if (!selectedProviderId || spawning) return;
+    if (!canLaunch) return;
     setSpawning(true);
     try {
       // biome-ignore lint/suspicious/noExplicitAny: tRPC proxy returns dynamic shape
@@ -216,7 +218,7 @@ export function SpawnAgentModal({
         branchName: useWorktree && branchName ? branchName : undefined,
         accessMode,
         skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
-        yolo: yoloFlag ? yolo : undefined,
+        yolo: yoloFlag && yolo !== null ? yolo : undefined,
         baseBranch: useWorktree && baseBranch ? baseBranch : undefined,
         ...(resumeOf
           ? { resumeSession: true, resumeFromAgentId: resumeOf.agentId }
@@ -293,7 +295,7 @@ export function SpawnAgentModal({
     createTerminal,
     setFocusedAgent,
     onClose,
-    spawning,
+    canLaunch,
     targetPaneId,
   ]);
 
@@ -418,7 +420,7 @@ export function SpawnAgentModal({
                     <span className="max-w-[150px] truncate">
                       {session.alias ?? session.taskDescription.slice(0, 24)}
                     </span>
-                    <span className="text-text-muted">{relativeEnded(session.endedAt)}</span>
+                    <span className="text-text-muted">{formatTimeAgo(session.endedAt)}</span>
                   </button>
                 ))}
               </div>
@@ -469,7 +471,7 @@ export function SpawnAgentModal({
                 <input
                   type="checkbox"
                   id="yolo-mode"
-                  checked={yolo}
+                  checked={yoloChecked}
                   onChange={(e) => setYolo(e.target.checked)}
                   className="h-3.5 w-3.5 rounded border-border accent-accent"
                 />
@@ -648,11 +650,11 @@ export function SpawnAgentModal({
             </button>
             <button
               type="button"
-              disabled={!selectedProviderId || spawning}
+              disabled={!canLaunch}
               onClick={handleSpawn}
               className={cn(
                 "rounded-lg px-4 py-1.5 text-[11px] font-semibold transition-all",
-                task.trim() && selectedProviderId && !spawning
+                canLaunch
                   ? "bg-accent text-white hover:bg-accent/90"
                   : "bg-bg-tertiary text-text-muted cursor-not-allowed",
               )}

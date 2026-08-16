@@ -8,6 +8,9 @@ const ALT_OFF = "\x1b[?1049l";
 /** Longest sequence we scan for, minus one — enough overlap that a toggle split
  *  across two writes is still seen. */
 const CARRY = ALT_ON.length - 1;
+const ESC = 0x1b;
+const ALT_ON_BYTES = Buffer.from(ALT_ON, "latin1");
+const ALT_OFF_BYTES = Buffer.from(ALT_OFF, "latin1");
 
 export class RingBuffer {
   private buf: Buffer;
@@ -22,7 +25,9 @@ export class RingBuffer {
    * shell prompt (2026-08-13).
    */
   private altScreen = false;
-  private carry = "";
+  /** Tail of the previous write, so a toggle split across two chunks is seen. */
+  private readonly carry = Buffer.alloc(CARRY);
+  private carryLen = 0;
 
   constructor(capacity = DEFAULT_CAPACITY) {
     this.buf = Buffer.allocUnsafe(capacity);
@@ -34,11 +39,20 @@ export class RingBuffer {
   }
 
   private trackScreenMode(data: Buffer): void {
-    const text = this.carry + data.toString("latin1");
-    const on = text.lastIndexOf(ALT_ON);
-    const off = text.lastIndexOf(ALT_OFF);
-    if (on !== -1 || off !== -1) this.altScreen = on > off;
-    this.carry = text.slice(-CARRY);
+    // ESC first: a memchr reject costs one native pass and skips the rest for
+    // the overwhelming majority of chunks, which carry no mode switch at all.
+    if (data.indexOf(ESC) !== -1) {
+      const on = data.lastIndexOf(ALT_ON_BYTES);
+      const off = data.lastIndexOf(ALT_OFF_BYTES);
+      if (on !== -1 || off !== -1) this.altScreen = on > off;
+    } else if (this.carryLen > 0) {
+      // The switch may straddle the boundary; only the join can show it.
+      const seam = Buffer.concat([this.carry.subarray(0, this.carryLen), data.subarray(0, CARRY)]);
+      const on = seam.lastIndexOf(ALT_ON_BYTES);
+      const off = seam.lastIndexOf(ALT_OFF_BYTES);
+      if (on !== -1 || off !== -1) this.altScreen = on > off;
+    }
+    this.carryLen = data.copy(this.carry, 0, Math.max(0, data.length - CARRY));
   }
 
   write(data: Buffer): void {
@@ -76,16 +90,24 @@ export class RingBuffer {
    * drawing to the alternate one.
    */
   snapshot(): Buffer {
-    const body = this.rawSnapshot();
-    return this.altScreen ? Buffer.concat([Buffer.from(ALT_ON, "latin1"), body]) : body;
+    return this.altScreen ? Buffer.concat([ALT_ON_BYTES, ...this.parts()]) : this.rawSnapshot();
   }
 
-  private rawSnapshot(): Buffer {
-    if (!this.filled) {
-      return Buffer.from(this.buf.subarray(0, this.head));
-    }
-    // Wrap: [head..end] + [0..head]
-    return Buffer.concat([this.buf.subarray(this.head), this.buf.subarray(0, this.head)]);
+  /**
+   * Contents WITHOUT the alternate-screen prefix. Persistence must use this:
+   * eviction writes the snapshot to disk and reload feeds it back through
+   * `write()`, so a prefixed snapshot would be stored as real content and
+   * prefixed again on the next read — one forged escape accreted per cycle.
+   */
+  rawSnapshot(): Buffer {
+    const parts = this.parts();
+    return parts.length === 1 ? Buffer.from(parts[0] as Buffer) : Buffer.concat(parts);
+  }
+
+  /** Contents in write order, without copying — callers concat once. */
+  private parts(): Buffer[] {
+    if (!this.filled) return [this.buf.subarray(0, this.head)];
+    return [this.buf.subarray(this.head), this.buf.subarray(0, this.head)];
   }
 
   get byteLength(): number {
@@ -99,7 +121,7 @@ export class RingBuffer {
 
   clear(): void {
     this.altScreen = false;
-    this.carry = "";
+    this.carryLen = 0;
     this.head = 0;
     this.filled = false;
   }

@@ -2,7 +2,15 @@ import { app, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
 import { getPtyHost } from "../terminal/pty-host";
-import { consumeMissedOutput, setTerminalViewerVisible } from "../terminal/pty-visibility";
+import {
+  consumeMissedOutput,
+  forgetViewer,
+  setTerminalViewerVisible,
+} from "../terminal/pty-visibility";
+
+/** webContents we already wired a destroy listener for. */
+const trackedSenders = new Set<number>();
+
 import { getMainWindow } from "./window";
 
 export function registerIpcHandlers(): void {
@@ -31,8 +39,18 @@ export function registerIpcHandlers(): void {
   /** T178: a view reports whether it can currently draw this agent. Returns a
    *  snapshot when output was dropped while hidden, so the view repaints from
    *  the model instead of resuming mid-stream on a screen that moved on. */
-  ipcMain.handle("terminal:set-visible", (_event, agentId: string, visible: boolean) => {
-    setTerminalViewerVisible(agentId, visible);
+  ipcMain.handle("terminal:set-visible", (event, agentId: string, visible: boolean) => {
+    const viewerId = event.sender.id;
+    if (!trackedSenders.has(viewerId)) {
+      trackedSenders.add(viewerId);
+      // A reload or a closed window never sends "hidden" for anything it was
+      // showing. Without this the gate degrades to a no-op after one Cmd+R.
+      event.sender.once("destroyed", () => {
+        trackedSenders.delete(viewerId);
+        forgetViewer(viewerId);
+      });
+    }
+    setTerminalViewerVisible(agentId, viewerId, visible);
     if (!visible || !consumeMissedOutput(agentId)) return null;
     return getPtyHost().getSnapshot(agentId);
   });

@@ -259,9 +259,13 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   // hidden, main answers with a snapshot and we repaint from it — resuming
   // mid-stream would paint onto a screen the app has already moved past.
   useEffect(() => {
+    if (!isVisible) {
+      window.api.terminal.setVisible(agentId, false).catch(() => {});
+      return;
+    }
     let cancelled = false;
     window.api.terminal
-      .setVisible(agentId, isVisible)
+      .setVisible(agentId, true)
       .then((snapshot) => {
         if (cancelled || !snapshot) return;
         const terminal = terminalRef.current;
@@ -272,8 +276,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       .catch(() => {
         /* main is gone or the channel is unavailable — the gate fails open */
       });
+    // Acquire/release: unmounting while visible must release too, or the view
+    // stays registered forever and the gate never engages again.
     return () => {
       cancelled = true;
+      window.api.terminal.setVisible(agentId, false).catch(() => {});
     };
   }, [agentId, isVisible]);
 

@@ -1,7 +1,7 @@
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, FolderGit2, Loader2, Trash2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 
 interface FleetWorktree {
@@ -25,7 +25,6 @@ interface FleetWorktree {
  */
 export function WorktreesCard() {
   const queryClient = useQueryClient();
-  const [pending, setPending] = useState<string | null>(null);
 
   const { data: worktrees = [], isLoading } = useQuery({
     queryKey: ["allWorktrees"],
@@ -42,11 +41,12 @@ export function WorktreesCard() {
         force: wt.dirty,
       }),
     onSettled: () => {
-      setPending(null);
       queryClient.invalidateQueries({ queryKey: ["allWorktrees"] });
       queryClient.invalidateQueries({ queryKey: ["worktrees"] });
     },
   });
+
+  const isRemoving = (id: string) => remove.isPending && remove.variables?.id === id;
 
   const handleDelete = useCallback(
     (wt: FleetWorktree) => {
@@ -54,7 +54,6 @@ export function WorktreesCard() {
       // pull the floor out from under a live session.
       if (wt.liveAgents > 0) return;
       if (wt.dirty && !confirm(`${wt.branchName} has uncommitted changes. Delete anyway?`)) return;
-      setPending(wt.id);
       remove.mutate(wt);
     },
     [remove],
@@ -113,7 +112,7 @@ export function WorktreesCard() {
             <button
               type="button"
               onClick={() => handleDelete(wt)}
-              disabled={wt.liveAgents > 0 || pending === wt.id}
+              disabled={wt.liveAgents > 0 || isRemoving(wt.id)}
               title={wt.liveAgents > 0 ? "An agent is working here" : "Delete worktree"}
               className={cn(
                 "ml-auto flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors",
@@ -122,7 +121,7 @@ export function WorktreesCard() {
                   : "text-text-muted hover:bg-red-400/80 hover:text-white",
               )}
             >
-              {pending === wt.id ? (
+              {isRemoving(wt.id) ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
                 <Trash2 className="h-3 w-3" />

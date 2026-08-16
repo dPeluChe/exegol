@@ -34,7 +34,7 @@ export function listAgents(db: Database.Database, projectId: string): Agent[] {
       `SELECT a.*, w.branch_name
        FROM agents a
        LEFT JOIN worktrees w ON w.id = a.worktree_id
-       WHERE a.project_id = ?
+       WHERE a.project_id = ? AND a.archived_at IS NULL
        ORDER BY a.started_at DESC`,
     )
     .all(projectId);

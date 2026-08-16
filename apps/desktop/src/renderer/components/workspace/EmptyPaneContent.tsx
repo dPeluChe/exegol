@@ -67,7 +67,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   // T155.5: cross-provider resumable session history for this project
   const [showSessions, setShowSessions] = useState(false);
   const { data: resumableSessions } = useQuery({
-    queryKey: ["resumableSessions", projectId],
+    queryKey: ["resumableSessions", projectId, 10],
     queryFn: () => trpcInvoke<ResumableSession[]>("agents.listResumable", { projectId, limit: 10 }),
     enabled: !!projectId,
     staleTime: 15_000,
@@ -309,7 +309,6 @@ export function EmptyPane({ paneId }: { paneId: string }) {
             className={cn(
               "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
               isMini ? "gap-0.5 p-1.5" : isCompact ? "gap-1 p-2" : "gap-1.5 p-2.5",
-              launching === cli.id && "opacity-50",
             )}
           >
             <AgentIcon

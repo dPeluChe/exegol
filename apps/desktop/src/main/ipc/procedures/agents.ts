@@ -182,7 +182,8 @@ export const agentRouter = router({
            FROM agents
            WHERE project_id = ?
              AND status IN ('completed', 'failed', 'stopped', 'crashed')
-             AND (resume_command IS NOT NULL OR claude_session_id IS NOT NULL)
+             AND archived_at IS NULL
+           AND (resume_command IS NOT NULL OR claude_session_id IS NOT NULL)
            ORDER BY COALESCE(stopped_at, started_at) DESC
            LIMIT ?`,
         )
