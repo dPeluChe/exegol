@@ -210,18 +210,26 @@ function handleAgentSend(
 }
 
 /** T165: make delivery observable, so an ambiguous timeout isn't guessed at. */
-function handleMessageStatus(args: Record<string, unknown>, context: ExegolToolContext) {
+function handleMessageStatus(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
   const messageId = String(args.message_id ?? "");
   if (!messageId) throw new ExegolToolError("message_status requires message_id", -32602);
-  return getMessageDeliveryState(messageId, context.agentId);
+  return getMessageDeliveryState(db, messageId, context.agentId);
 }
 
 /** T172: a queued message is still ours — withdrawing it beats sending a
  *  correction and hoping both are read in order. */
-function handleMessageCancel(args: Record<string, unknown>, context: ExegolToolContext) {
+function handleMessageCancel(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
   const messageId = String(args.message_id ?? "");
   if (!messageId) throw new ExegolToolError("message_cancel requires message_id", -32602);
-  return cancelQueuedMessage(messageId, context.agentId);
+  return cancelQueuedMessage(db, messageId, context.agentId);
 }
 
 // ─── T172: path claims ───────────────────────────────────────────────────────
@@ -407,9 +415,9 @@ export async function callExegolTool(
       case "agent_send":
         return handleAgentSend(db, args, context);
       case "message_status":
-        return handleMessageStatus(args, context);
+        return handleMessageStatus(db, args, context);
       case "message_cancel":
-        return handleMessageCancel(args, context);
+        return handleMessageCancel(db, args, context);
       case "messages_check":
         return checkAgentMessages(db, context.agentId);
       case "claim_paths":

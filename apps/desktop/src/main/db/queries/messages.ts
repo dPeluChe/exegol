@@ -25,13 +25,24 @@ export function sendMessage(
     toAgentId: string | null;
     type: AgentMessageType;
     content: string;
+    /** T170.1: the sender's own retry key — unique per sender, enforced by index. */
+    clientKey?: string | null;
+    deliveryState?: MessageDeliveryState;
   },
 ): AgentMessage {
   const id = nanoid();
   db.prepare(
-    `INSERT INTO messages (id, from_agent_id, to_agent_id, type, content)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, data.fromAgentId, data.toAgentId, data.type, data.content);
+    `INSERT INTO messages (id, from_agent_id, to_agent_id, type, content, client_key, delivery_state)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    data.fromAgentId,
+    data.toAgentId,
+    data.type,
+    data.content,
+    data.clientKey ?? null,
+    data.deliveryState ?? null,
+  );
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getMessage(db, id)!;
 }
@@ -110,4 +121,84 @@ export function countUnread(db: Database.Database, agentId: string): number {
     .prepare("SELECT COUNT(*) as count FROM messages WHERE to_agent_id = ? AND read_at IS NULL")
     .get(agentId) as { count: number };
   return row.count;
+}
+
+// ─── Delivery state (T170.1) ─────────────────────────────────────────────────
+//
+// This used to be a Map, so it died with the process: after a restart every
+// `message_status` answered "unknown" and a retry re-delivered.
+
+/** `queued` and `delivered` are transport; `consumed` is the receiver's own
+ *  turn boundary. Only the terminal three are final. */
+export type MessageDeliveryState =
+  | "queued"
+  | "delivered"
+  | "consumed"
+  | "cancelled"
+  | "undeliverable";
+
+export interface MessageDelivery {
+  fromAgentId: string | null;
+  toAgentId: string | null;
+  state: MessageDeliveryState | null;
+}
+
+export function getMessageDelivery(db: Database.Database, id: string): MessageDelivery | null {
+  const row = db
+    .prepare("SELECT from_agent_id, to_agent_id, delivery_state FROM messages WHERE id = ?")
+    .get(id) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    fromAgentId: (row.from_agent_id as string) ?? null,
+    toAgentId: (row.to_agent_id as string) ?? null,
+    state: (row.delivery_state as MessageDeliveryState) ?? null,
+  };
+}
+
+/** A terminal state is never overwritten: reporting a cancelled message as read
+ *  would be worse than reporting nothing. */
+export function setMessageDeliveryState(
+  db: Database.Database,
+  id: string,
+  state: MessageDeliveryState,
+): void {
+  db.prepare(
+    `UPDATE messages SET delivery_state = ?
+     WHERE id = ?
+       AND (delivery_state IS NULL
+            OR delivery_state NOT IN ('consumed', 'cancelled', 'undeliverable'))`,
+  ).run(state, id);
+}
+
+/** One statement for a whole dropped queue — an agent exit can strand ten. */
+export function markMessagesUndeliverable(db: Database.Database, ids: string[]): void {
+  if (ids.length === 0) return;
+  db.prepare(
+    `UPDATE messages SET delivery_state = 'undeliverable'
+     WHERE id IN (${ids.map(() => "?").join(",")})
+       AND (delivery_state IS NULL
+            OR delivery_state NOT IN ('consumed', 'cancelled', 'undeliverable'))`,
+  ).run(...ids);
+}
+
+/** The message a previous send with this key produced, if any. */
+export function findMessageByClientKey(
+  db: Database.Database,
+  fromAgentId: string,
+  clientKey: string,
+): string | null {
+  const row = db
+    .prepare("SELECT id FROM messages WHERE from_agent_id = ? AND client_key = ?")
+    .get(fromAgentId, clientKey) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+/** Startup sweep: the in-memory queue died with the process, so anything still
+ *  marked queued was never going to arrive. Saying so beats leaving a sender
+ *  waiting on a message that no longer exists anywhere. */
+export function markStaleQueuedUndeliverable(db: Database.Database): number {
+  const res = db
+    .prepare("UPDATE messages SET delivery_state = 'undeliverable' WHERE delivery_state = 'queued'")
+    .run();
+  return Number(res.changes ?? 0);
 }

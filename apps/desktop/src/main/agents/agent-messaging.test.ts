@@ -7,6 +7,11 @@ const ptyMock = vi.hoisted(() => ({
   alive: new Set<string>(),
 }));
 
+// Only the 2s quiescence sweep reaches for the ambient db; every other path
+// takes it explicitly.
+const dbHolder = vi.hoisted(() => ({ db: null as unknown as Database.Database }));
+vi.mock("../db/client", () => ({ getDb: () => dbHolder.db }));
+
 vi.mock("../terminal/pty-host", () => ({
   getPtyHost: () => ({
     isAlive: (id: string) => ptyMock.alive.has(id),
@@ -15,6 +20,7 @@ vi.mock("../terminal/pty-host", () => ({
 }));
 
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
+import { getMessageDelivery, markStaleQueuedUndeliverable } from "../db/queries/messages";
 import {
   cancelQueuedMessage,
   checkAgentMessages,
@@ -28,13 +34,26 @@ import {
   seedAgentLinkCache,
   sendAgentMessage,
   setAgentAwaitingApproval,
+  stopSweep,
 } from "./agent-messaging";
 
 function setupDb(): Database.Database {
   const db = new Database(":memory:");
   runMigrations(db);
   db.prepare("INSERT INTO projects (id, name, path) VALUES ('p1', 'Proj', '/tmp/p1')").run();
+  dbHolder.db = db;
   return db;
+}
+
+/** Clearing a queue notifies its waiting senders, which enqueues to THEM — so
+ *  one pass can leave the fleet sweep running into the next test's clock. */
+function resetQueues(db: Database.Database, ids: string[]): void {
+  for (let pass = 0; pass < 2; pass++) {
+    for (const id of ids) clearAgentMessageQueue(db, id);
+  }
+  // The sweep interval belongs to the PREVIOUS test's fake clock; left armed,
+  // its module handle blocks the next test from ever scheduling one.
+  stopSweep();
 }
 
 function insertAgent(db: Database.Database, id: string, status: string): void {
@@ -56,7 +75,7 @@ describe("sendAgentMessage", () => {
     ptyMock.writes.length = 0;
     ptyMock.alive.clear();
     // Runtime queues/dedup are module-level: isolate tests by clearing targets.
-    for (const id of ["a1", "a2", "a3", "e1", "e2"]) clearAgentMessageQueue(id);
+    resetQueues(db, ["a1", "a2", "a3", "e1", "e2"]);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-11T12:00:00Z"));
   });
@@ -98,15 +117,15 @@ describe("sendAgentMessage", () => {
     expect(r2.delivered).toBe(false);
     expect(ptyMock.writes).toHaveLength(0);
 
-    deliverPendingAgentMessages("a2");
+    deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(1);
     expect(ptyMock.writes[0]?.data).toContain("first");
 
-    deliverPendingAgentMessages("a2");
+    deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(2);
     expect(ptyMock.writes[1]?.data).toContain("second");
 
-    deliverPendingAgentMessages("a2");
+    deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(2);
   });
 
@@ -228,7 +247,7 @@ describe("sendAgentMessage", () => {
 
     // Once the dialog is gone, the normal boundary delivers it.
     setAgentAwaitingApproval("a2", false);
-    deliverPendingAgentMessages("a2");
+    deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(1);
   });
 
@@ -269,7 +288,6 @@ describe("sendAgentMessage", () => {
     expect(() =>
       sendAgentMessage(db, { fromAgentId: "r1", toAgentId: "r2", text: "after the window" }),
     ).not.toThrow();
-    for (const id of ["r1", "r2", "r3", "r4"]) clearAgentMessageQueue(id);
   });
 
   it("delivers on quiescence when the provider emits no boundary signal", () => {
@@ -286,8 +304,8 @@ describe("sendAgentMessage", () => {
     expect(ptyMock.writes[0]?.data).toContain("ping");
     // …and the submit follows as its own write.
     expect(ptyMock.writes[1]?.data).toBe("\r");
-    clearAgentMessageQueue("q1");
-    clearAgentMessageQueue("q2");
+    clearAgentMessageQueue(db, "q1");
+    clearAgentMessageQueue(db, "q2");
   });
 
   it("tells the sender when the target dies with messages still queued", () => {
@@ -298,14 +316,14 @@ describe("sendAgentMessage", () => {
     sendAgentMessage(db, { fromAgentId: "d1", toAgentId: "d2", text: "¿me revisas esto?" });
     expect(ptyMock.writes).toHaveLength(0); // queued: d2 is busy
 
-    clearAgentMessageQueue("d2", db); // d2's session ends
+    clearAgentMessageQueue(db, "d2"); // d2's session ends
 
     // d1 is told instead of waiting forever for a reply.
     expect(ptyMock.writes).toHaveLength(1);
     const notice = ptyMock.writes[0]?.data ?? "";
     expect(notice).toContain("never reached");
     expect(notice).toContain("No reply expected");
-    clearAgentMessageQueue("d1");
+    clearAgentMessageQueue(db, "d1");
   });
 
   it("caps the per-target queue", () => {
@@ -392,12 +410,12 @@ describe("sendAgentMessage", () => {
 
     sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "doomed" });
     // a2 never added to ptyMock.alive → injectNow fails
-    deliverPendingAgentMessages("a2");
+    deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(0);
     expect(messageCount(db)).toBe(1);
     // queue dropped: a later boundary delivers nothing
     ptyMock.alive.add("a2");
-    deliverPendingAgentMessages("a2");
+    deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(0);
   });
 });
@@ -411,7 +429,7 @@ describe("delivery is idempotent and observable", () => {
     db = setupDb();
     ptyMock.writes.length = 0;
     ptyMock.alive.clear();
-    for (const id of ["a1", "a2"]) clearAgentMessageQueue(id);
+    resetQueues(db, ["a1", "a2"]);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-13T12:00:00Z"));
   });
@@ -441,29 +459,72 @@ describe("delivery is idempotent and observable", () => {
     expect(messageCount(db)).toBe(1);
   });
 
+  // The whole point of T170.1: the answer used to live in a Map, so a relaunch
+  // said "unknown" for everything and the same client_key delivered twice.
+  it("survives a restart: state is answered from the row, and the key still dedups", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+
+    const first = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: "review please after the restart",
+      clientKey: "k-restart",
+    });
+    expect(getMessageDeliveryState(db, first.messageId, "a1").state).toBe("delivered");
+
+    // Everything in memory is gone; only the database came back.
+    clearAgentMessageQueue(db, "a1");
+    clearAgentMessageQueue(db, "a2");
+
+    expect(getMessageDeliveryState(db, first.messageId, "a1").state).toBe("delivered");
+    const retry = sendAgentMessage(db, {
+      fromAgentId: "a1",
+      toAgentId: "a2",
+      text: "review please after the restart",
+      clientKey: "k-restart",
+    });
+    expect(retry.messageId).toBe(first.messageId);
+    expect(retry.duplicate).toBe(true);
+    expect(messageCount(db)).toBe(1);
+  });
+
+  it("marks messages stranded in a dead queue undeliverable on the next start", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "running"); // busy → queued, never delivered
+    const queued = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "hola" });
+    expect(getMessageDeliveryState(db, queued.messageId, "a1").state).toBe("queued");
+
+    // The queue that would have delivered it died with the process, so the
+    // startup sweep is the only thing that can answer the sender.
+    expect(markStaleQueuedUndeliverable(db)).toBe(1);
+    expect(getMessageDelivery(db, queued.messageId)?.state).toBe("undeliverable");
+  });
+
   it("reports delivered / queued-with-position / undeliverable, and hides other agents' traffic", () => {
     insertAgent(db, "a1", "running");
     insertAgent(db, "a2", "waiting_input");
     ptyMock.alive.add("a2");
 
     const delivered = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "one" });
-    expect(getMessageDeliveryState(delivered.messageId, "a1").state).toBe("delivered");
+    expect(getMessageDeliveryState(db, delivered.messageId, "a1").state).toBe("delivered");
 
     // Busy target → queued behind nothing yet, so position 1.
     db.prepare("UPDATE agents SET status = 'running' WHERE id = 'a2'").run();
     const queued = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "two" });
-    expect(getMessageDeliveryState(queued.messageId, "a1")).toEqual({
+    expect(getMessageDeliveryState(db, queued.messageId, "a1")).toEqual({
       state: "queued",
       queuePosition: 1,
     });
 
     // A message id is not a licence to inspect someone else's conversation.
-    expect(getMessageDeliveryState(queued.messageId, "a3").state).toBe("unknown");
-    expect(getMessageDeliveryState("no-such-id", "a1").state).toBe("unknown");
+    expect(getMessageDeliveryState(db, queued.messageId, "a3").state).toBe("unknown");
+    expect(getMessageDeliveryState(db, "no-such-id", "a1").state).toBe("unknown");
 
     // Target's session ends before its next turn.
-    clearAgentMessageQueue("a2", db);
-    expect(getMessageDeliveryState(queued.messageId, "a1").state).toBe("undeliverable");
+    clearAgentMessageQueue(db, "a2");
+    expect(getMessageDeliveryState(db, queued.messageId, "a1").state).toBe("undeliverable");
   });
 
   it("reports consumed once the target closes a turn after the injection", () => {
@@ -473,11 +534,11 @@ describe("delivery is idempotent and observable", () => {
 
     const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "review this" });
     // Delivered = it reached the terminal. Not the same as read.
-    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("delivered");
+    expect(getMessageDeliveryState(db, res.messageId, "a1").state).toBe("delivered");
 
     // The next turn boundary is the observable moment it was processed.
-    deliverPendingAgentMessages("a2");
-    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("consumed");
+    deliverPendingAgentMessages(db, "a2");
+    expect(getMessageDeliveryState(db, res.messageId, "a1").state).toBe("consumed");
   });
 
   it("cancels a queued message, but refuses once it has been delivered", () => {
@@ -486,22 +547,22 @@ describe("delivery is idempotent and observable", () => {
     ptyMock.alive.add("a2");
 
     const queued = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "wrong task" });
-    expect(cancelQueuedMessage(queued.messageId, "a1")).toEqual({
+    expect(cancelQueuedMessage(db, queued.messageId, "a1")).toEqual({
       cancelled: true,
       state: "cancelled",
     });
     // Cancelled means never injected — not "recalled after the fact".
-    deliverPendingAgentMessages("a2");
+    deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(0);
 
     const landed = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "real task" });
-    deliverPendingAgentMessages("a2");
-    const late = cancelQueuedMessage(landed.messageId, "a1");
+    deliverPendingAgentMessages(db, "a2");
+    const late = cancelQueuedMessage(db, landed.messageId, "a1");
     expect(late.cancelled).toBe(false);
     expect(late.reason).toContain("already left the queue");
 
     // Only the sender may withdraw its own message.
-    expect(cancelQueuedMessage(queued.messageId, "a2").cancelled).toBe(false);
+    expect(cancelQueuedMessage(db, queued.messageId, "a2").cancelled).toBe(false);
   });
 });
 
@@ -515,7 +576,7 @@ describe("long messages are delivered as a pointer", () => {
     db = setupDb();
     ptyMock.writes.length = 0;
     ptyMock.alive.clear();
-    for (const id of ["a1", "a2"]) clearAgentMessageQueue(id);
+    resetQueues(db, ["a1", "a2"]);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-13T12:00:00Z"));
     insertAgent(db, "a1", "running");
@@ -540,20 +601,20 @@ describe("long messages are delivered as a pointer", () => {
     expect(pulled.messages[0]?.messageId).toBe(res.messageId);
 
     // Pulling IS the read receipt, and it drains.
-    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("consumed");
+    expect(getMessageDeliveryState(db, res.messageId, "a1").state).toBe("consumed");
     expect(checkAgentMessages(db, "a2").messages).toHaveLength(0);
   });
 
   it("does not count a pointer as read just because a turn ended", () => {
     const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: `${LONG}-2` });
-    deliverPendingAgentMessages("a2"); // a turn boundary, but no pull
-    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("delivered");
+    deliverPendingAgentMessages(db, "a2"); // a turn boundary, but no pull
+    expect(getMessageDeliveryState(db, res.messageId, "a1").state).toBe("delivered");
   });
 
   it("still reports a retry as delivered once the target has read it", () => {
     const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: `${LONG}-read` });
     checkAgentMessages(db, "a2");
-    expect(getMessageDeliveryState(res.messageId, "a1").state).toBe("consumed");
+    expect(getMessageDeliveryState(db, res.messageId, "a1").state).toBe("consumed");
 
     // `consumed` is delivery that also got read. Answering delivered:false here
     // told the sender its message never landed at the moment it most clearly had.
@@ -573,7 +634,7 @@ describe("long messages are delivered as a pointer", () => {
     });
     // Simulate a main-process restart: the pointer is in the agent's scrollback
     // but our refs died with the process.
-    clearAgentMessageQueue("a2");
+    clearAgentMessageQueue(db, "a2");
 
     const pulled = checkAgentMessages(db, "a2");
     expect(pulled.messages.map((m) => m.messageId)).toContain(res.messageId);

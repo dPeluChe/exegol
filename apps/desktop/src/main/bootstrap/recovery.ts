@@ -1,6 +1,7 @@
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { recoverStaleAgents } from "../db/queries";
+import { markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
@@ -64,6 +65,18 @@ export async function runStartupRecovery(): Promise<void> {
     }
   } catch (err) {
     logger.warn("[Startup] Could not snapshot DB agents:", err);
+  }
+
+  // T170.1: before ANY queue can exist again. The in-memory queue died with the
+  // process, so a message still marked queued was never going to arrive — the
+  // sender gets an answer instead of waiting on something that exists nowhere.
+  try {
+    const stranded = markStaleQueuedUndeliverable(getDb());
+    if (stranded > 0) {
+      logger.info(`[Recovery] ${stranded} queued message(s) marked undeliverable`);
+    }
+  } catch (err) {
+    logger.warn("[Recovery] Could not sweep stranded messages:", err);
   }
 
   let aliveSessionIds: string[] = [];

@@ -80,11 +80,14 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
     prev !== "waiting_input" &&
     !event.needsAttention;
   if (enteredIdleBoundary) {
-    deliverPendingAgentMessages(event.agentId);
     try {
-      fireAgentLinks(getDb(), event.agentId);
-    } catch {
-      /* db not ready during early startup — non-fatal */
+      const db = getDb();
+      deliverPendingAgentMessages(db, event.agentId);
+      fireAgentLinks(db, event.agentId);
+    } catch (err) {
+      // db not ready during early startup — non-fatal, but never silent: a
+      // swallowed delivery failure looks exactly like "nobody wrote to me".
+      logger.warn(`[AgentMsg] Turn-boundary delivery failed for ${event.agentId}:`, err);
     }
   }
 }

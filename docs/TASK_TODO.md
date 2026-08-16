@@ -614,22 +614,15 @@ Worth taking:
 ### T170 — Messaging durability + generalized idempotency `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over the T165/T168 round (2026-08-13)
 
-Three follow-ups the review flagged as right-but-bigger than that commit:
+Follow-ups the review flagged as right-but-bigger than that commit.
+(Item 1 — delivery state in the DB — shipped 2026-08-16; see `TASK_COMPLETED/2608.md`.)
 
-1. **Delivery state belongs in the DB, not a Map.** `messageState`/`idempotency` are
-   in-memory, so after an app restart `message_status` answers `unknown` for everything and
-   a retry with the same `message_id` re-delivers — precisely when a sender most needs the
-   answer. Add `delivered_at` / `state` / `client_key` (+ unique index on
-   `(from_agent_id, client_key)`) via a wave migration-set; `getMessageDeliveryState` then
-   reads the row, idempotency becomes a unique-constraint lookup, and a startup sweep marks
-   still-queued messages undeliverable (correct: the in-memory queue died with the process).
-   Reviewers called this the highest value-per-line item.
-2. **Generalize idempotency to the RPC layer.** Today only `agent_send` is safely
+1. **Generalize idempotency to the RPC layer.** Today only `agent_send` is safely
    retryable, and the retry is performed by the MODEL following prose. The shim already has
    a per-call id — make it stable across reconnects and have the server replay the recorded
    response for a repeated id. Then every tool is retryable and the shim can retry itself.
    Build it when the SECOND tool needs it, not with another bespoke key.
-3. **Finish the tokenless-config move.** `EXEGOL_MCP_TOKEN_FILE` + shim env-preference
+2. **Finish the tokenless-config move.** `EXEGOL_MCP_TOKEN_FILE` + shim env-preference
    already makes per-session identity win wherever the CLI forwards its env. Verify
    empirically per CLI (two opencode sessions in one repo, ~30 min); for every CLI that
    forwards, the file token can be dropped entirely and the multi-binding registry, the
