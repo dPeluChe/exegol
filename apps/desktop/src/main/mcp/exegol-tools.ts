@@ -250,6 +250,12 @@ function resolveAgentPaths(
     if (resolved !== base && !resolved.startsWith(`${base}/`)) {
       throw new ExegolToolError(`path is outside your working directory: ${path}`, -32602);
     }
+    if (resolved === base) {
+      throw new ExegolToolError(
+        "claiming the whole working directory would lock out every other session — claim the files or directories you will actually edit",
+        -32602,
+      );
+    }
     return resolved;
   });
 }
@@ -266,6 +272,7 @@ function handleClaimPaths(
     paths,
     note: typeof args.note === "string" ? args.note.slice(0, 300) : null,
   });
+  const enforcement = describeEnforcement(db, context);
   if (result.conflicts.length > 0) {
     return {
       granted: false,
@@ -275,9 +282,34 @@ function handleClaimPaths(
         note: c.note,
       })),
       hint: "Nothing was claimed. Pick different files, or message the holder with agent_send to agree who takes what.",
+      ...enforcement,
     };
   }
-  return { granted: true, paths: result.granted };
+  return { granted: true, paths: result.granted, ...enforcement };
+}
+
+/**
+ * Who this claim can actually stop. Enforcement needs a per-session hook file,
+ * which only claude-code has — for every other provider a claim is a signal the
+ * sibling has to choose to read. Saying "so two agents never write the same
+ * file" without this would have an agent trusting a lock three of its four
+ * siblings walk straight through.
+ */
+function describeEnforcement(db: Database.Database, context: ExegolToolContext) {
+  const others = listActiveAgents(db).filter(
+    (a) => a.id !== context.agentId && a.projectId === context.projectId,
+  );
+  const label = (a: (typeof others)[number]) => `${a.alias ?? a.id} (${a.cliType})`;
+  const enforcedAgainst = others.filter((a) => a.cliType === "claude-code").map(label);
+  const advisoryFor = others.filter((a) => a.cliType !== "claude-code").map(label);
+  if (advisoryFor.length === 0) return { enforcedAgainst };
+  return {
+    enforcedAgainst,
+    advisoryFor,
+    hint:
+      "Exegol blocks file-editing tools for the enforced sessions. The others only see " +
+      "your claim if they call list_claims — tell them with agent_send if it matters.",
+  };
 }
 
 function handleReleasePaths(
@@ -294,6 +326,7 @@ function handleReleasePaths(
 
 function handleListClaims(db: Database.Database, context: ExegolToolContext) {
   return {
+    ...describeEnforcement(db, context),
     claims: listProjectClaims(db, context.projectId).map((c) => ({
       path: c.path,
       heldBy: c.heldByName ?? c.agentId,

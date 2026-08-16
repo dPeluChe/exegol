@@ -183,8 +183,17 @@ describe("buildPtyInvocation", () => {
     const [agent, config] = makeAgent("claude-code");
     const inv = buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
 
-    expect(mocks.buildClaudeCodeHooksFile).toHaveBeenCalledWith(agent.id);
+    // Enforcement only makes sense in a SHARED tree: an agent alone in its own
+    // worktree cannot collide with anyone, so it pays no guard spawn per write.
+    expect(mocks.buildClaudeCodeHooksFile).toHaveBeenCalledWith(agent.id, { enforceClaims: true });
     expect(inv.args[1]).toContain("--settings /tmp/exegol-hooks/agent.json");
+  });
+
+  it("skips the claim guard for an agent isolated in its own worktree", () => {
+    const [agent, config] = makeAgent("claude-code", { useWorktree: true });
+    buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
+
+    expect(mocks.buildClaudeCodeHooksFile).toHaveBeenCalledWith(agent.id, { enforceClaims: false });
   });
 
   it("does not double-append --settings when the command already carries one", () => {

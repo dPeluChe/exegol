@@ -18,7 +18,6 @@
  * where the provider lets us.
  */
 
-import { readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { isAbsolute, join } from "node:path";
 import {
@@ -31,49 +30,71 @@ import {
 /** Claude Code blocks a tool call on exit 2 and feeds stderr back to the model. */
 const EXIT_BLOCK = 2;
 const ANSWER_TIMEOUT_MS = 2_000;
+const GUARD_DEADLINE_MS = 3_000;
 
 function allow(): never {
   process.exit(0);
 }
 
+/**
+ * Env only — deliberately NOT the shim's `<cwd>/.mcp.json` fallback.
+ *
+ * That fallback exists for codex, which sanitizes the env it gives MCP servers.
+ * This guard runs only under claude-code, which gets a per-agent config outside
+ * the repo and always has the token in its PTY env. In a shared repo the cwd
+ * file holds a SIBLING's token, so falling back to it would authenticate this
+ * guard as another agent — allowing writes to paths that agent holds and
+ * blocking the ones this one holds. No token means fail open, which is already
+ * the contract.
+ */
 function resolveToken(): string {
-  const perSession = process.env.EXEGOL_MCP_TOKEN;
-  if (perSession) return perSession;
-  const fromFile = process.env.EXEGOL_MCP_TOKEN_FILE;
-  if (fromFile) return fromFile;
-  try {
-    const raw = readFileSync(join(process.cwd(), ".mcp.json"), "utf-8");
-    const parsed = JSON.parse(raw) as {
-      mcpServers?: { exegol?: { env?: Record<string, string> } };
-    };
-    const env = parsed.mcpServers?.exegol?.env;
-    return env?.EXEGOL_MCP_TOKEN_FILE ?? env?.EXEGOL_MCP_TOKEN ?? "";
-  } catch {
-    return "";
-  }
+  return process.env.EXEGOL_MCP_TOKEN ?? "";
 }
 
 /** The file a write-shaped tool call targets, or null when it targets none. */
-function targetPath(payload: unknown): string | null {
-  const input = (payload as { tool_input?: Record<string, unknown> } | null)?.tool_input;
-  const raw = input?.file_path ?? input?.path ?? input?.notebook_path;
+export function targetPath(payload: unknown): string | null {
+  const hook = payload as { tool_input?: Record<string, unknown>; cwd?: unknown } | null;
+  const input = hook?.tool_input;
+  const raw =
+    input?.file_path ??
+    input?.path ??
+    input?.notebook_path ??
+    (input?.edits as { file_path?: string }[] | undefined)?.[0]?.file_path;
   if (typeof raw !== "string" || raw.length === 0) return null;
-  return isAbsolute(raw) ? raw : join(process.cwd(), raw);
+  // The payload carries an authoritative cwd; process.cwd() is only incidentally
+  // the same one.
+  const base = typeof hook?.cwd === "string" && hook.cwd ? hook.cwd : process.cwd();
+  return isAbsolute(raw) ? raw : join(base, raw);
 }
+
+const STDIN_TIMEOUT_MS = 1_000;
 
 function readStdin(): Promise<string> {
   return new Promise((resolve) => {
     let buf = "";
+    // A parent that never closes stdin would otherwise hang until Claude Code's
+    // own hook timeout — ten minutes of stall on a single Edit.
+    const timer = setTimeout(() => resolve(""), STDIN_TIMEOUT_MS);
+    timer.unref?.();
+    const done = (value: string) => {
+      clearTimeout(timer);
+      resolve(value);
+    };
     process.stdin.setEncoding("utf-8");
     process.stdin.on("data", (chunk) => {
       buf += chunk;
     });
-    process.stdin.on("end", () => resolve(buf));
-    process.stdin.on("error", () => resolve(""));
+    process.stdin.on("end", () => done(buf));
+    process.stdin.on("error", () => done(""));
   });
 }
 
 async function main(): Promise<void> {
+  // A guard that fails open on every uncertainty must also fail open on "I
+  // hung": without this, a stdin that never ends blocks the tool call until
+  // Claude Code's own hook timeout. NOT unref'd — it has to be able to fire.
+  setTimeout(allow, GUARD_DEADLINE_MS);
+
   const token = resolveToken();
   if (!token) allow();
 
@@ -103,7 +124,11 @@ async function main(): Promise<void> {
         }),
       );
       socket.on("connect", () => {
-        socket.write(encodeRequest(1, "check_path", { token, ppid: process.ppid, path }));
+        // No ppid on purpose: resolving it costs the MAIN process three
+        // synchronous `ps` forks per write, and it buys nothing here — this
+        // guard only runs under claude-code, which gets a per-agent token, so
+        // the token alone is unambiguous. Ambiguity already fails open.
+        socket.write(encodeRequest(1, "check_path", { token, path }));
       });
     },
   );
@@ -119,4 +144,5 @@ async function main(): Promise<void> {
   process.exit(EXIT_BLOCK);
 }
 
-void main();
+// Guarded so the parsing helpers can be unit-tested without running the hook.
+if (require.main === module) void main();

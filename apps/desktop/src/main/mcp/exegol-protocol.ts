@@ -285,7 +285,9 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
     name: "claim_paths",
     description:
       "Reserve files or directories before editing them, so two agents never write the same " +
-      "file. ALL-OR-NOTHING: if any path overlaps another live agent's claim, nothing is " +
+      "file — ENFORCED for sessions Exegol can intercept (their file-editing tools are " +
+      "blocked), advisory for the rest; the response says which is which. Writes made " +
+      "through shell commands are never intercepted. ALL-OR-NOTHING: if any path overlaps another live agent's claim, nothing is " +
       "granted and you get the conflicts (who holds what) — pick different files or negotiate " +
       "via agent_send. A directory claim covers everything under it. Re-claiming what you " +
       "already hold succeeds. Paths may be relative to your working directory. Your claims are " +

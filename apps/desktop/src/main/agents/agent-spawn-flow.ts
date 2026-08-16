@@ -293,7 +293,10 @@ export function buildPtyInvocation(
     // ones that need deterministic status, and --settings composes with
     // --resume (guard against a stored resume_command that already has one).
     if (agent.cliType === "claude-code" && !fullCommand.includes("--settings")) {
-      const hooksPath = buildClaudeCodeHooksFile(agent.id);
+      const hooksPath = buildClaudeCodeHooksFile(agent.id, {
+        // Only a shared checkout can have two agents reaching for one file.
+        enforceClaims: !config.useWorktree,
+      });
       if (hooksPath) {
         fullCommand = `${fullCommand} --settings ${hooksPath}`;
       }

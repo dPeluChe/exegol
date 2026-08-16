@@ -18,8 +18,9 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
-import { listProjectClaims, pathsOverlap } from "../db/queries/path-claims";
+import { findBlockingClaim } from "../db/queries/path-claims";
 import { logger } from "../lib/logger";
+import { getNotificationBus } from "../notifications/bus";
 import {
   createNdjsonBuffer,
   EXEGOL_DIR,
@@ -128,8 +129,25 @@ const PID_WALK_MAX_HOPS = 4;
 /** The shim's ancestry never changes, so walk it ONCE per connection. Without
  *  the cache an unresolvable token re-forked `ps` on every single call, forever,
  *  blocking the main process that also drives PTY output and the UI. */
+/**
+ * The claim guard is a FRESH PROCESS per write, so it opens a fresh connection
+ * and the per-connection ancestor cache never hits — every Edit would fork up
+ * to four blocking `ps` calls on the process that also pumps every PTY. The
+ * mapping cannot change within a session, so memoize it by caller instead.
+ */
+const IDENTITY_TTL_MS = 30_000;
+const identityMemo = new Map<string, { chain: number[]; at: number }>();
+
 function ancestorPids(conn: McpConnectionState | undefined, ppid: number | undefined): number[] {
   if (conn?.ancestors) return conn.ancestors;
+  const memoKey = ppid === undefined ? null : String(ppid);
+  if (memoKey) {
+    const hit = identityMemo.get(memoKey);
+    if (hit && Date.now() - hit.at < IDENTITY_TTL_MS) {
+      if (conn) conn.ancestors = hit.chain;
+      return hit.chain;
+    }
+  }
   const chain: number[] = [];
   let pid: number | null = ppid ?? null;
   while (pid !== null && chain.length < PID_WALK_MAX_HOPS) {
@@ -137,6 +155,7 @@ function ancestorPids(conn: McpConnectionState | undefined, ppid: number | undef
     pid = chain.length < PID_WALK_MAX_HOPS ? parentOf(pid) : null;
   }
   if (conn) conn.ancestors = chain;
+  if (memoKey) identityMemo.set(memoKey, { chain, at: Date.now() });
   return chain;
 }
 
@@ -370,6 +389,10 @@ export async function handleRequest(
     const params = req.params as { token?: string; ppid?: number; path?: string };
     const resolved = resolveContext(db, params.token, params.ppid, conn);
     if (!resolved.ok || !params.path) {
+      // Fail-open must be COUNTED. A silent allow is indistinguishable from a
+      // real one, so a session that lost enforcement looks identical to one
+      // that never needed it.
+      record({ kind: "error", tool: "check_path", detail: "unidentified caller — allowed" });
       // Fail OPEN: a guard that blocks when it cannot identify the caller would
       // stop an agent from working over an app restart or a revoked token.
       socket.write(encodeResponse(req.id, { allowed: true }));
@@ -378,21 +401,35 @@ export async function handleRequest(
     const { agentId, projectId } = resolved.context;
     let holder: { heldBy: string; note: string | null } | null = null;
     try {
-      const conflict = listProjectClaims(db, projectId).find(
-        (c) => c.agentId !== agentId && pathsOverlap(params.path as string, c.path),
-      );
-      if (conflict) {
-        holder = { heldBy: conflict.heldByName ?? conflict.agentId, note: conflict.note };
-      }
+      holder = findBlockingClaim(db, { agentId, projectId, path: params.path });
     } catch (err) {
       logger.warn("[ExegolMcp] check_path failed (allowing):", err);
     }
-    record({
-      kind: holder ? "error" : "call",
-      tool: "check_path",
-      agentId,
-      detail: holder ? `blocked ${params.path} — held by ${holder.heldBy}` : undefined,
-    });
+    // Only blocks are recorded: the activity ring holds 100 entries, and one
+    // agent doing a hundred edits would evict every message and memory call
+    // from the panel whose purpose is showing what agents are doing.
+    if (holder) {
+      record({
+        kind: "error",
+        tool: "check_path",
+        agentId,
+        detail: `blocked ${params.path} — held by ${holder.heldBy}`,
+      });
+      // The model is told by the guard; the USER has to hear it somewhere too,
+      // or a collision is only ever visible in a ring buffer that evicts it.
+      try {
+        getNotificationBus().emit({
+          type: "agent:attention",
+          title: "Write blocked — file claimed by another agent",
+          body: `${params.path} is held by "${holder.heldBy}"`,
+          agentId,
+          projectId,
+          at: Date.now(),
+        });
+      } catch {
+        /* notifications are best-effort */
+      }
+    }
     socket.write(encodeResponse(req.id, { allowed: !holder, ...holder }));
     return;
   }
@@ -447,16 +484,24 @@ function startListening(db: Database.Database): void {
     // Connection churn is the diagnostic that matters: a shim that never
     // reconnects after an app restart shows up here as silence.
     const connId = ++connectionSeq;
-    record({ kind: "connect", detail: `shim #${connId}` });
     const conn: McpConnectionState = {};
+    // Announced lazily: the claim guard opens a fresh connection per write, and
+    // announcing those would evict every real agent call from a 100-entry ring.
+    let announced = false;
     const feed = createNdjsonBuffer<JsonRpcRequest>((msg) => {
+      if (!announced && msg.method !== "check_path") {
+        announced = true;
+        record({ kind: "connect", detail: `shim #${connId}` });
+      }
       handleRequest(db, socket, msg, conn).catch((err) => {
         record({ kind: "error", detail: `unhandled: ${err instanceof Error ? err.message : err}` });
         logger.warn("[ExegolMcp] Unhandled request error:", err);
       });
     });
     socket.on("data", feed);
-    socket.on("close", () => record({ kind: "disconnect", detail: `shim #${connId}` }));
+    socket.on("close", () => {
+      if (announced) record({ kind: "disconnect", detail: `shim #${connId}` });
+    });
     socket.on("error", () => {
       /* client disconnects are routine — nothing to clean up per-connection */
     });

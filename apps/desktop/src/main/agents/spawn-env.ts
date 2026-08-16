@@ -148,7 +148,10 @@ function oscNotifyCommand(agentId: string, event: AgentSignalType): string {
  * Returns the settings file path, or null if it couldn't be written
  * (non-fatal — the scraping parser remains the fallback).
  */
-export function buildClaudeCodeHooksFile(agentId: string): string | null {
+export function buildClaudeCodeHooksFile(
+  agentId: string,
+  opts: { enforceClaims?: boolean } = {},
+): string | null {
   try {
     mkdirSync(HOOKS_DIR, { recursive: true });
     const path = join(HOOKS_DIR, `${agentId}.json`);
@@ -158,7 +161,9 @@ export function buildClaudeCodeHooksFile(agentId: string): string | null {
     // T175: the claim guard runs on write-shaped tools only, and BEFORE the
     // write — the one moment where "which agent touched this" is still known.
     // It fails open, so a missing socket or token costs the check, not the turn.
-    const guardPath = resolveClaimGuardPath();
+    // Skipped for an isolated worktree: separate trees genuinely cannot
+    // collide (claims are absolute paths), so every check there is pure cost.
+    const guardPath = opts.enforceClaims === false ? null : resolveClaimGuardPath();
     const settings = {
       hooks: {
         PreToolUse: [
@@ -166,11 +171,15 @@ export function buildClaudeCodeHooksFile(agentId: string): string | null {
           ...(guardPath
             ? [
                 {
-                  matcher: "Edit|Write|MultiEdit|NotebookEdit",
+                  // Anchored: an unanchored alternation also matches any MCP
+                  // tool whose name merely CONTAINS "Write", paying a process
+                  // spawn to find no file path and allow.
+                  matcher: "^(Edit|Write|MultiEdit|NotebookEdit)$",
                   hooks: [
                     {
                       type: "command",
                       command: `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${guardPath}"`,
+                      timeout: 5,
                     },
                   ],
                 },

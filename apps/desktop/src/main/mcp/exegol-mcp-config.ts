@@ -109,21 +109,24 @@ function flavorForCli(cliType: string): McpConfigFlavor {
   return "mcp-json";
 }
 
-/** Resolve the bundled shim binary path — mirrors pty-sidecar-discovery's lookup. */
-export function resolveMcpShimPath(): string {
-  const primary = join(__dirname, "exegol-mcp-shim-bin.js");
+/** Bundled bins sit beside this file in prod and under mcp/ in dev builds. */
+function resolveBundledBin(fileName: string): string | null {
+  const primary = join(__dirname, fileName);
   if (existsSync(primary)) return primary;
-  return join(__dirname, "mcp", "exegol-mcp-shim-bin.js");
+  const nested = join(__dirname, "mcp", fileName);
+  return existsSync(nested) ? nested : null;
 }
 
-/** T175: the PreToolUse claim guard, resolved like the shim. Null when the
- *  bundle is missing, which simply means no enforcement rather than a broken
- *  hook command in the agent's settings file. */
+const SHIM_BIN = "exegol-mcp-shim-bin.js";
+
+export function resolveMcpShimPath(): string {
+  return resolveBundledBin(SHIM_BIN) ?? join(__dirname, "mcp", SHIM_BIN);
+}
+
+/** T175: the PreToolUse claim guard. Null when the bundle is missing, which
+ *  means no enforcement rather than a broken hook command in the settings file. */
 export function resolveClaimGuardPath(): string | null {
-  const primary = join(__dirname, "exegol-claim-guard-bin.js");
-  if (existsSync(primary)) return primary;
-  const nested = join(__dirname, "mcp", "exegol-claim-guard-bin.js");
-  return existsSync(nested) ? nested : null;
+  return resolveBundledBin("exegol-claim-guard-bin.js");
 }
 
 interface McpJsonFile {
