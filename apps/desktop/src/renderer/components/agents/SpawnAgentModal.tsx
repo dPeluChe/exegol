@@ -2,6 +2,8 @@ import {
   type AgentAccessMode,
   type AgentCliType,
   type AgentProvider,
+  type ResumableSession,
+  type SpawnPreview,
   YOLO_FLAGS,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
@@ -34,7 +36,6 @@ import {
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-import type { ResumableSession } from "../workspace/EmptyPaneContent";
 
 /** Last few segments — enough to recognise the repo without the modal wrapping. */
 function tailPath(path: string | undefined, segments = 3): string {
@@ -64,7 +65,15 @@ interface SpawnAgentModalProps {
   /** Place the spawned agent in THIS pane instead of guessing from focus —
    *  the launcher grid lives inside a specific pane and must fill that one. */
   targetPaneId?: string;
+  /** Open with a session already chosen — the launcher's history chips resume
+   *  through this modal rather than spawning behind its back. */
+  initialSession?: SessionChoice;
+  initialAccessMode?: AgentAccessMode;
 }
+
+/** One 3-way choice, one state: a new session, the CLI's own last one, or a
+ *  specific past session. Two booleans could represent the impossible pair. */
+export type SessionChoice = ResumableSession | "last" | null;
 
 /** Per-project spawn preference. A UI default, deliberately not app config:
  *  it is remembered, never synced, and a wrong value costs one checkbox click. */
@@ -94,12 +103,14 @@ export function SpawnAgentModal({
   initialTask,
   initialCliType,
   targetPaneId,
+  initialSession = null,
+  initialAccessMode = "write",
 }: SpawnAgentModalProps) {
   const [task, setTask] = useState(initialTask ?? "");
   const [selectedProviderId, setSelectedProviderId] = useState(
     initialCliType ?? initialProvider?.id ?? "",
   );
-  const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
+  const [accessMode, setAccessMode] = useState<AgentAccessMode>(initialAccessMode);
   // Remembered per project: whether a repo is worked in parallel branches or by
   // several agents on ONE branch is a property of how that project is run, not
   // a per-spawn decision. Defaulting to "isolated" every time meant unchecking
@@ -108,12 +119,9 @@ export function SpawnAgentModal({
   const [branchName, setBranchName] = useState("");
   const [branchEdited, setBranchEdited] = useState(false);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-  /** null = start a new session; otherwise the past session to resume. */
-  const [resumeOf, setResumeOf] = useState<ResumableSession | null>(null);
+  const [session, setSession] = useState<SessionChoice>(initialSession);
   /** null = inherit the provider's configured args; a boolean overrides it. */
   const [yolo, setYolo] = useState<boolean | null>(null);
-  /** Resume the provider's OWN most recent session via its resume flag. */
-  const [continueLast, setContinueLast] = useState(false);
   const [showSkills, setShowSkills] = useState(false);
   /** T177: ref the worktree is cut from. Empty = the project's current branch. */
   const [baseBranch, setBaseBranch] = useState("");
@@ -159,13 +167,17 @@ export function SpawnAgentModal({
     });
   }, []);
 
-  // Worktrees live under ~/.exegol, never beside the checkout: next to it they
-  // would need a gitignore entry in every repo and a stray one would read as
-  // project content.
-  const worktreeRoot = (project as { worktreeRoot?: string } | undefined)?.worktreeRoot;
-  const workingPath = useWorktree
-    ? `${worktreeRoot ?? "…"}/${(branchName || "branch").replace(/\//g, "-")}`
-    : (project?.path ?? "");
+  // Resolved by the code that will create it: worktrees live under ~/.exegol
+  // (never beside the checkout), and a name collision appends a numeric suffix
+  // the renderer cannot predict — so it would show a directory nobody runs in.
+  const { data: preview } = useQuery({
+    queryKey: ["spawnPreview", projectId, useWorktree, branchName],
+    queryFn: () =>
+      trpcInvoke<SpawnPreview>("agents.previewSpawn", { projectId, useWorktree, branchName }),
+    enabled: !!projectId,
+    staleTime: 5_000,
+  });
+  const workingPath = preview?.cwd ?? "";
 
   const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
   const yoloFlag = YOLO_FLAGS[selectedProviderId];
@@ -176,12 +188,13 @@ export function SpawnAgentModal({
   const providerYolo = !!yoloFlag && !!selectedProvider?.args.includes(yoloFlag);
   const yoloChecked = yolo ?? providerYolo;
 
-  // Switching provider must drop a selection that belongs to the old one.
+  // Switching provider must drop a selection that belongs to the old one —
+  // "Continue last" included: left set, it sent resumeSession for a CLI with no
+  // resume flag at all.
   useEffect(() => {
-    setResumeOf((current) => (current && current.cliType !== selectedProviderId ? null : current));
-    // …and "Continue last" belongs to the old provider too. Left set, it hid its
-    // own button while still sending resumeSession for a CLI with no flag.
-    setContinueLast(false);
+    setSession((current) =>
+      current === "last" || (current && current.cliType !== selectedProviderId) ? null : current,
+    );
   }, [selectedProviderId]);
 
   // Auto-select first provider if none selected
@@ -220,10 +233,10 @@ export function SpawnAgentModal({
         skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
         yolo: yoloFlag && yolo !== null ? yolo : undefined,
         baseBranch: useWorktree && baseBranch ? baseBranch : undefined,
-        ...(resumeOf
-          ? { resumeSession: true, resumeFromAgentId: resumeOf.agentId }
-          : continueLast
-            ? { resumeSession: true }
+        ...(session === "last"
+          ? { resumeSession: true }
+          : session
+            ? { resumeSession: true, resumeFromAgentId: session.agentId }
             : {}),
       });
       addAgent({
@@ -284,8 +297,7 @@ export function SpawnAgentModal({
     useWorktree,
     branchName,
     selectedSkills,
-    resumeOf,
-    continueLast,
+    session,
     yolo,
     yoloFlag,
     baseBranch,
@@ -364,13 +376,10 @@ export function SpawnAgentModal({
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    setResumeOf(null);
-                    setContinueLast(false);
-                  }}
+                  onClick={() => setSession(null)}
                   className={cn(
                     "rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                    resumeOf === null && !continueLast
+                    session === null
                       ? "border-accent/50 bg-accent/10 text-accent"
                       : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
                   )}
@@ -382,14 +391,11 @@ export function SpawnAgentModal({
                 {resumeFlag && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setResumeOf(null);
-                      setContinueLast(true);
-                    }}
+                    onClick={() => setSession("last")}
                     title={`Launches with ${resumeFlag}`}
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                      continueLast
+                      session === "last"
                         ? "border-accent/50 bg-accent/10 text-accent"
                         : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
                     )}
@@ -399,18 +405,15 @@ export function SpawnAgentModal({
                     <code className="text-text-muted">{resumeFlag}</code>
                   </button>
                 )}
-                {resumableHere.slice(0, 5).map((session) => (
+                {resumableHere.slice(0, 5).map((past) => (
                   <button
-                    key={session.agentId}
+                    key={past.agentId}
                     type="button"
-                    onClick={() => {
-                      setResumeOf(session);
-                      setContinueLast(false);
-                    }}
-                    title={session.taskDescription}
+                    onClick={() => setSession(past)}
+                    title={past.taskDescription}
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                      resumeOf?.agentId === session.agentId
+                      typeof session === "object" && session?.agentId === past.agentId
                         ? "border-accent/50 bg-accent/10 text-accent"
                         : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
                     )}
@@ -418,9 +421,9 @@ export function SpawnAgentModal({
                     <History className="h-3 w-3 shrink-0" />
                     {/* The codename is how the user knew it; task text is the fallback. */}
                     <span className="max-w-[150px] truncate">
-                      {session.alias ?? session.taskDescription.slice(0, 24)}
+                      {past.alias ?? past.taskDescription.slice(0, 24)}
                     </span>
-                    <span className="text-text-muted">{formatTimeAgo(session.endedAt)}</span>
+                    <span className="text-text-muted">{formatTimeAgo(past.endedAt)}</span>
                   </button>
                 ))}
               </div>
@@ -610,6 +613,13 @@ export function SpawnAgentModal({
                     className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
                   />
                 </div>
+                {/* The name is taken, so the spawn will suffix it. Silently
+                    landing on a different branch is how work gets lost. */}
+                {preview?.branchName && branchName && preview.branchName !== branchName && (
+                  <span className="pl-12 text-[10px] text-warning">
+                    taken — will create <code>{preview.branchName}</code>
+                  </span>
+                )}
               </div>
             )}
           </div>

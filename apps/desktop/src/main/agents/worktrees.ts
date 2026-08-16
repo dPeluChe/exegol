@@ -38,6 +38,27 @@ function withNumericSuffix(branchName: string, attempt: number): string {
   return `${branchName}-${attempt + 1}`;
 }
 
+/** What `createManagedWorktree` would pick if called right now. The launch modal
+ *  has to show the directory the agent ACTUALLY gets, and a renderer cannot
+ *  reproduce the collision suffix — it would promise `…/exegol-foo` while the
+ *  agent ran in `…/exegol-foo-2`. */
+export function previewManagedWorktree(
+  projectName: string,
+  branchName: string,
+  rootKind: RootKind = "worktrees",
+): { branchName: string; path: string } {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidateBranch = withNumericSuffix(branchName, attempt);
+    const path = buildTargetPath(rootKind, projectName, getWorktreeName(candidateBranch));
+    if (!existsSync(path)) return { branchName: candidateBranch, path };
+  }
+  const fallback = withNumericSuffix(branchName, 20);
+  return {
+    branchName: fallback,
+    path: buildTargetPath(rootKind, projectName, getWorktreeName(fallback)),
+  };
+}
+
 function isRecoverableCreateError(err: unknown): boolean {
   const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   return (

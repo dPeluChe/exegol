@@ -9,8 +9,6 @@ import { join } from "node:path";
 export const EXEGOL_DIR = join(homedir(), ".exegol");
 export const SIDECAR_SOCK_PATH = join(EXEGOL_DIR, "pty-sidecar.sock");
 export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
-// Bumped to 1.2.0 when session.memory + per-session bufferCapacity were added.
-// Older running sidecars are auto-upgraded by main/index.ts on startup when safe.
 /**
  * BUMP THIS whenever you change code the sidecar bundles (pty-sidecar-entry,
  * pty-sidecar-eviction, pty-sidecar-flusher, this file, ring-buffer). The
@@ -23,7 +21,6 @@ export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
  * 1.4.0 — cleanup() only removes files this process owns (2026-08-13)
  */
 export const SIDECAR_VERSION = "1.4.0";
-export const SIDECAR_MIN_COMPATIBLE_VERSION = "1.1.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 

@@ -1,8 +1,9 @@
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, FolderGit2, Loader2, Trash2 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
+import { ConfirmDialog } from "../../common/ConfirmDialog";
 
 interface FleetWorktree {
   id: string;
@@ -47,14 +48,16 @@ export function WorktreesCard() {
   });
 
   const isRemoving = (id: string) => remove.isPending && remove.variables?.id === id;
+  /** Dirty ones need an explicit yes: the delete throws away real work. */
+  const [pendingDelete, setPendingDelete] = useState<FleetWorktree | null>(null);
 
   const handleDelete = useCallback(
     (wt: FleetWorktree) => {
       // In use means an agent is working there right now — deleting it would
       // pull the floor out from under a live session.
       if (wt.liveAgents > 0) return;
-      if (wt.dirty && !confirm(`${wt.branchName} has uncommitted changes. Delete anyway?`)) return;
-      remove.mutate(wt);
+      if (wt.dirty) setPendingDelete(wt);
+      else remove.mutate(wt);
     },
     [remove],
   );
@@ -130,6 +133,19 @@ export function WorktreesCard() {
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title="Delete worktree with uncommitted changes?"
+        description={`${pendingDelete?.branchName ?? ""} has uncommitted changes that are not on any branch. Deleting ${pendingDelete?.path ?? ""} loses them.`}
+        confirmLabel="Delete anyway"
+        variant="destructive"
+        onConfirm={() => {
+          if (pendingDelete) remove.mutate(pendingDelete);
+          setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }

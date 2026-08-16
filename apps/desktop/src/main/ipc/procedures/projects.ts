@@ -14,6 +14,7 @@ import {
   deleteProject,
   getProject,
   getWorktreeByAgentId,
+  listAllWorktreeRows,
   listProjects,
   listWorktrees,
   removeWorktree,
@@ -205,31 +206,10 @@ export const projectRouter = router({
       return listWorktrees(ctx.db, input.projectId);
     }),
 
-  /** Delete a worktree (runs archive hook, removes from disk + DB) */
-  /** T176: every worktree Exegol owns, across projects — the view you need when
-   *  a round ends and you want the disk back. Dirty ones are flagged because
-   *  deleting them loses work, which is the only reason to hesitate. */
+  /** T176: dirty worktrees are flagged because deleting them loses work, which
+   *  is the only reason to hesitate. */
   listAllWorktrees: publicProcedure.query(({ ctx }) => {
-    const statuses = [...LIVE_STATUSES];
-    const rows = ctx.db
-      .prepare(
-        `SELECT w.id, w.path, w.branch_name, w.project_id, p.name AS project_name,
-                (SELECT COUNT(*) FROM agents a
-                  WHERE a.worktree_id = w.id
-                    AND a.status IN (${statuses.map(() => "?").join(",")})) AS live_agents
-         FROM worktrees w JOIN projects p ON p.id = w.project_id
-         ORDER BY p.name, w.branch_name`,
-      )
-      .all(...statuses) as Array<{
-      id: string;
-      path: string;
-      branch_name: string;
-      project_id: string;
-      project_name: string;
-      live_agents: number;
-    }>;
-
-    return rows.map((r) => {
+    return listAllWorktreeRows(ctx.db, [...LIVE_STATUSES]).map((r) => {
       const exists = existsSync(r.path);
       // git2 in-process, not a `git status` subprocess per row: this renders on
       // every dashboard mount, and 20 spawns each rewriting .git/index would
@@ -245,16 +225,7 @@ export const projectRouter = router({
           dirty = true;
         }
       }
-      return {
-        id: r.id,
-        path: r.path,
-        branchName: r.branch_name,
-        projectId: r.project_id,
-        projectName: r.project_name,
-        liveAgents: r.live_agents,
-        exists,
-        dirty,
-      };
+      return { ...r, exists, dirty };
     });
   }),
 

@@ -1,4 +1,4 @@
-import type { AgentAccessMode, AgentCliType, AgentProvider } from "@exegol/shared";
+import type { AgentAccessMode, AgentProvider, ResumableSession } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -21,20 +21,10 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { SpawnAgentModal } from "../agents/SpawnAgentModal";
+import { type SessionChoice, SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { AgentIcon } from "../common";
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
-
-export interface ResumableSession {
-  agentId: string;
-  cliType: string;
-  /** Session codename, when it had one — how the user knew this session. */
-  alias: string | null;
-  taskDescription: string;
-  status: string;
-  endedAt: number | null;
-}
 
 function relativeTime(epoch: number | null): string {
   if (!epoch) return "";
@@ -52,6 +42,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const { data: scripts } = useProjectScripts(project?.path ?? null);
   const [launching, setLaunching] = useState<string | null>(null);
   const [modalProvider, setModalProvider] = useState<AgentProvider | null>(null);
+  const [modalSession, setModalSession] = useState<SessionChoice>(null);
   const [search, setSearch] = useState("");
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const addAgent = useAgentStore((s) => s.addAgent);
@@ -106,48 +97,21 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   // and no YOLO — so every launch from here had to be fixed up inside the
   // terminal afterwards (Antonio, 2026-08-13). The modal fills THIS pane.
   const handleLaunchAgent = useCallback((cli: AgentProvider) => {
+    setModalSession(null);
     setModalProvider(cli);
   }, []);
 
-  // T155.5: relaunch a past session with the provider's own resume mechanism
+  // Resume goes through the SAME modal as a fresh launch: from here it could not
+  // pick a worktree, a base branch or YOLO, which is exactly the gap the launch
+  // migration existed to close (Antonio, 2026-08-13).
   const handleResumeSession = useCallback(
-    async (session: ResumableSession) => {
-      if (!projectId) return;
-      setLaunching(`resume-${session.agentId}`);
-      try {
-        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-        const agent = await trpcMutate<any>("agents.spawn", {
-          projectId,
-          cliType: session.cliType as AgentCliType,
-          taskDescription: session.taskDescription,
-          accessMode,
-          resumeSession: true,
-          resumeFromAgentId: session.agentId,
-        });
-        addAgent({
-          id: agent.id,
-          projectId,
-          cliType: agent.cliType,
-          status: agent.status,
-          currentStep: agent.currentStep,
-          taskDescription: agent.taskDescription,
-          branchName: agent.branchName ?? null,
-          alias: agent.alias ?? null,
-          tokenUsage: { input: 0, output: 0, cost: 0 },
-          startedAt: agent.startedAt,
-          accessMode: agent.accessMode ?? null,
-          claudeSessionId: null,
-          activityLevel: "busy",
-        });
-        createTerminal(agent.id);
-        updatePane(paneId, { type: "terminal", agentId: agent.id });
-      } catch (err) {
-        console.error("[EmptyPane] Resume failed:", err);
-      } finally {
-        setLaunching(null);
-      }
+    (session: ResumableSession) => {
+      const provider = cliOptions.find((c) => c.id === session.cliType);
+      if (!provider) return;
+      setModalSession(session);
+      setModalProvider(provider);
     },
-    [projectId, paneId, accessMode, addAgent, createTerminal, updatePane],
+    [cliOptions],
   );
 
   const handleBrowser = useCallback(async () => {
@@ -353,12 +317,8 @@ export function EmptyPane({ paneId }: { paneId: string }) {
                 <button
                   key={s.agentId}
                   type="button"
-                  disabled={launching === `resume-${s.agentId}`}
                   onClick={() => handleResumeSession(s)}
-                  className={cn(
-                    "flex w-full items-center gap-1.5 rounded border border-border/50 bg-bg-secondary px-2 py-1 transition-all hover:border-accent/50 hover:bg-white/[0.03]",
-                    launching === `resume-${s.agentId}` && "opacity-50",
-                  )}
+                  className="flex w-full items-center gap-1.5 rounded border border-border/50 bg-bg-secondary px-2 py-1 transition-all hover:border-accent/50 hover:bg-white/[0.03]"
                   title={`Resume: ${s.taskDescription || s.cliType}`}
                 >
                   <AgentIcon provider={s.cliType} size={12} />
@@ -458,6 +418,8 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           projectId={projectId ?? ""}
           initialProvider={modalProvider}
           initialCliType={modalProvider.id}
+          initialSession={modalSession}
+          initialAccessMode={accessMode}
           targetPaneId={paneId}
           onClose={() => setModalProvider(null)}
         />

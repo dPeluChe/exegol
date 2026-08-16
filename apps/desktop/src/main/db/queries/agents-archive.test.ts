@@ -1,7 +1,7 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../migrations";
-import { archiveAgent, archiveEndedAgents, listRecentSessions } from "./agents";
+import { archiveAgent, archiveEndedAgents, createAgent, listRecentSessions } from "./agents";
 
 function setupDb(): Database.Database {
   const db = new Database(":memory:");
@@ -61,5 +61,29 @@ describe("archiving ended sessions", () => {
       archived_at: number | null;
     };
     expect(live.archived_at).toBeNull();
+  });
+});
+
+// The task is optional at every launcher, but a blank label makes an agent
+// unidentifiable in the dashboard, the tab bar and agent_send addressing.
+describe("createAgent task label", () => {
+  it("falls back to the provider name when no task is given", () => {
+    const db = setupDb();
+    expect(
+      createAgent(db, { projectId: "p1", cliType: "claude-code", taskDescription: "" })
+        .taskDescription,
+    ).toBe("Claude Code");
+    expect(
+      createAgent(db, { projectId: "p1", cliType: "claude-code", taskDescription: "   " })
+        .taskDescription,
+    ).toBe("Claude Code");
+  });
+
+  it("keeps a real task untouched", () => {
+    const db = setupDb();
+    expect(
+      createAgent(db, { projectId: "p1", cliType: "claude-code", taskDescription: "fix login" })
+        .taskDescription,
+    ).toBe("fix login");
   });
 });

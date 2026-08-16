@@ -1,4 +1,4 @@
-import type { AgentCliType } from "@exegol/shared";
+import type { AgentCliType, ResumableSession, SpawnPreview } from "@exegol/shared";
 import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -10,9 +10,11 @@ import {
 } from "../../agents/handoff";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust } from "../../agents/spawn-env";
+import { previewManagedWorktree } from "../../agents/worktrees";
 import {
   createAgent,
   getAgent,
+  getProject,
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
@@ -196,7 +198,7 @@ export const agentRouter = router({
         stopped_at: number | null;
         alias: string | null;
       }>;
-      return rows.map((r) => ({
+      return rows.map<ResumableSession>((r) => ({
         agentId: r.id,
         cliType: r.cli_type,
         // The codename is how the user (and other agents) knew this session —
@@ -206,6 +208,25 @@ export const agentRouter = router({
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,
       }));
+    }),
+
+  /** Where a spawn would actually run. Resolved HERE because only this side
+   *  knows the worktree root and the collision suffix; the modal used to
+   *  half-reimplement the rule and promise a directory the agent never got. */
+  previewSpawn: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        useWorktree: z.boolean(),
+        branchName: z.string().optional(),
+      }),
+    )
+    .query(({ ctx, input }): SpawnPreview => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) return { cwd: "", branchName: null };
+      if (!input.useWorktree) return { cwd: project.path, branchName: null };
+      const preview = previewManagedWorktree(project.name, input.branchName || "exegol/branch");
+      return { cwd: preview.path, branchName: preview.branchName };
     }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {
