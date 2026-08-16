@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { slugifyBranchName } from "./spawn-env";
+import { describe, expect, it, vi } from "vitest";
+
+const fs = vi.hoisted(() => ({ mkdirSync: vi.fn(), writeFileSync: vi.fn() }));
+vi.mock("node:fs", () => fs);
+vi.mock("../mcp/exegol-mcp-config", () => ({ resolveClaimGuardPath: () => "/bundle/guard.js" }));
+
+import { buildClaudeCodeHooksFile, slugifyBranchName } from "./spawn-env";
 
 describe("slugifyBranchName", () => {
   it("should slugify a simple description", () => {
@@ -48,5 +53,36 @@ describe("slugifyBranchName", () => {
 
   it("should handle empty string", () => {
     expect(slugifyBranchName("")).toBe("exegol/");
+  });
+});
+
+// The hooks file is an external contract owned by Claude Code: a wrong shape
+// does not throw, it silently stops delivering signals and enforcement.
+describe("buildClaudeCodeHooksFile", () => {
+  function written(agentId: string, opts?: { enforceClaims?: boolean }) {
+    fs.writeFileSync.mockClear();
+    buildClaudeCodeHooksFile(agentId, opts);
+    const [, json] = fs.writeFileSync.mock.calls[0] as [string, string];
+    return JSON.parse(json).hooks as Record<string, { matcher?: string; hooks: unknown[] }[]>;
+  }
+
+  it("keeps the OSC signal entries and adds an anchored, time-boxed guard", () => {
+    const hooks = written("a1", { enforceClaims: true });
+
+    expect(hooks.Notification).toHaveLength(1);
+    expect(hooks.Stop).toHaveLength(1);
+    const [signal, guard] = hooks.PreToolUse ?? [];
+    expect(signal?.matcher).toBeUndefined(); // matcher-less = every tool
+    expect(guard?.matcher).toBe("^(Edit|Write|MultiEdit|NotebookEdit)$");
+    expect(guard?.hooks[0]).toMatchObject({
+      type: "command",
+      timeout: 5,
+      command: expect.stringContaining("/bundle/guard.js"),
+    });
+  });
+
+  it("omits the guard when claims cannot collide", () => {
+    const hooks = written("a1", { enforceClaims: false });
+    expect(hooks.PreToolUse).toHaveLength(1);
   });
 });

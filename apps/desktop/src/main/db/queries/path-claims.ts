@@ -43,7 +43,7 @@ function mapRow(row: Record<string, unknown>): PathClaim {
 }
 
 /** Same file, or one contains the other — a directory claim covers its tree. */
-function overlaps(a: string, b: string): boolean {
+function pathsOverlap(a: string, b: string): boolean {
   return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 }
 
@@ -65,7 +65,7 @@ export function claimPaths(
   const conflicts: ClaimConflict[] = [];
   for (const path of input.paths) {
     for (const claim of existing) {
-      if (!overlaps(path, claim.path)) continue;
+      if (!pathsOverlap(path, claim.path)) continue;
       conflicts.push({
         path,
         heldBy: claim.agentId,
@@ -123,4 +123,20 @@ export function listProjectClaims(
     )
     .all(projectId, ...statuses) as Record<string, unknown>[];
   return rows.map((r) => ({ ...mapRow(r), heldByName: (r.alias as string) ?? null }));
+}
+
+/**
+ * May this agent write this path? The single place that answers it, so the
+ * PreToolUse guard and any future auditor share one rule instead of each
+ * re-deriving prefix overlap from the claim rows.
+ */
+export function findBlockingClaim(
+  db: Database.Database,
+  input: { agentId: string; projectId: string; path: string },
+): { heldBy: string; note: string | null } | null {
+  const conflict = listProjectClaims(db, input.projectId).find(
+    (c) => c.agentId !== input.agentId && pathsOverlap(input.path, c.path),
+  );
+  if (!conflict) return null;
+  return { heldBy: conflict.heldByName ?? conflict.agentId, note: conflict.note };
 }
