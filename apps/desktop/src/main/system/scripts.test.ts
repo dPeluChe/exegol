@@ -63,4 +63,17 @@ describe("parseCustomActions", () => {
   it("ignores a line with no command", () => {
     expect(parseCustomActions("broken:\nalso-broken:   \n")).toEqual([]);
   });
+
+  it("strips a trailing comment from an unquoted command", () => {
+    expect(parseCustomActions("seed: bun run seed # dev only")).toEqual([
+      { name: "seed", command: "bun run seed" },
+    ]);
+  });
+
+  // These commands come out of a REPO — a clone must not be able to put
+  // `rm -rf ~` behind a chip labelled "dev".
+  it("refuses a command the safety guard rejects", () => {
+    expect(parseCustomActions("dev: rm -rf ~/")).toEqual([]);
+    expect(parseCustomActions("dev: bun run dev")).toHaveLength(1);
+  });
 });

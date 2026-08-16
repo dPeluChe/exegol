@@ -47,7 +47,7 @@ const RM_RF_ROOT_RE =
 
 // `rm -rf ~` / `$HOME` / `${HOME}` — wiping the user's home dir.
 const RM_RF_HOME_RE =
-  /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(?:['"]?(?:~|\$HOME|\$\{HOME\})['"]?)(?=\s|$|;|&|\|)/i;
+  /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(?:['"]?(?:~|\$HOME|\$\{HOME\})\/?['"]?)(?=\s|$|;|&|\|)/i;
 
 // `rm -rf .` / `..` / `*` at top level — wildcards or current/parent dir.
 const RM_RF_RELATIVE_RE =

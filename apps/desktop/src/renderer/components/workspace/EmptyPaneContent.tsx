@@ -30,6 +30,14 @@ import { AgentIcon } from "../common";
  *  invalidates every callback that depends on it. */
 const NO_PROVIDERS: AgentProvider[] = [];
 
+/** Only the non-obvious runners earn a badge; package.json is the default. */
+function runnerLabel(source: string): string | null {
+  if (source.toLowerCase().includes("makefile")) return "make";
+  if (source.toLowerCase().includes("justfile")) return "just";
+  if (source.startsWith(".exegol/")) return "custom";
+  return null;
+}
+
 function relativeTime(epoch: number | null): string {
   if (!epoch) return "";
   const ms = epoch > 1e12 ? epoch : epoch * 1000;
@@ -360,6 +368,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
                 type="button"
                 disabled={launching === `script-${s.name}`}
                 onClick={() => handleRunScript(s.command, s.name)}
+                title={s.command}
                 className={cn(
                   "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
                   isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
@@ -369,9 +378,12 @@ export function EmptyPane({ paneId }: { paneId: string }) {
                 <Terminal className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
                 {s.name}
                 {/* `build` from package.json and `build` from a Makefile are
-                    different commands with the same label — say which. */}
-                {!isMini && (s.framework || s.source) && (
-                  <span className="text-[9px] text-text-muted">({s.framework ?? s.source})</span>
+                    different commands with one label — name the runner, not the
+                    file, and only when it is not the default one. */}
+                {!isMini && (s.framework || runnerLabel(s.source)) && (
+                  <span className="text-[9px] text-text-muted">
+                    ({s.framework ?? runnerLabel(s.source)})
+                  </span>
                 )}
               </button>
             ))}

@@ -22,6 +22,9 @@ describe("inspectCommand — refusals", () => {
     ["rm --force --recursive /"],
     ["sudo rm -rf /"],
     ["rm -rf ~"],
+    // A trailing slash is how a person actually types it, and it used to pass.
+    ["rm -rf ~/"],
+    ["rm -rf $HOME/"],
     ["rm -rf $HOME"],
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell syntax under test
     ["rm -rf ${HOME}"],

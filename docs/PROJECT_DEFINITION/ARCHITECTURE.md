@@ -258,7 +258,8 @@ Top-level renderer entry point for PiP windows. Loaded lazily via `?floatingPane
 - **tRPC over IPC**: renderer calls `window.api.trpc.invoke(path, input)` → `ipcMain.handle('trpc', ...)` → `appRouter.createCaller(ctx)` with dot-path traversal
 - **Push-first**: `broadcastAgentStatus()` IPC push events on every status change; 30s polling fallback only
 - **Structured errors**: `ExegolError` hierarchy with `cause` chain; `withRetry()` retries transient errors with exponential backoff (1s base, max 3 attempts)
-- **Lifecycle scripts**: `.exegol/lifecycle.yaml` per repo; `setup` runs once per session on first agent spawn; `beforeAgent` prepended to shell command; `teardown` awaited before worktree deletion; line-based parser (no YAML lib)
+- **Lifecycle scripts**: `.exegol/lifecycle.yaml` per repo; `setup` runs once per session on first agent spawn; `beforeAgent` prepended to shell command; `teardown` awaited before worktree deletion; line-based parser (`lib/flat-config.ts`, no YAML lib)
+- **Run actions** (T179): `.exegol/actions.yaml` per repo (`name: command`) joins detected npm/Python/Cargo/Go scripts plus `Makefile` targets and `justfile` recipes in the launcher's Dev Scripts row. Commands from the repo pass `security/command-guard`, exactly like lifecycle hooks
 - **Crash recovery**: `session.listInfo` RPC → alive IDs → `reattachSidecarAgents()`; dead IDs → `recoverStaleAgents()` → marked `crashed` with scrollback preserved
 - **Shell skip**: shell agents bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Bundle splits**: workspace sections, xterm+addons, SettingsPanel, ProjectList, CommandPalette, FloatingPaneRoot are lazy chunks; initial `index.js` ~1,026 KB
