@@ -18,6 +18,7 @@ const MAIN_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
 
 export type ProjectSubTab =
   | "tasks"
+  | "history"
   | "prompts-skills"
   | "memory"
   | "knowledge"
@@ -29,6 +30,7 @@ export type MonitorSubTab = "resources-tokens" | "scoring";
 export type WorkspaceSection =
   | "agents"
   | "tasks"
+  | "history"
   | "prompts-skills"
   | "memory"
   | "knowledge"
@@ -41,6 +43,7 @@ export type WorkspaceSection =
 
 const PROJECT_SUBS: { id: ProjectSubTab; label: string }[] = [
   { id: "tasks", label: "Tasks" },
+  { id: "history", label: "History" },
   { id: "prompts-skills", label: "Prompts & Skills" },
   { id: "memory", label: "Memory" },
   { id: "knowledge", label: "Knowledge" },
@@ -61,6 +64,7 @@ export function getMainTab(section: WorkspaceSection): MainTab {
   if (section === "agents") return "agents";
   if (
     section === "tasks" ||
+    section === "history" ||
     section === "prompts-skills" ||
     section === "memory" ||
     section === "knowledge" ||

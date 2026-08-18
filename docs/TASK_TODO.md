@@ -496,6 +496,27 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
 
 ---
 
+### T181 — Session history per repo `added: 2026-08-18`
+**Priority**: P2 | **Effort**: S remaining | **Source**: Antonio, 2026-08-18
+
+Core shipped 2026-08-18 (see `TASK_COMPLETED/2608.md`): retention, the merged timeline, and
+local-store adapters for claude-code / codex / opencode. Remaining:
+
+- **Adapters for the other providers.** gemini, devin, aider, goose, amp, kiro, crush all keep
+  their own stores; only three were verified against real data on this machine, and an adapter
+  written against a guessed format is worse than none (it fails silently). Each is a file in
+  `main/history/providers/` plus a line in the registry — write one when a real store exists to
+  read.
+- **Resume from history.** The rows carry the provider's own session id; the launch modal
+  already knows how to resume. A local session Exegol never launched is the interesting case.
+- **Purge UI.** Nothing is deleted automatically any more, and `oplog` stores git trees, so the
+  DB grows. There is no user-facing way to reclaim it — Settings needs a size readout and an
+  explicit "purge older than N".
+- **`shell` rows are still deleted at startup**, so a terminal tab never appears in history.
+  Correct today (no task, no score); revisit if plain terminals become worth remembering.
+
+---
+
 ### T175 — Coordination follow-ups deferred from the round-7 simplify `added: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over `test/agent-collab-round6`
 

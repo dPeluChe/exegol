@@ -35,6 +35,9 @@ const SHORTCUTS: { key: string; label: string }[] = [
 
 // Lazy: non-default sections are only rendered on user demand.
 // Each section bundles its own deps (PipelineSection pulls xterm via PipelineRunView).
+const HistorySection = lazy(() =>
+  import("./sections/HistorySection").then((m) => ({ default: m.HistorySection })),
+);
 const TasksSection = lazy(() =>
   import("./sections/TasksSection").then((m) => ({ default: m.TasksSection })),
 );
@@ -179,6 +182,7 @@ export function WorkspaceView() {
         {activeSection !== "agents" && (
           <Suspense fallback={<SectionFallback />}>
             {activeSection === "tasks" && <TasksSection />}
+            {activeSection === "history" && <HistorySection />}
             {activeSection === "prompts-skills" && <PromptsSkillsSection />}
             {activeSection === "memory" && <MemorySection />}
             {activeSection === "knowledge" && <KnowledgeSection />}

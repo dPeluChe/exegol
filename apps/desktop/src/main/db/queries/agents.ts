@@ -258,3 +258,144 @@ export function archiveEndedAgents(db: Database.Database, projectId?: string): n
     .run(...statuses, ...(projectId ? [projectId] : []));
   return Number(info.changes ?? 0);
 }
+
+// ---------------------------------------------------------------------------
+// Session history (T181)
+// ---------------------------------------------------------------------------
+
+/** The tail of what a session last said, stored at exit. The ring buffer dies
+ *  with the process, so without this a past session has a score and no evidence. */
+export function setAgentFinalOutput(db: Database.Database, id: string, output: string): void {
+  db.prepare("UPDATE agents SET final_output = ? WHERE id = ?").run(output, id);
+}
+
+export interface SessionHistoryRow {
+  id: string;
+  alias: string | null;
+  cliType: string;
+  taskDescription: string;
+  status: string;
+  accessMode: string | null;
+  isolationMode: string | null;
+  branchName: string | null;
+  worktreePath: string | null;
+  startedAt: number | null;
+  stoppedAt: number | null;
+  archivedAt: number | null;
+  /** Null when scoring never ran (a session stopped by hand, a shell, a crash). */
+  score: number | null;
+  exitReason: string | null;
+  filesChanged: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  oplogEntries: number;
+  hasFinalOutput: boolean;
+  /** Non-null when the provider captured a handle we can relaunch from. */
+  resumeCommand: string | null;
+  claudeSessionId: string | null;
+}
+
+/**
+ * Every session this repo has seen, newest first — closed, crashed and archived
+ * alike. The dashboard answers "what is running"; this answers "what did I run,
+ * with which agent, and how did it go", which is the question you ask the day
+ * after (Antonio, 2026-08-18).
+ *
+ * Aggregates are subqueries rather than joins: a session with twelve token rows
+ * and four oplog entries must be ONE row, and a GROUP BY over three joined
+ * tables multiplies the sums.
+ */
+export function listSessionHistory(
+  db: Database.Database,
+  filters: {
+    projectId: string;
+    cliType?: string;
+    /** Epoch seconds; rows older than this are excluded. */
+    since?: number;
+    limit?: number;
+    offset?: number;
+  },
+): SessionHistoryRow[] {
+  const conditions = ["a.project_id = ?", "a.cli_type != 'shell'"];
+  const values: unknown[] = [filters.projectId];
+
+  if (filters.cliType) {
+    conditions.push("a.cli_type = ?");
+    values.push(filters.cliType);
+  }
+  if (filters.since !== undefined) {
+    // started_at is the fallback: a session killed with the app never stopped.
+    conditions.push("COALESCE(a.stopped_at, a.started_at) >= ?");
+    values.push(filters.since);
+  }
+  values.push(filters.limit ?? 50, filters.offset ?? 0);
+
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.alias, a.cli_type, a.task_description, a.status, a.access_mode,
+              a.isolation_mode, a.started_at, a.stopped_at, a.archived_at,
+              a.resume_command, a.claude_session_id,
+              a.final_output IS NOT NULL AND a.final_output != '' AS has_final_output,
+              w.branch_name, w.path AS worktree_path,
+              s.overall_score, s.exit_reason, s.files_changed,
+              (SELECT COALESCE(SUM(t.input_tokens), 0) FROM token_usage t WHERE t.agent_id = a.id)
+                AS input_tokens,
+              (SELECT COALESCE(SUM(t.output_tokens), 0) FROM token_usage t WHERE t.agent_id = a.id)
+                AS output_tokens,
+              (SELECT COALESCE(SUM(t.estimated_cost_usd), 0) FROM token_usage t WHERE t.agent_id = a.id)
+                AS cost_usd,
+              (SELECT COUNT(*) FROM oplog o WHERE o.agent_id = a.id) AS oplog_entries
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       LEFT JOIN agent_scores s ON s.agent_id = a.id
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY COALESCE(a.stopped_at, a.started_at) DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...values) as Record<string, unknown>[];
+
+  return rows.map((r) => ({
+    id: r.id as string,
+    alias: (r.alias as string) ?? null,
+    cliType: r.cli_type as string,
+    taskDescription: r.task_description as string,
+    status: r.status as string,
+    accessMode: (r.access_mode as string) ?? null,
+    isolationMode: (r.isolation_mode as string) ?? null,
+    branchName: (r.branch_name as string) ?? null,
+    worktreePath: (r.worktree_path as string) ?? null,
+    startedAt: (r.started_at as number) ?? null,
+    stoppedAt: (r.stopped_at as number) ?? null,
+    archivedAt: (r.archived_at as number) ?? null,
+    score: (r.overall_score as number) ?? null,
+    exitReason: (r.exit_reason as string) ?? null,
+    filesChanged: (r.files_changed as number) ?? null,
+    inputTokens: (r.input_tokens as number) ?? 0,
+    outputTokens: (r.output_tokens as number) ?? 0,
+    costUsd: (r.cost_usd as number) ?? 0,
+    oplogEntries: (r.oplog_entries as number) ?? 0,
+    hasFinalOutput: Boolean(r.has_final_output),
+    resumeCommand: (r.resume_command as string) ?? null,
+    claudeSessionId: (r.claude_session_id as string) ?? null,
+  }));
+}
+
+/** Which providers this repo has actually been worked with — the filter list is
+ *  the repo's own history, not the full provider registry. */
+export function listHistoryCliTypes(db: Database.Database, projectId: string): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT cli_type FROM agents
+       WHERE project_id = ? AND cli_type != 'shell' ORDER BY cli_type`,
+    )
+    .all(projectId) as Array<{ cli_type: string }>;
+  return rows.map((r) => r.cli_type);
+}
+
+export function getAgentFinalOutput(db: Database.Database, id: string): string | null {
+  const row = db.prepare("SELECT final_output FROM agents WHERE id = ?").get(id) as
+    | { final_output: string | null }
+    | undefined;
+  return row?.final_output ?? null;
+}

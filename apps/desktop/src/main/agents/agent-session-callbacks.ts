@@ -6,6 +6,7 @@ import {
 } from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
+import { setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
@@ -40,6 +41,9 @@ import { stripAnsi, stripOscSequences } from "./status-parser";
 
 /** Tail length (chars) of scrollback used as the attention notification body. */
 const ATTENTION_TAIL_CHARS = 240;
+/** T181: what the session last said, kept with the row. A score with no output
+ *  is a number nobody can check, and the ring buffer dies with the process. */
+const FINAL_OUTPUT_TAIL_CHARS = 16_000;
 
 export interface SessionMaps {
   outputProcessors: Map<string, OutputProcessor>;
@@ -355,6 +359,17 @@ export function createSpawnCallbacks(
       maps.scrollbackBuffers.delete(agent.id);
       maps.scrollbackSizes.delete(agent.id);
       maps.dataCallbacks.delete(agent.id);
+
+      if (!isShell) {
+        try {
+          const tail = stripAnsi(stripOscSequences(scrollbackForScoring))
+            .trimEnd()
+            .slice(-FINAL_OUTPUT_TAIL_CHARS);
+          if (tail) setAgentFinalOutput(db, agent.id, tail);
+        } catch (err) {
+          logger.warn(`[AgentCallback] Could not store final output for ${agent.id}:`, err);
+        }
+      }
 
       finalizeAgentStatus(db, agent, exitCode);
 

@@ -9,21 +9,22 @@ import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
 // Background: stale data cleanup (not needed before first paint)
 export function cleanupStaleData(): void {
   try {
-    const oneHourAgo = Math.floor(Date.now() / 1000) - 3600;
-    const oneDayAgo = Math.floor(Date.now() / 1000) - 86400;
-    const staleCleanup = getDb()
-      .prepare(
-        `DELETE FROM agents WHERE
-          cli_type = 'shell'
-          OR (status = 'crashed' AND stopped_at < ?)
-          OR (status IN ('completed', 'failed', 'stopped') AND stopped_at < ?)`,
-      )
-      .run(oneHourAgo, oneDayAgo);
-    if (staleCleanup.changes > 0) {
-      logger.info(`[Startup] Cleaned ${staleCleanup.changes} stale agent(s)`);
+    // T181: agent sessions are NO LONGER deleted here. This used to drop every
+    // completed/failed/stopped session older than a day and every crashed one
+    // older than an hour — and the DELETE cascades into agent_scores,
+    // token_usage, oplog and host_metrics, so the score, the spend and the
+    // operation log went with it. That is exactly what Project › History
+    // answers from; purging it silently at startup meant "what have I run on
+    // this repo" could never be answered past a day.
+    //
+    // Shells stay ephemeral: no task, no score, no memory (they bypass all of
+    // it by design), so they are terminal tabs rather than sessions.
+    const shellCleanup = getDb().prepare("DELETE FROM agents WHERE cli_type = 'shell'").run();
+    if (shellCleanup.changes > 0) {
+      logger.info(`[Startup] Cleaned ${shellCleanup.changes} shell terminal(s)`);
     }
-  } catch {
-    /* table may not exist */
+  } catch (err) {
+    logger.warn("[Startup] Could not clean shell terminals:", err);
   }
   try {
     const cleaned = getDb()
