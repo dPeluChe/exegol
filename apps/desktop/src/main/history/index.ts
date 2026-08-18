@@ -1,4 +1,6 @@
+import { getProviderRegistry } from "../agents/registry";
 import { logger } from "../lib/logger";
+import { AsyncLruCache } from "../lib/lru-cache";
 import { claudeCodeHistory } from "./providers/claude-code";
 import { codexHistory } from "./providers/codex";
 import { opencodeHistory } from "./providers/opencode";
@@ -13,33 +15,48 @@ export type { LocalSession } from "./types";
  */
 const PROVIDERS: LocalHistoryProvider[] = [claudeCodeHistory, codexHistory, opencodeHistory];
 
-/** Scanning the stores means filesystem work per call, and the History view
- *  remounts every time the tab is opened. */
-const CACHE_TTL_MS = 30_000;
-const cache = new Map<string, { at: number; sessions: LocalSession[] }>();
+/**
+ * Scanning the stores is filesystem work, and the History view remounts every
+ * time the tab is opened. Keyed on `days` rather than the derived `since`: an
+ * epoch computed per request changes every second, so a TTL map keyed on it
+ * never hits and grows an entry per request-second. Bounded + in-flight dedup
+ * comes from the existing cache, so two panes mounting together scan once.
+ */
+const cache = new AsyncLruCache<string, LocalSession[]>(16);
 
 /**
  * Every session the installed CLIs recorded for these directories, whoever
  * launched them. One slow or broken store must not hide the others, so each
  * provider is isolated and a failure logs rather than throws.
  */
-export async function listLocalSessions(cwds: string[], since: number): Promise<LocalSession[]> {
-  const key = `${since}:${[...cwds].sort().join("|")}`;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.sessions;
+export async function listLocalSessions(
+  cwds: string[],
+  since: number,
+  windowKey: string,
+): Promise<LocalSession[]> {
+  const key = `${windowKey}:${[...cwds].sort().join("|")}`;
+  return cache.getOrCompute(key, async () => {
+    const enabled = new Set(
+      getProviderRegistry()
+        .list()
+        .filter((p) => p.enabled !== false)
+        .map((p) => p.id),
+    );
 
-  const results = await Promise.all(
-    PROVIDERS.map(async (provider) => {
-      try {
-        return await provider.list(cwds, since);
-      } catch (err) {
-        logger.warn(`[History] ${provider.id} store unreadable:`, err);
-        return [];
-      }
-    }),
-  );
+    const results = await Promise.all(
+      // A provider the user turned off should not have its store read either.
+      PROVIDERS.filter((p) => enabled.has(p.id)).map(async (provider) => {
+        try {
+          return await provider.list(cwds, since);
+        } catch (err) {
+          logger.warn(`[History] ${provider.id} store unreadable:`, err);
+          return [];
+        }
+      }),
+    );
 
-  const sessions = results.flat().sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0));
-  cache.set(key, { at: Date.now(), sessions });
-  return sessions;
+    // Ordering is the merge's job — it has both sources and the startedAt
+    // fallback; sorting here too would be a second rule that disagrees.
+    return results.flat();
+  });
 }

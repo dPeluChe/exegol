@@ -31,3 +31,13 @@ export function formatCost(usd: number): string {
   if (usd < 1) return `$${usd.toFixed(3)}`;
   return `$${usd.toFixed(2)}`;
 }
+
+/** Elapsed time between two epoch-second stamps. Was written four times across
+ *  the sections (comparator, dashboard, pipeline run, history). */
+export function formatDuration(from: number | null, to: number | null): string | null {
+  if (!from || !to || to < from) return null;
+  const mins = Math.round((to - from) / 60);
+  if (mins < 1) return "<1m";
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}

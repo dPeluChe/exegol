@@ -395,3 +395,39 @@ export type SpawnPreview = {
   /** True when an existing worktree already holds that branch and is reused. */
   reused: boolean;
 };
+
+/**
+ * T181 — one row in Project › History.
+ *
+ * `origin` is the honest distinction, not a decoration: Exegol knows the score,
+ * the spend and the oplog for what IT launched, and knows only that a session
+ * happened for everything read out of a CLI's own on-disk store.
+ */
+export type HistoryEntry = {
+  origin: "exegol" | "local";
+  id: string;
+  provider: string;
+  /** Session codename for Exegol runs; the CLI's own title otherwise. */
+  label: string;
+  task: string | null;
+  branch: string | null;
+  startedAt: number | null;
+  endedAt: number | null;
+  /** Null for a local session — a store on disk records no outcome. */
+  status: string | null;
+  score: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+  oplogEntries: number;
+  hasFinalOutput: boolean;
+  archived: boolean;
+  /** The provider's own session id, when known — what its resume flag takes. */
+  sessionId: string | null;
+  /** CLI version that ran it, when the source records one. */
+  version: string | null;
+  /** Transcript size for a local session — with no score and no token count,
+   *  it is the only signal of how much actually happened. 0 for Exegol rows,
+   *  which have better evidence. */
+  sizeBytes: number;
+};

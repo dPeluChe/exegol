@@ -514,6 +514,25 @@ local-store adapters for claude-code / codex / opencode. Remaining:
   explicit "purge older than N".
 - **`shell` rows are still deleted at startup**, so a terminal tab never appears in history.
   Correct today (no task, no score); revisit if plain terminals become worth remembering.
+  Deeper, from the round-9 simplify: the *trigger* is wrong. Every other part of the shell
+  lifecycle is handled at EXIT (`agent-session-callbacks.ts` skips scoring/memory/final_output;
+  the renderer store auto-cleans on final status). Delete the row where the shell ends and the
+  startup sweep disappears — it also currently runs before `runStartupRecovery`, whose
+  reattach has explicit handling for shells still alive in the sidecar.
+- **Retention has three homes and no statement of policy**: the shell delete and the
+  ANSI-memory delete in `cleanupStaleData`, plus `agent_events` at 30 days in
+  `notify-handler.ts`. One `db/retention.ts` declaring per-table policy, invoked once.
+- **`cli_type === "shell"` is a string literal in ~19 places** and this task added two more.
+  `shell` IS a registry provider — an `isEphemeral` capability on the provider definition (or
+  at minimum an `isShellAgent()` helper in `@exegol/shared`) would state "shells are not
+  sessions" once instead of re-deriving it at every call site.
+- **Per-provider filesystem knowledge is now a 4th hardcoded table.** `history/providers/*`
+  hardcode `~/.claude`, `~/.codex`, `~/.local/share/opencode`, while `skills/paths.ts`,
+  `skills/importer.ts` and `agents/wrappers.ts` keep their own — and they already DISAGREE
+  (`skills/importer.ts` uses id `"claude"` vs the registry's `"claude-code"`; opencode is
+  `~/.config/opencode` there and `~/.local/share/opencode` here). A `configDir` (and
+  `localHistory`) field on the provider definition is the fix; the history registry currently
+  only filters by `enabled`, so a CUSTOM provider can never have local history.
 
 ---
 

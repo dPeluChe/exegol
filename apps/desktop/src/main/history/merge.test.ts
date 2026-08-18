@@ -1,32 +1,29 @@
+import type { HistoryEntry } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import type { SessionHistoryRow } from "../db/queries/agents";
 import { mergeHistory } from "./merge";
 import type { LocalSession } from "./types";
 
-function exegolRow(over: Partial<SessionHistoryRow> = {}): SessionHistoryRow {
+function exegolRow(over: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
+    origin: "exegol",
     id: "a1",
-    alias: "draco",
-    cliType: "claude-code",
-    taskDescription: "fix auth",
-    status: "completed",
-    accessMode: "write",
-    isolationMode: "isolated",
-    branchName: "exegol/fix-auth",
-    worktreePath: "/wt/fix-auth",
+    provider: "claude-code",
+    label: "draco",
+    task: "fix auth",
+    branch: "exegol/fix-auth",
     startedAt: 1000,
-    stoppedAt: 2000,
-    archivedAt: null,
+    endedAt: 2000,
+    status: "completed",
     score: 0.82,
-    exitReason: "success",
-    filesChanged: 4,
     inputTokens: 100,
     outputTokens: 50,
     costUsd: 1.4,
     oplogEntries: 3,
     hasFinalOutput: true,
-    resumeCommand: null,
-    claudeSessionId: null,
+    archived: false,
+    sessionId: null,
+    version: null,
+    sizeBytes: 0,
     ...over,
   };
 }
@@ -59,7 +56,7 @@ describe("mergeHistory", () => {
   // only the Exegol row carries the score, the spend and the oplog.
   it("drops the on-disk copy of a session Exegol launched", () => {
     const merged = mergeHistory(
-      [exegolRow({ claudeSessionId: "uuid-1" })],
+      [exegolRow({ sessionId: "uuid-1" })],
       [localSession({ sessionId: "uuid-1" }), localSession({ sessionId: "uuid-2" })],
     );
     expect(merged).toHaveLength(2);
@@ -69,10 +66,22 @@ describe("mergeHistory", () => {
 
   it("does not dedup across providers that happen to share an id", () => {
     const merged = mergeHistory(
-      [exegolRow({ claudeSessionId: "shared" })],
+      [exegolRow({ sessionId: "shared" })],
       [localSession({ provider: "codex", sessionId: "shared" })],
     );
     expect(merged).toHaveLength(2);
+  });
+
+  // The dedupe key used to be the claude-only `claude_session_id`, so every
+  // codex/opencode session Exegol launched appeared twice — once with its
+  // score, once as "outside Exegol".
+  it("dedups a codex session Exegol launched, not just a claude one", () => {
+    const merged = mergeHistory(
+      [exegolRow({ id: "a2", provider: "codex", sessionId: "019f8b75" })],
+      [localSession({ provider: "codex", sessionId: "019f8b75" })],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.origin).toBe("exegol");
   });
 
   // A store on disk records that a session existed, never how it went. Claiming
@@ -84,7 +93,7 @@ describe("mergeHistory", () => {
 
   it("falls back to startedAt when a session never stopped", () => {
     const merged = mergeHistory(
-      [exegolRow({ id: "old", stoppedAt: null, startedAt: 100 })],
+      [exegolRow({ id: "old", endedAt: null, startedAt: 100 })],
       [localSession({ endedAt: 900 })],
     );
     expect(merged.map((e) => e.id)).toEqual(["claude-code:uuid-1", "old"]);

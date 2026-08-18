@@ -25,11 +25,9 @@ export const historyRouter = router({
     .input(
       z.object({
         projectId: z.string(),
-        cliType: z.string().optional(),
         /** 0 = everything ever recorded. */
         days: z.number().int().min(0).max(3650).optional(),
         limit: z.number().int().min(1).max(500).optional(),
-        offset: z.number().int().min(0).optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -41,18 +39,21 @@ export const historyRouter = router({
 
       const rows = listSessionHistory(ctx.db, {
         projectId: input.projectId,
-        cliType: input.cliType,
         since,
         limit: input.limit ?? 100,
-        offset: input.offset,
       });
 
       const cwds = [project.path, ...listWorktrees(ctx.db, input.projectId).map((w) => w.path)];
-      const local = await listLocalSessions(cwds, since);
-      const filtered = input.cliType ? local.filter((s) => s.provider === input.cliType) : local;
+      // The window key is the STABLE input; `since` is derived from now and
+      // would defeat any cache keyed on it.
+      const local = await listLocalSessions(cwds, since, String(days));
+
+      // The page bound belongs to the merged list: applying it to the SQL side
+      // alone would let a local session reappear on every page.
+      const entries = mergeHistory(rows, local).slice(0, input.limit ?? 100);
 
       return {
-        entries: mergeHistory(rows, filtered),
+        entries,
         // The filter offers what this repo has actually been worked with, from
         // both sources — not the full provider registry.
         providers: [

@@ -5,6 +5,7 @@ export { FilterChip } from "./FilterChip";
 export type { AgentRef, IssueBubbleProps } from "./IssueBubble";
 export { IssueBubble } from "./IssueBubble";
 export { LoadingSpinner } from "./LoadingSpinner";
+export { ScoreBadge } from "./ScoreBadge";
 export { type SegmentedTab, SegmentedTabs } from "./SegmentedTabs";
 export { SessionAlias } from "./SessionAlias";
 export { StatusDot } from "./StatusDot";

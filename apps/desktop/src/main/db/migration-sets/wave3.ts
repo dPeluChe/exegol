@@ -100,6 +100,10 @@ export const wave3Migrations: Migration[] = [
     id: "w3_007_session_history",
     sql: `ALTER TABLE agents ADD COLUMN final_output TEXT;
     CREATE INDEX IF NOT EXISTS idx_agents_project_history
-      ON agents(project_id, stopped_at DESC);`,
+      ON agents(project_id, stopped_at DESC);
+    /* The provider filter list is a DISTINCT cli_type per request; without this
+       it scans a table that no longer gets purged. */
+    CREATE INDEX IF NOT EXISTS idx_agents_project_cli
+      ON agents(project_id, cli_type);`,
   },
 ];
