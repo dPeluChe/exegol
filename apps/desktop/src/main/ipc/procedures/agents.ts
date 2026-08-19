@@ -11,6 +11,7 @@ import {
 import { runPreflight } from "../../agents/preflight";
 import { coreRust } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
+import { resolveTaskLabel } from "../../agents/task-label";
 import {
   createAgent,
   getAgent,
@@ -219,6 +220,8 @@ export const agentRouter = router({
         useWorktree: z.boolean(),
         branchName: z.string().optional(),
         taskDescription: z.string().optional(),
+        /** Needed because the blank-task fallback is the provider's name. */
+        cliType: z.string(),
       }),
     )
     .query(({ ctx, input }): SpawnPreview => {
@@ -226,7 +229,15 @@ export const agentRouter = router({
       if (!project) {
         throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.projectId} not found` });
       }
-      const target = resolveSpawnTarget(ctx.db, project, input);
+      // Through the SAME label resolution the spawn will apply: createAgent
+      // turns a blank task into the provider's display name, and the branch is
+      // slugged from THAT. Previewing the raw task promised `exegol/` while the
+      // agent landed on `exegol/claude-code` — the exact class of lie this
+      // procedure exists to remove.
+      const target = resolveSpawnTarget(ctx.db, project, {
+        ...input,
+        taskDescription: resolveTaskLabel(input.cliType, input.taskDescription),
+      });
       return { cwd: target.cwd, branchName: target.branchName, reused: target.reused };
     }),
 
@@ -264,9 +275,25 @@ export const agentRouter = router({
     return getAgent(ctx.db, input.id) ?? agent;
   }),
 
+  /**
+   * Closing a pane retires the session — it does NOT destroy it.
+   *
+   * This used to be `DELETE FROM agents`, and it is the normal way a session
+   * ends (close pane, Cmd+W, scrollback dismiss). The FKs cascade, so the
+   * score, the token spend, the oplog and the final output went with the row —
+   * defeating T181's whole retention change through the most-travelled path.
+   * `listAgents` filters archived rows, so the UI behaves identically.
+   *
+   * Shells are still deleted: they are terminal tabs, with nothing to keep.
+   */
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
-    ctx.db.prepare("DELETE FROM agents WHERE id = ?").run(input.id);
-    return { success: true };
+    const agent = getAgent(ctx.db, input.id);
+    if (agent?.cliType === "shell") {
+      ctx.db.prepare("DELETE FROM agents WHERE id = ?").run(input.id);
+      return { success: true, archived: false };
+    }
+    archiveAgent(ctx.db, input.id);
+    return { success: true, archived: true };
   }),
 
   // Returns null instead of throwing: stale pane references to deleted

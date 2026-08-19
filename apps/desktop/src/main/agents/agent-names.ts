@@ -1,5 +1,6 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
+import { logger } from "../lib/logger";
 
 /**
  * T160/T167: every session gets a unique short codename at birth.
@@ -107,11 +108,15 @@ export function pickAgentCodename(db: Database.Database): string {
         `SELECT LOWER(alias) AS alias FROM agents
          WHERE alias IS NOT NULL
            AND (status IN (${statuses.map(() => "?").join(",")})
-                OR ended_at > unixepoch() - ?)`,
+                OR stopped_at > unixepoch() - ?)`,
       )
       .all(...statuses, NAME_COOLDOWN_SECONDS) as Array<{ alias: string }>;
     taken = new Set(rows.map((r) => r.alias));
-  } catch {
+  } catch (err) {
+    // Never silent again: this swallowed `no such column: ended_at` for the
+    // whole life of the feature, so codenames were drawn from the full pool and
+    // collided with LIVE agents — which is what makes agent_send refuse a name.
+    logger.warn("[AgentNames] Could not read taken codenames, allowing reuse:", err);
     taken = new Set();
   }
 

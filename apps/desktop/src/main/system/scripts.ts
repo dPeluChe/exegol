@@ -236,11 +236,17 @@ export const parseMakeTargets = (content: string): string[] =>
 export const parseJustRecipes = (content: string): string[] =>
   parseTargets(content, /^([A-Za-z0-9_][A-Za-z0-9_-]*)(?:\s+[^:]*)?:(?!=)/);
 
-/** `.exegol/actions.yaml`: `name: command`, same shape as `lifecycle.yaml`.
+/**
+ * `.exegol/actions.yaml`: `name: command`, same shape as `lifecycle.yaml`.
  *
- *  These are commands read out of a repo — the same trust level as a lifecycle
- *  hook — so they pass the same safety gate. A cloned repo must not be able to
- *  put `rm -rf ~` behind a chip labelled "dev". */
+ * These are commands read out of a repo, so they pass the same guard lifecycle
+ * hooks pass. Be clear about what that is and is not: the guard catches a
+ * handful of catastrophic spellings, and it is NOT a trust boundary — a
+ * `Makefile` target or a `package.json` script runs the same way and never sees
+ * it. Clicking a chip runs repo-authored code as the user, from every source.
+ * The real boundary would be a one-time "this repo defines N run commands"
+ * review; until then this is a seatbelt, not a wall.
+ */
 export function parseCustomActions(content: string): Array<{ name: string; command: string }> {
   const actions: Array<{ name: string; command: string }> = [];
   for (const [name, command] of parseFlatConfig(content)) {

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, globalShortcut } from "electron";
-import { seedAgentLinkCache } from "./agents/agent-messaging";
+import { seedAgentLinkCache, stopSweep } from "./agents/agent-messaging";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
@@ -157,6 +157,7 @@ function teardownSteps() {
     { name: "scheduler", run: () => getSchedulerEngine().stop() },
     { name: "queueExecutor", run: () => getQueueExecutor().stop() },
     { name: "metrics", run: stopMetricsCollector },
+    { name: "messageSweep", run: stopSweep },
     { name: "database", run: closeDatabase },
     // Last: it silences console output, and until now it ran FIRST — hiding
     // every [Shutdown] line in the dev terminal, the one place someone chasing

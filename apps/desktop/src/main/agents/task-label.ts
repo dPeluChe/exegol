@@ -1,4 +1,3 @@
-import type { AgentCliType } from "@exegol/shared";
 import { getProviderRegistry } from "./registry";
 
 /**
@@ -10,6 +9,6 @@ import { getProviderRegistry } from "./registry";
  * used to do this itself, so pipelines, the scheduler and the queue produced
  * blank-labelled agents. One funnel is the point.
  */
-export function resolveTaskLabel(cliType: AgentCliType, taskDescription?: string): string {
+export function resolveTaskLabel(cliType: string, taskDescription?: string): string {
   return taskDescription?.trim() || getProviderRegistry().get(cliType)?.name || cliType;
 }

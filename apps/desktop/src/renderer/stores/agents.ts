@@ -162,6 +162,10 @@ export interface AgentState {
   claudeSessionId: string | null;
   /** T70: Derived activity level — busy/idle/neutral. Updated on every status change. */
   activityLevel: AgentActivityLevel;
+  /** T181: dismissed from the dashboard. Kept in the store on purpose — removing
+   *  the row makes an open terminal pane look like a leftover from a previous
+   *  session, and WorkspacePane converts it to empty, destroying the transcript. */
+  archived?: boolean;
 }
 
 interface AgentStore {
@@ -180,6 +184,7 @@ interface AgentStore {
 
   /** Remove an agent from the store */
   removeAgent: (id: string) => void;
+  markArchived: (id: string) => void;
 
   /** Sync agents from DB for a given project. Merges with existing live state. */
   syncFromDb: (projectId: string, dbAgents: Agent[]) => void;
@@ -313,6 +318,13 @@ export const useAgentStore = create<AgentStore>()(
         set((state) => ({
           agents: { ...state.agents, [agent.id]: agent },
         })),
+
+      markArchived: (id) =>
+        set((state) => {
+          const agent = state.agents[id];
+          if (!agent) return state;
+          return { agents: { ...state.agents, [id]: { ...agent, archived: true } } };
+        }),
 
       removeAgent: (id) => {
         // Verify round 3: a removed agent must not haunt the attention

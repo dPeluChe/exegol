@@ -42,10 +42,16 @@ export function encodeResponse(
   return `${JSON.stringify({ jsonrpc: "2.0", id, result: result ?? null })}\n`;
 }
 
-/** A newline-less stream would grow the frame buffer without bound — and in the
- *  main process that is the whole app. Counted in UTF-16 chars (~16 MB of heap),
- *  per connection. Nothing legitimate approaches it: the largest message is a
- *  tool result, and agent_send caps its body far below. */
+/**
+ * Default frame ceiling: a newline-less stream would grow the buffer without
+ * bound, and in the main process that is the whole app. Counted in UTF-16 chars.
+ *
+ * This is the ceiling for the MCP socket, where the largest message is a tool
+ * result and agent_send caps its body far below. It is NOT one size for every
+ * channel — `createNdjsonBuffer` takes an override, because the PTY sidecar
+ * socket carries a whole ring buffer in one frame and JSON escaping inflates
+ * `\x1b` to `\u001b`, six chars per byte.
+ */
 export const MAX_NDJSON_LINE_CHARS = 8 * 1024 * 1024;
 
 /**
@@ -55,6 +61,7 @@ export const MAX_NDJSON_LINE_CHARS = 8 * 1024 * 1024;
 export function createNdjsonBuffer<T>(
   onMessage: (msg: T) => void,
   onOverflow?: () => void,
+  maxChars: number = MAX_NDJSON_LINE_CHARS,
 ): (chunk: Buffer | string) => void {
   // StringDecoder, not per-chunk toString: a multibyte character split across
   // a chunk boundary would otherwise decode to U+FFFD on both sides and the
@@ -64,7 +71,7 @@ export function createNdjsonBuffer<T>(
   let overflowed = false;
   return (chunk) => {
     buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
-    if (buffer.length > MAX_NDJSON_LINE_CHARS) {
+    if (buffer.length > maxChars) {
       // Drop what we hold and stay in the discard state until a newline gives
       // us a fresh frame boundary — resuming mid-message would parse garbage.
       const resumeAt = buffer.lastIndexOf("\n");

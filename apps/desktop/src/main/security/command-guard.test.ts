@@ -25,6 +25,12 @@ describe("inspectCommand — refusals", () => {
     // A trailing slash is how a person actually types it, and it used to pass.
     ["rm -rf ~/"],
     ["rm -rf $HOME/"],
+    // …and the glob is how they type it more often still.
+    ["rm -rf ~/*"],
+    ["rm -rf $HOME/*"],
+    ["rm -rf ~/."],
+    ["rm -rf ~//"],
+    ["rm --recursive --force ~/"],
     ["rm -rf $HOME"],
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell syntax under test
     ["rm -rf ${HOME}"],

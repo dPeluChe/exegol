@@ -178,11 +178,12 @@ export function AgentDashboard() {
     setArchiving(true);
     try {
       await trpcMutate("agents.archiveEnded", {});
-      // The dashboard renders from the store, so the rows must leave it too —
-      // invalidating the query alone would leave them on screen.
+      // The dashboard renders from the store, so the rows must leave the VIEW
+      // too — but flagged rather than removed, or every ended agent's open
+      // terminal pane is treated as stale and reset to the launcher.
       const store = useAgentStore.getState();
       for (const a of Object.values(store.agents)) {
-        if (!LIVE_STATUSES.has(a.status)) store.removeAgent(a.id);
+        if (!LIVE_STATUSES.has(a.status)) store.markArchived(a.id);
       }
       queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
     } finally {
@@ -195,7 +196,9 @@ export function AgentDashboard() {
   const archiveOne = useCallback(
     async (agentId: string) => {
       await trpcMutate("agents.archive", { id: agentId });
-      useAgentStore.getState().removeAgent(agentId);
+      // Flagged, not removed: a removed row makes an open terminal pane look
+      // stale and WorkspacePane converts it to empty, losing the transcript.
+      useAgentStore.getState().markArchived(agentId);
       queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
     },
     [queryClient],
@@ -219,12 +222,14 @@ export function AgentDashboard() {
   }, [projects, activeRows]);
 
   const { groups, total, runningCount, unreadCount } = useMemo(() => {
-    const all = Object.values(storeAgents).sort((a, b) => {
-      const aActive = LIVE_STATUSES.has(a.status) ? 0 : 1;
-      const bActive = LIVE_STATUSES.has(b.status) ? 0 : 1;
-      if (aActive !== bActive) return aActive - bActive;
-      return (b.startedAt ?? 0) - (a.startedAt ?? 0);
-    });
+    const all = Object.values(storeAgents)
+      .filter((a) => !a.archived)
+      .sort((a, b) => {
+        const aActive = LIVE_STATUSES.has(a.status) ? 0 : 1;
+        const bActive = LIVE_STATUSES.has(b.status) ? 0 : 1;
+        if (aActive !== bActive) return aActive - bActive;
+        return (b.startedAt ?? 0) - (a.startedAt ?? 0);
+      });
     const unread = (id: string) => {
       const item = attentionItems[id];
       return !!item && !item.read;

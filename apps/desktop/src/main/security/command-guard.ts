@@ -46,8 +46,11 @@ const RM_RF_ROOT_RE =
   /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*|--recursive(?:\s+--force)?|--force\s+--recursive)\s+(?:['"]?\/['"]?)(?=\s|$|;|&|\|)/i;
 
 // `rm -rf ~` / `$HOME` / `${HOME}` — wiping the user's home dir.
+// Long-option forms and the trailing `/`, `/*`, `/.` spellings all empty the
+// home directory just as thoroughly as the bare `~`, and `rm -rf ~/*` is the
+// one people actually type. The short-flag branch alone let every one through.
 const RM_RF_HOME_RE =
-  /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(?:['"]?(?:~|\$HOME|\$\{HOME\})\/?['"]?)(?=\s|$|;|&|\|)/i;
+  /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*|--recursive(?:\s+--force)?|--force\s+--recursive)\s+(?:['"]?(?:~|\$HOME|\$\{HOME\})(?:\/+[.*]?)?['"]?)(?=\s|$|;|&|\|)/i;
 
 // `rm -rf .` / `..` / `*` at top level — wildcards or current/parent dir.
 const RM_RF_RELATIVE_RE =

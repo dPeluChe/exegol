@@ -341,9 +341,11 @@ export function listSessionHistory(
                 SUM(input_tokens) AS input_tokens,
                 SUM(output_tokens) AS output_tokens,
                 SUM(estimated_cost_usd) AS cost_usd
-         FROM token_usage GROUP BY agent_id
+         FROM token_usage
+         WHERE agent_id IN (SELECT id FROM page)
+         GROUP BY agent_id
        ) t ON t.agent_id = page.id
-       ORDER BY COALESCE(page.stopped_at, page.started_at) DESC`,
+       ORDER BY COALESCE(page.stopped_at, page.started_at) DESC, page.id DESC`,
     )
     .all(...values) as Record<string, unknown>[];
 

@@ -212,6 +212,9 @@ function readLiveAccessMode(db: Database.Database, agentId: string): ExegolAcces
  * agent saw its own name and id change between two consecutive `agents_list`
  * calls, which is how a reply came back addressed to the sender itself.
  */
+/** plan and read are both "may not write"; write is the only elevation. */
+const ACCESS_RANK: Record<ExegolAccessMode, number> = { read: 0, plan: 0, write: 1 };
+
 export interface McpConnectionState {
   pinnedAgentId?: string;
   /** Cached `ps` walk — the shim's ancestry is fixed for the connection. */
@@ -280,10 +283,23 @@ function resolveContext(
   ]);
   if (byPid) {
     if (conn) conn.pinnedAgentId = byPid.agentId;
-    if (!live.some((e) => e.agentId === byPid.agentId)) {
-      logger.info(
-        `[ExegolMcp] Caller's process tree belongs to ${byPid.agentId}, which is not the token's own binding — trusting the process tree (shared config file)`,
+    const ownBinding = live.some((e) => e.agentId === byPid.agentId);
+    if (!ownBinding) {
+      // `ppid` is supplied by the CALLER, and this branch resolves an agent the
+      // token was never bound to — so a plan-mode agent could name a write-mode
+      // agent's pid and inherit its access. Identity still follows the process
+      // tree (that is what disambiguates two sessions sharing a config file),
+      // but privileges are capped at what the caller's OWN token grants.
+      const ceiling = live.reduce<ExegolAccessMode>(
+        (mode, e) => (ACCESS_RANK[e.accessMode] > ACCESS_RANK[mode] ? e.accessMode : mode),
+        "read",
       );
+      const capped =
+        ACCESS_RANK[byPid.accessMode] > ACCESS_RANK[ceiling] ? ceiling : byPid.accessMode;
+      logger.info(
+        `[ExegolMcp] Caller's process tree belongs to ${byPid.agentId}, not a binding of this token — trusting the tree for identity, capping access at ${capped} (shared config file)`,
+      );
+      return { ok: true, context: { ...byPid, accessMode: capped } };
     }
     return { ok: true, context: byPid };
   }
@@ -392,7 +408,11 @@ export async function handleRequest(
       // Fail-open must be COUNTED. A silent allow is indistinguishable from a
       // real one, so a session that lost enforcement looks identical to one
       // that never needed it.
-      record({ kind: "error", tool: "check_path", detail: "unidentified caller — allowed" });
+      record({
+        kind: "error",
+        tool: "check_path",
+        detail: resolved.ok ? "no path in request — allowed" : "unidentified caller — allowed",
+      });
       // Fail OPEN: a guard that blocks when it cannot identify the caller would
       // stop an agent from working over an app restart or a revoked token.
       socket.write(encodeResponse(req.id, { allowed: true }));
@@ -403,6 +423,15 @@ export async function handleRequest(
     try {
       holder = findBlockingClaim(db, { agentId, projectId, path: params.path });
     } catch (err) {
+      // Counted, like the unidentified-caller case: a session that lost
+      // enforcement to a locked database looks identical to one that never
+      // needed it, which is the whole reason fail-open is recorded.
+      record({
+        kind: "error",
+        tool: "check_path",
+        agentId,
+        detail: "claim lookup failed — allowed",
+      });
       logger.warn("[ExegolMcp] check_path failed (allowing):", err);
     }
     // Only blocks are recorded: the activity ring holds 100 entries, and one

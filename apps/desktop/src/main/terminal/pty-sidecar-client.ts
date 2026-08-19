@@ -9,6 +9,7 @@ import {
   type JsonRpcResponse,
   makeRequest,
   type PingResult,
+  RING_BUFFER_CAPACITY,
   type SessionCreateParams,
   type SessionCreateResult,
   type SessionDataNotification,
@@ -33,6 +34,12 @@ export class SidecarClient {
   private feed = createNdjsonBuffer<JsonRpcMessage>(
     (msg) => this.handleMessage(msg),
     () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
+    // A session.snapshot answers with the ENTIRE ring buffer in one frame, and
+    // JSON escaping inflates it (measured: 8 MB of coloured output becomes
+    // ~10.7 M chars). At the default ceiling the reply would be dropped and a
+    // reattached terminal would come back blank — the exact thing the ring
+    // buffer exists to prevent. Headroom over the worst case, still bounded.
+    RING_BUFFER_CAPACITY * 4,
   );
   private pendingRequests = new Map<
     number,

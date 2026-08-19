@@ -169,15 +169,18 @@ export function SpawnAgentModal({
   // branch may already have a worktree (reused as-is) or collide (suffixed), and
   // the default branch name is derived from the task by the spawn path itself.
   const { data: preview } = useQuery({
-    queryKey: ["spawnPreview", projectId, settled.task, settled.branch],
+    queryKey: ["spawnPreview", projectId, selectedProviderId, settled.task, settled.branch],
     queryFn: () =>
       trpcInvoke<SpawnPreview>("agents.previewSpawn", {
         projectId,
+        cliType: selectedProviderId,
         useWorktree: true,
-        taskDescription: settled.task,
-        branchName: settled.branch || undefined,
+        // Trimmed exactly as the spawn trims it, or a leading space shows
+        // `exegol/-fix-bug` on screen and creates `exegol/fix-bug`.
+        taskDescription: settled.task.trim(),
+        branchName: settled.branch.trim() || undefined,
       }),
-    enabled: !!projectId && useWorktree,
+    enabled: !!projectId && !!selectedProviderId && useWorktree,
     placeholderData: (prev) => prev,
     staleTime: 5_000,
   });
