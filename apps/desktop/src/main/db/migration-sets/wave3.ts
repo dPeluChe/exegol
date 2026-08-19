@@ -91,4 +91,19 @@ export const wave3Migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_messages_queued
       ON messages(delivery_state) WHERE delivery_state = 'queued';`,
   },
+  {
+    // T181: session history. Sessions used to be DELETED at startup after a
+    // day, cascading into scores, token usage and the oplog — so "what did I
+    // run on this repo, with which agent" had no answer past 24h. Rows are kept
+    // now; the tail of what the agent last said is kept with them, because a
+    // score without the output is a number nobody can check.
+    id: "w3_007_session_history",
+    sql: `ALTER TABLE agents ADD COLUMN final_output TEXT;
+    CREATE INDEX IF NOT EXISTS idx_agents_project_history
+      ON agents(project_id, stopped_at DESC);
+    /* The provider filter list is a DISTINCT cli_type per request; without this
+       it scans a table that no longer gets purged. */
+    CREATE INDEX IF NOT EXISTS idx_agents_project_cli
+      ON agents(project_id, cli_type);`,
+  },
 ];

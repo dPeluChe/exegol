@@ -8,6 +8,7 @@ import { doctorRouter } from "./procedures/doctor";
 import { filesRouter } from "./procedures/files";
 import { fsSearchRouter } from "./procedures/fs-search";
 import { githubRouter } from "./procedures/github";
+import { historyRouter } from "./procedures/history";
 import { indexerRouter } from "./procedures/indexer";
 import { knowledgeRouter } from "./procedures/knowledge";
 import { mcpRouter } from "./procedures/mcp";
@@ -62,6 +63,7 @@ export const appRouter = router({
   knowledge: knowledgeRouter,
   doctor: doctorRouter,
   budgets: budgetsRouter,
+  history: historyRouter,
   projectGroups: projectGroupsRouter,
 });
 

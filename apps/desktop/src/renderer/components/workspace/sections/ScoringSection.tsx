@@ -5,24 +5,9 @@ import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useProjectScores, useScoringStats } from "../../../hooks/use-trpc";
 import { formatTimeAgoLong } from "../../../lib/format";
 import { EmptyState, LoadingSpinner } from "../../common";
+import { ScoreBadge } from "../../common/ScoreBadge";
 
 // ─── Score Badge ────────────────────────────────────────────────────────────
-
-function ScoreBadge({ score }: { score: number }) {
-  const pct = Math.round(score * 100);
-  const color =
-    pct >= 70
-      ? "bg-green-500/20 text-green-400"
-      : pct >= 40
-        ? "bg-yellow-500/20 text-yellow-400"
-        : "bg-red-500/20 text-red-400";
-
-  return (
-    <span className={cn("rounded px-1.5 py-0.5 text-[11px] font-bold tabular-nums", color)}>
-      {pct}%
-    </span>
-  );
-}
 
 // ─── Metric Card ────────────────────────────────────────────────────────────
 
