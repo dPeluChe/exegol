@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -244,4 +245,32 @@ export async function assertSafePath(p: string, opts: { allowedBases: string[] }
     );
   }
   return canonical;
+}
+
+/**
+ * Synchronous `realpathSafe`, for the paths that decide whether a write is
+ * refused — those are resolved inside sync handlers and cannot await.
+ *
+ * Both sides of a claim comparison have to agree on the same spelling of a
+ * path. On macOS `/tmp` is a symlink to `/private/tmp`, and a project added
+ * under any symlinked path makes the stored claim and the hook's realpath'd cwd
+ * disagree — so enforcement silently no-ops for that whole project.
+ */
+export function realpathSafeSync(p: string): string {
+  const abs = resolve(p);
+  let current = abs;
+  const missing: string[] = [];
+
+  while (true) {
+    try {
+      const real = realpathSync(current);
+      return missing.length ? join(real, ...missing.reverse()) : real;
+    } catch {
+      const parent = resolve(current, "..");
+      // Reached the filesystem root without finding anything that exists.
+      if (parent === current) return abs;
+      missing.push(basename(current));
+      current = parent;
+    }
+  }
 }

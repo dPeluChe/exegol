@@ -21,6 +21,7 @@ import type Database from "libsql";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
+import { realpathSafeSync } from "../security/path-guard";
 import {
   createNdjsonBuffer,
   EXEGOL_DIR,
@@ -421,7 +422,14 @@ export async function handleRequest(
     const { agentId, projectId } = resolved.context;
     let holder: { heldBy: string; note: string | null } | null = null;
     try {
-      holder = findBlockingClaim(db, { agentId, projectId, path: params.path });
+      // The guard sends whatever Claude Code gave it, and claims are stored
+      // through realpath — both sides must spell a symlinked path the same way
+      // or nothing ever overlaps and enforcement quietly does nothing.
+      holder = findBlockingClaim(db, {
+        agentId,
+        projectId,
+        path: realpathSafeSync(params.path),
+      });
     } catch (err) {
       // Counted, like the unidentified-caller case: a session that lost
       // enforcement to a locked database looks identical to one that never

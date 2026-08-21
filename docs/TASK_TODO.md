@@ -511,13 +511,13 @@ review are in `TASK_COMPLETED/2608.md`; these are the ones that need more than a
    Real fix, in order: finish T166's "codex cwd→token 1:1" so no token is ever shared, then
    require `resolveByParentPid` to land inside the token's own bindings and delete the
    fallback. Peer credentials would be better still, but Node exposes no `SO_PEERCRED`.
-2. **Claims and guarded paths are compared as raw strings** — `db/queries/path-claims.ts`,
-   `mcp/exegol-tools.ts`, `mcp/exegol-claim-guard-bin.ts`. `security/path-guard.ts` already
-   exports `realpathSafe` and none of them call it. Deliberate bypass: `ln -s src/api.ts
-   alias.ts`, edit `alias.ts`, no overlap detected. The ACCIDENTAL case is likelier and worse:
-   a project under a symlinked path (macOS `/tmp` → `/private/tmp`, a `~/code` symlink) makes
-   the stored claim base and the hook's realpath'd cwd disagree, and enforcement silently
-   no-ops for that whole project with no signal anywhere.
+2. ~~Claims and guarded paths compared as raw strings~~ — **shipped 2026-08-19.** Both sides
+   go through `realpathSafeSync` now (stored claims in `resolveAgentPaths`, the guard's
+   question in `check_path`), so a project under a symlinked path is enforced like any other.
+   Still open, the smaller half: a symlink *inside* the tree (`ln -s src/api.ts alias.ts`,
+   then edit `alias.ts`) is resolved by the guard's realpath, so it is now caught — but
+   `pathsOverlap` itself still compares strings, which is fine while both sides are resolved
+   and would break again if any caller stored an unresolved path.
 3. **Repo-authored run commands have no review step.** `inspectCommand` on
    `.exegol/actions.yaml` is a seatbelt, not a boundary — a `Makefile` target or a
    `package.json` script reaches the PTY without it, and even in actions.yaml

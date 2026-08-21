@@ -21,6 +21,23 @@ const CANARY_FEED = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/
 
 const UPDATE_FEED_URL = IS_PRERELEASE ? CANARY_FEED : STABLE_FEED;
 
+/**
+ * "There is nothing published yet" is not a failure the user can act on.
+ *
+ * The feed is a GitHub releases URL, so a repo with no release answers 404 on
+ * every check — at launch and every four hours after. Surfaced as an error, a
+ * locally built app reports a broken updater forever, which is exactly what a
+ * test build should not spend the user's attention on.
+ */
+const NO_RELEASE_ERRORS = [
+  "404",
+  "Not Found",
+  "Cannot find latest-mac.yml",
+  "Cannot find latest.yml",
+  "No published versions",
+  "latest-mac.yml in the latest release artifacts",
+];
+
 // Network errors that should be silenced (retry later, don't bother user)
 const SILENT_ERRORS = [
   "net::ERR_INTERNET_DISCONNECTED",
@@ -38,6 +55,11 @@ const SILENT_ERRORS = [
 function isNetworkError(error: Error): boolean {
   const msg = error.message ?? "";
   return SILENT_ERRORS.some((e) => msg.includes(e));
+}
+
+function isMissingFeed(error: Error): boolean {
+  const msg = error.message ?? "";
+  return NO_RELEASE_ERRORS.some((e) => msg.includes(e));
 }
 
 /** Broadcast update status to all renderer windows */
@@ -100,6 +122,11 @@ export function initAutoUpdater(): void {
   autoUpdater.on("error", (error) => {
     if (isNetworkError(error)) {
       logger.info("[AutoUpdater] Network error (will retry later):", error.message);
+      broadcastUpdateStatus("idle");
+      return;
+    }
+    if (isMissingFeed(error)) {
+      logger.info("[AutoUpdater] No published release to update from — staying on this build");
       broadcastUpdateStatus("idle");
       return;
     }
