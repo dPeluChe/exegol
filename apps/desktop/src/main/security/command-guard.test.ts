@@ -31,6 +31,11 @@ describe("inspectCommand — refusals", () => {
     ["rm -rf ~/."],
     ["rm -rf ~//"],
     ["rm --recursive --force ~/"],
+    // The long-option spelling was refused for `/` and `~` but ALLOWED for `*`,
+    // because the flag alternation was copy-pasted into three patterns and only
+    // two got widened. Same command, different verdict by argument.
+    ["rm --recursive --force *"],
+    ["rm --force --recursive ."],
     ["rm -rf $HOME"],
     // biome-ignore lint/suspicious/noTemplateCurlyInString: literal shell syntax under test
     ["rm -rf ${HOME}"],

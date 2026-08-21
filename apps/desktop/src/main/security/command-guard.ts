@@ -42,19 +42,33 @@ const FORK_BOMB_RE = /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/;
 // `rm -rf /` — flags may be combined (`-rf`, `-fr`, `-Rf`, `-rfv`, etc.) or
 // supplied as long options. The trailing target is `/` (optionally quoted)
 // followed by end / shell separator. We also forbid `--no-preserve-root`.
-const RM_RF_ROOT_RE =
-  /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*|--recursive(?:\s+--force)?|--force\s+--recursive)\s+(?:['"]?\/['"]?)(?=\s|$|;|&|\|)/i;
+/**
+ * `rm` plus a recursive-force flag, in every spelling. Written once: the three
+ * target patterns below differ ONLY in what follows, and keeping three copies
+ * is how `--recursive --force` came to be caught for `/` and `~` but not for
+ * `*` — the same command, refused or allowed depending on the argument.
+ */
+const RM_RECURSIVE_FORCE =
+  "\\brm\\b\\s+(?:[^|;&\\n]*\\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*|--recursive(?:\\s+--force)?|--force\\s+--recursive)\\s+";
+/** Refuse only when the target ENDS there — `rm -rf ./build` is ordinary work. */
+const TARGET_ENDS = "(?=\\s|$|;|&|\\|)";
+
+const RM_RF_ROOT_RE = new RegExp(`${RM_RECURSIVE_FORCE}(?:['"]?\\/['"]?)${TARGET_ENDS}`, "i");
 
 // `rm -rf ~` / `$HOME` / `${HOME}` — wiping the user's home dir.
 // Long-option forms and the trailing `/`, `/*`, `/.` spellings all empty the
 // home directory just as thoroughly as the bare `~`, and `rm -rf ~/*` is the
 // one people actually type. The short-flag branch alone let every one through.
-const RM_RF_HOME_RE =
-  /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*|--recursive(?:\s+--force)?|--force\s+--recursive)\s+(?:['"]?(?:~|\$HOME|\$\{HOME\})(?:\/+[.*]?)?['"]?)(?=\s|$|;|&|\|)/i;
+const RM_RF_HOME_RE = new RegExp(
+  `${RM_RECURSIVE_FORCE}(?:['"]?(?:~|\\$HOME|\\$\\{HOME\\})(?:\\/+[.*]?)?['"]?)${TARGET_ENDS}`,
+  "i",
+);
 
 // `rm -rf .` / `..` / `*` at top level — wildcards or current/parent dir.
-const RM_RF_RELATIVE_RE =
-  /\brm\b\s+(?:[^|;&\n]*\s)?(?:-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+(?:['"]?(?:\.|\.\.|\*)['"]?)(?=\s|$|;|&|\|)/i;
+const RM_RF_RELATIVE_RE = new RegExp(
+  `${RM_RECURSIVE_FORCE}(?:['"]?(?:\\.|\\.\\.|\\*)['"]?)${TARGET_ENDS}`,
+  "i",
+);
 
 const NO_PRESERVE_ROOT_RE = /--no-preserve-root\b/i;
 

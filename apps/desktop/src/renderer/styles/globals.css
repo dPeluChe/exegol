@@ -21,6 +21,26 @@
   --color-warning: var(--warning);
   --color-error: var(--error);
   --color-info: var(--info);
+
+  /* The shadcn vocabulary `packages/ui` primitives are written in. None of it
+     was ever defined here, so `bg-primary`, `text-foreground`, `border-input`
+     and the rest resolved to NOTHING — which is why Tooltip rendered with no
+     background and Button/Input have been quietly re-skinned by callers passing
+     their own className. Aliased onto the app's palette rather than rewritten
+     one primitive at a time. */
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --color-primary: var(--accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--bg-tertiary);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--bg-tertiary);
+  --color-muted-foreground: var(--text-muted);
+  --color-destructive: var(--error);
+  --color-destructive-foreground: #ffffff;
+  --color-accent-foreground: #ffffff;
+  --color-input: var(--border);
+  --color-ring: var(--accent);
 }
 
 *, *::before, *::after {

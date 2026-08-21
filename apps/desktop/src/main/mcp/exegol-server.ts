@@ -213,9 +213,6 @@ function readLiveAccessMode(db: Database.Database, agentId: string): ExegolAcces
  * agent saw its own name and id change between two consecutive `agents_list`
  * calls, which is how a reply came back addressed to the sender itself.
  */
-/** plan and read are both "may not write"; write is the only elevation. */
-const ACCESS_RANK: Record<ExegolAccessMode, number> = { read: 0, plan: 0, write: 1 };
-
 export interface McpConnectionState {
   pinnedAgentId?: string;
   /** Cached `ps` walk — the shim's ancestry is fixed for the connection. */
@@ -291,12 +288,13 @@ function resolveContext(
       // agent's pid and inherit its access. Identity still follows the process
       // tree (that is what disambiguates two sessions sharing a config file),
       // but privileges are capped at what the caller's OWN token grants.
-      const ceiling = live.reduce<ExegolAccessMode>(
-        (mode, e) => (ACCESS_RANK[e.accessMode] > ACCESS_RANK[mode] ? e.accessMode : mode),
-        "read",
-      );
-      const capped =
-        ACCESS_RANK[byPid.accessMode] > ACCESS_RANK[ceiling] ? ceiling : byPid.accessMode;
+      // `write` is the only elevation there is — plan and read both mean "may
+      // not write" — so the cap is one question. A rank table seeded at "read"
+      // also demoted a plan-mode caller to read, which grants nothing extra and
+      // costs it the plan-mode tools.
+      const tokenMayWrite = live.some((e) => e.accessMode === "write");
+      const capped: ExegolAccessMode =
+        byPid.accessMode === "write" && !tokenMayWrite ? "read" : byPid.accessMode;
       logger.info(
         `[ExegolMcp] Caller's process tree belongs to ${byPid.agentId}, not a binding of this token — trusting the tree for identity, capping access at ${capped} (shared config file)`,
       );

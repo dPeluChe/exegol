@@ -575,6 +575,18 @@ local-store adapters for claude-code / codex / opencode. Remaining:
   `shell` IS a registry provider — an `isEphemeral` capability on the provider definition (or
   at minimum an `isShellAgent()` helper in `@exegol/shared`) would state "shells are not
   sessions" once instead of re-deriving it at every call site.
+- **Derive `capabilities.json` instead of hand-maintaining it.** The parity test stops a
+  procedure shipping dead, but it also makes the trpc half of the allowlist a copy of the
+  router — it can no longer deny anything. The property worth keeping is deny-by-default for
+  a compromised renderer (browser panes are webviews in this app), so the fix is to mark
+  intent AT the router (a `rendererProcedure` builder or `.meta({ exposed: true })`) and
+  generate the file from that, asserting only "exposed ⇔ listed". Then a new procedure is
+  denied until someone opts it in.
+- **Normalize paths inside `db/queries/path-claims.ts`.** `realpathSafeSync` is applied by
+  two callers today and they cover every path, but the invariant lives in their heads;
+  `claimPaths`/`releasePaths`/`findBlockingClaim` still take raw strings, and the module's own
+  comment claims an absoluteness it does not enforce. A `canonical()` on insert and on every
+  comparison means no fourth caller can forget.
 - **Per-provider filesystem knowledge is now a 4th hardcoded table.** `history/providers/*`
   hardcode `~/.claude`, `~/.codex`, `~/.local/share/opencode`, while `skills/paths.ts`,
   `skills/importer.ts` and `agents/wrappers.ts` keep their own — and they already DISAGREE

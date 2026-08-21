@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FILE_CONCURRENCY, mapWithConcurrency } from "../pool";
-import type { LocalHistoryProvider, LocalSession } from "../types";
+import { scanPerCwdDir } from "../pool";
+import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 /**
  * gemini files a directory per repo under `tmp/<sha256 of the cwd>` — the
@@ -14,6 +14,9 @@ import type { LocalHistoryProvider, LocalSession } from "../types";
 function projectDirFor(cwd: string): string {
   return createHash("sha256").update(cwd).digest("hex");
 }
+
+/** A parse past this blocks the main thread long enough to be felt. */
+const MAX_CHAT_BYTES = 2 * 1024 * 1024;
 
 interface GeminiChat {
   sessionId?: string;
@@ -27,36 +30,22 @@ function firstUserMessage(chat: GeminiChat): string | null {
   const user = (chat.messages ?? []).find(
     (m) => m.type === "user" && (m.content ?? "").trim().length > 2,
   );
-  return user?.content?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null;
+  return normalizeTitle(user?.content);
 }
 
 export const geminiHistory: LocalHistoryProvider = {
   id: "gemini",
 
   async list(cwds: string[], since: number): Promise<LocalSession[]> {
-    const found = await Promise.all(
-      cwds.map(async (cwd) => {
-        const dir = join(homedir(), ".gemini", "tmp", projectDirFor(cwd), "chats");
-        let entries: string[];
-        try {
-          entries = await readdir(dir);
-        } catch {
-          return []; // no gemini history for this directory — normal
-        }
-
-        const chats = await mapWithConcurrency(
-          entries.filter((e) => e.endsWith(".json")),
-          FILE_CONCURRENCY,
-          (entry) => readChat(join(dir, entry), entry, cwd, since),
-        );
-        // gemini reuses a session id across resumed chats, writing one file per
-        // resume. Those are ONE session picked up again, not several — and left
-        // separate they collide on the id the timeline keys rows by.
-        return collapseResumes(chats.filter((c): c is LocalSession => c !== null));
-      }),
-    );
-
-    return found.flat();
+    const chats = await scanPerCwdDir(cwds, {
+      dirFor: (cwd) => join(homedir(), ".gemini", "tmp", projectDirFor(cwd), "chats"),
+      ext: ".json",
+      read: (path, entry, cwd) => readChat(path, entry, cwd, since),
+    });
+    // gemini reuses a session id across resumed chats, writing one file per
+    // resume. Those are ONE session picked up again, not several — and left
+    // separate they collide on the id the timeline keys rows by.
+    return collapseResumes(chats);
   },
 };
 
@@ -69,10 +58,14 @@ function collapseResumes(sessions: LocalSession[]): LocalSession[] {
       bySession.set(session.sessionId, session);
       continue;
     }
-    // The first chat holds the question that opened the session.
-    existing.title ??= session.title;
-    existing.endedAt = Math.max(existing.endedAt ?? 0, session.endedAt ?? 0);
-    existing.sizeBytes += session.sizeBytes;
+    // Sorted by start above, so `existing` IS the first chat — its question is
+    // the one that opened the session.
+    bySession.set(session.sessionId, {
+      ...existing,
+      title: existing.title ?? session.title,
+      endedAt: Math.max(existing.endedAt ?? 0, session.endedAt ?? 0),
+      sizeBytes: existing.sizeBytes + session.sizeBytes,
+    });
   }
 
   return [...bySession.values()];
@@ -86,9 +79,29 @@ async function readChat(
 ): Promise<LocalSession | null> {
   try {
     const info = await stat(path);
-    const raw = await readFile(path, "utf-8");
-    const chat = JSON.parse(raw) as GeminiChat;
+    // Rejected on the stat, BEFORE reading. A chat file can be tens of
+    // megabytes (30 MB measured here) and gemini's whole store for one repo hit
+    // 81 MB — all of it read, decoded and parsed only to be dropped by a date
+    // filter that the mtime could have answered for free. mtime is never older
+    // than lastUpdated, so it is a safe pre-filter.
+    if (Math.floor(info.mtimeMs / 1000) < since) return null;
+    // Past that size the parse alone blocks the main process for ~60ms, and a
+    // title is not worth it — the row still carries its times and its size.
+    if (info.size > MAX_CHAT_BYTES) {
+      return {
+        provider: "gemini",
+        sessionId: entry.replace(/\.json$/, ""),
+        title: null,
+        cwd,
+        branch: null,
+        startedAt: null,
+        endedAt: Math.floor(info.mtimeMs / 1000),
+        version: null,
+        sizeBytes: info.size,
+      };
+    }
 
+    const chat = JSON.parse(await readFile(path, "utf-8")) as GeminiChat;
     const endedAt = chat.lastUpdated
       ? Math.floor(Date.parse(chat.lastUpdated) / 1000)
       : Math.floor(info.mtimeMs / 1000);

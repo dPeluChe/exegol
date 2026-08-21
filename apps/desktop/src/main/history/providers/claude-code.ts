@@ -1,9 +1,8 @@
-import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FILE_CONCURRENCY, mapWithConcurrency } from "../pool";
+import { scanPerCwdDir } from "../pool";
 import { readHead } from "../read-head";
-import type { LocalHistoryProvider, LocalSession } from "../types";
+import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 /**
  * Claude Code names a project directory after its cwd, replacing BOTH `/` and
@@ -50,26 +49,12 @@ function firstPromptText(line: HeadLine): string | null {
 export const claudeCodeHistory: LocalHistoryProvider = {
   id: "claude-code",
 
-  async list(cwds: string[], since: number): Promise<LocalSession[]> {
-    const found = await Promise.all(
-      cwds.map(async (cwd) => {
-        const dir = join(homedir(), ".claude", "projects", projectDirFor(cwd));
-        let entries: string[];
-        try {
-          entries = await readdir(dir);
-        } catch {
-          return []; // no history for this directory — normal
-        }
-
-        const transcripts = entries.filter((e) => e.endsWith(".jsonl"));
-        const sessions = await mapWithConcurrency(transcripts, FILE_CONCURRENCY, (entry) =>
-          readTranscript(join(dir, entry), entry, cwd, since),
-        );
-        return sessions.filter((s): s is LocalSession => s !== null);
-      }),
-    );
-
-    return found.flat();
+  list(cwds: string[], since: number): Promise<LocalSession[]> {
+    return scanPerCwdDir(cwds, {
+      dirFor: (cwd) => join(homedir(), ".claude", "projects", projectDirFor(cwd)),
+      ext: ".jsonl",
+      read: (path, entry, cwd) => readTranscript(path, entry, cwd, since),
+    });
   },
 };
 
@@ -105,7 +90,7 @@ async function readTranscript(
         continue; // a truncated final line is expected — we read a prefix
       }
       if (line.cwd && !recordedCwd) recordedCwd = line.cwd;
-      if (line.aiTitle) session.title = line.aiTitle;
+      if (line.aiTitle) session.title = normalizeTitle(line.aiTitle);
       if (line.gitBranch && !session.branch) session.branch = line.gitBranch;
       if (line.version && !session.version) session.version = line.version;
       if (line.timestamp && session.startedAt === null) {
@@ -113,7 +98,7 @@ async function readTranscript(
       }
       if (!session.title && line.type === "user") {
         const prompt = firstPromptText(line);
-        if (prompt) session.title = prompt.slice(0, 120);
+        if (prompt) session.title = normalizeTitle(prompt);
       }
     }
 

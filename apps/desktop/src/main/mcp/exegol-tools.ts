@@ -39,7 +39,7 @@ import {
   observeMemory,
   searchMemories,
 } from "../memory/store";
-import { realpathSafeSync } from "../security/path-guard";
+import { isPathInside, realpathSafeSync } from "../security/path-guard";
 import {
   EXEGOL_TOOL_NAMES,
   type ExegolToolContext,
@@ -276,7 +276,7 @@ function resolveAgentPaths(
     // claim — then refuse anything that escaped: `../..` resolves above the
     // project and, under the prefix rule, would overlap every path in it.
     const resolved = realpathSafeSync(resolve(base, path));
-    if (resolved !== base && !resolved.startsWith(`${base}/`)) {
+    if (resolved !== base && !isPathInside(base, resolved)) {
       throw new ExegolToolError(`path is outside your working directory: ${path}`, -32602);
     }
     if (resolved === base) {
