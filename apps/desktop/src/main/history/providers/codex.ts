@@ -1,9 +1,9 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FILE_CONCURRENCY, mapWithConcurrency } from "../pool";
+import { FILE_CONCURRENCY, mapWithConcurrency, mentionsAnyCwd } from "../pool";
 import { readHead } from "../read-head";
-import type { LocalHistoryProvider, LocalSession } from "../types";
+import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 interface SessionMeta {
   timestamp?: string;
@@ -23,8 +23,14 @@ interface SessionMeta {
  * Everything codex injects before the person gets a word in. Skipping these is
  * what separates "what did I ask for" from the scaffolding around it.
  */
-/** Enough to clear session_meta + world_state and reach the first real turn. */
-const TITLE_SCAN_BYTES = 512 * 1024;
+/**
+ * Fallback depth when the person's first message is not already in the matching
+ * head. Measured over 756 real rollouts: the first non-boilerplate user message
+ * sits at p50 24 KB, p90 59 KB, max 92 KB — so 93% need no second read at all,
+ * and 128 KB covers the worst case observed with margin. Reading everything at
+ * this size instead would be 387 MB rather than 48 MB.
+ */
+const TITLE_SCAN_BYTES = 128 * 1024;
 
 const BOILERPLATE_PREFIXES = [
   "# AGENTS.md instructions",
@@ -52,7 +58,7 @@ function firstUserPrompt(head: string): string | null {
     try {
       line = JSON.parse(raw) as RolloutLine;
     } catch {
-      continue; // the tail of a 64 KB read is normally truncated
+      continue; // the tail of a partial read is normally a truncated line
     }
     const p = line.payload;
     const text =
@@ -65,7 +71,7 @@ function firstUserPrompt(head: string): string | null {
     const trimmed = text?.trim();
     if (!trimmed || trimmed.length < 3) continue;
     if (BOILERPLATE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) continue;
-    return trimmed.replace(/\s+/g, " ").slice(0, 120);
+    return normalizeTitle(trimmed);
   }
   return null;
 }
@@ -152,8 +158,7 @@ async function readRollout(path: string, cwds: string[]): Promise<LocalSession |
     const firstLine = head.split("\n", 1)[0];
     if (!firstLine) return null;
 
-    // Cheap reject before the 20 KB parse: most rollouts belong to other repos.
-    if (!cwds.some((cwd) => firstLine.includes(`"${cwd}"`))) return null;
+    if (!mentionsAnyCwd(firstLine, cwds)) return null;
 
     const meta = JSON.parse(firstLine) as SessionMeta;
     const cwd = meta.payload?.cwd;
@@ -165,11 +170,13 @@ async function readRollout(path: string, cwds: string[]): Promise<LocalSession |
     // on this machine).
     if (meta.payload?.thread_source && meta.payload.thread_source !== "user") return null;
 
-    // Only NOW is a bigger read worth it: session_meta alone runs 20 KB and the
-    // world_state that follows can dwarf it, so the person's first message sits
-    // well past the matching head. Two reads, but only for the handful of
-    // rollouts that belong to this repo.
-    const { head: deepHead } = await readHead(path, TITLE_SCAN_BYTES);
+    // The head we already hold usually contains it; the deeper read is for the
+    // 7% where session_meta plus world_state push the first turn past 64 KB.
+    let title = firstUserPrompt(head);
+    if (title === null) {
+      const { head: deepHead } = await readHead(path, TITLE_SCAN_BYTES);
+      title = firstUserPrompt(deepHead);
+    }
 
     const started = meta.payload?.timestamp ?? meta.timestamp;
     return {
@@ -181,11 +188,9 @@ async function readRollout(path: string, cwds: string[]): Promise<LocalSession |
           .pop()
           ?.replace(/\.jsonl$/, "") ??
         path,
-      // codex records no title; the rollout is identified by when it ran and,
-      // usefully, by the branch it ran against.
       // codex records no title of its own, but it does record what the person
-      // typed — which is the only thing that tells two rollouts apart.
-      title: firstUserPrompt(deepHead),
+      // typed — the only thing that tells two rollouts apart.
+      title,
       cwd,
       branch: meta.payload?.git?.branch ?? null,
       startedAt: started ? Math.floor(Date.parse(started) / 1000) : null,

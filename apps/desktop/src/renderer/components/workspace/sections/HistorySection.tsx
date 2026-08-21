@@ -147,12 +147,14 @@ const HistoryRow = memo(function HistoryRow({ entry }: { entry: HistoryEntry }) 
         <span className="min-w-0 flex-1 truncate text-[11px] text-text-primary">{entry.label}</span>
 
         {entry.origin === "local" && (
-          <span
-            className="shrink-0 text-[9px] text-text-muted"
-            title="Recorded by the CLI itself — not launched from Exegol"
-          >
-            outside
-          </span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="shrink-0 cursor-help text-[9px] text-text-muted">outside</span>
+            </TooltipTrigger>
+            <TooltipContent side="left">
+              Read from this CLI&apos;s own history — Exegol did not launch it
+            </TooltipContent>
+          </Tooltip>
         )}
         {entry.archived && <span className="shrink-0 text-[9px] text-text-muted">archived</span>}
         {entry.status && (
@@ -170,6 +172,12 @@ const HistoryRow = memo(function HistoryRow({ entry }: { entry: HistoryEntry }) 
           {formatTimeAgo(entry.endedAt ?? entry.startedAt)}
         </span>
       </div>
+
+      {/* The task only earns a line when it says something the label does not —
+          for an Exegol session the label is usually the codename. */}
+      {entry.task && entry.task !== entry.label && (
+        <p className="truncate text-[10px] text-text-muted">{entry.task}</p>
+      )}
 
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-[10px] text-text-muted">
         {elapsed && <span title="From first activity to last">{elapsed}</span>}

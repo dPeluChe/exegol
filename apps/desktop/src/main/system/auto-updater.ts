@@ -21,26 +21,55 @@ const CANARY_FEED = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/
 
 const UPDATE_FEED_URL = IS_PRERELEASE ? CANARY_FEED : STABLE_FEED;
 
-// Network errors that should be silenced (retry later, don't bother user)
-const SILENT_ERRORS = [
-  "net::ERR_INTERNET_DISCONNECTED",
-  "net::ERR_NETWORK_CHANGED",
-  "net::ERR_CONNECTION_REFUSED",
-  "net::ERR_CONNECTION_RESET",
-  "net::ERR_NAME_NOT_RESOLVED",
-  "ENOTFOUND",
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "ETIMEDOUT",
-  "HttpError: 404",
+/**
+ * Errors the user cannot act on, and what to call them in the log.
+ *
+ * ONE table: two lists both claiming a 404 made the classification undecidable
+ * — `SILENT_ERRORS` already carried `HttpError: 404` and ran first, so a second
+ * list leading with the bare substring `404` could never win. And `404` alone
+ * matches a version, a port or a path just as happily.
+ */
+const SILENCED: Array<{ reason: string; needles: string[] }> = [
+  {
+    reason: "Network error (will retry later)",
+    needles: [
+      "net::ERR_INTERNET_DISCONNECTED",
+      "net::ERR_NETWORK_CHANGED",
+      "net::ERR_CONNECTION_REFUSED",
+      "net::ERR_CONNECTION_RESET",
+      "net::ERR_NAME_NOT_RESOLVED",
+      "ENOTFOUND",
+      "ECONNREFUSED",
+      "ECONNRESET",
+      "ETIMEDOUT",
+    ],
+  },
+  {
+    // A repo with no release answers 404 for the feed, at launch and every four
+    // hours after. "Nothing has been published yet" is not a broken updater.
+    reason: "No published release to update from — staying on this build",
+    needles: [
+      "Cannot find latest-mac.yml",
+      "Cannot find latest.yml",
+      "No published versions",
+      "latest-mac.yml in the latest release artifacts",
+    ],
+  },
 ];
 
-function isNetworkError(error: Error): boolean {
-  const msg = error.message ?? "";
-  return SILENT_ERRORS.some((e) => msg.includes(e));
+/** electron-updater surfaces builder-util-runtime's `HttpError`, which carries
+ *  a real status code — worth more than matching the library's prose. */
+function statusCodeOf(error: Error): number | undefined {
+  return (error as Error & { statusCode?: number }).statusCode;
 }
 
-/** Broadcast update status to all renderer windows */
+/** The log reason when this error must not reach the user, else null. */
+function silencedReason(error: Error): string | null {
+  if (statusCodeOf(error) === 404) return "No published release to update from";
+  const msg = error.message ?? "";
+  return SILENCED.find((s) => s.needles.some((n) => msg.includes(n)))?.reason ?? null;
+}
+
 function broadcastUpdateStatus(status: string, info?: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send("updater:status", { status, info });
@@ -98,8 +127,9 @@ export function initAutoUpdater(): void {
   });
 
   autoUpdater.on("error", (error) => {
-    if (isNetworkError(error)) {
-      logger.info("[AutoUpdater] Network error (will retry later):", error.message);
+    const silenced = silencedReason(error);
+    if (silenced) {
+      logger.info(`[AutoUpdater] ${silenced}:`, error.message);
       broadcastUpdateStatus("idle");
       return;
     }

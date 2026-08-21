@@ -5,24 +5,32 @@
  * don't hit git twice in the same UI render burst.
  */
 export class AsyncLruCache<K, V> {
-  private readonly cache = new Map<K, V>();
+  private readonly cache = new Map<K, { value: V; at: number }>();
   private readonly inflight = new Map<K, Promise<V>>();
 
-  constructor(private readonly maxSize: number) {}
+  /** @param ttlMs entries older than this are recomputed. Decided INSIDE
+   *  getOrCompute so concurrent callers still share one in-flight promise —
+   *  checking staleness at the call site and invalidating made every expiring
+   *  caller wipe the others' in-flight scan and start its own. */
+  constructor(
+    private readonly maxSize: number,
+    private readonly ttlMs?: number,
+  ) {}
 
   async getOrCompute(key: K, factory: () => Promise<V>): Promise<V> {
-    if (this.cache.has(key)) {
-      const value = this.cache.get(key) as V;
+    const hit = this.cache.get(key);
+    if (hit && (this.ttlMs === undefined || Date.now() - hit.at < this.ttlMs)) {
       this.cache.delete(key);
-      this.cache.set(key, value);
-      return value;
+      this.cache.set(key, hit);
+      return hit.value;
     }
+    if (hit) this.cache.delete(key);
     const pending = this.inflight.get(key);
     if (pending) return pending;
     const promise = (async () => {
       try {
         const value = await factory();
-        this.cache.set(key, value);
+        this.cache.set(key, { value, at: Date.now() });
         if (this.cache.size > this.maxSize) {
           const oldest = this.cache.keys().next().value;
           if (oldest !== undefined) this.cache.delete(oldest);

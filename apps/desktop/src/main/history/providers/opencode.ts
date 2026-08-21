@@ -1,8 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FILE_CONCURRENCY, mapWithConcurrency } from "../pool";
-import type { LocalHistoryProvider, LocalSession } from "../types";
+import { FILE_CONCURRENCY, mapWithConcurrency, mentionsAnyCwd } from "../pool";
+import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 interface OpencodeSession {
   id?: string;
@@ -54,8 +54,7 @@ async function readSession(
 ): Promise<LocalSession | null> {
   try {
     const raw = await readFile(path, "utf-8");
-    // Cheap reject before parsing: most sessions belong to other directories.
-    if (!cwds.some((cwd) => raw.includes(`"${cwd}"`))) return null;
+    if (!mentionsAnyCwd(raw, cwds)) return null;
 
     const parsed = JSON.parse(raw) as OpencodeSession;
     if (!parsed.directory || !cwds.includes(parsed.directory)) return null;
@@ -75,7 +74,7 @@ async function readSession(
           .pop()
           ?.replace(/\.json$/, "") ??
         path,
-      title: parsed.title ?? null,
+      title: normalizeTitle(parsed.title),
       cwd: parsed.directory,
       branch: null,
       startedAt: parsed.time?.created ? Math.floor(parsed.time.created / 1000) : null,

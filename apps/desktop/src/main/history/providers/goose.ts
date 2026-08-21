@@ -1,19 +1,18 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FILE_CONCURRENCY, mapWithConcurrency } from "../pool";
+import { FILE_CONCURRENCY, mapWithConcurrency, mentionsAnyCwd } from "../pool";
 import { readHead } from "../read-head";
-import type { LocalHistoryProvider, LocalSession } from "../types";
+import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
-/** goose's first line is a header, and it is the richest of any CLI here: the
- *  working directory, a written description, and real token counts. */
+const GOOSE_HEAD_BYTES = 8 * 1024;
+
+/** goose's first line is a header carrying the working directory and its own
+ *  written summary. (It also records token counts, which `LocalSession` has
+ *  nowhere to put — left out rather than declared and dropped.) */
 interface GooseHeader {
   working_dir?: string;
   description?: string;
-  message_count?: number;
-  total_tokens?: number;
-  input_tokens?: number;
-  output_tokens?: number;
 }
 
 export const gooseHistory: LocalHistoryProvider = {
@@ -53,13 +52,16 @@ async function readSession(
   since: number,
 ): Promise<LocalSession | null> {
   try {
-    const { head, sizeBytes, modifiedAt } = await readHead(path);
+    // Only the header line is ever read, and the largest measured is 422 bytes.
+    // goose's directory is flat and cannot be scoped by cwd, so EVERY session in
+    // the user's whole goose history is opened on every scan — the head size is
+    // multiplied by their history, not by this repo's.
+    const { head, sizeBytes, modifiedAt } = await readHead(path, GOOSE_HEAD_BYTES);
     if (modifiedAt < since) return null;
 
     const firstLine = head.split("\n", 1)[0];
     if (!firstLine) return null;
-    // Cheap reject before parsing: most sessions belong to other directories.
-    if (!cwds.some((cwd) => firstLine.includes(`"${cwd}"`))) return null;
+    if (!mentionsAnyCwd(firstLine, cwds)) return null;
 
     const header = JSON.parse(firstLine) as GooseHeader;
     if (!header.working_dir || !cwds.includes(header.working_dir)) return null;
@@ -67,8 +69,7 @@ async function readSession(
     return {
       provider: "goose",
       sessionId: entry.replace(/\.jsonl$/, ""),
-      // The description is goose's own summary of the conversation.
-      title: header.description?.replace(/\s+/g, " ").trim().slice(0, 120) ?? null,
+      title: normalizeTitle(header.description),
       cwd: header.working_dir,
       branch: null,
       startedAt: startedAtFromName(entry),

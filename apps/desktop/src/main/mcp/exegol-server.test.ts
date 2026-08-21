@@ -1,4 +1,7 @@
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from "node:fs";
 import type { Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
@@ -300,6 +303,30 @@ describe("check_path guard", () => {
     // app restart — far worse than a missed collision.
     expect((await checkPath(undefined, "/repo/src/auth.ts")).allowed).toBe(true);
     expect((await checkPath("not-a-token", "/repo/src/auth.ts")).allowed).toBe(true);
+  });
+
+  // macOS makes this the DEFAULT case, not an edge one: /tmp is a symlink to
+  // /private/tmp, so a project added under it stored claims one way and the
+  // guard asked the other — and enforcement silently did nothing for that whole
+  // project, with no signal anywhere.
+  it("matches a claim through a symlinked path", async () => {
+    const real = mkdtempSync(join(tmpdir(), "exegol-real-"));
+    const link = join(mkdtempSync(join(tmpdir(), "exegol-link-")), "repo");
+    symlinkSync(real, link);
+    mkdirSync(join(real, "src"), { recursive: true });
+
+    // Stored the way claim_paths stores it: resolved through realpath.
+    db.prepare(
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1',?)",
+    ).run(join(realpathSync(real), "src"));
+
+    // The guard asks with the symlinked spelling; the claim was stored resolved.
+    const res = await checkPath(
+      registerAgentMcpToken("writer", "p1"),
+      join(link, "src", "auth.ts"),
+    );
+    expect(res.allowed).toBe(false);
+    expect(res.heldBy).toBe("reader");
   });
 
   it("allows when the claim holder is no longer live", async () => {

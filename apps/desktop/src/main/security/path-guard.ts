@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -13,9 +14,16 @@ export function isPathInside(base: string, target: string): boolean {
 }
 
 /**
- * Resolves symlinks by walking up to the nearest existing ancestor.
- * This handles both symlinked base paths (e.g. macOS /tmp → /private/tmp)
- * and non-existent targets (files about to be created).
+ * Walks up to the nearest ancestor that exists, resolves THAT, and re-joins
+ * what was missing. Handles both a symlinked base (macOS /tmp → /private/tmp)
+ * and a target that does not exist yet (a file about to be created).
+ *
+ * Deliberately written twice. The async export exists so its callers do not
+ * block, and routing it through the sync walk would quietly take that away; the
+ * sync export exists because the paths that decide whether a WRITE is refused
+ * are resolved inside handlers that cannot await. Keep the two bodies
+ * identical apart from the `await` — they had already drifted on how they took
+ * the segment, which is the failure this note is here to prevent.
  */
 export async function realpathSafe(p: string): Promise<string> {
   const abs = resolve(p);
@@ -28,8 +36,27 @@ export async function realpathSafe(p: string): Promise<string> {
       return missing.length ? join(real, ...missing.reverse()) : real;
     } catch {
       const parent = resolve(current, "..");
-      if (parent === current) return abs; // hit filesystem root — give up
-      missing.push(current.slice(parent.length + 1));
+      if (parent === current) return abs;
+      missing.push(basename(current));
+      current = parent;
+    }
+  }
+}
+
+/** See `realpathSafe` — same walk, for callers that cannot await. */
+export function realpathSafeSync(p: string): string {
+  const abs = resolve(p);
+  let current = abs;
+  const missing: string[] = [];
+
+  while (true) {
+    try {
+      const real = realpathSync(current);
+      return missing.length ? join(real, ...missing.reverse()) : real;
+    } catch {
+      const parent = resolve(current, "..");
+      if (parent === current) return abs;
+      missing.push(basename(current));
       current = parent;
     }
   }

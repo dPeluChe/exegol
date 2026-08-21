@@ -1,5 +1,5 @@
 import type { AgentCliType, ResumableSession, SpawnPreview } from "@exegol/shared";
-import { agentCreateSchema, agentStatusSchema } from "@exegol/shared";
+import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
@@ -220,8 +220,9 @@ export const agentRouter = router({
         useWorktree: z.boolean(),
         branchName: z.string().optional(),
         taskDescription: z.string().optional(),
-        /** Needed because the blank-task fallback is the provider's name. */
-        cliType: z.string(),
+        /** Needed because the blank-task fallback is the provider's name.
+         *  Validated here rather than widening the domain type inland. */
+        cliType: agentCliTypeSchema,
       }),
     )
     .query(({ ctx, input }): SpawnPreview => {

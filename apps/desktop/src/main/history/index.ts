@@ -1,4 +1,3 @@
-import { getProviderRegistry } from "../agents/registry";
 import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
 import { claudeCodeHistory } from "./providers/claude-code";
@@ -32,11 +31,9 @@ const PROVIDERS: LocalHistoryProvider[] = [
  * never hits and grows an entry per request-second. Bounded + in-flight dedup
  * comes from the existing cache, so two panes mounting together scan once.
  */
-const cache = new AsyncLruCache<string, { at: number; sessions: LocalSession[] }>(16);
-
-/** Matches the renderer's staleTime: a session the user just ran in their own
- *  terminal must show up on the next refetch, not on the next app restart. */
-const CACHE_TTL_MS = 15_000;
+/** TTL matches the renderer's staleTime: a session the user just ran in their
+ *  own terminal must show up on the next refetch, not on the next app restart. */
+const cache = new AsyncLruCache<string, LocalSession[]>(16, 15_000);
 
 /**
  * Every session the installed CLIs recorded for these directories, whoever
@@ -49,41 +46,26 @@ export async function listLocalSessions(
   windowKey: string,
 ): Promise<LocalSession[]> {
   const key = `${windowKey}:${[...cwds].sort().join("|")}`;
-  const cached = await cache.getOrCompute(key, () => scan(cwds, since));
-  if (Date.now() - cached.at < CACHE_TTL_MS) return cached.sessions;
-
-  // Expired: recompute and replace, so the entry cannot pin a stale scan for
-  // the process lifetime (the LRU has no TTL of its own).
-  cache.invalidateWhere((k) => k === key);
-  return (await cache.getOrCompute(key, () => scan(cwds, since))).sessions;
+  return cache.getOrCompute(key, () => scan(cwds, since));
 }
 
-async function scan(
-  cwds: string[],
-  since: number,
-): Promise<{ at: number; sessions: LocalSession[] }> {
-  return (async () => {
-    const enabled = new Set(
-      getProviderRegistry()
-        .list()
-        .filter((p) => p.enabled !== false)
-        .map((p) => p.id),
-    );
+async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
+  // Deliberately NOT filtered by the registry's `enabled` flag. That flag
+  // means "hide from the launcher" — gemini carries it, superseded by agy —
+  // and a retired CLI's PAST sessions are precisely what a history view is
+  // for. Filtering on it shipped gemini's adapter dead on every install.
+  const results = await Promise.all(
+    PROVIDERS.map(async (provider) => {
+      try {
+        return await provider.list(cwds, since);
+      } catch (err) {
+        logger.warn(`[History] ${provider.id} store unreadable:`, err);
+        return [];
+      }
+    }),
+  );
 
-    const results = await Promise.all(
-      // A provider the user turned off should not have its store read either.
-      PROVIDERS.filter((p) => enabled.has(p.id)).map(async (provider) => {
-        try {
-          return await provider.list(cwds, since);
-        } catch (err) {
-          logger.warn(`[History] ${provider.id} store unreadable:`, err);
-          return [];
-        }
-      }),
-    );
-
-    // Ordering is the merge's job — it has both sources and the startedAt
-    // fallback; sorting here too would be a second rule that disagrees.
-    return { at: Date.now(), sessions: results.flat() };
-  })();
+  // Ordering is the merge's job — it has both sources and the startedAt
+  // fallback; sorting here too would be a second rule that disagrees.
+  return results.flat();
 }

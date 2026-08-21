@@ -22,19 +22,28 @@ import { appRouter } from "../main/ipc/router";
  * halves are individually correct.
  */
 describe("preload capabilities allowlist", () => {
+  // Mirrors the shape both live matchers use (`preload/index.ts`,
+  // `main/ipc/capabilities.ts`): a router may be "*" for every procedure.
   const capabilities = JSON.parse(readFileSync(join(__dirname, "capabilities.json"), "utf-8")) as {
-    trpc: Record<string, string[]>;
+    trpc: Record<string, "*" | readonly string[]>;
   };
 
+  const wildcardRouters = new Set(
+    Object.entries(capabilities.trpc)
+      .filter(([, procedures]) => procedures === "*")
+      .map(([router]) => router),
+  );
   const allowed = new Set(
     Object.entries(capabilities.trpc).flatMap(([router, procedures]) =>
-      procedures.map((p) => `${router}.${p}`),
+      procedures === "*" ? [] : procedures.map((p) => `${router}.${p}`),
     ),
   );
+  const isAllowed = (name: string) =>
+    allowed.has(name) || wildcardRouters.has(name.split(".")[0] ?? "");
   const served = Object.keys(appRouter._def.procedures);
 
   it("exposes every procedure the router serves", () => {
-    const missing = served.filter((name) => !allowed.has(name));
+    const missing = served.filter((name) => !isAllowed(name));
     expect(missing, `add these to preload/capabilities.json: ${missing.join(", ")}`).toEqual([]);
   });
 

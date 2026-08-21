@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "libsql";
@@ -151,7 +151,10 @@ describe("exegol-tools", () => {
     it("resolves relative paths against the agent's working directory", async () => {
       const res = (await claim(["src/auth.ts"])) as { granted: boolean; paths: string[] };
       expect(res.granted).toBe(true);
-      expect(res.paths).toEqual([join(projectPath, "src/auth.ts")]);
+      // Stored through realpath — on macOS the temp dir is itself a symlink
+      // (/var → /private/var), and a claim spelled differently from the guard's
+      // question never overlaps, so enforcement silently does nothing.
+      expect(res.paths).toEqual([join(realpathSync(projectPath), "src/auth.ts")]);
     });
 
     it("refuses a path that escapes the working directory", async () => {

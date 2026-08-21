@@ -39,6 +39,7 @@ import {
   observeMemory,
   searchMemories,
 } from "../memory/store";
+import { isPathInside, realpathSafeSync } from "../security/path-guard";
 import {
   EXEGOL_TOOL_NAMES,
   type ExegolToolContext,
@@ -260,16 +261,22 @@ function resolveAgentPaths(
   }
   const worktree = getWorktreeByAgentId(db, context.agentId);
   const project = getProject(db, context.projectId);
-  const base = worktree?.path ?? project?.path;
-  if (!base) throw new ExegolToolError("cannot resolve this agent's working directory", -32603);
+  // Stored through realpath so a claim and the guard's later question are the
+  // same string. Without it a project under a symlinked path (macOS /tmp, a
+  // ~/code symlink) has no enforcement at all, and nothing says so.
+  const rawBase = worktree?.path ?? project?.path;
+  // Checked BEFORE resolving: realpath of "" is the main process's own cwd, so
+  // resolving first would silently anchor every claim there instead of failing.
+  if (!rawBase) throw new ExegolToolError("cannot resolve this agent's working directory", -32603);
+  const base = realpathSafeSync(rawBase);
   return raw.map((p) => {
     const path = String(p).trim();
     if (!path) throw new ExegolToolError("paths must not contain empty entries", -32602);
     // Normalize away trailing slashes and ".." so `src/` and `src` are one
     // claim — then refuse anything that escaped: `../..` resolves above the
     // project and, under the prefix rule, would overlap every path in it.
-    const resolved = resolve(base, path);
-    if (resolved !== base && !resolved.startsWith(`${base}/`)) {
+    const resolved = realpathSafeSync(resolve(base, path));
+    if (resolved !== base && !isPathInside(base, resolved)) {
       throw new ExegolToolError(`path is outside your working directory: ${path}`, -32602);
     }
     if (resolved === base) {

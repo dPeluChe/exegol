@@ -331,6 +331,8 @@ export function deliverPendingAgentMessages(db: Database.Database, agentId: stri
   // This IS the boundary: anything injected before it has now been read.
   markConsumed(db, agentId);
   const queue = queues.get(agentId);
+  // Not redundant with the shift below: it narrows `queue` for the rest of the
+  // function, which reads its length after draining one message.
   if (!queue?.length) return;
   const next = queue.shift();
   if (!next) return;
@@ -473,12 +475,12 @@ export function clearAgentMessageQueue(db: Database.Database, agentId: string): 
       }
     }
   }
-  queues.delete(agentId);
+  // `queues` is the first entry in PER_AGENT_STATE, so the loop clears it too —
+  // its rate history and echo window die with it, or a new agent reusing the id
+  // would inherit them.
+  for (const store of PER_AGENT_STATE) store.delete(agentId);
   // Nothing left to watch — don't keep a timer alive for an empty fleet.
   if (queues.size === 0) stopSweep();
-  // Its rate history and echo window die with it too — a new agent reusing the
-  // id must not inherit them.
-  for (const store of PER_AGENT_STATE) store.delete(agentId);
   forgetAgentMessageState(agentId);
   forgetAgentInjectionState(agentId);
 }

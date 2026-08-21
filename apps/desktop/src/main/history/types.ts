@@ -33,3 +33,17 @@ export interface LocalHistoryProvider {
    */
   list(cwds: string[], since: number): Promise<LocalSession[]>;
 }
+
+/**
+ * One spelling for a session title, whatever store it came from.
+ *
+ * Five adapters each had their own `.replace(/\s+/g," ").trim().slice(0,120)`
+ * — and claude-code capped without collapsing while droid did neither, so the
+ * same list rendered multi-line prompts next to normalized ones.
+ */
+export function normalizeTitle(text: string | null | undefined): string | null {
+  const clean = text?.replace(/\s+/g, " ").trim();
+  return clean ? clean.slice(0, TITLE_MAX_CHARS) : null;
+}
+
+const TITLE_MAX_CHARS = 120;
