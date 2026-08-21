@@ -551,11 +551,11 @@ review are in `TASK_COMPLETED/2608.md`; these are the ones that need more than a
 Core shipped 2026-08-18 (see `TASK_COMPLETED/2608.md`): retention, the merged timeline, and
 local-store adapters for claude-code / codex / opencode. Remaining:
 
-- **Adapters for the other providers.** gemini, devin, aider, goose, amp, kiro, crush all keep
-  their own stores; only three were verified against real data on this machine, and an adapter
-  written against a guessed format is worse than none (it fails silently). Each is a file in
-  `main/history/providers/` plus a line in the registry — write one when a real store exists to
-  read.
+- **Remaining providers have nothing to read** (surveyed 2026-08-19, see `TASK_COMPLETED`):
+  `crush` has a proper sessions table but zero rows and no cwd column; `amp` keeps only
+  file-change directories; `kiro`, `kilocode` and `devin` keep settings/extensions/plans and no
+  session store. Revisit `crush` if it starts being used — scoping would go through
+  `files.path`. Six adapters now cover every CLI that records anything.
 - **Resume from history.** The rows carry the provider's own session id; the launch modal
   already knows how to resume. A local session Exegol never launched is the interesting case.
 - **Purge UI.** Nothing is deleted automatically any more, and `oplog` stores git trees, so the

@@ -1,5 +1,5 @@
 import type { HistoryEntry } from "@exegol/shared";
-import { cn } from "@exegol/ui";
+import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { FileClock, GitBranch, History, Terminal } from "lucide-react";
 import { memo, useMemo, useState } from "react";
@@ -10,10 +10,34 @@ import { trpcInvoke } from "../../../lib/trpc-client";
 import { EmptyState, FilterChip, ScoreBadge } from "../../common";
 import { AgentIcon } from "../../common/AgentIcon";
 
-/** The score is Exegol's own post-run evaluation, and it only exists for
- *  sessions Exegol launched — so it needs saying, not just showing. */
-const SCORE_HINT =
-  "Exegol's post-run score: did it compile, did tests pass, was the task completed, how many files changed";
+/**
+ * A bare "18%" is a number nobody can place, and a native `title` is barely
+ * discoverable — so the explanation is a real tooltip, and it says both what the
+ * score measures AND why most rows do not have one.
+ */
+function ScoreExplainer({ score }: { score: number }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex shrink-0 cursor-help items-center gap-1">
+          <span className="text-[9px] text-text-muted">score</span>
+          <ScoreBadge score={score} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-[260px]">
+        <p className="font-medium">Exegol&apos;s score for this session</p>
+        <p className="mt-1 text-text-secondary">
+          Graded when the agent exited: did the work compile, did tests pass, was the task
+          completed, how many files changed, and how it ended.
+        </p>
+        <p className="mt-1 text-text-muted">
+          Only sessions Exegol launched have one — a CLI&apos;s own history records that a session
+          happened, never how it went.
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const RANGES: { days: number; label: string }[] = [
   { days: 7, label: "7d" },
@@ -141,13 +165,7 @@ const HistoryRow = memo(function HistoryRow({ entry }: { entry: HistoryEntry }) 
             {entry.status}
           </span>
         )}
-        {/* Labelled, because "18%" on its own is a number nobody can place. */}
-        {entry.score !== null && (
-          <span className="flex shrink-0 items-center gap-1" title={SCORE_HINT}>
-            <span className="text-[9px] text-text-muted">score</span>
-            <ScoreBadge score={entry.score} />
-          </span>
-        )}
+        {entry.score !== null && <ScoreExplainer score={entry.score} />}
         <span className="shrink-0 text-[10px] tabular-nums text-text-muted">
           {formatTimeAgo(entry.endedAt ?? entry.startedAt)}
         </span>
