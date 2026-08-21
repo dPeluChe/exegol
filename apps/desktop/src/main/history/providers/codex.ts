@@ -13,7 +13,61 @@ interface SessionMeta {
     timestamp?: string;
     cli_version?: string;
     git?: { branch?: string };
+    /** "user" for a session a person started; "subagent" for codex's own
+     *  internal rollouts (one per turn its guardian assesses). */
+    thread_source?: string;
   };
+}
+
+/**
+ * Everything codex injects before the person gets a word in. Skipping these is
+ * what separates "what did I ask for" from the scaffolding around it.
+ */
+/** Enough to clear session_meta + world_state and reach the first real turn. */
+const TITLE_SCAN_BYTES = 512 * 1024;
+
+const BOILERPLATE_PREFIXES = [
+  "# AGENTS.md instructions",
+  "<permissions instructions",
+  "The following is the Codex agent history",
+  "<user_instructions",
+  "<environment_context",
+  "## My request for Codex:",
+];
+
+interface RolloutLine {
+  payload?: {
+    type?: string;
+    role?: string;
+    message?: string;
+    content?: Array<{ text?: string }>;
+  };
+}
+
+/** codex records no title, but it does record what the person typed. */
+function firstUserPrompt(head: string): string | null {
+  for (const raw of head.split("\n")) {
+    if (!raw.startsWith("{")) continue;
+    let line: RolloutLine;
+    try {
+      line = JSON.parse(raw) as RolloutLine;
+    } catch {
+      continue; // the tail of a 64 KB read is normally truncated
+    }
+    const p = line.payload;
+    const text =
+      p?.type === "user_message"
+        ? p.message
+        : p?.type === "message" && p.role === "user"
+          ? (p.content ?? []).map((c) => c.text ?? "").join("")
+          : null;
+
+    const trimmed = text?.trim();
+    if (!trimmed || trimmed.length < 3) continue;
+    if (BOILERPLATE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) continue;
+    return trimmed.replace(/\s+/g, " ").slice(0, 120);
+  }
+  return null;
 }
 
 async function subdirs(path: string): Promise<string[]> {
@@ -105,6 +159,18 @@ async function readRollout(path: string, cwds: string[]): Promise<LocalSession |
     const cwd = meta.payload?.cwd;
     if (!cwd || !cwds.includes(cwd)) return null;
 
+    // codex writes a rollout per internal guardian assessment too, one for every
+    // turn it reviews. Those are machinery, not sessions a person ran — listed,
+    // they bury the real ones under near-identical rows (four of six, measured
+    // on this machine).
+    if (meta.payload?.thread_source && meta.payload.thread_source !== "user") return null;
+
+    // Only NOW is a bigger read worth it: session_meta alone runs 20 KB and the
+    // world_state that follows can dwarf it, so the person's first message sits
+    // well past the matching head. Two reads, but only for the handful of
+    // rollouts that belong to this repo.
+    const { head: deepHead } = await readHead(path, TITLE_SCAN_BYTES);
+
     const started = meta.payload?.timestamp ?? meta.timestamp;
     return {
       provider: "codex",
@@ -117,7 +183,9 @@ async function readRollout(path: string, cwds: string[]): Promise<LocalSession |
         path,
       // codex records no title; the rollout is identified by when it ran and,
       // usefully, by the branch it ran against.
-      title: null,
+      // codex records no title of its own, but it does record what the person
+      // typed — which is the only thing that tells two rollouts apart.
+      title: firstUserPrompt(deepHead),
       cwd,
       branch: meta.payload?.git?.branch ?? null,
       startedAt: started ? Math.floor(Date.parse(started) / 1000) : null,

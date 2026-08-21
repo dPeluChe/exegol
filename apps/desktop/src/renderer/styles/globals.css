@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* The design-system package is a sibling workspace, so Tailwind does not find it
+   on its own: its classes only got generated when the app happened to use the
+   same ones. A primitive styled with a class nobody else uses would silently
+   render unstyled. */
+@source "../../../../../packages/ui/src";
 @import "@xterm/xterm/css/xterm.css";
 @import "./fonts.css";
 

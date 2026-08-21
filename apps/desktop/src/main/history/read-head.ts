@@ -18,15 +18,15 @@ export interface FileHead {
 
 /** One open per file: the head and the stat come from the same handle, instead
  *  of a separate `stat(path)` paying a second path resolution and open. */
-export async function readHead(path: string): Promise<FileHead> {
+export async function readHead(path: string, bytes = HEAD_BYTES): Promise<FileHead> {
   const handle = await open(path, "r");
   try {
     const info = await handle.stat();
     // allocUnsafe, not alloc: 64 KB is past Buffer.poolSize, so `alloc` memsets
     // a fresh block per file — 48 MB zeroed across a full codex scan. The
     // subarray below bounds what is read out.
-    const buffer = Buffer.allocUnsafe(HEAD_BYTES);
-    const { bytesRead } = await handle.read(buffer, 0, HEAD_BYTES, 0);
+    const buffer = Buffer.allocUnsafe(bytes);
+    const { bytesRead } = await handle.read(buffer, 0, bytes, 0);
     return {
       head: buffer.subarray(0, bytesRead).toString("utf-8"),
       sizeBytes: info.size,

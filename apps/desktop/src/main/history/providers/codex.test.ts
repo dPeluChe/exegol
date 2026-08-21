@@ -83,6 +83,59 @@ describe("codexHistory", () => {
     expect(sessions.find((s) => s.sessionId === "big")?.branch).toBe("main");
   });
 
+  // codex writes a rollout per internal guardian assessment too — four of every
+  // six on this machine. Listed, they bury the real sessions under near-
+  // identical rows.
+  it("skips codex's own subagent rollouts", async () => {
+    writeRollout("2026", "08", "18", "rollout-guardian.jsonl", {
+      type: "session_meta",
+      payload: {
+        session_id: "guardian",
+        cwd: REPO,
+        thread_source: "subagent",
+        source: { subagent: { other: "guardian" } },
+      },
+    });
+    writeRollout("2026", "08", "18", "rollout-mine.jsonl", {
+      type: "session_meta",
+      payload: { session_id: "mine", cwd: REPO, thread_source: "user" },
+    });
+
+    const sessions = await codexHistory.list([REPO], 0);
+    expect(sessions.map((s) => s.sessionId)).toEqual(["mine"]);
+  });
+
+  it("titles a rollout with the first thing the person actually typed", async () => {
+    const dir = join(home.dir, ".codex", "sessions", "2026", "08", "18");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "rollout-titled.jsonl"),
+      [
+        JSON.stringify({
+          type: "session_meta",
+          payload: { session_id: "titled", cwd: REPO, thread_source: "user" },
+        }),
+        // Everything codex injects before the person gets a word in.
+        JSON.stringify({
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ text: "# AGENTS.md instructions\nblah" }],
+          },
+        }),
+        JSON.stringify({
+          payload: { type: "message", role: "developer", content: [{ text: "ignored" }] },
+        }),
+        JSON.stringify({
+          payload: { type: "user_message", message: "arregla el login   por favor" },
+        }),
+      ].join("\n"),
+    );
+
+    const [session] = await codexHistory.list([REPO], 0);
+    expect(session?.title).toBe("arregla el login por favor");
+  });
+
   it("returns nothing when codex is not installed", async () => {
     expect(await codexHistory.list([REPO], 0)).toEqual([]);
   });

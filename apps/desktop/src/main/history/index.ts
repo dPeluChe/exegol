@@ -3,6 +3,9 @@ import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
 import { claudeCodeHistory } from "./providers/claude-code";
 import { codexHistory } from "./providers/codex";
+import { droidHistory } from "./providers/droid";
+import { geminiHistory } from "./providers/gemini";
+import { gooseHistory } from "./providers/goose";
 import { opencodeHistory } from "./providers/opencode";
 import type { LocalHistoryProvider, LocalSession } from "./types";
 
@@ -13,7 +16,14 @@ export type { LocalSession } from "./types";
  * missing here is not "unsupported" — it simply has no adapter yet, and adding
  * one is a file in `providers/` plus a line below.
  */
-const PROVIDERS: LocalHistoryProvider[] = [claudeCodeHistory, codexHistory, opencodeHistory];
+const PROVIDERS: LocalHistoryProvider[] = [
+  claudeCodeHistory,
+  codexHistory,
+  opencodeHistory,
+  droidHistory,
+  gooseHistory,
+  geminiHistory,
+];
 
 /**
  * Scanning the stores is filesystem work, and the History view remounts every
