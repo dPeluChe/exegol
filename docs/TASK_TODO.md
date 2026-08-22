@@ -501,6 +501,9 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
 brought (2026-08-19). Clones under `_repos_2_learn/github.com/`. Every claim about OUR code below
 was re-verified before filing.
 
+(Terminal fidelity — alt-screen fit and OSC 10/11/12 replies — shipped 2026-08-19; see
+`TASK_COMPLETED/2608.md`.)
+
 **The two product-level misses (monocode).**
 
 1. **Context-window occupancy is a number we do not have.** Every `token_usage` query we own is

@@ -1,6 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
-import { createShellIntegrationState, registerOscHandlers } from "./osc-handlers";
+import { createShellIntegrationState, registerOscHandlers, toXParseColor } from "./osc-handlers";
 
 type OscHandler = (data: string) => boolean | Promise<boolean>;
 
@@ -159,5 +159,52 @@ describe("registerOscHandlers — OSC 133 state machine", () => {
     result.dispose();
     expect(handlers.has(7)).toBe(false);
     expect(handlers.has(133)).toBe(false);
+  });
+});
+
+// A TUI that asks for the terminal's colors and gets no answer picks its own
+// palette — which is why vim, delta and lazygit fight the app's theme inside a
+// pane. These are the replies that let them match.
+describe("OSC 10/11/12 color queries", () => {
+  const COLORS = { foreground: "#e4e4e7", background: "#0a0a0b", cursor: "#6366f1" };
+
+  function setup() {
+    const written: string[] = [];
+    const handlers = new Map<number, (data: string) => boolean>();
+    const term = {
+      parser: {
+        registerOscHandler: (code: number, fn: (data: string) => boolean) => {
+          handlers.set(code, fn);
+          return { dispose: () => {} };
+        },
+      },
+      input: (data: string) => written.push(data),
+      registerMarker: () => null,
+    } as unknown as Terminal;
+
+    registerOscHandlers(term, {
+      setCwd: () => {},
+      setLastExit: () => {},
+      getColors: () => COLORS,
+    });
+    return { handlers, written };
+  }
+
+  it("answers a query with the theme colour in 16-bit XParseColor form", () => {
+    const { handlers, written } = setup();
+    expect(handlers.get(11)?.("?")).toBe(true);
+    expect(written[0]).toContain("11;rgb:0a0a/0a0a/0b0b");
+  });
+
+  it("ignores an app SETTING a colour — that is not a question", () => {
+    const { handlers, written } = setup();
+    expect(handlers.get(11)?.("rgb:ffff/0000/0000")).toBe(false);
+    expect(written).toHaveLength(0);
+  });
+
+  it("doubles each channel, or every colour reads half as bright", () => {
+    expect(toXParseColor("#ffffff")).toBe("rgb:ffff/ffff/ffff");
+    expect(toXParseColor("#6366f1")).toBe("rgb:6363/6666/f1f1");
+    expect(toXParseColor("nonsense")).toBe("rgb:0000/0000/0000");
   });
 });
