@@ -496,6 +496,95 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
 
 ---
 
+### T183 — Learnings from monocode, mcp_agent_mail_rust and proliferate `added: 2026-08-19`
+**Priority**: P1 for items 1-3 | **Effort**: varies | **Source**: 3-agent read of the repos Antonio
+brought (2026-08-19). Clones under `_repos_2_learn/github.com/`. Every claim about OUR code below
+was re-verified before filing.
+
+**The two product-level misses (monocode).**
+
+1. **Context-window occupancy is a number we do not have.** Every `token_usage` query we own is
+   `SUM(input + output)` — cumulative SPEND. Occupancy is a different quantity and the actionable
+   one ("am I about to get compacted?"). Their framing is the insight: it is a LEVEL, not a total —
+   each turn reports the size of the prompt it just sent, so the newest reading REPLACES the
+   previous one and compaction is free (after compacting, the next report is simply smaller). And
+   the window size is read from the CLI (`modelUsage[*].contextWindow`), never from a model table
+   that goes stale. Ring in the terminal toolbar, amber 75% / red 90%.
+   → `main/tokens/log-parser.ts`, `renderer/components/terminal/TerminalToolbar.tsx`, a wave migration.
+2. **Four features are dark until the user pastes an API key**: `agents/scoring.ts`,
+   `ipc/procedures/diff-ai.ts` (the Sparkles commit button), `pipeline/evaluator.ts`,
+   `pipeline/evidence.ts` — all through `callAnthropicMessage` with `x-api-key`. monocode spawns the
+   user's ALREADY-AUTHENTICATED `claude` headless and isolated
+   (`--no-session-persistence --strict-mcp-config --mcp-config '{"mcpServers":{}}' --settings '{"disableAllHooks":true}'`)
+   for commit messages, PR titles and branch names. No key, nothing to configure, no double payment.
+   → new `main/lib/headless-claude.ts` behind the existing `callAnthropicMessage` signature, API key
+   as fallback.
+
+**The coordination gaps (mcp_agent_mail_rust).** Verified against our code, not taken on faith:
+
+3. **Claims have no TTL.** `w3_004_path_claims` has `created_at` and no `expires_at`, so a wedged
+   but LIVE agent holds `src/` forever. Theirs: mandatory TTL clamped [60s, 1y], default 1h, plus
+   renew, force-release and an expiry sweep.
+4. **Overlap is prefix-only, so no glob can ever be claimed.** `pathsOverlap` is
+   `a===b || startsWith`. Demonstrated: `src/**/*.test.ts` vs `src/auth.test.ts` reports NO overlap.
+   Theirs is a memoized DP over segment lists answering "can any path satisfy both patterns", with a
+   first-literal-segment index so it is not O(n). Take the per-repo `core.ignorecase` flag, not their
+   compile-time `cfg!(target_os)`.
+5. **Commit-time guard.** Our own tool description already admits "writes through shell commands are
+   never intercepted". Their `pre-commit` hook reads active reservations from JSON in the git archive
+   — so it works with the server DOWN — and blocks by default with an explicit bypass env var. We
+   block BEFORE the write, they block after the work is done; the answer is both, not either.
+6. **Threads die on restart.** `inReplyTo` exists only on the in-memory `PendingMessage`; there is no
+   column. Theirs has `thread_id`, `reply_message` inheriting importance/ack, and `summarize_thread`.
+7. **`consumed` is inferred, theirs is asserted.** We mark consumed when the receiver hits a turn
+   boundary — an agent that ignored the text is still recorded as having read it. Theirs is
+   `ack_required` → `acknowledge_message` → `ack_ts`, plus a "sent N ago, still unacked" view.
+8. **Idempotency has no payload fingerprint.** Same `client_key` with a different body silently
+   returns the old message instead of erroring.
+9. **`agents_list` spans every project** (`listActiveAgents` filters by status only) and cross-project
+   `agent_send` is unrestricted. Theirs has a per-agent contact policy
+   (`open|auto|contacts_only|block_all`) and a deliberately vague rejection that does not leak
+   whether the recipient exists.
+10. **A hook is a second delivery route.** We already own the channel (T123 per-agent `--settings`).
+    A `SessionStart`/`PostToolUse` hook printing unread mail costs zero PTY risk and covers exactly
+    what injection cannot: an agent parked on a permission dialog (we correctly refuse to inject),
+    providers with no boundary signal, and post-restart. INVERT both of their defaults — theirs
+    re-prints already-read mail on every Bash call, a permanent token tax.
+
+**The pipeline handoff (proliferate).**
+
+11. **We pass terminal scrapings between steps.** `{{previousOutput}}` resolves to `outputSummary`,
+    which is read from the previous agent's SCROLLBACK (`pipeline-helpers.ts:33`), and `{{diff}}` is
+    an inlined git diff. They hand off through FILES — `.proliferate/context/<runId>/NN-slug.md`,
+    referenced as `@doc:slug` — and never pass a diff at all: a reviewer is told to inspect the
+    worktree itself, with only a manifest of changed files and per-file diff hashes stored. Strictly
+    less lossy, far cheaper in tokens, and survives a restart for free.
+    → `main/pipeline/context.ts`, `pipeline-step-handler.ts`, `packages/shared/src/types/pipeline.ts`
+12. **Durable delegation outbox.** Their subagent completion is a deliveries table with lease token,
+    `attempt_count`, `next_attempt_at`, dead-letter after 20, sibling coalescing — written in the SAME
+    transaction as the child's terminal turn event, so it is crash-safe by construction. The hook that
+    nudges the worker is documented as a latency hint, explicitly NOT the correctness path.
+13. **Cheap and worth copying now**: a static fan-out cap on any agent-spawns-agent path (theirs:
+    8 per parent, depth 1) and ONE documented canonical lock-acquisition order. We acquire worktree
+    locks, DB writes and sidecar RPCs in whatever order each call site needed.
+14. **Durable judge verdicts.** Our evaluator gate is N stateless Haiku calls; theirs is N agents
+    whose verdicts are durable rows with their own status and retry count, so a gate interrupted
+    mid-round resumes instead of re-running.
+
+**Explicitly NOT worth copying:**
+- Their sender authentication is OFF by default and identity is a tmux-pane file with three legacy
+  fallbacks — a symptom of not owning the process. We mint a token at spawn and revoke on exit.
+- proliferate's workflow triggers: the README claims "recurring and event-driven" and there are NO
+  automated triggers of any kind — no cron, no webhook, no schedule column. Our `scheduler/engine.ts`
+  is ahead of them on this axis.
+- proliferate's intra-workspace concurrency: two in-process locks, no per-file arbitration at all.
+  Our path claims are the differentiated thing here — keep them.
+- 900k LOC for a mailbox, with a live Bayes-risk policy that can release other agents' reservations
+  on by default. Take the deadlock detector (Tarjan SCC over the conflict graph, surfaced as an
+  advisory notification), leave the rest.
+
+---
+
 ### T182 — Findings from the round-9 code review `added: 2026-08-19`
 **Priority**: P1 for the first two | **Effort**: S-M each | **Source**: 4-agent correctness review
 over `eb6b37e..HEAD` (the T175/T180/T170.1/T166.1/T179.3/T181 wave)
