@@ -11,7 +11,6 @@ import {
 } from "./osc-handlers";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
-import { type CellMetrics, computeFit } from "./terminal-fit";
 import { registerTerminalLinkProviders } from "./terminal-links";
 import type { TerminalInstanceProps } from "./terminal-types";
 
@@ -270,11 +269,13 @@ export function setupTerminalSession(
 /**
  * Fit the terminal and broadcast the new size to PTY + store. Wrapped so the
  * many callers in TerminalInstance don't each have to repeat the try/catch.
+ *
+ * Always the addon's floored grid. An alt-screen variant used to CEIL the rows
+ * and meant to squeeze the line height to compensate, but the squeeze was a
+ * no-op: every fit left the grid one row taller than its box, the box grew to
+ * hold it, and the next fit added another row, so the PTY kept gaining rows
+ * nobody could see (Claude's input box ended up below the edge) (T194 logs).
  */
-/** xterm's defaults; a TUI fit scales these and a shell fit restores them. */
-const BASE_LETTER_SPACING = 0;
-const BASE_LINE_HEIGHT = 1;
-
 export function fitAndSyncSize(
   terminal: Terminal,
   fitAddon: FitAddon,
@@ -283,32 +284,13 @@ export function fitAndSyncSize(
   onSize: (cols: number, rows: number) => void,
 ): void {
   try {
-    // A full-screen TUI paints exactly rows × cols and never scrolls, so the
-    // addon's flooring leaves a dead strip along the bottom and right of the
-    // pane — which is most of our agent panes, since Gemini, OpenCode, Kiro and
-    // Crush are alt-screen apps. Ceil the grid and stretch the cell instead.
-    const alternate = terminal.buffer.active.type === "alternate";
     const host = measureHost(terminal);
-    const cell = measureCell(terminal);
-    const fit = host && cell ? computeFit(host, cell, alternate ? "alternate" : "normal") : null;
-
-    if (fit && alternate) {
-      terminal.options.letterSpacing = BASE_LETTER_SPACING * fit.letterSpacing;
-      terminal.options.lineHeight = BASE_LINE_HEIGHT * fit.lineHeight;
-      terminal.resize(fit.cols, fit.rows);
-    } else {
-      // Shell panes keep the addon's own arithmetic, and any stretch from a
-      // previous TUI is undone — otherwise a shell inherits stretched glyphs.
-      terminal.options.letterSpacing = BASE_LETTER_SPACING;
-      terminal.options.lineHeight = BASE_LINE_HEIGHT;
-      fitAddon.fit();
-    }
-
+    fitAddon.fit();
     const { cols, rows } = terminal;
     termDbg(`fit:${agentId}:${readOnly}`, "pane fit", {
       agentId,
       readOnly,
-      alternate,
+      alternate: terminal.buffer.active.type === "alternate",
       host: host ? `${host.width}x${host.height}` : null,
       grid: `${cols}x${rows}`,
     });
@@ -388,16 +370,6 @@ export function nextMirrorFont(
     return next > current ? next : null;
   }
   return null;
-}
-
-/** xterm exposes the rendered cell size only through this internal service. */
-function measureCell(terminal: Terminal): CellMetrics | null {
-  const core = (terminal as unknown as { _core?: { _renderService?: { dimensions?: unknown } } })
-    ._core?._renderService?.dimensions as
-    | { css?: { cell?: { width?: number; height?: number } } }
-    | undefined;
-  const cell = core?.css?.cell;
-  return cell?.width && cell?.height ? { width: cell.width, height: cell.height } : null;
 }
 
 function measureHost(terminal: Terminal): { width: number; height: number } | null {

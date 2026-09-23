@@ -411,7 +411,9 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       className={cn(
         // A mirror sizes to its content: rows × the scaled cell height
         "terminal-container w-full bg-bg-primary",
-        !mirror && "h-full",
+        // Clipped, so a grid momentarily taller than its box can never push the
+        // box (and with it the next fit) taller
+        !mirror && "h-full overflow-hidden",
         isDragOver && "ring-2 ring-inset ring-accent/60",
       )}
       onDragOver={handleDragOver}
