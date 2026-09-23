@@ -3,6 +3,7 @@ import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { switchSection } from "../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -67,9 +68,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
       const { agentIds } = result as { agentIds: string[] };
 
       // Open the comparator so the user can watch all variants side-by-side.
-      window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", { detail: { section: "parallel-runs" } }),
-      );
+      switchSection("parallel-runs");
 
       // Create tabs and terminals for each spawned agent
       const store = useWorkspaceStore.getState();

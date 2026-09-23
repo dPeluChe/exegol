@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
+import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { selectPanes, useWorkspaceStore } from "../../../stores/workspace";
 
@@ -214,9 +215,7 @@ export function QaTestsSection() {
         detail: { testId: test.id, startUrl: test.startUrl, actions },
       }),
     );
-    window.dispatchEvent(
-      new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-    );
+    switchSection("agents");
   };
 
   const handleDelete = async (id: string) => {

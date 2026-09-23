@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { SWITCH_SECTION_EVENT, switchSection } from "../../lib/switch-section";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
@@ -92,8 +93,8 @@ export function WorkspaceView() {
       const section = (e as CustomEvent).detail?.section as WorkspaceSection;
       if (section) setActiveSection(section);
     };
-    window.addEventListener("exegol:switch-section", handler);
-    return () => window.removeEventListener("exegol:switch-section", handler);
+    window.addEventListener(SWITCH_SECTION_EVENT, handler);
+    return () => window.removeEventListener(SWITCH_SECTION_EVENT, handler);
   });
 
   // Listen for Cmd+N spawn-agent hotkey OR T106 "New agent with same task"
@@ -261,9 +262,7 @@ function focusAgentPane(agentId: string): void {
           ws.setActiveTab(tab.id);
           ws.setFocusedPane(paneId);
           useAgentStore.getState().setFocusedAgent(agentId);
-          window.dispatchEvent(
-            new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-          );
+          switchSection("agents");
           return;
         }
       }
@@ -279,7 +278,7 @@ function focusAgentPane(agentId: string): void {
       useAgentStore.getState().setFocusedAgent(agentId);
     }
   }
-  window.dispatchEvent(new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }));
+  switchSection("agents");
 }
 
 function tabIncludesPane(
@@ -314,5 +313,5 @@ async function openDiffForAgent(agentId: string): Promise<void> {
   if (!paneId) return;
   ws.updatePane(paneId, { type: "git", agentId, filePath: worktreePath });
   ws.setFocusedPane(paneId);
-  window.dispatchEvent(new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }));
+  switchSection("agents");
 }

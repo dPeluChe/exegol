@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
 import { formatTimeAgo } from "../../lib/format";
+import { switchSection } from "../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -259,9 +260,7 @@ export function SpawnAgentModal({
       createTerminal(agent.id);
       setFocusedAgent(agent.id);
       // Switch to Agents section
-      window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-      );
+      switchSection("agents");
       // T95: Reuse focused empty pane, otherwise create a new tab
       const store = useWorkspaceStore.getState();
       if (targetPaneId) {

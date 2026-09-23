@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { formatCost, formatTokens } from "../../../lib/format";
+import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { AgentIcon } from "../../common/AgentIcon";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
@@ -275,9 +276,7 @@ function ColumnCard({
             window.dispatchEvent(
               new CustomEvent("exegol:focus-agent", { detail: { agentId: agent.id } }),
             );
-            window.dispatchEvent(
-              new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-            );
+            switchSection("agents");
           }}
           className="h-7 gap-1 px-2 text-[10px]"
           title="Open this agent's terminal pane"

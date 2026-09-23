@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { AlertTriangle, CheckCircle, Info, X, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
+import { switchSection } from "../../lib/switch-section";
 import type { Toast, ToastType } from "../../stores/toasts";
 import { TOAST_AUTO_DISMISS_MS, useToastStore } from "../../stores/toasts";
 
@@ -77,11 +78,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       )}
       onClick={() => {
         if (toast.agentId) {
-          window.dispatchEvent(
-            new CustomEvent("exegol:switch-section", {
-              detail: { section: "agents" },
-            }),
-          );
+          switchSection("agents");
         }
         removeToast(toast.id);
       }}

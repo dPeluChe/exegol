@@ -1,6 +1,7 @@
 import { Activity, Copy, FileText, LayoutGrid, Plus } from "lucide-react";
 import { useCallback } from "react";
 import { useAppVersion, usePrompts } from "../../hooks/use-trpc";
+import { switchSection } from "../../lib/switch-section";
 import { useAppStore } from "../../stores/app";
 import { ResourcesOverview } from "./ResourcesOverview";
 import { SidebarSection } from "./SidebarSection";
@@ -18,9 +19,7 @@ function PinnedPrompts() {
   const navigateToPrompts = () => {
     if (projectId) {
       useAppStore.getState().setActiveView("workspace");
-      window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", { detail: { section: "prompts-skills" } }),
-      );
+      switchSection("prompts-skills");
     }
   };
 

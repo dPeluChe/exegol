@@ -59,14 +59,15 @@ app.whenReady().then(async () => {
   endMark("dbInit");
   ensureExegolMcpServerStarted(getDb()); // T163: the socket belongs to the app
   seedAgentLinkCache(getDb()); // T162: warm the in-memory has-links set
-  setMcpVerboseLogging(getAppSettings(getDb()).mcpVerboseLogging === true);
+  const settings = getAppSettings(getDb());
+  setMcpVerboseLogging(settings.mcpVerboseLogging === true);
   setDesktopChannelDb(getDb()); // T124: NotificationBus desktop channel settings lookup
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerFloatingIpcHandlers();
   registerSettingsIpcHandlers();
-  registerGlobalHotkey(getAppSettings(getDb()).globalHotkey, showMainWindow);
+  registerGlobalHotkey(settings.globalHotkey, showMainWindow);
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
   endMark("criticalPath");

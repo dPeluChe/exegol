@@ -22,6 +22,7 @@ import {
   useSettings,
   useWorktrees,
 } from "../../hooks/use-trpc";
+import { switchSection } from "../../lib/switch-section";
 import type { AgentState } from "../../stores/agents";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { VISIBLE_STATUSES } from "./AgentMiniCard";
@@ -315,9 +316,7 @@ export function ProjectItem({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  window.dispatchEvent(
-                    new CustomEvent("exegol:switch-section", { detail: { section: "pipelines" } }),
-                  );
+                  switchSection("pipelines");
                 }}
                 className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-accent/20 hover:text-accent"
                 title="Pipelines"

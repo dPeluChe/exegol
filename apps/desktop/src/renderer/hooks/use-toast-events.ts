@@ -1,5 +1,6 @@
 import type { NotificationMuteChannel, Settings } from "@exegol/shared";
 import { useEffect, useRef } from "react";
+import { switchSection } from "../lib/switch-section";
 import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAttentionItem, useAgentStore } from "../stores/agents";
 import { useNotificationPrefsStore } from "../stores/notification-prefs";
@@ -81,11 +82,7 @@ export function useToastEvents(): void {
 
     // ── Notification navigate (system notification click) ───────────────
     const unsubNav = window.api.onNotificationNavigate?.((data) => {
-      window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", {
-          detail: { section: "agents" },
-        }),
-      );
+      switchSection("agents");
       // T155.3: land on the exact pane of the agent that raised the notification
       const agent = useAgentStore.getState().agents[data.agentId];
       if (agent) jumpToAttentionItem(data.agentId, agent.projectId);

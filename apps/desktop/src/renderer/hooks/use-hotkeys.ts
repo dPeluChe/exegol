@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAttentionItem, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
@@ -94,8 +93,7 @@ export function useHotkeys() {
       // Cmd+.: Stop focused agent
       if (e.key === ".") {
         e.preventDefault();
-        const { focusedAgentId } = useAgentStore.getState();
-        if (focusedAgentId) trpcMutate("agents.stop", { id: focusedAgentId }).catch(() => {});
+        useAgentStore.getState().stopFocusedAgent();
         return;
       }
 

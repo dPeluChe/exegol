@@ -2,6 +2,7 @@ import type { Worktree } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { FolderOpen, GitBranch, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { switchSection } from "../../lib/switch-section";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { AgentState } from "../../stores/agents";
 import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
@@ -28,9 +29,7 @@ export function BranchGroup({
 
   const handleViewChanges = () => {
     if (!worktree) return;
-    window.dispatchEvent(
-      new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-    );
+    switchSection("agents");
     const store = useWorkspaceStore.getState();
     const activeTab = store.getActiveTab();
     if (!activeTab) return;
@@ -79,9 +78,7 @@ export function BranchGroup({
             <button
               type="button"
               onClick={() => {
-                window.dispatchEvent(
-                  new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-                );
+                switchSection("agents");
                 const store = useWorkspaceStore.getState();
                 const activeTab = store.getActiveTab();
                 if (activeTab) {

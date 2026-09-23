@@ -253,8 +253,8 @@ function checkStaleWorktrees(db: Database.Database): DoctorCheck {
 // ─── Main entry ─────────────────────────────────────────────────────────────
 
 export async function runDoctorChecks(db: Database.Database): Promise<DoctorReport> {
-  const { ollamaUrl: url, ollamaModel: model } = getAppSettings(db);
-  const ollamaConfig = { url, model };
+  const s = getAppSettings(db);
+  const ollamaConfig = { url: s.ollamaUrl, model: s.ollamaModel };
   const [cliChecks, gitVersion, ghAvailable, ollama, mcpCheck] = await Promise.all([
     runCliDetection(),
     checkGitVersion(),

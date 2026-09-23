@@ -131,10 +131,7 @@ function useCommands(close: () => void): Command[] {
         category: "agent",
         icon: Square,
         shortcut: "⌘.",
-        action: run(() => {
-          const { focusedAgentId } = useAgentStore.getState();
-          if (focusedAgentId) trpcMutate("agents.stop", { id: focusedAgentId }).catch(() => {});
-        }),
+        action: run(() => useAgentStore.getState().stopFocusedAgent()),
       },
 
       // Dynamic: running agents

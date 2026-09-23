@@ -1,6 +1,7 @@
 import { ScrollArea, Separator } from "@exegol/ui";
 import { Activity, Cuboid, History, LayoutDashboard, Plus, Rss } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
+import { switchSection } from "../../lib/switch-section";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { ActivityFeed } from "./ActivityFeed";
@@ -32,11 +33,7 @@ export function Sidebar() {
           dashboard sits above everything — one click from anywhere. */}
       <button
         type="button"
-        onClick={() =>
-          window.dispatchEvent(
-            new CustomEvent("exegol:switch-section", { detail: { section: "agent-dashboard" } }),
-          )
-        }
+        onClick={() => switchSection("agent-dashboard")}
         className="mx-3 mt-2 flex shrink-0 items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-1.5 text-xs font-semibold text-text-primary transition-colors hover:bg-accent/20"
       >
         <LayoutDashboard className="h-3.5 w-3.5 text-accent" />
