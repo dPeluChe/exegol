@@ -8,14 +8,7 @@ import type {
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
-import { useToastStore } from "../stores/toasts";
-
-const toastError = (title: string) => (err: unknown) =>
-  useToastStore.getState().addToast({
-    type: "error",
-    title,
-    body: err instanceof Error ? err.message : String(err),
-  });
+import { toastError } from "../stores/toasts";
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 

@@ -1,11 +1,11 @@
 import { access, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, extname, join, resolve } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog } from "electron";
 import { z } from "zod";
 import { listProjects } from "../../db/queries";
-import { isPathAllowed } from "../../security/path-guard";
+import { isPathAllowed, isProtectedRoot } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 
 const EXTENSION_LANGUAGES: Record<string, string> = {
@@ -48,14 +48,15 @@ const IGNORED_NAMES = new Set([
  * Uses realpath + relative() to prevent both symlink traversal and prefix
  * confusion attacks (e.g. /repo/app matching /repo/app-evil via startsWith).
  */
+function allowedBases(ctx: { db: import("libsql").Database }): string[] {
+  return [...listProjects(ctx.db).map((p) => p.path), resolve(homedir(), ".exegol")];
+}
+
 async function assertPathInsideProject(
   filePath: string,
   ctx: { db: import("libsql").Database },
 ): Promise<void> {
-  const projects = listProjects(ctx.db);
-  const exegolDir = resolve(require("node:os").homedir(), ".exegol");
-  const allowedBases = [...projects.map((p) => p.path), exegolDir];
-  const allowed = await isPathAllowed(filePath, allowedBases);
+  const allowed = await isPathAllowed(filePath, allowedBases(ctx));
   if (!allowed) {
     throw new TRPCError({
       code: "FORBIDDEN",
@@ -144,12 +145,7 @@ export const filesRouter = router({
 
   delete: publicProcedure.input(z.object({ path: z.string() })).mutation(async ({ ctx, input }) => {
     await assertPathInsideProject(input.path, ctx);
-    const target = resolve(input.path);
-    const roots = [
-      ...listProjects(ctx.db).map((p) => resolve(p.path)),
-      resolve(homedir(), ".exegol"),
-    ];
-    if (roots.includes(target) || basename(target) === ".git") {
+    if (isProtectedRoot(input.path, allowedBases(ctx))) {
       throw new TRPCError({
         code: "FORBIDDEN",
         message: "Refusing to delete a project root or .git",

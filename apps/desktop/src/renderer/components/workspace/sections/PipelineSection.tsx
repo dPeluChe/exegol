@@ -62,6 +62,8 @@ export function PipelineSection() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [useWorktree, setUseWorktree] = useState(true);
   const [task, setTask] = useState("");
+  const trimmedTask = task.trim();
+  const canRun = !!selectedTemplateId && !!trimmedTask;
   const [gitWarning, setGitWarning] = useState<string | null>(null);
 
   const selectedTemplate = templates?.find((t) => t.id === selectedTemplateId);
@@ -83,7 +85,7 @@ export function PipelineSection() {
   }
 
   const handleStartRun = async () => {
-    if (!projectId || !selectedTemplateId || !task.trim()) return;
+    if (!projectId || !canRun) return;
 
     // Check git sync before creating worktree
     if (useWorktree) {
@@ -106,7 +108,7 @@ export function PipelineSection() {
       {
         templateId: selectedTemplateId,
         projectId,
-        task: task.trim(),
+        task: trimmedTask,
         useWorktree,
       },
       {
@@ -151,12 +153,10 @@ export function PipelineSection() {
           <button
             type="button"
             onClick={handleStartRun}
-            disabled={!selectedTemplateId || !task.trim() || startRun.isPending}
+            disabled={!canRun || startRun.isPending}
             className={cn(
               "flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-medium shrink-0",
-              selectedTemplateId && task.trim()
-                ? "bg-accent text-white hover:bg-accent/90"
-                : "bg-white/5 text-text-muted",
+              canRun ? "bg-accent text-white hover:bg-accent/90" : "bg-white/5 text-text-muted",
             )}
           >
             <Play className="h-3 w-3" />

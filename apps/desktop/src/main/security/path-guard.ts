@@ -272,3 +272,9 @@ export async function assertSafePath(p: string, opts: { allowedBases: string[] }
   }
   return canonical;
 }
+
+/** Roots a recursive delete must never target: a registered base itself, or any `.git`. */
+export function isProtectedRoot(target: string, bases: string[]): boolean {
+  const real = realpathSafeSync(target);
+  return basename(real) === ".git" || bases.some((b) => realpathSafeSync(b) === real);
+}

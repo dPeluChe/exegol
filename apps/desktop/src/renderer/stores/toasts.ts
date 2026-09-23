@@ -41,3 +41,11 @@ export const useToastStore = create<ToastStore>((set) => ({
     set((state) => ({ toasts: state.toasts.filter((x) => x.id !== id) }));
   },
 }));
+
+/** onError handler for mutations: surfaces the server message instead of failing silently. */
+export const toastError = (title: string) => (err: unknown) =>
+  useToastStore.getState().addToast({
+    type: "error",
+    title,
+    body: err instanceof Error ? err.message : String(err),
+  });

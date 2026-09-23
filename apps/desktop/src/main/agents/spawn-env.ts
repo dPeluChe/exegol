@@ -283,22 +283,22 @@ let resolvedPath: string | null = null;
 
 /** Resolve the login-shell PATH off the main thread so the first spawn or Doctor run doesn't block on it. */
 export function warmShellPath(): void {
-  if (resolvedPath) return;
   exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
     // Overwrites a sync fallback too: the real shell PATH wins whenever it arrives
-    if (!err && stdout.trim()) adoptPath(stdout.trim());
+    if (!err && stdout.trim()) {
+      resolvedPath = stdout.trim();
+      process.env.PATH = resolvedPath;
+    }
   });
 }
 
-// Main's own execs (gh, git, lsof) inherit launchd's PATH when launched from Finder
-function adoptPath(path: string): void {
-  resolvedPath = path;
-  process.env.PATH = path;
-}
-
+// Adopted into process.env: main's own execs (gh, git, lsof) otherwise get launchd's PATH from Finder
 export function _getFullPath(): string {
-  if (!resolvedPath) adoptPath(getShellPath());
-  return resolvedPath as string;
+  if (!resolvedPath) {
+    resolvedPath = getShellPath();
+    process.env.PATH = resolvedPath;
+  }
+  return resolvedPath;
 }
 
 // ─── Worktree helpers ───────────────────────────────────────────────────

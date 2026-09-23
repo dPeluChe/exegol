@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
-import { createOplogEntry, listAgentOplog, listProjectOplog } from "../../db/queries";
+import { createOplogEntry, getAgent, listAgentOplog, listProjectOplog } from "../../db/queries";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
 
@@ -64,10 +64,7 @@ export const oplogRouter = router({
         message: "Worktree creation can't be undone here",
       });
     }
-    const agentRow = ctx.db
-      .prepare("SELECT worktree_id FROM agents WHERE id = ?")
-      .get(entry.agent_id as string) as { worktree_id: string | null } | undefined;
-    if (agentRow?.worktree_id) {
+    if (getAgent(ctx.db, entry.agent_id as string)?.worktreeId) {
       throw new TRPCError({
         code: "BAD_REQUEST",
         message: "This agent worked in a worktree; undo would rewrite the main checkout",

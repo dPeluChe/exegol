@@ -19,17 +19,17 @@ export const execFileAsync = promisify(execFile);
 
 // ─── gh CLI detection (cached) ─────────────────────────────────────────────
 
-let ghAvailable: boolean | null = null;
+let ghFound = false;
 export async function detectGhCli(): Promise<boolean> {
-  if (ghAvailable) return true;
+  if (ghFound) return true;
   // A miss is not cached: before the login-shell PATH lands, a Homebrew gh is invisible
   try {
     await execFileAsync("gh", ["--version"], { timeout: 3000 });
-    ghAvailable = true;
+    ghFound = true;
+    return true;
   } catch {
     return false;
   }
-  return true;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
