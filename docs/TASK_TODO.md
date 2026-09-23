@@ -496,10 +496,117 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
 
 ---
 
+### T184 — Learnings from fx, eve, pullfrog, openchamber and clay `added: 2026-08-22`
+**Priority**: P0 for item 1 (a shipped feature is dead) | **Effort**: varies | **Source**: 4-agent read
+of the repos Antonio brought + fx.sh docs. Clones under `_repos_2_learn/github.com/`. Every claim
+about OUR code below was reproduced before filing; two of the reviewers' claims did NOT reproduce
+and are recorded as refuted at the end.
+
+**P0 — a feature we built is defeated by our own prompt.**
+
+1. **`git diff HEAD` captures nothing once the agent commits.** `pipeline-helpers.ts:18` captures
+   `git diff HEAD` (uncommitted only), while `pipeline/context.ts:10` — our own `fix` step prompt —
+   ends with "Address all review comments **and commit**." Demonstrated on a scratch repo: after the
+   agent commits, `git diff HEAD` returns **0 lines** where `git diff --merge-base <base>` returns
+   the real 7. So `hasRealDiff` is false, the T88v2 evaluator gate answers "No diff to judge" every
+   time, and T130 emits no evidence. `merge-base` appears **zero times** in the whole repo. Needs a
+   base ref recorded at worktree creation. Also drop the 1 MB `maxBuffer`, which turns any larger
+   diff into `"(failed to capture git diff)"`.
+   → `main/pipeline/pipeline-helpers.ts:14-28`, `evaluator-step-handler.ts:56`, `evidence.ts:17`
+
+**Latent bugs in the sidecar (openchamber).** All three verified:
+
+2. **Nothing answers a terminal query while detached.** The sidecar only ever writes to its clients,
+   never back into the PTY — so with no xterm attached (the normal case for a background agent) a
+   shell's DA1/colour queries go unanswered and fish waits ~10s at startup. Their note names it
+   exactly: "the DA1 fallback prevents Fish from waiting ten seconds for a renderer that cannot
+   observe or answer its startup query." Note T183.1 answers OSC 10/11/12 in the RENDERER only, so
+   this is the other half of that fix.
+3. **The ring buffer replays query sequences.** Replay is raw ANSI, so every reattach re-asks the new
+   xterm every question the shell ever asked. They store history sanitized (DSR, CPR, DA1, Mode 2031,
+   OSC 10-12 stripped) while the live stream stays byte-identical — two paths, not one.
+4. **We kill the previous sidecar by pid without verifying identity.** `ensureSidecar` SIGTERMs then
+   SIGKILLs a live-but-unresponsive pid with no check that it is still ours; a recycled pid gets
+   killed. Theirs keeps one file per process with `{pid, ownerPid, port, binary}` and re-verifies the
+   live process before killing, only when `ppid === 1` or the owner is dead.
+
+**Spawn and lifecycle (pullfrog).**
+
+5. **A failing `beforeAgent` silently prevents the agent from starting.** `agent-spawn-flow.ts:299`
+   builds `beforeAgent && <command>`; `&&` short-circuits, so a failed `npm install` means the CLI
+   never launches and nothing says why. They run the hook separately, capture structured failure, and
+   TELL THE AGENT in a dedicated `SETUP HOOK FAILED` prompt section. Their hook timeout is 10 min;
+   ours is 2, too short for a cold install.
+6. **We check that an API key exists, never that it works.** `doctor.ts:339` tests for a non-empty
+   string, so a revoked key passes the doctor and fails inside a PTY at spawn. Their 40-line liveness
+   probe returns `alive | dead | unknown` with a 5s timeout, and only lists providers whose live-200
+   AND bad-key rejection have both been measured — `unknown` never rewrites a working config.
+7. **Evaluator output is regex-scraped** with a silent score-0 fallback (`evaluator.ts:83-91`). They
+   compile a JSON Schema into the tool's parameter schema and hard-fail the run if the tool was never
+   called.
+8. **Merge PR has no guard.** `diff-pr.ts:63` hardcodes `--squash --delete-branch`; they refuse a
+   direct merge when the base is unprotected ("base branch not protected — refusing CI-ungated
+   merge") and prefer GitHub-native auto-merge with `expectedHeadOid`.
+9. **PR body is `--fill`** — body = commit messages, no footer, no link back to the agent run. Their
+   sentinel-delimited footer with strip-before-append makes PR-body updates idempotent, and records
+   which model ran and WHY a model was substituted.
+10. **Stop-hook gate.** A 15-line bash hook curls a localhost server that can answer
+    `{decision:"block", reason}` — the agent cannot end its turn with a dirty tree or an unmet
+    contract. We already write per-agent hook settings AND already run a node binary from a PreToolUse
+    hook, so the plumbing exists. Highest leverage per line in that repo.
+11. **Effort as a `[0,1]` position** mapped onto each CLI's own published ladder, always rounding
+    DOWN so it can never cost more than asked. We have no effort concept at all.
+12. **Lazy context: hand paths and tool names, not payloads.** They inline nothing — the diff arrives
+    as a path, learnings as a heading TOC with line ranges, explicitly so the body is "never inlined,
+    that would re-inflate context every run." Pairs with T183 item 11 (file-based pipeline handoff).
+
+**Context budgeting (clay + monocode, same piece from two sides).**
+
+13. **Deterministic pre-compaction, ~30 lines and no API call**: at 90% of budget keep the last N
+    turns whole and collapse older TOOL RESULTS to a marker. LLM summarization stays a manual user
+    action, and their reasoning is the part worth keeping: an automatic LLM compaction "risks failing
+    exactly when the context is already overloaded." We have no compaction logic at all — only
+    `diff-budget.ts` and a 2000-token memory cap.
+
+**Observability (clay).**
+
+14. **The state we scrape for is a first-class variable inside these CLIs and is never emitted.**
+    clay has `CLAY_APP_PROMPTING` with a state-change hook, and its own comment says the opaque slot
+    is "for the driver (the main loop today, an agent daemon later)". Confirms T123's hook approach is
+    the right shape and that scraping is what is left when a CLI exposes nothing.
+15. **A CLI's own journal is a liveness signal, not just history.** clay writes a turn as `"pending"`
+    BEFORE the request and rewrites it after, so a trailing `pending` means "running right now" —
+    scrape-free, ANSI-immune. Extends T181's store readers from "what happened" to "what is happening".
+
+**Permissions (fx).** Their model is worth adopting as a FRAMING: read/list/glob/search need no
+approval, only state-changing calls do, and an approval grants exactly the scope shown rather than a
+category. Our access modes are a sentence in the prompt plus an env var — not a gate. The T175 claim
+guard is the only thing that actually intercepts, and only for claude-code.
+
+**Refuted — recorded so nobody re-files them:**
+- *"History expansion breaks the spawn"*: measured on a real PTY with histexpand confirmed active
+  (control: `echo !e` expanded). `!`, `!important` and `!!` inside our quoted heredoc all pass, because
+  bash history-expands only the FIRST line of a command and our prompt text is always a continuation
+  line. Bracketed paste is on and we do not wrap the payload — fragile, not broken.
+- *"Spawn context is rebuilt uncached every spawn"*: the expensive part already is cached —
+  `skills/loader.ts:49` memoizes the per-skill `execSync` binary checks with a TTL. File reads and the
+  MCP tool context are rebuilt, which is cheap.
+
+**Explicitly NOT worth copying:** pullfrog's Linux/CI-only namespace sandbox (wrong threat model —
+our agent runs as the user on the user's machine) and its bot-identity commit authorship (T142 already
+ruled that out; single human identity keeps CODEOWNERS working); openchamber's five-surface matrix,
+12-locale i18n, client-side multi-run, and in-process server (our sidecar is why terminals survive a
+reload); clay's NULL-absorbing JSON accessors and first-word command allowlist.
+
+---
+
 ### T183 — Learnings from monocode, mcp_agent_mail_rust and proliferate `added: 2026-08-19`
 **Priority**: P1 for items 1-3 | **Effort**: varies | **Source**: 3-agent read of the repos Antonio
 brought (2026-08-19). Clones under `_repos_2_learn/github.com/`. Every claim about OUR code below
 was re-verified before filing.
+
+(Terminal fidelity — alt-screen fit and OSC 10/11/12 replies — shipped 2026-08-19; see
+`TASK_COMPLETED/2608.md`.)
 
 **The two product-level misses (monocode).**
 

@@ -18,6 +18,15 @@ export function createShellIntegrationState(): ShellIntegrationState {
 export interface OscHandlerDeps {
   setCwd: (cwd: string) => void;
   setLastExit: (code: number | null) => void;
+  /** Current theme colors, read at ANSWER time so a theme switch mid-session is
+   *  reflected without re-registering handlers. */
+  getColors?: () => TerminalColors;
+}
+
+export interface TerminalColors {
+  foreground: string;
+  background: string;
+  cursor: string;
 }
 
 export interface OscHandlersDisposable {
@@ -31,6 +40,20 @@ export function registerOscHandlers(
   state: ShellIntegrationState = createShellIntegrationState(),
 ): OscHandlersDisposable {
   let marker: IMarker | null = null;
+
+  // OSC 10/11/12 — foreground / background / cursor queries. A TUI that asks
+  // and gets no answer picks its own palette, which is why vim, delta and lazygit
+  // render with colors that fight the app's theme inside our panes. Answering is
+  // ~10 lines and makes them match.
+  const colorQueries = COLOR_QUERY_CODES.map(({ code, pick }) =>
+    term.parser.registerOscHandler(code, (data) => {
+      // Only a QUERY is answered. `OSC 11 ; rgb:...` is an app SETTING the color,
+      // and echoing a reply to that would be a report nobody asked for.
+      if (data.trim() !== "?" || !deps.getColors) return false;
+      term.input(`\u001b]${code};${toXParseColor(pick(deps.getColors()))}\u001b\\`, false);
+      return true;
+    }),
+  );
 
   const osc7 = term.parser.registerOscHandler(7, (data) => {
     // SSH spoofing guard: only honor OSC 7 emitted between commands. Output
@@ -68,6 +91,7 @@ export function registerOscHandlers(
   return {
     getPromptMarker: () => (marker && !marker.isDisposed ? marker : null),
     dispose: () => {
+      for (const q of colorQueries) q.dispose();
       osc7.dispose();
       osc133.dispose();
       marker?.dispose();
@@ -99,4 +123,22 @@ function parseOsc133D(data: string): number | null {
   if (raw === "") return null;
   const code = Number.parseInt(raw, 10);
   return Number.isFinite(code) ? code : null;
+}
+
+const COLOR_QUERY_CODES: Array<{ code: number; pick: (c: TerminalColors) => string }> = [
+  { code: 10, pick: (c) => c.foreground },
+  { code: 11, pick: (c) => c.background },
+  { code: 12, pick: (c) => c.cursor },
+];
+
+/**
+ * `#rrggbb` → `rgb:rrrr/gggg/bbbb`, the XParseColor form terminals reply in.
+ * Each channel is doubled because the format is 16 bits per channel; sending
+ * 8-bit values makes every color read as half as bright.
+ */
+export function toXParseColor(hex: string): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex.trim());
+  if (!m) return "rgb:0000/0000/0000";
+  const [, r, g, b] = m as unknown as [string, string, string, string];
+  return `rgb:${r}${r}/${g}${g}/${b}${b}`.toLowerCase();
 }
