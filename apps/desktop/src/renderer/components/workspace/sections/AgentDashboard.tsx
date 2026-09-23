@@ -13,6 +13,7 @@ import {
   Cpu,
   Eye,
   Map as MapIcon,
+  Pin,
   Send,
   Square,
   XCircle,
@@ -23,6 +24,7 @@ import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
+import { useWatchStore } from "../../../stores/watch";
 import {
   collectPaneIds,
   selectPanes,
@@ -33,6 +35,7 @@ import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
+import { WatchingSection } from "./WatchingSection";
 import { WorktreesCard } from "./WorktreesCard";
 
 const STATUS_CONFIG: Record<
@@ -371,6 +374,8 @@ export function AgentDashboard() {
           </div>
         </div>
 
+        <WatchingSection projectMeta={projectMeta} onOpenAgent={navigateToAgent} />
+
         <WorktreesCard />
 
         {groups.map((group) => (
@@ -437,6 +442,8 @@ function AgentCard({
   const StatusIcon = config.icon;
   const canPeek = LIVE_STATUSES.has(agent.status);
   const [peekOpen, setPeekOpen] = useState(false);
+  const watching = useWatchStore((s) => s.watched.includes(agent.id));
+  const toggleWatch = useWatchStore((s) => s.toggleWatch);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: nested interactive children (peek button/input) prevent <button>
@@ -519,6 +526,25 @@ function AgentCard({
               <span className="truncate rounded bg-white/5 px-1 py-0.5 font-mono text-[9px]">
                 {agent.branchName}
               </span>
+            )}
+            {canPeek && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleWatch(agent.id);
+                }}
+                className={cn(
+                  "flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] hover:bg-white/10",
+                  watching ? "text-accent" : "text-text-muted hover:text-text-primary",
+                )}
+                title={
+                  watching ? "Stop watching" : "Watch: pin a live terminal to the top of Overview"
+                }
+              >
+                <Pin className="h-3 w-3" />
+                {watching ? "Watching" : "Watch"}
+              </button>
             )}
             {canPeek && (
               <button

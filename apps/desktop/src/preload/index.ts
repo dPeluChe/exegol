@@ -94,6 +94,23 @@ contextBridge.exposeInMainWorld("api", {
      *  needed, arrives on terminal:data so it stays ordered with live output. */
     setVisible: (id: string, visible: boolean): Promise<void> =>
       safe.invoke("terminal:set-visible", id, visible),
+    /** The PTY's current grid (T194 mirrors), null when the session is gone */
+    getSize: (id: string): Promise<{ cols: number; rows: number } | null> =>
+      safe.invoke("terminal:get-size", id),
+    onResized: (id: string, callback: (cols: number, rows: number) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        termId: string,
+        cols: number,
+        rows: number,
+      ): void => {
+        if (termId === id) callback(cols, rows);
+      };
+      safe.on("terminal:resized", handler as never);
+      return () => {
+        safe.off("terminal:resized", handler as never);
+      };
+    },
     /** Save clipboard image as temp file, returns file path or null */
     saveClipboardImage: (): Promise<string | null> => safe.invoke("terminal:save-clipboard-image"),
   },

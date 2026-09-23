@@ -2,6 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
+import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
   type OscHandlersDisposable,
@@ -21,6 +22,11 @@ export interface TerminalSessionDeps {
   /** With readOnly: still replay the snapshot + stream live PTY output
    *  (T156 dashboard mini-terminal) — input stays disabled, PTY never resized. */
   liveFeed?: boolean;
+  /** T194 Overview mirror: interactive, but the owning pane answers terminal
+   *  queries and owns the PTY size. */
+  mirror?: boolean;
+  /** Mirror only: the PTY grid, reported once it is read (before the snapshot lands) */
+  onPtySize?: (size: { cols: number; rows: number }) => void;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -159,7 +165,8 @@ export function setupTerminalSession(
 
     disposables.push(
       terminal.onData((data) => {
-        window.api.terminal.write(deps.agentId, data);
+        const out = deps.mirror ? stripTerminalReports(data) : data;
+        if (out) window.api.terminal.write(deps.agentId, out);
       }),
     );
 
@@ -185,13 +192,28 @@ export function setupTerminalSession(
       }
     });
 
-    window.api.terminal.getSnapshot(deps.agentId).then((snapshot) => {
-      if (liveDisposed) return;
-      if (snapshot) terminal.write(snapshot);
-      snapshotResolved = true;
-      for (const chunk of liveBuffer) dormantPipe.push(chunk);
-      liveBuffer.length = 0;
-    });
+    // A mirror must be at the PTY's grid BEFORE the snapshot lands, or history
+    // written at 80 columns wraps differently from the pane that owns it
+    const sized = deps.mirror
+      ? window.api.terminal
+          .getSize(deps.agentId)
+          .then((size) => {
+            if (!size || liveDisposed) return;
+            terminal.resize(size.cols, size.rows);
+            deps.onPtySize?.(size);
+          })
+          .catch(() => {})
+      : Promise.resolve();
+
+    sized
+      .then(() => window.api.terminal.getSnapshot(deps.agentId))
+      .then((snapshot) => {
+        if (liveDisposed) return;
+        if (snapshot) terminal.write(snapshot);
+        snapshotResolved = true;
+        for (const chunk of liveBuffer) dormantPipe.push(chunk);
+        liveBuffer.length = 0;
+      });
 
     disposables.push({
       dispose: () => {
@@ -261,6 +283,31 @@ export function fitAndSyncSize(
     const { cols, rows } = terminal;
     onSize(cols, rows);
     if (!readOnly) window.api.terminal.resize(agentId, cols, rows);
+  } catch {
+    /* container may not be ready */
+  }
+}
+
+/**
+ * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
+ * the owning pane, and shrinks its font to fit the card instead of resizing.
+ */
+export function fitMirror(
+  terminal: Terminal,
+  size: { cols: number; rows: number },
+  baseFontSize: number,
+): void {
+  try {
+    if (terminal.cols !== size.cols || terminal.rows !== size.rows) {
+      terminal.resize(size.cols, size.rows);
+    }
+    const host = measureHost(terminal);
+    const cell = measureCell(terminal);
+    if (!host?.width || !cell) return;
+    const current = terminal.options.fontSize ?? baseFontSize;
+    const target = (current * host.width) / (size.cols * cell.width);
+    const next = Math.floor(Math.max(6, Math.min(baseFontSize, target)) * 4) / 4;
+    if (Math.abs(next - current) >= 0.25) terminal.options.fontSize = next;
   } catch {
     /* container may not be ready */
   }

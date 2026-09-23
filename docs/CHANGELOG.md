@@ -11,6 +11,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 First release since 0.4.4. Groups the three unreleased batches below.
 
+### Overview watch list (T194)
+- Pin sessions from any project to Overview ("Watch") and work in them from there: each is a live,
+  interactive terminal mirror that never resizes or disturbs the original session
+- Sessions waiting for input open and sort first; "Open" jumps to the project and pane
+
 ### Pre-build audit fixes
 - Undo works in the packaged app; tray icon ships; worktree archive hook runs
 - A queued agent message can no longer type into a permission dialog that was redrawn

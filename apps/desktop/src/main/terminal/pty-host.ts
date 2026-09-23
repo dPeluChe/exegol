@@ -289,6 +289,11 @@ export class PtyHost {
     this.sidecarClient?.kill(id).catch(() => {});
   }
 
+  /** The PTY's real grid; mirrors render at this size instead of resizing it. */
+  getSize(id: string): { cols: number; rows: number } | null {
+    return this.sessions.get(id)?.emulator.size ?? null;
+  }
+
   getSnapshot(id: string): string | null {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }

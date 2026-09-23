@@ -7,6 +7,7 @@ import { useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { useWatchStore } from "../../stores/watch";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentStopReason } from "./AgentStopReason";
 import { ChatView } from "./ChatView";
@@ -81,6 +82,7 @@ export function TerminalScrollback({
       resumeFromAgentId: canResume ? agent.id : undefined,
     });
 
+    if (newAgent?.id) useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
     if (paneId && newAgent?.id) {
       removeAgent(agent.id);
       trpcMutate("agents.delete", { id: agent.id }).catch(() => {});

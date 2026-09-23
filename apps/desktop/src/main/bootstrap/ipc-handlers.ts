@@ -30,6 +30,12 @@ export function registerIpcHandlers(): void {
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
     const manager = getAgentManager();
     manager.resize(agentId, cols, rows);
+    // Overview mirrors follow the owner's size; they never resize the PTY themselves
+    broadcast("terminal:resized", agentId, cols, rows);
+  });
+
+  ipcMain.handle("terminal:get-size", (_event, agentId: string) => {
+    return getPtyHost().getSize(agentId);
   });
 
   // Terminal snapshot: replay ring buffer content for late-mounting terminals

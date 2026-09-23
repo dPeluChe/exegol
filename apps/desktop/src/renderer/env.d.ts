@@ -62,6 +62,8 @@ interface Window {
       /** T178: report whether this view can draw the agent. A repaint, when one
        *  is needed, arrives on terminal:data so it stays ordered. */
       setVisible: (id: string, visible: boolean) => Promise<void>;
+      getSize: (id: string) => Promise<{ cols: number; rows: number } | null>;
+      onResized: (id: string, callback: (cols: number, rows: number) => void) => () => void;
       saveClipboardImage: () => Promise<string | null>;
     };
     app: {

@@ -8,11 +8,13 @@ import {
   GitBranch,
   Loader2,
   MessageSquare,
+  Pin,
   Shield,
   ShieldAlert,
   TerminalSquare,
   X,
 } from "lucide-react";
+import { useWatchStore } from "../../stores/watch";
 import { SessionAlias } from "../common/SessionAlias";
 
 interface TerminalToolbarProps {
@@ -47,7 +49,10 @@ export function TerminalToolbar({
     // occupy the right edge and were covering them (verify session 2026-08-11).
     <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
       {agent && agent.cliType !== "shell" && (
-        <SessionAlias agent={agent} textClassName="text-[10px]" />
+        <>
+          <SessionAlias agent={agent} textClassName="text-[10px]" />
+          <WatchToggle agentId={agent.id} />
+        </>
       )}
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {branchName && (
@@ -73,6 +78,29 @@ export function TerminalToolbar({
         <PreviewUrlChip url={previewUrl} onOpen={onOpenPreview} onDismiss={onDismissPreview} />
       )}
     </div>
+  );
+}
+
+// ─── T194: pin this session to the Overview watch list ─────────────────────
+
+function WatchToggle({ agentId }: { agentId: string }) {
+  const watching = useWatchStore((s) => s.watched.includes(agentId));
+  const toggleWatch = useWatchStore((s) => s.toggleWatch);
+  return (
+    <button
+      type="button"
+      onClick={() => toggleWatch(agentId)}
+      className={cn(
+        "flex items-center gap-0.5 rounded px-1 text-[9px] hover:bg-white/10",
+        watching ? "text-accent" : "text-text-muted hover:text-text-secondary",
+      )}
+      title={
+        watching ? "Stop watching in Overview" : "Watch in Overview: work on it from any project"
+      }
+    >
+      <Pin className="h-2.5 w-2.5" />
+      {watching ? "Watching" : "Watch"}
+    </button>
   );
 }
 

@@ -280,6 +280,8 @@
     "terminal:resize",
     "terminal:get-snapshot",
     "terminal:save-clipboard-image",
+    "terminal:get-size",
+    "terminal:resized",
     "app:version",
     "menu:new-tab",
     "menu:close-pane",
