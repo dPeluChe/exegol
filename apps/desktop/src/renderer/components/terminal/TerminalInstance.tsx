@@ -35,6 +35,9 @@ export type { TerminalInstanceHandle, TerminalInstanceProps } from "./terminal-t
  *  backgrounded agent stops paying IPC almost immediately. */
 const HIDE_DEBOUNCE_MS = 1_500;
 
+/** Sessions already kicked by this renderer (see the mount kick) */
+const kickedSessions = new Set<string>();
+
 function paneIdForAgentSelector(
   state: ReturnType<typeof useWorkspaceStore.getState>,
   agentId: string,
@@ -80,6 +83,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const dormantPipeRef = useRef<DormantPipe | null>(null);
   const [isVisible, setIsVisible] = useState(true);
   const viewId = useId();
+  const reportedVisibleRef = useRef(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
   useImperativeHandle(ref, () => ({
@@ -183,30 +187,20 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to
     // a black pane after window reload — the ring replay can't repaint an alt
-    // screen, only the app can. A one-shot resize jiggle forces the redraw.
-    // Only when the PTY already had this pane's size: otherwise the fit's own
-    // resize delivered a SIGWINCH and the jiggle is two redraws for nothing.
-    let kickTimer2: ReturnType<typeof setTimeout> | null = null;
-    const sizeAtMount =
-      readOnly || mirror ? Promise.resolve(null) : window.api.terminal.getSize(agentId);
-    const kickTimer = setTimeout(async () => {
-      if (readOnly || mirror) return;
-      const t = session.terminal;
-      if (t.cols < 3) return;
-      const before = await sizeAtMount.catch(() => null);
-      if (before && (before.cols !== t.cols || before.rows !== t.rows)) return;
-      termDbg(`kick:${agentId}:${viewId}`, "SIGWINCH kick", {
-        agentId,
-        grid: `${t.cols}x${t.rows}`,
-      });
-      window.api.terminal.resize(agentId, t.cols - 1, t.rows);
-      kickTimer2 = setTimeout(() => window.api.terminal.resize(agentId, t.cols, t.rows), 60);
+    // screen, only the app can. Once per session per renderer: a pane that
+    // remounts on a project switch doesn't need it (two redraws for nothing),
+    // and a reload clears the set. Main does the jiggle without telling mirrors.
+    const kickTimer = setTimeout(() => {
+      if (readOnly || mirror || kickedSessions.has(agentId)) return;
+      if (session.terminal.buffer.active.type !== "alternate") return;
+      kickedSessions.add(agentId);
+      termDbg(`kick:${agentId}:${viewId}`, "SIGWINCH kick", { agentId });
+      window.api.terminal.redraw(agentId);
     }, 350);
 
     if (!mirror) setTerminalReady(agentId);
     onReady?.();
 
-    let resizeRaf: number | null = null;
     let mirrorFitTimer: ReturnType<typeof setTimeout> | null = null;
     let observedWidth = -1;
     const resizeObserver = new ResizeObserver(([entry]) => {
@@ -227,19 +221,14 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         mirrorFitTimer = setTimeout(refit, 120);
         return;
       }
-      if (resizeRaf) cancelAnimationFrame(resizeRaf);
-      resizeRaf = requestAnimationFrame(() => {
-        resizeRaf = null;
-        refit();
-      });
+      // ResizeObserver already fires at most once per frame
+      refit();
     });
     resizeObserver.observe(container);
 
     return () => {
       clearTimeout(settleTimer);
       clearTimeout(kickTimer);
-      if (kickTimer2) clearTimeout(kickTimer2);
-      if (resizeRaf) cancelAnimationFrame(resizeRaf);
       if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
       resizeObserver.disconnect();
       // WebGL context must be freed before the terminal itself is torn down.
@@ -311,7 +300,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // call only reports. Acquire/release: unmounting while visible must release
     // too, or the view stays registered and the gate never engages again.
     termDbg(`vis:${agentId}:${viewId}`, "visible", { agentId, viewId, mirror, visible: true });
-    window.api.terminal.setVisible(agentId, true, viewId).catch(() => {});
+    // First report of this view: its mount already fetched a snapshot
+    const fresh = !reportedVisibleRef.current;
+    reportedVisibleRef.current = true;
+    window.api.terminal.setVisible(agentId, true, viewId, fresh).catch(() => {});
     return () => {
       termDbg(`vis:${agentId}:${viewId}`, "visible", { agentId, viewId, mirror, visible: false });
       window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
@@ -354,13 +346,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       const fit = fitAddonRef.current;
       if (!terminal || !fit || mirror) return;
       try {
-        fit.fit();
-        if (!readOnly && terminal.cols > 2) {
-          window.api.terminal.resize(agentId, terminal.cols - 1, terminal.rows);
-          setTimeout(() => {
-            window.api.terminal.resize(agentId, terminal.cols, terminal.rows);
-          }, 60);
-        }
+        handleResize();
+        if (!readOnly) window.api.terminal.redraw(agentId);
         terminal.refresh(0, terminal.rows - 1);
       } catch {
         /* not ready */
@@ -368,7 +355,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     };
     window.addEventListener("exegol:kick-terminal", handleKick);
     return () => window.removeEventListener("exegol:kick-terminal", handleKick);
-  }, [agentId, mirror, readOnly]);
+  }, [agentId, mirror, readOnly, handleResize]);
 
   useEffect(() => {
     const handleWindowResize = () => handleResize();

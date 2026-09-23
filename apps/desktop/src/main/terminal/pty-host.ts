@@ -1,4 +1,5 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { HeadlessEmulator, type SessionSnapshot } from "./headless-emulator";
 import {
@@ -27,6 +28,9 @@ export type { SessionCallbacks } from "./pty-session-types";
 
 export class PtyHost {
   private sessions = new Map<string, Session>();
+  /** A pane can mount (and size itself) before its session is reattached;
+   *  that size was dropped, so the PTY kept its old grid until the next resize */
+  private pendingSizes = new Map<string, { cols: number; rows: number }>();
   private activeSpawns = 0;
   private spawnQueue: Array<() => void> = [];
   private sidecarClient: SidecarClient | null = null;
@@ -153,6 +157,13 @@ export class PtyHost {
     } catch {
       // Snapshot unavailable — session still reattaches, just without scrollback history
     }
+
+    const pending = this.pendingSizes.get(id);
+    if (pending) {
+      this.pendingSizes.delete(id);
+      this.resize(id, pending.cols, pending.rows);
+      broadcast("terminal:resized", id, pending.cols, pending.rows);
+    }
   }
 
   /** Create a new PTY session — uses sidecar if available, falls back to subprocess */
@@ -162,6 +173,7 @@ export class PtyHost {
     callbacks: SessionCallbacks,
     options?: { scrollbackPath?: string; shellReadyGating?: boolean; smallRingBuffer?: boolean },
   ): Promise<{ pid: number }> {
+    this.pendingSizes.delete(id);
     if (this.sidecarClient?.isConnected()) {
       return this.doCreateSidecar(id, spawnOpts, callbacks, options);
     }
@@ -256,10 +268,31 @@ export class PtyHost {
 
   resize(id: string, cols: number, rows: number): void {
     const s = this.sessions.get(id);
-    if (!s?.alive) return;
+    if (!s) {
+      this.pendingSizes.set(id, { cols, rows });
+      return;
+    }
+    if (!s.alive) return;
     s.emulator.resize(cols, rows);
+    this.resizePty(s, cols, rows);
+  }
+
+  /** Make the CLI repaint at its current size: a size change is the only
+   *  signal every TUI honours. The model keeps its real grid throughout. */
+  redraw(id: string): void {
+    const s = this.sessions.get(id);
+    if (!s?.alive) return;
+    const { cols, rows } = s.emulator.size;
+    if (cols < 3) return;
+    this.resizePty(s, cols - 1, rows);
+    setTimeout(() => {
+      if (s.alive) this.resizePty(s, s.emulator.size.cols, s.emulator.size.rows);
+    }, 60);
+  }
+
+  private resizePty(s: Session, cols: number, rows: number): void {
     if (s.mode === "sidecar") {
-      this.sidecarClient?.resize(id, cols, rows).catch(() => {});
+      this.sidecarClient?.resize(s.id, cols, rows).catch(() => {});
       return;
     }
     try {

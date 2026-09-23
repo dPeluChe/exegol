@@ -34,17 +34,20 @@ export function registerIpcHandlers(): void {
 
   ipcMain.on("terminal:resize", (event, agentId: string, cols: number, rows: number) => {
     const before = getPtyHost().getSize(agentId);
-    if (before?.cols !== cols || before?.rows !== rows) {
-      logger.debug(
-        `[TermDbg:main] PTY resize ${agentId} ${before?.cols}x${before?.rows} -> ${cols}x${rows} (w${event.sender.id})`,
-      );
-    }
+    // A drag re-sends the same grid every frame; each would be a sidecar RPC
+    if (before?.cols === cols && before?.rows === rows) return;
+    logger.debug(
+      `[TermDbg:main] PTY resize ${agentId} ${before?.cols}x${before?.rows} -> ${cols}x${rows} (w${event.sender.id})`,
+    );
     getAgentManager().resize(agentId, cols, rows);
-    // Overview mirrors follow the owner's size; they never resize the PTY themselves.
-    // Only real changes: a pane drag re-sends the same grid every frame.
-    if (before?.cols !== cols || before?.rows !== rows) {
-      broadcast("terminal:resized", agentId, cols, rows);
-    }
+    // Overview mirrors follow the owner's size; they never resize the PTY themselves
+    if (before) broadcast("terminal:resized", agentId, cols, rows);
+  });
+
+  // Repaint without telling mirrors: the jiggle is not a real size change
+  ipcMain.on("terminal:redraw", (_event, agentId: string) => {
+    logger.debug(`[TermDbg:main] redraw ${agentId}`);
+    getPtyHost().redraw(agentId);
   });
 
   ipcMain.handle("terminal:get-size", (_event, agentId: string) => {
@@ -61,7 +64,7 @@ export function registerIpcHandlers(): void {
    *  the model instead of resuming mid-stream on a screen that moved on. */
   ipcMain.handle(
     "terminal:set-visible",
-    (event, agentId: string, visible: boolean, viewId: string) => {
+    (event, agentId: string, visible: boolean, viewId: string, fresh?: boolean) => {
       const viewerId = event.sender.id;
       if (!trackedSenders.has(viewerId)) {
         trackedSenders.add(viewerId);
@@ -73,7 +76,9 @@ export function registerIpcHandlers(): void {
         });
       }
       setTerminalViewerVisible(agentId, viewerId, visible, viewId);
-      if (!visible || !consumeMissedOutput(agentId)) return;
+      // A view's first report comes from a mount that fetched its own snapshot:
+      // repainting it again would serialize and paint the screen twice
+      if (!visible || !consumeMissedOutput(agentId) || fresh) return;
       const snapshot = getPtyHost().getSnapshot(agentId);
       logger.debug(
         `[TermDbg:main] repaint ${agentId} for w${viewerId}/${viewId}: ${snapshot?.length ?? 0} chars`,

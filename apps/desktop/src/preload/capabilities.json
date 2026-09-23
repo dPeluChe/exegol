@@ -281,6 +281,7 @@
     "terminal:get-snapshot",
     "terminal:save-clipboard-image",
     "terminal:get-size",
+    "terminal:redraw",
     "debug:log",
     "terminal:resized",
     "app:version",
