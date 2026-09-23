@@ -370,7 +370,9 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           onDismissPreview={dismissPreview}
         />
       )}
-      <div className="relative flex-1">
+      {/* min-h-0: a flex item never shrinks below its content by default, so the
+          terminal's own rows set the box height and each fit stepped it down a row */}
+      <div className="relative min-h-0 flex-1">
         {viewMode === "chat" ? (
           <ChatView scrollback={liveSnapshot} cliType={agent?.cliType} />
         ) : (
