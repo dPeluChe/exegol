@@ -5,6 +5,7 @@ import { runMigrations } from "../db/migrations";
 import { createPipelineTemplate, createProject, getPipelineRun } from "../db/queries";
 import { logger } from "../lib/logger";
 import { PipelineExecutor } from "./executor";
+import { captureGitDiff, captureTree } from "./pipeline-helpers";
 
 const mocks = vi.hoisted(() => {
   const completionCallbacks = new Map<string, (exitCode: number) => void>();
@@ -51,6 +52,7 @@ vi.mock("./pipeline-helpers", () => ({
   YOLO_FLAGS: {},
   broadcastPipelineStatus: vi.fn(),
   captureGitDiff: vi.fn(async () => ""),
+  captureTree: vi.fn(async () => "tree"),
   readScrollbackSummary: vi.fn(async () => ""),
   now: () => Math.floor(Date.now() / 1000),
   checkGitSync: vi.fn(),
@@ -119,6 +121,37 @@ describe("PipelineExecutor", () => {
 
   afterEach(() => {
     warnSpy.mockRestore();
+  });
+
+  it("holds baseline failures without spawning an agent or inventing a resume baseline", async () => {
+    vi.mocked(captureTree).mockRejectedValueOnce(new Error("Git unavailable"));
+    const run = await executor.startRun(db, makeTemplate([step()]), projectId, "task", 5, false);
+    expect(run.status).toBe("paused");
+    expect(run.baseRevision).toBeNull();
+    expect(mocks.manager.spawn).not.toHaveBeenCalled();
+    await expect(executor.resumeRun(db, run.id)).rejects.toThrow("no Git baseline");
+  });
+
+  it("pauses before creating an agent when a step snapshot fails", async () => {
+    vi.mocked(captureTree)
+      .mockResolvedValueOnce("tree")
+      .mockRejectedValueOnce(new Error("index error"));
+    const run = await executor.startRun(db, makeTemplate([step()]), projectId, "task", 5, false);
+    expect(run.status).toBe("paused");
+    expect(run.baseRevision).toBeTruthy();
+    expect(run.stepResults).toEqual([]);
+    expect(mocks.manager.spawn).not.toHaveBeenCalled();
+    expect(db.prepare("SELECT COUNT(*) AS count FROM agents").get()).toMatchObject({ count: 0 });
+  });
+
+  it("persists run and step baselines and uses the step baseline on completion", async () => {
+    const run = await executor.startRun(db, makeTemplate([step()]), projectId, "task", 5, false);
+    expect(run.baseRevision).toBe(`refs/exegol/pipelines/${run.id}/base`);
+    expect(run.evidencePath).toBeTruthy();
+    const stepBase = run.stepResults[0]?.baseRevision;
+    expect(stepBase).toBeTruthy();
+    await completeCurrentStep(db, run.id, 0);
+    expect(captureGitDiff).toHaveBeenCalledWith(run.evidencePath, stepBase);
   });
 
   it("runs the valid path: pending → running → step advance → completed", async () => {

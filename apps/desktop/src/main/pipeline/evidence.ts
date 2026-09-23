@@ -16,11 +16,9 @@ import { getApiKey } from "../security/keystore";
 
 // captureGitDiff resolves these literal placeholders instead of empty string —
 // they must never reach the paid summary call or render as a "diff".
-const DIFF_PLACEHOLDERS = new Set(["(no changes)", "(failed to capture git diff)"]);
-
 export function isRealDiff(diff: string): boolean {
   const trimmed = diff.trim();
-  return trimmed.length > 0 && !DIFF_PLACEHOLDERS.has(trimmed);
+  return trimmed.startsWith("diff --git ");
 }
 
 /** Summarize a step's diff in 1-2 sentences via Haiku. Empty string on any
@@ -77,6 +75,7 @@ export function buildRunReport(run: PipelineRun, template: PipelineTemplate | nu
   lines.push("");
   lines.push(`**Task:** ${run.originalTask}`);
   lines.push(`**Status:** ${run.status}`);
+  if (run.baseRevision) lines.push(`**Git baseline:** ${run.baseRevision}`);
   if (run.iterationCount > 0)
     lines.push(`**Iterations:** ${run.iterationCount}/${run.maxIterations}`);
   lines.push("");
@@ -99,6 +98,10 @@ export function buildRunReport(run: PipelineRun, template: PipelineTemplate | nu
       lines.push("");
     }
 
+    if (result.diffSummary && !isRealDiff(result.diffSummary)) {
+      lines.push(result.diffSummary);
+      lines.push("");
+    }
     if (isRealDiff(result.diffSummary)) {
       const diff = result.diffSummary.trim();
       // A diff touching markdown can contain ``` — pick a fence that can't be escaped.

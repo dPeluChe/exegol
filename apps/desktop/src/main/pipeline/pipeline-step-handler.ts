@@ -42,9 +42,11 @@ export async function handleStepComplete(
   const run = getPipelineRun(db, runId);
   if (!run || run.status === "cancelled") return;
 
+  const evidencePath = run.evidencePath ?? run.worktreePath;
+  const baseRevision = run.stepResults.find((r) => r.agentId === agentId)?.baseRevision;
   const [outputSummary, diffSummary] = await Promise.all([
     readScrollbackSummary(agentId),
-    run.worktreePath ? captureGitDiff(run.worktreePath) : Promise.resolve(""),
+    evidencePath ? captureGitDiff(evidencePath, baseRevision) : Promise.resolve(""),
   ]);
 
   const stepDef = template.steps[stepIndex];

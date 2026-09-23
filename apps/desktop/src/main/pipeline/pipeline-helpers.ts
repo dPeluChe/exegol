@@ -12,21 +12,7 @@ export function broadcastPipelineStatus(event: PipelineStatusEvent): void {
   broadcast("pipeline:status-changed", event);
 }
 
-export async function captureGitDiff(worktreePath: string): Promise<string> {
-  return new Promise((resolve) => {
-    exec(
-      "git diff HEAD",
-      { cwd: worktreePath, encoding: "utf-8", timeout: 10_000, maxBuffer: 1024 * 1024 },
-      (err, stdout) => {
-        if (err) {
-          resolve("(failed to capture git diff)");
-        } else {
-          resolve(stdout || "(no changes)");
-        }
-      },
-    );
-  });
-}
+export { captureGitDiff, captureTree } from "./git-evidence";
 
 export async function readScrollbackSummary(agentId: string): Promise<string> {
   try {

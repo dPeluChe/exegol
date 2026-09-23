@@ -24,7 +24,7 @@ import { logger } from "../lib/logger";
 import { buildStepPrompt, getPreviousOutput, getRetryFeedback } from "./context";
 import { handleEvaluatorStep } from "./evaluator-step-handler";
 import { prepareStepSnapshot } from "./oplog-snapshots";
-import { broadcastPipelineStatus, captureGitDiff, now } from "./pipeline-helpers";
+import { broadcastPipelineStatus, captureGitDiff, captureTree, now } from "./pipeline-helpers";
 import {
   handleStepComplete,
   type StepHandlerDeps,
@@ -78,6 +78,7 @@ export class PipelineExecutor {
     if (!template) throw new Error(`Pipeline template ${templateId} not found`);
 
     let worktreePath: string | null = null;
+    let worktreeBranch = "";
     if (useWorktree && coreRust) {
       const project = getProject(db, projectId);
       if (project) {
@@ -85,8 +86,8 @@ export class PipelineExecutor {
           const branchName = `pipeline/${slugifyBranchName(task)}`;
           const wtInfo = createManagedWorktree(project.path, project.name, branchName, "pipelines");
           worktreePath = wtInfo.path;
+          worktreeBranch = wtInfo.branchName;
           logger.info("[Pipeline] Created shared worktree:", { path: worktreePath });
-          runSetupHook(project.path, worktreePath, wtInfo.branchName).catch(() => {});
         } catch (err) {
           logger.warn("[Pipeline] Failed to create worktree, using project root:", err);
         }
@@ -100,6 +101,28 @@ export class PipelineExecutor {
       maxIterations,
       worktreePath,
     });
+
+    const project = getProject(db, projectId);
+    const evidencePath = worktreePath ?? project?.path ?? null;
+    if (evidencePath) {
+      const baseRevision = `refs/exegol/pipelines/${run.id}/base`;
+      try {
+        await captureTree(evidencePath, baseRevision);
+        updatePipelineRun(db, run.id, { evidencePath, baseRevision });
+      } catch (err) {
+        updatePipelineRun(db, run.id, { evidencePath });
+        this.pauseRun(
+          db,
+          run.id,
+          "Cannot capture pipeline baseline; start a new run after fixing Git.",
+        );
+        logger.warn("[Pipeline] Baseline capture failed:", err);
+        return getPipelineRun(db, run.id) ?? run;
+      }
+    }
+    if (worktreePath && project) {
+      await runSetupHook(project.path, worktreePath, worktreeBranch).catch(() => {});
+    }
 
     logger.info("[Pipeline] Starting run:", { runId: run.id, template: template.name });
 
@@ -135,7 +158,8 @@ export class PipelineExecutor {
       startedAt,
     });
 
-    const diff = run.worktreePath ? await captureGitDiff(run.worktreePath) : "";
+    const evidencePath = run.evidencePath ?? run.worktreePath;
+    const diff = evidencePath ? await captureGitDiff(evidencePath, run.baseRevision) : "";
 
     // T88v2 — evaluator gates resolve synchronously (judge calls, no spawned
     // agent), so they route to their own handler instead of the agent flow.
@@ -174,11 +198,23 @@ export class PipelineExecutor {
       retryFeedback,
     });
 
+    if (evidencePath) {
+      const baseRevision = `refs/exegol/pipelines/${run.id}/steps/${run.stepResults.length}`;
+      try {
+        await captureTree(evidencePath, baseRevision);
+        stepResult.baseRevision = baseRevision;
+      } catch (err) {
+        logger.warn("[Pipeline] Step baseline capture failed:", err);
+        this.pauseRun(db, runId, "Cannot capture step baseline; check Git before resuming.");
+        return;
+      }
+    }
+
     const agent = createAgent(db, {
       projectId: run.projectId,
       cliType: stepDef.cliType as AgentCliType,
       taskDescription: prompt,
-      cwdOverride: run.worktreePath ?? undefined,
+      cwdOverride: evidencePath ?? undefined,
       accessMode: stepDef.accessMode,
     });
 
@@ -215,7 +251,7 @@ export class PipelineExecutor {
         projectId: run.projectId,
         cliType: stepDef.cliType as AgentCliType,
         taskDescription: prompt,
-        cwdOverride: run.worktreePath ?? undefined,
+        cwdOverride: evidencePath ?? undefined,
         accessMode: stepDef.accessMode,
         // Pipeline steps run unattended, so they cannot answer a permission
         // prompt. This used to push the flag onto the SHARED registry provider
@@ -287,6 +323,8 @@ export class PipelineExecutor {
     if (!run || run.status !== "paused") {
       throw new Error(`Pipeline run ${runId} is not paused`);
     }
+
+    if (!run.baseRevision) throw new Error("Pipeline has no Git baseline; start a new run.");
 
     const template = getPipelineTemplate(db, run.templateId);
     if (!template) throw new Error(`Pipeline template ${run.templateId} not found`);
