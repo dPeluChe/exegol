@@ -14,6 +14,7 @@ import {
 } from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
+import { termDbg } from "../../lib/term-debug";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { DormantPipe } from "./terminal-dormant-wiring";
@@ -132,7 +133,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     const terminal = terminalRef.current;
     if (!fit || !terminal) return;
     // A mirror follows the PTY's grid (wired in setup) and only rescales its font
-    if (mirror) fitMirror(terminal, fontSize);
+    if (mirror) fitMirror(terminal, fontSize, agentId);
     else fitAndSyncSize(terminal, fit, agentId, readOnly, (c, r) => setTerminalSize(agentId, c, r));
   }, [agentId, setTerminalSize, readOnly, mirror, fontSize]);
 
@@ -166,7 +167,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     dormantPipeRef.current = session.dormantPipe;
 
     const refit = () => {
-      if (mirror) fitMirror(session.terminal, fontSize);
+      if (mirror) fitMirror(session.terminal, fontSize, agentId);
       else
         fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, (c, r) =>
           setTerminalSize(agentId, c, r),
@@ -188,6 +189,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       if (readOnly || mirror) return;
       const t = session.terminal;
       if (t.cols < 3) return;
+      termDbg(`kick:${agentId}:${viewId}`, "SIGWINCH kick", {
+        agentId,
+        grid: `${t.cols}x${t.rows}`,
+      });
       window.api.terminal.resize(agentId, t.cols - 1, t.rows);
       kickTimer2 = setTimeout(() => window.api.terminal.resize(agentId, t.cols, t.rows), 60);
     }, 350);
@@ -201,6 +206,12 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       // A mirror's height follows its own font: only a WIDTH change is news,
       // or each font change comes back as a resize and refits again
       const width = entry?.contentRect.width ?? -1;
+      termDbg(`ro:${agentId}:${viewId}`, "container resized", {
+        agentId,
+        viewId,
+        mirror,
+        box: `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`,
+      });
       if (mirror && width === observedWidth) return;
       observedWidth = width;
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
@@ -285,11 +296,13 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // The repaint arrives on terminal:data, in order with live output — this
     // call only reports. Acquire/release: unmounting while visible must release
     // too, or the view stays registered and the gate never engages again.
+    termDbg(`vis:${agentId}:${viewId}`, "visible", { agentId, viewId, mirror, visible: true });
     window.api.terminal.setVisible(agentId, true, viewId).catch(() => {});
     return () => {
+      termDbg(`vis:${agentId}:${viewId}`, "visible", { agentId, viewId, mirror, visible: false });
       window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
     };
-  }, [agentId, isVisible, viewId]);
+  }, [agentId, isVisible, viewId, mirror]);
 
   useEffect(() => {
     dormantPipeRef.current?.setVisible(isVisible);
