@@ -23,6 +23,7 @@ import { submitToAgent } from "../../../lib/agent-input";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
+import { useWatchStore } from "../../../stores/watch";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
@@ -153,6 +154,11 @@ export function AgentDashboard() {
   const storeAgents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const [groupBy, setGroupBy] = useState<GroupBy>("state");
+  // With sessions pinned, the dashboard is for watching them; the full fleet is
+  // already in the sidebar's Agents list, so it waits behind a toggle
+  const watchingCount = useWatchStore((s) => s.watched.length);
+  const [showAll, setShowAll] = useState(false);
+  const showFleet = watchingCount === 0 || showAll;
 
   // DB truth for the whole fleet — hydrated INTO the store so every consumer
   // (attention, badges) sees cross-project agents, not just this dashboard.
@@ -353,59 +359,74 @@ export function AgentDashboard() {
             {unreadCount} need attention
           </span>
           <div className="ml-auto flex items-center gap-1">
-            <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
-              By state
-            </FilterChip>
-            <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
-              By project
-            </FilterChip>
+            {watchingCount > 0 && (
+              <FilterChip active={showAll} onClick={() => setShowAll((v) => !v)}>
+                Show all agents
+              </FilterChip>
+            )}
+            {showFleet && (
+              <>
+                <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
+                  By state
+                </FilterChip>
+                <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
+                  By project
+                </FilterChip>
+              </>
+            )}
           </div>
         </div>
 
         <WatchingSection projectMeta={projectMeta} onOpenAgent={navigateToAgent} />
 
-        <WorktreesCard />
+        {showFleet && (
+          <>
+            <WorktreesCard />
 
-        {groups.map((group) => (
-          <div key={group.key}>
-            <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              <span
-                className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
-                style={group.color ? { backgroundColor: group.color } : undefined}
-              />
-              {group.title}
-              <span className="font-normal">({group.agents.length})</span>
-              {/* Ended sessions pile up forever — a list you cannot clear is a
+            {groups.map((group) => (
+              <div key={group.key}>
+                <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  <span
+                    className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
+                    style={group.color ? { backgroundColor: group.color } : undefined}
+                  />
+                  {group.title}
+                  <span className="font-normal">({group.agents.length})</span>
+                  {/* Ended sessions pile up forever — a list you cannot clear is a
                   list you stop reading. Archive keeps the row (scoring, oplog,
                   resume handle); it only leaves the view. */}
-              {group.key === "recent" && (
-                <button
-                  type="button"
-                  onClick={archiveEnded}
-                  disabled={archiving}
-                  className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
-                >
-                  <Archive className="h-3 w-3" />
-                  Archive all
-                </button>
-              )}
-            </h3>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {group.agents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  projectMeta={groupBy === "state" ? projectMeta.get(agent.projectId) : undefined}
-                  hasUnread={group.unread.has(agent.id)}
-                  onClick={() => navigateToAgent(agent)}
-                  onArchive={
-                    LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
-                  }
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+                  {group.key === "recent" && (
+                    <button
+                      type="button"
+                      onClick={archiveEnded}
+                      disabled={archiving}
+                      className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
+                    >
+                      <Archive className="h-3 w-3" />
+                      Archive all
+                    </button>
+                  )}
+                </h3>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {group.agents.map((agent) => (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      projectMeta={
+                        groupBy === "state" ? projectMeta.get(agent.projectId) : undefined
+                      }
+                      hasUnread={group.unread.has(agent.id)}
+                      onClick={() => navigateToAgent(agent)}
+                      onArchive={
+                        LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </ScrollArea>
   );

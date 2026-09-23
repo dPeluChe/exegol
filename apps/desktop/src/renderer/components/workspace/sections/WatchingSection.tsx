@@ -71,7 +71,8 @@ export function WatchingSection({
       {/* No breakpoint: "side by side" must hold at the width the dashboard has */}
       <div
         className={cn(
-          "grid gap-2",
+          // items-start: a collapsed card is its header, not a stretched empty box
+          "grid items-start gap-2",
           columns === 1 && "grid-cols-1",
           columns === 2 && "grid-cols-2",
           columns === 3 && "grid-cols-3",

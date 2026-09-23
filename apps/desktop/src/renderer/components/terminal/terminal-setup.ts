@@ -95,6 +95,14 @@ export function setupTerminalSession(
     );
   }
 
+  if (deps.mirror) {
+    // Several mirrors fill the dashboard: a wheel over one must scroll the page,
+    // not trap it in that terminal's history. Clicked (focused) = it's yours.
+    terminal.attachCustomWheelEventHandler(
+      () => !!terminal.element?.contains(document.activeElement),
+    );
+  }
+
   const dormantPipe = createDormantPipe(terminal, true);
   if (deps.initialContent) terminal.write(deps.initialContent);
 

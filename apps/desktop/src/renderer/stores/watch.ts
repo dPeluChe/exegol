@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 /** Each open mirror is a live xterm fed every byte of its session; a few is plenty. */
-export const MAX_OPEN_MIRRORS = 4;
+export const MAX_OPEN_MIRRORS = 6;
 
 interface WatchStore {
   /** T194: sessions pinned to the Overview, in pin order, across all projects */
