@@ -7,13 +7,13 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useRef,
   useState,
 } from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
-import { hideTerminalView, showTerminalView } from "../../lib/terminal-visibility";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { DormantPipe } from "./terminal-dormant-wiring";
@@ -78,6 +78,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const webglRef = useRef<WebglController | null>(null);
   const dormantPipeRef = useRef<DormantPipe | null>(null);
   const [isVisible, setIsVisible] = useState(true);
+  const viewId = useId();
   const [isDragOver, setIsDragOver] = useState(false);
 
   useImperativeHandle(ref, () => ({
@@ -247,9 +248,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     if (terminalRef.current) {
       terminalRef.current.options.fontSize = fontSize;
       terminalRef.current.options.fontFamily = fontFamily;
-      handleResize();
+      // Refit only: the resize observer syncs the PTY once layout has settled
+      if (mirror) fitMirror(terminalRef.current, fontSize);
+      else fitAddonRef.current?.fit();
     }
-  }, [fontSize, fontFamily, handleResize]);
+  }, [fontSize, fontFamily, mirror]);
 
   // T38: visibility observer — drives WebGL attach/detach + T115 dormant ring
   useEffect(() => {
@@ -275,17 +278,22 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // Revealing costs a full serialize in main, so a pane flicking past during
     // a scroll must not pay for it. Hiding is debounced; showing is immediate,
     // because a late reveal is a visibly stale terminal.
-    if (!isVisible) return;
+    // viewId: main counts views, not windows, so a pane unmounting can't
+    // silence its Overview mirror in the same window (T194)
+    if (!isVisible) {
+      const timer = setTimeout(() => {
+        window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
+      }, HIDE_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    }
     // The repaint arrives on terminal:data, in order with live output — this
     // call only reports. Acquire/release: unmounting while visible must release
     // too, or the view stays registered and the gate never engages again.
-    // Counted per session, so a pane and its Overview mirror don't cancel out.
-    showTerminalView(agentId);
-    // Hide is debounced so a pane flicking past during a scroll pays nothing
+    window.api.terminal.setVisible(agentId, true, viewId).catch(() => {});
     return () => {
-      setTimeout(() => hideTerminalView(agentId), HIDE_DEBOUNCE_MS);
+      window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
     };
-  }, [agentId, isVisible]);
+  }, [agentId, isVisible, viewId]);
 
   useEffect(() => {
     dormantPipeRef.current?.setVisible(isVisible);

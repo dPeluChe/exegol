@@ -39,6 +39,15 @@ describe("terminal visibility gate", () => {
     expect(hasVisibleViewer("a")).toBe(false);
   });
 
+  it("tracks two views in the same window separately (pane + Overview mirror)", () => {
+    setTerminalViewerVisible("a", PANE, true, "pane");
+    setTerminalViewerVisible("a", PANE, true, "mirror");
+    setTerminalViewerVisible("a", PANE, false, "pane");
+    expect(hasVisibleViewer("a")).toBe(true);
+    forgetViewer(PANE);
+    expect(hasVisibleViewer("a")).toBe(false);
+  });
+
   it("is idempotent — repeated reports from one view say the same thing", () => {
     // The counter version needed a clamp here; identity makes it structural.
     setTerminalViewerVisible("a", PANE, true);

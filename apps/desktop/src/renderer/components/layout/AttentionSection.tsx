@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
+import { switchSection } from "../../lib/switch-section";
 import {
   type AgentState,
   type AttentionItem,
@@ -165,8 +166,11 @@ export function AttentionSection() {
     return () => clearInterval(id);
   }, []);
 
-  // Group active agents by project
-  const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
+  // Group active agents by project. One already listed under Needs Attention
+  // is not repeated below it: same session, two rows, two different names.
+  const activeAgents = Object.values(agents).filter(
+    (a) => ACTIVE_STATUSES.has(a.status) && !rawItems[a.id],
+  );
   const byProject = new Map<string, AgentState[]>();
   for (const agent of activeAgents) {
     const list = byProject.get(agent.projectId) ?? [];
@@ -197,6 +201,7 @@ export function AttentionSection() {
       };
 
       const app = useAppStore.getState();
+      switchSection("agents");
       if (app.activeProjectId !== projectId) {
         // Switching projects causes ProjectProvider to re-render. Defer
         // pane-finding to the next frame so the new workspace state has
@@ -204,6 +209,8 @@ export function AttentionSection() {
         app.setActiveProject(projectId);
         requestAnimationFrame(focusAgentPane);
       } else {
+        // Same project but on the dashboard: go to the pane, not stay put
+        if (app.activeView !== "workspace") app.setActiveView("workspace");
         focusAgentPane();
       }
     },
@@ -236,6 +243,7 @@ export function AttentionSection() {
             <AttentionCard
               key={item.agentId}
               item={item}
+              name={agents[item.agentId]?.alias ?? item.cliType}
               onNavigate={() => navigateToAgent(item.agentId, item.projectId)}
               onDismiss={() => dismiss(item.agentId)}
               onTogglePin={() => togglePin(item.agentId)}
@@ -369,11 +377,14 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
 
 function AttentionCard({
   item,
+  name,
   onNavigate,
   onDismiss,
   onTogglePin,
 }: {
   item: AttentionItem;
+  /** The session's name (alias) — the same one the project list and panes show */
+  name: string;
   onNavigate: () => void;
   onDismiss: () => void;
   onTogglePin: () => void;
@@ -405,7 +416,7 @@ function AttentionCard({
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
-          <span className="text-[10px] font-medium text-text-primary">{item.cliType}</span>
+          <span className="text-[10px] font-medium text-text-primary">{name}</span>
           {item.pinned && <Pin className="h-2.5 w-2.5 shrink-0 text-amber-400" />}
           {!item.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
         </div>

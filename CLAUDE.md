@@ -40,8 +40,8 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 
 ## Architecture
 
-### Workspace (4 tabs + sub-tabs)
-- **Dashboard**: home, cross-project fleet view (`AgentDashboard`)
+### Dashboard + workspace (3 tabs + sub-tabs)
+- **Dashboard**: its own view (`activeView: "dashboard"`, sidebar button), cross-project fleet + Watching (T194). No project is selected while it shows; picking one lands on its Agents tab. Panes stay mounted behind it
 - **Agents**: multi-pane workspace (terminal, browser, files, git, empty)
 - **Project**: Tasks | History | Prompts & Skills | Memory | Knowledge | Pipelines | Parallel Runs | QA Tests
 - **Monitor**: Resources & Tokens | Scoring
