@@ -207,29 +207,26 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     onReady?.();
 
     let resizeRaf: number | null = null;
+    let mirrorFitTimer: ReturnType<typeof setTimeout> | null = null;
     let observedWidth = -1;
     const resizeObserver = new ResizeObserver(([entry]) => {
-      // A mirror's height follows its own font: only a WIDTH change is news,
-      // or each font change comes back as a resize and refits again
       const width = entry?.contentRect.width ?? -1;
-      // Which ancestor sets this height: a layout-sized chain keeps it fixed,
-      // a content-sized one lets the grid feed its own box back
-      const chain: string[] = [];
-      for (let el = container.parentElement, i = 0; el && i < 10; el = el.parentElement, i++) {
-        chain.push(
-          `${el.clientHeight}:${el.className.toString().split(" ").slice(0, 3).join(".")}`,
-        );
-      }
       termDbg(`ro:${agentId}:${viewId}`, "container resized", {
         agentId,
         viewId,
         mirror,
         box: `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`,
-        window: window.innerHeight,
-        chain,
       });
-      if (mirror && width === observedWidth) return;
-      observedWidth = width;
+      if (mirror) {
+        // Its height follows its own font: only a WIDTH change is news. And a
+        // drag changes width every frame; refit once it stops, since each font
+        // step rebuilds the glyph atlas
+        if (width === observedWidth) return;
+        observedWidth = width;
+        if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
+        mirrorFitTimer = setTimeout(refit, 120);
+        return;
+      }
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
       resizeRaf = requestAnimationFrame(() => {
         resizeRaf = null;
@@ -243,6 +240,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       clearTimeout(kickTimer);
       if (kickTimer2) clearTimeout(kickTimer2);
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
       resizeObserver.disconnect();
       // WebGL context must be freed before the terminal itself is torn down.
       webglRef.current?.dispose();
