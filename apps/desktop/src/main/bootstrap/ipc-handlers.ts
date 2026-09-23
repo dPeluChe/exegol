@@ -28,12 +28,9 @@ export function registerIpcHandlers(): void {
 
   // Terminal resize: renderer -> main -> pty
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
-    const before = getPtyHost().getSize(agentId);
     getAgentManager().resize(agentId, cols, rows);
     // Overview mirrors follow the owner's size; they never resize the PTY themselves
-    if (before?.cols !== cols || before?.rows !== rows) {
-      broadcast("terminal:resized", agentId, cols, rows);
-    }
+    broadcast("terminal:resized", agentId, cols, rows);
   });
 
   ipcMain.handle("terminal:get-size", (_event, agentId: string) => {
@@ -50,7 +47,7 @@ export function registerIpcHandlers(): void {
    *  the model instead of resuming mid-stream on a screen that moved on. */
   ipcMain.handle(
     "terminal:set-visible",
-    (event, agentId: string, visible: boolean, viewId?: string) => {
+    (event, agentId: string, visible: boolean, viewId: string) => {
       const viewerId = event.sender.id;
       if (!trackedSenders.has(viewerId)) {
         trackedSenders.add(viewerId);

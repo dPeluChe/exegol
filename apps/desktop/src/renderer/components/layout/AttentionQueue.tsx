@@ -6,7 +6,7 @@ import { useProject } from "../../hooks/use-trpc";
 import {
   type AttentionItem,
   type AttentionLevel,
-  jumpToAttentionItem,
+  jumpToAgent,
   sortAttentionItems,
   useAgentStore,
 } from "../../stores/agents";
@@ -145,7 +145,7 @@ function AttentionQueueRow({ item, onClose }: { item: AttentionItem; onClose: ()
     <button
       type="button"
       onClick={() => {
-        jumpToAttentionItem(item.agentId, item.projectId);
+        jumpToAgent(item.agentId, item.projectId);
         onClose();
       }}
       className={cn(

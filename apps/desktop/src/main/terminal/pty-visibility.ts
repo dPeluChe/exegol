@@ -30,7 +30,7 @@ export function setTerminalViewerVisible(
   agentId: string,
   windowId: number,
   visible: boolean,
-  viewId = "",
+  viewId: string,
 ): void {
   const key = `${windowId}:${viewId}`;
   const showing = viewers.get(agentId) ?? new Set<string>();

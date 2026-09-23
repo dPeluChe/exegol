@@ -12,15 +12,13 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
-import { switchSection } from "../../lib/switch-section";
 import {
   type AgentState,
   type AttentionItem,
   type AttentionLevel,
+  jumpToAgent,
   useAgentStore,
 } from "../../stores/agents";
-import { useAppStore } from "../../stores/app";
-import { collectPaneIds, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
 // ─── Level config ────────────────────────────────────────────────────────
@@ -181,38 +179,7 @@ export function AttentionSection() {
   const navigateToAgent = useCallback(
     (agentId: string, projectId: string) => {
       markRead(agentId);
-
-      // Helper: find and focus the agent's pane in the current workspace
-      const focusAgentPane = () => {
-        const ws = useWorkspaceStore.getState();
-        const tabs = selectTabs(ws);
-        const panes = selectPanes(ws);
-        for (const tab of tabs) {
-          for (const paneId of collectPaneIds(tab.layout)) {
-            const pane = panes[paneId];
-            if (pane?.type === "terminal" && pane.agentId === agentId) {
-              ws.setActiveTab(tab.id);
-              ws.setFocusedPane(paneId);
-              useAgentStore.getState().setFocusedAgent(agentId);
-              return;
-            }
-          }
-        }
-      };
-
-      const app = useAppStore.getState();
-      switchSection("agents");
-      if (app.activeProjectId !== projectId) {
-        // Switching projects causes ProjectProvider to re-render. Defer
-        // pane-finding to the next frame so the new workspace state has
-        // settled and we read the correct tabs/panes for the new project.
-        app.setActiveProject(projectId);
-        requestAnimationFrame(focusAgentPane);
-      } else {
-        // Same project but on the dashboard: go to the pane, not stay put
-        if (app.activeView !== "workspace") app.setActiveView("workspace");
-        focusAgentPane();
-      }
+      jumpToAgent(agentId, projectId);
     },
     [markRead],
   );

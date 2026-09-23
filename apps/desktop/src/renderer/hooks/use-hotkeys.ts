@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { jumpToAttentionItem, sortAttentionItems, useAgentStore } from "../stores/agents";
+import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
 import { deleteAgentImperative } from "./use-delete-agent";
@@ -204,7 +204,7 @@ function jumpToNextAttention(): void {
   const pool = unread.length > 0 ? unread : queue;
   const currentIndex = pool.findIndex((i) => i.agentId === focusedAgentId);
   const next = pool[(currentIndex + 1) % pool.length];
-  if (next) jumpToAttentionItem(next.agentId, next.projectId);
+  if (next) jumpToAgent(next.agentId, next.projectId);
 }
 
 /** Cycle through workspace tabs (next/prev) */

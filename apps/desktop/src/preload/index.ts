@@ -92,7 +92,7 @@ contextBridge.exposeInMainWorld("api", {
     getSnapshot: (id: string): Promise<string | null> => safe.invoke("terminal:get-snapshot", id),
     /** T178: report whether this view can draw the agent. A repaint, when one is
      *  needed, arrives on terminal:data so it stays ordered with live output. */
-    setVisible: (id: string, visible: boolean, viewId?: string): Promise<void> =>
+    setVisible: (id: string, visible: boolean, viewId: string): Promise<void> =>
       safe.invoke("terminal:set-visible", id, visible, viewId),
     /** The PTY's current grid (T194 mirrors), null when the session is gone */
     getSize: (id: string): Promise<{ cols: number; rows: number } | null> =>

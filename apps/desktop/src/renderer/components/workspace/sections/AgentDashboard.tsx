@@ -20,16 +20,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { submitToAgent } from "../../../lib/agent-input";
-import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
-import { type AgentState, useAgentStore } from "../../../stores/agents";
+import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
-import {
-  collectPaneIds,
-  selectPanes,
-  selectTabs,
-  useWorkspaceStore,
-} from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
@@ -297,36 +290,7 @@ export function AgentDashboard() {
   }, [storeAgents, attentionItems, groupBy, projectMeta]);
 
   const navigateToAgent = useCallback((agent: AgentState) => {
-    const app = useAppStore.getState();
-    const store = useAgentStore.getState();
-    store.markAttentionRead(agent.id);
-
-    const focusPane = () => {
-      const ws = useWorkspaceStore.getState();
-      const tabs = selectTabs(ws);
-      const panes = selectPanes(ws);
-      for (const tab of tabs) {
-        for (const paneId of collectPaneIds(tab.layout)) {
-          const pane = panes[paneId];
-          if (pane?.type === "terminal" && pane.agentId === agent.id) {
-            ws.setActiveTab(tab.id);
-            ws.setFocusedPane(paneId);
-            store.setFocusedAgent(agent.id);
-            // Switch workspace back to Agents tab
-            switchSection("agents");
-            return;
-          }
-        }
-      }
-    };
-
-    if (app.activeProjectId !== agent.projectId) {
-      app.setActiveProject(agent.projectId);
-      requestAnimationFrame(focusPane);
-    } else {
-      focusPane();
-      switchSection("agents");
-    }
+    jumpToAgent(agent.id, agent.projectId);
   }, []);
 
   // The dashboard spans every project, so starting an agent means picking one

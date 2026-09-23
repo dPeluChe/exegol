@@ -2,7 +2,7 @@ import type { NotificationMuteChannel, Settings } from "@exegol/shared";
 import { useEffect, useRef } from "react";
 import { switchSection } from "../lib/switch-section";
 import { trpcInvoke } from "../lib/trpc-client";
-import { jumpToAttentionItem, useAgentStore } from "../stores/agents";
+import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useNotificationPrefsStore } from "../stores/notification-prefs";
 import type { ToastType } from "../stores/toasts";
 import { useToastStore } from "../stores/toasts";
@@ -85,7 +85,7 @@ export function useToastEvents(): void {
       switchSection("agents");
       // T155.3: land on the exact pane of the agent that raised the notification
       const agent = useAgentStore.getState().agents[data.agentId];
-      if (agent) jumpToAttentionItem(data.agentId, agent.projectId);
+      if (agent) jumpToAgent(data.agentId, agent.projectId);
     });
     if (unsubNav) cleanups.push(unsubNav);
 

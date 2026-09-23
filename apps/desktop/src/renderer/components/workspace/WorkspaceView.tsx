@@ -100,11 +100,7 @@ export function WorkspaceView() {
   useMountEffect(() => {
     const handler = (e: Event) => {
       const section = (e as CustomEvent).detail?.section as WorkspaceSection;
-      if (!section) return;
-      setActiveSection(section);
-      // A section belongs to a project: asking for one leaves the dashboard
-      const app = useAppStore.getState();
-      if (app.activeView === "dashboard" && app.activeProjectId) app.setActiveView("workspace");
+      if (section) setActiveSection(section);
     };
     window.addEventListener(SWITCH_SECTION_EVENT, handler);
     return () => window.removeEventListener(SWITCH_SECTION_EVENT, handler);

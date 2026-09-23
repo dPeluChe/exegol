@@ -198,7 +198,7 @@ export function setupTerminalSession(
           .then((size) => {
             if (!size || liveDisposed) return;
             terminal.resize(size.cols, size.rows);
-            requestAnimationFrame(() => fitMirror(terminal, deps.fontSize));
+            fitMirror(terminal, deps.fontSize);
           })
           .catch(() => {})
       : Promise.resolve();
@@ -208,7 +208,7 @@ export function setupTerminalSession(
       disposables.push({
         dispose: window.api.terminal.onResized(deps.agentId, (cols, rows) => {
           terminal.resize(cols, rows);
-          requestAnimationFrame(() => fitMirror(terminal, deps.fontSize));
+          fitMirror(terminal, deps.fontSize);
         }),
       });
     }
@@ -301,26 +301,27 @@ export function fitAndSyncSize(
  * the owning pane, and shrinks its font to fit the card instead of resizing.
  */
 export function fitMirror(terminal: Terminal, baseFontSize: number, attempt = 0): void {
+  let settled = false;
   try {
     const host = measureHost(terminal);
     // The painted grid, not xterm's internal cell metrics: those may not exist
     // yet, and a mirror that never measures keeps its full font and overflows
-    const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
-    const drawn = screen?.getBoundingClientRect().width ?? 0;
-    if (!host?.width || !drawn) {
-      if (attempt < 10) requestAnimationFrame(() => fitMirror(terminal, baseFontSize, attempt + 1));
-      return;
-    }
-    const current = terminal.options.fontSize ?? baseFontSize;
-    const target = (current * host.width) / drawn;
-    const next = Math.floor(Math.max(6, Math.min(baseFontSize, target)) * 4) / 4;
-    if (Math.abs(next - current) >= 0.25) {
-      terminal.options.fontSize = next;
-      // Glyph metrics settle a frame later; converge instead of stopping short
-      if (attempt < 10) requestAnimationFrame(() => fitMirror(terminal, baseFontSize, attempt + 1));
+    const drawn =
+      terminal.element?.querySelector<HTMLElement>(".xterm-screen")?.getBoundingClientRect()
+        .width ?? 0;
+    if (host?.width && drawn) {
+      const current = terminal.options.fontSize ?? baseFontSize;
+      const target = (current * host.width) / drawn;
+      const next = Math.floor(Math.max(6, Math.min(baseFontSize, target)) * 4) / 4;
+      if (Math.abs(next - current) >= 0.25) terminal.options.fontSize = next;
+      else settled = true;
     }
   } catch {
     /* container may not be ready */
+  }
+  // Unmeasured, or glyph metrics settle a frame after a font change
+  if (!settled && attempt < 10) {
+    requestAnimationFrame(() => fitMirror(terminal, baseFontSize, attempt + 1));
   }
 }
 

@@ -80,8 +80,13 @@ export async function hasLocalSession(provider: string, cwd: string): Promise<bo
   const adapter = PROVIDERS.find((p) => p.id === provider);
   if (!adapter) return null;
   try {
-    return (await adapter.list([cwd], 0)).length > 0;
-  } catch {
+    // A recent window: codex stores rollouts by day across every repo, and
+    // since=0 read the head of every one of them before each resume spawn
+    return (await adapter.list([cwd], Date.now() / 1000 - RESUME_WINDOW_S)).length > 0;
+  } catch (err) {
+    logger.warn(`[History] ${provider} store unreadable:`, err);
     return null;
   }
 }
+
+const RESUME_WINDOW_S = 90 * 24 * 3600;
