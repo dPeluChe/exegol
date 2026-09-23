@@ -5,7 +5,7 @@
 - **Build config**: `apps/desktop/electron-builder.ts` (macOS DMG/ZIP, Windows NSIS, Linux AppImage)
 - **Auto-updater**: `apps/desktop/src/main/system/auto-updater.ts` (electron-updater, GitHub Releases, feed `dPeluChe/exegol`)
 - **Icons**: `apps/desktop/src/resources/build/icons/` (icns, ico, png)
-- **Version**: `apps/desktop/package.json` says `0.4.1` (git tag `v0.4.1`), but `docs/CHANGELOG.md` already lists 0.4.2, 0.4.3 and 0.4.4 as released. Reconcile before cutting a DMG (step 2).
+- **Version**: `0.5.0` in `apps/desktop/package.json` and `docs/CHANGELOG.md` (0.4.2-0.4.4 were CHANGELOG-only; the last tag is `v0.4.1`).
 - **Signing**: `notarize: false`, no signing identity configured. Builds are unsigned.
 
 ## Steps to First Release
@@ -19,9 +19,9 @@ node --version         # 20+ (root engines; CI uses 22; esbuild EPIPE issue on N
 cargo --version        # For core-rust native module
 ```
 
-### 2. Reconcile the version
+### 2. Set the version
 
-`apps/desktop/package.json` (0.4.1) and `docs/CHANGELOG.md` (latest released 0.4.4, plus the Unreleased sections above it) disagree. Pick the next version above 0.4.4, set it in `apps/desktop/package.json`, and rename the CHANGELOG Unreleased sections to that version before packaging. The DMG file name and the auto-update manifest both take the version from `package.json`.
+Bump `apps/desktop/package.json` and rename the CHANGELOG `[Unreleased]` sections to that version before packaging. The DMG file name and the auto-update manifest both take the version from `package.json`.
 
 ### 3. Local build
 

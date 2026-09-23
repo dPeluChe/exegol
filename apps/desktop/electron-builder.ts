@@ -50,6 +50,7 @@ const config: Configuration = {
       to: "core-rust",
       filter: ["*.node", "index.js", "index.d.ts", "package.json"],
     },
+    { from: "src/resources/build/icons/icon.png", to: "tray-icon.png" },
     // T155.6: `exegol` CLI opener script, symlinked onto PATH via the app menu
     {
       from: "resources/bin",

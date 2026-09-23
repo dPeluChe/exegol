@@ -24,6 +24,7 @@ import {
   updateProjectSortOrder,
 } from "../../db/queries";
 import { getAppSettings } from "../../db/queries/settings";
+import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde } from "../../ide/opener";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
@@ -243,7 +244,6 @@ export const projectRouter = router({
 
       // Run archive hook before deletion (T60: exegol.yaml)
       try {
-        const { runArchiveHook } = require("../../hooks/project-hooks");
         await runArchiveHook(project.path, wt.path, wt.branch_name);
       } catch {
         /* Non-fatal */

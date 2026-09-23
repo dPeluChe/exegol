@@ -15,6 +15,7 @@ import { refreshTray } from "../system/tray";
 import {
   deliverPendingAgentMessages,
   fireAgentLinks,
+  isAgentAwaitingApproval,
   setAgentAwaitingApproval,
 } from "./agent-messaging";
 import { scoreAgent } from "./scoring";
@@ -52,23 +53,10 @@ export interface AgentStatusEvent {
 // re-emits waiting_input per PTY frame (flapping) → repeated delivery + link
 // SELECTs; and reattach synthesizes waiting_input at startup → premature link
 // firing. Undefined prev (first event, incl. reattach) is NOT an edge.
-const lastBroadcast = new Map<
-  string,
-  { status: AgentStatus; step: string | null; attention: boolean }
->();
+const lastBroadcastStatus = new Map<string, AgentStatus>();
 
 export function forgetBroadcastStatus(agentId: string): void {
-  lastBroadcast.delete(agentId);
-}
-
-/** Parsers re-match the same spinner line many times a second; a repeat is not news. */
-export function isRepeatStatus(
-  agentId: string,
-  status: AgentStatus,
-  step?: string | null,
-): boolean {
-  const last = lastBroadcast.get(agentId);
-  return !!last && !last.attention && last.status === status && last.step === (step ?? null);
+  lastBroadcastStatus.delete(agentId);
 }
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
@@ -76,16 +64,18 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
   broadcast("agent:status-changed", event);
   refreshTray();
 
-  const prev = lastBroadcast.get(event.agentId)?.status;
-  lastBroadcast.set(event.agentId, {
-    status: event.status,
-    step: event.currentStep ?? null,
-    attention: event.needsAttention === true,
-  });
+  const prev = lastBroadcastStatus.get(event.agentId);
+  lastBroadcastStatus.set(event.agentId, event.status);
   // needsAttention is transient (never persisted), so messaging can't read it
   // from the DB — mirror it here so a sender can't inject into a permission
   // dialog and confirm it with the trailing Enter.
-  setAgentAwaitingApproval(event.agentId, event.needsAttention === true);
+  // Only leaving waiting_input clears it: a redrawn dialog scraped as plain
+  // waiting_input is still the dialog.
+  setAgentAwaitingApproval(
+    event.agentId,
+    event.needsAttention === true ||
+      (event.status === "waiting_input" && isAgentAwaitingApproval(event.agentId)),
+  );
 
   // T157/T162: turn boundary = a real transition INTO waiting_input that is NOT
   // an attention prompt. Delivering on `needsAttention` would inject (with a
@@ -269,10 +259,24 @@ export function getShellPath(): string {
       encoding: "utf-8",
       timeout: SHELL_PATH_TIMEOUT_MS,
     }).trim();
-    return result || process.env.PATH || "";
+    return result || fallbackPath();
   } catch {
-    return process.env.PATH || "";
+    return fallbackPath();
   }
+}
+
+// A heavy rc file can blow the timeout; launchd's PATH alone hides every Homebrew CLI
+function fallbackPath(): string {
+  const home = homedir();
+  const extra = [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    join(home, ".local/bin"),
+    join(home, ".bun/bin"),
+    join(home, ".cargo/bin"),
+  ];
+  const parts = (process.env.PATH || "").split(":").filter(Boolean);
+  return [...new Set([...parts, ...extra])].join(":");
 }
 
 let resolvedPath: string | null = null;
@@ -281,7 +285,8 @@ let resolvedPath: string | null = null;
 export function warmShellPath(): void {
   if (resolvedPath) return;
   exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
-    if (!err && !resolvedPath) resolvedPath = stdout.trim() || null;
+    // Overwrites a sync fallback too: the real shell PATH wins whenever it arrives
+    if (!err && stdout.trim()) resolvedPath = stdout.trim();
   });
 }
 

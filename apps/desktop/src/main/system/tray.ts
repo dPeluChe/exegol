@@ -80,7 +80,10 @@ function updateTrayBadge(count: number): void {
 }
 
 export function initTray(): void {
-  const iconPath = join(__dirname, "../../resources/build/icons/icon.png");
+  // Packaged: shipped via extraResources; dev: __dirname is out/main
+  const iconPath = app.isPackaged
+    ? join(process.resourcesPath, "tray-icon.png")
+    : join(__dirname, "../../src/resources/build/icons/icon.png");
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
   if (process.platform === "darwin") {
     icon.setTemplateImage(true);

@@ -1,3 +1,4 @@
+import { LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import {
   clearAgentWorktree,
@@ -46,6 +47,19 @@ export async function cleanupWorktree(
   hydrateTrackedWorktree(db, agentId, worktrees);
   const wt = worktrees.get(agentId);
   if (!wt || !coreRust) return;
+  // findReusableWorktree lets agents share a branch's worktree; never pull it out from under one
+  const statuses = [...LIVE_STATUSES];
+  const others = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM agents
+       WHERE worktree_id = ? AND id != ? AND status IN (${statuses.map(() => "?").join(",")})`,
+    )
+    .get(wt.dbId, agentId, ...statuses) as { n: number };
+  if (others.n > 0) {
+    logger.info(`[AgentManager] Worktree '${wt.worktreeName}' still in use — keeping it`);
+    worktrees.delete(agentId);
+    return;
+  }
   try {
     const hasChanges = coreRust.worktreeHasChanges(wt.worktreePath);
     if (hasChanges) {

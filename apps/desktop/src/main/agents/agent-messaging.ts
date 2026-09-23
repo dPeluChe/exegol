@@ -165,6 +165,10 @@ export function setAgentAwaitingApproval(agentId: string, awaiting: boolean): vo
   else agentsAwaitingApproval.delete(agentId);
 }
 
+export function isAgentAwaitingApproval(agentId: string): boolean {
+  return agentsAwaitingApproval.has(agentId);
+}
+
 /**
  * Validate, persist and route a message. Returns delivery state so the sender
  * (MCP tool / UI) can tell the difference between "landed" and "queued for the

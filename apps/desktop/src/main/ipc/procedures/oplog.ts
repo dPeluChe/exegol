@@ -1,17 +1,9 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { coreRust } from "../../agents/spawn-env";
 import { createOplogEntry, listAgentOplog, listProjectOplog } from "../../db/queries";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
-
-// ─── Rust native module (git2 revert) ──────────────────────────────────────
-
-let coreRust: typeof import("@exegol/core-rust") | null = null;
-try {
-  coreRust = require("@exegol/core-rust");
-} catch {
-  logger.warn("[Oplog] @exegol/core-rust not available — undo disabled");
-}
 
 // ─── Router ─────────────────────────────────────────────────────────────────
 
