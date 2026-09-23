@@ -13,6 +13,7 @@ import {
   Cpu,
   Eye,
   Map as MapIcon,
+  Plus,
   Send,
   Square,
   XCircle,
@@ -328,15 +329,40 @@ export function AgentDashboard() {
     }
   }, []);
 
+  // The dashboard spans every project, so starting an agent means picking one
+  const startAgentIn = (projectId: string) => {
+    useAppStore.getState().setActiveProject(projectId);
+    window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
+  };
+
   if (total === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-bg-primary p-8">
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg-primary p-8">
         <Cpu className="h-10 w-10 text-text-muted/30" />
         <div className="text-center">
-          <p className="text-sm font-medium text-text-primary">No agents yet</p>
+          <p className="text-sm font-medium text-text-primary">No agents running</p>
           <p className="mt-1 text-xs text-text-muted">
-            Spawn an agent from the launcher to see it here
+            The dashboard shows agents from every project. Start one:
           </p>
+        </div>
+        <div className="flex w-full max-w-sm flex-col gap-1.5">
+          {(projects ?? []).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => startAgentIn(p.id)}
+              className="flex items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-left text-xs text-text-primary transition-colors hover:border-accent/40 hover:bg-accent/10"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0 text-accent" />
+              <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              <span className="shrink-0 text-[10px] text-text-muted">Start agent</span>
+            </button>
+          ))}
+          {projects?.length === 0 && (
+            <p className="text-center text-[11px] text-text-muted">
+              Add a project from the sidebar first.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -347,6 +373,9 @@ export function AgentDashboard() {
       <div className="space-y-6 p-4">
         {/* Summary bar + group toggle */}
         <div className="flex items-center gap-4 text-xs text-text-muted">
+          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wider">
+            All projects
+          </span>
           <span className="flex items-center gap-1.5">
             <Cpu className="h-3.5 w-3.5" />
             <span className="font-medium text-text-primary">{total}</span> agents
