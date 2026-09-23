@@ -1,17 +1,20 @@
-import { app, BrowserWindow, globalShortcut } from "electron";
+import { app, BrowserWindow, dialog, globalShortcut } from "electron";
 import { seedAgentLinkCache, stopSweep } from "./agents/agent-messaging";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
+import { warmShellPath } from "./agents/spawn-env";
 import { ensureAgentWrappers, sweepStaleAgentEvents } from "./agents/wrappers";
 import { installDeepLinkHandling } from "./bootstrap/deep-link";
+import { registerGlobalHotkey } from "./bootstrap/global-hotkey";
 import { registerIpcHandlers } from "./bootstrap/ipc-handlers";
 import { cleanupStaleData, runStartupRecovery } from "./bootstrap/recovery";
 import { installSignalHandlers, runTeardown } from "./bootstrap/shutdown";
 import { endMark, startMark } from "./bootstrap/startup-timings";
-import { createWindow, registerGlobalHotkey } from "./bootstrap/window";
+import { createWindow, showMainWindow } from "./bootstrap/window";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
+import { getAppSettings } from "./db/queries/settings";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { logger, markShutdown } from "./lib/logger";
 import {
@@ -41,25 +44,29 @@ installDeepLinkHandling();
 app.whenReady().then(async () => {
   startMark("appReady");
   // ─── Critical path: everything the window needs before first paint ──
-  await initializeDatabase();
+  try {
+    await initializeDatabase();
+  } catch (err) {
+    // A failed migration used to leave a running app with no window and no message
+    logger.error("[Startup] database init failed", err);
+    dialog.showErrorBox(
+      "Exegol could not open its database",
+      `${err instanceof Error ? err.message : String(err)}\n\nDatabase: ${app.getPath("userData")}/exegol.db`,
+    );
+    app.exit(1);
+    return;
+  }
   endMark("dbInit");
   ensureExegolMcpServerStarted(getDb()); // T163: the socket belongs to the app
   seedAgentLinkCache(getDb()); // T162: warm the in-memory has-links set
-  try {
-    const row = getDb().prepare("SELECT value FROM settings WHERE key = 'app_settings'").get() as
-      | { value: string }
-      | undefined;
-    if (row) setMcpVerboseLogging(JSON.parse(row.value)?.mcpVerboseLogging === true);
-  } catch {
-    /* settings not readable yet — verbose stays off */
-  }
+  setMcpVerboseLogging(getAppSettings(getDb()).mcpVerboseLogging === true);
   setDesktopChannelDb(getDb()); // T124: NotificationBus desktop channel settings lookup
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();
   registerFloatingIpcHandlers();
   registerSettingsIpcHandlers();
-  registerGlobalHotkey();
+  registerGlobalHotkey(getAppSettings(getDb()).globalHotkey, showMainWindow);
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
   endMark("criticalPath");
@@ -67,6 +74,7 @@ app.whenReady().then(async () => {
 
   // Show window FIRST (fast TTI), then everything else in background
   createWindow();
+  warmShellPath();
   endMark("windowCreated");
   initTray();
 

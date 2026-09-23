@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { exec, execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -53,9 +53,23 @@ export interface AgentStatusEvent {
 // SELECTs; and reattach synthesizes waiting_input at startup → premature link
 // firing. Undefined prev (first event, incl. reattach) is NOT an edge.
 const lastBroadcastStatus = new Map<string, AgentStatus>();
+const lastBroadcastKey = new Map<string, string>();
+
+const statusKey = (status: AgentStatus, step: string | null | undefined, attention?: boolean) =>
+  `${status}\0${step ?? ""}\0${attention === true}`;
 
 export function forgetBroadcastStatus(agentId: string): void {
   lastBroadcastStatus.delete(agentId);
+  lastBroadcastKey.delete(agentId);
+}
+
+/** Parsers re-match the same spinner line many times a second; a repeat is not news. */
+export function isRepeatStatus(
+  agentId: string,
+  status: AgentStatus,
+  step?: string | null,
+): boolean {
+  return lastBroadcastKey.get(agentId) === statusKey(status, step);
 }
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
@@ -65,6 +79,10 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
 
   const prev = lastBroadcastStatus.get(event.agentId);
   lastBroadcastStatus.set(event.agentId, event.status);
+  lastBroadcastKey.set(
+    event.agentId,
+    statusKey(event.status, event.currentStep, event.needsAttention),
+  );
   // needsAttention is transient (never persisted), so messaging can't read it
   // from the DB — mirror it here so a sender can't inject into a permission
   // dialog and confirm it with the trailing Enter.
@@ -258,6 +276,16 @@ export function getShellPath(): string {
 }
 
 let resolvedPath: string | null = null;
+
+/** Resolve the login-shell PATH off the main thread so the first spawn or Doctor run doesn't block on it. */
+export function warmShellPath(): void {
+  if (resolvedPath) return;
+  const shell = process.env.SHELL || "/bin/zsh";
+  exec(`${shell} -ilc 'echo $PATH'`, { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
+    if (!err && !resolvedPath) resolvedPath = stdout.trim() || null;
+  });
+}
+
 export function _getFullPath(): string {
   if (!resolvedPath) {
     resolvedPath = getShellPath();

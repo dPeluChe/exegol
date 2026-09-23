@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAttentionItem, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
@@ -65,18 +66,14 @@ export function useHotkeys() {
       // Cmd+Shift+D: Split vertical
       if (e.shiftKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        window.dispatchEvent(
-          new CustomEvent("exegol:split-pane", { detail: { direction: "vertical" } }),
-        );
+        useWorkspaceStore.getState().splitFocusedPane("vertical");
         return;
       }
 
       // Cmd+D: Split horizontal
       if (e.key === "d") {
         e.preventDefault();
-        window.dispatchEvent(
-          new CustomEvent("exegol:split-pane", { detail: { direction: "horizontal" } }),
-        );
+        useWorkspaceStore.getState().splitFocusedPane("horizontal");
         return;
       }
 
@@ -98,13 +95,7 @@ export function useHotkeys() {
       if (e.key === ".") {
         e.preventDefault();
         const { focusedAgentId } = useAgentStore.getState();
-        if (focusedAgentId) {
-          window.dispatchEvent(
-            new CustomEvent("exegol:stop-agent", {
-              detail: { agentId: focusedAgentId },
-            }),
-          );
-        }
+        if (focusedAgentId) trpcMutate("agents.stop", { id: focusedAgentId }).catch(() => {});
         return;
       }
 

@@ -130,11 +130,8 @@ function PromptCard({ prompt, onEdit }: { prompt: Prompt; onEdit: () => void }) 
 
   const handleUse = useCallback(() => {
     window.dispatchEvent(
-      new CustomEvent("exegol:spawn-agent-with-prompt", {
-        detail: { content: prompt.content },
-      }),
+      new CustomEvent("exegol:spawn-agent", { detail: { taskDescription: prompt.content } }),
     );
-    window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
   }, [prompt.content]);
 
   return (

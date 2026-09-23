@@ -1,9 +1,8 @@
-import { Activity, Clock, Copy, FileText, LayoutGrid, Plus } from "lucide-react";
+import { Activity, Copy, FileText, LayoutGrid, Plus } from "lucide-react";
 import { useCallback } from "react";
 import { useAppVersion, usePrompts } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 import { ResourcesOverview } from "./ResourcesOverview";
-import { SchedulersOverview } from "./SchedulersOverview";
 import { SidebarSection } from "./SidebarSection";
 
 function PinnedPrompts() {
@@ -20,7 +19,7 @@ function PinnedPrompts() {
     if (projectId) {
       useAppStore.getState().setActiveView("workspace");
       window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", { detail: { section: "prompts" } }),
+        new CustomEvent("exegol:switch-section", { detail: { section: "prompts-skills" } }),
       );
     }
   };
@@ -83,10 +82,6 @@ export function SidebarFooter() {
 
   return (
     <div className="flex flex-col">
-      <SidebarSection title="Schedulers" icon={Clock} defaultOpen={false}>
-        <SchedulersOverview />
-      </SidebarSection>
-
       <SidebarSection title="Prompts" icon={FileText} defaultOpen={false}>
         <PinnedPrompts />
       </SidebarSection>

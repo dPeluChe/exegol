@@ -311,7 +311,11 @@ export const useAgentStore = create<AgentStore>()(
           if (update.status && !update.activityLevel) {
             merged.activityLevel = classifyActivity(merged.status, merged.currentStep);
           }
-          return { agents: { ...state.agents, [id]: merged } };
+          // A new agents object re-renders every pane subscribed to the map
+          const changed = (Object.keys(merged) as (keyof AgentState)[]).some(
+            (k) => merged[k] !== existing[k],
+          );
+          return changed ? { agents: { ...state.agents, [id]: merged } } : state;
         }),
 
       addAgent: (agent) =>

@@ -1,7 +1,6 @@
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
-import { DEFAULT_SETTINGS } from "@exegol/shared";
-import { BrowserWindow, globalShortcut, shell } from "electron";
+import { BrowserWindow, shell } from "electron";
 import windowStateKeeper from "electron-window-state";
 import { registerMainWindow } from "../windows/floating";
 import { registerMainWindowForSettings } from "../windows/settings";
@@ -69,22 +68,12 @@ export function createWindow(): void {
   }
 }
 
-export function registerGlobalHotkey(): void {
-  const hotkey = DEFAULT_SETTINGS.globalHotkey;
-  globalShortcut.register(hotkey, () => {
-    if (!mainWindow) {
-      createWindow();
-      return;
-    }
-
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
-    }
-
-    if (mainWindow.isVisible()) {
-      mainWindow.focus();
-    } else {
-      mainWindow.show();
-    }
-  });
+export function showMainWindow(): void {
+  if (!mainWindow) {
+    createWindow();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  if (mainWindow.isVisible()) mainWindow.focus();
+  else mainWindow.show();
 }

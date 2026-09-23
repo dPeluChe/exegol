@@ -23,6 +23,7 @@ import {
   updateProjectLastOpened,
   updateProjectSortOrder,
 } from "../../db/queries";
+import { getAppSettings } from "../../db/queries/settings";
 import { openInIde } from "../../ide/opener";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
@@ -147,21 +148,8 @@ export const projectRouter = router({
         });
       }
       // Read user's IDE preference from settings, fallback to project default
-      let ide = input.ide;
-      if (!ide) {
-        const settingsRow = ctx.db
-          .prepare("SELECT value FROM settings WHERE key = 'app_settings'")
-          .get() as { value: string } | undefined;
-        if (settingsRow) {
-          try {
-            const settings = JSON.parse(settingsRow.value);
-            ide = settings.defaultIde;
-          } catch {
-            /* use fallback */
-          }
-        }
-      }
-      ide = ide ?? project.defaultIde ?? "vscode";
+      const settings = getAppSettings(ctx.db);
+      const ide = input.ide ?? settings.defaultIde ?? project.defaultIde ?? "vscode";
       let target = project.path;
       if (input.file) {
         // Worktree agents print paths relative to their worktree — resolving
@@ -175,7 +163,12 @@ export const projectRouter = router({
         }
         target = resolved;
       }
-      await openInIde(target, ide, input.customPath, input.file ? input.line : undefined);
+      await openInIde(
+        target,
+        ide,
+        input.customPath ?? settings.customIdePath ?? undefined,
+        input.file ? input.line : undefined,
+      );
       return { success: true };
     }),
 

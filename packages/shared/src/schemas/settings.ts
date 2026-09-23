@@ -20,6 +20,8 @@ export const settingsSchema = z.object({
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   mutedNotificationChannels: z.array(z.string()).default([]),
+  ollamaUrl: z.string().default("http://localhost:11434"),
+  ollamaModel: z.string().default("nomic-embed-text"),
   mcpVerboseLogging: z.boolean().default(false),
 });
 

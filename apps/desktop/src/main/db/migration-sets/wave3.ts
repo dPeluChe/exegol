@@ -111,4 +111,12 @@ export const wave3Migrations: Migration[] = [
     sql: `ALTER TABLE pipeline_runs ADD COLUMN evidence_path TEXT;
     ALTER TABLE pipeline_runs ADD COLUMN base_revision TEXT;`,
   },
+  {
+    // scoring.ts wrote these since tier 3 landed; without them every paid Haiku judge call was lost
+    id: "w3_009_llm_score_columns",
+    sql: `ALTER TABLE agent_scores ADD COLUMN llm_clarity INTEGER;
+    ALTER TABLE agent_scores ADD COLUMN llm_completeness INTEGER;
+    ALTER TABLE agent_scores ADD COLUMN llm_correctness INTEGER;
+    ALTER TABLE agent_scores ADD COLUMN llm_score REAL;`,
+  },
 ];

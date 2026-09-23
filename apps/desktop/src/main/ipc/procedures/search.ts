@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
-import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { z } from "zod";
 import { hybridSearch, indexScrollback, rebuildIndex } from "../../db/queries/search";
+import { getAppSettings } from "../../db/queries/settings";
 import type { OllamaConfig } from "../../indexer/ollama-client";
 import { publicProcedure, router } from "../trpc";
 import { getScrollbackPath } from "./scrollback";
@@ -19,9 +19,10 @@ export const searchRouter = router({
       }),
     )
     .query(({ input, ctx }) => {
+      const saved = getAppSettings(ctx.db);
       const ollamaConfig: OllamaConfig = {
-        url: input.ollamaUrl ?? DEFAULT_SETTINGS.ollamaUrl,
-        model: input.ollamaModel ?? DEFAULT_SETTINGS.ollamaModel,
+        url: input.ollamaUrl ?? saved.ollamaUrl,
+        model: input.ollamaModel ?? saved.ollamaModel,
       };
       return hybridSearch(ctx.db, input.query, {
         projectId: input.projectId,

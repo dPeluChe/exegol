@@ -105,11 +105,7 @@ function useCommands(close: () => void): Command[] {
         category: "workspace",
         icon: Split,
         shortcut: "⌘D",
-        action: run(() =>
-          window.dispatchEvent(
-            new CustomEvent("exegol:split-pane", { detail: { direction: "horizontal" } }),
-          ),
-        ),
+        action: run(() => useWorkspaceStore.getState().splitFocusedPane("horizontal")),
       },
       {
         id: "ws:split-v",
@@ -117,11 +113,7 @@ function useCommands(close: () => void): Command[] {
         category: "workspace",
         icon: Split,
         shortcut: "⌘⇧D",
-        action: run(() =>
-          window.dispatchEvent(
-            new CustomEvent("exegol:split-pane", { detail: { direction: "vertical" } }),
-          ),
-        ),
+        action: run(() => useWorkspaceStore.getState().splitFocusedPane("vertical")),
       },
 
       // Agent commands
@@ -141,11 +133,7 @@ function useCommands(close: () => void): Command[] {
         shortcut: "⌘.",
         action: run(() => {
           const { focusedAgentId } = useAgentStore.getState();
-          if (focusedAgentId) {
-            window.dispatchEvent(
-              new CustomEvent("exegol:stop-agent", { detail: { agentId: focusedAgentId } }),
-            );
-          }
+          if (focusedAgentId) trpcMutate("agents.stop", { id: focusedAgentId }).catch(() => {});
         }),
       },
 
