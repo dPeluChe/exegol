@@ -28,10 +28,10 @@ const DEFAULT_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
-    id: "projects",
-    label: "Go to Projects",
-    description: "Switch to projects view",
-    keys: "Cmd+Shift+P",
+    id: "command-palette",
+    label: "Command Palette",
+    description: "Search commands, agents and projects",
+    keys: "Cmd+K / Cmd+Shift+P",
     category: "navigation",
   },
   {
@@ -42,32 +42,11 @@ const DEFAULT_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
-    id: "agent-1",
-    label: "Agent 1",
-    description: "Focus agent session #1",
-    keys: "Cmd+1",
-    category: "agents",
-  },
-  {
-    id: "agent-2",
-    label: "Agent 2",
-    description: "Focus agent session #2",
-    keys: "Cmd+2",
-    category: "agents",
-  },
-  {
-    id: "agent-3",
-    label: "Agent 3",
-    description: "Focus agent session #3",
-    keys: "Cmd+3",
-    category: "agents",
-  },
-  {
-    id: "agent-n",
-    label: "Agent N",
-    description: "Focus agent session by number (up to 9)",
-    keys: "Cmd+4-9",
-    category: "agents",
+    id: "workspace-tab-n",
+    label: "Workspace Tab N",
+    description: "Switch to workspace tab by number (1-9)",
+    keys: "Cmd+1-9",
+    category: "navigation",
   },
   // Agents
   {
@@ -86,17 +65,31 @@ const DEFAULT_SHORTCUTS: Shortcut[] = [
   },
   // Terminal
   {
+    id: "split-horizontal",
+    label: "Split Horizontal",
+    description: "Split the focused pane",
+    keys: "Cmd+D",
+    category: "terminal",
+  },
+  {
+    id: "split-vertical",
+    label: "Split Vertical",
+    description: "Split the focused pane vertically",
+    keys: "Cmd+Shift+D",
+    category: "terminal",
+  },
+  {
     id: "next-tab",
     label: "Next Tab",
-    description: "Focus next agent terminal",
-    keys: "Cmd+]",
+    description: "Switch to the next workspace tab",
+    keys: "Cmd+Shift+]",
     category: "terminal",
   },
   {
     id: "prev-tab",
     label: "Previous Tab",
-    description: "Focus previous agent terminal",
-    keys: "Cmd+[",
+    description: "Switch to the previous workspace tab",
+    keys: "Cmd+Shift+[",
     category: "terminal",
   },
 ];

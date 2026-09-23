@@ -65,18 +65,14 @@ export function useHotkeys() {
       // Cmd+Shift+D: Split vertical
       if (e.shiftKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        window.dispatchEvent(
-          new CustomEvent("exegol:split-pane", { detail: { direction: "vertical" } }),
-        );
+        useWorkspaceStore.getState().splitFocusedPane("vertical");
         return;
       }
 
       // Cmd+D: Split horizontal
       if (e.key === "d") {
         e.preventDefault();
-        window.dispatchEvent(
-          new CustomEvent("exegol:split-pane", { detail: { direction: "horizontal" } }),
-        );
+        useWorkspaceStore.getState().splitFocusedPane("horizontal");
         return;
       }
 
@@ -97,14 +93,7 @@ export function useHotkeys() {
       // Cmd+.: Stop focused agent
       if (e.key === ".") {
         e.preventDefault();
-        const { focusedAgentId } = useAgentStore.getState();
-        if (focusedAgentId) {
-          window.dispatchEvent(
-            new CustomEvent("exegol:stop-agent", {
-              detail: { agentId: focusedAgentId },
-            }),
-          );
-        }
+        useAgentStore.getState().stopFocusedAgent();
         return;
       }
 

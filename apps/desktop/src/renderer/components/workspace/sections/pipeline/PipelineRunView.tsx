@@ -22,6 +22,7 @@ import {
   usePipelineTemplate,
   useResumePipelineRun,
 } from "../../../../hooks/use-trpc-pipeline";
+import { switchSection } from "../../../../lib/switch-section";
 import { useAgentStore } from "../../../../stores/agents";
 import { useTerminalStore } from "../../../../stores/terminals";
 import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../../../stores/workspace";
@@ -103,9 +104,7 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
 
   const navigateToTerminal = useCallback((agentId: string) => {
     // Switch to Agents section (from Pipelines sub-tab)
-    window.dispatchEvent(
-      new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-    );
+    switchSection("agents");
     // Open the agent's terminal in the active pane
     const store = useWorkspaceStore.getState();
     const activeTab = store.getActiveTab();

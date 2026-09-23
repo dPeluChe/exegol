@@ -1,10 +1,12 @@
 import type { NotificationMuteChannel, Settings } from "@exegol/shared";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { switchSection } from "../lib/switch-section";
 import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAttentionItem, useAgentStore } from "../stores/agents";
 import { useNotificationPrefsStore } from "../stores/notification-prefs";
 import type { ToastType } from "../stores/toasts";
 import { useToastStore } from "../stores/toasts";
+import { useSettings } from "./use-trpc";
 
 // ─── Status → toast mapping ─────────────────────────────────────────────────
 
@@ -26,6 +28,9 @@ const TOAST_THROTTLE_MS = 10_000;
  * Call once in App.tsx.
  */
 export function useToastEvents(): void {
+  const toastsEnabled = useRef(true);
+  toastsEnabled.current = useSettings().data?.toastsEnabled ?? true;
+
   useEffect(() => {
     const cleanups: (() => void)[] = [];
 
@@ -43,7 +48,7 @@ export function useToastEvents(): void {
     const lastToasted = new Map<string, string>();
     const lastToastTime = new Map<string, number>();
     const unsubStatus = window.api.onAgentStatus((event) => {
-      if (event.cliType === "shell") return;
+      if (event.cliType === "shell" || !toastsEnabled.current) return;
 
       const mapping = STATUS_TOAST_MAP[event.status];
       if (!mapping) return;
@@ -77,11 +82,7 @@ export function useToastEvents(): void {
 
     // ── Notification navigate (system notification click) ───────────────
     const unsubNav = window.api.onNotificationNavigate?.((data) => {
-      window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", {
-          detail: { section: "agents" },
-        }),
-      );
+      switchSection("agents");
       // T155.3: land on the exact pane of the agent that raised the notification
       const agent = useAgentStore.getState().agents[data.agentId];
       if (agent) jumpToAttentionItem(data.agentId, agent.projectId);

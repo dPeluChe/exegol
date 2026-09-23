@@ -91,6 +91,7 @@ export interface WorkspaceStore {
 
   extractPaneToNewTab: (sourceTabId: string, paneId: string) => void;
   closeFocusedPane: () => void;
+  splitFocusedPane: (direction: "horizontal" | "vertical") => void;
 
   // Derived
   getActiveTab: () => WorkspaceTab | null;

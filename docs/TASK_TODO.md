@@ -5,63 +5,52 @@
 > **Pending tasks only** — completed work lives in [`TASK_COMPLETED/`](./TASK_COMPLETED/) (monthly files) and `CHANGELOG.md` (per release).
 
 > **Quality gate before PR**
-> - `npx @biomejs/biome check --fix apps/ packages/shared/src/ packages/ui/src/`
-> - `npx tsc --noEmit -p apps/desktop/tsconfig.node.json && npx tsc --noEmit -p apps/desktop/tsconfig.web.json`
+> - `bun run lint` (pinned Biome 2.4.7, fails on warnings) and `bun run typecheck`
+> - `bun run test && bun run test:shared`; CI (`.github/workflows/ci.yml`) runs the same plus `cargo test` and `bun run build`
 > - Max 400-500 LOC per file unless a refactor task explicitly says otherwise
 
 ---
 
 ## Priority Order
 
-### Wave 2.6 — Hardening & verification (2026-07-06) — ACTIVE
-> **Verificar > construir.** Source: `docs/RESEARCH/CODE_HEALTH_AUDIT_2026_07.md` (Fable audit).
-> New features deferred to the next round — this wave hardens what Wave 1+2 built before
-> shipping anything on top. Moat thesis re-validated against live market (Conductor $22M,
-> Vibe Kanban/Terragon dead, first-party absorption): **Pipelines → Evidence → Undo → Scoring**
-> still uncontested — the risk is follow-through, not direction.
+### Daily readiness (2026-09-22): ACTIVE
+> Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.
+> Goal: an installed build Antonio can use every day. Features wait.
 
-**Execution plan decided 2026-08-11 (Antonio + Fable):**
-- A1 checklist → **dedicated joint verification session** (Antonio drives, Fable greps/checks)
-- T149 + T150 → **parallel claude-code agents in Exegol worktrees** — briefs ready:
-  `docs/AGENT_PROMPTS/WT_T149_CORE_TESTS.md` + `WT_T150_T80_PARITY.md` (supervisor reviews, no agent pushes)
-- Wave 3 order: **T156 ✅ (PRs #90-#92: fleet home + live peek terminal) → T157 core ✅ (PR #93, pending live verify) → T153**
-- Exit criteria met → **release v0.5.0** (tag + changelog)
+**P0**
+1. **Installable build**: reconcile the version (`package.json` 0.4.1 vs CHANGELOG 0.4.4, see
+   `GUIDES/RELEASE.md` step 2), `bun run package:mac`, then run both manual-verification
+   checklists below on the PACKAGED app (PATH detection, CSP, capability allowlist). Cut v0.5.0.
 
-**P0 — before any new feature:**
-1. **Manual verification backlog** — DEFERRED by Antonio 2026-08-11: Wave 3 (T156/T157)
-   starts first because using the dashboard + messaging day-to-day exercises these same
-   surfaces; checklists get verified opportunistically during Wave 3 sessions
-2. ~~T149~~ — ✅ DONE 2026-08-11 (PR #84, `TASK_COMPLETED/2608.md`): 42 tests + REAL BUG fixed (running→running missing — multi-step pipelines stalled after step 0)
-3. ~~T150~~ — ✅ DONE 2026-08-11 (PR #85): withRetry wired ×6 via `lib/anthropic.ts`, 65 parity vectors, 9 JS↔Rust divergences fixed
+**P1**
+2. opencode TUI dies across app quit (Wave 2 checklist below)
+3. Sidecar terminal correctness: T184.2 (unanswered DA1/colour queries), T184.3 (replay re-asks
+   queries), T184.4 (kills a pid without identity check), T185.14 (backpressure), T185.8 (reattach replay)
+4. T184.5: a failing `beforeAgent` silently prevents the spawn
+5. T181 purge UI + one retention policy (nothing is deleted any more; oplog keeps git trees)
+6. T183.2: AI features dark without an API key (Sparkles commit, scoring, evaluator)
+7. T185.11: scheduler timeout records two results and frees capacity early; T185.1 scheduler UI
+8. T185.6 / T185.7 / T185.9: main-process freezes (token scan, idle serialize, worktree status)
+9. T182.8: History pagination
 
-**P1 — after P0:**
-4. ~~T151~~ — ✅ DONE 2026-08-11 (`TASK_COMPLETED/2608.md`): zero capability wildcards, keystore warn, Doctor duplicate-CLI + stale-worktree checks
-5. ~~T152~~ — ✅ DONE 2026-08-11 (PR #86): workspace.ts 698→77 (slices), index.ts 607→136 (`main/bootstrap/`) — pending live smoke (boot, deep link, layout persist)
-6. **T142** — Integrations Hub: GitHub API — **POSTPONED by Antonio 2026-08-11**: v0.5.0 ships without it; pick up after the Wave 3 kickoff decision
+**Wave 2.6 status (2026-07-06 → 2026-08-11)**: T149-T152 shipped (`TASK_COMPLETED/2608.md`).
+Open exit criteria: both manual checklists below, and cut **v0.5.0** (T156 dashboard landed;
+T142 postponed by Antonio 2026-08-11).
 
-**P2 — Post-launch bets (next round):**
-**Wave 3 co-headliners: T153 Awareness Engine · T156 Global Sessions Dashboard · T157
-Cross-provider Inter-agent Messaging** (T156/T157 answer Claude Code's Aug absorption of
-dashboard+messaging — see `RESEARCH/COMPETITIVE_UPDATE_2026_08.md`) ·
-**T155 Terminal & Attention UX pack** (7 independently-shippable QoL wins — klaudio review) ·
-T133 remote channel (Telegram) — *candidate to elevate: remote continuity is the most visible
-gap vs Omnara / Claude web / Codex Remote* · T132 automations catalog · T134 ACP experimental ·
-T135 derived status + CDC · T136 tiered merge resolver · T137 hunk assignment + absorb ·
-T138 ModeTracker headless · T139 skills security scan · T144 dependency/library audit
+**P2 — Post-launch bets (next round):** T153 Awareness Engine · T133 remote channel (Telegram;
+remote continuity is the most visible gap vs Omnara / Claude web / Codex Remote) · T132 automations
+catalog (after T185.11) · T134 ACP experimental · T135 derived status + CDC · T136 tiered merge
+resolver · T137 hunk assignment + absorb · T138 ModeTracker · T139 skills security scan · T144
+dependency/library audit
 
 > **Docs to review before Wave 3 design** (merged with PR #82, pending review — Antonio 2026-08-11):
-> `docs/ARCHITECTURE/COUNCIL_BASE.md` (council mode / structured executions — absorbs the
-> standalone council-MCP idea, backs T158/T160) + `docs/ARCHITECTURE/OWL_FLEET_WATCH.md`
-> (fleet watch module — backs T156–T159). Reuse when designing T156/T157.
-
-**Wave 2.6 exit criteria (definition of done):**
-- [ ] Both manual-verification checklists below fully checked (T123 result recorded either way)
-- [x] T149 merged: migration-chain, executor-transition, spawn-lifecycle and MCP-token tests green (PR #84)
-- [x] T150 merged: zero unwired T80 code left; parity vectors run in both vitest and cargo test (PR #85)
-- [x] T151 + T152 merged: no `"*"` capability wildcards, no file > 500 LOC in the flagged pair (PRs #83/#86)
-- [ ] Cut **v0.5.0** when T156 lands + opportunistic checklist passes (T142 postponed; full checklist sweep deferred per Antonio 2026-08-11)
+> `docs/ARCHITECTURE/COUNCIL_BASE.md` (council mode / structured executions — backs T188/T189)
+> + `docs/ARCHITECTURE/OWL_FLEET_WATCH.md` (fleet watch module — backs T186-T188, T159).
 
 ### Shipped waves
+- **Wave 3: fleet + coordination (2026-08 to 2026-09)**: T149-T152, T155, T156, T157, T160, T161
+  (resume picker), T162 phases 1-2, T163 core, T166.1, T167, T168, T170.1, T172.1/5-7, T175.1, T176, T177, T178,
+  T179.3, T180, T181 core, T183.1 terminal fidelity, T184.1. Details: `docs/TASK_COMPLETED/2608.md`, `2609.md`.
 - **Wave 2 — Competitive Review (2026-07)**: T123-T131, T88v2, T140, T141, T143, T145-T148
   across WT-A/B/C/D. Details: `docs/TASK_COMPLETED/2607.md`.
 
@@ -98,14 +87,9 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - [x] Exegol MCP — **VERIFIED 2026-08-11**: shim framing bug found+fixed; claude shows
   `exegol · connected · 3 tools`; live memory_search (empty-correct) → 3× memory_save
   (ids+categories) → retrieval ✅. Pending only: read-mode denial (spawn a read-mode agent,
-  memory_save must be refused). **Agent-sourced improvements filed**: (a) add `memory_list`
-  tool (recent N) — search-only is awkward for "what do you know?"; (b) multi-word recall
-  too literal ("Capacitador proyecto estado stack convex" → empty while single terms hit) —
-  likely no-Ollama fallback path; tune FTS OR-semantics / RRF and fold into the min-cosine
-  upgrade already queued in T153. **Follow-ups filed**: (a) opencode/other CLIs never see `.mcp.json`
-  (claude's convention) — extend exegol-mcp-config to inject opencode's own config
-  (`opencode.json` mcp section) + audit codex path; (b) MCP HOST StdioTransport has the
-  same LSP-framing bug as the shim had — external stdio servers likely can't connect
+  memory_save must be refused). Follow-up still open: MCP HOST StdioTransport may have the
+  same LSP-framing bug the shim had (external stdio servers likely can't connect).
+  (`memory_list`, the AND→OR recall retry and opencode MCP config shipped: 2608.md, T163.)
 - Polish note (verify session): shell/agent exit card duplicates the scrollback tail
   visible right below it — slim the AgentStopReason card (keep actions, drop/collapse tail)
 - Pipeline evidence: score badge + AI summary per step, Export Report
@@ -125,14 +109,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ### P3 — Strategic bets / larger scope (post Wave 2)
 - **SSH Remote Development** (T73)
-- **CI/CD release pipeline** (T45) — activate when repo goes public
+- **CI/CD release pipeline** (T45): validation CI shipped (PR #115); release workflow pending
 - **Canary channel** (T46)
 - **Cross-repo workspaces** (T92) — front + back in one workspace (T146 project groups is the cheap precursor)
 - **Mobile companion app** (T93) — natural successor of T133 Telegram channel
 - **Headless daemon mode** (T94) — prerequisite for T93
 - **Panel Plugin SDK** (T97) — extensible panel system, v1.0 architecture (design spike first)
 - **Ephemeral validation containers** (T154) — run tests/evaluator checks in disposable Apple `container` VMs (NOT agent isolation)
-- **xterm renderer pool** (T114) — re-scoped inside T143: measure after disposal fixes, build only if needed
+- **xterm renderer pool** (T114): measure first, T115 DormantRing and T178 hidden-pane byte cut already shipped
 - **Vercel AI SDK + Ollama** (T122) — value compounds with T130/T147 in-process LLM calls
 - **Issue tracker expansion** (T71) — Linear/Jira; plugs into T142 integrations registry
 - **T60 project hooks** — ⚠️ mostly superseded by shipped T91 (`.exegol/lifecycle.yaml`); pending delta only: `archive` hook on worktree archival + env vars — review & fold or drop
@@ -186,7 +170,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   oplog: what agents did recently in this repo)
 - Observations feed the memory store (salience/supersession applies); knowledge DIGEST.md
   refresh consumes the file_index
-- External agents (any of the 11 CLIs) get the shared brain mid-session, not just at spawn
+- External agents (any of the 14 built-in CLIs) get the shared brain mid-session, not just at spawn
 
 **Execution architecture (decided 2026-07-07)**
 - **Runtime**: llama.cpp `llama-server` binary as an **inference sidecar** (same pattern
@@ -259,130 +243,6 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
-### T155 — Terminal & Attention UX Pack `added: 2026-07-09`
-**Priority**: P2 (post Wave 2.6 — daily-use polish, great filler between waves) | **Effort**: S-M per item, independently shippable | **Source**: `RESEARCH/KLAUDIO_PANELS_2026_07.md` (willywg/klaudio-panels review — its CHANGELOG.md + PRPs/ are ready-made specs with failure modes documented)
-
-**Why**
-- klaudio-panels (indie, Claude-only shell) is far behind Exegol on power but ahead on
-  daily-use interaction polish. Seven cheap, high-frequency QoL wins, each independently
-  shippable — ideal parallel-agent or between-waves work.
-
-**Scope (ranked by value/effort — details + file refs in the research doc)**
-1. [x] ~~Drag file → terminal as `@path` mention~~ — **SHIPPED PR #68** (FileExplorer + GitPane
-   rows → any PTY; Finder-external drops deferred — needs preload `webUtils.getPathForFile`)
-2. [x] ~~Cmd+click file paths + bare URLs~~ — **SHIPPED PR #68** (file → IDE at line via
-   `openInIde --goto`; bare URL plain click → external browser, Cmd+click → browser pane;
-   + "Open in default browser" button in the browser address bar)
-3. [x] ~~Attention → exact-pane routing~~ — **SHIPPED PR #70** (OS-notification click →
-   exact pane via jumpToAttentionItem, clear-on-activation on pane mousedown, amber tab
-   pulse beats activity dot; + worktree-aware file-link resolution fix for #68)
-4. [x] ~~Terminal input QoL~~ — **SHIPPED PR #68** (Shift+Enter newline, Cmd+←/→ home/end,
-   Cmd+↓ + amber "new output below" pulse; image paste was already solved better via
-   clipboard-to-file; single-SIGWINCH guard deferred — measure first, current resize path
-   already coalesces via rAF)
-5. [x] ~~Session browser + resume~~ — **SHIPPED PR #72**, upgraded per Antonio: cross-provider
-   from our own DB (`agents.listResumable` over T101 resume handles), mixed by date in the
-   empty pane, responsive 1/3/5 rows, collapsed by default. Follow-up idea: also import
-   Claude sessions born outside Exegol (`~/.claude/projects/*.jsonl`)
-6. [x] ~~`exegol .` CLI + deep link~~ — **SHIPPED PR #73** (worktree agent, diff-reviewed):
-   protocol + single-instance + delivery queue, deepest-ancestor project match, menu
-   install/uninstall. Pending live smoke: real `open` delivery + menu dialogs
-7. [x] ~~Notification hygiene~~ — **SHIPPED PR #73**: toast hover-pause (timers moved to
-   component), dismiss≠read audited (already correct), per-channel kill switches in the
-   bell popover enforced renderer- AND main-side
-
-**T155 COMPLETE (7/7) — 2026-07-10, PRs #68/#70/#72/#73. Archive to TASK_COMPLETED on next sweep.**
-
-**Cross-cutting rules to adopt while in there**
-- Focus discipline (their PRP 017): only explicit user action or per-project restore sets
-  focus — visibility flips never do
-- Per-project panel persistence (width/tab/height keyed by project) + non-destructive
-  auto-hide on narrow windows
-
-**Likely files**
-- `renderer/components/terminal/{TerminalInstance,TerminalPanel,terminal-setup}.ts*`,
-  `renderer/components/workspace/{FileExplorer,GitPane,WorkspaceTabBar}.tsx`,
-  `renderer/components/layout/TitleBar.tsx` (bell), `main/notifications/*`,
-  `main/index.ts` (deep link), new `resources/bin/exegol` CLI script
-
----
-
-### T156 — Global Sessions Dashboard `added: 2026-08-11`
-**Priority**: P2 — **Wave 3 co-headliner** (with T153/T157; after Wave 2.6 exit criteria) | **Effort**: M | **Source**: idea (Antonio) + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude Code "agent view" is the UX benchmark — ours is cross-provider)
-
-**Why**
-- One place showing ALL active sessions across ALL projects, project badge per row, even
-  across different paths. Claude Code just shipped exactly this (`claude agents` + supervisor
-  daemon) — validating the need — but Claude-only. Exegol already has the primitives: the
-  agents store accumulates cross-project, `jumpToAttentionItem` does cross-project jump
-  (T141), and the attention pending-question tail is already extracted (T124).
-
-**Scope**
-- New Monitor sub-tab "Sessions" (or promoted top-level view): every non-terminal agent
-  across all projects — project badge (name + group color T146), provider icon, status +
-  activity dot, current step, uptime, cost (T147 data), attention state
-- **Group-by toggle**: by state (Needs input / Working / Ready-review / Completed-recent)
-  vs by project — mirror agent view's Ctrl+S
-- **Peek-and-reply** (the killer interaction, copied from agent view): expand a
-  needs-input row → show the pending question (attention tail already computed) → inline
-  one-line reply sent to the agent's PTY without leaving the dashboard
-- Row click → `jumpToAttentionItem` (exact pane, existing)
-- Needs: `agents.listActive` query (all projects, join project name/color) — the store
-  alone may miss projects never opened this session
-
-**Likely files**
-- New: `renderer/components/workspace/sections/SessionsSection.tsx`
-- `main/ipc/procedures/agents.ts` (listActive), `WorkspaceTabs` (sub-tab), reuse
-  StatusDot/AgentIcon/attention tail
-
----
-
-### T157 — Cross-provider Inter-agent Messaging `added: 2026-08-11`
-**Priority**: P2 — **Wave 3 co-headliner** | **Effort**: M-L | **Source**: idea (Antonio: "hablar entre sesiones DURANTE el chat, no como flujo") + `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` (Claude trust model; herdr gap) + **`RESEARCH/TRINITY_2026_08.md`** (typed human-gate items park-and-end-turn + expiry-as-denial; completion-event wake with triple loop-safety; zero-default agent_permissions checked at MCP layer, parent→child auto-grant)
-
-**Why**
-- The inter-agent-comms race is Anthropic (Claude-only, best trust design) vs herdr
-  (cross-provider-ish but ZERO identity/trust — receiver can't tell agent from human).
-  **Nobody has cross-provider messaging with a real trust model.** Exegol is uniquely
-  positioned: MCP server with per-agent tokens (T145) = identity for free; deterministic
-  turn boundaries (T123) = safe delivery timing; messages table (T25, orphaned) = storage
-  already migrated.
-
-**Scope**
-- **MCP tools on the T145 server**: `agents_list` (visible agents + states, scoped by
-  accessMode), `agent_send(target, message)` — identity from the caller's token, NEVER
-  client-claimed (existing pattern)
-- **Delivery at turn boundaries** (Claude's rule, our T123 signals): queue per target;
-  inject into the PTY as a formatted prompt when the target hits `waiting_input`/turn end —
-  never mid-generation. Idle target → deliver immediately
-- **Trust model (copy Anthropic, fix herdr's gap)**: sender attribution in the injected
-  text ("[message from agent X — it cannot approve actions]"); inbound policy per agent
-  `accept/hold/refuse` with default HOLD for messages from YOLO/bypass agents (human
-  approves in Attention Inbox); loop throttling (dedup window + queue cap)
-- Persist via T25 `messages` table (types text/request/result already exist) — audit trail
-  in the oplog; conversation visible to the human in the agent pane toolbar
-- Optional ergonomic (herdr's good idea): `agent_send` with `wait_for: "turn_end"` —
-  send-and-wait as one call for scripted coordination
-- Human side: "Send to" (existing) grows into a small message composer with target picker
-
-**Likely files**
-- `main/mcp/exegol-tools.ts` (+2 tools), `main/agents/agent-session-callbacks.ts` (delivery
-  hook on turn boundary), new `main/agents/agent-messaging.ts` (queue + policy + throttle),
-  `ipc/procedures/messages.ts` (de-orphan), Attention Inbox (hold approvals)
-
----
-
-### T160 — Session Alias `added: 2026-08-11`
-**Priority**: P2 (prereq-lite for T157 addressing) | **Effort**: S | **Source**: idea (Antonio, verify round 3)
-
-- User-editable alias per agent session ("ClaudeTester") — new nullable `alias` column,
-  shown as an editable chip in the terminal toolbar (next to isolation/branch/Chat),
-  used in sidebar/attention/session-browser labels, and later as the **addressing name
-  for T157 inter-agent messaging** (mirrors Claude cross-session `/rename` and agent-teams
-  naming). Sessions get identity, not just windows.
-
----
-
 ### T161 — Session naming ↔ CLI session identity `added: 2026-08-11` `updated: 2026-08-13`
 **Priority**: P2 | **Effort**: M | **Source**: Antonio, during the multi-agent rounds
 
@@ -399,12 +259,12 @@ Wanted: when Exegol assigns a codename, push it INTO the CLI's session name wher
 provider supports it, and prefer name-based resume over the captured resume command. One
 identity instead of two, and `agents_list` names then survive outside Exegol. Needs a
 per-provider capability (`supportsSessionRename`, `resumeByName`) rather than a special
-case — see [[T174]] on declaring provider behaviour instead of learning it.
+case; lands as a field of the T191 provider descriptor.
 
 ---
 
 ### T162 — Agent Links & Rooms `added: 2026-08-12`
-**Priority**: P1 (Wave 3 — next after T157 live verify) | **Effort**: M (phased) | **Source**: idea (Antonio 2026-08-12) + `ARCHITECTURE/COUNCIL_BASE.md` (exchange bus) + trinity human-gate patterns + **`RESEARCH/HERDR_2026_08.md` design requirements (2026-08-12): send-and-wait atomic (event cursor captured pre-write), `delivery_not_observed` error distinct from reply timeout, replies KEYED to message id + receiver-session pinning (never satisfied by a state transition or a successor session), reads never clear the human's seen-bit**
+**Priority**: P1 (Wave 3) | **Effort**: M (phased) | **Source**: idea (Antonio 2026-08-12) + `ARCHITECTURE/COUNCIL_BASE.md` (exchange bus) + trinity human-gate patterns + **`RESEARCH/HERDR_2026_08.md` design requirements (2026-08-12): send-and-wait atomic (event cursor captured pre-write), `delivery_not_observed` error distinct from reply timeout, replies KEYED to message id + receiver-session pinning (never satisfied by a state transition or a successor session), reads never clear the human's seen-bit**
 
 **Why**
 - "Cuando termines avisale a revisor-api" works today only if the agent remembers to call
@@ -412,16 +272,16 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
   at the turn boundary even when the model forgets. Rooms generalize it to multi-agent
   feedback (A builds, B+C review) — the council preset from COUNCIL_BASE.md.
 
-**Scope (phased — each useful alone)**
-1. ✅ **Directed link — SHIPPED 2026-08-12 (PR #101)**: `agent_link` MCP tool + agent_links
-   table (w3_002), fired from the broadcastAgentStatus choke point, one-shot default,
-   dies with either endpoint. Roles notify/reviewer/feedback with framing + expects_reply.
-   Also shipped: cross-project origin in attribution headers + Settings > MCP Server panel.
-   Pending: dashboard link UI (link icon on cards), `once:false` recurring links live-verify.
-2. ✅ **Roles** — shipped with phase 1 (framing per role).
-3. **Rooms**: N-agent membership; message to room fans out (still one per boundary per
-   member); human sees the thread. Build on T25 messages + a room_id column. This is the
-   COUNCIL_BASE exchange-bus MVP — do not build the headless council executions yet.
+Phases 1-2 (directed links + roles, `agent_link`, w3_002) shipped 2026-08-12 (PR #101), see
+`TASK_COMPLETED/2609.md`. Pending from them: dashboard link UI (link icon on cards), `once:false`
+recurring links live-verify.
+
+**Remaining: Rooms.** N-agent membership; message to a room fans out (one per boundary per
+member); the human sees the thread. Build on T25 messages + a room_id column. COUNCIL_BASE
+exchange-bus MVP only, no headless council executions. Absorbs:
+- T172.4 broadcast / shared session context (the same isolation rules written twice by hand)
+- T183.6 threads survive restart: `inReplyTo` lives only on the in-memory `PendingMessage`;
+  needs a `thread_id` column
 
 **Likely files**
 - `main/agents/agent-messaging.ts` (links + fanout), `mcp/exegol-{protocol,tools}.ts`
@@ -430,7 +290,7 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
 ---
 
 ### T163 — MCP Config Injection: all providers `added: 2026-08-12`
-**Priority**: P1 | **Effort**: S-M | **STATUS: core SHIPPED 2026-08-12** (PR #96 stale-shim proxy + PR #97 codex/opencode/gemini injection) — pending live verify + remaining CLIs (aider/goose/amp/kiro/crush/agy/devin per docs)
+**Priority**: P1 | **Effort**: S-M | **STATUS: core SHIPPED 2026-08-12** (PR #96 stale-shim proxy + PR #97 codex/opencode/gemini injection; devin + agy wired later, `exegol-mcp-config.ts:408-425`) — pending live verify + remaining CLIs: aider, goose, amp, kiro, kilocode, crush, factory-droid
 
 - Today only claude-code gets `.mcp.json` → only claude agents can use agents_list /
   agent_send / memory tools. Extend `mcp/exegol-mcp-config.ts` per provider:
@@ -488,31 +348,121 @@ case — see [[T174]] on declaring provider behaviour instead of learning it.
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over T157–T162 (2026-08-12) — correctness landed in PR #102; these are the larger/architectural residuals
 
 - **Lifecycle event emitter**: `broadcastAgentStatus` (a transport fn) still owns delivery + link firing + `getDb()`, forcing the documented import-cycle workaround. Extract an in-main `agent:turn-ended {agentId, reason}` emitter (notifications/bus pattern) that agent-messaging subscribes to once at bootstrap; spawn-env goes back to broadcast+tray.
-- **Collapse the 4 per-provider MCP config writers** (exegol-mcp-config.ts) into one descriptor table (path, section, envKey, entry); token-read chain + removeAgentMcpConfig ride the same table. ~120→~50 LOC.
-- **Derive the MCP wiring panel from the registry** (procedures/mcp.ts EXEGOL_MCP_PROVIDER_WIRING duplicates flavorForCli + registry names) — `mcpConfigFlavor` on AgentProviderCapabilities; covers custom providers.
-- ~~**codex cwd→token 1:1 hardening**~~ — DONE 2026-08-13: a token now binds N agents and identity is resolved per CONNECTION (process tree first, pinned for the socket's life); an unresolvable share returns -32003 instead of guessing. Per-agent token record written for every provider, so reattach re-arms each session with its own credential.
+- MCP config writer table + wiring panel from the registry: moved to T191.
+- Per-session token identity: moved to T173.
 - **SessionAlias window-listener → store**: `renamingAgentId` field in the workspace/agents store instead of N window listeners.
 - **mapLinkRow → zod** (agentLinkRowSchema) to match every other table's validated mapping.
 
 ---
 
+### T185 — Daily-readiness audit `added: 2026-09-22`
+**Priority**: P1 unless noted | **Effort**: S-M each | **Source**: 2026-09-22 code audit + `RESEARCH/EXEGOL_REVIEW_2026_09_05.md` findings #3-#9. Items fixed in the same PR are in `TASK_COMPLETED/2609.md`.
+
+**Dead or missing surface**
+1. **Scheduler has no UI** since 274e611 (SchedulerSection deleted); the sidebar Schedulers section
+   was removed in the 2026-09-22 PR. Create/edit/toggle/run UI missing; hooks in
+   `renderer/hooks/use-trpc-scheduler.ts` unused.
+2. **Ollama project indexing has no start button**: `indexer.startIndexing/search/projectStats` have
+   no renderer caller; the Settings section describes a feature the user cannot run.
+3. **Parallel runs**: `parallel-run:changed` broadcast is in neither the capabilities IPC list nor
+   preload (UI polls every 10s); `agents.cancelParallelRun` has no UI.
+4. **Dead surface** (P2): `agent:signal` / `agent:turn-boundary` broadcasts have no subscriber;
+   tables `sessions`, `port_registry`, `host_metrics` unused; `messages.*` and `queue.*` have no UI;
+   preload `browser.captureElement` unused. Wire or delete (feeds T144).
+5. **LLM tier-3 score persists (w3_009) but nothing displays it**: show it in Scoring/History or stop
+   the paid Haiku call.
+
+**Main-process stalls**
+6. **Tokens tab Scan** (`tokens/log-parser.ts`) is sync `readFileSync` + `JSON.parse` over
+   `~/.claude/projects`: 2.1s freeze at ~1GB. Move to a worker_thread or stream with mtime skip.
+7. **Headless xterm serialize on main** (`headless-emulator.ts:83`), 25-40ms per 5000 lines: runs on
+   every 5s scrollback flush per agent even when idle (add a dirty flag), and twice per pane mount
+   (`use-terminal-lifecycle.ts` fetches a full snapshot to test non-empty, `terminal-setup.ts`
+   fetches again; the lifecycle hook's `markData` is unused and could be wired).
+8. **Reattach replays up to 8MB ring snapshot through `callbacks.onData`** (`pty-host.ts` ~146):
+   ~100-150ms blocking per live agent at startup, and it re-fires old status/OSC signals. Write the
+   snapshot to the emulator only and seed the scrollback buffer tail directly.
+9. **`projects.listAllWorktrees` calls sync napi `worktreeHasChanges` per worktree** on the main
+   thread (10ms/worktree here, est 150ms+ on 10k files). Use a napi AsyncTask or async git status.
+10. **GitPane / SmartGitAction / TerminalPanel poll git status + `gh pr view` every 15s**: refetch on
+    turn-end / commit / push events instead.
+
+**From the 2026-09-05 review (reproduced there, confirmed still in code 2026-09-22)**
+11. **Scheduler timeout double-records and frees capacity early** (#3): the 10-min timeout
+    (`scheduler/engine.ts:277`) logs `timeout`, drops the task from `runningTasks` without stopping
+    the agent, and a later finish logs `success` for the same run. Stored `maxTokenBudget` and
+    `skillName` never reach spawn options; a full concurrency slot returns without a durable
+    deferred run. Separate task from run; persist queue, attempt and terminal state; close each run
+    once. Prerequisite for T132.
+12. **Embeddings: a failed call leaves a permanent hole, and a model change never invalidates**
+    (#4, #5): `indexProject` stores the file hash before the vector, so a `null` embedding is never
+    retried; the cache compares content hash only, and `cosineSimilarity` truncates to the shorter
+    dimension. Persist model id, dimension and chunker version per index generation. Before T153.
+13. **Indexer follows symlinks out of the repo** (#6): `project-indexer.ts:51` uses `stat`, no
+    real-path containment, no `.gitignore`. Git-aware enumeration, skip external symlinks.
+14. **Sidecar memory pressure** (#9): `pendingBytes` counts UTF-16 units, not bytes; ring eviction
+    only touches idle sessions (33 active rings = 264 MiB > 256 MiB target); `broadcast`
+    (`pty-sidecar-entry.ts:65`) ignores `client.write`'s return, so a slow client grows the socket
+    queue unbounded. Test with a slow and a healthy client. Pairs with T184.2-4 (bump
+    SIDECAR_VERSION).
+15. **Memory salience reinforces a negation** (#7, P1 for T158/T164): `classifyObservation`
+    (`salience.ts:51,61`) reinforces "Always run migrations…" with "Never run migrations…" (word
+    similarity > 0.8). Auto-dedup only exact normalized matches; supersession needs an explicit
+    relation, provenance and reason.
+
+**Left from the PR simplify pass** (P2)
+16. **Settings defined three times**: the `Settings` type, `settingsSchema` defaults and
+    `DEFAULT_SETTINGS` drift (that is how zod stripped the Ollama keys). Make
+    `Settings = z.infer<typeof settingsSchema>` and `DEFAULT_SETTINGS = settingsSchema.parse({})`;
+    reconcile `agentClis` (schema `[]`, constant 4 entries) first.
+17. **Other untyped CustomEvents**: `switch-section` is typed now (`lib/switch-section.ts`); give
+    `spawn-agent` and the rest a typed `WindowEventMap` so detail keys are checked at both ends.
+18. **One apply-status helper**: status dedup covers the parser path only; the other 7
+    `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
+
+---
+
+### T191 — Provider capability descriptor `added: 2026-09-22`
+**Priority**: P2 | **Effort**: M | **Source**: merge of overlapping provider-knowledge items
+
+Per-provider behaviour lives in at least five hand-synced tables. Declare it once on the provider
+definition in `agents/registry.ts` so custom providers get it too. Absorbs:
+- T165/T166: one descriptor table for the per-provider MCP config writers + token read chain
+  (`exegol-mcp-config.ts`, 506 LOC), and derive the MCP wiring panel
+  (`procedures/mcp.ts` `EXEGOL_MCP_PROVIDER_WIRING`) from it (`mcpConfigFlavor`)
+- T181: `configDir` + `localHistory` (history readers, `skills/paths.ts`, `skills/importer.ts` and
+  `agents/wrappers.ts` disagree: `"claude"` vs `"claude-code"`, two opencode dirs); `isEphemeral`
+  instead of `cli_type === "shell"` in ~19 places
+- T161: `supportsSessionRename`, `resumeByName`
+- T175.6: `emitsTurnBoundaries`
+- T174: composer-ready marker + anchor per TUI
+- T172: expected behaviour (asks for authorization before sharing, etc.)
+
+---
+
+### T192 — Evaluator: schema output, honest failure states, durable verdicts `added: 2026-09-22`
+**Priority**: P1 when pipelines are in daily use, else P2 | **Effort**: M | **Source**: merge of T184.7, T183.14, review 2026-09-05 #10, T122 structured output
+
+- Judge output is regex-scraped (`evaluator.ts:83`) with a silent score-0 fallback; failed judges'
+  zeros enter the average, so an infrastructure or format failure can route the pipeline to "fix".
+  Schema-validated output (tool parameter schema or `generateObject`), hard-fail when absent.
+- Distinct states: valid verdict / provider failure / insufficient evidence; minimum valid judges
+  before deciding.
+- Resume-after-hold counts as human approval: bind the approval to the evidence reviewed; a later
+  diff change invalidates it. Retry-after-provider-failure must not read as approval.
+- Durable verdict rows per attempt (status, retry count) so an interrupted gate resumes.
+- Report: deterministic checks and their commands before the model score.
+
+---
+
 ### T184 — Learnings from fx, eve, pullfrog, openchamber and clay `added: 2026-08-22`
-**Priority**: P0 for item 1 (a shipped feature is dead) | **Effort**: varies | **Source**: 4-agent read
+**Priority**: P1 for items 2-5 (daily-readiness list) | **Effort**: varies | **Source**: 4-agent read
 of the repos Antonio brought + fx.sh docs. Clones under `_repos_2_learn/github.com/`. Every claim
 about OUR code below was reproduced before filing; two of the reviewers' claims did NOT reproduce
 and are recorded as refuted at the end.
 
-**P0 — a feature we built is defeated by our own prompt.**
-
-1. **`git diff HEAD` captures nothing once the agent commits.** `pipeline-helpers.ts:18` captures
-   `git diff HEAD` (uncommitted only), while `pipeline/context.ts:10` — our own `fix` step prompt —
-   ends with "Address all review comments **and commit**." Demonstrated on a scratch repo: after the
-   agent commits, `git diff HEAD` returns **0 lines** where `git diff --merge-base <base>` returns
-   the real 7. So `hasRealDiff` is false, the T88v2 evaluator gate answers "No diff to judge" every
-   time, and T130 emits no evidence. `merge-base` appears **zero times** in the whole repo. Needs a
-   base ref recorded at worktree creation. Also drop the 1 MB `maxBuffer`, which turns any larger
-   diff into `"(failed to capture git diff)"`.
-   → `main/pipeline/pipeline-helpers.ts:14-28`, `evaluator-step-handler.ts:56`, `evidence.ts:17`
+(Item 1, pipeline evidence lost once the agent commits, shipped 2026-09-22 in PR #115; see
+`TASK_COMPLETED/2609.md`.)
 
 **Latent bugs in the sidecar (openchamber).** All three verified:
 
@@ -532,19 +482,17 @@ and are recorded as refuted at the end.
 
 **Spawn and lifecycle (pullfrog).**
 
-5. **A failing `beforeAgent` silently prevents the agent from starting.** `agent-spawn-flow.ts:299`
+5. **A failing `beforeAgent` silently prevents the agent from starting.** `agent-spawn-flow.ts:300-301`
    builds `beforeAgent && <command>`; `&&` short-circuits, so a failed `npm install` means the CLI
    never launches and nothing says why. They run the hook separately, capture structured failure, and
    TELL THE AGENT in a dedicated `SETUP HOOK FAILED` prompt section. Their hook timeout is 10 min;
    ours is 2, too short for a cold install.
-6. **We check that an API key exists, never that it works.** `doctor.ts:339` tests for a non-empty
+6. **We check that an API key exists, never that it works** (pairs with T183.2: prefer the logged-in CLI, probe the key as fallback). `doctor.ts:339` tests for a non-empty
    string, so a revoked key passes the doctor and fails inside a PTY at spawn. Their 40-line liveness
    probe returns `alive | dead | unknown` with a 5s timeout, and only lists providers whose live-200
    AND bad-key rejection have both been measured — `unknown` never rewrites a working config.
-7. **Evaluator output is regex-scraped** with a silent score-0 fallback (`evaluator.ts:83-91`). They
-   compile a JSON Schema into the tool's parameter schema and hard-fail the run if the tool was never
-   called.
-8. **Merge PR has no guard.** `diff-pr.ts:63` hardcodes `--squash --delete-branch`; they refuse a
+7. Evaluator output is regex-scraped (`evaluator.ts:83-91`): moved to T192.
+8. **Merge PR has no guard.** `diff-pr.ts:51-52` defaults to `--squash` + `--delete-branch` (strategy is now a parameter) with no base-protection check; they refuse a
    direct merge when the base is unprotected ("base branch not protected — refusing CI-ungated
    merge") and prefer GitHub-native auto-merge with `expectedHeadOid`.
 9. **PR body is `--fill`** — body = commit messages, no footer, no link back to the agent run. Their
@@ -556,13 +504,11 @@ and are recorded as refuted at the end.
     hook, so the plumbing exists. Highest leverage per line in that repo.
 11. **Effort as a `[0,1]` position** mapped onto each CLI's own published ladder, always rounding
     DOWN so it can never cost more than asked. We have no effort concept at all.
-12. **Lazy context: hand paths and tool names, not payloads.** They inline nothing — the diff arrives
-    as a path, learnings as a heading TOC with line ranges, explicitly so the body is "never inlined,
-    that would re-inflate context every run." Pairs with T183 item 11 (file-based pipeline handoff).
+12. Lazy context (paths, not payloads): merged into T183.11.
 
 **Context budgeting (clay + monocode, same piece from two sides).**
 
-13. **Deterministic pre-compaction, ~30 lines and no API call**: at 90% of budget keep the last N
+13. **Deterministic pre-compaction, ~30 lines and no API call** (same context-budget track as T183.1 occupancy): at 90% of budget keep the last N
     turns whole and collapse older TOOL RESULTS to a marker. LLM summarization stays a manual user
     action, and their reasoning is the part worth keeping: an automatic LLM compaction "risks failing
     exactly when the context is already overloaded." We have no compaction logic at all — only
@@ -605,8 +551,9 @@ reload); clay's NULL-absorbing JSON accessors and first-word command allowlist.
 brought (2026-08-19). Clones under `_repos_2_learn/github.com/`. Every claim about OUR code below
 was re-verified before filing.
 
-(Terminal fidelity — alt-screen fit and OSC 10/11/12 replies — shipped 2026-08-19; see
-`TASK_COMPLETED/2608.md`.)
+(Terminal fidelity — alt-screen fit and OSC 10/11/12 replies — shipped 2026-08-19 under the
+name "T183.1" (PR #114); see `TASK_COMPLETED/2608.md`. That name predates this list: item 1
+below, context occupancy, is still open.)
 
 **The two product-level misses (monocode).**
 
@@ -629,25 +576,13 @@ was re-verified before filing.
 
 **The coordination gaps (mcp_agent_mail_rust).** Verified against our code, not taken on faith:
 
-3. **Claims have no TTL.** `w3_004_path_claims` has `created_at` and no `expires_at`, so a wedged
-   but LIVE agent holds `src/` forever. Theirs: mandatory TTL clamped [60s, 1y], default 1h, plus
-   renew, force-release and an expiry sweep.
-4. **Overlap is prefix-only, so no glob can ever be claimed.** `pathsOverlap` is
-   `a===b || startsWith`. Demonstrated: `src/**/*.test.ts` vs `src/auth.test.ts` reports NO overlap.
-   Theirs is a memoized DP over segment lists answering "can any path satisfy both patterns", with a
-   first-literal-segment index so it is not O(n). Take the per-repo `core.ignorecase` flag, not their
-   compile-time `cfg!(target_os)`.
+3. Claims TTL and 4. glob overlap: moved to T175.4 (claims track).
 5. **Commit-time guard.** Our own tool description already admits "writes through shell commands are
    never intercepted". Their `pre-commit` hook reads active reservations from JSON in the git archive
    — so it works with the server DOWN — and blocks by default with an explicit bypass env var. We
    block BEFORE the write, they block after the work is done; the answer is both, not either.
-6. **Threads die on restart.** `inReplyTo` exists only on the in-memory `PendingMessage`; there is no
-   column. Theirs has `thread_id`, `reply_message` inheriting importance/ack, and `summarize_thread`.
-7. **`consumed` is inferred, theirs is asserted.** We mark consumed when the receiver hits a turn
-   boundary — an agent that ignored the text is still recorded as having read it. Theirs is
-   `ack_required` → `acknowledge_message` → `ack_ts`, plus a "sent N ago, still unacked" view.
-8. **Idempotency has no payload fingerprint.** Same `client_key` with a different body silently
-   returns the old message instead of erroring.
+6. Threads: moved to T162 (rooms). 7. Asserted ack: moved to T175.1. 8. Idempotency payload
+   fingerprint: moved to T170.1.
 9. **`agents_list` spans every project** (`listActiveAgents` filters by status only) and cross-project
    `agent_send` is unrestricted. Theirs has a per-agent contact policy
    (`open|auto|contacts_only|block_all`) and a deliberately vague rejection that does not leak
@@ -667,16 +602,11 @@ was re-verified before filing.
     worktree itself, with only a manifest of changed files and per-file diff hashes stored. Strictly
     less lossy, far cheaper in tokens, and survives a restart for free.
     → `main/pipeline/context.ts`, `pipeline-step-handler.ts`, `packages/shared/src/types/pipeline.ts`
-12. **Durable delegation outbox.** Their subagent completion is a deliveries table with lease token,
-    `attempt_count`, `next_attempt_at`, dead-letter after 20, sibling coalescing — written in the SAME
-    transaction as the child's terminal turn event, so it is crash-safe by construction. The hook that
-    nudges the worker is documented as a latency hint, explicitly NOT the correctness path.
+12. Durable delegation outbox: moved to T170.3.
 13. **Cheap and worth copying now**: a static fan-out cap on any agent-spawns-agent path (theirs:
     8 per parent, depth 1) and ONE documented canonical lock-acquisition order. We acquire worktree
     locks, DB writes and sidecar RPCs in whatever order each call site needed.
-14. **Durable judge verdicts.** Our evaluator gate is N stateless Haiku calls; theirs is N agents
-    whose verdicts are durable rows with their own status and retry count, so a gate interrupted
-    mid-round resumes instead of re-running.
+14. Durable judge verdicts: moved to T192.
 
 **Explicitly NOT worth copying:**
 - Their sender authentication is OFF by default and identity is a tmux-pane file with three legacy
@@ -693,27 +623,14 @@ was re-verified before filing.
 ---
 
 ### T182 — Findings from the round-9 code review `added: 2026-08-19`
-**Priority**: P1 for the first two | **Effort**: S-M each | **Source**: 4-agent correctness review
+**Priority**: P1 for item 8 (daily use); rest P2 | **Effort**: S-M each | **Source**: 4-agent correctness review
 over `eb6b37e..HEAD` (the T175/T180/T170.1/T166.1/T179.3/T181 wave)
 
 Everything below was CONFIRMED by execution, not by reading. The fixes that shipped with the
 review are in `TASK_COMPLETED/2608.md`; these are the ones that need more than a patch.
 
-1. **`ppid` is client-supplied, so the process-tree fallback can name another agent** —
-   `mcp/exegol-server.ts#resolveContext`. An agent sends a sibling's pid and is resolved as
-   that sibling; access is now capped at the caller's own token (shipped), but the IDENTITY
-   is still theirs, so `agent_send` can be forged and `release_paths` can drop a claim.
-   The branch exists only because a shared config file makes one token serve several agents.
-   Real fix, in order: finish T166's "codex cwd→token 1:1" so no token is ever shared, then
-   require `resolveByParentPid` to land inside the token's own bindings and delete the
-   fallback. Peer credentials would be better still, but Node exposes no `SO_PEERCRED`.
-2. ~~Claims and guarded paths compared as raw strings~~ — **shipped 2026-08-19.** Both sides
-   go through `realpathSafeSync` now (stored claims in `resolveAgentPaths`, the guard's
-   question in `check_path`), so a project under a symlinked path is enforced like any other.
-   Still open, the smaller half: a symlink *inside* the tree (`ln -s src/api.ts alias.ts`,
-   then edit `alias.ts`) is resolved by the guard's realpath, so it is now caught — but
-   `pathsOverlap` itself still compares strings, which is fine while both sides are resolved
-   and would break again if any caller stored an unresolved path.
+1. `ppid` is client-supplied, so the process-tree fallback can name another agent: moved to T173.
+2. (Symlinked claim paths shipped 2026-08-19; the `pathsOverlap` residual moved to T175.4.)
 3. **Repo-authored run commands have no review step.** `inspectCommand` on
    `.exegol/actions.yaml` is a seatbelt, not a boundary — a `Makefile` target or a
    `package.json` script reaches the PTY without it, and even in actions.yaml
@@ -732,10 +649,7 @@ review are in `TASK_COMPLETED/2608.md`; these are the ones that need more than a
    a connection lazily on the first non-`check_path` message, so a shim that connects and dies
    before its first `list_tools` produces zero records. Announce on the first AUTHENTICATED
    message instead.
-7. **`runMigrations` wraps every migration in one transaction and `main/index.ts` awaits
-   `initializeDatabase()` with no try/catch** — a future migration throw is an unhandled
-   rejection with no window and no message. Blast radius is total; cost of a guard is three
-   lines.
+7. (DB init failure guard shipped 2026-09-22; see `TASK_COMPLETED/2609.md`.)
 8. **`listSessionHistory` pagination has no pager yet** — the `, a.id DESC` tiebreaker shipped,
    but `history.list` still takes no `offset` and the UI has no paging. Add both together.
 
@@ -767,10 +681,7 @@ local-store adapters for claude-code / codex / opencode. Remaining:
 - **Retention has three homes and no statement of policy**: the shell delete and the
   ANSI-memory delete in `cleanupStaleData`, plus `agent_events` at 30 days in
   `notify-handler.ts`. One `db/retention.ts` declaring per-table policy, invoked once.
-- **`cli_type === "shell"` is a string literal in ~19 places** and this task added two more.
-  `shell` IS a registry provider — an `isEphemeral` capability on the provider definition (or
-  at minimum an `isShellAgent()` helper in `@exegol/shared`) would state "shells are not
-  sessions" once instead of re-deriving it at every call site.
+- `cli_type === "shell"` literal in ~19 places (`isEphemeral` capability): moved to T191.
 - **Derive `capabilities.json` instead of hand-maintaining it.** The parity test stops a
   procedure shipping dead, but it also makes the trpc half of the allowlist a copy of the
   router — it can no longer deny anything. The property worth keeping is deny-by-default for
@@ -778,18 +689,8 @@ local-store adapters for claude-code / codex / opencode. Remaining:
   intent AT the router (a `rendererProcedure` builder or `.meta({ exposed: true })`) and
   generate the file from that, asserting only "exposed ⇔ listed". Then a new procedure is
   denied until someone opts it in.
-- **Normalize paths inside `db/queries/path-claims.ts`.** `realpathSafeSync` is applied by
-  two callers today and they cover every path, but the invariant lives in their heads;
-  `claimPaths`/`releasePaths`/`findBlockingClaim` still take raw strings, and the module's own
-  comment claims an absoluteness it does not enforce. A `canonical()` on insert and on every
-  comparison means no fourth caller can forget.
-- **Per-provider filesystem knowledge is now a 4th hardcoded table.** `history/providers/*`
-  hardcode `~/.claude`, `~/.codex`, `~/.local/share/opencode`, while `skills/paths.ts`,
-  `skills/importer.ts` and `agents/wrappers.ts` keep their own — and they already DISAGREE
-  (`skills/importer.ts` uses id `"claude"` vs the registry's `"claude-code"`; opencode is
-  `~/.config/opencode` there and `~/.local/share/opencode` here). A `configDir` (and
-  `localHistory`) field on the provider definition is the fix; the history registry currently
-  only filters by `enabled`, so a CUSTOM provider can never have local history.
+- Normalize paths inside `db/queries/path-claims.ts`: moved to T175.4.
+- Per-provider filesystem knowledge (`configDir`, `localHistory`): moved to T191.
 
 ---
 
@@ -802,7 +703,9 @@ Real findings that needed more than a cleanup, so they were not folded into that
 1. **`consumed` means two different things.** Pull-consumed is a receipt (the agent's own
    authenticated call); turn-consumed is an inference ("a boundary happened after we wrote bytes")
    that a swallowed submit would report as read. Either add provenance (`via: "pull" | "turn"`) or
-   reserve `consumed` for evidenced reads and call the inferred one `presumed_read`.
+   reserve `consumed` for evidenced reads and call the inferred one `presumed_read`. Absorbs T183.7:
+   mcp_agent_mail asserts it (`ack_required` → `acknowledge_message` → `ack_ts`, plus a "sent N ago,
+   still unacked" view).
 2. **`MAX_MESSAGE_CHARS` (12 000) is now incoherent with pointer delivery.** The cap existed because
    of the paste; bodies now travel as JSON over a socket. The cap is exactly what forces senders to
    split at send time — the bug pointer delivery was built to kill. Raise it hard, or drop it and
@@ -813,8 +716,15 @@ Real findings that needed more than a cleanup, so they were not folded into that
    `projects.default_isolation` (that table already has `default_branch`/`default_ide`) and should
    be read in `agent-spawn-flow`, not per call site. Matters more now: whether a spawn shares the
    tree decides whether path claims are load-bearing or dead code.
-4. **No human surface for claims.** Zero tRPC/UI references — the user arbitrates a stuck claim but
-   cannot see or break one, and a stuck `waiting_input` agent holds its files with no TTL or steal.
+4. **Claims track: no human surface, no TTL, prefix-only overlap.** Zero tRPC/UI references: the
+   user arbitrates a stuck claim but cannot see or break one, and a stuck `waiting_input` agent holds
+   its files forever (`w3_004_path_claims` has no `expires_at`). Absorbs:
+   - T183.3 TTL: mandatory, clamped [60s, 1y], default 1h, plus renew, force-release, expiry sweep
+   - T183.4 globs: `pathsOverlap` (`path-claims.ts:46`) is `a===b || startsWith`, so
+     `src/**/*.test.ts` never overlaps `src/auth.test.ts`. Conflicts with the T172.1 decision
+     ("NOT globs", module header): decide before building
+   - T181/T182.2 residual: `canonical()` inside `db/queries/path-claims.ts` on insert and every
+     comparison, so no caller can store an unresolved path
 5. **`warnIfCommittable` is a log line nobody reads** for a credential in the user's repo. The
    NotificationBus already carries `resource:warning`/`budget:warning`; this deserves the same.
    (Made async in round 7 so it no longer blocks the spawn path.)
@@ -822,8 +732,7 @@ Real findings that needed more than a cleanup, so they were not folded into that
    removed (most TUIs enable it once at startup, so it never fired, and it cost a hot-path scan).
    The `HeadlessEmulator` already parses this mode; a `getBracketedPaste(id): boolean | null`
    accessor on PtyHost would give the tri-state properly if readiness detection is wanted later.
-   Better still: `emitsTurnBoundaries` as a declared `AgentProviderCapabilities` field rather than
-   learned at runtime.
+   Better still: `emitsTurnBoundaries` as a declared field (T191).
 
 ---
 
@@ -842,12 +751,11 @@ write, closing the paste on the failure path, boundary-signals-beat-quiescence.
 Still worth taking, roughly by value:
 - ~~**Fair-share diff truncation**~~ — DONE 2026-08-13: `main/lib/diff-budget.ts`, wired into all
   three head-truncating call sites (commit messages, evaluator judges, evidence summaries).
-- **Per-provider composer-ready spec** (`src/shared/draft-paste-ready-scanner.ts:26-70`): each TUI
+- **Per-provider composer-ready spec** (lands in T191) (`src/shared/draft-paste-ready-scanner.ts:26-70`): each TUI
   declares a marker + anchor (codex `›`, opencode `ESC[?25h`, grok `❯` anchored to alt-screen and
   REVOKED on exit because starship uses the same glyph). We took the provider-agnostic half
   (`ESC[?2004h`); the per-provider table is the precise version.
-- **One-outstanding-delivery-per-run enforced in DDL** + replay-until-ack — the durable form of
-  [[T170]] item 1.
+- One-outstanding-delivery-per-run in DDL + replay-until-ack: moved to T170.3.
 - **Declare which signal is authoritative and which is fallback.** We run THREE paths for one
   job — OSC-777 through the PTY, hook events dropped as files, and the scraped output parser —
   with the precedence living implicitly in the order of `if`s. That has already cost us: the
@@ -917,12 +825,13 @@ Follow-ups the review flagged as right-but-bigger than that commit.
    retryable, and the retry is performed by the MODEL following prose. The shim already has
    a per-call id — make it stable across reconnects and have the server replay the recorded
    response for a repeated id. Then every tool is retryable and the shim can retry itself.
-   Build it when the SECOND tool needs it, not with another bespoke key.
-2. **Finish the tokenless-config move.** `EXEGOL_MCP_TOKEN_FILE` + shim env-preference
-   already makes per-session identity win wherever the CLI forwards its env. Verify
-   empirically per CLI (two opencode sessions in one repo, ~30 min); for every CLI that
-   forwards, the file token can be dropped entirely and the multi-binding registry, the
-   `ps` walk and the `-32003` ambiguity path all get deleted rather than optimized.
+   Build it when the SECOND tool needs it, not with another bespoke key. Absorbs T183.8: the
+   same `client_key` with a different body silently returns the old message; store a payload
+   fingerprint and error on mismatch.
+2. Tokenless config: moved to T173.
+3. **Durable delivery outbox.** Absorbs T183.12 and the T174 DDL note: deliveries table with
+   lease token, `attempt_count`, `next_attempt_at`, dead-letter, written in the SAME transaction
+   as the terminal turn event; one outstanding delivery per run enforced in DDL, replay until ack.
 
 ---
 
@@ -970,14 +879,10 @@ files a team may legitimately version — the warning goes to the human instead.
   initialize/ping/tools-list/tools-call/result-encoding all run in the RUNNING app. What
   stays frozen in a shim then is irreducible: framing, token resolve, reconnect (~60 LOC
   vs ~270). Every future drift stops needing a per-method proxy.
-- **Descriptor table for the 4 per-provider config writers + token read chain**
-  (~174 → ~55 LOC; adding provider #6 is currently a 4-site hand-synced edit).
+- Descriptor table for the per-provider config writers: moved to T191.
 - **Drop `EXEGOL_ACCESS_MODE`**: display-only, stale by construction (never rewritten when
   the user changes mode), never delivered to codex; enforcement is 100% server-side.
-- **codex cwd→token 1:1**: two codex agents in one cwd still share a token file at runtime
-  (the restore/revoke guards close the restart paths, not the live one). Force a unique cwd
-  for on-disk-token flavors or refuse the second; persist cwd on the agent row while at it
-  (reattach + exit cleanup + pipeline agents all re-derive it today).
+- codex cwd→token 1:1: moved to T173.
 - **Socket squat probe**: `connect()` succeeding is treated as "another Exegol owns it" —
   verify `lstat` isSocket + uid, and handshake before trusting; surface "refused to start"
   in the MCP panel instead of one log line.
@@ -1008,26 +913,23 @@ The gaps below are what the coordinator had to cover BY HAND.
 3. **`status` is too coarse.** `running`/`waiting_input` doesn't say whether an agent is on MY
    task, finished and idle, or off doing something else. Needs task-level state: who assigned
    what, and where it is.
-4. **No broadcast / shared session context.** The same isolation rules were written twice, by
-   hand, worded differently — a divergence source at 2 agents and a guarantee of it at 6.
-   Overlaps [[T162]] phases 2-3 (rooms).
+4. Broadcast / shared session context: moved to T162 (rooms).
 5. ~~**`delivered` is transport, not comprehension**~~ — DONE: `message_status` now reports
    `consumed` once the target closes a turn after the injection.
 6. ~~**4000-char cap**~~ — DONE: raised to 12 000.
 7. ~~**No retract**~~ — DONE: `message_cancel` withdraws a message still in our queue; it
    refuses honestly once the text has reached the terminal.
 
-**Provider behaviour differs and the orchestrator can't know in advance**: codex demanded explicit
-human authorization before sharing repo findings; opencode asked nothing. Document expected
-behaviour per provider (registry capability), or a coordinator stalls for no visible reason.
+**Provider behaviour differs and the orchestrator can't know in advance** (codex demanded human
+authorization, opencode asked nothing): declared per provider in T191.
 
-**Remaining**: 2 (attach the diff Exegol already captures — highest value of what's left),
-3 (task-level state) and 4 (broadcast / shared session context, overlaps [[T162]]).
+**Remaining**: 2 (attach the diff Exegol already captures — highest value of what's left) and
+3 (task-level state).
 
 ---
 
-### T173 — MCP token must not sit in a repo file `added: 2026-08-13`
-**Priority**: P1 (security hygiene) | **Effort**: S | **Source**: Juanito, 2026-08-13
+### T173 — Per-session MCP identity, no token in a repo file `added: 2026-08-13`
+**Priority**: P1 (security hygiene) | **Effort**: M | **Source**: Juanito, 2026-08-13 · merges T166 codex cwd→token, T170.2, T182.1
 
 `opencode.json` (repo root) carries `EXEGOL_MCP_TOKEN_FILE`; `.mcp.json`, `.gemini/settings.json`,
 `.devin/`, `.agents/` are the same shape. The credential is bounded — per session, revoked on
@@ -1036,10 +938,22 @@ all. Exegol must NOT gitignore these itself: they are legitimate project config 
 versioned, and we only insert the `exegol` key. Shipped for now: a warning at spawn when the
 file isn't ignored.
 
-Real fix, and it deletes code rather than adding it ([[T170]] item 3): wherever the CLI forwards
-its env to MCP servers, the per-session token already arrives via the PTY and the file needs no
-secret at all. Verify per provider with TWO sessions of the same provider in one cwd — the
-single-session case looks identical either way and proves nothing.
+Real fix, and it deletes code rather than adding it: wherever the CLI forwards its env to MCP
+servers, the per-session token already arrives via the PTY (`EXEGOL_MCP_TOKEN_FILE` + shim
+env-preference) and the file needs no secret at all. Verify per provider with TWO sessions of the
+same provider in one cwd; the single-session case looks identical either way and proves nothing.
+For every CLI that forwards, drop the file token, the multi-binding registry, the `ps` walk and
+the `-32003` ambiguity path.
+
+Where a CLI does NOT forward (codex today): two codex agents in one cwd still share a token file
+at runtime. Force a unique cwd for on-disk-token flavors or refuse the second; persist cwd on the
+agent row (reattach, exit cleanup and pipeline agents all re-derive it today).
+
+Then close the forgery hole (was T182.1): `ppid` is client-supplied, so
+`mcp/exegol-server.ts#resolveContext` can resolve an agent as a sibling; access is capped at the
+caller's token but the IDENTITY is the sibling's, so `agent_send` can be forged and
+`release_paths` can drop a claim. Once no token is shared, require `resolveByParentPid` to land
+inside the token's own bindings and delete the fallback. Node exposes no `SO_PEERCRED`.
 
 ---
 
@@ -1353,7 +1267,8 @@ location (local path vs ssh://host). Key files to study:
 - **knip config** (`knip.json` with electron-vite entries: main/index, preload, renderer, pty-sidecar-entry, workspaces): raw run 2026-07 flagged 42 exports + deps but produced false positives on `export *` barrels (e.g. `listProjects` flagged while used) — needs tuned config before pruning; then delete verified-dead exports
 - Bundle budget: initial chunk ≤ 1MB enforced in CI (fonts already lazy — verify), track in BENCHMARKS.md
 - Rust: `cargo update` + clippy pedantic re-run; napi + memchr versions
-- Baseline 2026-07 (pre-wave sweep): 0 files >450 LOC, 0 TODOs/FIXMEs, clippy clean; dead code removed (-1,981 LOC: 5 disconnected sections, paneLayouts subsystem, dead store actions/query fns)
+- Baseline 2026-07 was 0 files >450 LOC. 2026-09-22: 8 files >500 LOC (`SpawnAgentModal.tsx` 689, `exegol-server.ts` 626, `AgentDashboard.tsx` 612, `migrations.ts` 590, `procedures/agents.ts` 570, `FileExplorer.tsx` 514, `WorkspacePane.tsx` 507, `exegol-mcp-config.ts` 506)
+- Dead surface inventory 2026-09-22: see T185.4
 - **Orphaned tRPC procedures inventory** (defined in routers, renderer never calls — review with product before deleting; some are planned-feature stubs): `projects.open`, `agents.getStatus/updateStatus/getParallelRun/cancelParallelRun/preflight`, `settings.updateModelCatalog`, `resources.portConflicts`, `apikeys.test`, `scheduler.get`, `scrollback.exists`, `skills.getEnabledForSpawn`, `mcp.callTool`, `memory.updateRelevance/getContext/extract`, `messages.conversation/markAllRead/unreadCount`, `queue.get/updateStatus`, `qa-tests.get`, `fs-search.fuzzyFind/grep`, `indexer.projectStats/startIndexing/search`
 - ~~Recovery half-wiring~~ resolved 2026-07: `invalidatePane`/`getRecoveryToken`/`RecoveryToken` removed (`invalidReason` stays — set via `updatePane`, rendered in WorkspacePane); unused deps removed (`@radix-ui/react-dialog` in desktop+ui, `react-dropdown-menu` + `lucide-react` in ui)
 
@@ -1392,7 +1307,7 @@ location (local path vs ssh://host). Key files to study:
 
 ### T138 — ModeTracker Headless `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S | **Source**: superset `terminal-mode-tracker.ts` (VSCode XtermSerializer lineage)
-- Per-session headless xterm (scrollback 1) tracking VT modes (kitty keyboard, bracketed paste); reconstruct preamble on reattach — fixes Shift+Enter/paste after reload.
+- A `HeadlessEmulator` exists (`main/terminal/headless-emulator.ts`) but reads modes with a per-write regex: a bracketed-paste sequence split across two writes leaves the mode off, and multi-mode `;` sequences fail (review 2026-09-05 #8). Track modes through the xterm parser, serialize only after the parser drained. Acceptance: splitting any supported sequence at any position gives the same final state.
 
 ### T139 — Skills Security Scan (pre-import) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: mission-control Skills Hub scanner
@@ -1424,7 +1339,7 @@ location (local path vs ssh://host). Key files to study:
 - WebGL context-loss recovery (already in T113, adapt for pool).
 
 **Depends on**
-- T115 (DormantRing) — ideally ship T115 first as standalone, then build pool on top.
+- T115 (DormantRing) shipped (`renderer/lib/dormant-ring.ts`); T178 already stops sending bytes to hidden panes. Measure before building.
 
 **Risk**
 - Our sidecar ring already provides instant reconnect; pool's value is only above ~5 concurrent tabs.
@@ -1442,7 +1357,7 @@ location (local path vs ssh://host). Key files to study:
 **Priority**: Wave 1 / P3 (radar) | **Effort**: M | **Source**: Terax `src/modules/ai/lib/agent.ts:70-211` + `transport.ts:71-114`
 
 **Why**
-- Today our two direct LLM calls (`diff.ts:324-396` Smart Git Button commit msg + `scoring.ts:210-280` Tier-3 LLM-as-judge) use raw `fetch()` to `api.anthropic.com`. No cache breakpoints, no retry, no abort beyond timeout, brittle regex parse for structured output.
+- Today our direct LLM calls (commit msg `diff-ai.ts:53`, Tier-3 judge `scoring.ts:239`, evaluator, evidence) go through `lib/anthropic.ts#callAnthropicMessage` (withRetry since T150). Still missing: cache breakpoints, provider choice, schema-validated output (regex parse; see T192).
 - Vercel AI SDK v6 gives us all of that + provider-agnostic API. Unlocks **Ollama / LM Studio / local models** via `@ai-sdk/openai-compatible` with a single abstraction.
 - Not vital for our spawned-CLI core — keep on radar but value compounds if we add more in-process LLM utilities.
 
@@ -1452,7 +1367,7 @@ location (local path vs ssh://host). Key files to study:
   - `getAnthropic(db)`: pulls key from `keystore`, returns `LanguageModel`.
   - `getOllama(baseUrl)`: returns local OpenAI-compatible model.
   - `applyCacheBreakpoints(messages)`: helper porting Terax's `agent.ts:294-311` pattern.
-- Refactor `diff.ts:324-396`:
+- Refactor `diff-ai.ts`:
   - `generateText({ model, prompt, maxOutputTokens: 120, abortSignal })` instead of fetch.
 - Refactor `scoring.ts:210-280`:
   - `generateObject({ model, schema: z.object({ clarity: z.number().min(1).max(5), ... }) })` — replaces regex parse on `text.match(/\{[^}]+\}/)`.
@@ -1463,7 +1378,7 @@ location (local path vs ssh://host). Key files to study:
 **Likely files**
 - `apps/desktop/package.json`
 - `apps/desktop/src/main/ai/llm.ts` (new)
-- `apps/desktop/src/main/ipc/procedures/diff.ts`
+- `apps/desktop/src/main/lib/anthropic.ts`, `ipc/procedures/diff-ai.ts`
 - `apps/desktop/src/main/agents/scoring.ts`
 - `apps/desktop/src/renderer/components/settings/ApiKeysSettings.tsx` (Ollama config)
 
@@ -1479,8 +1394,12 @@ location (local path vs ssh://host). Key files to study:
 > Antonio has NOT seen/reviewed (attention tracking), consumed by the UI and by external
 > Claude sessions via the existing MCP layer. Deferred until Wave 2.6 (hardening) closes.
 > Salvage source: `_code_/_archive_/labs-cli-proman`.
+> IDs renumbered 2026-09-22 (were T156/T157/T158/T160, which collided with the dashboard,
+> messaging, memory-habit and alias tasks): T186, T187, T188, T189. T159 unchanged.
+> Runtime conflict to settle before building: T153 wants a `llama-server` sidecar, T159 an
+> in-process backend.
 
-### T156 — Owl Phase 1: Collectors + store + raw digest `P2`
+### T186 — Owl Phase 1: Collectors + store + raw digest `P2`
 **Why**: kills the manual "¿qué no he visto?" scan across active repos; useful with zero LLM.
 **Scope**: port cli-proman collector commands (`status`, `git-status`, `wip`, `blocked`,
 `review`, `next`...) as deterministic per-repo collectors → facts JSON; scheduler
@@ -1488,7 +1407,7 @@ location (local path vs ssh://host). Key files to study:
 dpeluche.dev); store in SQLite with per-item seen/unseen marks; raw digest view in UI.
 Owl is read-only toward repos — writes only to its own store.
 
-### T157 — Owl Phase 2: Small-model synthesis via InferenceProvider `P2` (depends: T156, T122)
+### T187 — Owl Phase 2: Small-model synthesis via InferenceProvider `P2` (depends: T186, T122)
 **Why**: turn facts into notable-or-noise + priority + 1-2 line summaries; seen items go
 quiet, unseen insist.
 **Scope**: generative small model (start Qwen3 4B; SmolLM3-3B/Gemma 3 4B interchangeable)
@@ -1497,15 +1416,15 @@ never raw diffs. Every digest line carries verifiable facts (SHA, PR#, timestamp
 bake-off happens here. Note: `nomic-embed-text` stays embeddings-only; this is a second,
 generative model on the same runtime.
 
-### T158 — Owl Phase 3: MCP exposure + digest actions `P2` (depends: T157)
+### T188 — Owl Phase 3: MCP exposure + digest actions `P2` (depends: T187)
 **Scope**: `fleet_digest` / `repo_status` / `mark_seen` tools on `main/mcp/registry.ts`;
 digest actions: create task, open session, launch review agent (only Exegol can close this
 loop). External consumer #1: kickoff resume mode reading the digest instead of re-scanning.
 **Runtime requirement**: the MCP server ships in the build and runs as a **headless daemon**
-(`exegol watch`, launchd) — shared with T160's council/bus tools. The Electron window is a
+(`exegol watch`, launchd) — shared with T189's council/bus tools. The Electron window is a
 view, not the runtime. Definition: `docs/ARCHITECTURE/COUNCIL_BASE.md`.
 
-### T160 — Council base: structured executions + exchange bus `P2` (depends: T158)
+### T189 — Council base: structured executions + exchange bus `P2` (depends: T188)
 **Definition**: `docs/ARCHITECTURE/COUNCIL_BASE.md`. Absorbs the standalone "council MCP"
 project — one server, not two. NOT branded "rubber duck": cross-family review is one preset.
 **Why**: (a) relay-by-hand between session agents was friction #1 of the jul-2026
@@ -1521,7 +1440,7 @@ structure, get result" executions are what live sessions don't cover.
 - Per-project activity view in UI: new threads · council results · owl updates, with the
   same seen/unseen marks as Owl (one feed, three producers).
 
-### T159 — Embedded inference backend `P3` (depends: T157 proven)
+### T159 — Embedded inference backend `P3` (depends: T187 proven)
 **Why**: Ollama = shared server (contention) + keep_alive unload → multi-second reload each
 watcher cycle. Embedded = resident, always warm, app-managed resources.
 **Scope**: second `InferenceProvider` backend in-process (node-llama-cpp, or llama.cpp via
@@ -1534,7 +1453,8 @@ config, not rewrite (TERAX rule: ONE abstraction, not 4 cases).
 ## Distribution (pending GitHub)
 
 ### T45 — CI/CD Release Pipeline `added: 2026-04-15`
-**Priority**: P3 — activate when repo goes to GitHub
+**Priority**: P3 | Validation CI shipped (`.github/workflows/ci.yml`, PR #115). Remaining: tag-triggered
+package + release workflow, signing secrets (see `GUIDES/RELEASE.md`).
 
 ### T46 — Canary Channel `added: 2026-04-15`
 **Priority**: P3

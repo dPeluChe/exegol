@@ -7,6 +7,30 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] Daily-readiness fixes (2026-09)
+
+Details: `docs/TASK_COMPLETED/2609.md`.
+
+### Fixed
+
+- **Pipeline evidence** survives the agent committing: the evaluator gate and evidence report
+  now see committed work (T184.1, PR #115).
+- **Database init failure** shows an error dialog and exits instead of leaving the app running
+  with no window.
+- **Shortcuts**: Cmd+D, Cmd+Shift+D and Cmd+. (split, split vertical, stop agent) and their
+  command-palette entries work; the shortcuts list matches the real bindings.
+- **Sidebar Prompts link** opens Prompts & Skills; the empty Schedulers sidebar section is gone.
+- **Prompt "Use"** pre-fills the spawn dialog.
+- **Settings that did not save or apply**: Ollama URL and model, the global hotkey (re-registered
+  on change), the "In-app toasts" toggle, and the custom IDE path from the pane toolbar and
+  Cmd+click.
+- **LLM scoring** results are stored (the tier-3 write failed every time).
+- **Faster startup**: the window no longer waits on a login shell for PATH detection.
+- **Less UI churn**: repeated agent status updates no longer re-render every pane several times
+  a second.
+- **Attention text, final output and scoring** read the latest session output (the scrollback
+  buffer kept the first 1MB instead of the last).
+
 ## [Unreleased] — Wave 2: signal, knowledge, evidence, undo, surface (2026-07)
 
 17 tasks landed across 4 parallel worktree groups (PRs #40–#50, each review-fixed

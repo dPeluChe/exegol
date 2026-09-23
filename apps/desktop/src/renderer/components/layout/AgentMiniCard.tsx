@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDeleteAgent } from "../../hooks/use-delete-agent";
 import { formatTimeAgo } from "../../lib/format";
 import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
+import { switchSection } from "../../lib/switch-section";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
@@ -20,7 +21,7 @@ export const VISIBLE_STATUSES = new Set([
 ]);
 
 export function navigateToAgent(agentId: string): void {
-  window.dispatchEvent(new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }));
+  switchSection("agents");
   const store = useWorkspaceStore.getState();
   const activeTab = store.getActiveTab();
   if (activeTab) {

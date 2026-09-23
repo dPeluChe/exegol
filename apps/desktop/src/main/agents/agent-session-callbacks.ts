@@ -35,6 +35,7 @@ import {
   deriveStatusFromSignal,
   finalizeAgentStatus,
   forgetBroadcastStatus,
+  isRepeatStatus,
   scoreAndRecordOplog,
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
@@ -217,10 +218,13 @@ export function createSpawnCallbacks(
       const SKIP_PARSING: Set<string> = new Set(["shell", "crush", "opencode", "kiro"]);
       if (SKIP_PARSING.has(agent.cliType)) return;
 
-      const currentSize = maps.scrollbackSizes.get(agent.id) ?? 0;
-      if (currentSize < maxScrollbackBytes) {
-        maps.scrollbackBuffers.get(agent.id)?.push(data);
-        maps.scrollbackSizes.set(agent.id, currentSize + data.length);
+      // Keep the LAST maxScrollbackBytes: attention tails, final output and scoring read the end
+      const chunks = maps.scrollbackBuffers.get(agent.id);
+      if (chunks) {
+        chunks.push(data);
+        let size = (maps.scrollbackSizes.get(agent.id) ?? 0) + data.length;
+        while (size > maxScrollbackBytes && chunks.length > 1) size -= chunks.shift()?.length ?? 0;
+        maps.scrollbackSizes.set(agent.id, size);
       }
 
       const processor = maps.outputProcessors.get(agent.id);
@@ -298,7 +302,14 @@ export function createSpawnCallbacks(
         );
         scrapedStatus = undefined;
       }
-      if (scrapedStatus || result.currentStep) {
+      if (
+        (scrapedStatus || result.currentStep) &&
+        !isRepeatStatus(
+          agent.id,
+          (scrapedStatus as AgentStatus | undefined) ?? "running",
+          result.currentStep,
+        )
+      ) {
         if (scrapedStatus) {
           logger.info(
             `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${result.currentStep ? ` [${result.currentStep}]` : ""}`,

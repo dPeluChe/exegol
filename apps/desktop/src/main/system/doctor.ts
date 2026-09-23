@@ -4,11 +4,11 @@ import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
 import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
+import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
 import { getApiKey } from "../security/keystore";
 
@@ -18,7 +18,8 @@ const execAsync = promisify(exec);
 // (claude, gh, ollama...) are invisible to it. _getFullPath resolves the
 // user's login-shell PATH exactly like agent spawns do; without this the
 // onboarding wizard reports every installed CLI as missing on first run.
-const shellEnv = { ...process.env, PATH: _getFullPath() };
+// Lazy: resolving it at import ran a login shell before the window existed
+const shellEnv = () => ({ ...process.env, PATH: _getFullPath() });
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -61,14 +62,14 @@ const CLI_INSTALL_LINKS: Partial<Record<string, string>> = {
 
 function checkCommandAvailable(command: string): Promise<boolean> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which "${command}"`;
-  return new Promise((resolve) => exec(cmd, { env: shellEnv }, (err) => resolve(!err)));
+  return new Promise((resolve) => exec(cmd, { env: shellEnv() }, (err) => resolve(!err)));
 }
 
 /** All PATH hits for a command (`which -a` / `where` both list every match). */
 function findAllOnPath(command: string): Promise<string[]> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which -a "${command}"`;
   return new Promise((resolve) =>
-    exec(cmd, { env: shellEnv }, (err, stdout) =>
+    exec(cmd, { env: shellEnv() }, (err, stdout) =>
       resolve(err ? [] : [...new Set(stdout.trim().split("\n").filter(Boolean))]),
     ),
   );
@@ -76,32 +77,17 @@ function findAllOnPath(command: string): Promise<string[]> {
 
 async function checkGitVersion(): Promise<string | null> {
   try {
-    const { stdout } = await execAsync("git --version", { timeout: 3_000, env: shellEnv });
+    const { stdout } = await execAsync("git --version", { timeout: 3_000, env: shellEnv() });
     return stdout.trim();
   } catch {
     return null;
   }
 }
 
-function readOllamaConfig(db: Database.Database): { url: string; model: string } {
-  try {
-    const row = db.prepare("SELECT value FROM settings WHERE key = 'app_settings'").get() as
-      | { value: string }
-      | undefined;
-    const s = row ? (JSON.parse(row.value) as { ollamaUrl?: string; ollamaModel?: string }) : {};
-    return {
-      url: s.ollamaUrl ?? DEFAULT_SETTINGS.ollamaUrl,
-      model: s.ollamaModel ?? DEFAULT_SETTINGS.ollamaModel,
-    };
-  } catch {
-    return { url: DEFAULT_SETTINGS.ollamaUrl, model: DEFAULT_SETTINGS.ollamaModel };
-  }
-}
-
 /** Best-effort `--version` for a specific binary path (duplicate-install detail). */
 function readBinaryVersion(binPath: string): Promise<string | null> {
   return new Promise((resolve) => {
-    exec(`"${binPath}" --version`, { env: shellEnv, timeout: 3_000 }, (err, stdout) => {
+    exec(`"${binPath}" --version`, { env: shellEnv(), timeout: 3_000 }, (err, stdout) => {
       if (err) return resolve(null);
       const m = stdout.trim().match(/\d+\.\d+[.\w-]*/);
       resolve(m ? m[0] : null);
@@ -267,7 +253,8 @@ function checkStaleWorktrees(db: Database.Database): DoctorCheck {
 // ─── Main entry ─────────────────────────────────────────────────────────────
 
 export async function runDoctorChecks(db: Database.Database): Promise<DoctorReport> {
-  const ollamaConfig = readOllamaConfig(db);
+  const s = getAppSettings(db);
+  const ollamaConfig = { url: s.ollamaUrl, model: s.ollamaModel };
   const [cliChecks, gitVersion, ghAvailable, ollama, mcpCheck] = await Promise.all([
     runCliDetection(),
     checkGitVersion(),

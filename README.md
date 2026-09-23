@@ -13,7 +13,7 @@ Desktop app for orchestrating AI coding agents. Run Claude Code, Codex, Gemini C
 Current AI coding tools force you into one of two extremes: **terminal-only** (powerful but invisible) or **locked platforms** (feature-rich but ecosystem-bound). Exegol bridges both — an agent-agnostic command center where you manage, monitor, and orchestrate any CLI coding agent from a single interface.
 
 **Key ideas:**
-- **Any agent** — Claude Code, Codex, Gemini, Aider, Goose, Amp, Kiro, or your custom CLI. 11 built-in providers.
+- **Any agent** — Claude Code, Codex, Gemini, Aider, Goose, Amp, Kiro, Factory Droid, Devin, Antigravity, or your custom CLI. 14 built-in providers.
 - **Parallel execution** — Run multiple agents simultaneously, each in its own terminal with live status.
 - **Project-centric** — Organize agents, tasks, and resources per project with git worktree isolation.
 - **Pipelines** — Sequential multi-agent orchestration with loop/review cycles and shared worktrees.
@@ -29,7 +29,7 @@ Current AI coding tools force you into one of two extremes: **terminal-only** (p
 
 - [Bun](https://bun.sh/) 1.2+
 - [Rust](https://rustup.rs/) (for native modules)
-- [Node.js](https://nodejs.org/) 18+ (Electron requirement)
+- [Node.js](https://nodejs.org/) 20+ (root `engines`; CI uses 22)
 - At least one AI coding CLI installed: `claude`, `codex`, `aider`, `gemini`, etc.
 
 ### Install & Run
@@ -51,17 +51,21 @@ bun run dev
 
 The app opens as a desktop window. Add a project (any git repo), then launch an agent.
 
-### Build
+### Build and install (macOS)
 
 ```bash
-bun run build
+bun run build:rust       # native module, bundled into the app
+bun run package:mac      # electron-vite build + electron-builder
 ```
 
-### Lint & Typecheck
+Output: `apps/desktop/dist/Exegol-<version>-<arch>.dmg`. Open it and drag Exegol to Applications. The build is unsigned (`notarize: false`), so on first launch right-click the app and choose Open. `bun run build` alone only compiles to `apps/desktop/out/`. Full guide: [`docs/GUIDES/RELEASE.md`](docs/GUIDES/RELEASE.md).
+
+### Lint, Typecheck & Tests
 
 ```bash
-npx @biomejs/biome check apps/ packages/shared/src/ packages/ui/src/
+bun run lint
 bun run typecheck
+bun run test && bun run test:shared
 ```
 
 ### Rust (native module)
@@ -78,9 +82,9 @@ cargo check && cargo test && cargo clippy
 | Desktop | Electron 41 |
 | Frontend | React 18, TailwindCSS 4, Zustand 5, Monaco Editor |
 | IPC | tRPC 11 (over Electron IPC, not HTTP) |
-| Database | libSQL (SQLite fork by Turso), 35 migrations, 22 tables |
+| Database | libSQL (SQLite fork by Turso), 48 migrations (36 base + wave sets), 34 tables |
 | Terminal | xterm.js 6 + WebGL renderer, node-pty, PTY sidecar |
-| Native | Rust via napi-rs (ANSI stripping, status parsing, git2 worktree ops) |
+| Native | Rust via napi-rs (ANSI stripping, status parsing, git2 worktree ops, fuzzy/grep search) |
 | Build | electron-vite 5, Turborepo, Bun, Biome 2.4 |
 
 ## Project Structure
@@ -111,7 +115,7 @@ exegol/
 
 ### Workspace
 
-- **Multi-pane tabbed workspace** — 3 main tabs (Agents, Project, Monitor), each with split support (Cmd+D / Cmd+Shift+D)
+- **Multi-pane tabbed workspace** — 4 main tabs (Dashboard, Agents, Project, Monitor), each with split support (Cmd+D / Cmd+Shift+D)
 - **6 layout presets** — Single, Split Horizontal, Split Vertical, Three Columns, Bottom Terminal (70/30), 2×2 Grid; custom saved layouts with per-slot type/url/filePath
 - **5 pane types** — Terminal (agent or plain shell), Browser (Electron webview), Files (FileExplorer + Monaco), Git (diff + oplog), Empty (agent selector grid)
 - **Picture-in-Picture** — Any terminal or browser pane detaches into a frameless always-on-top window (T84)
@@ -119,7 +123,7 @@ exegol/
 
 ### Agents
 
-- **11 built-in providers** — Claude Code, Codex CLI, Gemini CLI, Aider, Goose, OpenCode, Amp, Kiro, KiloCode, Crush, Shell; fully configurable via Settings
+- **14 built-in providers** — Claude Code, Codex CLI, Gemini CLI, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal (shell); fully configurable via Settings
 - **PTY Sidecar** — Standalone detached Node.js process (`~/.exegol/pty-sidecar.sock`) survives window reload and app crashes; 8MB ring buffer per session for instant reconnect
 - **Live status parsing** — Rust `AgentOutputStream` strips ANSI and detects status/step from output (zero-alloc case-insensitive matching)
 - **Activity classification** — `busy | idle | neutral` derived from status on every push event; pulsing dot in tab chrome
@@ -148,7 +152,7 @@ exegol/
 - **Multi-agent pipelines** — Sequential orchestration in shared worktrees; loop/review cycles with `loopBackTo` + max iterations guard; explicit state machine (T78)
 - **MCP Host** — stdio + HTTP transports; auto-reconnect with exponential backoff (2s→32s, 5 attempts)
 - **Skills** — 5 built-in personas + per-project custom skills; injected into agent context at spawn
-- **Memory system** — ANSI-stripped extraction from scrollback; relevance scoring; persisted per project
+- **Memory system** — ANSI-stripped extraction from scrollback; salience v2 (reinforce/supersede/decay); hybrid FTS5 + Ollama recall; persisted per project
 - **Prompts** — Reusable templates per project with category filters, pin, copy
 - **Scheduler** — Cron-based task scheduling (croner), visual CronBuilder, dependency-aware engine
 - **Lifecycle scripts** — `.exegol/lifecycle.yaml` per repo: `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks
@@ -156,7 +160,7 @@ exegol/
 
 ### Monitor
 
-- **Agent Dashboard** — Live cards with uptime, token usage (k tokens + cost), status dot, provider icon
+- **Dashboard** (top-level home tab) — Live cross-project cards with uptime, token usage (k tokens + cost), status dot, provider icon
 - **Attention Center** — Inbox for agent events needing review (critical/action_needed/info); click to navigate to pane
 - **Token usage** — Claude Code JSONL log parser; cost breakdown by model
 - **Resource monitor** — CPU, RAM, Disk with background collector (10s interval)
@@ -179,7 +183,7 @@ exegol/
 
 | Shortcut | Action |
 |----------|--------|
-| `Cmd+K` | Command Palette |
+| `Cmd+K` / `Cmd+Shift+P` | Command Palette |
 | `Cmd+B` | Toggle sidebar |
 | `Cmd+,` | Open Settings window |
 | `Cmd+N` | New Agent |
@@ -188,9 +192,12 @@ exegol/
 | `Cmd+W` | Close focused pane |
 | `Cmd+D` | Split pane horizontal |
 | `Cmd+Shift+D` | Split pane vertical |
-| `Cmd+[` / `Cmd+]` | Previous / Next agent |
-| `Cmd+1-9` | Focus agent by index |
-| `Cmd+Shift+E` | Bring Exegol to front (global) |
+| `Cmd+Shift+]` / `Cmd+Shift+[` | Next / Previous workspace tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cycle workspace tabs |
+| `Cmd+1-9` | Switch to workspace tab by position |
+| `Cmd+J` | Jump to next attention item |
+| `Cmd+/` | Keyboard shortcuts overlay |
+| `Cmd+Shift+E` | Bring Exegol to front (global, configurable in Settings) |
 
 ## Documentation
 

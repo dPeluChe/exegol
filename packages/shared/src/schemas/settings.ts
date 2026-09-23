@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_SETTINGS } from "../types/settings";
 
 export const ideTypeSchema = z.enum(["vscode", "cursor", "zed", "windsurf", "custom"]);
 
@@ -20,6 +21,8 @@ export const settingsSchema = z.object({
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   mutedNotificationChannels: z.array(z.string()).default([]),
+  ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
+  ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),
   mcpVerboseLogging: z.boolean().default(false),
 });
 

@@ -2,6 +2,7 @@ import type { NotificationEvent } from "@exegol/shared";
 import { DEFAULT_SETTINGS, muteChannelForEvent } from "@exegol/shared";
 import { BrowserWindow, Notification } from "electron";
 import type Database from "libsql";
+import { getAppSettings } from "../../db/queries/settings";
 import { logger } from "../../lib/logger";
 import type { NotificationChannel } from "../bus";
 
@@ -32,20 +33,13 @@ function getPrefs(): CachedPrefs {
   if (cachedPrefs !== null && now - cacheTimestamp < CACHE_TTL_MS) {
     return cachedPrefs;
   }
-  try {
-    const row = dbRef?.prepare("SELECT value FROM settings WHERE key = 'app_settings'").get() as
-      | { value: string }
-      | undefined;
-    const parsed = row ? JSON.parse(row.value) : {};
-    cachedPrefs = {
-      enabled: parsed.notificationsEnabled ?? DEFAULT_SETTINGS.notificationsEnabled,
-      mutedChannels: Array.isArray(parsed.mutedNotificationChannels)
-        ? parsed.mutedNotificationChannels
-        : [],
-    };
-  } catch {
-    cachedPrefs = { enabled: DEFAULT_SETTINGS.notificationsEnabled, mutedChannels: [] };
-  }
+  const settings = dbRef ? getAppSettings(dbRef) : DEFAULT_SETTINGS;
+  cachedPrefs = {
+    enabled: settings.notificationsEnabled,
+    mutedChannels: Array.isArray(settings.mutedNotificationChannels)
+      ? settings.mutedNotificationChannels
+      : [],
+  };
   cacheTimestamp = now;
   return cachedPrefs;
 }

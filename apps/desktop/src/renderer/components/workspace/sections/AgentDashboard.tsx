@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { submitToAgent } from "../../../lib/agent-input";
+import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
@@ -313,9 +314,7 @@ export function AgentDashboard() {
             ws.setFocusedPane(paneId);
             store.setFocusedAgent(agent.id);
             // Switch workspace back to Agents tab
-            window.dispatchEvent(
-              new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-            );
+            switchSection("agents");
             return;
           }
         }
@@ -327,9 +326,7 @@ export function AgentDashboard() {
       requestAnimationFrame(focusPane);
     } else {
       focusPane();
-      window.dispatchEvent(
-        new CustomEvent("exegol:switch-section", { detail: { section: "agents" } }),
-      );
+      switchSection("agents");
     }
   }, []);
 

@@ -8,6 +8,8 @@ import {
 } from "@exegol/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { shallow } from "zustand/shallow";
+import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "./workspace";
 
@@ -175,6 +177,7 @@ interface AgentStore {
   /** Which agent terminal is currently focused */
   focusedAgentId: string | null;
   setFocusedAgent: (id: string | null) => void;
+  stopFocusedAgent: () => void;
 
   /** Update an agent's state (partial merge) */
   updateAgent: (id: string, update: Partial<AgentState>) => void;
@@ -276,6 +279,11 @@ export const useAgentStore = create<AgentStore>()(
       attentionItems: {},
       unreadAttentionCount: 0,
 
+      stopFocusedAgent: () => {
+        const id = get().focusedAgentId;
+        if (id) trpcMutate("agents.stop", { id }).catch(() => {});
+      },
+
       setFocusedAgent: (id) => {
         if (id) {
           // Auto-mark as read when focused
@@ -311,7 +319,8 @@ export const useAgentStore = create<AgentStore>()(
           if (update.status && !update.activityLevel) {
             merged.activityLevel = classifyActivity(merged.status, merged.currentStep);
           }
-          return { agents: { ...state.agents, [id]: merged } };
+          // A new agents object re-renders every pane subscribed to the map
+          return shallow(merged, existing) ? state : { agents: { ...state.agents, [id]: merged } };
         }),
 
       addAgent: (agent) =>

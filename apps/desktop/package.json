@@ -22,6 +22,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "1.1.15",
     "@tanstack/react-virtual": "^3.13.24",
     "@trpc/server": "^11.0.0",
     "@xterm/addon-serialize": "^0.14.0",

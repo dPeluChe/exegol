@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { useState } from "react";
 import type { TaskColumn, TaskItem } from "../../../../lib/markdown-tasks";
+import { switchSection } from "../../../../lib/switch-section";
 import { COLUMN_CONFIG } from "./config";
 
 export function TaskDetailModal({
@@ -176,11 +177,7 @@ export function TaskDetailModal({
           <button
             type="button"
             onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("exegol:switch-section", {
-                  detail: { section: "pipelines" },
-                }),
-              );
+              switchSection("pipelines");
               onClose();
             }}
             className="rounded-lg bg-purple-500/15 px-3 py-2 text-xs font-medium text-purple-400 hover:bg-purple-500/25"

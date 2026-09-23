@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { exec, execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -52,10 +52,23 @@ export interface AgentStatusEvent {
 // re-emits waiting_input per PTY frame (flapping) → repeated delivery + link
 // SELECTs; and reattach synthesizes waiting_input at startup → premature link
 // firing. Undefined prev (first event, incl. reattach) is NOT an edge.
-const lastBroadcastStatus = new Map<string, AgentStatus>();
+const lastBroadcast = new Map<
+  string,
+  { status: AgentStatus; step: string | null; attention: boolean }
+>();
 
 export function forgetBroadcastStatus(agentId: string): void {
-  lastBroadcastStatus.delete(agentId);
+  lastBroadcast.delete(agentId);
+}
+
+/** Parsers re-match the same spinner line many times a second; a repeat is not news. */
+export function isRepeatStatus(
+  agentId: string,
+  status: AgentStatus,
+  step?: string | null,
+): boolean {
+  const last = lastBroadcast.get(agentId);
+  return !!last && !last.attention && last.status === status && last.step === (step ?? null);
 }
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
@@ -63,8 +76,12 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
   broadcast("agent:status-changed", event);
   refreshTray();
 
-  const prev = lastBroadcastStatus.get(event.agentId);
-  lastBroadcastStatus.set(event.agentId, event.status);
+  const prev = lastBroadcast.get(event.agentId)?.status;
+  lastBroadcast.set(event.agentId, {
+    status: event.status,
+    step: event.currentStep ?? null,
+    attention: event.needsAttention === true,
+  });
   // needsAttention is transient (never persisted), so messaging can't read it
   // from the DB — mirror it here so a sender can't inject into a permission
   // dialog and confirm it with the trailing Enter.
@@ -244,10 +261,11 @@ export const DEFAULT_PTY_ROWS = 30;
  * Get the full user shell PATH. Electron doesn't inherit the full PATH
  * from the user's shell on macOS/Linux.
  */
+const shellPathCommand = () => `${process.env.SHELL || "/bin/zsh"} -ilc 'echo $PATH'`;
+
 export function getShellPath(): string {
   try {
-    const shell = process.env.SHELL || "/bin/zsh";
-    const result = execSync(`${shell} -ilc 'echo $PATH'`, {
+    const result = execSync(shellPathCommand(), {
       encoding: "utf-8",
       timeout: SHELL_PATH_TIMEOUT_MS,
     }).trim();
@@ -258,6 +276,15 @@ export function getShellPath(): string {
 }
 
 let resolvedPath: string | null = null;
+
+/** Resolve the login-shell PATH off the main thread so the first spawn or Doctor run doesn't block on it. */
+export function warmShellPath(): void {
+  if (resolvedPath) return;
+  exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
+    if (!err && !resolvedPath) resolvedPath = stdout.trim() || null;
+  });
+}
+
 export function _getFullPath(): string {
   if (!resolvedPath) {
     resolvedPath = getShellPath();

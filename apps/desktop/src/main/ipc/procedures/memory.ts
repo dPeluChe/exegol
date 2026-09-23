@@ -1,5 +1,5 @@
-import { DEFAULT_SETTINGS } from "@exegol/shared";
 import { z } from "zod";
+import { getAppSettings } from "../../db/queries/settings";
 import type { OllamaConfig } from "../../indexer/ollama-client";
 import { extractAndStoreMemories } from "../../memory/extractor";
 import {
@@ -49,9 +49,10 @@ export const memoryRouter = router({
       }),
     )
     .query(({ ctx, input }) => {
+      const saved = getAppSettings(ctx.db);
       const ollamaConfig: OllamaConfig = {
-        url: input.ollamaUrl ?? DEFAULT_SETTINGS.ollamaUrl,
-        model: input.ollamaModel ?? DEFAULT_SETTINGS.ollamaModel,
+        url: input.ollamaUrl ?? saved.ollamaUrl,
+        model: input.ollamaModel ?? saved.ollamaModel,
       };
       return searchMemories(ctx.db, input.projectId, input.query, ollamaConfig);
     }),

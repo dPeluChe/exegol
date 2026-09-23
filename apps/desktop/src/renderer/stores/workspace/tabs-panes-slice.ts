@@ -38,6 +38,7 @@ export type TabsPanesSlice = Pick<
   | "setFocusedPane"
   | "extractPaneToNewTab"
   | "closeFocusedPane"
+  | "splitFocusedPane"
   | "getActiveTab"
   | "ensureDefaultTab"
   | "equalizeSplits"
@@ -322,6 +323,11 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
         set({ focusedPaneId: nextPaneId });
       }
     }
+  },
+
+  splitFocusedPane: (direction) => {
+    const { activeTabId } = getPw(get());
+    if (activeTabId) get().splitPane(activeTabId, get().focusedPaneId, direction, "empty");
   },
 
   getActiveTab: () => {
