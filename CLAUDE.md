@@ -12,6 +12,7 @@ Electron 41 · React 18 · TailwindCSS 4 · Rust (napi-rs + memchr) · libSQL ·
 bun run dev              # Build Rust + start Electron (full pipeline)
 bun run dev:fresh        # + restart the PTY sidecar (see below)
 bun run dev:ui           # Electron only (JS fallback, faster)
+bun run kill:dev         # Stop a stuck dev Electron (keeps the sidecar + agent sessions)
 bun run build:rust       # Build Rust native module only
 bun run rebuild:native   # Rust + rebuild node-pty for Electron
 
