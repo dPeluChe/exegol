@@ -1,12 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type ActiveView = "projects" | "workspace";
+/** "dashboard" is the cross-project view: no project is selected while it shows. */
+export type ActiveView = "projects" | "workspace" | "dashboard";
 
 interface AppStore {
   /** Current main view */
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
+  openDashboard: () => void;
 
   /** Currently selected project */
   activeProjectId: string | null;
@@ -30,6 +32,7 @@ export const useAppStore = create<AppStore>()(
     (set) => ({
       activeView: "projects",
       setActiveView: (view) => set({ activeView: view }),
+      openDashboard: () => set({ activeView: "dashboard" }),
 
       activeProjectId: null,
       setActiveProject: (id) =>

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
+import { hideTerminalView, showTerminalView } from "../../lib/terminal-visibility";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { DormantPipe } from "./terminal-dormant-wiring";
@@ -274,18 +275,15 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // Revealing costs a full serialize in main, so a pane flicking past during
     // a scroll must not pay for it. Hiding is debounced; showing is immediate,
     // because a late reveal is a visibly stale terminal.
-    if (!isVisible) {
-      const timer = setTimeout(() => {
-        window.api.terminal.setVisible(agentId, false).catch(() => {});
-      }, HIDE_DEBOUNCE_MS);
-      return () => clearTimeout(timer);
-    }
+    if (!isVisible) return;
     // The repaint arrives on terminal:data, in order with live output — this
     // call only reports. Acquire/release: unmounting while visible must release
     // too, or the view stays registered and the gate never engages again.
-    window.api.terminal.setVisible(agentId, true).catch(() => {});
+    // Counted per session, so a pane and its Overview mirror don't cancel out.
+    showTerminalView(agentId);
+    // Hide is debounced so a pane flicking past during a scroll pays nothing
     return () => {
-      window.api.terminal.setVisible(agentId, false).catch(() => {});
+      setTimeout(() => hideTerminalView(agentId), HIDE_DEBOUNCE_MS);
     };
   }, [agentId, isVisible]);
 

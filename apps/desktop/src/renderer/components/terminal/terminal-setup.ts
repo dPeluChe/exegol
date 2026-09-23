@@ -208,7 +208,7 @@ export function setupTerminalSession(
       disposables.push({
         dispose: window.api.terminal.onResized(deps.agentId, (cols, rows) => {
           terminal.resize(cols, rows);
-          fitMirror(terminal, deps.fontSize);
+          requestAnimationFrame(() => fitMirror(terminal, deps.fontSize));
         }),
       });
     }
@@ -300,15 +300,25 @@ export function fitAndSyncSize(
  * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
  * the owning pane, and shrinks its font to fit the card instead of resizing.
  */
-export function fitMirror(terminal: Terminal, baseFontSize: number): void {
+export function fitMirror(terminal: Terminal, baseFontSize: number, attempt = 0): void {
   try {
     const host = measureHost(terminal);
-    const cell = measureCell(terminal);
-    if (!host?.width || !cell) return;
+    // The painted grid, not xterm's internal cell metrics: those may not exist
+    // yet, and a mirror that never measures keeps its full font and overflows
+    const screen = terminal.element?.querySelector<HTMLElement>(".xterm-screen");
+    const drawn = screen?.getBoundingClientRect().width ?? 0;
+    if (!host?.width || !drawn) {
+      if (attempt < 10) requestAnimationFrame(() => fitMirror(terminal, baseFontSize, attempt + 1));
+      return;
+    }
     const current = terminal.options.fontSize ?? baseFontSize;
-    const target = (current * host.width) / (terminal.cols * cell.width);
+    const target = (current * host.width) / drawn;
     const next = Math.floor(Math.max(6, Math.min(baseFontSize, target)) * 4) / 4;
-    if (Math.abs(next - current) >= 0.25) terminal.options.fontSize = next;
+    if (Math.abs(next - current) >= 0.25) {
+      terminal.options.fontSize = next;
+      // Glyph metrics settle a frame later; converge instead of stopping short
+      if (attempt < 10) requestAnimationFrame(() => fitMirror(terminal, baseFontSize, attempt + 1));
+    }
   } catch {
     /* container may not be ready */
   }

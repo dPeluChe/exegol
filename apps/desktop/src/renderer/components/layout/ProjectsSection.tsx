@@ -55,6 +55,8 @@ function ProjectListSection({
   onRename,
 }: ProjectListSectionProps) {
   const queryClient = useQueryClient();
+  // The dashboard spans every project: none is "selected" while it shows
+  const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const dragIndexRef = useRef<number | null>(null);
   const ids = new Set(list.map((p) => p.id));
 
@@ -88,7 +90,7 @@ function ProjectListSection({
         <ProjectItem
           key={project.id}
           project={project}
-          isSelected={project.id === activeProjectId}
+          isSelected={!onDashboard && project.id === activeProjectId}
           isExpanded={expandedIds.has(project.id)}
           onSelect={() => onSelect(project.id)}
           onToggle={() => onToggle(project.id)}

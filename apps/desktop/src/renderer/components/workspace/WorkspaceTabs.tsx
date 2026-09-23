@@ -1,14 +1,14 @@
 import { cn } from "@exegol/ui";
-import { BarChart3, Cpu, FolderKanban, LayoutDashboard, type LucideIcon } from "lucide-react";
+import { BarChart3, Cpu, FolderKanban, type LucideIcon } from "lucide-react";
 
-// ─── Main tabs (4 top-level) ────────────────────────────────────────────────
+// ─── Main tabs (3 per-project) ──────────────────────────────────────────────
 
-// Dashboard is Exegol's HOME (Antonio 2026-08-11) — first-class, not a
-// Monitor sub-tab: the cross-project fleet view lands first.
-export type MainTab = "dashboard" | "agents" | "project" | "monitor";
+// The cross-project Dashboard is its own view (sidebar button, activeView
+// "dashboard"), not a tab here: as a tab it sat inside whichever project was
+// selected, which read as "this project's dashboard" (Antonio 2026-09-23).
+export type MainTab = "agents" | "project" | "monitor";
 
 const MAIN_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "agents", label: "Agents", icon: Cpu },
   { id: "project", label: "Project", icon: FolderKanban },
   { id: "monitor", label: "Monitor", icon: BarChart3 },
@@ -37,7 +37,6 @@ export type WorkspaceSection =
   | "pipelines"
   | "parallel-runs"
   | "qa-tests"
-  | "agent-dashboard"
   | "resources-tokens"
   | "scoring";
 
@@ -60,7 +59,6 @@ const MONITOR_SUBS: { id: MonitorSubTab; label: string }[] = [
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 export function getMainTab(section: WorkspaceSection): MainTab {
-  if (section === "agent-dashboard") return "dashboard";
   if (section === "agents") return "agents";
   if (
     section === "tasks" ||
@@ -77,7 +75,6 @@ export function getMainTab(section: WorkspaceSection): MainTab {
 }
 
 export function getDefaultSubTab(tab: MainTab): WorkspaceSection {
-  if (tab === "dashboard") return "agent-dashboard";
   if (tab === "agents") return "agents";
   if (tab === "project") return "tasks";
   return "resources-tokens";
