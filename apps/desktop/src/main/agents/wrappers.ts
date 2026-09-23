@@ -159,14 +159,16 @@ function mergeClaudeHooks(): void {
 
 function mergeCodexHooks(): void {
   const codexDir = join(homedir(), ".codex");
+  if (!existsSync(codexDir)) return; // Codex not installed
   let settings: Record<string, unknown> = {};
 
-  // Read existing hooks.json if it exists
   if (existsSync(CODEX_HOOKS)) {
     try {
       settings = JSON.parse(readFileSync(CODEX_HOOKS, "utf-8"));
-    } catch {
-      settings = {};
+    } catch (err) {
+      // Never overwrite a file the user wrote by hand just because we can't parse it
+      logger.warn("[AgentWrappers] ~/.codex/hooks.json is not valid JSON, leaving it alone:", err);
+      return;
     }
   }
 

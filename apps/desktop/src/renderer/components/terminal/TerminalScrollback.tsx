@@ -76,6 +76,7 @@ export function TerminalScrollback({
       taskDescription: agent.taskDescription,
       useWorktree: !!agent.branchName,
       branchName: agent.branchName ?? undefined,
+      accessMode: agent.accessMode ?? undefined,
       resumeSession: canResume,
       resumeFromAgentId: canResume ? agent.id : undefined,
     });

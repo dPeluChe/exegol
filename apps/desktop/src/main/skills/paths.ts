@@ -109,18 +109,16 @@ function migrateLegacyDir(): void {
 
   // Real directory — migrate contents if canonical is empty
   if (legacyStat.isDirectory()) {
-    const legacyEntries = readdirSync(LEGACY_DIR);
-    const canonicalEntries = readdirSync(CANONICAL_DIR);
-
-    if (legacyEntries.length > 0 && canonicalEntries.length === 0) {
-      // Copy each skill directory
-      for (const entry of legacyEntries) {
-        const src = join(LEGACY_DIR, entry);
-        if (!statSync(src).isDirectory()) continue;
-        copyDirRecursive(src, join(CANONICAL_DIR, entry));
-      }
-      logger.info(`[SkillPaths] Migrated ${legacyEntries.length} skills from legacy dir`);
+    // Copy every skill canonical lacks: the legacy dir is deleted next, so skipping one loses it
+    let migrated = 0;
+    for (const entry of readdirSync(LEGACY_DIR)) {
+      const src = join(LEGACY_DIR, entry);
+      const dst = join(CANONICAL_DIR, entry);
+      if (!statSync(src).isDirectory() || existsSync(dst)) continue;
+      copyDirRecursive(src, dst);
+      migrated++;
     }
+    if (migrated > 0) logger.info(`[SkillPaths] Migrated ${migrated} skills from legacy dir`);
 
     // Replace legacy dir with symlink
     rmSync(LEGACY_DIR, { recursive: true });

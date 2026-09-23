@@ -1,4 +1,4 @@
-import { existsSync, unlinkSync } from "node:fs";
+import { existsSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -194,9 +194,9 @@ export const diffRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      // Remove stale lock file if exists
+      // Only a lock nobody has touched for a minute is stale; an agent's live git op holds a fresh one
       const lockPath = join(cwd, ".git", "index.lock");
-      if (existsSync(lockPath)) {
+      if (existsSync(lockPath) && Date.now() - statSync(lockPath).mtimeMs > 60_000) {
         try {
           unlinkSync(lockPath);
         } catch {

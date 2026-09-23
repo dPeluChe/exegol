@@ -396,3 +396,25 @@ export function getAgentFinalOutput(db: Database.Database, id: string): string |
     | undefined;
   return row?.final_output ?? null;
 }
+
+const liveIn = () => [...LIVE_STATUSES].map(() => "?").join(",");
+
+export function countLiveAgentsInWorktree(
+  db: Database.Database,
+  worktreeId: string,
+  excludeAgentId = "",
+): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM agents WHERE worktree_id = ? AND id != ? AND status IN (${liveIn()})`,
+    )
+    .get(worktreeId, excludeAgentId, ...LIVE_STATUSES) as { n: number };
+  return row.n;
+}
+
+export function listLiveAgentIds(db: Database.Database, projectId: string): string[] {
+  const rows = db
+    .prepare(`SELECT id FROM agents WHERE project_id = ? AND status IN (${liveIn()})`)
+    .all(projectId, ...LIVE_STATUSES) as { id: string }[];
+  return rows.map((r) => r.id);
+}

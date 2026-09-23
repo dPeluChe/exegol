@@ -7,7 +7,21 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] Daily-readiness fixes (2026-09)
+## [0.5.0] — 2026-09-22 — Waves 1-3 consolidated, daily-readiness fixes
+
+First release since 0.4.4. Groups the three unreleased batches below.
+
+### Pre-build audit fixes
+- Undo works in the packaged app; tray icon ships; worktree archive hook runs
+- A queued agent message can no longer type into a permission dialog that was redrawn
+- Undo refuses when it would drop uncommitted work, later commits, or a worktree agent's base
+- Shared worktrees are not removed while another agent uses them; resume keeps the access mode
+- Pausing a pipeline holds it; pipelines take a task description
+- Removing a project asks first and stops its agents; file delete refuses project roots and .git
+- `gh`/`git` find Homebrew when launched from Finder; Git diff refreshes after agent edits
+- Settings no longer revert changes saved from other screens
+
+### Daily-readiness fixes (2026-09)
 
 Details: `docs/TASK_COMPLETED/2609.md`.
 
@@ -31,7 +45,7 @@ Details: `docs/TASK_COMPLETED/2609.md`.
 - **Attention text, final output and scoring** read the latest session output (the scrollback
   buffer kept the first 1MB instead of the last).
 
-## [Unreleased] — Wave 2: signal, knowledge, evidence, undo, surface (2026-07)
+### Wave 2: signal, knowledge, evidence, undo, surface (2026-07)
 
 17 tasks landed across 4 parallel worktree groups (PRs #40–#50, each review-fixed
 before merge). Source: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md` +
@@ -83,7 +97,7 @@ before merge). Source: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md` +
 - 3 new tables (`budgets`, `budget_alerts`, `project_groups`) and 3 new memory
   columns via per-group migration sets (`db/migration-sets/`).
 
-## [Unreleased — May 2026 batch] — Wave 1 stack optimizations, parallel multi-agent, settings window
+### Wave 1 (May 2026): stack optimizations, parallel multi-agent, settings window
 
 Big batch of work landed in May 2026 across 5 parallel worktrees (Wave 1+2)
 plus T120 settings window. Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` +

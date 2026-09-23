@@ -81,14 +81,12 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
 
   // Auto-save on every change (General + Terminal tabs)
   const updateField = (updates: Partial<Settings>) => {
-    setForm((prev) => {
-      if (!prev) return prev;
-      const updated = { ...prev, ...updates };
-      updateSettings.mutate(updated, {
-        onSuccess: () => flashSaved(),
-        onError: (err) => console.error("[Settings] Auto-save failed:", err),
-      });
-      return updated;
+    setForm((prev) => (prev ? { ...prev, ...updates } : prev));
+    // Send only the changed fields: the whole form is a mount-time snapshot and
+    // would revert settings saved elsewhere (MCP verbose, notification mutes)
+    updateSettings.mutate(updates, {
+      onSuccess: () => flashSaved(),
+      onError: (err) => console.error("[Settings] Auto-save failed:", err),
     });
   };
 

@@ -35,7 +35,6 @@ import {
   deriveStatusFromSignal,
   finalizeAgentStatus,
   forgetBroadcastStatus,
-  isRepeatStatus,
   scoreAndRecordOplog,
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
@@ -212,12 +211,6 @@ export function createSpawnCallbacks(
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
-      // Skip output processing for shells and interactive TUI CLIs
-      // (their output contains TUI escape sequences and status-like text that
-      // the parser misinterprets as "failed"/"waiting_input")
-      const SKIP_PARSING: Set<string> = new Set(["shell", "crush", "opencode", "kiro"]);
-      if (SKIP_PARSING.has(agent.cliType)) return;
-
       // Keep the LAST maxScrollbackBytes: attention tails, final output and scoring read the end
       const chunks = maps.scrollbackBuffers.get(agent.id);
       if (chunks) {
@@ -226,6 +219,12 @@ export function createSpawnCallbacks(
         while (size > maxScrollbackBytes && chunks.length > 1) size -= chunks.shift()?.length ?? 0;
         maps.scrollbackSizes.set(agent.id, size);
       }
+
+      // Skip output processing for shells and interactive TUI CLIs
+      // (their output contains TUI escape sequences and status-like text that
+      // the parser misinterprets as "failed"/"waiting_input")
+      const SKIP_PARSING: Set<string> = new Set(["shell", "crush", "opencode", "kiro"]);
+      if (SKIP_PARSING.has(agent.cliType)) return;
 
       const processor = maps.outputProcessors.get(agent.id);
       if (!processor) return;
@@ -302,14 +301,7 @@ export function createSpawnCallbacks(
         );
         scrapedStatus = undefined;
       }
-      if (
-        (scrapedStatus || result.currentStep) &&
-        !isRepeatStatus(
-          agent.id,
-          (scrapedStatus as AgentStatus | undefined) ?? "running",
-          result.currentStep,
-        )
-      ) {
+      if (scrapedStatus || result.currentStep) {
         if (scrapedStatus) {
           logger.info(
             `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${result.currentStep ? ` [${result.currentStep}]` : ""}`,

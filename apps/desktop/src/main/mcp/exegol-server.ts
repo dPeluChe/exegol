@@ -614,12 +614,14 @@ export function getExegolMcpServerInfo(): {
 }
 
 export function stopExegolMcpServer(): void {
+  // Another instance (dev beside packaged) may own the socket; only the owner unlinks it
+  const owned = server?.listening === true;
   server?.close();
   server = null;
   tokensBySecret.clear();
   tokensByAgent.clear();
   try {
-    if (existsSync(MCP_SOCK_PATH)) unlinkSync(MCP_SOCK_PATH);
+    if (owned && existsSync(MCP_SOCK_PATH)) unlinkSync(MCP_SOCK_PATH);
   } catch {
     /* best-effort */
   }

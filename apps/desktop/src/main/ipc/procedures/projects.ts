@@ -6,7 +6,7 @@ import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
 
-import { LIVE_STATUSES, projectCreateSchema } from "@exegol/shared";
+import { projectCreateSchema } from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import {
@@ -23,7 +23,9 @@ import {
   updateProjectLastOpened,
   updateProjectSortOrder,
 } from "../../db/queries";
+import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
 import { getAppSettings } from "../../db/queries/settings";
+import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde } from "../../ide/opener";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
@@ -117,11 +119,19 @@ export const projectRouter = router({
       return { success: true };
     }),
 
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const project = getProject(ctx.db, input.id);
     if (!project) {
       throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.id} not found` });
     }
+    // The row cascade drops agents from the DB; their PTYs would keep running unowned
+    await Promise.all(
+      listLiveAgentIds(ctx.db, input.id).map((id) =>
+        ctx.agentManager.stop(ctx.db, id).catch((err) => {
+          logger.warn(`[Projects] Failed to stop ${id} before delete:`, err);
+        }),
+      ),
+    );
     deleteProject(ctx.db, input.id);
     return { success: true };
   }),
@@ -230,20 +240,12 @@ export const projectRouter = router({
       const project = getProject(ctx.db, input.projectId);
       if (!project) return { success: false, message: "Project not found" };
 
-      const statuses = [...LIVE_STATUSES];
-      const live = ctx.db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM agents
-           WHERE worktree_id = ? AND status IN (${statuses.map(() => "?").join(",")})`,
-        )
-        .get(input.worktreeId, ...statuses) as { n: number };
-      if (live.n > 0) {
+      if (countLiveAgentsInWorktree(ctx.db, input.worktreeId) > 0) {
         return { success: false, message: "An agent is still working in this worktree" };
       }
 
       // Run archive hook before deletion (T60: exegol.yaml)
       try {
-        const { runArchiveHook } = require("../../hooks/project-hooks");
         await runArchiveHook(project.path, wt.path, wt.branch_name);
       } catch {
         /* Non-fatal */

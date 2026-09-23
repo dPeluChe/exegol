@@ -18,9 +18,9 @@
 > Goal: an installed build Antonio can use every day. Features wait.
 
 **P0**
-1. **Installable build**: reconcile the version (`package.json` 0.4.1 vs CHANGELOG 0.4.4, see
-   `GUIDES/RELEASE.md` step 2), `bun run package:mac`, then run both manual-verification
-   checklists below on the PACKAGED app (PATH detection, CSP, capability allowlist). Cut v0.5.0.
+1. **Installable build**: version is 0.5.0. `bun run package:mac`, install to /Applications, then
+   run both manual-verification checklists below on the PACKAGED app. Tag v0.5.0. Open items from
+   the pre-build audit are T193.
 
 **P1**
 2. opencode TUI dies across app quit (Wave 2 checklist below)
@@ -419,6 +419,54 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     `spawn-agent` and the rest a typed `WindowEventMap` so detail keys are checked at both ends.
 18. **One apply-status helper**: status dedup covers the parser path only; the other 7
     `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
+
+---
+
+### T193 — v0.5.0 pre-build audit leftovers `added: 2026-09-22`
+**Priority**: P1 unless noted | **Source**: 2026-09-22 pre-build audit. Fixed items are in `TASK_COMPLETED/2609.md`.
+
+**Distribution**
+1. Not notarized (`notarize: false`); a CI build without the Developer ID cert is ad-hoc signed, so
+   Squirrel updates fail. Local builds sign with the keychain identity.
+2. `process.execPath` is written into hooks, `.mcp.json` and CLI configs: launching from the DMG
+   volume or a translocated path breaks them once the app moves. Install to /Applications first;
+   long term, rewrite those paths at startup when execPath changed.
+3. arm64 only (`core-rust.darwin-arm64.node`, no `@libsql/darwin-x64`). P2.
+4. node-pty `prebuilds/darwin-arm64/spawn-helper` has no exec bit; works only because
+   `rebuild:native` builds `build/Release/spawn-helper`. chmod in an afterPack hook.
+5. Dev and packaged share `~/.exegol` sidecar socket and pid (same SIDECAR_VERSION reuses each
+   other's sidecar). P2.
+6. `@exegol/core-rust` undeclared in `apps/desktop`; `vitest` undeclared in `packages/shared`. P2.
+
+**Agents**
+7. `onExit` ignores the signal (`pty-host.ts:67`): a manual Stop records completed/failed, not
+   stopped (pipelines now guard on paused).
+8. Memory extraction on exit is dead (`extractAndStoreMemories` only via `memory.extract`, never
+   called since 8b26000). Decide: wire on exit or drop from CLAUDE.md.
+9. Reattach doesn't recreate title trackers.
+10. `getAppSettings` falls back to defaults on bad JSON; the next update saves over the row.
+
+**Pipelines and git**
+11. After a restart a paused run's step agent is still alive; resume spawns a second one.
+12. `{{diff}}` (up to 16 MiB) goes into argv; over ~1MB the spawn fails. Pass via file (T183.11).
+13. Without core-rust (`dev:ui`) runs silently use the project root.
+14. Resume/Export pipeline mutations and Git stage/unstage have no onError; renamed or quoted
+    paths break staging; Create PR is offered on main.
+15. Pipeline snapshot restore runs on `project.path`; Rust refuses the cross-worktree restore (safe,
+    now visible as a toast). Pass the run's worktree path.
+
+**History, parallel, QA, files**
+16. History: opencode moved to SQLite (adapter reads JSON only); Gemini now uses `projects.json`
+    folder names (adapter reads hashed `tmp/`); no "resume from history" button.
+17. Parallel runs: no Cancel in the UI; if every spawn fails the run stays `running` forever.
+18. QA Run does nothing unless the browser pane is focused (`use-browser-qa.ts:252`).
+19. Files pane: no size/binary guard before Monaco.
+20. Global hotkey stops working after the main window closes (`window.ts:10`).
+21. Knowledge, Tasks and Add Memory swallow errors; archiving can overwrite `tasks_completed.md`
+    (`task-file-actions.ts:40`).
+22. P2 debt: `trpcMutate<any>("agents.spawn")` x9; ~30 stale biome suppressions; unused renderer
+    hooks (`use-trpc-mcp`, `-search`, `-budgets`, `-scoring`); MCP serverInfo version hardcoded 1.0.0;
+    CLI package 0.4.0.
 
 ---
 

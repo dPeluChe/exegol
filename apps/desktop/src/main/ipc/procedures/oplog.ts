@@ -1,17 +1,9 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { createOplogEntry, listAgentOplog, listProjectOplog } from "../../db/queries";
+import { coreRust } from "../../agents/spawn-env";
+import { createOplogEntry, getAgent, listAgentOplog, listProjectOplog } from "../../db/queries";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
-
-// ─── Rust native module (git2 revert) ──────────────────────────────────────
-
-let coreRust: typeof import("@exegol/core-rust") | null = null;
-try {
-  coreRust = require("@exegol/core-rust");
-} catch {
-  logger.warn("[Oplog] @exegol/core-rust not available — undo disabled");
-}
 
 // ─── Router ─────────────────────────────────────────────────────────────────
 
@@ -65,8 +57,33 @@ export const oplogRouter = router({
       throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
     }
 
-    // Get current HEAD before revert
+    // revertToSnapshot force-checks-out project.path: refuse every case where that destroys work
+    if (entry.operation === "worktree_create") {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "Worktree creation can't be undone here",
+      });
+    }
+    if (getAgent(ctx.db, entry.agent_id as string)?.worktreeId) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: "This agent worked in a worktree; undo would rewrite the main checkout",
+      });
+    }
+    if (coreRust.worktreeHasChanges(project.path)) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Uncommitted changes in the project; commit or stash them before undoing",
+      });
+    }
     const snapshotBefore = coreRust.getRepoSnapshot(project.path);
+    const refAfter = entry.ref_after as string | null;
+    if (refAfter && snapshotBefore.headSha !== refAfter) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "HEAD moved since this operation; undoing it would drop later commits",
+      });
+    }
 
     // Perform the revert
     const newSha = coreRust.revertToSnapshot(project.path, refBefore);
