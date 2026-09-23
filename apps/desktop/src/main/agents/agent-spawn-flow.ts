@@ -211,6 +211,8 @@ export function buildPtyInvocation(
   registry: AgentProviderRegistry,
   cliConfig: { command: string; args: string[]; env: Record<string, string> },
   projectPath: string,
+  /** From the CLI's own store: false = nothing to continue here, null = unknown */
+  priorSession: boolean | null = null,
 ): PtyInvocation {
   const isPlainShell = agent.cliType === "shell";
   const userShell = process.env.SHELL || "/bin/zsh";
@@ -273,7 +275,14 @@ export function buildPtyInvocation(
       } else {
         const provider = registry.get(agent.cliType);
         const resumeFlag = provider?.capabilities?.resumeFlag;
-        if (resumeFlag) {
+        if (resumeFlag && priorSession === false) {
+          // `claude --continue` with no conversation here exits 1. Open a clean
+          // session instead of failing, and don't re-run the old task as a prompt.
+          fullCommand = cliConfig.command;
+          logger.info(
+            `[AgentManager] No prior ${agent.cliType} session in ${cwd}; starting a new one`,
+          );
+        } else if (resumeFlag) {
           fullCommand = `${cliConfig.command} ${resumeFlag}`;
         }
       }

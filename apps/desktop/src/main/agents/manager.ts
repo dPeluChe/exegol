@@ -1,6 +1,7 @@
 import { type Agent, type AgentCreate, YOLO_FLAGS } from "@exegol/shared";
 import type Database from "libsql";
 import { activateAgent, getAgent, insertActivity, stopAgent } from "../db/queries";
+import { hasLocalSession } from "../history";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
@@ -117,6 +118,7 @@ export class AgentManager {
 
     const cwd = setupAgentCwd(db, agent, config, project, this.worktrees, this.initialSnapshots);
 
+    const priorSession = config.resumeSession ? await hasLocalSession(agent.cliType, cwd) : null;
     const { shell, args, env, stdinCommand, enableMarker, isPlainShell } = buildPtyInvocation(
       db,
       agent,
@@ -125,6 +127,7 @@ export class AgentManager {
       registry,
       cliConfig,
       project.path,
+      priorSession,
     );
 
     if (!isPlainShell) {

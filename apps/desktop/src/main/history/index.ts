@@ -69,3 +69,19 @@ async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
   // fallback; sorting here too would be a second rule that disagrees.
   return results.flat();
 }
+
+/**
+ * Whether this CLI recorded any session in `cwd`: a generic resume flag
+ * (`--continue`, `resume --last`) exits with an error when there is none, which
+ * turned "Resume" on a fresh folder into a failed agent. null = no adapter for
+ * this CLI, so the caller can't tell and keeps the flag.
+ */
+export async function hasLocalSession(provider: string, cwd: string): Promise<boolean | null> {
+  const adapter = PROVIDERS.find((p) => p.id === provider);
+  if (!adapter) return null;
+  try {
+    return (await adapter.list([cwd], 0)).length > 0;
+  } catch {
+    return null;
+  }
+}

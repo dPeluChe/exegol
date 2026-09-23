@@ -248,6 +248,23 @@ describe("buildPtyInvocation", () => {
     expect(inv.args[1]).toContain("claude --continue");
   });
 
+  it("starts a clean session when the CLI has nothing to continue in this cwd", () => {
+    const [agent, config] = makeAgent("claude-code", { resumeSession: true });
+    const inv = buildPtyInvocation(
+      db,
+      agent,
+      config,
+      "/tmp/cwd",
+      registry,
+      cliConfig,
+      "/tmp/p1",
+      false,
+    );
+    expect(inv.args[1]).not.toContain("--continue");
+    // A resume is not a re-run: the original task must not be sent again
+    expect(inv.args[1]).not.toContain("do the task");
+  });
+
   it("prepends the lifecycle beforeAgent hook to the command", () => {
     mocks.lifecycle = { beforeAgent: "npm install" };
     const [agent, config] = makeAgent("claude-code");
