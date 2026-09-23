@@ -199,8 +199,7 @@ export function TerminalScrollback({
           </button>
         </div>
       ) : (
-        {/* min-h-0: a flex item never shrinks below its content by default, so the
-            terminal's own rows set the box height and each fit stepped it down a row */}
+        // min-h-0: a flex item won't shrink below its content, so the grid set the box height
         <div className="relative min-h-0 flex-1">
           {viewMode === "chat" ? (
             <ChatView scrollback={scrollbackContent} cliType={agent?.cliType} />
@@ -219,8 +218,7 @@ export function TerminalScrollback({
             </>
           )}
         </div>
-      )
-}
-</div>
-  )
+      )}
+    </div>
+  );
 }
