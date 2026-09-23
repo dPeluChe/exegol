@@ -1,7 +1,6 @@
 import { app, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { broadcast } from "../lib/event-bus";
-import { logger } from "../lib/logger";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
 import { getPtyHost } from "../terminal/pty-host";
 import {
@@ -28,17 +27,10 @@ export function registerIpcHandlers(): void {
   });
 
   // Terminal resize: renderer -> main -> pty
-  ipcMain.on("debug:log", (event, name: string, data: unknown) => {
-    logger.debug(`[TermDbg:w${event.sender.id}] ${name}`, JSON.stringify(data));
-  });
-
-  ipcMain.on("terminal:resize", (event, agentId: string, cols: number, rows: number) => {
+  ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
     const before = getPtyHost().getSize(agentId);
     // A drag re-sends the same grid every frame; each would be a sidecar RPC
     if (before?.cols === cols && before?.rows === rows) return;
-    logger.debug(
-      `[TermDbg:main] PTY resize ${agentId} ${before?.cols}x${before?.rows} -> ${cols}x${rows} (w${event.sender.id})`,
-    );
     getAgentManager().resize(agentId, cols, rows);
     // Overview mirrors follow the owner's size; they never resize the PTY themselves
     if (before) broadcast("terminal:resized", agentId, cols, rows);
@@ -46,7 +38,6 @@ export function registerIpcHandlers(): void {
 
   // Repaint without telling mirrors: the jiggle is not a real size change
   ipcMain.on("terminal:redraw", (_event, agentId: string) => {
-    logger.debug(`[TermDbg:main] redraw ${agentId}`);
     getPtyHost().redraw(agentId);
   });
 
@@ -80,9 +71,6 @@ export function registerIpcHandlers(): void {
       // repainting it again would serialize and paint the screen twice
       if (!visible || !consumeMissedOutput(agentId) || fresh) return;
       const snapshot = getPtyHost().getSnapshot(agentId);
-      logger.debug(
-        `[TermDbg:main] repaint ${agentId} for w${viewerId}/${viewId}: ${snapshot?.length ?? 0} chars`,
-      );
       if (!snapshot) return;
       // Pushed through terminal:data rather than returned, so the repaint is
       // ORDERED with live output. Returning it raced: bytes arriving between the

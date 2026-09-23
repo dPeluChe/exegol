@@ -54,9 +54,6 @@ interface Window {
     trpc: {
       invoke: (path: string, input: unknown) => Promise<unknown>;
     };
-    debug?: {
-      log: (event: string, data: unknown) => void;
-    };
     terminal: {
       onData: (id: string, callback: (data: string) => void) => () => void;
       write: (id: string, data: string) => void;

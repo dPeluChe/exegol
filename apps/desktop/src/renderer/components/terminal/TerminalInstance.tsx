@@ -14,7 +14,6 @@ import {
 } from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
-import { termDbg } from "../../lib/term-debug";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { DormantPipe } from "./terminal-dormant-wiring";
@@ -137,7 +136,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     const terminal = terminalRef.current;
     if (!fit || !terminal) return;
     // A mirror follows the PTY's grid (wired in setup) and only rescales its font
-    if (mirror) fitMirror(terminal, fontSize, agentId);
+    if (mirror) fitMirror(terminal, fontSize);
     else fitAndSyncSize(terminal, fit, agentId, readOnly, (c, r) => setTerminalSize(agentId, c, r));
   }, [agentId, setTerminalSize, readOnly, mirror, fontSize]);
 
@@ -171,7 +170,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     dormantPipeRef.current = session.dormantPipe;
 
     const refit = () => {
-      if (mirror) fitMirror(session.terminal, fontSize, agentId);
+      if (mirror) fitMirror(session.terminal, fontSize);
       else
         fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, (c, r) =>
           setTerminalSize(agentId, c, r),
@@ -194,7 +193,6 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       if (readOnly || mirror || kickedSessions.has(agentId)) return;
       if (session.terminal.buffer.active.type !== "alternate") return;
       kickedSessions.add(agentId);
-      termDbg(`kick:${agentId}:${viewId}`, "SIGWINCH kick", { agentId });
       window.api.terminal.redraw(agentId);
     }, 350);
 
@@ -205,12 +203,6 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     let observedBox = "";
     const resizeObserver = new ResizeObserver(([entry]) => {
       const width = entry?.contentRect.width ?? -1;
-      termDbg(`ro:${agentId}:${viewId}`, "container resized", {
-        agentId,
-        viewId,
-        mirror,
-        box: `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`,
-      });
       if (mirror) {
         // The card sets both dimensions (the grid never sizes its box), so any
         // real change is news. A drag changes it every frame; refit once it
@@ -300,16 +292,14 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // The repaint arrives on terminal:data, in order with live output — this
     // call only reports. Acquire/release: unmounting while visible must release
     // too, or the view stays registered and the gate never engages again.
-    termDbg(`vis:${agentId}:${viewId}`, "visible", { agentId, viewId, mirror, visible: true });
     // First report of this view: its mount already fetched a snapshot
     const fresh = !reportedVisibleRef.current;
     reportedVisibleRef.current = true;
     window.api.terminal.setVisible(agentId, true, viewId, fresh).catch(() => {});
     return () => {
-      termDbg(`vis:${agentId}:${viewId}`, "visible", { agentId, viewId, mirror, visible: false });
       window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
     };
-  }, [agentId, isVisible, viewId, mirror]);
+  }, [agentId, isVisible, viewId]);
 
   useEffect(() => {
     dormantPipeRef.current?.setVisible(isVisible);

@@ -12,6 +12,8 @@ import { StatusDot } from "../../common/StatusDot";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
 
 const DRAG_TYPE = "application/x-exegol-watch";
+/** Cards and collapsed strips alike take the dashboard's height; more rows scroll it */
+const FULL_HEIGHT = "max(320px, calc(100vh - 11rem))";
 
 interface DragProps {
   draggable: boolean;
@@ -116,13 +118,10 @@ export function WatchingSection({
           collapsing one never remounts (and repaints) the mirrors around it */}
       <div className="flex flex-wrap gap-x-2">
         {rows.flatMap((ids, rowIndex) => {
-          const height = ids.some((id) => openIds.has(id))
-            ? "max(320px, calc(100vh - 11rem))"
-            : "10rem";
           const items = ids.map((id) => {
             const agent = agents[id];
             const common = {
-              height,
+              height: FULL_HEIGHT,
               needsInput: needsInput(id),
               project: agent ? projectMeta.get(agent.projectId) : undefined,
               dropTarget: dragOver === id,

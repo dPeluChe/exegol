@@ -2,7 +2,6 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
-import { termDbg } from "../../lib/term-debug";
 import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
@@ -189,18 +188,8 @@ export function setupTerminalSession(
     let snapshotResolved = false;
     let liveDisposed = false;
     const liveBuffer: string[] = [];
-    let repaints = 0;
     unsubData = window.api.terminal.onData(deps.agentId, (data) => {
       if (liveDisposed) return;
-      if (data.startsWith("\x1bc")) {
-        repaints++;
-        termDbg(`ris:${deps.agentId}:${!!deps.mirror}`, "full repaint received", {
-          agentId: deps.agentId,
-          mirror: !!deps.mirror,
-          repaints,
-          chars: data.length,
-        });
-      }
       if (!snapshotResolved) {
         liveBuffer.push(data);
       } else {
@@ -216,7 +205,7 @@ export function setupTerminalSession(
           .then((size) => {
             if (!size || liveDisposed) return;
             terminal.resize(size.cols, size.rows);
-            fitMirror(terminal, deps.fontSize, deps.agentId);
+            fitMirror(terminal, deps.fontSize);
           })
           .catch(() => {})
       : Promise.resolve();
@@ -225,13 +214,8 @@ export function setupTerminalSession(
     if (deps.mirror) {
       disposables.push({
         dispose: window.api.terminal.onResized(deps.agentId, (cols, rows) => {
-          termDbg(`resized:${deps.agentId}`, "mirror follows owner", {
-            agentId: deps.agentId,
-            cols,
-            rows,
-          });
           terminal.resize(cols, rows);
-          fitMirror(terminal, deps.fontSize, deps.agentId);
+          fitMirror(terminal, deps.fontSize);
         }),
       });
     }
@@ -298,13 +282,6 @@ export function fitAndSyncSize(
     if (!host?.width || !host?.height) return;
     fitAddon.fit();
     const { cols, rows } = terminal;
-    termDbg(`fit:${agentId}:${readOnly}`, "pane fit", {
-      agentId,
-      readOnly,
-      alternate: terminal.buffer.active.type === "alternate",
-      host: host ? `${host.width}x${host.height}` : null,
-      grid: `${cols}x${rows}`,
-    });
     onSize(cols, rows);
     if (!readOnly) sendPtyResize(agentId, cols, rows);
   } catch {
@@ -334,7 +311,7 @@ function sendPtyResize(agentId: string, cols: number, rows: number): void {
  *  two chains measuring a width that lags a frame can't shrink it twice. */
 const mirrorFitGeneration = new WeakMap<Terminal, number>();
 
-export function fitMirror(terminal: Terminal, baseFontSize: number, label = ""): void {
+export function fitMirror(terminal: Terminal, baseFontSize: number): void {
   const generation = (mirrorFitGeneration.get(terminal) ?? 0) + 1;
   mirrorFitGeneration.set(terminal, generation);
   const step = (attempt: number) => {
@@ -350,16 +327,6 @@ export function fitMirror(terminal: Terminal, baseFontSize: number, label = ""):
         const current = terminal.options.fontSize ?? baseFontSize;
         const drawn = { width: rect.width, height: rect.height };
         const next = nextMirrorFont(current, drawn, host, baseFontSize);
-        termDbg(`mirror:${label}:${generation}:${attempt}`, "mirror fit", {
-          agentId: label,
-          generation,
-          attempt,
-          host: `${host.width}x${host.height}`,
-          drawn: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
-          grid: `${terminal.cols}x${terminal.rows}`,
-          font: current,
-          next,
-        });
         if (next === null) return;
         terminal.options.fontSize = next;
       }

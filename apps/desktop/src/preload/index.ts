@@ -75,12 +75,6 @@ contextBridge.exposeInMainWorld("api", {
       return ipcRenderer.invoke("trpc", { path, input });
     },
   },
-  /** T194 dev diagnostics, forwarded to the main log file */
-  debug: {
-    log: (event: string, data: unknown) => {
-      if (ipcSet.has("debug:log")) ipcRenderer.send("debug:log", event, data);
-    },
-  },
   terminal: {
     onData: (id: string, callback: (data: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, termId: string, data: string): void => {
