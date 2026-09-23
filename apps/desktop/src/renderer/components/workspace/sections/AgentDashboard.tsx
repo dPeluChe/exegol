@@ -13,7 +13,6 @@ import {
   Cpu,
   Eye,
   Map as MapIcon,
-  Pin,
   Send,
   Square,
   XCircle,
@@ -24,7 +23,6 @@ import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
-import { useWatchStore } from "../../../stores/watch";
 import {
   collectPaneIds,
   selectPanes,
@@ -33,7 +31,9 @@ import {
 } from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
+import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
+import { WatchToggle } from "../../common/WatchToggle";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
 import { WatchingSection } from "./WatchingSection";
 import { WorktreesCard } from "./WorktreesCard";
@@ -147,11 +147,6 @@ type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
 interface ProjectInfo {
   id: string;
   name: string;
-}
-
-interface ProjectMeta {
-  name: string;
-  color: string | null;
 }
 
 type GroupBy = "state" | "project";
@@ -442,8 +437,6 @@ function AgentCard({
   const StatusIcon = config.icon;
   const canPeek = LIVE_STATUSES.has(agent.status);
   const [peekOpen, setPeekOpen] = useState(false);
-  const watching = useWatchStore((s) => s.watched.includes(agent.id));
-  const toggleWatch = useWatchStore((s) => s.toggleWatch);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: nested interactive children (peek button/input) prevent <button>
@@ -478,18 +471,7 @@ function AgentCard({
               <StatusIcon className="h-3 w-3" />
               {hasUnread ? "Needs input" : config.label}
             </span>
-            {projectMeta && (
-              <span
-                className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] text-text-muted"
-                title={projectMeta.name}
-              >
-                <span
-                  className={cn("h-1.5 w-1.5 rounded-full", !projectMeta.color && "bg-accent")}
-                  style={projectMeta.color ? { backgroundColor: projectMeta.color } : undefined}
-                />
-                <span className="max-w-[90px] truncate">{projectMeta.name}</span>
-              </span>
-            )}
+            {projectMeta && <ProjectChip project={projectMeta} className="ml-auto text-[9px]" />}
           </div>
           <p className="mt-0.5 truncate text-xs text-text-muted">{agent.taskDescription}</p>
           {agent.currentStep && (
@@ -527,25 +509,7 @@ function AgentCard({
                 {agent.branchName}
               </span>
             )}
-            {canPeek && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleWatch(agent.id);
-                }}
-                className={cn(
-                  "flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] hover:bg-white/10",
-                  watching ? "text-accent" : "text-text-muted hover:text-text-primary",
-                )}
-                title={
-                  watching ? "Stop watching" : "Watch: pin a live terminal to the top of Overview"
-                }
-              >
-                <Pin className="h-3 w-3" />
-                {watching ? "Watching" : "Watch"}
-              </button>
-            )}
+            {canPeek && <WatchToggle agentId={agent.id} className="text-[10px]" />}
             {canPeek && (
               <button
                 type="button"

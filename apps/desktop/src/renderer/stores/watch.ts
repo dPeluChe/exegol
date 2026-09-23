@@ -17,6 +17,7 @@ interface WatchStore {
   setColumns: (columns: 1 | 2) => void;
 }
 
+const pushOpen = (open: string[], id: string) => [...open, id].slice(-MAX_OPEN_MIRRORS);
 const swap = (list: string[], oldId: string, newId: string) =>
   list.map((id) => (id === oldId ? newId : id));
 
@@ -35,14 +36,14 @@ export const useWatchStore = create<WatchStore>()(
               }
             : {
                 watched: [...s.watched, agentId],
-                open: [...s.open, agentId].slice(-MAX_OPEN_MIRRORS),
+                open: pushOpen(s.open, agentId),
               },
         ),
       toggleOpen: (agentId) =>
         set((s) => ({
           open: s.open.includes(agentId)
             ? s.open.filter((id) => id !== agentId)
-            : [...s.open, agentId].slice(-MAX_OPEN_MIRRORS),
+            : pushOpen(s.open, agentId),
         })),
       replaceAgent: (oldId, newId) =>
         set((s) => ({ watched: swap(s.watched, oldId, newId), open: swap(s.open, oldId, newId) })),

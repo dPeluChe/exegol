@@ -25,8 +25,6 @@ export interface TerminalSessionDeps {
   /** T194 Overview mirror: interactive, but the owning pane answers terminal
    *  queries and owns the PTY size. */
   mirror?: boolean;
-  /** Mirror only: the PTY grid, reported once it is read (before the snapshot lands) */
-  onPtySize?: (size: { cols: number; rows: number }) => void;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -200,10 +198,20 @@ export function setupTerminalSession(
           .then((size) => {
             if (!size || liveDisposed) return;
             terminal.resize(size.cols, size.rows);
-            deps.onPtySize?.(size);
+            requestAnimationFrame(() => fitMirror(terminal, deps.fontSize));
           })
           .catch(() => {})
       : Promise.resolve();
+
+    // ...and follows the owner's resizes after that
+    if (deps.mirror) {
+      disposables.push({
+        dispose: window.api.terminal.onResized(deps.agentId, (cols, rows) => {
+          terminal.resize(cols, rows);
+          fitMirror(terminal, deps.fontSize);
+        }),
+      });
+    }
 
     sized
       .then(() => window.api.terminal.getSnapshot(deps.agentId))
@@ -292,20 +300,13 @@ export function fitAndSyncSize(
  * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
  * the owning pane, and shrinks its font to fit the card instead of resizing.
  */
-export function fitMirror(
-  terminal: Terminal,
-  size: { cols: number; rows: number },
-  baseFontSize: number,
-): void {
+export function fitMirror(terminal: Terminal, baseFontSize: number): void {
   try {
-    if (terminal.cols !== size.cols || terminal.rows !== size.rows) {
-      terminal.resize(size.cols, size.rows);
-    }
     const host = measureHost(terminal);
     const cell = measureCell(terminal);
     if (!host?.width || !cell) return;
     const current = terminal.options.fontSize ?? baseFontSize;
-    const target = (current * host.width) / (size.cols * cell.width);
+    const target = (current * host.width) / (terminal.cols * cell.width);
     const next = Math.floor(Math.max(6, Math.min(baseFontSize, target)) * 4) / 4;
     if (Math.abs(next - current) >= 0.25) terminal.options.fontSize = next;
   } catch {

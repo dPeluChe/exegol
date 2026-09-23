@@ -6,14 +6,10 @@ import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
+import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { StatusDot } from "../../common/StatusDot";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
-
-export interface WatchProjectMeta {
-  name: string;
-  color: string | null;
-}
 
 /**
  * T194: sessions pinned from any project, each with an interactive mirror of its
@@ -24,10 +20,11 @@ export function WatchingSection({
   projectMeta,
   onOpenAgent,
 }: {
-  projectMeta: Map<string, WatchProjectMeta>;
+  projectMeta: Map<string, ProjectMeta>;
   onOpenAgent: (agent: AgentState) => void;
 }) {
   const watched = useWatchStore((s) => s.watched);
+  const opened = useWatchStore((s) => s.open);
   const columns = useWatchStore((s) => s.columns);
   const setColumns = useWatchStore((s) => s.setColumns);
   const agents = useAgentStore((s) => s.agents);
@@ -45,6 +42,12 @@ export function WatchingSection({
     };
     return watched.map((id, i) => ({ id, i, r: rank(id) })).sort((a, b) => a.r - b.r || a.i - b.i);
   }, [watched, agents, attentionItems]);
+
+  // Questions open a mirror on their own, but the WebGL cap holds for them too
+  const openIds = useMemo(() => {
+    const ids = ordered.filter(({ id, r }) => r === 0 || opened.includes(id)).map((o) => o.id);
+    return new Set(ids.slice(0, MAX_OPEN_MIRRORS));
+  }, [ordered, opened]);
 
   if (watched.length === 0) return null;
 
@@ -67,12 +70,13 @@ export function WatchingSection({
         </div>
       </h3>
       <div className={cn("grid grid-cols-1 gap-2", columns === 2 && "xl:grid-cols-2")}>
-        {ordered.map(({ id }) => (
+        {ordered.map(({ id, r }) => (
           <WatchCard
             key={id}
             agentId={id}
             agent={agents[id]}
-            needsInput={!!attentionItems[id] && !attentionItems[id]?.read}
+            needsInput={r === 0}
+            isOpen={openIds.has(id)}
             project={agents[id] ? projectMeta.get(agents[id].projectId) : undefined}
             onOpenAgent={onOpenAgent}
           />
@@ -86,13 +90,15 @@ function WatchCard({
   agentId,
   agent,
   needsInput,
+  isOpen,
   project,
   onOpenAgent,
 }: {
   agentId: string;
   agent: AgentState | undefined;
   needsInput: boolean;
-  project: WatchProjectMeta | undefined;
+  isOpen: boolean;
+  project: ProjectMeta | undefined;
   onOpenAgent: (agent: AgentState) => void;
 }) {
   const openedByUser = useWatchStore((s) => s.open.includes(agentId));
@@ -116,8 +122,6 @@ function WatchCard({
   }
 
   const live = LIVE_STATUSES.has(agent.status);
-  // A question opens the mirror on its own: that is the moment you need to answer
-  const isOpen = openedByUser || needsInput;
 
   return (
     <div
@@ -129,7 +133,12 @@ function WatchCard({
       <div className="flex items-center gap-2 px-3 py-2">
         <button
           type="button"
-          onClick={() => toggleOpen(agentId)}
+          onClick={() =>
+            // Opened by a question, not by you: collapsing means "seen"
+            isOpen && !openedByUser
+              ? useAgentStore.getState().markAttentionRead(agentId)
+              : toggleOpen(agentId)
+          }
           className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
           title={isOpen ? "Collapse" : "Open the terminal here"}
         >
@@ -145,18 +154,7 @@ function WatchCard({
           <span className="min-w-0 shrink truncate">
             <SessionAlias agent={agent} textClassName="text-xs" />
           </span>
-          {project && (
-            <span
-              className="flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-text-muted"
-              title={project.name}
-            >
-              <span
-                className={cn("h-1.5 w-1.5 rounded-full", !project.color && "bg-accent")}
-                style={project.color ? { backgroundColor: project.color } : undefined}
-              />
-              <span className="max-w-[120px] truncate">{project.name}</span>
-            </span>
-          )}
+          {project && <ProjectChip project={project} className="text-[10px]" />}
           {needsInput && (
             <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-400">
               Needs input

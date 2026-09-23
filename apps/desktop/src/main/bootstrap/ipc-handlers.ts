@@ -28,10 +28,12 @@ export function registerIpcHandlers(): void {
 
   // Terminal resize: renderer -> main -> pty
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
-    const manager = getAgentManager();
-    manager.resize(agentId, cols, rows);
+    const before = getPtyHost().getSize(agentId);
+    getAgentManager().resize(agentId, cols, rows);
     // Overview mirrors follow the owner's size; they never resize the PTY themselves
-    broadcast("terminal:resized", agentId, cols, rows);
+    if (before?.cols !== cols || before?.rows !== rows) {
+      broadcast("terminal:resized", agentId, cols, rows);
+    }
   });
 
   ipcMain.handle("terminal:get-size", (_event, agentId: string) => {
