@@ -9,12 +9,12 @@ interface WatchStore {
   watched: string[];
   /** Mirrors the user opened; attention opens one on its own without landing here */
   open: string[];
-  columns: 1 | 2;
+  columns: 1 | 2 | 3;
   toggleWatch: (agentId: string) => void;
   toggleOpen: (agentId: string) => void;
   /** Resume spawns a new agent id for the same session; the pin follows it */
   replaceAgent: (oldId: string, newId: string) => void;
-  setColumns: (columns: 1 | 2) => void;
+  setColumns: (columns: 1 | 2 | 3) => void;
 }
 
 const pushOpen = (open: string[], id: string) => [...open, id].slice(-MAX_OPEN_MIRRORS);

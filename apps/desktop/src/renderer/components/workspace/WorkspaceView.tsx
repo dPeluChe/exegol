@@ -178,10 +178,10 @@ export function WorkspaceView() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-bg-primary">
-      {!onDashboard && (
-        <WorkspaceTabs activeSection={activeSection} onSectionChange={setActiveSection} />
-      )}
+    <div className="relative flex h-full flex-col bg-bg-primary">
+      {/* Tabs stay laid out under the dashboard: hiding them made the panes
+          behind it taller, so every dashboard toggle resized every PTY twice */}
+      <WorkspaceTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
       <div className="relative flex-1 overflow-hidden">
         {/* Agents: always mounted. When hidden, keep in DOM but invisible.
@@ -190,14 +190,6 @@ export function WorkspaceView() {
           <div className={isAgents ? "absolute inset-0" : "invisible absolute inset-0"}>
             <AgentsSection />
           </div>
-        )}
-
-        {onDashboard && (
-          <Suspense fallback={<SectionFallback />}>
-            <div className="absolute inset-0">
-              <AgentDashboard />
-            </div>
-          </Suspense>
         )}
 
         {/* Other sections: conditionally rendered + lazy loaded (no terminal state to preserve) */}
@@ -216,6 +208,14 @@ export function WorkspaceView() {
           </Suspense>
         )}
       </div>
+
+      {onDashboard && (
+        <Suspense fallback={<SectionFallback />}>
+          <div className="absolute inset-0 z-10 bg-bg-primary">
+            <AgentDashboard />
+          </div>
+        </Suspense>
+      )}
 
       {showSpawnModal && projectId && (
         <SpawnAgentModal

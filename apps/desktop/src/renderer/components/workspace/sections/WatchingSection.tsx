@@ -61,15 +61,22 @@ export function WatchingSection({
           up to {MAX_OPEN_MIRRORS} open
         </span>
         <div className="ml-auto flex items-center gap-1 font-normal normal-case tracking-normal">
-          <FilterChip active={columns === 1} onClick={() => setColumns(1)}>
-            1 column
-          </FilterChip>
-          <FilterChip active={columns === 2} onClick={() => setColumns(2)}>
-            2 columns
-          </FilterChip>
+          {([1, 2, 3] as const).map((n) => (
+            <FilterChip key={n} active={columns === n} onClick={() => setColumns(n)}>
+              {n === 1 ? "1 column" : `${n} side by side`}
+            </FilterChip>
+          ))}
         </div>
       </h3>
-      <div className={cn("grid grid-cols-1 gap-2", columns === 2 && "xl:grid-cols-2")}>
+      {/* No breakpoint: "side by side" must hold at the width the dashboard has */}
+      <div
+        className={cn(
+          "grid gap-2",
+          columns === 1 && "grid-cols-1",
+          columns === 2 && "grid-cols-2",
+          columns === 3 && "grid-cols-3",
+        )}
+      >
         {ordered.map(({ id, r }) => (
           <WatchCard
             key={id}
