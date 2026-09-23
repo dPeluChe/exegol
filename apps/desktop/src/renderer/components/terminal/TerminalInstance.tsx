@@ -202,7 +202,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     onReady?.();
 
     let mirrorFitTimer: ReturnType<typeof setTimeout> | null = null;
-    let observedWidth = -1;
+    let observedBox = "";
     const resizeObserver = new ResizeObserver(([entry]) => {
       const width = entry?.contentRect.width ?? -1;
       termDbg(`ro:${agentId}:${viewId}`, "container resized", {
@@ -212,11 +212,12 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         box: `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`,
       });
       if (mirror) {
-        // Its height follows its own font: only a WIDTH change is news. And a
-        // drag changes width every frame; refit once it stops, since each font
-        // step rebuilds the glyph atlas
-        if (width === observedWidth) return;
-        observedWidth = width;
+        // The card sets both dimensions (the grid never sizes its box), so any
+        // real change is news. A drag changes it every frame; refit once it
+        // stops, since each font step rebuilds the glyph atlas
+        const box = `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`;
+        if (box === observedBox) return;
+        observedBox = box;
         if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
         mirrorFitTimer = setTimeout(refit, 120);
         return;
@@ -410,11 +411,9 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     <div
       ref={containerRef}
       className={cn(
-        // A mirror sizes to its content: rows × the scaled cell height
-        "terminal-container w-full bg-bg-primary",
-        // Clipped, so a grid momentarily taller than its box can never push the
-        // box (and with it the next fit) taller
-        !mirror && "h-full overflow-hidden",
+        // Clipped, so a grid momentarily larger than its box can never push the
+        // box (and with it the next fit); a mirror's box is its card's body
+        "terminal-container h-full w-full overflow-hidden bg-bg-primary",
         isDragOver && "ring-2 ring-inset ring-accent/60",
       )}
       onDragOver={handleDragOver}

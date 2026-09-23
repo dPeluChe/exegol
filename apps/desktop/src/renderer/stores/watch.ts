@@ -15,6 +15,8 @@ interface WatchStore {
   /** Resume spawns a new agent id for the same session; the pin follows it */
   replaceAgent: (oldId: string, newId: string) => void;
   setColumns: (columns: 1 | 2 | 3) => void;
+  /** Drag to reorder: put `agentId` right before `beforeId` (null = at the end) */
+  moveWatched: (agentId: string, beforeId: string | null) => void;
 }
 
 const pushOpen = (open: string[], id: string) => [...open, id].slice(-MAX_OPEN_MIRRORS);
@@ -48,6 +50,14 @@ export const useWatchStore = create<WatchStore>()(
       replaceAgent: (oldId, newId) =>
         set((s) => ({ watched: swap(s.watched, oldId, newId), open: swap(s.open, oldId, newId) })),
       setColumns: (columns) => set({ columns }),
+      moveWatched: (agentId, beforeId) =>
+        set((s) => {
+          if (agentId === beforeId || !s.watched.includes(agentId)) return s;
+          const rest = s.watched.filter((id) => id !== agentId);
+          const at = beforeId ? rest.indexOf(beforeId) : -1;
+          rest.splice(at === -1 ? rest.length : at, 0, agentId);
+          return { watched: rest };
+        }),
     }),
     { name: "exegol-watch" },
   ),

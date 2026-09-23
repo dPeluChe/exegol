@@ -343,18 +343,19 @@ export function fitMirror(terminal: Terminal, baseFontSize: number, label = ""):
       const host = measureHost(terminal);
       // The painted grid, not xterm's internal cell metrics: those may not exist
       // yet, and a mirror that never measures keeps its full font and overflows
-      const drawn =
-        terminal.element?.querySelector<HTMLElement>(".xterm-screen")?.getBoundingClientRect()
-          .width ?? 0;
-      if (host?.width && drawn) {
+      const rect = terminal.element
+        ?.querySelector<HTMLElement>(".xterm-screen")
+        ?.getBoundingClientRect();
+      if (host?.width && host.height && rect?.width && rect.height) {
         const current = terminal.options.fontSize ?? baseFontSize;
-        const next = nextMirrorFont(current, drawn, host.width, baseFontSize);
+        const drawn = { width: rect.width, height: rect.height };
+        const next = nextMirrorFont(current, drawn, host, baseFontSize);
         termDbg(`mirror:${label}:${generation}:${attempt}`, "mirror fit", {
           agentId: label,
           generation,
           attempt,
           host: `${host.width}x${host.height}`,
-          drawn,
+          drawn: `${Math.round(rect.width)}x${Math.round(rect.height)}`,
           grid: `${terminal.cols}x${terminal.rows}`,
           font: current,
           next,
@@ -372,8 +373,8 @@ export function fitMirror(terminal: Terminal, baseFontSize: number, label = ""):
 }
 
 /**
- * Next font for a mirror, or null when it should stay put. Glyph widths round
- * to device pixels, so the painted width moves in steps: jumping by ratio
+ * Next font for a mirror, or null when it should stay put. Glyph sizes round
+ * to device pixels, so the painted grid moves in steps: jumping by ratio
  * alone overshot the size that fits and flip-flopped forever, and every font
  * change rebuilds xterm's glyph atlas (~50ms a frame, the renderer never went
  * idle). Overflow always shrinks strictly, fitting is final, and only a card
@@ -381,16 +382,20 @@ export function fitMirror(terminal: Terminal, baseFontSize: number, label = ""):
  */
 export function nextMirrorFont(
   current: number,
-  drawn: number,
-  hostWidth: number,
+  drawn: { width: number; height: number },
+  host: { width: number; height: number },
   base: number,
 ): number | null {
-  const byRatio = Math.floor(((current * hostWidth) / drawn) * 4) / 4;
-  if (drawn > hostWidth + 1) {
+  // The tighter of the two dimensions decides: a full-height card is usually
+  // width-bound, a wide one height-bound
+  const ratio = Math.min(host.width / drawn.width, host.height / drawn.height);
+  const byRatio = Math.floor(current * ratio * 4) / 4;
+  if (drawn.width > host.width + 1 || drawn.height > host.height + 1) {
     const next = Math.max(6, Math.min(current - 0.25, byRatio));
     return next < current ? next : null;
   }
-  if (drawn < hostWidth * 0.75 && current < base) {
+  const loose = drawn.width < host.width * 0.75 && drawn.height < host.height * 0.75;
+  if (loose && current < base) {
     const next = Math.min(base, byRatio);
     return next > current ? next : null;
   }
