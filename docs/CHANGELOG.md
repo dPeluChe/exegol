@@ -11,10 +11,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 First release since 0.4.4. Groups the three unreleased batches below.
 
-### Overview watch list (T194)
-- Pin sessions from any project to Overview ("Watch") and work in them from there: each is a live,
+### Dashboard watch list (T194)
+- The Dashboard is its own view over the workspace (no project selected while it shows); with
+  sessions pinned it shows only them, "Show all agents" brings back the fleet
+- Pin sessions from any project ("Watch") and work in them from the Dashboard: each is a live,
   interactive terminal mirror that never resizes or disturbs the original session
-- Sessions waiting for input open and sort first; "Open" jumps to the project and pane
+- Full-height cards, 1-3 per row, up to 6 open; collapsed sessions stay in their row as vertical
+  strips; drag to reorder; a session waiting for input opens in place; "Open" jumps to its pane
+- Terminals: a pane no longer gains rows forever after a reattach, mount and drag send one resize,
+  and switching projects no longer makes CLIs redraw
+- "Resume" with no prior conversation starts a clean session instead of failing
 
 ### Pre-build audit fixes
 - Undo works in the packaged app; tray icon ships; worktree archive hook runs

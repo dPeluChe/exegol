@@ -1,7 +1,7 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ArrowUpRight, ChevronDown, GripVertical, PinOff, X } from "lucide-react";
-import { type DragEvent, useMemo, useState } from "react";
+import { type DragEvent, useState } from "react";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
 import { AgentIcon } from "../../common/AgentIcon";
@@ -48,16 +48,16 @@ export function WatchingSection({
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
+  const needsInput = (id: string) => !!attentionItems[id] && !attentionItems[id]?.read;
   // A question opens a mirror on its own, but the open cap holds for it too
-  const openIds = useMemo(() => {
-    const asks = (id: string) => !!attentionItems[id] && !attentionItems[id]?.read;
-    const ids = watched.filter((id) => agents[id] && (opened.includes(id) || asks(id)));
-    return new Set(ids.slice(0, MAX_OPEN_MIRRORS));
-  }, [watched, opened, attentionItems, agents]);
+  const openIds = new Set(
+    watched
+      .filter((id) => agents[id] && (opened.includes(id) || needsInput(id)))
+      .slice(0, MAX_OPEN_MIRRORS),
+  );
 
   if (watched.length === 0) return null;
 
-  const needsInput = (id: string) => !!attentionItems[id] && !attentionItems[id]?.read;
   // Rows follow the user's order: each holds up to `columns` open cards, and a
   // collapsed session stays in its row as a thin strip beside them
   const rows: string[][] = [];
@@ -121,7 +121,6 @@ export function WatchingSection({
           const items = ids.map((id) => {
             const agent = agents[id];
             const common = {
-              height: FULL_HEIGHT,
               needsInput: needsInput(id),
               project: agent ? projectMeta.get(agent.projectId) : undefined,
               dropTarget: dragOver === id,
@@ -145,7 +144,6 @@ export function WatchingSection({
 function CollapsedStrip({
   agentId,
   agent,
-  height,
   needsInput,
   project,
   dropTarget,
@@ -153,7 +151,6 @@ function CollapsedStrip({
 }: {
   agentId: string;
   agent: AgentState | undefined;
-  height: string;
   needsInput: boolean;
   project: ProjectMeta | undefined;
   dropTarget: boolean;
@@ -166,7 +163,7 @@ function CollapsedStrip({
   return (
     <div
       {...dragProps}
-      style={{ height }}
+      style={{ height: FULL_HEIGHT }}
       className={cn(
         "group flex w-9 shrink-0 cursor-grab flex-col items-center gap-2 rounded-xl border bg-bg-secondary/60 py-2 active:cursor-grabbing",
         needsInput ? "border-amber-500/50" : "border-border",
@@ -205,7 +202,6 @@ function CollapsedStrip({
 
 function WatchCard({
   agent,
-  height,
   needsInput,
   project,
   onOpenAgent,
@@ -213,7 +209,6 @@ function WatchCard({
   dragProps,
 }: {
   agent: AgentState;
-  height: string;
   needsInput: boolean;
   project: ProjectMeta | undefined;
   onOpenAgent: (agent: AgentState) => void;
@@ -227,8 +222,7 @@ function WatchCard({
 
   return (
     <div
-      // Full dashboard height: more rows scroll the dashboard itself
-      style={{ height }}
+      style={{ height: FULL_HEIGHT }}
       className={cn(
         "flex min-w-0 flex-1 flex-col rounded-xl border bg-bg-secondary/40",
         needsInput ? "border-amber-500/40" : "border-border",

@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 export const MAX_OPEN_MIRRORS = 6;
 
 interface WatchStore {
-  /** T194: sessions pinned to the Overview, in pin order, across all projects */
+  /** T194: sessions pinned to the Dashboard, in pin order, across all projects */
   watched: string[];
   /** Mirrors the user opened; attention opens one on its own without landing here */
   open: string[];
@@ -15,8 +15,8 @@ interface WatchStore {
   /** Resume spawns a new agent id for the same session; the pin follows it */
   replaceAgent: (oldId: string, newId: string) => void;
   setColumns: (columns: 1 | 2 | 3) => void;
-  /** Drag to reorder: put `agentId` right before `beforeId` (null = at the end) */
-  moveWatched: (agentId: string, beforeId: string | null) => void;
+  /** Drag to reorder: put `agentId` right before `beforeId` */
+  moveWatched: (agentId: string, beforeId: string) => void;
 }
 
 const pushOpen = (open: string[], id: string) => [...open, id].slice(-MAX_OPEN_MIRRORS);
@@ -54,7 +54,7 @@ export const useWatchStore = create<WatchStore>()(
         set((s) => {
           if (agentId === beforeId || !s.watched.includes(agentId)) return s;
           const rest = s.watched.filter((id) => id !== agentId);
-          const at = beforeId ? rest.indexOf(beforeId) : -1;
+          const at = rest.indexOf(beforeId);
           rest.splice(at === -1 ? rest.length : at, 0, agentId);
           return { watched: rest };
         }),

@@ -255,10 +255,9 @@ function findAgentPane(
 }
 
 /**
- * Jump to the pane hosting `agentId` (T141): switches project/tab if needed,
- * focuses the pane, and marks the attention item read.
+ * Go to an agent's pane from anywhere (dashboard, sidebar, hotkey, toast):
+ * switches project/tab if needed, focuses the pane, marks its attention read.
  */
-/** Go to an agent's pane from anywhere (dashboard, sidebar, hotkey, toast). */
 export function jumpToAgent(agentId: string, projectId: string): void {
   if (useAppStore.getState().activeProjectId !== projectId) {
     useAppStore.getState().setActiveProject(projectId);

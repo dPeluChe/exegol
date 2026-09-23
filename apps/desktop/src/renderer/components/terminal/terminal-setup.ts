@@ -21,7 +21,7 @@ export interface TerminalSessionDeps {
   /** With readOnly: still replay the snapshot + stream live PTY output
    *  (T156 dashboard mini-terminal) — input stays disabled, PTY never resized. */
   liveFeed?: boolean;
-  /** T194 Overview mirror: interactive, but the owning pane answers terminal
+  /** T194 Dashboard mirror: interactive, but the owning pane answers terminal
    *  queries and owns the PTY size. */
   mirror?: boolean;
   initialContent?: string;
@@ -197,27 +197,24 @@ export function setupTerminalSession(
       }
     });
 
+    const applyGrid = (cols: number, rows: number) => {
+      terminal.resize(cols, rows);
+      fitMirror(terminal, deps.fontSize);
+    };
     // A mirror must be at the PTY's grid BEFORE the snapshot lands, or history
     // written at 80 columns wraps differently from the pane that owns it
     const sized = deps.mirror
       ? window.api.terminal
           .getSize(deps.agentId)
           .then((size) => {
-            if (!size || liveDisposed) return;
-            terminal.resize(size.cols, size.rows);
-            fitMirror(terminal, deps.fontSize);
+            if (size && !liveDisposed) applyGrid(size.cols, size.rows);
           })
           .catch(() => {})
       : Promise.resolve();
 
     // ...and follows the owner's resizes after that
     if (deps.mirror) {
-      disposables.push({
-        dispose: window.api.terminal.onResized(deps.agentId, (cols, rows) => {
-          terminal.resize(cols, rows);
-          fitMirror(terminal, deps.fontSize);
-        }),
-      });
+      disposables.push({ dispose: window.api.terminal.onResized(deps.agentId, applyGrid) });
     }
 
     sized
@@ -303,14 +300,14 @@ function sendPtyResize(agentId: string, cols: number, rows: number): void {
   );
 }
 
-/**
- * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
- * the owning pane, and shrinks its font to fit the card instead of resizing.
- */
 /** Latest fit per terminal: a newer call makes older rAF retry chains exit, so
  *  two chains measuring a width that lags a frame can't shrink it twice. */
 const mirrorFitGeneration = new WeakMap<Terminal, number>();
 
+/**
+ * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
+ * the owning pane, and shrinks its font to fit the card instead of resizing.
+ */
 export function fitMirror(terminal: Terminal, baseFontSize: number): void {
   const generation = (mirrorFitGeneration.get(terminal) ?? 0) + 1;
   mirrorFitGeneration.set(terminal, generation);

@@ -282,7 +282,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // a scroll must not pay for it. Hiding is debounced; showing is immediate,
     // because a late reveal is a visibly stale terminal.
     // viewId: main counts views, not windows, so a pane unmounting can't
-    // silence its Overview mirror in the same window (T194)
+    // silence its Dashboard mirror in the same window (T194)
     if (!isVisible) {
       const timer = setTimeout(() => {
         window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
@@ -334,8 +334,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
       if (detail?.agentId !== agentId) return;
       const terminal = terminalRef.current;
-      const fit = fitAddonRef.current;
-      if (!terminal || !fit || mirror) return;
+      if (!terminal || mirror) return;
       try {
         handleResize();
         if (!readOnly) window.api.terminal.redraw(agentId);

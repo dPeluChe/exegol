@@ -2,7 +2,7 @@ import { cn } from "@exegol/ui";
 import { Pin } from "lucide-react";
 import { useWatchStore } from "../../stores/watch";
 
-/** T194: pin a session to the Overview watch list (or unpin it). */
+/** T194: pin a session to the Dashboard watch list (or unpin it). */
 export function WatchToggle({ agentId, className }: { agentId: string; className?: string }) {
   const watching = useWatchStore((s) => s.watched.includes(agentId));
   const toggleWatch = useWatchStore((s) => s.toggleWatch);
@@ -19,7 +19,9 @@ export function WatchToggle({ agentId, className }: { agentId: string; className
         className,
       )}
       title={
-        watching ? "Stop watching in Overview" : "Watch in Overview: work on it from any project"
+        watching
+          ? "Stop watching in the Dashboard"
+          : "Watch in the Dashboard: work on it from any project"
       }
     >
       <Pin className="h-3 w-3" />
