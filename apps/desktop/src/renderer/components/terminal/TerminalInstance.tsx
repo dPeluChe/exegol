@@ -165,15 +165,9 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     serializeAddonRef.current = session.serializeAddon;
     dormantPipeRef.current = session.dormantPipe;
 
-    // A mirror's height follows its font, so only a WIDTH change is a reason to
-    // refit it; reacting to height fed its own font changes back as resizes
-    let mirrorWidth = -1;
     const refit = () => {
-      if (mirror) {
-        if (container.clientWidth === mirrorWidth) return;
-        mirrorWidth = container.clientWidth;
-        fitMirror(session.terminal, fontSize);
-      } else
+      if (mirror) fitMirror(session.terminal, fontSize);
+      else
         fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, (c, r) =>
           setTerminalSize(agentId, c, r),
         );
@@ -202,7 +196,13 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     onReady?.();
 
     let resizeRaf: number | null = null;
-    const resizeObserver = new ResizeObserver(() => {
+    let observedWidth = -1;
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      // A mirror's height follows its own font: only a WIDTH change is news,
+      // or each font change comes back as a resize and refits again
+      const width = entry?.contentRect.width ?? -1;
+      if (mirror && width === observedWidth) return;
+      observedWidth = width;
       if (resizeRaf) cancelAnimationFrame(resizeRaf);
       resizeRaf = requestAnimationFrame(() => {
         resizeRaf = null;
@@ -249,16 +249,6 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     initialContent,
     isLight,
   ]);
-
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.options.fontSize = fontSize;
-      terminalRef.current.options.fontFamily = fontFamily;
-      // Refit only: the resize observer syncs the PTY once layout has settled
-      if (mirror) fitMirror(terminalRef.current, fontSize);
-      else fitAddonRef.current?.fit();
-    }
-  }, [fontSize, fontFamily, mirror]);
 
   // T38: visibility observer — drives WebGL attach/detach + T115 dormant ring
   useEffect(() => {
@@ -309,14 +299,21 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
-    const useCanvas = cliType && CANVAS_ONLY_CLI_TYPES.has(cliType);
+    // Mirrors draw on canvas: several open at once would eat into Chromium's
+    // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
+    const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
     if (isVisible && !webglRef.current && !useCanvas) {
       const controller = createWebglController(terminal);
       controller.attach();
       webglRef.current = controller;
     } else if (!isVisible && webglRef.current) {
-      webglRef.current.dispose();
-      webglRef.current = null;
+      // Debounced like the IPC hide: scrolling past must not tear down and
+      // rebuild a GL context and its glyph atlas every time
+      const timer = setTimeout(() => {
+        webglRef.current?.dispose();
+        webglRef.current = null;
+      }, HIDE_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
     }
   }, [isVisible]);
 

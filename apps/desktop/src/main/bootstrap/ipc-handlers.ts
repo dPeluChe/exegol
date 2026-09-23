@@ -28,9 +28,13 @@ export function registerIpcHandlers(): void {
 
   // Terminal resize: renderer -> main -> pty
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
+    const before = getPtyHost().getSize(agentId);
     getAgentManager().resize(agentId, cols, rows);
-    // Overview mirrors follow the owner's size; they never resize the PTY themselves
-    broadcast("terminal:resized", agentId, cols, rows);
+    // Overview mirrors follow the owner's size; they never resize the PTY themselves.
+    // Only real changes: a pane drag re-sends the same grid every frame.
+    if (before?.cols !== cols || before?.rows !== rows) {
+      broadcast("terminal:resized", agentId, cols, rows);
+    }
   });
 
   ipcMain.handle("terminal:get-size", (_event, agentId: string) => {

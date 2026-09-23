@@ -300,28 +300,35 @@ export function fitAndSyncSize(
  * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
  * the owning pane, and shrinks its font to fit the card instead of resizing.
  */
-export function fitMirror(terminal: Terminal, baseFontSize: number, attempt = 0): void {
-  let settled = false;
-  try {
-    const host = measureHost(terminal);
-    // The painted grid, not xterm's internal cell metrics: those may not exist
-    // yet, and a mirror that never measures keeps its full font and overflows
-    const drawn =
-      terminal.element?.querySelector<HTMLElement>(".xterm-screen")?.getBoundingClientRect()
-        .width ?? 0;
-    if (host?.width && drawn) {
-      const current = terminal.options.fontSize ?? baseFontSize;
-      const next = nextMirrorFont(current, drawn, host.width, baseFontSize);
-      if (next === null) settled = true;
-      else terminal.options.fontSize = next;
+/** Latest fit per terminal: a newer call makes older rAF retry chains exit, so
+ *  two chains measuring a width that lags a frame can't shrink it twice. */
+const mirrorFitGeneration = new WeakMap<Terminal, number>();
+
+export function fitMirror(terminal: Terminal, baseFontSize: number): void {
+  const generation = (mirrorFitGeneration.get(terminal) ?? 0) + 1;
+  mirrorFitGeneration.set(terminal, generation);
+  const step = (attempt: number) => {
+    if (mirrorFitGeneration.get(terminal) !== generation) return;
+    try {
+      const host = measureHost(terminal);
+      // The painted grid, not xterm's internal cell metrics: those may not exist
+      // yet, and a mirror that never measures keeps its full font and overflows
+      const drawn =
+        terminal.element?.querySelector<HTMLElement>(".xterm-screen")?.getBoundingClientRect()
+          .width ?? 0;
+      if (host?.width && drawn) {
+        const current = terminal.options.fontSize ?? baseFontSize;
+        const next = nextMirrorFont(current, drawn, host.width, baseFontSize);
+        if (next === null) return;
+        terminal.options.fontSize = next;
+      }
+    } catch {
+      /* container may not be ready */
     }
-  } catch {
-    /* container may not be ready */
-  }
-  // Unmeasured, or glyph metrics settle a frame after a font change
-  if (!settled && attempt < 40) {
-    requestAnimationFrame(() => fitMirror(terminal, baseFontSize, attempt + 1));
-  }
+    // Unmeasured, or glyph metrics settle a frame after a font change
+    if (attempt < 10) requestAnimationFrame(() => step(attempt + 1));
+  };
+  step(0);
 }
 
 /**

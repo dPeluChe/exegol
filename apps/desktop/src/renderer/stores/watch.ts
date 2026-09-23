@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-/** Each open mirror is a live xterm with its own WebGL context; Chromium caps those. */
+/** Each open mirror is a live xterm fed every byte of its session; a few is plenty. */
 export const MAX_OPEN_MIRRORS = 4;
 
 interface WatchStore {
