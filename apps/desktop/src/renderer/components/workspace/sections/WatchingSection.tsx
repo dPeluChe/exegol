@@ -26,9 +26,9 @@ interface DragProps {
  * terminal. The mirror types into the session but the pane that owns it keeps
  * the PTY size, so watching from here never reflows or breaks the session.
  *
- * Open sessions get a full-height card; collapsed ones wait in a bar above them.
- * Order is the user's (drag chips or card headers); a session that needs input
- * opens itself in place.
+ * Open sessions get full-height cards, `columns` per row; a collapsed one stays
+ * in its row as a thin vertical strip. Order is the user's (drag strips or card
+ * headers); a session that needs input opens itself in place.
  */
 export function WatchingSection({
   projectMeta,
@@ -56,8 +56,23 @@ export function WatchingSection({
   if (watched.length === 0) return null;
 
   const needsInput = (id: string) => !!attentionItems[id] && !attentionItems[id]?.read;
-  const collapsed = watched.filter((id) => !openIds.has(id));
-  const open = watched.filter((id) => openIds.has(id));
+  // Rows follow the user's order: each holds up to `columns` open cards, and a
+  // collapsed session stays in its row as a thin strip beside them
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let openInRow = 0;
+  for (const id of watched) {
+    if (openIds.has(id)) {
+      if (openInRow === columns) {
+        rows.push(row);
+        row = [];
+        openInRow = 0;
+      }
+      openInRow++;
+    }
+    row.push(id);
+  }
+  if (row.length) rows.push(row);
 
   const dragProps = (id: string): DragProps => ({
     draggable: true,
@@ -96,54 +111,42 @@ export function WatchingSection({
         </div>
       </h3>
 
-      {collapsed.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {collapsed.map((id) => (
-            <CollapsedChip
-              key={id}
-              agentId={id}
-              agent={agents[id]}
-              needsInput={needsInput(id)}
-              project={agents[id] ? projectMeta.get(agents[id].projectId) : undefined}
-              dropTarget={dragOver === id}
-              dragProps={dragProps(id)}
-            />
-          ))}
-        </div>
-      )}
-
-      {/* No breakpoint: "side by side" must hold at the width the dashboard has */}
-      <div
-        className={cn(
-          "grid gap-2",
-          columns === 1 && "grid-cols-1",
-          columns === 2 && "grid-cols-2",
-          columns === 3 && "grid-cols-3",
-        )}
-      >
-        {open.map((id) => {
-          const agent = agents[id];
-          if (!agent) return null;
-          return (
-            <WatchCard
-              key={id}
-              agent={agent}
-              needsInput={needsInput(id)}
-              project={projectMeta.get(agent.projectId)}
-              onOpenAgent={onOpenAgent}
-              dropTarget={dragOver === id}
-              dragProps={dragProps(id)}
-            />
-          );
+      {/* One container for every session, rows split by break elements: a
+          session moving between rows keeps its identity, so opening or
+          collapsing one never remounts (and repaints) the mirrors around it */}
+      <div className="flex flex-wrap gap-x-2">
+        {rows.flatMap((ids, rowIndex) => {
+          const height = ids.some((id) => openIds.has(id))
+            ? "max(320px, calc(100vh - 11rem))"
+            : "10rem";
+          const items = ids.map((id) => {
+            const agent = agents[id];
+            const common = {
+              height,
+              needsInput: needsInput(id),
+              project: agent ? projectMeta.get(agent.projectId) : undefined,
+              dropTarget: dragOver === id,
+              dragProps: dragProps(id),
+            };
+            return openIds.has(id) && agent ? (
+              <WatchCard key={id} agent={agent} onOpenAgent={onOpenAgent} {...common} />
+            ) : (
+              <CollapsedStrip key={id} agentId={id} agent={agent} {...common} />
+            );
+          });
+          return rowIndex === 0
+            ? items
+            : [<div key={`break-${ids[0]}`} className="h-2 basis-full" />, ...items];
         })}
       </div>
     </section>
   );
 }
 
-function CollapsedChip({
+function CollapsedStrip({
   agentId,
   agent,
+  height,
   needsInput,
   project,
   dropTarget,
@@ -151,6 +154,7 @@ function CollapsedChip({
 }: {
   agentId: string;
   agent: AgentState | undefined;
+  height: string;
   needsInput: boolean;
   project: ProjectMeta | undefined;
   dropTarget: boolean;
@@ -163,25 +167,13 @@ function CollapsedChip({
   return (
     <div
       {...dragProps}
+      style={{ height }}
       className={cn(
-        "group flex cursor-grab items-center gap-1.5 rounded-lg border bg-bg-secondary/60 py-1 pl-1.5 pr-1 text-[11px] active:cursor-grabbing",
+        "group flex w-9 shrink-0 cursor-grab flex-col items-center gap-2 rounded-xl border bg-bg-secondary/60 py-2 active:cursor-grabbing",
         needsInput ? "border-amber-500/50" : "border-border",
         dropTarget && "ring-1 ring-accent",
       )}
     >
-      <button
-        type="button"
-        disabled={!agent}
-        onClick={() => toggleOpen(agentId)}
-        className="flex items-center gap-1.5 text-text-secondary hover:text-text-primary disabled:opacity-50"
-        title={agent ? "Open its terminal here" : undefined}
-      >
-        {agent && <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />}
-        {agent && <AgentIcon provider={agent.cliType} size={14} />}
-        <span className="font-medium">{name}</span>
-        {project && <span className="max-w-[110px] truncate text-text-muted">{project.name}</span>}
-        {needsInput && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />}
-      </button>
       <button
         type="button"
         onClick={() => toggleWatch(agentId)}
@@ -190,12 +182,31 @@ function CollapsedChip({
       >
         <X className="h-3 w-3" />
       </button>
+      <button
+        type="button"
+        disabled={!agent}
+        onClick={() => toggleOpen(agentId)}
+        className="flex min-h-0 flex-1 flex-col items-center gap-2 text-text-secondary hover:text-text-primary disabled:opacity-50"
+        title={agent ? `Open ${name} here` : undefined}
+      >
+        {agent && <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />}
+        {agent && <AgentIcon provider={agent.cliType} size={16} />}
+        {needsInput && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
+        <span
+          className="min-h-0 truncate text-[11px] font-medium"
+          style={{ writingMode: "vertical-rl" }}
+        >
+          {name}
+          {project && <span className="font-normal text-text-muted"> · {project.name}</span>}
+        </span>
+      </button>
     </div>
   );
 }
 
 function WatchCard({
   agent,
+  height,
   needsInput,
   project,
   onOpenAgent,
@@ -203,6 +214,7 @@ function WatchCard({
   dragProps,
 }: {
   agent: AgentState;
+  height: string;
   needsInput: boolean;
   project: ProjectMeta | undefined;
   onOpenAgent: (agent: AgentState) => void;
@@ -216,10 +228,10 @@ function WatchCard({
 
   return (
     <div
-      // Full height of the dashboard: more sessions scroll the dashboard itself
-      style={{ height: "calc(100vh - 11rem)" }}
+      // Full dashboard height: more rows scroll the dashboard itself
+      style={{ height }}
       className={cn(
-        "flex min-h-[320px] flex-col rounded-xl border bg-bg-secondary/40",
+        "flex min-w-0 flex-1 flex-col rounded-xl border bg-bg-secondary/40",
         needsInput ? "border-amber-500/40" : "border-border",
         dropTarget && "ring-1 ring-accent",
       )}
@@ -238,7 +250,7 @@ function WatchCard({
               : useAgentStore.getState().markAttentionRead(agent.id)
           }
           className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Collapse into the bar"
+          title="Collapse to a strip"
         >
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
