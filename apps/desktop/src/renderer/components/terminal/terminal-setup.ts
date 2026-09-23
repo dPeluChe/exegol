@@ -285,6 +285,9 @@ export function fitAndSyncSize(
 ): void {
   try {
     const host = measureHost(terminal);
+    // Unlaid-out box: the addon would fall back to 80x24 and the PTY would
+    // redraw (and rewrap) at 80 columns for a frame
+    if (!host?.width || !host?.height) return;
     fitAddon.fit();
     const { cols, rows } = terminal;
     termDbg(`fit:${agentId}:${readOnly}`, "pane fit", {
@@ -295,10 +298,24 @@ export function fitAndSyncSize(
       grid: `${cols}x${rows}`,
     });
     onSize(cols, rows);
-    if (!readOnly) window.api.terminal.resize(agentId, cols, rows);
+    if (!readOnly) sendPtyResize(agentId, cols, rows);
   } catch {
     /* container may not be ready */
   }
+}
+
+/** Layout settles over a few frames on mount (toolbar, tabs); each size the
+ *  PTY sees makes the CLI redraw, so only the last of a burst is sent. */
+const pendingResize = new Map<string, ReturnType<typeof setTimeout>>();
+function sendPtyResize(agentId: string, cols: number, rows: number): void {
+  clearTimeout(pendingResize.get(agentId));
+  pendingResize.set(
+    agentId,
+    setTimeout(() => {
+      pendingResize.delete(agentId);
+      window.api.terminal.resize(agentId, cols, rows);
+    }, 80),
+  );
 }
 
 /**
