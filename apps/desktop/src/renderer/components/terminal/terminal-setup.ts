@@ -311,18 +311,43 @@ export function fitMirror(terminal: Terminal, baseFontSize: number, attempt = 0)
         .width ?? 0;
     if (host?.width && drawn) {
       const current = terminal.options.fontSize ?? baseFontSize;
-      const target = (current * host.width) / drawn;
-      const next = Math.floor(Math.max(6, Math.min(baseFontSize, target)) * 4) / 4;
-      if (Math.abs(next - current) >= 0.25) terminal.options.fontSize = next;
-      else settled = true;
+      const next = nextMirrorFont(current, drawn, host.width, baseFontSize);
+      if (next === null) settled = true;
+      else terminal.options.fontSize = next;
     }
   } catch {
     /* container may not be ready */
   }
   // Unmeasured, or glyph metrics settle a frame after a font change
-  if (!settled && attempt < 10) {
+  if (!settled && attempt < 40) {
     requestAnimationFrame(() => fitMirror(terminal, baseFontSize, attempt + 1));
   }
+}
+
+/**
+ * Next font for a mirror, or null when it should stay put. Glyph widths round
+ * to device pixels, so the painted width moves in steps: jumping by ratio
+ * alone overshot the size that fits and flip-flopped forever, and every font
+ * change rebuilds xterm's glyph atlas (~50ms a frame, the renderer never went
+ * idle). Overflow always shrinks strictly, fitting is final, and only a card
+ * with lots of room left grows, so the sequence always ends.
+ */
+export function nextMirrorFont(
+  current: number,
+  drawn: number,
+  hostWidth: number,
+  base: number,
+): number | null {
+  const byRatio = Math.floor(((current * hostWidth) / drawn) * 4) / 4;
+  if (drawn > hostWidth + 1) {
+    const next = Math.max(6, Math.min(current - 0.25, byRatio));
+    return next < current ? next : null;
+  }
+  if (drawn < hostWidth * 0.75 && current < base) {
+    const next = Math.min(base, byRatio);
+    return next > current ? next : null;
+  }
+  return null;
 }
 
 /** xterm exposes the rendered cell size only through this internal service. */

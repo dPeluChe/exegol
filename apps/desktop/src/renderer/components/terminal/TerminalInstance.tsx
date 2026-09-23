@@ -165,9 +165,15 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     serializeAddonRef.current = session.serializeAddon;
     dormantPipeRef.current = session.dormantPipe;
 
+    // A mirror's height follows its font, so only a WIDTH change is a reason to
+    // refit it; reacting to height fed its own font changes back as resizes
+    let mirrorWidth = -1;
     const refit = () => {
-      if (mirror) fitMirror(session.terminal, fontSize);
-      else
+      if (mirror) {
+        if (container.clientWidth === mirrorWidth) return;
+        mirrorWidth = container.clientWidth;
+        fitMirror(session.terminal, fontSize);
+      } else
         fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, (c, r) =>
           setTerminalSize(agentId, c, r),
         );
