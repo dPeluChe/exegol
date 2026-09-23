@@ -286,15 +286,19 @@ export function warmShellPath(): void {
   if (resolvedPath) return;
   exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
     // Overwrites a sync fallback too: the real shell PATH wins whenever it arrives
-    if (!err && stdout.trim()) resolvedPath = stdout.trim();
+    if (!err && stdout.trim()) adoptPath(stdout.trim());
   });
 }
 
+// Main's own execs (gh, git, lsof) inherit launchd's PATH when launched from Finder
+function adoptPath(path: string): void {
+  resolvedPath = path;
+  process.env.PATH = path;
+}
+
 export function _getFullPath(): string {
-  if (!resolvedPath) {
-    resolvedPath = getShellPath();
-  }
-  return resolvedPath;
+  if (!resolvedPath) adoptPath(getShellPath());
+  return resolvedPath as string;
 }
 
 // ─── Worktree helpers ───────────────────────────────────────────────────

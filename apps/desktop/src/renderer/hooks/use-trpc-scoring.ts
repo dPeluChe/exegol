@@ -8,6 +8,14 @@ import type {
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
+import { useToastStore } from "../stores/toasts";
+
+const toastError = (title: string) => (err: unknown) =>
+  useToastStore.getState().addToast({
+    type: "error",
+    title,
+    body: err instanceof Error ? err.message : String(err),
+  });
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
@@ -135,6 +143,7 @@ export function useUndoOplog() {
       queryClient.invalidateQueries({ queryKey: ["oplog"] });
       queryClient.invalidateQueries({ queryKey: ["diff"] });
     },
+    onError: toastError("Undo failed"),
   });
 }
 
@@ -157,5 +166,6 @@ export function useRestoreOplogSnapshot(projectId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["oplog"] });
       queryClient.invalidateQueries({ queryKey: ["diff"] });
     },
+    onError: toastError("Restore failed"),
   });
 }

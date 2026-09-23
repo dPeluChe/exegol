@@ -61,6 +61,7 @@ export function PipelineSection() {
   const [view, setView] = useState<View>({ type: "list" });
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [useWorktree, setUseWorktree] = useState(true);
+  const [task, setTask] = useState("");
   const [gitWarning, setGitWarning] = useState<string | null>(null);
 
   const selectedTemplate = templates?.find((t) => t.id === selectedTemplateId);
@@ -82,7 +83,7 @@ export function PipelineSection() {
   }
 
   const handleStartRun = async () => {
-    if (!projectId || !selectedTemplateId) return;
+    if (!projectId || !selectedTemplateId || !task.trim()) return;
 
     // Check git sync before creating worktree
     if (useWorktree) {
@@ -105,7 +106,7 @@ export function PipelineSection() {
       {
         templateId: selectedTemplateId,
         projectId,
-        task: selectedTemplate?.name || "Pipeline run",
+        task: task.trim(),
         useWorktree,
       },
       {
@@ -150,10 +151,10 @@ export function PipelineSection() {
           <button
             type="button"
             onClick={handleStartRun}
-            disabled={!selectedTemplateId || startRun.isPending}
+            disabled={!selectedTemplateId || !task.trim() || startRun.isPending}
             className={cn(
               "flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-medium shrink-0",
-              selectedTemplateId
+              selectedTemplateId && task.trim()
                 ? "bg-accent text-white hover:bg-accent/90"
                 : "bg-white/5 text-text-muted",
             )}
@@ -162,6 +163,13 @@ export function PipelineSection() {
             {startRun.isPending ? "Starting..." : "Run"}
           </button>
         </div>
+        <textarea
+          value={task}
+          onChange={(e) => setTask(e.target.value)}
+          placeholder="What should this pipeline do? (becomes {{task}} in every step)"
+          rows={2}
+          className="mt-2 w-full resize-y rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
+        />
         {/* Git sync warning */}
         {gitWarning && (
           <div className="mt-2 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2">

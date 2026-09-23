@@ -25,6 +25,7 @@ import {
 import { switchSection } from "../../lib/switch-section";
 import type { AgentState } from "../../stores/agents";
 import { AgentLauncher } from "../agents/AgentLauncher";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
 import { TabsOverview } from "./TabsOverview";
@@ -145,6 +146,7 @@ export function ProjectItem({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useSettings();
@@ -291,9 +293,7 @@ export function ProjectItem({
             type="button"
             onClick={() => {
               setContextMenu(null);
-              deleteProject.mutate(project.id, {
-                onError: (err) => console.error("[Project] Delete failed:", err),
-              });
+              setConfirmRemove(true);
             }}
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-red-400 transition-colors hover:bg-white/10"
           >
@@ -378,6 +378,19 @@ export function ProjectItem({
           {isSelected && <TabsOverview />}
         </div>
       )}
+      <ConfirmDialog
+        open={confirmRemove}
+        onOpenChange={setConfirmRemove}
+        title="Remove project"
+        description={`Remove "${project.name}" from Exegol? Its session history, scores and memories are deleted. Files on disk are not touched.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() =>
+          deleteProject.mutate(project.id, {
+            onError: (err) => console.error("[Project] Delete failed:", err),
+          })
+        }
+      />
     </section>
   );
 }

@@ -40,7 +40,8 @@ export async function handleStepComplete(
   }
 
   const run = getPipelineRun(db, runId);
-  if (!run || run.status === "cancelled") return;
+  // pauseRun kills the step agent and that exit arrives here as a normal one; resume re-runs the step
+  if (!run || run.status === "cancelled" || run.status === "paused") return;
 
   const evidencePath = run.evidencePath ?? run.worktreePath;
   const baseRevision = run.stepResults.find((r) => r.agentId === agentId)?.baseRevision;

@@ -118,11 +118,25 @@ export const projectRouter = router({
       return { success: true };
     }),
 
-  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const project = getProject(ctx.db, input.id);
     if (!project) {
       throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.id} not found` });
     }
+    // The row cascade drops agents from the DB; their PTYs would keep running unowned
+    const statuses = [...LIVE_STATUSES];
+    const live = ctx.db
+      .prepare(
+        `SELECT id FROM agents WHERE project_id = ? AND status IN (${statuses.map(() => "?").join(",")})`,
+      )
+      .all(input.id, ...statuses) as { id: string }[];
+    await Promise.all(
+      live.map((a) =>
+        ctx.agentManager.stop(ctx.db, a.id).catch((err) => {
+          logger.warn(`[Projects] Failed to stop ${a.id} before delete:`, err);
+        }),
+      ),
+    );
     deleteProject(ctx.db, input.id);
     return { success: true };
   }),

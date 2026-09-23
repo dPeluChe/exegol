@@ -105,7 +105,7 @@ message from the current diff via Claude Haiku (reuses Anthropic API key).
 2. `AgentManager.spawn()` → resolves provider → builds context (memory + MCP + skills) → spawns PTY via sidecar
 3. PTY output → sidecar ring buffer → JSON-RPC notification → main process → Rust `AgentOutputStream` (ANSI strip + status parse) or JS fallback
 4. Status broadcast via IPC push events → Zustand store → UI
-5. On exit: memory extraction → scoring → oplog → worktree cleanup (all non-fatal, try/catch)
+5. On exit: final output tail → scoring → oplog → worktree cleanup, skipped while another live agent shares it (all non-fatal). Memory extraction on exit is currently not wired (T193.8)
 6. Close pane/tab/Cmd+W → stop agent + archive (`archiveAgent` sets `archived_at`; `listAgents` hides it) + remove from store. Shell rows are still deleted
 7. Window reload → sidecar keeps PTY alive → app reconnects on restart
 

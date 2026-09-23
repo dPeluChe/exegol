@@ -1,5 +1,6 @@
 import { access, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { extname, join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, extname, join, resolve } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog } from "electron";
 import { z } from "zod";
@@ -143,6 +144,17 @@ export const filesRouter = router({
 
   delete: publicProcedure.input(z.object({ path: z.string() })).mutation(async ({ ctx, input }) => {
     await assertPathInsideProject(input.path, ctx);
+    const target = resolve(input.path);
+    const roots = [
+      ...listProjects(ctx.db).map((p) => resolve(p.path)),
+      resolve(homedir(), ".exegol"),
+    ];
+    if (roots.includes(target) || basename(target) === ".git") {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Refusing to delete a project root or .git",
+      });
+    }
     await rm(input.path, { recursive: true });
     return { success: true };
   }),

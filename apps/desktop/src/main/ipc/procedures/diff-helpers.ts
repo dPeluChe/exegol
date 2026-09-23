@@ -9,7 +9,8 @@ export { coreRust };
 
 // Cache shape: key = `${projectId}|${kind}|${staged}|${pathOverride ?? ""}`
 // Invalidated whenever a mutation touches the same projectId.
-export const diffCache = new AsyncLruCache<string, unknown>(6);
+// TTL: agents edit files without going through a mutation, so invalidation alone never sees them
+export const diffCache = new AsyncLruCache<string, unknown>(6, 5_000);
 export function invalidateProjectDiff(projectId: string): void {
   diffCache.invalidateWhere((k) => k.startsWith(`${projectId}|`));
 }
@@ -20,14 +21,15 @@ export const execFileAsync = promisify(execFile);
 
 let ghAvailable: boolean | null = null;
 export async function detectGhCli(): Promise<boolean> {
-  if (ghAvailable !== null) return ghAvailable;
+  if (ghAvailable) return true;
+  // A miss is not cached: before the login-shell PATH lands, a Homebrew gh is invisible
   try {
     await execFileAsync("gh", ["--version"], { timeout: 3000 });
     ghAvailable = true;
   } catch {
-    ghAvailable = false;
+    return false;
   }
-  return ghAvailable;
+  return true;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

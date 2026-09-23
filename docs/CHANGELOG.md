@@ -11,6 +11,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 First release since 0.4.4. Groups the three unreleased batches below.
 
+### Pre-build audit fixes
+- Undo works in the packaged app; tray icon ships; worktree archive hook runs
+- A queued agent message can no longer type into a permission dialog that was redrawn
+- Undo refuses when it would drop uncommitted work, later commits, or a worktree agent's base
+- Shared worktrees are not removed while another agent uses them; resume keeps the access mode
+- Pausing a pipeline holds it; pipelines take a task description
+- Removing a project asks first and stops its agents; file delete refuses project roots and .git
+- `gh`/`git` find Homebrew when launched from Finder; Git diff refreshes after agent edits
+- Settings no longer revert changes saved from other screens
+
 ### Daily-readiness fixes (2026-09)
 
 Details: `docs/TASK_COMPLETED/2609.md`.
