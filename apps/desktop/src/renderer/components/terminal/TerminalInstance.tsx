@@ -206,11 +206,21 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       // A mirror's height follows its own font: only a WIDTH change is news,
       // or each font change comes back as a resize and refits again
       const width = entry?.contentRect.width ?? -1;
+      // Which ancestor sets this height: a layout-sized chain keeps it fixed,
+      // a content-sized one lets the grid feed its own box back
+      const chain: string[] = [];
+      for (let el = container.parentElement, i = 0; el && i < 10; el = el.parentElement, i++) {
+        chain.push(
+          `${el.clientHeight}:${el.className.toString().split(" ").slice(0, 3).join(".")}`,
+        );
+      }
       termDbg(`ro:${agentId}:${viewId}`, "container resized", {
         agentId,
         viewId,
         mirror,
         box: `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`,
+        window: window.innerHeight,
+        chain,
       });
       if (mirror && width === observedWidth) return;
       observedWidth = width;
