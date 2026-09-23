@@ -106,4 +106,9 @@ export const wave3Migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_agents_project_cli
       ON agents(project_id, cli_type);`,
   },
+  {
+    id: "w3_008_pipeline_evidence_base",
+    sql: `ALTER TABLE pipeline_runs ADD COLUMN evidence_path TEXT;
+    ALTER TABLE pipeline_runs ADD COLUMN base_revision TEXT;`,
+  },
 ];

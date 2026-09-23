@@ -45,7 +45,7 @@ export function SessionAlias({ agent, textClassName = "text-sm" }: SessionAliasP
       <span onClick={(e) => e.stopPropagation()}>
         <input
           value={draft}
-          autoFocus
+          ref={(input) => input?.focus()}
           onChange={(e) => setDraft(e.target.value)}
           onBlur={commit}
           onKeyDown={(e) => {

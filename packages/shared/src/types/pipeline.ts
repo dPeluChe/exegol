@@ -95,6 +95,7 @@ export type PipelineStepResult = {
   exitCode: number | null;
   outputSummary: string;
   diffSummary: string;
+  baseRevision?: string | null;
   startedAt: number | null;
   completedAt: number | null;
   /** T130 — AI-generated one-paragraph summary of diffSummary (Haiku, best-effort). */
@@ -143,6 +144,8 @@ export type PipelineRun = {
   maxIterations: number;
   originalTask: string;
   worktreePath: string | null;
+  evidencePath?: string | null;
+  baseRevision?: string | null;
   createdAt: number;
   startedAt: number | null;
   completedAt: number | null;

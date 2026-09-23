@@ -38,6 +38,8 @@ function mapRunRow(row: Record<string, unknown>): PipelineRun {
     maxIterations: row.max_iterations as number,
     originalTask: row.original_task as string,
     worktreePath: (row.worktree_path as string) ?? null,
+    evidencePath: (row.evidence_path as string) ?? null,
+    baseRevision: (row.base_revision as string) ?? null,
     createdAt: row.created_at as number,
     startedAt: (row.started_at as number) ?? null,
     completedAt: (row.completed_at as number) ?? null,
@@ -167,6 +169,8 @@ export function updatePipelineRun(
     stepResults?: PipelineStepResult[];
     iterationCount?: number;
     worktreePath?: string | null;
+    evidencePath?: string | null;
+    baseRevision?: string | null;
     startedAt?: number;
     completedAt?: number;
   },
@@ -193,6 +197,14 @@ export function updatePipelineRun(
   if (data.worktreePath !== undefined) {
     sets.push("worktree_path = ?");
     values.push(data.worktreePath);
+  }
+  if (data.evidencePath !== undefined) {
+    sets.push("evidence_path = ?");
+    values.push(data.evidencePath);
+  }
+  if (data.baseRevision !== undefined) {
+    sets.push("base_revision = ?");
+    values.push(data.baseRevision);
   }
   if (data.startedAt !== undefined) {
     sets.push("started_at = ?");

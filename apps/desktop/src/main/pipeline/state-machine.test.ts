@@ -41,8 +41,8 @@ describe("canTransition", () => {
     expect(canTransition("pending", "completed")).toBe(false);
   });
 
-  it("rejects pending → paused", () => {
-    expect(canTransition("pending", "paused")).toBe(false);
+  it("allows pending → paused on baseline failure", () => {
+    expect(canTransition("pending", "paused")).toBe(true);
   });
 
   it("rejects pending → failed", () => {

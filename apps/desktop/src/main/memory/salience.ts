@@ -6,7 +6,7 @@
 import type { MemoryEntry } from "@exegol/shared";
 
 const HALF_LIFE_DAYS = 30;
-const DECAY_LAMBDA = 0.693; // ln(2) — so exp(-lambda * days/halfLife) halves every 30 days
+const DECAY_LAMBDA = Math.LN2;
 
 /**
  * salience = similarity × log(reinforcement_count + 1) × exp(-0.693 × days_ago / 30)

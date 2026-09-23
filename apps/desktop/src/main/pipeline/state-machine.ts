@@ -4,7 +4,7 @@ import { logger } from "../lib/logger";
 // ─── Allowed State Transitions ─────────────────────────────────────────────
 
 const PIPELINE_TRANSITIONS: Record<PipelineRunStatus, readonly PipelineRunStatus[]> = {
-  pending: ["running"],
+  pending: ["running", "paused"],
   // running → running: step advance / loop-back re-enters advanceStep while
   // the run stays running — without it every multi-step run stalls after step 0.
   running: ["running", "paused", "completed", "failed", "cancelled"],

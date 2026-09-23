@@ -112,7 +112,11 @@ x.y.z — semver after 1.0
 x.y.z-canary.YYYYMMDDHHmmss — canary builds (auto-detected by updater)
 ```
 
-## Future: CI/CD Pipeline (T45)
+## CI checks
+
+Pull requests and pushes to main run lint, TypeScript checks, tests, and builds through `.github/workflows/ci.yml`. See [Pipeline evidence and CI](PIPELINE_EVIDENCE_AND_CI.md) for commands and scope.
+
+## Future: automated releases (T45)
 
 When ready to automate:
 1. Create `.github/workflows/build-desktop.yml` (reusable build)

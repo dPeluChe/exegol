@@ -6,7 +6,7 @@
  */
 
 import { execFileSync, execSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { logger } from "../lib/logger";
 
