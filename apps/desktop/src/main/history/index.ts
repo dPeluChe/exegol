@@ -69,3 +69,24 @@ async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
   // fallback; sorting here too would be a second rule that disagrees.
   return results.flat();
 }
+
+/**
+ * Whether this CLI recorded any session in `cwd`: a generic resume flag
+ * (`--continue`, `resume --last`) exits with an error when there is none, which
+ * turned "Resume" on a fresh folder into a failed agent. null = no adapter for
+ * this CLI, so the caller can't tell and keeps the flag.
+ */
+export async function hasLocalSession(provider: string, cwd: string): Promise<boolean | null> {
+  const adapter = PROVIDERS.find((p) => p.id === provider);
+  if (!adapter) return null;
+  try {
+    // A recent window: codex stores rollouts by day across every repo, and
+    // since=0 read the head of every one of them before each resume spawn
+    return (await adapter.list([cwd], Date.now() / 1000 - RESUME_WINDOW_S)).length > 0;
+  } catch (err) {
+    logger.warn(`[History] ${provider} store unreadable:`, err);
+    return null;
+  }
+}
+
+const RESUME_WINDOW_S = 90 * 24 * 3600;

@@ -7,6 +7,7 @@ import { useSpawnAgent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { useWatchStore } from "../../stores/watch";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentStopReason } from "./AgentStopReason";
 import { ChatView } from "./ChatView";
@@ -81,6 +82,7 @@ export function TerminalScrollback({
       resumeFromAgentId: canResume ? agent.id : undefined,
     });
 
+    if (newAgent?.id) useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
     if (paneId && newAgent?.id) {
       removeAgent(agent.id);
       trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
@@ -197,7 +199,8 @@ export function TerminalScrollback({
           </button>
         </div>
       ) : (
-        <div className="relative flex-1">
+        // min-h-0: a flex item won't shrink below its content, so the grid set the box height
+        <div className="relative min-h-0 flex-1">
           {viewMode === "chat" ? (
             <ChatView scrollback={scrollbackContent} cliType={agent?.cliType} />
           ) : (

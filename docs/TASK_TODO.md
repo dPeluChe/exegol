@@ -464,6 +464,8 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 20. Global hotkey stops working after the main window closes (`window.ts:10`).
 21. Knowledge, Tasks and Add Memory swallow errors; archiving can overwrite `tasks_completed.md`
     (`task-file-actions.ts:40`).
+24. A theme toggle rebuilds every terminal (`isLight` in the mount deps) instead of setting
+    `options.theme`: one-off cost, but every PTY re-replays its snapshot. P2.
 22. P2 debt: `trpcMutate<any>("agents.spawn")` x9; ~30 stale biome suppressions; unused renderer
     hooks (`use-trpc-mcp`, `-search`, `-budgets`, `-scoring`); MCP serverInfo version hardcoded 1.0.0;
     CLI package 0.4.0.

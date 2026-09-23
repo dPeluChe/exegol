@@ -2,6 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
+import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
   type OscHandlersDisposable,
@@ -9,7 +10,6 @@ import {
 } from "./osc-handlers";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
-import { type CellMetrics, computeFit } from "./terminal-fit";
 import { registerTerminalLinkProviders } from "./terminal-links";
 import type { TerminalInstanceProps } from "./terminal-types";
 
@@ -21,6 +21,9 @@ export interface TerminalSessionDeps {
   /** With readOnly: still replay the snapshot + stream live PTY output
    *  (T156 dashboard mini-terminal) — input stays disabled, PTY never resized. */
   liveFeed?: boolean;
+  /** T194 Dashboard mirror: interactive, but the owning pane answers terminal
+   *  queries and owns the PTY size. */
+  mirror?: boolean;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -88,6 +91,14 @@ export function setupTerminalSession(
         }),
       },
       state,
+    );
+  }
+
+  if (deps.mirror) {
+    // Several mirrors fill the dashboard: a wheel over one must scroll the page,
+    // not trap it in that terminal's history. Clicked (focused) = it's yours.
+    terminal.attachCustomWheelEventHandler(
+      () => !!terminal.element?.contains(document.activeElement),
     );
   }
 
@@ -159,7 +170,8 @@ export function setupTerminalSession(
 
     disposables.push(
       terminal.onData((data) => {
-        window.api.terminal.write(deps.agentId, data);
+        const out = deps.mirror ? stripTerminalReports(data) : data;
+        if (out) window.api.terminal.write(deps.agentId, out);
       }),
     );
 
@@ -185,13 +197,35 @@ export function setupTerminalSession(
       }
     });
 
-    window.api.terminal.getSnapshot(deps.agentId).then((snapshot) => {
-      if (liveDisposed) return;
-      if (snapshot) terminal.write(snapshot);
-      snapshotResolved = true;
-      for (const chunk of liveBuffer) dormantPipe.push(chunk);
-      liveBuffer.length = 0;
-    });
+    const applyGrid = (cols: number, rows: number) => {
+      terminal.resize(cols, rows);
+      fitMirror(terminal, deps.fontSize);
+    };
+    // A mirror must be at the PTY's grid BEFORE the snapshot lands, or history
+    // written at 80 columns wraps differently from the pane that owns it
+    const sized = deps.mirror
+      ? window.api.terminal
+          .getSize(deps.agentId)
+          .then((size) => {
+            if (size && !liveDisposed) applyGrid(size.cols, size.rows);
+          })
+          .catch(() => {})
+      : Promise.resolve();
+
+    // ...and follows the owner's resizes after that
+    if (deps.mirror) {
+      disposables.push({ dispose: window.api.terminal.onResized(deps.agentId, applyGrid) });
+    }
+
+    sized
+      .then(() => window.api.terminal.getSnapshot(deps.agentId))
+      .then((snapshot) => {
+        if (liveDisposed) return;
+        if (snapshot) terminal.write(snapshot);
+        snapshotResolved = true;
+        for (const chunk of liveBuffer) dormantPipe.push(chunk);
+        liveBuffer.length = 0;
+      });
 
     disposables.push({
       dispose: () => {
@@ -224,11 +258,13 @@ export function setupTerminalSession(
 /**
  * Fit the terminal and broadcast the new size to PTY + store. Wrapped so the
  * many callers in TerminalInstance don't each have to repeat the try/catch.
+ *
+ * Always the addon's floored grid. An alt-screen variant used to CEIL the rows
+ * and meant to squeeze the line height to compensate, but the squeeze was a
+ * no-op: every fit left the grid one row taller than its box, the box grew to
+ * hold it, and the next fit added another row, so the PTY kept gaining rows
+ * nobody could see (Claude's input box ended up below the edge) (T194 logs).
  */
-/** xterm's defaults; a TUI fit scales these and a shell fit restores them. */
-const BASE_LETTER_SPACING = 0;
-const BASE_LINE_HEIGHT = 1;
-
 export function fitAndSyncSize(
   terminal: Terminal,
   fitAddon: FitAddon,
@@ -237,43 +273,97 @@ export function fitAndSyncSize(
   onSize: (cols: number, rows: number) => void,
 ): void {
   try {
-    // A full-screen TUI paints exactly rows × cols and never scrolls, so the
-    // addon's flooring leaves a dead strip along the bottom and right of the
-    // pane — which is most of our agent panes, since Gemini, OpenCode, Kiro and
-    // Crush are alt-screen apps. Ceil the grid and stretch the cell instead.
-    const alternate = terminal.buffer.active.type === "alternate";
     const host = measureHost(terminal);
-    const cell = measureCell(terminal);
-    const fit = host && cell ? computeFit(host, cell, alternate ? "alternate" : "normal") : null;
-
-    if (fit && alternate) {
-      terminal.options.letterSpacing = BASE_LETTER_SPACING * fit.letterSpacing;
-      terminal.options.lineHeight = BASE_LINE_HEIGHT * fit.lineHeight;
-      terminal.resize(fit.cols, fit.rows);
-    } else {
-      // Shell panes keep the addon's own arithmetic, and any stretch from a
-      // previous TUI is undone — otherwise a shell inherits stretched glyphs.
-      terminal.options.letterSpacing = BASE_LETTER_SPACING;
-      terminal.options.lineHeight = BASE_LINE_HEIGHT;
-      fitAddon.fit();
-    }
-
+    // Unlaid-out box: the addon would fall back to 80x24 and the PTY would
+    // redraw (and rewrap) at 80 columns for a frame
+    if (!host?.width || !host?.height) return;
+    fitAddon.fit();
     const { cols, rows } = terminal;
     onSize(cols, rows);
-    if (!readOnly) window.api.terminal.resize(agentId, cols, rows);
+    if (!readOnly) sendPtyResize(agentId, cols, rows);
   } catch {
     /* container may not be ready */
   }
 }
 
-/** xterm exposes the rendered cell size only through this internal service. */
-function measureCell(terminal: Terminal): CellMetrics | null {
-  const core = (terminal as unknown as { _core?: { _renderService?: { dimensions?: unknown } } })
-    ._core?._renderService?.dimensions as
-    | { css?: { cell?: { width?: number; height?: number } } }
-    | undefined;
-  const cell = core?.css?.cell;
-  return cell?.width && cell?.height ? { width: cell.width, height: cell.height } : null;
+/** Layout settles over a few frames on mount (toolbar, tabs); each size the
+ *  PTY sees makes the CLI redraw, so only the last of a burst is sent. */
+const pendingResize = new Map<string, ReturnType<typeof setTimeout>>();
+function sendPtyResize(agentId: string, cols: number, rows: number): void {
+  clearTimeout(pendingResize.get(agentId));
+  pendingResize.set(
+    agentId,
+    setTimeout(() => {
+      pendingResize.delete(agentId);
+      window.api.terminal.resize(agentId, cols, rows);
+    }, 80),
+  );
+}
+
+/** Latest fit per terminal: a newer call makes older rAF retry chains exit, so
+ *  two chains measuring a width that lags a frame can't shrink it twice. */
+const mirrorFitGeneration = new WeakMap<Terminal, number>();
+
+/**
+ * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
+ * the owning pane, and shrinks its font to fit the card instead of resizing.
+ */
+export function fitMirror(terminal: Terminal, baseFontSize: number): void {
+  const generation = (mirrorFitGeneration.get(terminal) ?? 0) + 1;
+  mirrorFitGeneration.set(terminal, generation);
+  const step = (attempt: number) => {
+    if (mirrorFitGeneration.get(terminal) !== generation) return;
+    try {
+      const host = measureHost(terminal);
+      // The painted grid, not xterm's internal cell metrics: those may not exist
+      // yet, and a mirror that never measures keeps its full font and overflows
+      const rect = terminal.element
+        ?.querySelector<HTMLElement>(".xterm-screen")
+        ?.getBoundingClientRect();
+      if (host?.width && host.height && rect?.width && rect.height) {
+        const current = terminal.options.fontSize ?? baseFontSize;
+        const drawn = { width: rect.width, height: rect.height };
+        const next = nextMirrorFont(current, drawn, host, baseFontSize);
+        if (next === null) return;
+        terminal.options.fontSize = next;
+      }
+    } catch {
+      /* container may not be ready */
+    }
+    // Unmeasured, or glyph metrics settle a frame after a font change
+    if (attempt < 10) requestAnimationFrame(() => step(attempt + 1));
+  };
+  step(0);
+}
+
+/**
+ * Next font for a mirror, or null when it should stay put. Glyph sizes round
+ * to device pixels, so the painted grid moves in steps: jumping by ratio
+ * alone overshot the size that fits and flip-flopped forever, and every font
+ * change rebuilds xterm's glyph atlas (~50ms a frame, the renderer never went
+ * idle). Overflow always shrinks strictly, fitting is final, and only a card
+ * with lots of room left grows, so the sequence always ends.
+ */
+export function nextMirrorFont(
+  current: number,
+  drawn: { width: number; height: number },
+  host: { width: number; height: number },
+  base: number,
+): number | null {
+  // The tighter of the two dimensions decides: a full-height card is usually
+  // width-bound, a wide one height-bound
+  const ratio = Math.min(host.width / drawn.width, host.height / drawn.height);
+  const byRatio = Math.floor(current * ratio * 4) / 4;
+  if (drawn.width > host.width + 1 || drawn.height > host.height + 1) {
+    const next = Math.max(6, Math.min(current - 0.25, byRatio));
+    return next < current ? next : null;
+  }
+  const loose = drawn.width < host.width * 0.75 && drawn.height < host.height * 0.75;
+  if (loose && current < base) {
+    const next = Math.min(base, byRatio);
+    return next > current ? next : null;
+  }
+  return null;
 }
 
 function measureHost(terminal: Terminal): { width: number; height: number } | null {

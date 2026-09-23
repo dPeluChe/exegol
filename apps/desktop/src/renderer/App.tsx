@@ -46,7 +46,10 @@ function MainContent() {
           <ProjectList />
         </Suspense>
       );
+    // Same element for both, so switching to the dashboard keeps every
+    // terminal pane mounted behind it (no remount, no snapshot repaint)
     case "workspace":
+    case "dashboard":
       return (
         <ProjectProvider>
           <WorkspaceView />
@@ -74,7 +77,7 @@ export default function App() {
   usePanelessAgentSweep();
   useSettingsSync();
 
-  const showSidebar = activeView === "workspace";
+  const showSidebar = activeView === "workspace" || activeView === "dashboard";
 
   return (
     <TooltipProvider delayDuration={300}>

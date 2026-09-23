@@ -15,6 +15,9 @@ export interface TerminalInstanceProps {
   readOnly?: boolean;
   /** With readOnly: replay snapshot + stream live output (dashboard mini-terminal). */
   liveFeed?: boolean;
+  /** T194: interactive Dashboard mirror. Types into the session but never resizes
+   *  it, never answers terminal queries, and touches no pane state. */
+  mirror?: boolean;
   initialContent?: string;
   onReady?: () => void;
   /** `wrote` is true when triggered by new output landing (vs a user scroll). */

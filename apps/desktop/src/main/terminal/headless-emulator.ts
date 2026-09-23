@@ -106,6 +106,10 @@ export class HeadlessEmulator {
     };
   }
 
+  get size(): { cols: number; rows: number } {
+    return { cols: this.terminal.cols, rows: this.terminal.rows };
+  }
+
   resize(cols: number, rows: number): void {
     this.terminal.resize(cols, rows);
   }

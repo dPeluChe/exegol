@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { SessionAlias } from "../common/SessionAlias";
+import { WatchToggle } from "../common/WatchToggle";
 
 interface TerminalToolbarProps {
   /** T160: live agent identity for the session-name chip (omit for shells). */
@@ -47,7 +48,10 @@ export function TerminalToolbar({
     // occupy the right edge and were covering them (verify session 2026-08-11).
     <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
       {agent && agent.cliType !== "shell" && (
-        <SessionAlias agent={agent} textClassName="text-[10px]" />
+        <>
+          <SessionAlias agent={agent} textClassName="text-[10px]" />
+          <WatchToggle agentId={agent.id} className="py-0 text-[9px]" />
+        </>
       )}
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {branchName && (

@@ -13,26 +13,24 @@ import {
   Cpu,
   Eye,
   Map as MapIcon,
+  Plus,
   Send,
   Square,
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { submitToAgent } from "../../../lib/agent-input";
-import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
-import { type AgentState, useAgentStore } from "../../../stores/agents";
+import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
-import {
-  collectPaneIds,
-  selectPanes,
-  selectTabs,
-  useWorkspaceStore,
-} from "../../../stores/workspace";
+import { useWatchStore } from "../../../stores/watch";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
+import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
+import { WatchToggle } from "../../common/WatchToggle";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
+import { WatchingSection } from "./WatchingSection";
 import { WorktreesCard } from "./WorktreesCard";
 
 const STATUS_CONFIG: Record<
@@ -146,11 +144,6 @@ interface ProjectInfo {
   name: string;
 }
 
-interface ProjectMeta {
-  name: string;
-  color: string | null;
-}
-
 type GroupBy = "state" | "project";
 
 const isWorking = (a: AgentState) => a.status === "running" || a.status === "spawning";
@@ -161,6 +154,11 @@ export function AgentDashboard() {
   const storeAgents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const [groupBy, setGroupBy] = useState<GroupBy>("state");
+  // With sessions pinned, the dashboard is for watching them; the full fleet is
+  // already in the sidebar's Agents list, so it waits behind a toggle
+  const watchingCount = useWatchStore((s) => s.watched.length);
+  const [showAll, setShowAll] = useState(false);
+  const showFleet = watchingCount === 0 || showAll;
 
   // DB truth for the whole fleet — hydrated INTO the store so every consumer
   // (attention, badges) sees cross-project agents, not just this dashboard.
@@ -298,47 +296,43 @@ export function AgentDashboard() {
   }, [storeAgents, attentionItems, groupBy, projectMeta]);
 
   const navigateToAgent = useCallback((agent: AgentState) => {
-    const app = useAppStore.getState();
-    const store = useAgentStore.getState();
-    store.markAttentionRead(agent.id);
-
-    const focusPane = () => {
-      const ws = useWorkspaceStore.getState();
-      const tabs = selectTabs(ws);
-      const panes = selectPanes(ws);
-      for (const tab of tabs) {
-        for (const paneId of collectPaneIds(tab.layout)) {
-          const pane = panes[paneId];
-          if (pane?.type === "terminal" && pane.agentId === agent.id) {
-            ws.setActiveTab(tab.id);
-            ws.setFocusedPane(paneId);
-            store.setFocusedAgent(agent.id);
-            // Switch workspace back to Agents tab
-            switchSection("agents");
-            return;
-          }
-        }
-      }
-    };
-
-    if (app.activeProjectId !== agent.projectId) {
-      app.setActiveProject(agent.projectId);
-      requestAnimationFrame(focusPane);
-    } else {
-      focusPane();
-      switchSection("agents");
-    }
+    jumpToAgent(agent.id, agent.projectId);
   }, []);
+
+  // The dashboard spans every project, so starting an agent means picking one
+  const startAgentIn = (projectId: string) => {
+    useAppStore.getState().setActiveProject(projectId);
+    window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
+  };
 
   if (total === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 bg-bg-primary p-8">
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg-primary p-8">
         <Cpu className="h-10 w-10 text-text-muted/30" />
         <div className="text-center">
-          <p className="text-sm font-medium text-text-primary">No agents yet</p>
+          <p className="text-sm font-medium text-text-primary">No agents running</p>
           <p className="mt-1 text-xs text-text-muted">
-            Spawn an agent from the launcher to see it here
+            The dashboard shows agents from every project. Start one:
           </p>
+        </div>
+        <div className="flex w-full max-w-sm flex-col gap-1.5">
+          {(projects ?? []).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => startAgentIn(p.id)}
+              className="flex items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-left text-xs text-text-primary transition-colors hover:border-accent/40 hover:bg-accent/10"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0 text-accent" />
+              <span className="min-w-0 flex-1 truncate">{p.name}</span>
+              <span className="shrink-0 text-[10px] text-text-muted">Start agent</span>
+            </button>
+          ))}
+          {projects?.length === 0 && (
+            <p className="text-center text-[11px] text-text-muted">
+              Add a project from the sidebar first.
+            </p>
+          )}
         </div>
       </div>
     );
@@ -349,6 +343,9 @@ export function AgentDashboard() {
       <div className="space-y-6 p-4">
         {/* Summary bar + group toggle */}
         <div className="flex items-center gap-4 text-xs text-text-muted">
+          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wider">
+            All projects
+          </span>
           <span className="flex items-center gap-1.5">
             <Cpu className="h-3.5 w-3.5" />
             <span className="font-medium text-text-primary">{total}</span> agents
@@ -362,57 +359,74 @@ export function AgentDashboard() {
             {unreadCount} need attention
           </span>
           <div className="ml-auto flex items-center gap-1">
-            <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
-              By state
-            </FilterChip>
-            <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
-              By project
-            </FilterChip>
+            {watchingCount > 0 && (
+              <FilterChip active={showAll} onClick={() => setShowAll((v) => !v)}>
+                Show all agents
+              </FilterChip>
+            )}
+            {showFleet && (
+              <>
+                <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
+                  By state
+                </FilterChip>
+                <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
+                  By project
+                </FilterChip>
+              </>
+            )}
           </div>
         </div>
 
-        <WorktreesCard />
+        <WatchingSection projectMeta={projectMeta} onOpenAgent={navigateToAgent} />
 
-        {groups.map((group) => (
-          <div key={group.key}>
-            <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              <span
-                className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
-                style={group.color ? { backgroundColor: group.color } : undefined}
-              />
-              {group.title}
-              <span className="font-normal">({group.agents.length})</span>
-              {/* Ended sessions pile up forever — a list you cannot clear is a
+        {showFleet && (
+          <>
+            <WorktreesCard />
+
+            {groups.map((group) => (
+              <div key={group.key}>
+                <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  <span
+                    className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
+                    style={group.color ? { backgroundColor: group.color } : undefined}
+                  />
+                  {group.title}
+                  <span className="font-normal">({group.agents.length})</span>
+                  {/* Ended sessions pile up forever — a list you cannot clear is a
                   list you stop reading. Archive keeps the row (scoring, oplog,
                   resume handle); it only leaves the view. */}
-              {group.key === "recent" && (
-                <button
-                  type="button"
-                  onClick={archiveEnded}
-                  disabled={archiving}
-                  className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
-                >
-                  <Archive className="h-3 w-3" />
-                  Archive all
-                </button>
-              )}
-            </h3>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {group.agents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  projectMeta={groupBy === "state" ? projectMeta.get(agent.projectId) : undefined}
-                  hasUnread={group.unread.has(agent.id)}
-                  onClick={() => navigateToAgent(agent)}
-                  onArchive={
-                    LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
-                  }
-                />
-              ))}
-            </div>
-          </div>
-        ))}
+                  {group.key === "recent" && (
+                    <button
+                      type="button"
+                      onClick={archiveEnded}
+                      disabled={archiving}
+                      className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
+                    >
+                      <Archive className="h-3 w-3" />
+                      Archive all
+                    </button>
+                  )}
+                </h3>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {group.agents.map((agent) => (
+                    <AgentCard
+                      key={agent.id}
+                      agent={agent}
+                      projectMeta={
+                        groupBy === "state" ? projectMeta.get(agent.projectId) : undefined
+                      }
+                      hasUnread={group.unread.has(agent.id)}
+                      onClick={() => navigateToAgent(agent)}
+                      onArchive={
+                        LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </>
+        )}
       </div>
     </ScrollArea>
   );
@@ -471,18 +485,7 @@ function AgentCard({
               <StatusIcon className="h-3 w-3" />
               {hasUnread ? "Needs input" : config.label}
             </span>
-            {projectMeta && (
-              <span
-                className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-white/5 px-1.5 py-0.5 text-[9px] text-text-muted"
-                title={projectMeta.name}
-              >
-                <span
-                  className={cn("h-1.5 w-1.5 rounded-full", !projectMeta.color && "bg-accent")}
-                  style={projectMeta.color ? { backgroundColor: projectMeta.color } : undefined}
-                />
-                <span className="max-w-[90px] truncate">{projectMeta.name}</span>
-              </span>
-            )}
+            {projectMeta && <ProjectChip project={projectMeta} className="ml-auto text-[9px]" />}
           </div>
           <p className="mt-0.5 truncate text-xs text-text-muted">{agent.taskDescription}</p>
           {agent.currentStep && (
@@ -520,6 +523,7 @@ function AgentCard({
                 {agent.branchName}
               </span>
             )}
+            {canPeek && <WatchToggle agentId={agent.id} className="text-[10px]" />}
             {canPeek && (
               <button
                 type="button"

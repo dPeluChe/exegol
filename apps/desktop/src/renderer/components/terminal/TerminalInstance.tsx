@@ -7,6 +7,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useRef,
   useState,
@@ -16,7 +17,7 @@ import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
 import { useTerminalStore } from "../../stores/terminals";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { DormantPipe } from "./terminal-dormant-wiring";
-import { fitAndSyncSize, setupTerminalSession } from "./terminal-setup";
+import { fitAndSyncSize, fitMirror, setupTerminalSession } from "./terminal-setup";
 import {
   CANVAS_ONLY_CLI_TYPES,
   DARK_BLACK_TERMINAL_THEME,
@@ -32,6 +33,9 @@ export type { TerminalInstanceHandle, TerminalInstanceProps } from "./terminal-t
 /** Long enough that scrolling past a pane costs nothing; short enough that a
  *  backgrounded agent stops paying IPC almost immediately. */
 const HIDE_DEBOUNCE_MS = 1_500;
+
+/** Sessions already kicked by this renderer (see the mount kick) */
+const kickedSessions = new Set<string>();
 
 function paneIdForAgentSelector(
   state: ReturnType<typeof useWorkspaceStore.getState>,
@@ -53,6 +57,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     cliType,
     readOnly = false,
     liveFeed = false,
+    mirror = false,
     initialContent,
     onReady,
     onScrollPosition,
@@ -65,7 +70,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   // paneIdProp lets parents (e.g. floating windows) override the lookup.
   // The normal flow falls back to a workspace-store search by agentId so
   // we don't force TerminalPanel (owned by WT4) to plumb the paneId.
-  const paneId = useWorkspaceStore((s) => paneIdForAgentSelector(s, agentId, paneIdProp));
+  // A mirror must not write cwd/exit state into the owning pane
+  const paneId = useWorkspaceStore((s) =>
+    mirror ? undefined : paneIdForAgentSelector(s, agentId, paneIdProp),
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -73,6 +81,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const webglRef = useRef<WebglController | null>(null);
   const dormantPipeRef = useRef<DormantPipe | null>(null);
   const [isVisible, setIsVisible] = useState(true);
+  const viewId = useId();
+  const reportedVisibleRef = useRef(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
   useImperativeHandle(ref, () => ({
@@ -125,10 +135,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     const fit = fitAddonRef.current;
     const terminal = terminalRef.current;
     if (!fit || !terminal) return;
-    fitAndSyncSize(terminal, fit, agentId, readOnly, (cols, rows) =>
-      setTerminalSize(agentId, cols, rows),
-    );
-  }, [agentId, setTerminalSize, readOnly]);
+    // A mirror follows the PTY's grid (wired in setup) and only rescales its font
+    if (mirror) fitMirror(terminal, fontSize);
+    else fitAndSyncSize(terminal, fit, agentId, readOnly, (c, r) => setTerminalSize(agentId, c, r));
+  }, [agentId, setTerminalSize, readOnly, mirror, fontSize]);
 
   // Rule 4: external system sync — xterm.js setup/teardown, PTY wiring, resize observer
   // biome-ignore lint/correctness/useExhaustiveDependencies: onScrollPosition is stable (useCallback), adding it would remount the entire terminal
@@ -142,6 +152,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       cliType,
       readOnly,
       liveFeed,
+      mirror,
       initialContent,
       fontSize,
       fontFamily,
@@ -158,49 +169,60 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     serializeAddonRef.current = session.serializeAddon;
     dormantPipeRef.current = session.dormantPipe;
 
-    const sync = (cols: number, rows: number) => setTerminalSize(agentId, cols, rows);
+    const refit = () => {
+      if (mirror) fitMirror(session.terminal, fontSize);
+      else
+        fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, (c, r) =>
+          setTerminalSize(agentId, c, r),
+        );
+    };
 
     // Double-RAF: first frame settles layout, second fits terminal accurately
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, sync);
-      });
+      requestAnimationFrame(refit);
     });
 
-    const settleTimer = setTimeout(() => {
-      fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, sync);
-    }, 150);
+    const settleTimer = setTimeout(refit, 150);
 
     // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to
     // a black pane after window reload — the ring replay can't repaint an alt
-    // screen, only the app can. A one-shot resize jiggle forces the redraw.
-    let kickTimer2: ReturnType<typeof setTimeout> | null = null;
+    // screen, only the app can. Once per session per renderer: a pane that
+    // remounts on a project switch doesn't need it (two redraws for nothing),
+    // and a reload clears the set. Main does the jiggle without telling mirrors.
     const kickTimer = setTimeout(() => {
-      if (readOnly) return;
-      const t = session.terminal;
-      if (t.cols < 3) return;
-      window.api.terminal.resize(agentId, t.cols - 1, t.rows);
-      kickTimer2 = setTimeout(() => window.api.terminal.resize(agentId, t.cols, t.rows), 60);
+      if (readOnly || mirror || kickedSessions.has(agentId)) return;
+      if (session.terminal.buffer.active.type !== "alternate") return;
+      kickedSessions.add(agentId);
+      window.api.terminal.redraw(agentId);
     }, 350);
 
-    setTerminalReady(agentId);
+    if (!mirror) setTerminalReady(agentId);
     onReady?.();
 
-    let resizeRaf: number | null = null;
-    const resizeObserver = new ResizeObserver(() => {
-      if (resizeRaf) cancelAnimationFrame(resizeRaf);
-      resizeRaf = requestAnimationFrame(() => {
-        resizeRaf = null;
-        fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, sync);
-      });
+    let mirrorFitTimer: ReturnType<typeof setTimeout> | null = null;
+    let observedBox = "";
+    const resizeObserver = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? -1;
+      if (mirror) {
+        // The card sets both dimensions (the grid never sizes its box), so any
+        // real change is news. A drag changes it every frame; refit once it
+        // stops, since each font step rebuilds the glyph atlas
+        const box = `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`;
+        if (box === observedBox) return;
+        observedBox = box;
+        if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
+        mirrorFitTimer = setTimeout(refit, 120);
+        return;
+      }
+      // ResizeObserver already fires at most once per frame
+      refit();
     });
     resizeObserver.observe(container);
 
     return () => {
       clearTimeout(settleTimer);
       clearTimeout(kickTimer);
-      if (kickTimer2) clearTimeout(kickTimer2);
-      if (resizeRaf) cancelAnimationFrame(resizeRaf);
+      if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
       resizeObserver.disconnect();
       // WebGL context must be freed before the terminal itself is torn down.
       webglRef.current?.dispose();
@@ -230,17 +252,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     fontSize,
     readOnly,
     liveFeed,
+    mirror,
     initialContent,
     isLight,
   ]);
-
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.options.fontSize = fontSize;
-      terminalRef.current.options.fontFamily = fontFamily;
-      fitAddonRef.current?.fit();
-    }
-  }, [fontSize, fontFamily]);
 
   // T38: visibility observer — drives WebGL attach/detach + T115 dormant ring
   useEffect(() => {
@@ -266,20 +281,25 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // Revealing costs a full serialize in main, so a pane flicking past during
     // a scroll must not pay for it. Hiding is debounced; showing is immediate,
     // because a late reveal is a visibly stale terminal.
+    // viewId: main counts views, not windows, so a pane unmounting can't
+    // silence its Dashboard mirror in the same window (T194)
     if (!isVisible) {
       const timer = setTimeout(() => {
-        window.api.terminal.setVisible(agentId, false).catch(() => {});
+        window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
       }, HIDE_DEBOUNCE_MS);
       return () => clearTimeout(timer);
     }
     // The repaint arrives on terminal:data, in order with live output — this
     // call only reports. Acquire/release: unmounting while visible must release
     // too, or the view stays registered and the gate never engages again.
-    window.api.terminal.setVisible(agentId, true).catch(() => {});
+    // First report of this view: its mount already fetched a snapshot
+    const fresh = !reportedVisibleRef.current;
+    reportedVisibleRef.current = true;
+    window.api.terminal.setVisible(agentId, true, viewId, fresh).catch(() => {});
     return () => {
-      window.api.terminal.setVisible(agentId, false).catch(() => {});
+      window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
     };
-  }, [agentId, isVisible]);
+  }, [agentId, isVisible, viewId]);
 
   useEffect(() => {
     dormantPipeRef.current?.setVisible(isVisible);
@@ -289,14 +309,21 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
-    const useCanvas = cliType && CANVAS_ONLY_CLI_TYPES.has(cliType);
+    // Mirrors draw on canvas: several open at once would eat into Chromium's
+    // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
+    const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
     if (isVisible && !webglRef.current && !useCanvas) {
       const controller = createWebglController(terminal);
       controller.attach();
       webglRef.current = controller;
     } else if (!isVisible && webglRef.current) {
-      webglRef.current.dispose();
-      webglRef.current = null;
+      // Debounced like the IPC hide: scrolling past must not tear down and
+      // rebuild a GL context and its glyph atlas every time
+      const timer = setTimeout(() => {
+        webglRef.current?.dispose();
+        webglRef.current = null;
+      }, HIDE_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
     }
   }, [isVisible]);
 
@@ -307,16 +334,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
       if (detail?.agentId !== agentId) return;
       const terminal = terminalRef.current;
-      const fit = fitAddonRef.current;
-      if (!terminal || !fit) return;
+      if (!terminal || mirror) return;
       try {
-        fit.fit();
-        if (!readOnly && terminal.cols > 2) {
-          window.api.terminal.resize(agentId, terminal.cols - 1, terminal.rows);
-          setTimeout(() => {
-            window.api.terminal.resize(agentId, terminal.cols, terminal.rows);
-          }, 60);
-        }
+        handleResize();
+        if (!readOnly) window.api.terminal.redraw(agentId);
         terminal.refresh(0, terminal.rows - 1);
       } catch {
         /* not ready */
@@ -324,7 +345,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     };
     window.addEventListener("exegol:kick-terminal", handleKick);
     return () => window.removeEventListener("exegol:kick-terminal", handleKick);
-  }, [agentId, readOnly]);
+  }, [agentId, mirror, readOnly, handleResize]);
 
   useEffect(() => {
     const handleWindowResize = () => handleResize();
@@ -332,6 +353,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       const fit = fitAddonRef.current;
       const terminal = terminalRef.current;
       if (!fit || !terminal) return;
+      if (mirror) {
+        handleResize();
+        return;
+      }
       try {
         fit.fit();
         terminal.refresh(0, terminal.rows - 1);
@@ -345,7 +370,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       window.removeEventListener("resize", handleWindowResize);
       window.removeEventListener("exegol:refit-terminals", handleRefit);
     };
-  }, [handleResize]);
+  }, [handleResize, mirror]);
 
   // T155: drop a file (from FileExplorer/GitPane) → paste as @path mention
   const handleDragOver = useCallback(
@@ -375,7 +400,9 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     <div
       ref={containerRef}
       className={cn(
-        "terminal-container h-full w-full bg-bg-primary",
+        // Clipped, so a grid momentarily larger than its box can never push the
+        // box (and with it the next fit); a mirror's box is its card's body
+        "terminal-container h-full w-full overflow-hidden bg-bg-primary",
         isDragOver && "ring-2 ring-inset ring-accent/60",
       )}
       onDragOver={handleDragOver}

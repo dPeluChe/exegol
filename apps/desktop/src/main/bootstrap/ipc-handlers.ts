@@ -28,8 +28,21 @@ export function registerIpcHandlers(): void {
 
   // Terminal resize: renderer -> main -> pty
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
-    const manager = getAgentManager();
-    manager.resize(agentId, cols, rows);
+    const before = getPtyHost().getSize(agentId);
+    // A drag re-sends the same grid every frame; each would be a sidecar RPC
+    if (before?.cols === cols && before?.rows === rows) return;
+    getAgentManager().resize(agentId, cols, rows);
+    // Overview mirrors follow the owner's size; they never resize the PTY themselves
+    if (before) broadcast("terminal:resized", agentId, cols, rows);
+  });
+
+  // Repaint without telling mirrors: the jiggle is not a real size change
+  ipcMain.on("terminal:redraw", (_event, agentId: string) => {
+    getPtyHost().redraw(agentId);
+  });
+
+  ipcMain.handle("terminal:get-size", (_event, agentId: string) => {
+    return getPtyHost().getSize(agentId);
   });
 
   // Terminal snapshot: replay ring buffer content for late-mounting terminals
@@ -40,27 +53,32 @@ export function registerIpcHandlers(): void {
   /** T178: a view reports whether it can currently draw this agent. Returns a
    *  snapshot when output was dropped while hidden, so the view repaints from
    *  the model instead of resuming mid-stream on a screen that moved on. */
-  ipcMain.handle("terminal:set-visible", (event, agentId: string, visible: boolean) => {
-    const viewerId = event.sender.id;
-    if (!trackedSenders.has(viewerId)) {
-      trackedSenders.add(viewerId);
-      // A reload or a closed window never sends "hidden" for anything it was
-      // showing. Without this the gate degrades to a no-op after one Cmd+R.
-      event.sender.once("destroyed", () => {
-        trackedSenders.delete(viewerId);
-        forgetViewer(viewerId);
-      });
-    }
-    setTerminalViewerVisible(agentId, viewerId, visible);
-    if (!visible || !consumeMissedOutput(agentId)) return;
-    const snapshot = getPtyHost().getSnapshot(agentId);
-    if (!snapshot) return;
-    // Pushed through terminal:data rather than returned, so the repaint is
-    // ORDERED with live output. Returning it raced: bytes arriving between the
-    // gate opening and the reply landing were applied, then wiped by the
-    // renderer's reset. RIS (ESC c) makes the reset part of the same stream.
-    broadcast("terminal:data", agentId, `\x1bc${snapshot}`);
-  });
+  ipcMain.handle(
+    "terminal:set-visible",
+    (event, agentId: string, visible: boolean, viewId: string, fresh?: boolean) => {
+      const viewerId = event.sender.id;
+      if (!trackedSenders.has(viewerId)) {
+        trackedSenders.add(viewerId);
+        // A reload or a closed window never sends "hidden" for anything it was
+        // showing. Without this the gate degrades to a no-op after one Cmd+R.
+        event.sender.once("destroyed", () => {
+          trackedSenders.delete(viewerId);
+          forgetViewer(viewerId);
+        });
+      }
+      setTerminalViewerVisible(agentId, viewerId, visible, viewId);
+      // A view's first report comes from a mount that fetched its own snapshot:
+      // repainting it again would serialize and paint the screen twice
+      if (!visible || !consumeMissedOutput(agentId) || fresh) return;
+      const snapshot = getPtyHost().getSnapshot(agentId);
+      if (!snapshot) return;
+      // Pushed through terminal:data rather than returned, so the repaint is
+      // ORDERED with live output. Returning it raced: bytes arriving between the
+      // gate opening and the reply landing were applied, then wiped by the
+      // renderer's reset. RIS (ESC c) makes the reset part of the same stream.
+      broadcast("terminal:data", agentId, `\x1bc${snapshot}`);
+    },
+  );
 
   // Save clipboard image as temp file for terminal paste
   ipcMain.handle("terminal:save-clipboard-image", async () => {

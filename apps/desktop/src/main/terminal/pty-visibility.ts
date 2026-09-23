@@ -18,26 +18,33 @@
  * webContents id, a reload simply drops every id that window held.
  */
 
-/** agentId → webContents ids currently showing it. Absent = never reported. */
-const viewers = new Map<string, Set<number>>();
+/** agentId → views currently showing it, as `windowId:viewId`. Absent = never reported.
+ *  Per view, not per window: a pane and its Overview mirror share a window, and
+ *  the pane unmounting must not silence the mirror (T194). */
+const viewers = new Map<string, Set<string>>();
 
 /** Agents whose output was dropped since their last repaint. */
 const missedOutput = new Set<string>();
 
 export function setTerminalViewerVisible(
   agentId: string,
-  viewerId: number,
+  windowId: number,
   visible: boolean,
+  viewId: string,
 ): void {
-  const showing = viewers.get(agentId) ?? new Set<number>();
-  if (visible) showing.add(viewerId);
-  else showing.delete(viewerId);
+  const key = `${windowId}:${viewId}`;
+  const showing = viewers.get(agentId) ?? new Set<string>();
+  if (visible) showing.add(key);
+  else showing.delete(key);
   viewers.set(agentId, showing);
 }
 
 /** A window went away — it can no longer be showing anything. */
-export function forgetViewer(viewerId: number): void {
-  for (const showing of viewers.values()) showing.delete(viewerId);
+export function forgetViewer(windowId: number): void {
+  const prefix = `${windowId}:`;
+  for (const showing of viewers.values()) {
+    for (const key of showing) if (key.startsWith(prefix)) showing.delete(key);
+  }
 }
 
 /** Every view of this agent is gone for good (session ended). */

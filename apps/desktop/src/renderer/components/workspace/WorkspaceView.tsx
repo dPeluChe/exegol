@@ -5,6 +5,7 @@ import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { SWITCH_SECTION_EVENT, switchSection } from "../../lib/switch-section";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
+import { useAppStore } from "../../stores/app";
 import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { ParallelSpawnModal } from "../agents/ParallelSpawnModal";
 import { SpawnAgentModal } from "../agents/SpawnAgentModal";
@@ -78,13 +79,21 @@ export function WorkspaceView() {
   const { projectId } = useProjectContext();
   // Home = the fleet dashboard (Antonio 2026-08-11): land on the cross-project
   // control center; the Agents tab stays mounted underneath for its terminals.
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>("agent-dashboard");
+  const onDashboard = useAppStore((s) => s.activeView === "dashboard");
+  const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
+  // Picking a project from the dashboard lands on its agents, not on
+  // whichever project tab was open before the dashboard
+  const [wasDashboard, setWasDashboard] = useState(onDashboard);
+  if (wasDashboard !== onDashboard) {
+    setWasDashboard(onDashboard);
+    if (!onDashboard) setActiveSection("agents");
+  }
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const [spawnInitialTask, setSpawnInitialTask] = useState<string | undefined>(undefined);
   const [spawnInitialCliType, setSpawnInitialCliType] = useState<string | undefined>(undefined);
   const [showParallelModal, setShowParallelModal] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const isAgents = activeSection === "agents";
+  const isAgents = activeSection === "agents" && !onDashboard;
   const prevIsAgents = useRef(isAgents);
 
   // Listen for section switch events from sidebar (Rule 4: mount effect for event listener)
@@ -160,7 +169,7 @@ export function WorkspaceView() {
     prevIsAgents.current = isAgents;
   }, [isAgents]);
 
-  if (!projectId) {
+  if (!projectId && !onDashboard) {
     return (
       <div className="flex h-full items-center justify-center bg-bg-primary">
         <p className="text-sm text-text-muted">Select a project to get started</p>
@@ -169,18 +178,22 @@ export function WorkspaceView() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-bg-primary">
+    <div className="relative flex h-full flex-col bg-bg-primary">
+      {/* Tabs stay laid out under the dashboard: hiding them made the panes
+          behind it taller, so every dashboard toggle resized every PTY twice */}
       <WorkspaceTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
       <div className="relative flex-1 overflow-hidden">
         {/* Agents: always mounted. When hidden, keep in DOM but invisible.
             Dispatch resize event when becoming visible to trigger xterm.js fit() */}
-        <div className={isAgents ? "absolute inset-0" : "invisible absolute inset-0"}>
-          <AgentsSection />
-        </div>
+        {projectId && (
+          <div className={isAgents ? "absolute inset-0" : "invisible absolute inset-0"}>
+            <AgentsSection />
+          </div>
+        )}
 
         {/* Other sections: conditionally rendered + lazy loaded (no terminal state to preserve) */}
-        {activeSection !== "agents" && (
+        {!onDashboard && activeSection !== "agents" && (
           <Suspense fallback={<SectionFallback />}>
             {activeSection === "tasks" && <TasksSection />}
             {activeSection === "history" && <HistorySection />}
@@ -190,12 +203,19 @@ export function WorkspaceView() {
             {activeSection === "pipelines" && <PipelineSection />}
             {activeSection === "parallel-runs" && <ParallelRunsSection />}
             {activeSection === "qa-tests" && <QaTestsSection />}
-            {activeSection === "agent-dashboard" && <AgentDashboard />}
             {activeSection === "resources-tokens" && <ResourcesTokensSection />}
             {activeSection === "scoring" && <ScoringSection />}
           </Suspense>
         )}
       </div>
+
+      {onDashboard && (
+        <Suspense fallback={<SectionFallback />}>
+          <div className="absolute inset-0 z-10 bg-bg-primary">
+            <AgentDashboard />
+          </div>
+        </Suspense>
+      )}
 
       {showSpawnModal && projectId && (
         <SpawnAgentModal

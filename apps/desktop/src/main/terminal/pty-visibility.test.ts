@@ -23,35 +23,44 @@ describe("terminal visibility gate", () => {
   });
 
   it("stops shipping output once every view reports hidden", () => {
-    setTerminalViewerVisible("a", PANE, true);
+    setTerminalViewerVisible("a", PANE, true, "view");
     expect(hasVisibleViewer("a")).toBe(true);
-    setTerminalViewerVisible("a", PANE, false);
+    setTerminalViewerVisible("a", PANE, false, "view");
     expect(hasVisibleViewer("a")).toBe(false);
   });
 
   it("tracks views separately, so one hiding does not silence another", () => {
     // A pane and a floating window can show the same agent.
-    setTerminalViewerVisible("a", PANE, true);
-    setTerminalViewerVisible("a", FLOATING, true);
-    setTerminalViewerVisible("a", PANE, false);
+    setTerminalViewerVisible("a", PANE, true, "view");
+    setTerminalViewerVisible("a", FLOATING, true, "view");
+    setTerminalViewerVisible("a", PANE, false, "view");
     expect(hasVisibleViewer("a")).toBe(true);
-    setTerminalViewerVisible("a", FLOATING, false);
+    setTerminalViewerVisible("a", FLOATING, false, "view");
+    expect(hasVisibleViewer("a")).toBe(false);
+  });
+
+  it("tracks two views in the same window separately (pane + Overview mirror)", () => {
+    setTerminalViewerVisible("a", PANE, true, "pane");
+    setTerminalViewerVisible("a", PANE, true, "mirror");
+    setTerminalViewerVisible("a", PANE, false, "pane");
+    expect(hasVisibleViewer("a")).toBe(true);
+    forgetViewer(PANE);
     expect(hasVisibleViewer("a")).toBe(false);
   });
 
   it("is idempotent — repeated reports from one view say the same thing", () => {
     // The counter version needed a clamp here; identity makes it structural.
-    setTerminalViewerVisible("a", PANE, true);
-    setTerminalViewerVisible("a", PANE, true);
-    setTerminalViewerVisible("a", PANE, false);
+    setTerminalViewerVisible("a", PANE, true, "view");
+    setTerminalViewerVisible("a", PANE, true, "view");
+    setTerminalViewerVisible("a", PANE, false, "view");
     expect(hasVisibleViewer("a")).toBe(false);
   });
 
   it("drops a window's views when it is destroyed, so a reload cannot leak", () => {
     // A renderer reload never sends "hidden" for what it was showing. Without
     // this the gate silently degrades to a no-op after one Cmd+R.
-    setTerminalViewerVisible("a", PANE, true);
-    setTerminalViewerVisible("b", PANE, true);
+    setTerminalViewerVisible("a", PANE, true, "view");
+    setTerminalViewerVisible("b", PANE, true, "view");
     forgetViewer(PANE);
     expect(hasVisibleViewer("a")).toBe(false);
     expect(hasVisibleViewer("b")).toBe(false);
@@ -64,7 +73,7 @@ describe("terminal visibility gate", () => {
   });
 
   it("forgets an agent entirely, so a closed pane leaves no phantom hidden view", () => {
-    setTerminalViewerVisible("a", PANE, false);
+    setTerminalViewerVisible("a", PANE, false, "view");
     noteOutputDropped("a");
     forgetTerminalViewers("a");
     expect(hasVisibleViewer("a")).toBe(true);
