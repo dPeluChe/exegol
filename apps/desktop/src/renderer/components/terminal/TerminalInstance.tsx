@@ -184,11 +184,17 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to
     // a black pane after window reload — the ring replay can't repaint an alt
     // screen, only the app can. A one-shot resize jiggle forces the redraw.
+    // Only when the PTY already had this pane's size: otherwise the fit's own
+    // resize delivered a SIGWINCH and the jiggle is two redraws for nothing.
     let kickTimer2: ReturnType<typeof setTimeout> | null = null;
-    const kickTimer = setTimeout(() => {
+    const sizeAtMount =
+      readOnly || mirror ? Promise.resolve(null) : window.api.terminal.getSize(agentId);
+    const kickTimer = setTimeout(async () => {
       if (readOnly || mirror) return;
       const t = session.terminal;
       if (t.cols < 3) return;
+      const before = await sizeAtMount.catch(() => null);
+      if (before && (before.cols !== t.cols || before.rows !== t.rows)) return;
       termDbg(`kick:${agentId}:${viewId}`, "SIGWINCH kick", {
         agentId,
         grid: `${t.cols}x${t.rows}`,
