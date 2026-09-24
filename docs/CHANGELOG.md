@@ -26,6 +26,9 @@ First release since 0.4.4. Groups the three unreleased batches below.
 - Terminals: a pane no longer gains rows forever after a reattach, mount and drag send one resize,
   and switching projects no longer makes CLIs redraw
 - "Resume" with no prior conversation starts a clean session instead of failing
+- Watch cards: A−/A+ text size and "fit session to card" so side-by-side sessions stay readable;
+  the pane takes its size back when you open it
+- After a restart, terminals come back at their real size instead of a reflowed 120x30
 
 ### Pre-build audit fixes
 - Undo works in the packaged app; tray icon ships; worktree archive hook runs

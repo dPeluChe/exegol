@@ -1,7 +1,16 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { ArrowUpRight, ChevronDown, GripVertical, PinOff, X } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChevronDown,
+  GripVertical,
+  Maximize2,
+  Minimize2,
+  PinOff,
+  X,
+} from "lucide-react";
 import { type DragEvent, useState } from "react";
+import { useSettings } from "../../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
 import { AgentIcon } from "../../common/AgentIcon";
@@ -219,6 +228,7 @@ function WatchCard({
   const toggleOpen = useWatchStore((s) => s.toggleOpen);
   const toggleWatch = useWatchStore((s) => s.toggleWatch);
   const live = LIVE_STATUSES.has(agent.status);
+  const cardFont = useWatchStore((s) => s.cardFont[agent.id]);
 
   return (
     <div
@@ -260,6 +270,7 @@ function WatchCard({
             </span>
           )}
         </div>
+        {live && <CardSizeControls agentId={agent.id} />}
         <button
           type="button"
           onClick={() => onOpenAgent(agent)}
@@ -294,6 +305,7 @@ function WatchCard({
             agentId={agent.id}
             cliType={agent.cliType}
             mirror
+            cardFont={cardFont}
           />
         </div>
       ) : (
@@ -301,6 +313,47 @@ function WatchCard({
           Session ended ({agent.status}). Open it to read the transcript or resume.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * A-/A+ and "fit session to card": a plain mirror shows the owner pane's grid
+ * shrunk to fit, which gets tiny side by side. Sizing the session to the card
+ * reads at a normal font; the pane takes the size back when it is shown again.
+ */
+function CardSizeControls({ agentId }: { agentId: string }) {
+  const cardFont = useWatchStore((s) => s.cardFont[agentId]);
+  const setCardFont = useWatchStore((s) => s.setCardFont);
+  const base = useSettings().data?.terminalFontSize ?? 14;
+  const sizing = cardFont !== undefined;
+  const step = (delta: number) => setCardFont(agentId, (cardFont ?? base) + delta);
+  const btn =
+    "rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
+
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      <button type="button" onClick={() => step(-1)} className={btn} title="Smaller text">
+        A−
+      </button>
+      {sizing && (
+        <span className="w-5 text-center text-[10px] tabular-nums text-accent">{cardFont}</span>
+      )}
+      <button type="button" onClick={() => step(1)} className={btn} title="Larger text">
+        A+
+      </button>
+      <button
+        type="button"
+        onClick={() => setCardFont(agentId, sizing ? null : base)}
+        className={cn(btn, sizing && "text-accent")}
+        title={
+          sizing
+            ? "Stop sizing the session here: show the pane's layout, scaled to fit"
+            : "Fit the session to this card: readable text; its pane takes the size back when shown"
+        }
+      >
+        {sizing ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+      </button>
     </div>
   );
 }

@@ -3,6 +3,8 @@ import { persist } from "zustand/middleware";
 
 /** Each open mirror is a live xterm fed every byte of its session; a few is plenty. */
 export const MAX_OPEN_MIRRORS = 6;
+export const MIN_CARD_FONT = 8;
+export const MAX_CARD_FONT = 22;
 
 interface WatchStore {
   /** T194: sessions pinned to the Dashboard, in pin order, across all projects */
@@ -17,6 +19,13 @@ interface WatchStore {
   setColumns: (columns: 1 | 2 | 3) => void;
   /** Drag to reorder: put `agentId` right before `beforeId` */
   moveWatched: (agentId: string, beforeId: string) => void;
+  /**
+   * Cards that size their session: the PTY takes the card's grid at this font,
+   * so it reads at a normal size instead of the owner pane's grid shrunk down.
+   * Absent = a plain mirror. The pane takes the size back when it is shown.
+   */
+  cardFont: Record<string, number>;
+  setCardFont: (agentId: string, font: number | null) => void;
 }
 
 const pushOpen = (open: string[], id: string) => [...open, id].slice(-MAX_OPEN_MIRRORS);
@@ -48,7 +57,22 @@ export const useWatchStore = create<WatchStore>()(
             : pushOpen(s.open, agentId),
         })),
       replaceAgent: (oldId, newId) =>
-        set((s) => ({ watched: swap(s.watched, oldId, newId), open: swap(s.open, oldId, newId) })),
+        set((s) => {
+          const { [oldId]: font, ...cardFont } = s.cardFont;
+          return {
+            watched: swap(s.watched, oldId, newId),
+            open: swap(s.open, oldId, newId),
+            cardFont: font === undefined ? cardFont : { ...cardFont, [newId]: font },
+          };
+        }),
+      cardFont: {},
+      setCardFont: (agentId, font) =>
+        set((s) => {
+          const { [agentId]: _, ...rest } = s.cardFont;
+          if (font === null) return { cardFont: rest };
+          const clamped = Math.min(MAX_CARD_FONT, Math.max(MIN_CARD_FONT, font));
+          return { cardFont: { ...rest, [agentId]: clamped } };
+        }),
       setColumns: (columns) => set({ columns }),
       moveWatched: (agentId, beforeId) =>
         set((s) => {

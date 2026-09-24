@@ -18,6 +18,8 @@ export interface TerminalInstanceProps {
   /** T194: interactive Dashboard mirror. Types into the session but never resizes
    *  it, never answers terminal queries, and touches no pane state. */
   mirror?: boolean;
+  /** Mirror only: the card sizes the session at this font (unset = plain mirror) */
+  cardFont?: number;
   initialContent?: string;
   onReady?: () => void;
   /** `wrote` is true when triggered by new output landing (vs a user scroll). */
