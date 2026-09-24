@@ -72,6 +72,15 @@ describe("redact", () => {
     expect(out).not.toContain("acme");
   });
 
+  it("never joins two quoted words, on one line or across lines", () => {
+    const doctor = [
+      "- [warn] Aider: 'aider' not found on PATH",
+      "- [warn] Goose: 'goose' not found on PATH",
+      "- [ok] Kilo Code: Found 'kilocode' on PATH, and 'crush' too",
+    ].join("\n");
+    expect(redact(doctor, home)).toBe(doctor);
+  });
+
   it("covers more credential shapes", () => {
     const out = redact(
       [

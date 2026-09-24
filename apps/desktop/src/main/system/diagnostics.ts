@@ -50,7 +50,9 @@ const REDACTIONS: Array<[RegExp, string]> = [
   ],
   [/("taskDescription"\s*:\s*")(?:[^"\\]|\\.)*"/g, '$1[redacted]"'],
   // Quoted free text (prompts are sentences); single words like a CLI or model name stay
-  [/'[^'\n]*\s[^'\n]*'/g, "'[text redacted]'"],
+  // A real quotation opens after a space and closes before one: the span
+  // between two quoted words ('aider' not found … 'goose') is not a quote
+  [/(^|[\s=(])'[^'\n]*[ \t][^'\n]*'(?=$|[\s),;:.])/gm, "$1'[text redacted]'"],
   // URLs: credentials and query strings, and hosts other than local or GitHub.
   // Bounded quantifiers: an unanchored run over a long base64/hex blob was
   // quadratic (seconds on the main process for 100KB)
