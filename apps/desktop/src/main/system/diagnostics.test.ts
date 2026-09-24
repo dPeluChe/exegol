@@ -44,21 +44,12 @@ describe("redact", () => {
     }
   });
 
-  it("reduces spawn commands to binary + flags and drops task text", () => {
-    const line =
-      '[AgentManager] Spawning: {"fullCommand":"claude --settings /Users/someone/.exegol/hooks/a.json \'fix auth\'","taskDescription":"refactor the billing module"}';
-    const out = redact(line, home);
-    expect(out).toContain('"fullCommand":"claude --settings <args>"');
+  it("drops quoted prompts and task descriptions a line may still carry", () => {
+    const out = redact(
+      'claude \'fix the billing rounding\' {"taskDescription":"refactor the billing module"}',
+      home,
+    );
     expect(out).not.toContain("billing");
-    expect(out).not.toContain("fix auth");
-  });
-
-  it("drops raw agent output carried by status lines", () => {
-    const line =
-      "2026-09-24T10:00:00Z [INFO] [AgentCallback] Status change: abc (claude-code) → running [const secret = loadClientData()]";
-    const out = redact(line, home);
-    expect(out).toContain("→ running [step redacted]");
-    expect(out).not.toContain("loadClientData");
   });
 
   it("makes paths generic: folder names name the user and their clients", () => {

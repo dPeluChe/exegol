@@ -1,8 +1,17 @@
 import { execFile } from "node:child_process";
-import { closeSync, existsSync, openSync, readSync, statSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, release, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { BugDiagnostics } from "@exegol/shared";
 import type Database from "libsql";
 import { LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_SLUG, EXEGOL_REPO_URL } from "../lib/repo";
@@ -15,37 +24,19 @@ const execFileAsync = promisify(execFile);
 /** GitHub rejects issue bodies past 65536 chars; leave room for the header. */
 const MAX_BODY = 60_000;
 
-type Replacer = string | ((substring: string, ...groups: string[]) => string);
-
-/** A spawn command keeps its binary and flags; prompts, paths and values go. */
-function commandShape(cmd: string): string {
-  const [bin, ...rest] = cmd.split(/\s+/);
-  const flags = rest.filter((t) => /^--?[A-Za-z][\w-]*$/.test(t));
-  return [bin?.split("/").pop(), ...flags, rest.length > flags.length ? "<args>" : ""]
-    .filter(Boolean)
-    .join(" ");
-}
-
 /**
- * The report goes into a PUBLIC issue, and logs carry the user's paths (whose
- * folder names name clients), the prompts they gave agents, raw agent output
- * and sometimes a credential a CLI printed. Structure first (commands reduced
- * to their shape, agent text dropped, paths made generic), then patterns.
+ * The report goes into a PUBLIC issue. Exegol's own log lines no longer carry
+ * prompts, spawn commands or agent output (they log `commandShape` and drop the
+ * step text); these rules catch what third-party CLIs and errors put there:
+ * credentials, URLs, and paths whose folder names name the user and clients.
  */
-const REDACTIONS: Array<[RegExp, Replacer]> = [
-  // Structure: spawn commands and task text never leave
-  [/("fullCommand"\s*:\s*")((?:[^"\\]|\\.)*)"/g, (_m, p, cmd) => `${p}${commandShape(cmd)}"`],
-  [/("taskDescription"\s*:\s*")(?:[^"\\]|\\.)*"/g, '$1[redacted]"'],
-  // Status lines carry up to 120 chars of raw agent output as their step
-  [/(\[AgentCallback\] Status change:[^\n[]*?) \[[^\n]*\]$/gm, "$1 [step redacted]"],
-  [/'[^'\n]{3,}'/g, "'[text redacted]'"],
-  // Credentials
+const REDACTIONS: Array<[RegExp, string]> = [
+  // Credentials first, so a quoted secret is caught whole
   [
     /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
     "[private key redacted]",
   ],
-  [/sk-ant-[A-Za-z0-9_-]{10,}/g, "sk-ant-[redacted]"],
-  [/\bsk-[A-Za-z0-9_-]{16,}/g, "sk-[redacted]"],
+  [/\bsk-(ant-)?[A-Za-z0-9_-]{16,}/g, "sk-$1[redacted]"],
   [/\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}/g, "$1_[redacted]"],
   [/\bgithub_pat_[A-Za-z0-9_]{20,}/g, "github_pat_[redacted]"],
   [/\bxox[abprs]-[A-Za-z0-9-]{10,}/g, "xox-[redacted]"],
@@ -54,17 +45,21 @@ const REDACTIONS: Array<[RegExp, Replacer]> = [
   [/\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}/g, "[jwt redacted]"],
   [/(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi, "$1[redacted]"],
   [
-    /((?:TOKEN|SECRET|PASSWORD|PASSWD|KEY)[A-Z_]*\\?["']?\s*[:=]\s*\\?["']?)[^\s"'\\,}]{4,}/gi,
+    /((?:TOKEN|SECRET|PASSWORD|PASSWD|KEY)[A-Z_]*\\?["']?\s*[:=]\s*\\?["']?)[^\s"'\\,}[]{4,}/gi,
     "$1[redacted]",
   ],
-  // URLs: credentials and query strings, and hosts other than local or GitHub
-  [/(\b[a-z][\w+.-]*:\/\/)[^\s/@"']+@/gi, "$1[redacted]@"],
+  [/("taskDescription"\s*:\s*")(?:[^"\\]|\\.)*"/g, '$1[redacted]"'],
+  [/'[^'\n]{3,}'/g, "'[text redacted]'"],
+  // URLs: credentials and query strings, and hosts other than local or GitHub.
+  // Bounded quantifiers: an unanchored run over a long base64/hex blob was
+  // quadratic (seconds on the main process for 100KB)
+  [/(\b[a-z][\w+.-]{0,31}:\/\/)[^\s/@"']{1,256}@/gi, "$1[redacted]@"],
   [/(https?:\/\/[^\s?"')]+)\?[^\s"')]+/gi, "$1?[query redacted]"],
   [/https?:\/\/(?!localhost\b|127\.0\.0\.1\b|github\.com\b)[^\s/"')]+/gi, "<url>"],
-  [/[\w.+-]+@[\w-]+\.[\w.-]+/g, "<email>"],
+  [/[\w.+-]{1,64}@[\w-]{1,63}\.[\w.-]{2,63}/g, "<email>"],
   [/\b(?!127\.0\.0\.1\b)(?:\d{1,3}\.){3}\d{1,3}\b/g, "<ip>"],
-  // Paths: folder names identify the user and their clients. Exegol's own
-  // ~/.exegol tree is safe and useful to keep.
+  // Paths. Home becomes ~ first only so Exegol's own ~/.exegol survives; any
+  // other folder under home, or another user's, is generic.
   [/~\/(?!\.exegol\b)[^\s"',)\]]+/g, "~/<path>"],
   [/\/(?:Users|home)\/[^/\s"']+(?:\/[^\s"',)\]]*)?/g, "/<user-path>"],
   [/\/Volumes\/[^\s"',)\]]+/g, "/Volumes/<path>"],
@@ -72,9 +67,7 @@ const REDACTIONS: Array<[RegExp, Replacer]> = [
 
 export function redact(text: string, home = homedir()): string {
   let out = home ? text.split(home).join("~") : text;
-  for (const [re, replacement] of REDACTIONS) {
-    out = out.replace(re, replacement as string);
-  }
+  for (const [re, replacement] of REDACTIONS) out = out.replace(re, replacement);
   return out;
 }
 
@@ -117,18 +110,10 @@ function agentCounts(db: Database.Database): string[] {
   }
 }
 
-export interface Diagnostics {
-  /** Full redacted report (markdown) */
-  text: string;
-  version: string;
-  /** Last error line, redacted: becomes the default issue title */
-  lastError: string | null;
-}
-
 export async function collectDiagnostics(
   db: Database.Database,
   app: { getVersion: () => string; isPackaged: boolean },
-): Promise<Diagnostics> {
+): Promise<BugDiagnostics> {
   const version = app.getVersion();
   const doctor = await runDoctorChecks(db).catch(() => null);
   const current = tailFile(join(LOG_DIR, "exegol.log"), 300);
@@ -190,22 +175,27 @@ async function ghCanFile(): Promise<boolean> {
  * `diag` is what the user reviewed; the description is redacted like the logs.
  */
 export async function fileBugReport(
-  diag: Diagnostics,
+  diag: BugDiagnostics,
   description: string,
 ): Promise<{ url: string; via: "gh" | "browser" }> {
   const said = redact(description.trim());
+  // Defense in depth: the text comes back from the renderer; redact is idempotent
+  const text = redact(diag.text);
   const title = `[bug] ${(said.split("\n")[0] || diag.lastError || "Report from Exegol").slice(0, 100)}`;
 
   if (await ghCanFile()) {
-    const body = [said, diag.text].filter(Boolean).join("\n\n").slice(0, MAX_BODY);
     const file = join(tmpdir(), `exegol-bug-${Date.now()}.md`);
-    writeFileSync(file, body);
-    const { stdout } = await execFileAsync(
-      "gh",
-      ["issue", "create", "--repo", EXEGOL_REPO_SLUG, "--title", title, "--body-file", file],
-      { timeout: 30_000 },
-    );
-    return { url: stdout.trim().split("\n").pop() ?? EXEGOL_REPO_URL, via: "gh" };
+    writeFileSync(file, [said, text].filter(Boolean).join("\n\n").slice(0, MAX_BODY));
+    try {
+      const { stdout } = await execFileAsync(
+        "gh",
+        ["issue", "create", "--repo", EXEGOL_REPO_SLUG, "--title", title, "--body-file", file],
+        { timeout: 30_000 },
+      );
+      return { url: stdout.trim().split("\n").pop() ?? EXEGOL_REPO_URL, via: "gh" };
+    } finally {
+      rmSync(file, { force: true });
+    }
   }
 
   const body = [

@@ -18,18 +18,16 @@ export const diagnosticsRouter = router({
     .input(
       z.object({
         description: z.string().max(4000).default(""),
-        diagnostics: z.object({
-          text: z.string().max(200_000),
-          version: z.string(),
-          lastError: z.string().nullable(),
-        }),
+        text: z.string().max(200_000),
+        lastError: z.string().nullable(),
       }),
     )
     .mutation(async ({ input }) => {
-      const result = await fileBugReport(input.diagnostics, input.description);
+      const diag = { text: input.text, lastError: input.lastError, version: app.getVersion() };
+      const result = await fileBugReport(diag, input.description);
       if (result.via === "browser") {
         // A URL carries a few KB: the full report rides the clipboard
-        clipboard.writeText(input.diagnostics.text);
+        clipboard.writeText(diag.text);
         await shell.openExternal(result.url);
       }
       return result;

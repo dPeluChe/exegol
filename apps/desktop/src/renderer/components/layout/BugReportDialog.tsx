@@ -1,15 +1,10 @@
+import type { BugDiagnostics } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bug, ClipboardCopy, ExternalLink, FolderOpen, X } from "lucide-react";
 import { useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-
-interface Diagnostics {
-  text: string;
-  version: string;
-  lastError: string | null;
-}
 
 /**
  * T196: one place to turn "something broke" into an issue we can work on:
@@ -42,19 +37,20 @@ function BugReportDialog() {
   // Collected once per dialog: copy and report reuse what the user reviewed
   const diagnostics = useQuery({
     queryKey: ["diagnostics"],
-    queryFn: () => trpcInvoke<Diagnostics>("diagnostics.collect"),
-    staleTime: 0,
+    queryFn: () => trpcInvoke<BugDiagnostics>("diagnostics.collect"),
+    // What the user reviews is what gets sent: never refetch under them
+    staleTime: Number.POSITIVE_INFINITY,
     gcTime: 0,
   });
-  const openLogs = useMutation({ mutationFn: () => trpcMutate("diagnostics.openLogs") });
+  const diag = diagnostics.data;
   const report = useMutation({
-    mutationFn: (diag: Diagnostics) =>
+    mutationFn: () =>
       trpcMutate<{ url: string; via: "gh" | "browser" }>("diagnostics.report", {
         description,
-        diagnostics: diag,
+        text: diag?.text ?? "",
+        lastError: diag?.lastError ?? null,
       }),
   });
-  const diag = diagnostics.data;
 
   return (
     <Dialog.Portal>
@@ -87,11 +83,7 @@ function BugReportDialog() {
         />
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => diag && report.mutate(diag)}
-            disabled={!diag || report.isPending}
-          >
+          <Button size="sm" onClick={() => report.mutate()} disabled={!diag || report.isPending}>
             <ExternalLink className="h-3.5 w-3.5" />
             {report.isPending ? "Filing..." : "Create GitHub issue"}
           </Button>
@@ -110,7 +102,11 @@ function BugReportDialog() {
             <ClipboardCopy className="h-3.5 w-3.5" />
             {copied ? "Copied" : "Copy diagnostics"}
           </Button>
-          <Button size="sm" variant="outline" onClick={() => openLogs.mutate()}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => trpcMutate("diagnostics.openLogs").catch(() => {})}
+          >
             <FolderOpen className="h-3.5 w-3.5" />
             Open logs folder
           </Button>

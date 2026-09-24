@@ -297,14 +297,15 @@ export function createSpawnCallbacks(
       // "Ended" card with no way back (live 2026-08-12).
       if (scrapedStatus === "failed" && getPtyHost().isAlive(agent.id)) {
         logger.info(
-          `[AgentCallback] ${agent.id} printed an error but its PTY is alive — keeping the session (was: ${result.currentStep ?? "no detail"})`,
+          // The step is raw agent output: it stays out of the log (and bug reports)
+          `[AgentCallback] ${agent.id} printed an error but its PTY is alive — keeping the session`,
         );
         scrapedStatus = undefined;
       }
       if (scrapedStatus || result.currentStep) {
         if (scrapedStatus) {
           logger.info(
-            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${result.currentStep ? ` [${result.currentStep}]` : ""}`,
+            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}`,
           );
           updateAgentStatus(db, agent.id, scrapedStatus as AgentStatus, result.currentStep);
           broadcastAgentStatus({
