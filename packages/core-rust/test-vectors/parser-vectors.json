@@ -1,5 +1,5 @@
 {
-  "$comment": "T150 golden parity vectors — consumed by packages/core-rust/src/processing/parity_vectors_tests.rs (cargo test) and apps/desktop/src/main/agents/status-parser-parity.test.ts (vitest). Rust is the source of truth; the JS mirror must match. strip: pure strip_ansi parity on a single input string. signals: OSC-777 notify FSM fed chunk-by-chunk. status: full output stream (AgentOutputStream / AgentStatusParser) fed chunk-by-chunk; expectedStatus/expectedStep are the LAST values emitted; expectedTokenLimit defaults false, expectedSessionId/expectedResume default null.",
+  "$comment": "T150 golden parity vectors — consumed by packages/core-rust/src/processing/parity_vectors_tests.rs (cargo test) and apps/desktop/src/main/agents/status-parser-parity.test.ts (vitest). Rust is the source of truth; the JS mirror must match. strip: pure strip_ansi parity on a single input string. signals: OSC-777 notify FSM fed chunk-by-chunk. status: full output stream (AgentOutputStream / AgentStatusParser) fed chunk-by-chunk; expectedStatus/expectedStep are the LAST values emitted; expectedSessionId/expectedResume default null.",
   "strip": [
     { "name": "plain_text_passthrough", "input": "hello world", "expected": "hello world" },
     { "name": "sgr_color", "input": "\u001b[31mred\u001b[0m", "expected": "red" },
