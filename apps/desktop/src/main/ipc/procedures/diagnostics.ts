@@ -8,24 +8,28 @@ import { publicProcedure, router } from "../trpc";
 export const diagnosticsRouter = router({
   collect: publicProcedure.query(({ ctx }) => collectDiagnostics(ctx.db, app)),
 
-  copy: publicProcedure.mutation(async ({ ctx }) => {
-    clipboard.writeText((await collectDiagnostics(ctx.db, app)).text);
-    return { copied: true };
-  }),
-
   openLogs: publicProcedure.mutation(async () => {
     const error = await shell.openPath(LOG_DIR);
     return { opened: error === "" };
   }),
 
+  /** Files exactly what the user reviewed in the dialog (collected once, when it opened). */
   report: publicProcedure
-    .input(z.object({ description: z.string().max(4000).default("") }))
-    .mutation(async ({ ctx, input }) => {
-      const diag = await collectDiagnostics(ctx.db, app);
-      const result = await fileBugReport(diag, input.description);
+    .input(
+      z.object({
+        description: z.string().max(4000).default(""),
+        diagnostics: z.object({
+          text: z.string().max(200_000),
+          version: z.string(),
+          lastError: z.string().nullable(),
+        }),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const result = await fileBugReport(input.diagnostics, input.description);
       if (result.via === "browser") {
         // A URL carries a few KB: the full report rides the clipboard
-        clipboard.writeText(diag.text);
+        clipboard.writeText(input.diagnostics.text);
         await shell.openExternal(result.url);
       }
       return result;

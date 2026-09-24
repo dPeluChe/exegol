@@ -256,7 +256,6 @@
     ],
     "diagnostics": [
       "collect",
-      "copy",
       "openLogs",
       "report"
     ],

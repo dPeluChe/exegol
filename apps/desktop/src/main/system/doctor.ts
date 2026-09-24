@@ -62,14 +62,16 @@ const CLI_INSTALL_LINKS: Partial<Record<string, string>> = {
 
 function checkCommandAvailable(command: string): Promise<boolean> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which "${command}"`;
-  return new Promise((resolve) => exec(cmd, { env: shellEnv() }, (err) => resolve(!err)));
+  return new Promise((resolve) =>
+    exec(cmd, { env: shellEnv(), timeout: 3_000 }, (err) => resolve(!err)),
+  );
 }
 
 /** All PATH hits for a command (`which -a` / `where` both list every match). */
 function findAllOnPath(command: string): Promise<string[]> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which -a "${command}"`;
   return new Promise((resolve) =>
-    exec(cmd, { env: shellEnv() }, (err, stdout) =>
+    exec(cmd, { env: shellEnv(), timeout: 3_000 }, (err, stdout) =>
       resolve(err ? [] : [...new Set(stdout.trim().split("\n").filter(Boolean))]),
     ),
   );

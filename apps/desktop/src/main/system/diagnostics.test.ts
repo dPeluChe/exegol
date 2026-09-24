@@ -11,7 +11,7 @@ describe("redact", () => {
   const home = "/Users/someone";
 
   it("hides the home directory", () => {
-    expect(redact("cwd: /Users/someone/code/app", home)).toBe("cwd: ~/code/app");
+    expect(redact("cwd: /Users/someone/code/app", home)).toBe("cwd: ~/<path>");
   });
 
   it("hides API keys and tokens", () => {
@@ -44,12 +44,57 @@ describe("redact", () => {
     }
   });
 
-  it("drops prompt text from spawn commands and task descriptions but keeps the CLI and flags", () => {
+  it("reduces spawn commands to binary + flags and drops task text", () => {
     const line =
-      '[AgentManager] Spawning: {"fullCommand":"claude --settings /Users/someone/.exegol/hooks/a.json \'refactor the billing module so invoices round up\'","taskDescription":"refactor the billing module"}';
+      '[AgentManager] Spawning: {"fullCommand":"claude --settings /Users/someone/.exegol/hooks/a.json \'fix auth\'","taskDescription":"refactor the billing module"}';
     const out = redact(line, home);
-    expect(out).toContain("claude --settings ~/.exegol/hooks/a.json");
+    expect(out).toContain('"fullCommand":"claude --settings <args>"');
     expect(out).not.toContain("billing");
+    expect(out).not.toContain("fix auth");
+  });
+
+  it("drops raw agent output carried by status lines", () => {
+    const line =
+      "2026-09-24T10:00:00Z [INFO] [AgentCallback] Status change: abc (claude-code) → running [const secret = loadClientData()]";
+    const out = redact(line, home);
+    expect(out).toContain("→ running [step redacted]");
+    expect(out).not.toContain("loadClientData");
+  });
+
+  it("makes paths generic: folder names name the user and their clients", () => {
+    const out = redact(
+      "cwd /Users/someone/Data/PROJECTS/acme-client/app and /Users/other/x and /Volumes/Clients/acme, keep ~/.exegol/logs",
+      home,
+    );
+    expect(out).not.toMatch(/someone|acme|other|Clients/);
+    expect(out).toContain("~/.exegol/logs");
+  });
+
+  it("covers more credential shapes", () => {
+    const out = redact(
+      [
+        "aws AKIAABCDEFGHIJKLMNOP",
+        "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N",
+        "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----",
+        "url https://user:hunter2@example.com/path?sig=abcdef",
+        "export OPENAI_KEY=abcd1234",
+        "mail me@example.org from 10.0.0.12",
+      ].join("\n"),
+      home,
+    );
+    for (const secret of [
+      "ABCDEFGHIJKLMNOP",
+      "dozjgNryP4J3jVmNHl0w5N",
+      "MIIEpAIBAAKCAQEA",
+      "hunter2",
+      "sig=abcdef",
+      "example.com",
+      "abcd1234",
+      "me@example.org",
+      "10.0.0.12",
+    ]) {
+      expect(out).not.toContain(secret);
+    }
   });
 
   it("leaves ordinary log lines alone", () => {
