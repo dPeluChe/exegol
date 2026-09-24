@@ -40,6 +40,25 @@ async function getProcessCwd(pid: number): Promise<string | null> {
   return null;
 }
 
+/**
+ * One `lsof -iTCP -sTCP:LISTEN -P -n` row. The last column is "(LISTEN)", not
+ * the address: reading the port from it matched nothing, so no dev server was
+ * ever detected and the browser pane fell back to :3000.
+ */
+export function parseLsofListenLine(
+  line: string,
+): { port: number; pid: number; process: string } | null {
+  const parts = line.trim().split(/\s+/);
+  if (parts.length < 9) return null;
+  const portMatch = line.match(/:(\d+)\s+\(LISTEN\)\s*$/) ?? line.match(/:(\d+)\s*$/);
+  if (!portMatch?.[1]) return null;
+  return {
+    port: Number.parseInt(portMatch[1], 10),
+    pid: Number.parseInt(parts[1] ?? "0", 10),
+    process: parts[0] ?? "",
+  };
+}
+
 /** Detect active listening TCP ports, filtered to those whose CWD is under projectPath */
 async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]> {
   try {
@@ -52,21 +71,12 @@ async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]
     const seen = new Set<string>();
 
     for (const line of lines) {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 9) continue;
-
-      const processName = parts[0] ?? "";
-      const pid = Number.parseInt(parts[1] ?? "0", 10);
-      const nameCol = parts[parts.length - 1] ?? "";
-      const portMatch = nameCol.match(/:(\d+)$/);
-      if (!portMatch?.[1]) continue;
-
-      const port = Number.parseInt(portMatch[1], 10);
-      const key = `${pid}:${port}`;
+      const entry = parseLsofListenLine(line);
+      if (!entry) continue;
+      const key = `${entry.pid}:${entry.port}`;
       if (seen.has(key)) continue;
       seen.add(key);
-
-      candidates.push({ port, pid, process: processName });
+      candidates.push(entry);
     }
 
     // Resolve CWDs in parallel and filter to those under projectPath
@@ -78,7 +88,7 @@ async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]
     );
 
     return cwdChecks
-      .filter((c) => c.cwd?.startsWith(projectPath))
+      .filter((c) => c.cwd === projectPath || c.cwd?.startsWith(`${projectPath}/`))
       .map(({ port, pid, process: proc }) => ({
         port,
         pid,
@@ -179,16 +189,10 @@ export async function detectPortConflicts(): Promise<Map<number, string[]>> {
     });
     const portPids = new Map<number, Set<string>>();
     for (const line of stdout.split("\n").slice(1)) {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 9) continue;
-      const proc = parts[0] ?? "";
-      const pid = parts[1] ?? "";
-      const nameCol = parts[parts.length - 1] ?? "";
-      const portMatch = nameCol.match(/:(\d+)$/);
-      if (!portMatch?.[1]) continue;
-      const port = Number.parseInt(portMatch[1], 10);
-      if (!portPids.has(port)) portPids.set(port, new Set());
-      portPids.get(port)?.add(`${proc}(${pid})`);
+      const entry = parseLsofListenLine(line);
+      if (!entry) continue;
+      if (!portPids.has(entry.port)) portPids.set(entry.port, new Set());
+      portPids.get(entry.port)?.add(`${entry.process}(${entry.pid})`);
     }
     for (const [port, pids] of portPids) {
       if (pids.size > 1) conflicts.set(port, Array.from(pids));

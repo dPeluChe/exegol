@@ -16,6 +16,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
   you have stays the one you use
 - "Needs attention" (and the dashboard, toasts and the attention hotkey) opens an agent that has no
   pane in a new tab; it did nothing before
+- A new browser pane opens the project's running dev server (the port `pnpm dev` is listening on)
+  instead of always :3000. Running-port detection never matched anything
 
 ## [0.5.0] — 2026-09-22 — Waves 1-3 consolidated, daily-readiness fixes
 
