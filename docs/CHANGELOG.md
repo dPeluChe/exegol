@@ -11,6 +11,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 First release since 0.4.4. Groups the three unreleased batches below.
 
+### Bug reports (T196)
+- Bug button in the title bar: describe the problem, review the redacted diagnostics, and file a
+  GitHub issue (or copy them / open the logs folder)
+- Crashes and errors from every process now reach the log files, including the terminal sidecar
+
 ### Dashboard watch list (T194)
 - The Dashboard is its own view over the workspace (no project selected while it shows); with
   sessions pinned it shows only them, "Show all agents" brings back the fleet
@@ -21,6 +26,9 @@ First release since 0.4.4. Groups the three unreleased batches below.
 - Terminals: a pane no longer gains rows forever after a reattach, mount and drag send one resize,
   and switching projects no longer makes CLIs redraw
 - "Resume" with no prior conversation starts a clean session instead of failing
+- Watch cards: A−/A+ text size and "fit session to card" so side-by-side sessions stay readable;
+  the pane takes its size back when you open it
+- After a restart, terminals come back at their real size instead of a reflowed 120x30
 
 ### Pre-build audit fixes
 - Undo works in the packaged app; tray icon ships; worktree archive hook runs

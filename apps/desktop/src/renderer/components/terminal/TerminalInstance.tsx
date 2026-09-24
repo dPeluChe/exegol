@@ -58,6 +58,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     readOnly = false,
     liveFeed = false,
     mirror = false,
+    cardFont,
     initialContent,
     onReady,
     onScrollPosition,
@@ -81,6 +82,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const webglRef = useRef<WebglController | null>(null);
   const dormantPipeRef = useRef<DormantPipe | null>(null);
   const [isVisible, setIsVisible] = useState(true);
+  const refitRef = useRef<() => void>(() => {});
   const viewId = useId();
   const reportedVisibleRef = useRef(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -131,14 +133,33 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       ? DARK_BLACK_TERMINAL_THEME
       : DARK_TERMINAL_THEME;
 
+  // A card that sizes its session behaves like an owner pane for sizing only;
+  // read through a ref so toggling it never rebuilds the terminal
+  const cardOwnsRef = useRef(false);
+  cardOwnsRef.current = mirror && cardFont !== undefined;
+  const cardFontRef = useRef(cardFont);
+  cardFontRef.current = cardFont;
+
+  /** One sizing path: a plain mirror follows the PTY's grid and rescales its
+   *  font; a pane (or a card that sizes its session) fits and tells the PTY. */
+  const sizeTerminal = useCallback(
+    (terminal: Terminal, fit: FitAddon) => {
+      if (mirror && !cardOwnsRef.current) {
+        fitMirror(terminal, fontSize);
+        return;
+      }
+      // A mirror never writes the pane's size into the store
+      const onSize = mirror ? () => {} : (c: number, r: number) => setTerminalSize(agentId, c, r);
+      fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
+    },
+    [agentId, setTerminalSize, readOnly, mirror, fontSize],
+  );
+
   const handleResize = useCallback(() => {
     const fit = fitAddonRef.current;
     const terminal = terminalRef.current;
-    if (!fit || !terminal) return;
-    // A mirror follows the PTY's grid (wired in setup) and only rescales its font
-    if (mirror) fitMirror(terminal, fontSize);
-    else fitAndSyncSize(terminal, fit, agentId, readOnly, (c, r) => setTerminalSize(agentId, c, r));
-  }, [agentId, setTerminalSize, readOnly, mirror, fontSize]);
+    if (fit && terminal) sizeTerminal(terminal, fit);
+  }, [sizeTerminal]);
 
   // Rule 4: external system sync — xterm.js setup/teardown, PTY wiring, resize observer
   // biome-ignore lint/correctness/useExhaustiveDependencies: onScrollPosition is stable (useCallback), adding it would remount the entire terminal
@@ -153,6 +174,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       readOnly,
       liveFeed,
       mirror,
+      mirrorOwnsSize: () => cardOwnsRef.current,
+      onSnapshotApplied: () => {
+        if (cardOwnsRef.current) requestAnimationFrame(() => refitRef.current());
+      },
       initialContent,
       fontSize,
       fontFamily,
@@ -169,13 +194,11 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     serializeAddonRef.current = session.serializeAddon;
     dormantPipeRef.current = session.dormantPipe;
 
-    const refit = () => {
-      if (mirror) fitMirror(session.terminal, fontSize);
-      else
-        fitAndSyncSize(session.terminal, session.fitAddon, agentId, readOnly, (c, r) =>
-          setTerminalSize(agentId, c, r),
-        );
-    };
+    if (cardOwnsRef.current && cardFontRef.current) {
+      session.terminal.options.fontSize = cardFontRef.current;
+    }
+    const refit = () => sizeTerminal(session.terminal, session.fitAddon);
+    refitRef.current = refit;
 
     // Double-RAF: first frame settles layout, second fits terminal accurately
     requestAnimationFrame(() => {
@@ -256,6 +279,15 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     initialContent,
     isLight,
   ]);
+
+  // A card's A-/A+ or its "fit session to card" toggle: new font, then size
+  // again (a sizing card re-fits its grid and tells the PTY; a mirror rescales)
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal || !mirror) return;
+    terminal.options.fontSize = cardFont ?? fontSize;
+    handleResize();
+  }, [cardFont, mirror, fontSize, handleResize]);
 
   // T38: visibility observer — drives WebGL attach/detach + T115 dormant ring
   useEffect(() => {
@@ -349,16 +381,13 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
   useEffect(() => {
     const handleWindowResize = () => handleResize();
+    // Also how a pane takes its size back from a card that was sizing the
+    // session (the dashboard hides; the workspace dispatches a refit)
     const handleRefit = () => {
-      const fit = fitAddonRef.current;
       const terminal = terminalRef.current;
-      if (!fit || !terminal) return;
-      if (mirror) {
-        handleResize();
-        return;
-      }
+      if (!terminal) return;
       try {
-        fit.fit();
+        handleResize();
         terminal.refresh(0, terminal.rows - 1);
       } catch {
         /* not ready */
@@ -370,7 +399,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       window.removeEventListener("resize", handleWindowResize);
       window.removeEventListener("exegol:refit-terminals", handleRefit);
     };
-  }, [handleResize, mirror]);
+  }, [handleResize]);
 
   // T155: drop a file (from FileExplorer/GitPane) → paste as @path mention
   const handleDragOver = useCallback(

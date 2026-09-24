@@ -106,9 +106,14 @@ export async function reattachSidecarAgents(
         maxScrollbackBytes,
       );
 
+      // The PTY kept its last size in the sidecar; replaying its ring into a
+      // model of any other size reflows everything the CLI drew
       await ptyHost.reattachSession(
         agentId,
-        { cols: DEFAULT_PTY_COLS, rows: DEFAULT_PTY_ROWS },
+        {
+          cols: (row.pty_cols as number | null) ?? DEFAULT_PTY_COLS,
+          rows: (row.pty_rows as number | null) ?? DEFAULT_PTY_ROWS,
+        },
         callbacks,
         { scrollbackPath },
       );

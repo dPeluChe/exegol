@@ -1,6 +1,8 @@
 import { app, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
+import { getDb } from "../db/client";
 import { broadcast } from "../lib/event-bus";
+import { logger } from "../lib/logger";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
 import { getPtyHost } from "../terminal/pty-host";
 import {
@@ -21,6 +23,11 @@ export function registerIpcHandlers(): void {
     manager.write(agentId, data);
   });
 
+  // T196: renderer errors land in the log file (a packaged app has no console)
+  ipcMain.on("log:renderer-error", (event, source: string, message: string, stack: string) => {
+    logger.error(`[Renderer w${event.sender.id}] ${source}: ${message}\n${stack}`);
+  });
+
   // App DevTools from the TitleBar (whichever window asked)
   ipcMain.on("app:toggle-devtools", (event) => {
     event.sender.toggleDevTools();
@@ -32,6 +39,14 @@ export function registerIpcHandlers(): void {
     // A drag re-sends the same grid every frame; each would be a sidecar RPC
     if (before?.cols === cols && before?.rows === rows) return;
     getAgentManager().resize(agentId, cols, rows);
+    // Remembered so a reattach rebuilds the model at the size the output was drawn at
+    try {
+      getDb()
+        .prepare("UPDATE agents SET pty_cols = ?, pty_rows = ? WHERE id = ?")
+        .run(cols, rows, agentId);
+    } catch {
+      /* not an agent row (or db closing): the default size is only a fallback */
+    }
     // Overview mirrors follow the owner's size; they never resize the PTY themselves
     if (before) broadcast("terminal:resized", agentId, cols, rows);
   });

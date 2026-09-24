@@ -6,6 +6,7 @@ import {
   setAgentWorktree,
 } from "../db/queries";
 import { runSetupHook } from "../hooks/project-hooks";
+import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
@@ -362,7 +363,8 @@ export function buildPtyInvocation(
 
     logger.info("[AgentManager] Spawning:", {
       userShell,
-      fullCommand,
+      // Shape only: the full command carries the user's prompt
+      command: commandShape(fullCommand),
       isInteractiveCli,
       cwd,
       shellExists: require("node:fs").existsSync(userShell),

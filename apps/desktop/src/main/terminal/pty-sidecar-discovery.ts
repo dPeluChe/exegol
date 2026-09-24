@@ -2,8 +2,17 @@
 
 import { spawn as cpSpawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
 import { join } from "node:path";
+import { LOG_DIR } from "../lib/logger";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
@@ -58,14 +67,31 @@ async function tryConnect(client: SidecarClient, pidFile: PidFile): Promise<bool
   }
 }
 
+/** The sidecar's own stderr (its crashes, server errors). It outlives the app,
+ *  so it writes straight to a file; rolled once past a few MB. */
+export const SIDECAR_LOG = join(LOG_DIR, "sidecar.log");
+
+function openSidecarLog(): number | "ignore" {
+  try {
+    if (existsSync(SIDECAR_LOG) && statSync(SIDECAR_LOG).size > 5 * 1024 * 1024) {
+      renameSync(SIDECAR_LOG, `${SIDECAR_LOG}.1`);
+    }
+    return openSync(SIDECAR_LOG, "a");
+  } catch {
+    return "ignore";
+  }
+}
+
 function spawnSidecar(token: string): void {
   const sidecarPath = resolveSidecarPath();
+  const log = openSidecarLog();
   const child = cpSpawn(process.execPath, [sidecarPath], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", EXEGOL_SIDECAR_TOKEN: token },
-    stdio: "ignore",
+    stdio: ["ignore", log, log],
     detached: true,
   });
   child.unref();
+  if (typeof log === "number") closeSync(log);
 }
 
 function waitForPidFile(token: string, timeoutMs: number): Promise<PidFile> {

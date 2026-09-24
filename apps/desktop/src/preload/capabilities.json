@@ -254,6 +254,11 @@
     "doctor": [
       "run"
     ],
+    "diagnostics": [
+      "collect",
+      "openLogs",
+      "report"
+    ],
     "budgets": [
       "delete",
       "list",
@@ -281,6 +286,7 @@
     "terminal:get-snapshot",
     "terminal:save-clipboard-image",
     "terminal:get-size",
+    "log:renderer-error",
     "terminal:redraw",
     "terminal:resized",
     "app:version",

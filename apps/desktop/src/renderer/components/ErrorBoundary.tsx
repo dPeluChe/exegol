@@ -1,4 +1,5 @@
 import React from "react";
+import { reportRendererError } from "../lib/report-error";
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -20,6 +21,7 @@ export class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     console.error("[ErrorBoundary]", error, info.componentStack);
+    reportRendererError("ErrorBoundary", error, info.componentStack ?? undefined);
   }
 
   render() {

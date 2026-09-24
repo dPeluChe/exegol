@@ -3,6 +3,7 @@ export * from "./agent";
 export * from "./agent-signals";
 export * from "./budget";
 export * from "./dashboard";
+export * from "./diagnostics";
 export * from "./diff-comment";
 export * from "./github-issue";
 export * from "./mcp";

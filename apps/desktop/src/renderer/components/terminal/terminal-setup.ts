@@ -24,6 +24,10 @@ export interface TerminalSessionDeps {
   /** T194 Dashboard mirror: interactive, but the owning pane answers terminal
    *  queries and owns the PTY size. */
   mirror?: boolean;
+  /** Mirror whose card sizes the session (T194 "fit session to card"): read live */
+  mirrorOwnsSize?: () => boolean;
+  /** After the snapshot lands at the PTY's grid: a sizing card re-applies its own */
+  onSnapshotApplied?: () => void;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -199,7 +203,7 @@ export function setupTerminalSession(
 
     const applyGrid = (cols: number, rows: number) => {
       terminal.resize(cols, rows);
-      fitMirror(terminal, deps.fontSize);
+      if (!deps.mirrorOwnsSize?.()) fitMirror(terminal, deps.fontSize);
     };
     // A mirror must be at the PTY's grid BEFORE the snapshot lands, or history
     // written at 80 columns wraps differently from the pane that owns it
@@ -214,7 +218,12 @@ export function setupTerminalSession(
 
     // ...and follows the owner's resizes after that
     if (deps.mirror) {
-      disposables.push({ dispose: window.api.terminal.onResized(deps.agentId, applyGrid) });
+      // A card that sizes the session hears its own resizes echoed back: ignore
+      disposables.push({
+        dispose: window.api.terminal.onResized(deps.agentId, (cols, rows) => {
+          if (!deps.mirrorOwnsSize?.()) applyGrid(cols, rows);
+        }),
+      });
     }
 
     sized
@@ -222,6 +231,7 @@ export function setupTerminalSession(
       .then((snapshot) => {
         if (liveDisposed) return;
         if (snapshot) terminal.write(snapshot);
+        deps.onSnapshotApplied?.();
         snapshotResolved = true;
         for (const chunk of liveBuffer) dormantPipe.push(chunk);
         liveBuffer.length = 0;

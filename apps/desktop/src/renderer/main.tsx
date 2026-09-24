@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LoadingSpinner } from "./components/common";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { installRendererErrorReporting } from "./lib/report-error";
 import "./styles/globals.css";
 
 // T84: floating pane windows render a minimal UI (not the full app shell).
@@ -28,6 +29,8 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+installRendererErrorReporting();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("Root element not found");
