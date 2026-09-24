@@ -89,6 +89,7 @@ interface Window {
     onNotificationNavigate?: (callback: (data: { agentId: string }) => void) => () => void;
     /** Toggle the app's own DevTools (TitleBar button) */
     toggleDevTools?: () => void;
+    reportError?: (source: string, message: string, stack: string) => void;
     onDeepLinkOpenPath?: (callback: (data: { path: string }) => void) => () => void;
     updater: {
       check: () => Promise<void>;

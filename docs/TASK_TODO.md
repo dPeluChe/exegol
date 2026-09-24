@@ -422,6 +422,24 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T195 — Distribution: notarized universal build + GitHub release `added: 2026-09-24`
+**Priority**: P1 before sharing the app | **Effort**: M
+
+Signing works (Developer ID, local keychain) but the DMG is not notarized, so any downloaded copy
+(browser, Slack, Mail, AirDrop: all set the quarantine flag; a GitHub release does not avoid it)
+hits Gatekeeper, and on macOS 15 only System Settings > Privacy & Security > "Open Anyway" gets
+past it. It is also arm64 only.
+1. Notarization: `notarize: true` in `electron-builder.ts`, credentials from env only (Apple ID +
+   app-specific password + team NQHHJ85736, or an App Store Connect API key .p8 for CI).
+2. Universal build (Intel + Apple Silicon): core-rust for `x86_64-apple-darwin` too, the
+   `@libsql/darwin-x64` binary (not installed today), node-pty x64; `target: universal` or two DMGs.
+3. GitHub release: DMG + zip + `latest-mac.yml` (zip and yml feed the auto-updater, which already
+   points at dPeluChe/exegol releases), via `gh release create` or CI with secrets.
+4. Validate on someone else's Intel and Apple Silicon Mac: downloaded DMG opens with no warning;
+   auto-update goes from one release to the next.
+5. Build note: after `bun install --frozen-lockfile` electron-vite's nested esbuild binary went
+   missing (`write EPIPE` at config load); `bun install --force` restored it. Check in CI.
+
 ### T193 — v0.5.0 pre-build audit leftovers `added: 2026-09-22`
 **Priority**: P1 unless noted | **Source**: 2026-09-22 pre-build audit. Fixed items are in `TASK_COMPLETED/2609.md`.
 

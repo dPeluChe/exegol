@@ -6,6 +6,7 @@ import { app, BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
 import { prerelease } from "semver";
 import { logger } from "../lib/logger";
+import { EXEGOL_REPO } from "../lib/repo";
 
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 let checkTimer: ReturnType<typeof setInterval> | null = null;
@@ -13,8 +14,8 @@ let checkTimer: ReturnType<typeof setInterval> | null = null;
 // Detect channel from version string (e.g., "0.2.0-canary.20260320" → canary)
 const IS_PRERELEASE = prerelease(app.getVersion()) !== null;
 
-const GITHUB_OWNER = "dPeluChe";
-const GITHUB_REPO = "exegol";
+const GITHUB_OWNER = EXEGOL_REPO.owner;
+const GITHUB_REPO = EXEGOL_REPO.name;
 
 const STABLE_FEED = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest/download`;
 const CANARY_FEED = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/desktop-canary`;

@@ -207,6 +207,9 @@ contextBridge.exposeInMainWorld("api", {
   // T102: Design Mode + QA — browser pane inspection
   /** Verify-session QoL: toggle the app's own DevTools from the TitleBar */
   toggleDevTools: () => safe.send("app:toggle-devtools"),
+  /** T196: renderer errors to main's log file */
+  reportError: (source: string, message: string, stack: string) =>
+    safe.send("log:renderer-error", source, message, stack),
   browser: {
     executeJs: (code: string) => safe.invoke("browser:execute-js", { code }),
     captureScreenshot: () => safe.invoke("browser:capture-screenshot"),

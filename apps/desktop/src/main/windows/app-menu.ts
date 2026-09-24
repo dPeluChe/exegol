@@ -7,6 +7,7 @@ import {
   type MenuItemConstructorOptions,
   shell,
 } from "electron";
+import { EXEGOL_REPO_URL } from "../lib/repo";
 import { installCli, uninstallCli } from "../system/cli-installer";
 import { openSettingsWindow } from "./settings";
 
@@ -117,7 +118,7 @@ export function installAppMenu(): void {
       submenu: [
         {
           label: "Learn More",
-          click: () => shell.openExternal("https://github.com/dPeluChe/labs-exegol"),
+          click: () => shell.openExternal(EXEGOL_REPO_URL),
         },
       ],
     },

@@ -1,6 +1,7 @@
 import { app, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { broadcast } from "../lib/event-bus";
+import { logger } from "../lib/logger";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
 import { getPtyHost } from "../terminal/pty-host";
 import {
@@ -19,6 +20,11 @@ export function registerIpcHandlers(): void {
   ipcMain.on("terminal:write", (_event, agentId: string, data: string) => {
     const manager = getAgentManager();
     manager.write(agentId, data);
+  });
+
+  // T196: renderer errors land in the log file (a packaged app has no console)
+  ipcMain.on("log:renderer-error", (event, source: string, message: string, stack: string) => {
+    logger.error(`[Renderer w${event.sender.id}] ${source}: ${message}\n${stack}`);
   });
 
   // App DevTools from the TitleBar (whichever window asked)

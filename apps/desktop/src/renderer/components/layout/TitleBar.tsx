@@ -3,6 +3,7 @@ import { Code, Minus, Square, X } from "lucide-react";
 import { useProject } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 import { AttentionQueue } from "./AttentionQueue";
+import { BugReportButton } from "./BugReportDialog";
 
 export function TitleBar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
@@ -28,6 +29,7 @@ export function TitleBar() {
         >
           <Code className="h-3.5 w-3.5" />
         </button>
+        <BugReportButton />
       </div>
 
       {/* Center: Active project */}

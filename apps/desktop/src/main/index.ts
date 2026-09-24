@@ -128,7 +128,22 @@ app.on("window-all-closed", () => {});
 // Prevent crash on write EIO during shutdown (PTY writes after pipe closed)
 process.on("uncaughtException", (err) => {
   if (err.message?.includes("EIO") || err.message?.includes("EPIPE")) return;
-  console.error("Uncaught exception:", err);
+  // To the log file, not just the console: a packaged app has no console
+  logger.error("[Crash] Uncaught exception:", err);
+});
+process.on("unhandledRejection", (reason) => {
+  logger.error("[Crash] Unhandled rejection:", reason);
+});
+app.on("render-process-gone", (_event, contents, details) => {
+  logger.error(
+    `[Crash] Renderer gone (${details.reason}, exit ${details.exitCode}): ${contents.getURL()}`,
+  );
+});
+app.on("child-process-gone", (_event, details) => {
+  if (details.reason === "clean-exit") return;
+  logger.error(
+    `[Crash] ${details.type} process gone (${details.reason}, exit ${details.exitCode})${details.name ? `: ${details.name}` : ""}`,
+  );
 });
 
 installSignalHandlers(() => runTeardown(teardownSteps()));

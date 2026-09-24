@@ -11,6 +11,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 First release since 0.4.4. Groups the three unreleased batches below.
 
+### Bug reports (T196)
+- Bug button in the title bar: describe the problem, review the redacted diagnostics, and file a
+  GitHub issue (or copy them / open the logs folder)
+- Crashes and errors from every process now reach the log files, including the terminal sidecar
+
 ### Dashboard watch list (T194)
 - The Dashboard is its own view over the workspace (no project selected while it shows); with
   sessions pinned it shows only them, "Show all agents" brings back the fleet

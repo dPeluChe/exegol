@@ -1,5 +1,5 @@
 import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -7,7 +7,10 @@ let shuttingDown = false;
 
 // ─── File logging ───────────────────────────────────────────────────────────
 
-const LOG_DIR = join(homedir(), ".exegol", "logs");
+// Tests must never rotate (and so discard) the user's real logs
+export const LOG_DIR = process.env.VITEST
+  ? join(tmpdir(), "exegol-test-logs")
+  : join(homedir(), ".exegol", "logs");
 try {
   mkdirSync(LOG_DIR, { recursive: true });
 } catch {
@@ -34,10 +37,21 @@ try {
   /* ignore */
 }
 
+/** JSON.stringify(new Error()) is "{}": the message and stack were lost from every logged error */
+function formatArg(a: unknown): string {
+  if (typeof a === "string") return a;
+  if (a instanceof Error) return a.stack ?? `${a.name}: ${a.message}`;
+  try {
+    return JSON.stringify(a);
+  } catch {
+    return String(a);
+  }
+}
+
 function writeToFile(level: string, args: unknown[]): void {
   try {
     const ts = new Date().toISOString();
-    const msg = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
+    const msg = args.map(formatArg).join(" ");
     appendFileSync(logFile, `${ts} [${level}] ${msg}\n`);
   } catch {
     /* non-fatal */
