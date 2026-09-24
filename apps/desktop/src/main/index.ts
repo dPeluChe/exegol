@@ -135,6 +135,8 @@ process.on("unhandledRejection", (reason) => {
   logger.error("[Crash] Unhandled rejection:", reason);
 });
 app.on("render-process-gone", (_event, contents, details) => {
+  // A reload or a closed window, not a crash
+  if (details.reason === "clean-exit") return;
   logger.error(
     `[Crash] Renderer gone (${details.reason}, exit ${details.exitCode}): ${contents.getURL()}`,
   );
