@@ -8,13 +8,6 @@ fn test_claude_tool_detection() {
 }
 
 #[test]
-fn test_token_limit() {
-    let mut stream = AgentOutputStream::new("claude-code".into(), "".into());
-    let result = stream.process_chunk("Warning: context window is almost full\n".into()).unwrap();
-    assert!(result.token_limit_warning);
-}
-
-#[test]
 fn test_error_detection() {
     let mut stream = AgentOutputStream::new("claude-code".into(), "".into());
     let result = stream.process_chunk("error: something went wrong\n".into()).unwrap();

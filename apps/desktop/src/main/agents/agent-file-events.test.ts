@@ -27,7 +27,6 @@ function emptyMaps(): SessionMaps {
     titleTrackers: new Map(),
     scrollbackBuffers: new Map(),
     scrollbackSizes: new Map(),
-    tokenLimitDetected: new Set(),
     completionCallbacks: new Map(),
     initialSnapshots: new Map(),
     dataCallbacks: new Map(),

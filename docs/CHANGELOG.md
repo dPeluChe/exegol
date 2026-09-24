@@ -7,6 +7,16 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- No more "Token limit approaching" banner: it matched any line mentioning "context window" (a
+  resumed Devin session hit it in 10 seconds) and "Continue with new agent" spawned successors that
+  tripped it again. The automatic handoff is gone; CLIs compact their own context and the session
+  you have stays the one you use
+- "Needs attention" (and the dashboard, toasts and the attention hotkey) opens an agent that has no
+  pane in a new tab; it did nothing before
+
 ## [0.5.0] — 2026-09-22 — Waves 1-3 consolidated, daily-readiness fixes
 
 First release since 0.4.4. Groups the three unreleased batches below.

@@ -237,8 +237,6 @@ export interface ProcessedOutput {
   status?: string
   /** Current step/tool being executed. */
   currentStep?: string
-  /** Whether a token limit warning was detected. */
-  tokenLimitWarning: boolean
   /** Claude session ID parsed from startup output (T101, kept for backwards compat). */
   sessionId?: string
   /**

@@ -8,7 +8,6 @@ import { AgentStatusParser } from "./status-parser";
 export type ProcessResult = {
   status?: string;
   currentStep?: string;
-  tokenLimitWarning: boolean;
   sessionId?: string;
   resumeCommand?: string;
   /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
@@ -46,7 +45,6 @@ export function createOutputProcessor(
           return {
             status: r.status ?? undefined,
             currentStep: r.currentStep ?? undefined,
-            tokenLimitWarning: r.tokenLimitWarning,
             sessionId: r.sessionId ?? undefined,
             resumeCommand: r.resumeCommand ?? undefined,
             signals: r.signals?.length
@@ -67,7 +65,6 @@ export function createOutputProcessor(
       return {
         status: u?.status,
         currentStep: u?.currentStep,
-        tokenLimitWarning: u?.tokenLimitWarning ?? false,
         sessionId: u?.sessionId,
         resumeCommand: u?.resumeCommand,
         signals: u?.signals,
