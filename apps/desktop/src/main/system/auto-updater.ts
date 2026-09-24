@@ -47,6 +47,8 @@ const SILENCED: Array<{ reason: string; needles: string[] }> = [
     // hours after. "Nothing has been published yet" is not a broken updater.
     reason: "No published release to update from — staying on this build",
     needles: [
+      // electron-updater 6: `Cannot find channel "latest-mac.yml" update info: HttpError: 404`
+      'Cannot find channel "latest',
       "Cannot find latest-mac.yml",
       "Cannot find latest.yml",
       "No published versions",
@@ -55,15 +57,17 @@ const SILENCED: Array<{ reason: string; needles: string[] }> = [
   },
 ];
 
-/** electron-updater surfaces builder-util-runtime's `HttpError`, which carries
- *  a real status code — worth more than matching the library's prose. */
-function statusCodeOf(error: Error): number | undefined {
-  return (error as Error & { statusCode?: number }).statusCode;
+/** Codes worth more than the library's prose. A missing feed file arrives
+ *  wrapped (code set, no statusCode): the raw-404 check alone never saw it,
+ *  and "Update error" reached users of a repo with no release yet. */
+function isNoRelease(error: Error): boolean {
+  const e = error as Error & { statusCode?: number; code?: string };
+  return e.statusCode === 404 || e.code === "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND";
 }
 
 /** The log reason when this error must not reach the user, else null. */
-function silencedReason(error: Error): string | null {
-  if (statusCodeOf(error) === 404) return "No published release to update from";
+export function silencedReason(error: Error): string | null {
+  if (isNoRelease(error)) return "No published release to update from";
   const msg = error.message ?? "";
   return SILENCED.find((s) => s.needles.some((n) => msg.includes(n)))?.reason ?? null;
 }
@@ -132,7 +136,9 @@ export function initAutoUpdater(): void {
       return;
     }
     logger.error("[AutoUpdater] Error:", error.message);
-    broadcastUpdateStatus("error", { message: error.message });
+    // The banner gets one line: the full message carries response headers
+    // (GitHub session cookies included). The log keeps the detail.
+    broadcastUpdateStatus("error", { message: error.message.split("\n")[0]?.slice(0, 200) });
   });
 
   // ── Initial check + periodic interval ─────────────────────────────
