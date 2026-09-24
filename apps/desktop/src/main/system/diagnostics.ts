@@ -49,7 +49,8 @@ const REDACTIONS: Array<[RegExp, string]> = [
     "$1[redacted]",
   ],
   [/("taskDescription"\s*:\s*")(?:[^"\\]|\\.)*"/g, '$1[redacted]"'],
-  [/'[^'\n]{3,}'/g, "'[text redacted]'"],
+  // Quoted free text (prompts are sentences); single words like a CLI or model name stay
+  [/'[^'\n]*\s[^'\n]*'/g, "'[text redacted]'"],
   // URLs: credentials and query strings, and hosts other than local or GitHub.
   // Bounded quantifiers: an unanchored run over a long base64/hex blob was
   // quadratic (seconds on the main process for 100KB)
@@ -58,9 +59,10 @@ const REDACTIONS: Array<[RegExp, string]> = [
   [/https?:\/\/(?!localhost\b|127\.0\.0\.1\b|github\.com\b)[^\s/"')]+/gi, "<url>"],
   [/[\w.+-]{1,64}@[\w-]{1,63}\.[\w.-]{2,63}/g, "<email>"],
   [/\b(?!127\.0\.0\.1\b)(?:\d{1,3}\.){3}\d{1,3}\b/g, "<ip>"],
-  // Paths. Home becomes ~ first only so Exegol's own ~/.exegol survives; any
-  // other folder under home, or another user's, is generic.
-  [/~\/(?!\.exegol\b)[^\s"',)\]]+/g, "~/<path>"],
+  // Paths. Home becomes ~ first so hidden tool folders (~/.local/bin, ~/.bun,
+  // ~/.exegol) stay readable: they are what "multiple installs" is about. Visible
+  // folders are where projects (and client names) live, so they go generic.
+  [/~\/(?!\.)[^\s"',)\]]+/g, "~/<path>"],
   [/\/(?:Users|home)\/[^/\s"']+(?:\/[^\s"',)\]]*)?/g, "/<user-path>"],
   [/\/Volumes\/[^\s"',)\]]+/g, "/Volumes/<path>"],
 ];

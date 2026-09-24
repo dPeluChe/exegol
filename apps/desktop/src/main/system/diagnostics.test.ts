@@ -61,6 +61,17 @@ describe("redact", () => {
     expect(out).toContain("~/.exegol/logs");
   });
 
+  it("keeps what Doctor needs: CLI names and hidden tool folders", () => {
+    const out = redact(
+      "Found 'agy' on PATH; PATH resolves to /Users/someone/.local/bin/claude, losing copy /Users/someone/.bun/bin/claude, project /Users/someone/work/acme",
+      home,
+    );
+    expect(out).toContain("'agy'");
+    expect(out).toContain("~/.local/bin/claude");
+    expect(out).toContain("~/.bun/bin/claude");
+    expect(out).not.toContain("acme");
+  });
+
   it("covers more credential shapes", () => {
     const out = redact(
       [

@@ -119,4 +119,11 @@ export const wave3Migrations: Migration[] = [
     ALTER TABLE agent_scores ADD COLUMN llm_correctness INTEGER;
     ALTER TABLE agent_scores ADD COLUMN llm_score REAL;`,
   },
+  {
+    // T196: reattach rebuilt the terminal model at 120x30 and replayed a ring
+    // written at the PTY's real size, so panes and mirrors got a reflowed mess
+    id: "w3_010_agent_pty_size",
+    sql: `ALTER TABLE agents ADD COLUMN pty_cols INTEGER;
+    ALTER TABLE agents ADD COLUMN pty_rows INTEGER;`,
+  },
 ];
