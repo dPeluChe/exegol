@@ -7,6 +7,12 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- A new browser pane opens the project's running dev server (the port `pnpm dev` is listening on)
+  instead of always :3000. Running-port detection never matched anything
+
 ## [0.5.0] — 2026-09-22 — Waves 1-3 consolidated, daily-readiness fixes
 
 First release since 0.4.4. Groups the three unreleased batches below.
