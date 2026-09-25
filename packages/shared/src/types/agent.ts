@@ -155,6 +155,10 @@ export type Agent = {
   resumeCommand?: string | null;
   /** Per-launch YOLO choice (null = the provider's configured args); a resume inherits it */
   yolo?: boolean | null;
+  /** Alive, but kept out of Needs attention and notifications */
+  muted?: boolean;
+  /** Stopped on purpose to come back later (Resume); quiet like muted */
+  suspendedAt?: number | null;
 };
 
 export type AgentCreate = {

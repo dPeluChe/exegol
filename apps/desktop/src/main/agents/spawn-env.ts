@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
 import type Database from "libsql";
 import { getDb } from "../db/client";
-import { createOplogEntry, getAgent, insertActivity, stopAgent } from "../db/queries";
+import { createOplogEntry, getAgent, insertActivity, isAgentQuiet, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
@@ -373,7 +373,7 @@ export function finalizeAgentStatus(
     };
     broadcastAgentStatus(statusEvent);
     // The user just pressed Stop: no desktop notification about it
-    if (agent.cliType !== "shell" && !stoppedByUser) {
+    if (agent.cliType !== "shell" && !stoppedByUser && !isAgentQuiet(db, agent.id)) {
       getNotificationBus().emit({
         type: finalStatus === "completed" ? "agent:finished" : "agent:failed",
         title: `Agent ${finalStatus}`,

@@ -131,4 +131,11 @@ export const wave3Migrations: Migration[] = [
     id: "w3_011_agent_yolo",
     sql: "ALTER TABLE agents ADD COLUMN yolo INTEGER;",
   },
+  {
+    // Mute: alive but quiet (no attention, no notifications). Suspend: stopped
+    // on purpose, kept for Resume, and quiet too
+    id: "w3_012_agent_mute_suspend",
+    sql: `ALTER TABLE agents ADD COLUMN muted INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE agents ADD COLUMN suspended_at INTEGER;`,
+  },
 ];
