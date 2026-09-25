@@ -277,8 +277,14 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     liveFeed,
     mirror,
     initialContent,
-    isLight,
   ]);
+
+  // A theme change repaints in place: it used to be a mount dependency, so a
+  // toggle tore down every terminal and replayed each PTY's snapshot
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (terminal) terminal.options.theme = terminalTheme;
+  }, [terminalTheme]);
 
   // A card's A-/A+ or its "fit session to card" toggle: new font, then size
   // again (a sizing card re-fits its grid and tells the PTY; a mirror rescales)
