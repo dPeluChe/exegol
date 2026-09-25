@@ -72,7 +72,15 @@ EVENT_DIR="$HOME/.exegol/events"
 mkdir -p "$EVENT_DIR"
 EVENT_TYPE="\${1:-unknown}"
 TS=$(date +%s)
-echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\":$TS}" \\
+# Claude Code pipes the hook payload on stdin; its session_id is what
+# "claude --resume" needs after the PTY dies (a reboot leaves no exit output)
+SID=""
+if [ ! -t 0 ]; then
+  # Drain all of it (stopping early would break Claude's pipe); the id sits near the start
+  INPUT=$(cat)
+  SID=$(printf '%s' "\${INPUT:0:4096}" | tr -d '\\n' | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([A-Za-z0-9-]*\\)".*/\\1/p')
+fi
+echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\":$TS,\\"sessionId\\":\\"$SID\\"}" \\
   > "$EVENT_DIR/\${EXEGOL_AGENT_ID}_\${EVENT_TYPE}_\${TS}.json"
 `;
   writeFileSync(NOTIFY_SCRIPT, script, { mode: 0o755 });

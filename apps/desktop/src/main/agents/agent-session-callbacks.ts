@@ -167,11 +167,34 @@ const FILE_EVENT_SIGNALS: Record<string, string> = {
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 
+const SESSION_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
+
+/**
+ * Keep the latest Claude session id for resume. The startup-banner parse this
+ * replaced stopped matching (Claude Code no longer prints the id), so crashed
+ * sessions had nothing to resume from. /clear starts a new id: the latest wins.
+ */
+function storeHookSessionId(db: Database.Database, agentId: string, sessionId: string): void {
+  if (!SESSION_ID_RE.test(sessionId)) return;
+  try {
+    const { changes } = db
+      .prepare(
+        "UPDATE agents SET claude_session_id = ? WHERE id = ? AND cli_type = 'claude-code' AND claude_session_id IS NOT ?",
+      )
+      .run(sessionId, agentId, sessionId);
+    if (changes) logger.info(`[AgentCallback] Stored Claude session id from hook for ${agentId}`);
+  } catch (err) {
+    logger.warn(`[AgentCallback] Failed to store hook session id for ${agentId}:`, err);
+  }
+}
+
 export function dispatchAgentFileEvent(
   db: Database.Database,
   maps: SessionMaps,
-  event: { type: string; agentId: string },
+  event: { type: string; agentId: string; sessionId?: string },
 ): void {
+  // Before the OSC short-circuit: OSC carries no session id, hooks do
+  if (event.sessionId) storeHookSessionId(db, event.agentId, event.sessionId);
   if (oscDeliveredAgents.has(event.agentId)) return;
   const sigType = FILE_EVENT_SIGNALS[event.type];
   if (!sigType) return;
