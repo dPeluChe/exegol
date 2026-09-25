@@ -21,6 +21,7 @@ import {
 import { runSetupHook } from "../hooks/project-hooks";
 import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
+import { getPtyHost } from "../terminal/pty-host";
 import { buildStepPrompt, getPreviousOutput, getRetryFeedback } from "./context";
 import { handleEvaluatorStep } from "./evaluator-step-handler";
 import { prepareStepSnapshot } from "./oplog-snapshots";
@@ -328,6 +329,38 @@ export class PipelineExecutor {
 
     const template = getPipelineTemplate(db, run.templateId);
     if (!template) throw new Error(`Pipeline template ${run.templateId} not found`);
+
+    // A restart pauses running runs, but the step's agent lives on in the
+    // sidecar; only its completion hook died with the old process. Spawning the
+    // step again ran two agents on one worktree. Re-attach to the live one.
+    const current = run.stepResults.at(-1);
+    if (
+      current?.status === "running" &&
+      current.stepIndex === run.currentStepIndex &&
+      current.agentId &&
+      getPtyHost().isAlive(current.agentId)
+    ) {
+      const { agentId, stepIndex } = current;
+      if (!assertTransition(run.status, "running")) return;
+      updatePipelineRun(db, runId, { status: "running" });
+      this.activeAgents.set(runId, agentId);
+      getAgentManager().onAgentComplete(agentId, (exitCode) => {
+        handleStepComplete(this.getStepDeps(), db, runId, stepIndex, agentId, exitCode, template);
+      });
+      broadcastPipelineStatus({
+        runId,
+        projectId: run.projectId,
+        status: "running",
+        currentStepIndex: stepIndex,
+        stepLabel: template.steps[stepIndex]?.label ?? null,
+        timestamp: Date.now(),
+      });
+      logger.info("[Pipeline] Resumed by re-attaching to the step's live agent:", {
+        runId,
+        agentId,
+      });
+      return;
+    }
 
     await this.advanceStep(db, runId, run.currentStepIndex, template);
   }

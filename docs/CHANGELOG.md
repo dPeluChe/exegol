@@ -17,6 +17,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   replace the first pane of the active tab
 
 ### Fixed
+- Resuming a pipeline after an app restart continues with the step's agent that is still running, instead of starting a second agent on the same worktree
 - YOLO survives a resume: resuming used the bare CLI command and dropped every configured flag,
   so a session launched with `--dangerously-skip-permissions` came back asking for permission.
   The per-launch YOLO choice is now saved with the session and reapplied
