@@ -274,13 +274,23 @@ export function buildPtyInvocation(
         );
       }
 
+      // Resume forms replace the task, never the configured args: YOLO and any
+      // user flags used to be dropped on every resume. Args go after the resume
+      // part, which is where subcommand CLIs (codex resume <id>) accept them.
+      const withArgs = (resumePart: string) => {
+        // A flag given twice is an error for clap-based CLIs (devin)
+        const inResume = new Set(resumePart.split(/\s+/));
+        const args = cliConfig.args.filter((a) => !inResume.has(a));
+        return [cliConfig.command, resumePart, ...args].filter(Boolean).join(" ");
+      };
       if (row?.resume_command) {
-        fullCommand = row.resume_command;
+        // The stored line names the binary as the CLI printed it; use ours
+        fullCommand = withArgs(row.resume_command.trim().split(/\s+/).slice(1).join(" "));
         logger.info(
           `[AgentManager] Resuming ${agent.cliType} with stored command: ${row.resume_command}`,
         );
       } else if (row?.claude_session_id && agent.cliType === "claude-code") {
-        fullCommand = `${cliConfig.command} --resume ${row.claude_session_id}`;
+        fullCommand = withArgs(`--resume ${row.claude_session_id}`);
         logger.info(`[AgentManager] Resuming Claude via session ID ${row.claude_session_id}`);
       } else {
         const provider = registry.get(agent.cliType);
@@ -288,12 +298,12 @@ export function buildPtyInvocation(
         if (resumeFlag && priorSession === false) {
           // `claude --continue` with no conversation here exits 1. Open a clean
           // session instead of failing, and don't re-run the old task as a prompt.
-          fullCommand = cliConfig.command;
+          fullCommand = withArgs("");
           logger.info(
             `[AgentManager] No prior ${agent.cliType} session in ${cwd}; starting a new one`,
           );
         } else if (resumeFlag) {
-          fullCommand = `${cliConfig.command} ${resumeFlag}`;
+          fullCommand = withArgs(resumeFlag);
         }
       }
     }
