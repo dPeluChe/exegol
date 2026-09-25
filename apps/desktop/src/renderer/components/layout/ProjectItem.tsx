@@ -1,4 +1,4 @@
-import type { Project } from "@exegol/shared";
+import type { Project, Worktree } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -24,9 +24,10 @@ import {
 } from "../../hooks/use-trpc";
 import { switchSection } from "../../lib/switch-section";
 import type { AgentState } from "../../stores/agents";
+import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { ConfirmDialog } from "../common/ConfirmDialog";
-import { VISIBLE_STATUSES } from "./AgentMiniCard";
+import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
 import { TabsOverview } from "./TabsOverview";
 
@@ -44,7 +45,7 @@ function PortBadges({ projectPath }: { projectPath: string }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1 py-0.5">
+    <div className="ml-1 flex min-w-0 flex-wrap items-center gap-1">
       <Globe className="h-2.5 w-2.5 text-text-muted" />
       {Array.from(uniquePorts.values()).map((p) => (
         <button
@@ -139,7 +140,10 @@ export function ProjectItem({
   const runningCount = agents.filter((a) =>
     ["running", "spawning", "waiting_input"].includes(a.status),
   ).length;
-  const queryClient = useQueryClient();
+  const workspace = useWorkspaceStore((s) => s.projectWorkspaces[project.id]);
+  const paneAgentIds = new Set(
+    Object.values(workspace?.panes ?? {}).flatMap((p) => (p.agentId ? [p.agentId] : [])),
+  );
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(project.name);
@@ -305,10 +309,11 @@ export function ProjectItem({
 
       {isExpanded && (
         <div className="ml-5 border-l border-border/50 pl-2">
-          <div className="flex items-center justify-between py-1">
-            <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
-              <GitBranch className="h-2.5 w-2.5" />
-              <span>{project.defaultBranch}</span>
+          <div className="flex items-center justify-between gap-1 py-1">
+            <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-text-muted">
+              <GitBranch className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{project.defaultBranch}</span>
+              <PortBadges projectPath={project.path} />
             </div>
             <div className="flex items-center gap-0.5">
               <AgentLauncher projectId={project.id} />
@@ -327,55 +332,15 @@ export function ProjectItem({
             </div>
           </div>
 
-          <PortBadges projectPath={project.path} />
+          <TabsOverview projectId={project.id} />
 
-          {(() => {
-            const visible = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
-
-            const mainAgents = visible.filter((a) => !a.branchName);
-            const branchAgentMap = new Map<string, AgentState[]>();
-            for (const a of visible) {
-              if (a.branchName) {
-                const list = branchAgentMap.get(a.branchName) ?? [];
-                list.push(a);
-                branchAgentMap.set(a.branchName, list);
-              }
-            }
-
-            const worktreeBranches = new Set(worktrees.map((wt) => wt.branchName));
-            const allBranches = new Set([...worktreeBranches, ...branchAgentMap.keys()]);
-
-            return (
-              <>
-                {mainAgents.length > 0 && (
-                  <BranchGroup
-                    branchName={project.defaultBranch}
-                    agents={mainAgents}
-                    isWorktree={false}
-                    projectId={project.id}
-                  />
-                )}
-                {Array.from(allBranches).map((branch) => (
-                  <BranchGroup
-                    key={branch}
-                    branchName={branch}
-                    agents={branchAgentMap.get(branch) ?? []}
-                    isWorktree={true}
-                    worktree={worktrees.find((wt) => wt.branchName === branch)}
-                    projectId={project.id}
-                    onWorktreeDeleted={() => {
-                      queryClient.invalidateQueries({ queryKey: ["worktrees", project.id] });
-                    }}
-                  />
-                ))}
-                {visible.length === 0 && worktrees.length === 0 && (
-                  <p className="py-1 text-[10px] italic text-text-muted">No agents</p>
-                )}
-              </>
-            );
-          })()}
-
-          {isSelected && <TabsOverview />}
+          <ProjectAgentGroups
+            project={project}
+            agents={agents}
+            worktrees={worktrees}
+            paneAgentIds={paneAgentIds}
+            hasTabs={!!workspace?.tabs.length}
+          />
         </div>
       )}
       <ConfirmDialog
@@ -392,5 +357,63 @@ export function ProjectItem({
         }
       />
     </section>
+  );
+}
+
+/**
+ * What the tabs don't show: worktree branches with their agents, then agents
+ * open in no pane at all. An agent already in a tab is listed there only.
+ */
+function ProjectAgentGroups({
+  project,
+  agents,
+  worktrees,
+  paneAgentIds,
+  hasTabs,
+}: {
+  project: Project;
+  agents: AgentState[];
+  worktrees: Worktree[];
+  paneAgentIds: Set<string>;
+  hasTabs: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const visible = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
+  const offTab = visible.filter((a) => !paneAgentIds.has(a.id));
+  const loose = offTab.filter((a) => !a.branchName);
+  const byBranch = new Map<string, AgentState[]>();
+  for (const a of offTab) {
+    if (a.branchName) byBranch.set(a.branchName, [...(byBranch.get(a.branchName) ?? []), a]);
+  }
+  const branches = new Set([...worktrees.map((wt) => wt.branchName), ...byBranch.keys()]);
+
+  return (
+    <>
+      {Array.from(branches).map((branch) => (
+        <BranchGroup
+          key={branch}
+          branchName={branch}
+          agents={byBranch.get(branch) ?? []}
+          worktree={worktrees.find((wt) => wt.branchName === branch)}
+          projectId={project.id}
+          onWorktreeDeleted={() => {
+            queryClient.invalidateQueries({ queryKey: ["worktrees", project.id] });
+          }}
+        />
+      ))}
+      {loose.length > 0 && (
+        <div className="space-y-px">
+          <p className="px-1 py-0.5 text-[9px] font-medium uppercase tracking-wider text-text-muted">
+            Not open in a tab
+          </p>
+          {loose.map((a) => (
+            <AgentMiniCard key={a.id} agent={a} />
+          ))}
+        </div>
+      )}
+      {visible.length === 0 && worktrees.length === 0 && !hasTabs && (
+        <p className="py-1 text-[10px] italic text-text-muted">No agents</p>
+      )}
+    </>
   );
 }

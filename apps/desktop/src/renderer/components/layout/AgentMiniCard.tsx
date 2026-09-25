@@ -4,9 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDeleteAgent } from "../../hooks/use-delete-agent";
 import { formatTimeAgo } from "../../lib/format";
 import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
-import { switchSection } from "../../lib/switch-section";
-import { type AgentState, useAgentStore } from "../../stores/agents";
-import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
+import { type AgentState, jumpToAgent, useAgentStore } from "../../stores/agents";
 import { AgentIcon } from "../common/AgentIcon";
 
 export const VISIBLE_STATUSES = new Set([
@@ -20,19 +18,7 @@ export const VISIBLE_STATUSES = new Set([
   "crashed",
 ]);
 
-export function navigateToAgent(agentId: string): void {
-  switchSection("agents");
-  const store = useWorkspaceStore.getState();
-  const activeTab = store.getActiveTab();
-  if (activeTab) {
-    const paneId = findFirstPaneId(activeTab.layout);
-    if (paneId) store.updatePane(paneId, { type: "terminal", agentId });
-  }
-  useAgentStore.getState().setFocusedAgent(agentId);
-}
-
 export function AgentMiniCard({ agent }: { agent: AgentState }) {
-  const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
   const isFocused = useAgentStore((s) => s.focusedAgentId === agent.id);
   const isUnread = useAgentStore((s) => {
     const item = s.attentionItems[agent.id];
@@ -73,15 +59,15 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
     }
   }, [agent.id, deleteAgent, closeContextMenu]);
 
+  // The alias is the session's name; a quick launch's task is only the CLI's name
   const displayName =
-    agent.taskDescription && agent.taskDescription !== agent.cliType
+    agent.alias ??
+    (agent.taskDescription && agent.taskDescription !== agent.cliType
       ? agent.taskDescription.slice(0, 40)
-      : agent.cliType;
+      : agent.cliType);
 
-  const handleNavigate = () => {
-    setFocusedAgent(agent.id);
-    navigateToAgent(agent.id);
-  };
+  // Its own pane, or a new tab: never over whatever the active tab shows
+  const handleNavigate = () => jumpToAgent(agent.id, agent.projectId);
 
   return (
     <div
@@ -132,7 +118,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
                 isCrashed ? "text-red-400" : "text-text-muted",
               )}
             >
-              {isCrashed ? "Crashed — click to re-launch" : agent.currentStep}
+              {isCrashed ? "Crashed — open it to resume" : agent.currentStep}
             </p>
           )}
         </div>

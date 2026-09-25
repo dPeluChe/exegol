@@ -1,134 +1,105 @@
-import type { AgentStatus } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { FolderTree, GitBranch, Globe, Layout } from "lucide-react";
+import { FolderTree, GitBranch, Globe } from "lucide-react";
 import type { ComponentType } from "react";
-import { useAgentStore } from "../../stores/agents";
-import {
-  collectPaneIds,
-  findFirstPaneId,
-  type Pane,
-  selectActiveTabId,
-  selectPanes,
-  selectTabs,
-  useWorkspaceStore,
-  type WorkspaceTab,
-} from "../../stores/workspace";
-import { AgentIcon } from "../common/AgentIcon";
-import { StatusDot } from "../common/StatusDot";
+import { focusPane, useAgentStore } from "../../stores/agents";
+import { useAppStore } from "../../stores/app";
+import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
+import { AgentMiniCard } from "./AgentMiniCard";
 
 const PANE_ICON: Record<string, ComponentType<{ className?: string }>> = {
   browser: Globe,
   files: FolderTree,
   git: GitBranch,
-  empty: Layout,
 };
 
-function PaneDot({ pane }: { pane: Pane | undefined }) {
-  const agentCli = useAgentStore((s) =>
-    pane?.type === "terminal" && pane.agentId ? s.agents[pane.agentId]?.cliType : undefined,
-  );
+const PANE_LABEL: Record<string, string> = { files: "Files", git: "Git" };
 
-  if (!pane) return null;
-  if (agentCli) {
-    return (
-      <span title={agentCli} className="flex items-center justify-center">
-        <AgentIcon provider={agentCli} size={12} />
-      </span>
-    );
+function hostOf(url: string | undefined): string {
+  if (!url) return "Browser";
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname === "/" ? "" : u.pathname}`;
+  } catch {
+    return url;
   }
-  const Icon = PANE_ICON[pane.type] ?? Layout;
-  return (
-    <span title={pane.type} className="flex items-center justify-center">
-      <Icon className="h-2.5 w-2.5 text-text-muted" />
-    </span>
-  );
 }
 
-function TabRow({ tab, isActive }: { tab: WorkspaceTab; isActive: boolean }) {
-  const panes = useWorkspaceStore(selectPanes);
-  const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
+/** Selects its own agent: a status push re-renders this row, not the whole tree */
+function PaneAgentRow({ agentId }: { agentId: string }) {
+  const agent = useAgentStore((s) => s.agents[agentId]);
+  return agent ? <AgentMiniCard agent={agent} /> : null;
+}
 
-  const paneIds = collectPaneIds(tab.layout);
-  const firstPaneId = findFirstPaneId(tab.layout);
-  const firstPane = firstPaneId ? panes[firstPaneId] : null;
-  const primaryAgentId = firstPane?.type === "terminal" ? firstPane.agentId : undefined;
-  const primaryAgent = useAgentStore((s) =>
-    primaryAgentId ? s.agents[primaryAgentId] : undefined,
-  );
-
-  // Derive tab name and icon from primary pane
-  let name = tab.label;
-  let agentForIcon: { cliType: string; status: string } | null = null;
-  if (primaryAgent) {
-    name = primaryAgent.cliType;
-    agentForIcon = primaryAgent;
-  } else if (firstPane?.type === "browser") name = "Browser";
-  else if (firstPane?.type === "git") name = "Git";
-  else if (firstPane?.type === "files") name = "Files";
-
+/** One row per pane, in layout order: agents as agent rows, the rest by what they show */
+function PaneRow({ pane, onOpen }: { pane: Pane; onOpen: () => void }) {
+  if (pane.type === "terminal")
+    return pane.agentId ? <PaneAgentRow agentId={pane.agentId} /> : null;
+  if (pane.type === "empty") return null;
+  const Icon = PANE_ICON[pane.type] ?? Globe;
   return (
     <button
       type="button"
-      onClick={() => setActiveTab(tab.id)}
-      className={cn(
-        "flex w-full items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-[10px] transition-colors",
-        isActive ? "bg-white/10 text-text-primary" : "text-text-muted hover:bg-white/5",
-      )}
+      onClick={onOpen}
+      className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[10px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-secondary"
     >
-      {agentForIcon ? (
-        <>
-          <AgentIcon provider={agentForIcon.cliType} size={14} />
-          <StatusDot status={agentForIcon.status as AgentStatus} size="sm" />
-        </>
-      ) : (
-        (() => {
-          const Icon = PANE_ICON[firstPane?.type ?? "empty"] ?? Layout;
-          return <Icon className="h-3 w-3 shrink-0 text-text-muted" />;
-        })()
-      )}
-      <span className="flex-1 truncate">{name}</span>
-      {paneIds.length > 1 && (
-        <span className="flex items-center gap-0.5">
-          {paneIds.map((pid) => (
-            <PaneDot key={pid} pane={panes[pid]} />
-          ))}
-        </span>
-      )}
+      <Icon className="ml-0.5 h-3 w-3 shrink-0" />
+      <span className="truncate">
+        {pane.type === "browser" ? hostOf(pane.url) : PANE_LABEL[pane.type]}
+      </span>
     </button>
   );
 }
 
-export function TabsOverview() {
-  const tabs = useWorkspaceStore(selectTabs);
-  const panes = useWorkspaceStore(selectPanes);
-  const activeTabId = useWorkspaceStore(selectActiveTabId);
+/**
+ * The project's workspace as it is laid out: each tab with the panes it holds.
+ * The sidebar listed agents by branch and then the same tabs again, so a tab
+ * with a CLI, a shell and a browser showed its agents twice under two names.
+ */
+export function TabsOverview({ projectId }: { projectId: string }) {
+  const pw = useWorkspaceStore((s) => s.projectWorkspaces[projectId]);
+  const activeProjectId = useAppStore((s) => s.activeProjectId);
 
+  const tabs = pw?.tabs ?? [];
   if (tabs.length === 0) return null;
 
-  // Only show tabs that have multiple panes or non-agent panes.
-  // Single-agent-terminal tabs are already visible in the agents list above.
-  const interestingTabs = tabs.filter((tab) => {
-    const paneIds = collectPaneIds(tab.layout);
-    if (paneIds.length > 1) return true;
-    const firstPaneId = paneIds[0];
-    const pane = firstPaneId ? panes[firstPaneId] : null;
-    if (!pane) return true;
-    // Hide single-pane terminal tabs (agent already shown above)
-    if (pane.type === "terminal" && pane.agentId) return false;
-    return true;
-  });
-
-  if (interestingTabs.length === 0) return null;
-
   return (
-    <div className="mt-1 space-y-px">
-      <div className="flex items-center gap-1 pb-0.5 text-[9px] font-medium uppercase tracking-wider text-text-muted">
-        <Layout className="h-2.5 w-2.5" />
-        <span>Tabs ({interestingTabs.length})</span>
-      </div>
-      {interestingTabs.map((tab) => (
-        <TabRow key={tab.id} tab={tab} isActive={tab.id === activeTabId} />
-      ))}
+    <div className="space-y-1">
+      {tabs.map((tab, i) => {
+        const isActive = activeProjectId === projectId && tab.id === pw?.activeTabId;
+        return (
+          <div key={tab.id}>
+            <button
+              type="button"
+              onClick={() => focusPane(projectId, tab.id)}
+              className={cn(
+                "flex w-full items-center gap-1.5 px-1 py-0.5 text-left text-[9px] font-medium uppercase tracking-wider",
+                isActive ? "text-text-secondary" : "text-text-muted hover:text-text-secondary",
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1 w-1 shrink-0 rounded-full",
+                  isActive ? "bg-accent" : "bg-text-muted/40",
+                )}
+              />
+              <span className="truncate">{tab.label || `Tab ${i + 1}`}</span>
+            </button>
+            <div className="space-y-px">
+              {collectPaneIds(tab.layout).map((paneId) => {
+                const pane = pw?.panes[paneId];
+                if (!pane) return null;
+                return (
+                  <PaneRow
+                    key={paneId}
+                    pane={pane}
+                    onOpen={() => focusPane(projectId, tab.id, paneId)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

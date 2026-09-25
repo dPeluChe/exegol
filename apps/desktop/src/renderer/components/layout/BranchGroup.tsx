@@ -12,14 +12,12 @@ import { AgentMiniCard } from "./AgentMiniCard";
 export function BranchGroup({
   branchName,
   agents,
-  isWorktree,
   worktree,
   projectId,
   onWorktreeDeleted,
 }: {
   branchName: string;
   agents: AgentState[];
-  isWorktree: boolean;
   worktree?: Worktree;
   projectId: string;
   onWorktreeDeleted?: () => void;
@@ -58,14 +56,9 @@ export function BranchGroup({
   return (
     <div className="space-y-0.5">
       <div className="group/branch flex items-center gap-1.5 px-1 py-0.5 text-[9px] text-text-muted">
-        <GitBranch
-          className={cn(
-            "h-2.5 w-2.5 shrink-0",
-            isWorktree ? "text-accent/60" : "text-text-muted/50",
-          )}
-        />
+        <GitBranch className={cn("h-2.5 w-2.5 shrink-0", "text-accent/60")} />
         <span className="flex-1 truncate font-medium">{branchName}</span>
-        {isWorktree && worktree && (
+        {worktree && (
           <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover/branch:opacity-100">
             <button
               type="button"
@@ -109,7 +102,7 @@ export function BranchGroup({
         <AgentMiniCard key={agent.id} agent={agent} />
       ))}
 
-      {isWorktree && worktree && (
+      {worktree && (
         <ConfirmDialog
           open={showDeleteConfirm}
           onOpenChange={setShowDeleteConfirm}
