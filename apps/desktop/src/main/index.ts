@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut } from "electron";
+import { app, dialog, globalShortcut } from "electron";
 import { seedAgentLinkCache, stopSweep } from "./agents/agent-messaging";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
@@ -115,11 +115,9 @@ app.whenReady().then(async () => {
   getPipelineExecutor().recoverOnStartup(getDb());
   initAutoUpdater(); // Deferred: check for updates after window shows
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
+  // Dock click: a floating or settings window left open used to count as "a
+  // window exists", so the main one never came back
+  app.on("activate", showMainWindow);
 });
 
 // Keep app alive in system tray — quit only from tray menu

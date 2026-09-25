@@ -18,6 +18,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - Changing the theme recolors open terminals in place instead of rebuilding every one of them (and re-replaying each session). Switching between Dark and Dark Black now reaches the terminals too
+- The global hotkey and the Dock icon bring the window back after you close it (the hotkey stopped working; the Dock did nothing while a floating or settings window was open)
+- Resuming a pipeline after an app restart continues with the step's agent that is still running, instead of starting a second agent on the same worktree
 - A failing `beforeAgent` lifecycle script no longer stops the agent silently: it runs, the terminal says it failed, and the agent starts anyway. For CLIs that take their prompt on stdin (Gemini, OpenCode, Kiro...) the CLI never started at all when a `beforeAgent` was set
 - Stopping an agent records it as stopped, not as failed or completed (the kill's exit code decided it), and no longer fires a "failed" notification
 - YOLO survives a resume: resuming used the bare CLI command and dropped every configured flag,

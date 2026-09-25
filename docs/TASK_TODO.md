@@ -467,7 +467,6 @@ past it. It is also arm64 only.
 10. `getAppSettings` falls back to defaults on bad JSON; the next update saves over the row.
 
 **Pipelines and git**
-11. After a restart a paused run's step agent is still alive; resume spawns a second one.
 12. `{{diff}}` (up to 16 MiB) goes into argv; over ~1MB the spawn fails. Pass via file (T183.11).
 13. Without core-rust (`dev:ui`) runs silently use the project root.
 14. Resume/Export pipeline mutations and Git stage/unstage have no onError; renamed or quoted
@@ -481,7 +480,6 @@ past it. It is also arm64 only.
 17. Parallel runs: no Cancel in the UI; if every spawn fails the run stays `running` forever.
 18. QA Run does nothing unless the browser pane is focused (`use-browser-qa.ts:252`).
 19. Files pane: no size/binary guard before Monaco.
-20. Global hotkey stops working after the main window closes (`window.ts:10`).
 21. Knowledge, Tasks and Add Memory swallow errors; archiving can overwrite `tasks_completed.md`
     (`task-file-actions.ts:40`).
 22. P2 debt: `trpcMutate<any>("agents.spawn")` x9; ~30 stale biome suppressions; unused renderer
