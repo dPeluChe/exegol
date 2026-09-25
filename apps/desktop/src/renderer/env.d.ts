@@ -82,6 +82,7 @@ interface Window {
       maximize: () => void;
       close: () => void;
     };
+    pathForFile?: (file: File) => string;
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;

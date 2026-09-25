@@ -36,6 +36,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
   resumes with `--resume latest`; Kilo Code and Amp can resume; Crush no longer offers a resume it
   does not have
 
+### Added
+- Dropping a file from Finder onto a terminal pastes its path
+- Each project in the sidebar has a Files section: browse the folder, create, rename or delete files, drag one onto a terminal; a click opens it in the workspace's Files pane
+- Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
+
 ## [0.5.1] — 2026-09-24 — Fixes from the first days on 0.5.0
 
 ### Fixed

@@ -321,7 +321,15 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 
 // ─── Files Pane ─────────────────────────────────────────────────────────
 
-function FilesPaneContent({ overridePath }: { overridePath?: string }) {
+function FilesPaneContent({
+  overridePath,
+  openFile,
+  openFileAt,
+}: {
+  overridePath?: string;
+  openFile?: string;
+  openFileAt?: number;
+}) {
   const { project } = useProjectContext();
   const rootPath = overridePath || project?.path;
   if (!rootPath) {
@@ -331,7 +339,14 @@ function FilesPaneContent({ overridePath }: { overridePath?: string }) {
       </div>
     );
   }
-  return <FileExplorer rootPath={rootPath} />;
+  // Keyed: the expanded-folder set is seeded from the first root only
+  return (
+    <FileExplorer
+      key={`${rootPath}:${openFile ?? ""}:${openFileAt ?? 0}`}
+      rootPath={rootPath}
+      initialFile={openFile}
+    />
+  );
 }
 
 // ─── Main WorkspacePane ─────────────────────────────────────────────────────
@@ -508,7 +523,12 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
             <BrowserPane pane={pane} paneId={paneId} />
           )}
           {!pane.invalidReason && !isFloating && pane.type === "files" && (
-            <FilesPaneContent key={pane.filePath ?? "default"} overridePath={pane.filePath} />
+            <FilesPaneContent
+              key={pane.filePath ?? "default"}
+              overridePath={pane.filePath}
+              openFile={pane.openFile}
+              openFileAt={pane.openFileAt}
+            />
           )}
           {!pane.invalidReason && !isFloating && pane.type === "git" && (
             <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />
