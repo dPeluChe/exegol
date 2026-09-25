@@ -41,6 +41,13 @@ export function createWindow(): void {
 
   state.manage(mainWindow);
 
+  // Closing leaves a destroyed object behind: the global hotkey called
+  // isMinimized() on it, threw, and never opened a window again
+  const win = mainWindow;
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+
   mainWindow.on("ready-to-show", () => {
     mainWindow?.show();
     endMark("firstPaint");
