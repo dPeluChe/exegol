@@ -17,6 +17,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   replace the first pane of the active tab
 
 ### Fixed
+- Resized panes keep their size when you switch projects and come back (every split went back to the middle), and Equalize splits now actually moves the dividers
 - The sidebar and Dashboard no longer show garbled text under a TUI agent (Devin, OpenCode): a status bar or box border scraped as the agent's current step is ignored
 - A terminal (shell pane) survives an app restart again: Exegol deleted every shell at startup and then killed its still-running process as an orphan, so a `pnpm dev` died each time. If the shell cannot come back (the Mac restarted), its pane opens a fresh terminal in the project folder
 - From the 0.5.2 review: with fish as your shell, a project with a `beforeAgent` hook no longer fails to start its agents; Re-launch keeps the YOLO choice too (not only Resume); a pipeline step whose agent finished while the app was closed is judged on Resume instead of run again
