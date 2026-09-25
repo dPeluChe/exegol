@@ -1,5 +1,13 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseCustomActions, parseJustRecipes, parseMakeTargets } from "./scripts";
+import {
+  detectRunTargets,
+  parseCustomActions,
+  parseJustRecipes,
+  parseMakeTargets,
+} from "./scripts";
 
 // These parsers decide what the launcher offers to RUN, so a false positive is
 // a button that executes something meaningless — and a miss is a project whose
@@ -75,5 +83,30 @@ describe("parseCustomActions", () => {
   it("refuses a command the safety guard rejects", () => {
     expect(parseCustomActions("dev: rm -rf ~/")).toEqual([]);
     expect(parseCustomActions("dev: bun run dev")).toHaveLength(1);
+  });
+});
+
+describe("detectRunTargets (T197)", () => {
+  it("lists nested repos and packages, with Convex where it is wired", async () => {
+    const root = mkdtempSync(join(tmpdir(), "exegol-run-"));
+    const pkg = (dir: string, body: object) => {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "package.json"), JSON.stringify(body));
+    };
+    // A workspace of repos: nothing runnable at the root
+    mkdirSync(join(root, "backend", ".git"), { recursive: true });
+    pkg(join(root, "backend"), { scripts: { dev: "vite" }, dependencies: { convex: "1" } });
+    mkdirSync(join(root, "backend", "convex"));
+    pkg(join(root, "apps", "web"), { scripts: { dev: "next dev" } });
+    mkdirSync(join(root, "node_modules", "junk"), { recursive: true });
+    mkdirSync(join(root, "docs"));
+
+    const targets = await detectRunTargets(root);
+    const rels = targets.map((t) => t.rel);
+    expect(rels).toEqual(["", "apps/web", "backend"]);
+    const backend = targets.find((t) => t.rel === "backend");
+    expect(backend?.git).toBe(true);
+    expect(backend?.scripts[0]?.command).toBe("npx convex dev");
+    expect(targets.find((t) => t.rel === "apps/web")?.scripts.map((s) => s.name)).toEqual(["dev"]);
   });
 });

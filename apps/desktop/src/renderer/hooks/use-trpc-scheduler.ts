@@ -120,12 +120,3 @@ export interface DetectedScript {
   source: string;
   framework?: string;
 }
-
-export function useProjectScripts(projectPath: string | null) {
-  return useQuery({
-    queryKey: ["resources", "scripts", projectPath],
-    queryFn: () => trpcInvoke<DetectedScript[]>("resources.scripts", { projectPath }),
-    enabled: !!projectPath,
-    staleTime: 60_000,
-  });
-}

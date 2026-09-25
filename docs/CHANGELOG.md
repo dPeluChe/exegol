@@ -34,6 +34,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   does not have
 
 ### Added
+- The launcher's "Run in" row: a chip per project folder that is its own git repo or package (a workspace of repos had nothing to run at its root), each with a terminal already in that folder and its commands, `convex dev` included when the folder uses Convex; pin the ones you use
 - Dropping a file from Finder onto a terminal pastes its path
 - Each project in the sidebar has a Files section: browse the folder, create, rename or delete files, drag one onto a terminal; a click opens it in the workspace's Files pane
 - Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
