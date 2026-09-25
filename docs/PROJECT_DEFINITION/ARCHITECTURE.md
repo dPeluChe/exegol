@@ -64,7 +64,6 @@ Floating windows (PiP):
 - `spawn-env.ts` — shell PATH resolution, environment construction, `EXEGOL_ACCESS_MODE`
 - `spawn-context.ts` — assembles memory + MCP + skills context before spawn
 - `registry.ts` — 11 built-in providers + custom; `supportsPromptArg`, `promptFlag`, `enabled`
-- `handoff.ts` — agent-to-agent context transfer
 - `scoring.ts` — post-exit quality scoring (files changed, compile, tests, task complete)
 - `queue.ts` — task queue execution
 - `status-parser.ts` — JS fallback ANSI status parser (used when Rust module unavailable)
@@ -272,7 +271,7 @@ Top-level renderer entry point for PiP windows. Loaded lazily via `?floatingPane
 ```
 apps/desktop/src/
   main/
-    agents/         manager, spawn-env, spawn-context, registry, handoff, scoring, queue, status-parser
+    agents/         manager, spawn-env, spawn-context, registry, scoring, queue, status-parser
     db/             client, migrations (35), queries/ (18 domain modules)
     ipc/            router, procedures/ (21 modules)
     pipeline/       executor, context, defaults, state-machine
@@ -337,7 +336,7 @@ docs/
 | `prompts` | Saved prompt templates per project |
 | `activities` | Activity feed (type + entity + description) |
 | `search_index` | FTS5 virtual table (porter + unicode61 tokenizer) |
-| `handoffs` | Agent-to-agent context transfer records |
+| `handoffs` | Unused since the automatic token-limit handoff was removed (2026-09) |
 | `messages` | Inter-agent messages (text/handoff/status/request/result) |
 | `task_queue` | Queued tasks with priority and dependency graph |
 | `skills_state` | Per-project skill enable/disable state |

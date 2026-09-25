@@ -12,7 +12,6 @@ export type AgentEventType =
   | "task_complete"
   | "task_failed"
   | "permission_needed"
-  | "token_limit"
   | "tool_use"
   | "prompt_submit"
   | "session_start"

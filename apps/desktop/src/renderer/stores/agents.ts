@@ -264,10 +264,16 @@ export function jumpToAgent(agentId: string, projectId: string): void {
   }
   switchSection("agents");
   const location = findAgentPane(agentId, projectId);
+  const ws = useWorkspaceStore.getState();
   if (location) {
-    const ws = useWorkspaceStore.getState();
     ws.setActiveTab(location.tabId);
     ws.setFocusedPane(location.paneId);
+  } else {
+    // No pane shows it (closed, or spawned headless): a new tab, never replacing the user's panes
+    const agent = useAgentStore.getState().agents[agentId];
+    ws.addTab(agent?.alias ?? agent?.cliType);
+    const paneId = useWorkspaceStore.getState().focusedPaneId;
+    if (paneId) ws.updatePane(paneId, { type: "terminal", agentId });
   }
   // Focusing marks its attention item read
   useAgentStore.getState().setFocusedAgent(agentId);

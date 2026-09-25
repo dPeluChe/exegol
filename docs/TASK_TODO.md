@@ -423,7 +423,12 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 ---
 
 ### T195 — Distribution: notarized universal build + GitHub release `added: 2026-09-24`
-**Priority**: P1 before sharing the app | **Effort**: M
+**Priority**: P1, ship with 0.5.1 | **Effort**: M
+
+First share failed (2026-09-24): the 0.5.0 DMG sent over Slack would not open on a teammate's Mac.
+Expected from the points below (quarantine + no notarization, and arm64 only if that Mac is
+Intel). Next build goes out as a GitHub release download, notarized; downloading from GitHub alone
+would hit the same wall.
 
 Signing works (Developer ID, local keychain) but the DMG is not notarized, so any downloaded copy
 (browser, Slack, Mail, AirDrop: all set the quarantine flag; a GitHub release does not avoid it)

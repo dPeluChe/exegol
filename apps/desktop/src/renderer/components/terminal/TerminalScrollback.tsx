@@ -1,6 +1,6 @@
-import type { Agent, HandoffSummary } from "@exegol/shared";
+import type { Agent } from "@exegol/shared";
 import { Button } from "@exegol/ui";
-import { AlertCircle, ArrowRight, ChevronDown, Play, RotateCcw } from "lucide-react";
+import { AlertCircle, ChevronDown, Play, RotateCcw } from "lucide-react";
 import type { Ref } from "react";
 import { useCallback, useState } from "react";
 import { useSpawnAgent } from "../../hooks/use-trpc";
@@ -30,13 +30,10 @@ interface TerminalScrollbackProps {
   agent: ScrollbackAgent | null;
   agentId: string;
   scrollbackContent: string;
-  resolvedHandoff: HandoffSummary | null;
   resumableCliTypes: Set<string>;
   paneId?: string;
   viewMode: "terminal" | "chat";
   setViewMode: (mode: "terminal" | "chat") => void;
-  handoffLoading: boolean;
-  onContinueWithHandoff: () => void;
   terminalRef: Ref<TerminalInstanceHandle>;
   onScrollPosition: (atTop: boolean, atBottom: boolean) => void;
   floatingButtons: React.ReactNode;
@@ -44,20 +41,16 @@ interface TerminalScrollbackProps {
 
 /**
  * Read-only terminal view shown after an agent stops/crashes. Replays the
- * stored scrollback in a non-interactive xterm and exposes resume / handoff
- * continuation actions.
+ * stored scrollback in a non-interactive xterm and exposes the resume action.
  */
 export function TerminalScrollback({
   agent,
   agentId,
   scrollbackContent,
-  resolvedHandoff,
   resumableCliTypes,
   paneId,
   viewMode,
   setViewMode,
-  handoffLoading,
-  onContinueWithHandoff,
   terminalRef,
   onScrollPosition,
   floatingButtons,
@@ -140,18 +133,6 @@ export function TerminalScrollback({
               {resumeLabel}
             </Button>
           )}
-          {resolvedHandoff && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="pointer-events-auto h-6 gap-1 rounded-md border border-border px-2 text-[10px] text-text-secondary hover:bg-white/5"
-              onClick={onContinueWithHandoff}
-              disabled={handoffLoading}
-            >
-              <ArrowRight className="h-3 w-3" />
-              {handoffLoading ? "..." : "Continue"}
-            </Button>
-          )}
         </div>
         <TerminalViewToggle
           viewMode={viewMode}
@@ -159,15 +140,6 @@ export function TerminalScrollback({
           className="ml-auto"
         />
       </div>
-      {resolvedHandoff && (
-        <div className="shrink-0 border-b border-border bg-blue-500/5 px-3 py-2">
-          <p className="text-[10px] font-medium text-blue-300">Handoff available</p>
-          <p className="mt-0.5 text-[10px] text-text-muted">
-            Goal: {resolvedHandoff.goal.slice(0, 100)}
-            {resolvedHandoff.goal.length > 100 ? "..." : ""}
-          </p>
-        </div>
-      )}
       {agent && (
         <AgentStopReason
           agent={agent}
