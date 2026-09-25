@@ -15,6 +15,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcMutate } from "../../lib/trpc-client";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 
 const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
 
@@ -61,12 +62,12 @@ interface ContextMenuState {
 function FileContextMenu({
   menu,
   onClose,
-  onRefresh,
+  onRequestDelete,
   onStartCreate,
 }: {
   menu: ContextMenuState;
   onClose: () => void;
-  onRefresh: () => void;
+  onRequestDelete: (path: string) => void;
   onStartCreate: (parentDir: string, type: "file" | "folder") => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -90,17 +91,11 @@ function FileContextMenu({
     [menu, onClose, onStartCreate],
   );
 
-  const handleDelete = useCallback(async () => {
-    const name = menu.targetPath.split("/").pop();
-    if (!window.confirm(`Delete "${name}"?`)) return;
-    try {
-      await trpcMutate("files.delete", { path: menu.targetPath });
-      onRefresh();
-    } catch (err) {
-      console.error("[FileExplorer] Failed to delete:", err);
-    }
+  // The explorer asks (a blocking window.confirm froze the renderer's IPC)
+  const handleDelete = useCallback(() => {
+    onRequestDelete(menu.targetPath);
     onClose();
-  }, [menu, onClose, onRefresh]);
+  }, [menu, onClose, onRequestDelete]);
 
   return (
     <div
@@ -143,6 +138,10 @@ function FileContextMenu({
 
 interface FileExplorerProps {
   rootPath: string;
+  /** File to show when it mounts */
+  initialFile?: string;
+  /** Set (the sidebar): a click hands the file over instead of opening the inline viewer */
+  onOpenFile?: (path: string) => void;
 }
 
 interface InlineCreateState {
@@ -150,12 +149,28 @@ interface InlineCreateState {
   type: "file" | "folder";
 }
 
-export function FileExplorer({ rootPath }: FileExplorerProps) {
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set([rootPath]));
+export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorerProps) {
+  const [selectedFile, setSelectedFile] = useState<string | null>(initialFile ?? null);
+  // The initial file's folders start open so it is visible in the tree
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
+    const open = new Set([rootPath]);
+    if (initialFile?.startsWith(`${rootPath}/`)) {
+      const parts = initialFile
+        .slice(rootPath.length + 1)
+        .split("/")
+        .slice(0, -1);
+      let dir = rootPath;
+      for (const part of parts) {
+        dir = `${dir}/${part}`;
+        open.add(dir);
+      }
+    }
+    return open;
+  });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [inlineCreate, setInlineCreate] = useState<InlineCreateState | null>(null);
-  const { data: fileData } = useFileContent(selectedFile);
+  const { data: fileData, error: fileError } = useFileContent(selectedFile);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   // T155: drag a file onto a terminal pane → pasted as @rel/path mention
@@ -250,7 +265,7 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
             <DirectoryNode
               path={rootPath}
               depth={0}
-              onSelectFile={setSelectedFile}
+              onSelectFile={onOpenFile ?? setSelectedFile}
               selectedFile={selectedFile}
               expandedDirs={expandedDirs}
               onToggleDir={toggleDir}
@@ -265,7 +280,9 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
       </div>
 
       {/* File preview */}
-      {selectedFile && fileData && (
+      {/* Whenever a file is selected: the tree shrinks to 200px, so a failed or
+          slow read used to leave an empty area with no message */}
+      {selectedFile && (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3">
             <span className="truncate text-[10px] text-text-secondary">
@@ -287,7 +304,15 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
                 </div>
               }
             >
-              <CodeViewer content={fileData.content} fileName={selectedFile} />
+              {fileData ? (
+                <CodeViewer content={fileData.content} fileName={selectedFile} />
+              ) : (
+                <div className="flex h-full items-center justify-center px-4 text-center text-xs text-text-muted">
+                  {fileError
+                    ? `Cannot open this file: ${fileError instanceof Error ? fileError.message : String(fileError)}`
+                    : "Loading..."}
+                </div>
+              )}
             </Suspense>
           </div>
         </div>
@@ -297,10 +322,24 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
         <FileContextMenu
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
-          onRefresh={refreshAll}
+          onRequestDelete={setPendingDelete}
           onStartCreate={startInlineCreate}
         />
       )}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete ${pendingDelete?.split("/").pop() ?? ""}?`}
+        description={pendingDelete ?? ""}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          trpcMutate("files.delete", { path: pendingDelete })
+            .then(refreshAll)
+            .catch((err) => console.error("[FileExplorer] Failed to delete:", err));
+        }}
+      />
     </div>
   );
 }
@@ -389,7 +428,7 @@ function DirectoryNode({
   onInlineCancel: () => void;
 }) {
   const expanded = expandedDirs.has(path);
-  const { data: entries } = useDirectoryListing(expanded ? path : null);
+  const { data: entries, error } = useDirectoryListing(expanded ? path : null);
   const showInlineInput = inlineCreate?.parentDir === path;
 
   return (
@@ -417,6 +456,15 @@ function DirectoryNode({
           )}
           <span className="truncate font-medium">{path.split("/").pop()}</span>
         </button>
+      )}
+      {/* It failed silently: an unreadable root left the whole pane blank */}
+      {expanded && error && (
+        <p
+          className="px-2 py-1 text-[10px] text-red-400"
+          style={{ paddingLeft: `${depth * 12 + 20}px` }}
+        >
+          Cannot list {path}: {error instanceof Error ? error.message : String(error)}
+        </p>
       )}
 
       {showInlineInput && (

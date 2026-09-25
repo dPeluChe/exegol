@@ -262,6 +262,25 @@ function showProject(projectId: string): void {
   switchSection("agents");
 }
 
+/** Open a file in the active tab's Files pane, or in a new Files tab */
+export function openFileInWorkspace(projectId: string, filePath: string): void {
+  showProject(projectId);
+  const ws = useWorkspaceStore.getState();
+  const pw = getProjectState();
+  const tab = pw.tabs.find((t) => t.id === pw.activeTabId);
+  const filesPane = tab
+    ? collectPaneIds(tab.layout).find((id) => pw.panes[id]?.type === "files")
+    : undefined;
+  if (filesPane) {
+    ws.updatePane(filesPane, { openFile: filePath, openFileAt: Date.now() });
+    ws.setFocusedPane(filesPane);
+    return;
+  }
+  ws.addTab("Files");
+  const paneId = useWorkspaceStore.getState().focusedPaneId;
+  if (paneId) ws.updatePane(paneId, { type: "files", openFile: filePath, openFileAt: Date.now() });
+}
+
 /** Show a project's tab (and pane) */
 export function focusPane(projectId: string, tabId: string, paneId?: string): void {
   showProject(projectId);

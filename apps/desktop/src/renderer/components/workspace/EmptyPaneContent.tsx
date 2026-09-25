@@ -146,11 +146,12 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   }, [paneId, projectId, project?.path, updatePane]);
 
   const handleFiles = useCallback(() => {
-    updatePane(paneId, { type: "files" });
+    // A path left from the pane's previous view (a git worktree) would become the tree root
+    updatePane(paneId, { type: "files", filePath: undefined });
   }, [paneId, updatePane]);
 
   const handleGit = useCallback(() => {
-    updatePane(paneId, { type: "git" });
+    updatePane(paneId, { type: "git", filePath: undefined });
   }, [paneId, updatePane]);
 
   /** Spawn a shell into THIS pane. Both callers below did this verbatim. */
