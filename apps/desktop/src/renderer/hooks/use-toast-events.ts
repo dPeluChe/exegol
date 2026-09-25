@@ -49,6 +49,9 @@ export function useToastEvents(): void {
     const lastToastTime = new Map<string, number>();
     const unsubStatus = window.api.onAgentStatus((event) => {
       if (event.cliType === "shell" || !toastsEnabled.current) return;
+      // Muted and suspended sessions stay quiet here too
+      const quiet = useAgentStore.getState().agents[event.agentId];
+      if (quiet?.muted || quiet?.suspended) return;
 
       const mapping = STATUS_TOAST_MAP[event.status];
       if (!mapping) return;
