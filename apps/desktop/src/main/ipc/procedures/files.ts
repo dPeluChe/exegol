@@ -1,12 +1,11 @@
 import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { extname, join, resolve } from "node:path";
+import { extname, join } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog, shell } from "electron";
 import { z } from "zod";
-import { listProjects } from "../../db/queries";
-import { isPathAllowed, isProtectedRoot } from "../../security/path-guard";
+import { isProtectedRoot } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
+import { allowedBases, assertPathInsideProject } from "./project-paths";
 
 const EXTENSION_LANGUAGES: Record<string, string> = {
   ".ts": "typescript",
@@ -43,27 +42,7 @@ const IGNORED_NAMES = new Set([
   "Thumbs.db",
 ]);
 
-/**
- * Validate that a path is inside one of the registered project directories.
- * Uses realpath + relative() to prevent both symlink traversal and prefix
- * confusion attacks (e.g. /repo/app matching /repo/app-evil via startsWith).
- */
-function allowedBases(ctx: { db: import("libsql").Database }): string[] {
-  return [...listProjects(ctx.db).map((p) => p.path), resolve(homedir(), ".exegol")];
-}
-
-async function assertPathInsideProject(
-  filePath: string,
-  ctx: { db: import("libsql").Database },
-): Promise<void> {
-  const allowed = await isPathAllowed(filePath, allowedBases(ctx));
-  if (!allowed) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Access denied: path is outside any registered project directory",
-    });
-  }
-}
+export const FILE_CHANGED_ON_DISK = "The file changed on disk since editing began";
 
 /** Shown as an image or PDF instead of text */
 const PREVIEW_MIME: Record<string, string> = {
@@ -135,7 +114,7 @@ export const filesRouter = router({
     await assertPathInsideProject(input.path, ctx);
     try {
       const ext = extname(input.path).toLowerCase();
-      const { size } = await stat(input.path);
+      const { size, mtimeMs } = await stat(input.path);
       const mime = PREVIEW_MIME[ext];
       if (mime) {
         if (size > MAX_PREVIEW_BYTES)
@@ -157,7 +136,7 @@ export const filesRouter = router({
       if (data.subarray(0, 8192).includes(0))
         return { kind: "binary" as const, content: "", language: "", size };
       const language = EXTENSION_LANGUAGES[ext] ?? "plaintext";
-      return { kind: "text" as const, content: data.toString("utf-8"), language, size };
+      return { kind: "text" as const, content: data.toString("utf-8"), language, size, mtimeMs };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "EACCES" || code === "EPERM") {
@@ -218,11 +197,24 @@ export const filesRouter = router({
     }),
 
   writeFile: publicProcedure
-    .input(z.object({ path: z.string(), content: z.string() }))
+    .input(
+      z.object({
+        path: z.string(),
+        content: z.string(),
+        /** The viewer's edit base: refuse if the file changed on disk since (an agent wrote it) */
+        expectedMtimeMs: z.number().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       await assertPathInsideProject(input.path, ctx);
+      if (input.expectedMtimeMs !== undefined) {
+        const { mtimeMs } = await stat(input.path);
+        if (mtimeMs !== input.expectedMtimeMs)
+          throw new TRPCError({ code: "CONFLICT", message: FILE_CHANGED_ON_DISK });
+      }
       await writeFile(input.path, input.content, "utf-8");
-      return { success: true };
+      const { mtimeMs } = await stat(input.path);
+      return { success: true, mtimeMs };
     }),
 
   pickFile: publicProcedure

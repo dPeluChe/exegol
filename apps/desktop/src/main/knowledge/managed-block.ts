@@ -8,6 +8,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { escapeRegExp } from "../lib/escape-regexp";
 import { logger } from "../lib/logger";
 
 const BEGIN_MARKER = "<!-- exegol:knowledge:begin -->";
@@ -39,10 +40,6 @@ const MANAGED_BLOCK_BODY =
 
 function buildManagedBlock(): string {
   return `${BEGIN_MARKER}\n${MANAGED_BLOCK_BODY}\n${END_MARKER}`;
-}
-
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

@@ -11,6 +11,10 @@ vi.mock("../../agents/spawn-env", () => ({
   },
 }));
 
+const allowed = vi.fn(async () => true);
+vi.mock("../../security/path-guard", () => ({ isPathAllowed: () => allowed() }));
+vi.mock("../../db/queries", () => ({ listProjects: () => [{ path: "/r" }] }));
+
 // Import after mock so coreRust resolves to the stub.
 const { fsSearchRouter } = await import("./fs-search");
 
@@ -19,6 +23,17 @@ const caller = fsSearchRouter.createCaller({} as never);
 beforeEach(() => {
   fsSearch.mockReset();
   fsGrep.mockReset();
+  allowed.mockResolvedValue(true);
+});
+
+describe("search root guard", () => {
+  it("refuses a root outside the registered projects", async () => {
+    allowed.mockResolvedValue(false);
+    await expect(caller.grep({ pattern: "secret", root: "/Users/someone" })).rejects.toBeInstanceOf(
+      TRPCError,
+    );
+    expect(fsGrep).not.toHaveBeenCalled();
+  });
 });
 
 describe("fsSearchRouter.fuzzyFind", () => {

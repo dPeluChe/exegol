@@ -1,7 +1,8 @@
 import { ExternalLink, FolderSearch, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
-import type { FileContent } from "../../hooks/use-trpc";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { type FileContent, useWriteFile } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "./sections/resource-format";
 
 const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
@@ -29,20 +30,58 @@ function usePdfUrl(file: FileContent | undefined): string | null {
 /**
  * The file viewer next to the tree. Images and PDFs render as themselves (they
  * used to open as mojibake in Monaco); other binaries and very large files
- * offer the default app and Finder. Text stays read-only.
+ * offer the default app and Finder. Text is editable: Save / Cmd+S, with a
+ * check that nobody changed the file on disk in the meantime.
  */
 export function FilePreview({
   path,
   file,
   error,
   onClose,
+  revealLine,
+  onDirtyChange,
 }: {
   path: string;
   file: FileContent | undefined;
   error: unknown;
   onClose: () => void;
+  /** A text search hit: scroll to this line */
+  revealLine?: number;
+  /** The explorer asks before switching files or closing with unsaved edits */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const pdfUrl = usePdfUrl(file);
+  const writeFile = useWriteFile();
+  const [draft, setDraft] = useState<string | null>(null);
+  // What the edit started from: the file query refetches on its own, so without
+  // this an agent's change on disk would be overwritten without a word
+  const baseRef = useRef<{ content: string; mtimeMs?: number } | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const dirty = draft !== null && draft !== baseRef.current?.content;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  const save = async (force = false) => {
+    if (!dirty || draft === null || writeFile.isPending) return;
+    try {
+      await writeFile.mutateAsync({
+        path,
+        content: draft,
+        expectedMtimeMs: force ? undefined : baseRef.current?.mtimeMs,
+      });
+      baseRef.current = null;
+      setDraft(null);
+    } catch (err) {
+      // Main checks the mtime; the error code does not survive IPC, the message does
+      if (String(err).includes("changed on disk")) setConflict(true);
+    }
+  };
+  const saveError =
+    writeFile.error && !String(writeFile.error).includes("changed on disk")
+      ? writeFile.error.message
+      : null;
 
   const action =
     "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
@@ -71,7 +110,17 @@ export function FilePreview({
   } else if (file.kind === "text") {
     body = (
       <Suspense fallback={<Message>Loading editor...</Message>}>
-        <CodeViewer key={path} content={file.content} fileName={path} />
+        <CodeViewer
+          key={path}
+          content={draft ?? file.content}
+          fileName={path}
+          revealLine={revealLine}
+          onChange={(value) => {
+            baseRef.current ??= { content: file.content, mtimeMs: file.mtimeMs };
+            setDraft(value);
+          }}
+          onSave={save}
+        />
       </Suspense>
     );
   } else {
@@ -108,9 +157,23 @@ export function FilePreview({
         <span className="min-w-0 truncate text-[10px] text-text-secondary" title={path}>
           {path.split("/").pop()}
         </span>
-        {file?.kind === "text" && (
-          <span className="shrink-0 text-[9px] text-text-muted/70">read-only</span>
+        {dirty && (
+          <>
+            <span className="shrink-0 text-[9px] text-amber-400" title="Unsaved changes">
+              ● modified
+            </span>
+            <button
+              type="button"
+              onClick={() => save()}
+              disabled={writeFile.isPending}
+              className="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent hover:bg-accent/30 disabled:opacity-50"
+              title="Save (Cmd+S)"
+            >
+              {writeFile.isPending ? "Saving..." : "Save"}
+            </button>
+          </>
         )}
+        {saveError && <span className="min-w-0 truncate text-[9px] text-red-400">{saveError}</span>}
         <button
           type="button"
           onClick={() => openExternal(path)}
@@ -131,6 +194,15 @@ export function FilePreview({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">{body}</div>
+      <ConfirmDialog
+        open={conflict}
+        onOpenChange={setConflict}
+        title="The file changed on disk"
+        description={`${path.split("/").pop()} was modified since you started editing (an agent, or another editor). Overwrite it with your version?`}
+        confirmLabel="Overwrite"
+        variant="destructive"
+        onConfirm={() => save(true)}
+      />
     </div>
   );
 }

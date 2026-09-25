@@ -2,7 +2,7 @@ import { cn } from "@exegol/ui";
 import Editor, { loader } from "@monaco-editor/react";
 import { Code2, Eye, ListTree } from "lucide-react";
 import * as monaco from "monaco-editor";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { JsonTree } from "./JsonTree";
 
@@ -72,33 +72,71 @@ function isMarkdown(fileName: string): boolean {
 
 // ─── Monaco Code Viewer ────────────────────────────────────────────────────
 
-function MonacoViewer({ content, language }: { content: string; language: string }) {
+interface EditProps {
+  /** Given: the editor is writable and reports every change */
+  onChange?: (value: string) => void;
+  /** Cmd/Ctrl+S inside the editor */
+  onSave?: () => void;
+  /** Scroll to and select this 1-based line (a text search hit) */
+  revealLine?: number;
+}
+
+function revealAt(editor: monaco.editor.IStandaloneCodeEditor, line: number | undefined) {
+  if (!line) return;
+  editor.revealLineInCenter(line);
+  const end = editor.getModel()?.getLineMaxColumn(line) ?? 1;
+  editor.setSelection(new monaco.Selection(line, 1, line, end));
+}
+
+function MonacoViewer({
+  content,
+  language,
+  onChange,
+  onSave,
+  revealLine,
+}: { content: string; language: string } & EditProps) {
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  // Monaco keeps the command from mount: read the latest save through a ref
+  const saveRef = useRef(onSave);
+  saveRef.current = onSave;
+  const readOnly = !onChange;
+
+  useEffect(() => {
+    if (editorRef.current) revealAt(editorRef.current, revealLine);
+  }, [revealLine]);
+
   return (
     <Editor
       height="100%"
       language={language}
       value={content}
       theme="vs-dark"
+      onChange={(value) => onChange?.(value ?? "")}
+      onMount={(editor) => {
+        editorRef.current = editor;
+        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current?.());
+        revealAt(editor, revealLine);
+      }}
       loading={
         <div className="flex h-full items-center justify-center text-xs text-text-muted">
           Loading editor...
         </div>
       }
       options={{
-        readOnly: true,
+        readOnly,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
         fontSize: 12,
         lineNumbers: "on",
-        renderLineHighlight: "none",
+        renderLineHighlight: readOnly ? "none" : "line",
         overviewRulerLanes: 0,
         hideCursorInOverviewRuler: true,
         scrollbar: {
           vertical: "auto",
           horizontal: "auto",
         },
-        domReadOnly: true,
-        contextmenu: false,
+        domReadOnly: readOnly,
+        contextmenu: !readOnly,
         folding: true,
         wordWrap: "off",
         padding: { top: 8 },
@@ -119,7 +157,7 @@ function MarkdownViewer({ content }: { content: string }) {
 
 // ─── Main CodeViewer ───────────────────────────────────────────────────────
 
-interface CodeViewerProps {
+interface CodeViewerProps extends EditProps {
   content: string;
   fileName: string | null;
 }
@@ -153,7 +191,8 @@ function ModeButton({
   );
 }
 
-export function CodeViewer({ content, fileName }: CodeViewerProps) {
+export function CodeViewer({ content, fileName, onChange, onSave, revealLine }: CodeViewerProps) {
+  const edit = { onChange, onSave, revealLine };
   const language = fileName ? getMonacoLanguage(fileName) : "plaintext";
   // Files with a rendered view: markdown (Preview) and JSON/JSONL (Tree, shown first)
   const rendered = !fileName
@@ -165,11 +204,11 @@ export function CodeViewer({ content, fileName }: CodeViewerProps) {
         : null;
   // Past 1MB the tree starts behind the Code tab: parsing is paid only on request
   const [showRendered, setShowRendered] = useState(
-    (rendered?.first ?? false) && content.length < 1_000_000,
+    (rendered?.first ?? false) && content.length < 1_000_000 && !revealLine,
   );
 
   if (!fileName || !rendered) {
-    return <MonacoViewer content={content} language={language} />;
+    return <MonacoViewer content={content} language={language} {...edit} />;
   }
 
   return (
@@ -190,7 +229,7 @@ export function CodeViewer({ content, fileName }: CodeViewerProps) {
       </div>
       <div className="min-h-0 flex-1">
         {!showRendered ? (
-          <MonacoViewer content={content} language={language} />
+          <MonacoViewer content={content} language={language} {...edit} />
         ) : rendered.label === "Preview" ? (
           <MarkdownViewer content={content} />
         ) : (

@@ -1,7 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
+import { getProject } from "../../db/queries";
+import { escapeRegExp } from "../../lib/escape-regexp";
+import { isPathAllowed } from "../../security/path-guard";
+import { detectRunTargets } from "../../system/scripts";
 import { publicProcedure, router } from "../trpc";
+import { assertPathInsideProject } from "./project-paths";
 
 const fuzzyFindInput = z.object({
   query: z.string(),
@@ -33,10 +38,12 @@ function requireCoreRust(): NonNullable<typeof coreRust> {
   return coreRust;
 }
 
+/** `root` came from the renderer unchecked: grep could read any folder on disk */
 export const fsSearchRouter = router({
   /** Filename fuzzy-finder backed by Rust `ignore` crate (gitignore-aware). */
-  fuzzyFind: publicProcedure.input(fuzzyFindInput).query(({ input }) => {
+  fuzzyFind: publicProcedure.input(fuzzyFindInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
+    await assertPathInsideProject(input.root, ctx);
     return rust.fsSearch(input.query, input.root, {
       maxResults: input.maxResults,
       maxDepth: input.maxDepth,
@@ -46,8 +53,9 @@ export const fsSearchRouter = router({
   }),
 
   /** Regex content search backed by Rust `grep-regex` + `grep-searcher`. */
-  grep: publicProcedure.input(grepInput).query(({ input }) => {
+  grep: publicProcedure.input(grepInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
+    await assertPathInsideProject(input.root, ctx);
     return rust.fsGrep(input.pattern, input.root, {
       caseInsensitive: input.caseInsensitive,
       includeHidden: input.includeHidden,
@@ -57,4 +65,61 @@ export const fsSearchRouter = router({
       globs: input.globs,
     });
   }),
+
+  /**
+   * Search a whole project: the root and each subrepo/package (a workspace of
+   * repos gitignores its children, so a root-only search found nothing).
+   * Paths come back relative to the project; duplicates (a package the root
+   * search also reached) are dropped.
+   */
+  projectSearch: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        /** The explorer's root when it is a folder inside the project (a launcher chip) */
+        root: z.string().optional(),
+        query: z.string().min(1).max(200),
+        mode: z.enum(["name", "text"]),
+        caseInsensitive: z.boolean().optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const rust = requireCoreRust();
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) return { mode: input.mode, names: [], hits: [] };
+      if (input.root && !(await isPathAllowed(input.root, [project.path]))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Search root is outside the project" });
+      }
+      const folders = await detectRunTargets(input.root ?? project.path);
+      const prefix = (rel: string, p: string) => (rel ? `${rel}/${p}` : p);
+      if (input.mode === "name") {
+        const seen = new Set<string>();
+        const names = folders
+          .flatMap((f) =>
+            rust
+              .fsSearch(input.query, f.path, { maxResults: 100 })
+              .map((r) => ({ ...r, relativePath: prefix(f.rel, r.relativePath) })),
+          )
+          .filter((r) => !r.isDir && !seen.has(r.path) && seen.add(r.path))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 100);
+        return { mode: input.mode, names, hits: [] };
+      }
+      const seen = new Set<string>();
+      const hits = folders
+        .flatMap((f) =>
+          rust
+            .fsGrep(escapeRegExp(input.query), f.path, {
+              caseInsensitive: input.caseInsensitive ?? true,
+              maxMatches: 300,
+            })
+            .map((h) => ({ ...h, relativePath: prefix(f.rel, h.relativePath) })),
+        )
+        .filter((h) => {
+          const key = `${h.path}:${h.lineNumber}`;
+          return !seen.has(key) && seen.add(key);
+        })
+        .slice(0, 500);
+      return { mode: input.mode, names: [], hits };
+    }),
 });
