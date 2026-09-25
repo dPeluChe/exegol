@@ -89,7 +89,8 @@ export function useProjectPorts(projectPath: string | null) {
     queryKey: ["resources", "ports", projectPath],
     queryFn: () => trpcInvoke<PortInfo[]>("resources.ports", { projectPath }),
     enabled: !!projectPath,
-    refetchInterval: 30_000,
+    // A stopped server kept its green chip for up to 30s
+    refetchInterval: 10_000,
   });
 }
 

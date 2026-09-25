@@ -9,6 +9,7 @@ import {
   Globe,
   RefreshCw,
   RotateCw,
+  Square,
 } from "lucide-react";
 import type { PortInfo } from "../../hooks/use-trpc-scheduler";
 
@@ -34,6 +35,10 @@ interface BrowserAddressBarProps {
   onToggleQaMode: () => void;
   onNavigateToPort: (port: number) => void;
   onSetPreferredPort: (port: number) => void;
+  /** The port the page just failed to reach: its chip goes red */
+  deadPort?: number | null;
+  /** Stop the process listening on a detected port */
+  onStopPort?: (port: PortInfo) => void;
 }
 
 export function BrowserAddressBar({
@@ -58,6 +63,8 @@ export function BrowserAddressBar({
   onToggleQaMode,
   onNavigateToPort,
   onSetPreferredPort,
+  deadPort,
+  onStopPort,
 }: BrowserAddressBarProps) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border bg-bg-secondary px-2">
@@ -145,7 +152,7 @@ export function BrowserAddressBar({
       {uniquePorts.length > 0 && (
         <div className="flex shrink-0 items-center gap-0.5">
           {uniquePorts.map((p) => (
-            <div key={p.port} className="flex items-center">
+            <div key={p.port} className="group/port flex items-center">
               <button
                 type="button"
                 onClick={() => onNavigateToPort(p.port)}
@@ -159,11 +166,25 @@ export function BrowserAddressBar({
                 <span
                   className={cn(
                     "inline-block h-1.5 w-1.5 rounded-full",
-                    p.source === "runtime" ? "bg-green-500" : "bg-zinc-500",
+                    deadPort === p.port
+                      ? "bg-red-500"
+                      : p.source === "runtime"
+                        ? "bg-green-500"
+                        : "bg-zinc-500",
                   )}
                 />
                 {p.port}
               </button>
+              {onStopPort && p.source === "runtime" && (
+                <button
+                  type="button"
+                  onClick={() => onStopPort(p)}
+                  className="hidden rounded px-0.5 text-text-muted hover:bg-red-400/20 hover:text-red-400 group-hover/port:block"
+                  title={`Stop the server on :${p.port}`}
+                >
+                  <Square className="h-2 w-2" />
+                </button>
+              )}
               {projectId && (
                 <button
                   type="button"
