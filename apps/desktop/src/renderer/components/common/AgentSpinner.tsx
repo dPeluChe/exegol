@@ -46,7 +46,7 @@ const SPINNER_PRESETS: SpinnerPreset[] = [
 export function AgentSpinner({ agentId, className }: { agentId: string; className?: string }) {
   let hash = 0;
   for (let i = 0; i < agentId.length; i++) hash = (hash * 31 + agentId.charCodeAt(i)) | 0;
-  const preset = SPINNER_PRESETS[Math.abs(hash) % SPINNER_PRESETS.length] ?? SPINNER_PRESETS[0];
+  const preset = SPINNER_PRESETS[Math.abs(hash) % SPINNER_PRESETS.length];
   if (!preset) return null;
   const style = {
     "--frames": preset.frames.length,

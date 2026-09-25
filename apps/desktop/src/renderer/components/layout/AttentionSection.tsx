@@ -52,8 +52,6 @@ const LEVEL_CONFIG: Record<
   },
 };
 
-// ─── Animated agent spinners — each agent gets a unique "pet" animation ──
-
 // ─── Time formatting ─────────────────────────────────────────────────────
 
 function timeAgo(ts: number): string {

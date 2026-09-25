@@ -38,7 +38,7 @@ import {
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
 
-/** Full-screen TUIs whose output the status parser only misreads */
+/** Shells and full-screen TUIs: their escape sequences and status-like text read as "failed"/"waiting_input" */
 const SKIP_PARSING = new Set(["shell", "crush", "opencode", "kiro"]);
 
 /** Tail length (chars) of scrollback used as the attention notification body. */
@@ -247,9 +247,6 @@ export function createSpawnCallbacks(
         maps.scrollbackSizes.set(agent.id, size);
       }
 
-      // Skip output processing for shells and interactive TUI CLIs
-      // (their output contains TUI escape sequences and status-like text that
-      // the parser misinterprets as "failed"/"waiting_input")
       if (SKIP_PARSING.has(agent.cliType)) return;
 
       const processor = maps.outputProcessors.get(agent.id);

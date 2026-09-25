@@ -52,7 +52,7 @@ export async function isDigestStale(projectPath: string): Promise<boolean> {
   const match = content.match(DIGEST_HEAD_MARKER);
   if (!match?.[1]) return true;
   const out = await gitOut(projectPath, ["rev-list", "--count", `${match[1]}..HEAD`]);
-  const behind = out === null ? Number.NaN : Number.parseInt(out, 10);
+  const behind = Number.parseInt(out ?? "", 10);
   if (Number.isNaN(behind)) return (await gitOut(projectPath, ["rev-parse", "HEAD"])) !== null;
   return behind >= STALE_COMMIT_THRESHOLD;
 }
