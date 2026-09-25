@@ -99,8 +99,11 @@
       "delete",
       "exists",
       "listDirectory",
+      "openExternal",
       "pickFile",
       "readFile",
+      "rename",
+      "reveal",
       "writeFile"
     ],
     "prompts": [
