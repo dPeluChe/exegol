@@ -1,7 +1,9 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, FolderSearch, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import type { FileContent } from "../../hooks/use-trpc";
-import { trpcMutate } from "../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "./sections/resource-format";
 
 const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
@@ -29,20 +31,68 @@ function usePdfUrl(file: FileContent | undefined): string | null {
 /**
  * The file viewer next to the tree. Images and PDFs render as themselves (they
  * used to open as mojibake in Monaco); other binaries and very large files
- * offer the default app and Finder. Text stays read-only.
+ * offer the default app and Finder. Text is editable: Save / Cmd+S, with a
+ * check that nobody changed the file on disk in the meantime.
  */
 export function FilePreview({
   path,
   file,
   error,
   onClose,
+  revealLine,
+  onDirtyChange,
 }: {
   path: string;
   file: FileContent | undefined;
   error: unknown;
   onClose: () => void;
+  /** A text search hit: scroll to this line */
+  revealLine?: number;
+  /** The explorer asks before switching files or closing with unsaved edits */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const pdfUrl = usePdfUrl(file);
+  const queryClient = useQueryClient();
+  const [draft, setDraft] = useState<string | null>(null);
+  // What the edit started from: the file query refetches on its own, so an
+  // agent's change on disk would otherwise be overwritten without a word
+  const baseRef = useRef<string | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const dirty = draft !== null && draft !== baseRef.current;
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  const write = async () => {
+    if (draft === null) return;
+    setSaving(true);
+    try {
+      await trpcMutate("files.writeFile", { path, content: draft });
+      baseRef.current = draft;
+      queryClient.setQueryData<FileContent>(["file", path], (prev) =>
+        prev ? { ...prev, content: draft } : prev,
+      );
+      setDraft(null);
+      setSaveError(null);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const save = async () => {
+    if (!dirty || saving) return;
+    const onDisk = await trpcInvoke<FileContent>("files.readFile", { path }).catch(() => null);
+    if (onDisk && onDisk.content !== baseRef.current) {
+      setConflict(true);
+      return;
+    }
+    await write();
+  };
 
   const action =
     "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
@@ -71,7 +121,17 @@ export function FilePreview({
   } else if (file.kind === "text") {
     body = (
       <Suspense fallback={<Message>Loading editor...</Message>}>
-        <CodeViewer key={path} content={file.content} fileName={path} />
+        <CodeViewer
+          key={path}
+          content={draft ?? file.content}
+          fileName={path}
+          revealLine={revealLine}
+          onChange={(value) => {
+            if (baseRef.current === null) baseRef.current = file.content;
+            setDraft(value);
+          }}
+          onSave={save}
+        />
       </Suspense>
     );
   } else {
@@ -108,9 +168,23 @@ export function FilePreview({
         <span className="min-w-0 truncate text-[10px] text-text-secondary" title={path}>
           {path.split("/").pop()}
         </span>
-        {file?.kind === "text" && (
-          <span className="shrink-0 text-[9px] text-text-muted/70">read-only</span>
+        {dirty && (
+          <>
+            <span className="shrink-0 text-[9px] text-amber-400" title="Unsaved changes">
+              ● modified
+            </span>
+            <button
+              type="button"
+              onClick={() => save()}
+              disabled={saving}
+              className="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent hover:bg-accent/30 disabled:opacity-50"
+              title="Save (Cmd+S)"
+            >
+              {saving ? "Saving..." : "Save"}
+            </button>
+          </>
         )}
+        {saveError && <span className="min-w-0 truncate text-[9px] text-red-400">{saveError}</span>}
         <button
           type="button"
           onClick={() => openExternal(path)}
@@ -131,6 +205,15 @@ export function FilePreview({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto">{body}</div>
+      <ConfirmDialog
+        open={conflict}
+        onOpenChange={setConflict}
+        title="The file changed on disk"
+        description={`${path.split("/").pop()} was modified since you started editing (an agent, or another editor). Overwrite it with your version?`}
+        confirmLabel="Overwrite"
+        variant="destructive"
+        onConfirm={() => write()}
+      />
     </div>
   );
 }

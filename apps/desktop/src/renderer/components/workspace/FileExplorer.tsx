@@ -22,6 +22,7 @@ import { setFileDragData } from "../../lib/file-drag";
 import { trpcMutate } from "../../lib/trpc-client";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { FilePreview } from "./FilePreview";
+import { FileSearch } from "./FileSearch";
 
 // ─── Extension Labels ────────────────────────────────────────────────────────
 
@@ -189,6 +190,8 @@ interface FileExplorerProps {
   initialFile?: string;
   /** Set (the sidebar): a click hands the file over instead of opening the inline viewer */
   onOpenFile?: (path: string) => void;
+  /** Enables the search box (project root + subrepos) */
+  projectId?: string;
 }
 
 interface InlineCreateState {
@@ -196,7 +199,7 @@ interface InlineCreateState {
   type: "file" | "folder";
 }
 
-export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorerProps) {
+export function FileExplorer({ rootPath, initialFile, onOpenFile, projectId }: FileExplorerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(initialFile ?? null);
   // The initial file's folders start open so it is visible in the tree
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
@@ -219,7 +222,29 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
   const { data: fileData, error: fileError } = useFileContent(selectedFile);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const closePreview = useCallback(() => setSelectedFile(null), []);
+  const [revealLine, setRevealLine] = useState<number | undefined>(undefined);
+  // Unsaved edits in the viewer: switching files or closing asks first
+  const dirtyRef = useRef(false);
+  const [pendingSelect, setPendingSelect] = useState<{ path: string | null; line?: number } | null>(
+    null,
+  );
+  const applySelect = useCallback((path: string | null, line?: number) => {
+    dirtyRef.current = false;
+    setSelectedFile(path);
+    setRevealLine(line);
+  }, []);
+  const requestSelect = useCallback(
+    (path: string | null, line?: number) => {
+      if (dirtyRef.current && path !== selectedFile) setPendingSelect({ path, line });
+      else applySelect(path, line);
+    },
+    [selectedFile, applySelect],
+  );
+  const closePreview = useCallback(() => requestSelect(null), [requestSelect]);
+  const pick = useCallback(
+    (path: string, line?: number) => (onOpenFile ? onOpenFile(path) : requestSelect(path, line)),
+    [onOpenFile, requestSelect],
+  );
   const queryClient = useQueryClient();
 
   // T155: drag a file onto a terminal pane → pasted as @rel/path mention
@@ -283,6 +308,37 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
     [],
   );
 
+  const tree = (
+    // biome-ignore lint/a11y/noStaticElementInteractions: context menu on tree background
+    <div
+      className="flex-1 overflow-auto"
+      onContextMenu={(e) => handleContextMenu(e, rootPath, true)}
+    >
+      <div className="min-w-max py-1">
+        <DirectoryNode
+          path={rootPath}
+          depth={0}
+          onSelectFile={(path) => pick(path)}
+          selectedFile={selectedFile}
+          expandedDirs={expandedDirs}
+          onToggleDir={toggleDir}
+          onContextMenu={handleContextMenu}
+          onFileDragStart={handleFileDragStart}
+          inlineCreate={inlineCreate}
+          onInlineConfirm={handleInlineCreateConfirm}
+          onInlineCancel={() => setInlineCreate(null)}
+        />
+      </div>
+    </div>
+  );
+  const treeView = projectId ? (
+    <FileSearch projectId={projectId} rootPath={rootPath} onPick={pick}>
+      {tree}
+    </FileSearch>
+  ) : (
+    tree
+  );
+
   return (
     <div className="flex h-full bg-bg-primary">
       {/* Tree view */}
@@ -305,32 +361,22 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
             <RefreshCw className="h-2.5 w-2.5" />
           </button>
         </div>
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: context menu on tree background */}
-        <div
-          className="flex-1 overflow-auto"
-          onContextMenu={(e) => handleContextMenu(e, rootPath, true)}
-        >
-          <div className="min-w-max py-1">
-            <DirectoryNode
-              path={rootPath}
-              depth={0}
-              onSelectFile={onOpenFile ?? setSelectedFile}
-              selectedFile={selectedFile}
-              expandedDirs={expandedDirs}
-              onToggleDir={toggleDir}
-              onContextMenu={handleContextMenu}
-              onFileDragStart={handleFileDragStart}
-              inlineCreate={inlineCreate}
-              onInlineConfirm={handleInlineCreateConfirm}
-              onInlineCancel={() => setInlineCreate(null)}
-            />
-          </div>
-        </div>
+        {treeView}
       </div>
 
       {/* File preview */}
       {selectedFile && (
-        <FilePreview path={selectedFile} file={fileData} error={fileError} onClose={closePreview} />
+        <FilePreview
+          key={selectedFile}
+          path={selectedFile}
+          file={fileData}
+          error={fileError}
+          onClose={closePreview}
+          revealLine={revealLine}
+          onDirtyChange={(d) => {
+            dirtyRef.current = d;
+          }}
+        />
       )}
 
       {contextMenu && (
@@ -350,6 +396,15 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
           if (selectedFile === from) setSelectedFile(to);
           refreshAll();
         }}
+      />
+      <ConfirmDialog
+        open={!!pendingSelect}
+        onOpenChange={(open) => !open && setPendingSelect(null)}
+        title="Discard unsaved changes?"
+        description={`${selectedFile?.split("/").pop() ?? "The file"} has changes that were not saved.`}
+        confirmLabel="Discard"
+        variant="destructive"
+        onConfirm={() => pendingSelect && applySelect(pendingSelect.path, pendingSelect.line)}
       />
       <ConfirmDialog
         open={!!pendingDelete}

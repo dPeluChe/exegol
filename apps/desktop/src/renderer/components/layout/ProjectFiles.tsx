@@ -30,6 +30,7 @@ export function ProjectFiles({ projectId, path }: { projectId: string; path: str
         >
           <FileExplorer
             rootPath={path}
+            projectId={projectId}
             onOpenFile={(file) => openFileInWorkspace(projectId, file)}
           />
         </div>

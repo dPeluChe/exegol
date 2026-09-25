@@ -15,14 +15,9 @@
 
 ### 0.5.3 queue (2026-09-25): ACTIVE
 > Reported while using 0.5.2. Done so far is in TASK_COMPLETED/2609.md (files viewer, launcher
-> folder actions, sidebar layout + rail).
+> folder actions, sidebar layout + rail, project appearance, port status, files search + editing).
 
-1. **File and text search**: a search box over the project (file names + contents). The backend
-   exists: core-rust `search/` (fuzzy finder + grep) and the search router; the renderer hook is
-   unused (T193.22).
-2. **Edit files with save**: the viewer is read-only; editing needs a modified marker, Cmd+S and
-   a prompt before closing unsaved changes.
-3. **Verify opencode across app quit** (P1 #2 below).
+1. **Verify opencode across app quit** (P1 #2 below).
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.

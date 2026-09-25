@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Files: search file names or text across the project and its subrepos (a text hit opens the file at the line), and edit text files with Save / Cmd+S, a warning if the file changed on disk, and a prompt before leaving unsaved changes
 - Projects can have their own icon and color (right-click → Icon and color): the app's favicon or icon found in the repo or any of its subrepos, or a built-in icon, shown in the sidebar, the icon rail, the title bar and the project chips
 - JSON and JSONL files open as a collapsible tree (Code/Tree toggle, like the markdown preview)
 - Files right-click menu: open with the default app, reveal in Finder, copy path, rename
@@ -19,6 +20,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- File search from the renderer could read any folder; its root must now be inside a project
 - Browser port chips: a port the page cannot reach turns red (it stayed green up to 30s after the server stopped), and a green chip has a stop button on hover for a server left running after its terminal was closed
 - Files: images and PDFs open as themselves (they showed as garbled text), other binaries and very large files offer the default app; the viewer's Close was hidden under the pane's buttons (now on the left, Esc closes); New File no longer overwrites an existing file with an empty one
 

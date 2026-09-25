@@ -345,6 +345,7 @@ function FilesPaneContent({
       key={`${rootPath}:${openFile ?? ""}:${openFileAt ?? 0}`}
       rootPath={rootPath}
       initialFile={openFile}
+      projectId={project?.id}
     />
   );
 }
