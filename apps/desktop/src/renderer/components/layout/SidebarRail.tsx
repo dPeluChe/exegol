@@ -1,10 +1,11 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { Cuboid, LayoutDashboard, PanelLeftOpen, Plus, Settings } from "lucide-react";
+import { LayoutDashboard, PanelLeftOpen, Plus, Settings } from "lucide-react";
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
+import { ProjectAvatar } from "../common/ProjectAvatar";
 
 /**
  * The collapsed sidebar: icons instead of nothing. Collapsing used to hide the
@@ -85,7 +86,7 @@ export function SidebarRail() {
               )}
               title={`${p.name}${live ? ` · ${live} running` : ""}`}
             >
-              <Cuboid className={cn("h-4 w-4", active && "text-accent")} />
+              <ProjectAvatar project={p} className="h-4 w-4" active={active} />
               <span className="absolute bottom-0 right-0 text-[7px] font-semibold uppercase leading-none text-text-muted">
                 {p.name.slice(0, 2)}
               </span>

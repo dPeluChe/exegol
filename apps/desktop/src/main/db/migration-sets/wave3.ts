@@ -138,4 +138,11 @@ export const wave3Migrations: Migration[] = [
     sql: `ALTER TABLE agents ADD COLUMN muted INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE agents ADD COLUMN suspended_at INTEGER;`,
   },
+  {
+    // Project identity in lists: a color, a built-in icon, or an image from the repo
+    id: "w3_013_project_appearance",
+    sql: `ALTER TABLE projects ADD COLUMN color TEXT;
+    ALTER TABLE projects ADD COLUMN icon TEXT;
+    ALTER TABLE projects ADD COLUMN icon_image TEXT;`,
+  },
 ];

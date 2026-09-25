@@ -62,6 +62,9 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     lastOpenedAt: r.last_opened_at,
     groupId: r.group_id,
     sortOrder: r.sort_order,
+    color: r.color ?? null,
+    icon: r.icon ?? null,
+    iconImage: r.icon_image ?? null,
   };
 }
 

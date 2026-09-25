@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Projects can have their own icon and color (right-click → Icon and color): the app's favicon or icon found in the repo or any of its subrepos, or a built-in icon, shown in the sidebar, the icon rail, the title bar and the project chips
 - JSON and JSONL files open as a collapsible tree (Code/Tree toggle, like the markdown preview)
 - Files right-click menu: open with the default app, reveal in Finder, copy path, rename
 

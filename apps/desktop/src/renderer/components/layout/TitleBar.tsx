@@ -2,6 +2,7 @@ import { cn } from "@exegol/ui";
 import { Code, Minus, Square, X } from "lucide-react";
 import { useProject } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
+import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AttentionQueue } from "./AttentionQueue";
 import { BugReportButton } from "./BugReportDialog";
 
@@ -35,7 +36,10 @@ export function TitleBar() {
       {/* Center: Active project */}
       <div className="absolute left-1/2 -translate-x-1/2">
         {project ? (
-          <span className="text-xs text-text-secondary">{project.name}</span>
+          <span className="flex items-center gap-1.5 text-xs text-text-secondary">
+            <ProjectAvatar project={project} />
+            {project.name}
+          </span>
         ) : (
           <span className="text-xs text-text-muted">No project selected</span>
         )}

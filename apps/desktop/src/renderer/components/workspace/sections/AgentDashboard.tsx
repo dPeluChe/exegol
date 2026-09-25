@@ -144,6 +144,7 @@ type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
 interface ProjectInfo {
   id: string;
   name: string;
+  color?: string | null;
 }
 
 type GroupBy = "state" | "project";
@@ -215,9 +216,10 @@ export function AgentDashboard() {
   // fills in for Recent agents whose project has no live rows.
   const projectMeta = useMemo(() => {
     const m = new Map<string, ProjectMeta>();
-    for (const p of projects ?? []) m.set(p.id, { name: p.name, color: null });
+    for (const p of projects ?? []) m.set(p.id, { name: p.name, color: p.color ?? null });
+    // The project's own color wins over its group's
     for (const r of activeRows ?? []) {
-      m.set(r.projectId, { name: r.projectName, color: r.groupColor });
+      m.set(r.projectId, { name: r.projectName, color: m.get(r.projectId)?.color ?? r.groupColor });
     }
     return m;
   }, [projects, activeRows]);
