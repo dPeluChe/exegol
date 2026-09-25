@@ -17,6 +17,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   replace the first pane of the active tab
 
 ### Fixed
+- Changing the theme recolors open terminals in place instead of rebuilding every one of them (and re-replaying each session). Switching between Dark and Dark Black now reaches the terminals too
 - YOLO survives a resume: resuming used the bare CLI command and dropped every configured flag,
   so a session launched with `--dangerously-skip-permissions` came back asking for permission.
   The per-launch YOLO choice is now saved with the session and reapplied
