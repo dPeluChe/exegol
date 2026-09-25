@@ -22,6 +22,8 @@ export interface AgentEvent {
   type: AgentEventType;
   agentId: string;
   ts: number;
+  /** Provider session id from the hook payload (Claude Code), empty when absent */
+  sessionId?: string;
   payload?: Record<string, unknown>;
 }
 

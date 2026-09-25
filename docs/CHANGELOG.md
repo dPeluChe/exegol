@@ -10,6 +10,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Claude Code sessions resume after the Mac restarts or shuts down: Exegol now keeps each
+  session's id (from Claude's hooks), so "Resume" on a crashed session reopens the conversation.
+  Before, the id was never saved and there was nothing to resume
 - A new browser pane opens the project's running dev server (the port `pnpm dev` is listening on)
   instead of always :3000. Running-port detection never matched anything
 

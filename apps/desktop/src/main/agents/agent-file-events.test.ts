@@ -10,7 +10,8 @@ function setupDb(): Database.Database {
     project_id TEXT,
     task_description TEXT,
     status TEXT,
-    current_step TEXT
+    current_step TEXT,
+    claude_session_id TEXT
   )`);
   return db;
 }
@@ -84,5 +85,38 @@ describe("dispatchAgentFileEvent", () => {
     expect(() =>
       dispatchAgentFileEvent(db, emptyMaps(), { type: "stop", agentId: "ghost" }),
     ).not.toThrow();
+  });
+
+  it("stores the hook's Claude session id so a crashed session can resume", () => {
+    const sid = () =>
+      (
+        db.prepare("SELECT claude_session_id FROM agents WHERE id = ?").get("a7") as {
+          claude_session_id: string | null;
+        }
+      ).claude_session_id;
+    insertAgent(db, "a7", "claude-code", "running");
+    const first = "abc12345-6789-4def-8123-456789abcdef";
+    dispatchAgentFileEvent(db, emptyMaps(), { type: "tool_use", agentId: "a7", sessionId: first });
+    expect(sid()).toBe(first);
+    // /clear starts a new session: the latest id wins
+    const second = "fff12345-6789-4def-8123-456789abcdef";
+    dispatchAgentFileEvent(db, emptyMaps(), { type: "stop", agentId: "a7", sessionId: second });
+    expect(sid()).toBe(second);
+    // Anything that is not an id shape is ignored
+    dispatchAgentFileEvent(db, emptyMaps(), { type: "stop", agentId: "a7", sessionId: "x'; --" });
+    expect(sid()).toBe(second);
+  });
+
+  it("does not store a session id for other CLIs", () => {
+    insertAgent(db, "a8", "codex", "running");
+    dispatchAgentFileEvent(db, emptyMaps(), {
+      type: "tool_use",
+      agentId: "a8",
+      sessionId: "abc12345-6789-4def-8123-456789abcdef",
+    });
+    const row = db.prepare("SELECT claude_session_id FROM agents WHERE id = ?").get("a8") as {
+      claude_session_id: string | null;
+    };
+    expect(row.claude_session_id).toBeNull();
   });
 });
