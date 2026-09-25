@@ -12,6 +12,7 @@ import { createManagedWorktree } from "../agents/worktrees";
 import {
   createAgent,
   createPipelineRun,
+  getAgent,
   getPipelineRun,
   getPipelineTemplate,
   getProject,
@@ -224,25 +225,11 @@ export class PipelineExecutor {
     const updatedResults = [...run.stepResults, stepResult];
     updatePipelineRun(db, runId, { stepResults: updatedResults });
 
-    this.activeAgents.set(runId, agent.id);
-
     const snapshotTreeSha = prepareStepSnapshot(run.worktreePath);
     if (snapshotTreeSha) this.pendingSnapshots.set(agent.id, snapshotTreeSha);
 
-    broadcastPipelineStatus({
-      runId,
-      projectId: run.projectId,
-      status: "running",
-      currentStepIndex: stepIndex,
-      stepLabel: stepDef.label,
-      timestamp: Date.now(),
-    });
-
+    this.attachStepAgent(db, run.id, run.projectId, stepIndex, agent.id, template);
     const manager = getAgentManager();
-    manager.onAgentComplete(agent.id, (exitCode) => {
-      // biome-ignore lint/style/noNonNullAssertion: template is captured in closure scope
-      handleStepComplete(this.getStepDeps(), db, runId, stepIndex, agent.id, exitCode, template!);
-    });
 
     const registry = getProviderRegistry();
     const provider = registry.get(stepDef.cliType);
@@ -319,6 +306,29 @@ export class PipelineExecutor {
     logger.info("[Pipeline] Run paused:", { runId, reason });
   }
 
+  /** The step's agent is this run's: track it, announce it, and judge its exit */
+  private attachStepAgent(
+    db: Database.Database,
+    runId: string,
+    projectId: string,
+    stepIndex: number,
+    agentId: string,
+    template: PipelineTemplate,
+  ): void {
+    this.activeAgents.set(runId, agentId);
+    broadcastPipelineStatus({
+      runId,
+      projectId,
+      status: "running",
+      currentStepIndex: stepIndex,
+      stepLabel: template.steps[stepIndex]?.label ?? null,
+      timestamp: Date.now(),
+    });
+    getAgentManager().onAgentComplete(agentId, (exitCode) => {
+      handleStepComplete(this.getStepDeps(), db, runId, stepIndex, agentId, exitCode, template);
+    });
+  }
+
   async resumeRun(db: Database.Database, runId: string): Promise<void> {
     const run = getPipelineRun(db, runId);
     if (!run || run.status !== "paused") {
@@ -332,34 +342,33 @@ export class PipelineExecutor {
 
     // A restart pauses running runs, but the step's agent lives on in the
     // sidecar; only its completion hook died with the old process. Spawning the
-    // step again ran two agents on one worktree. Re-attach to the live one.
+    // step again ran two agents on one worktree (and threw away a finished one).
     const current = run.stepResults.at(-1);
     if (
       current?.status === "running" &&
       current.stepIndex === run.currentStepIndex &&
-      current.agentId &&
-      getPtyHost().isAlive(current.agentId)
+      current.agentId
     ) {
       const { agentId, stepIndex } = current;
-      if (!assertTransition(run.status, "running")) return;
-      updatePipelineRun(db, runId, { status: "running" });
-      this.activeAgents.set(runId, agentId);
-      getAgentManager().onAgentComplete(agentId, (exitCode) => {
-        handleStepComplete(this.getStepDeps(), db, runId, stepIndex, agentId, exitCode, template);
-      });
-      broadcastPipelineStatus({
-        runId,
-        projectId: run.projectId,
-        status: "running",
-        currentStepIndex: stepIndex,
-        stepLabel: template.steps[stepIndex]?.label ?? null,
-        timestamp: Date.now(),
-      });
-      logger.info("[Pipeline] Resumed by re-attaching to the step's live agent:", {
-        runId,
-        agentId,
-      });
-      return;
+      const finished = getAgent(db, agentId)?.status;
+      const alive = getPtyHost().isAlive(agentId);
+      if (alive || finished === "completed" || finished === "failed") {
+        if (!assertTransition(run.status, "running")) return;
+        updatePipelineRun(db, runId, { status: "running" });
+        if (alive) {
+          this.attachStepAgent(db, runId, run.projectId, stepIndex, agentId, template);
+          logger.info("[Pipeline] Resumed by re-attaching to the step's live agent:", {
+            runId,
+            agentId,
+          });
+        } else {
+          // It finished while the app was closed: judge that result, don't redo the step
+          this.activeAgents.set(runId, agentId);
+          const exitCode = finished === "completed" ? 0 : 1;
+          handleStepComplete(this.getStepDeps(), db, runId, stepIndex, agentId, exitCode, template);
+        }
+        return;
+      }
     }
 
     await this.advanceStep(db, runId, run.currentStepIndex, template);

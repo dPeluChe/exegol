@@ -96,6 +96,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     accessMode: r.access_mode,
     isolationMode: (r.isolation_mode ?? null) as IsolationMode | null,
     resumeCommand: r.resume_command ?? null,
+    yolo: r.yolo == null ? null : r.yolo === 1,
   };
 }
 

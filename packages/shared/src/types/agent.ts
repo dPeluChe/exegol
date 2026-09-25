@@ -84,9 +84,9 @@ export function classifyActivity(
  * truth: the settings toggle, the pipeline executor and the spawn modal all
  * read this. The two former copies had already drifted — crush's flag existed
  * in the pipeline but not in settings, so its toggle silently did nothing.
+ * One token each (the toggle finds the flag by exact match). Checked against
+ * each CLI's --help, 2026-09-24; codex dropped --full-auto.
  */
-/** One token each (the settings toggle finds the flag by exact match). Checked
- *  against each CLI's --help, 2026-09-24; codex dropped --full-auto. */
 export const YOLO_FLAGS: Record<string, string> = {
   "claude-code": "--dangerously-skip-permissions",
   codex: "--dangerously-bypass-approvals-and-sandbox",
@@ -153,6 +153,8 @@ export type Agent = {
   isolationMode?: IsolationMode | null;
   /** T101: CLI-emitted "resume this session" command string. T106: gates the Resume action. */
   resumeCommand?: string | null;
+  /** Per-launch YOLO choice (null = the provider's configured args); a resume inherits it */
+  yolo?: boolean | null;
 };
 
 export type AgentCreate = {

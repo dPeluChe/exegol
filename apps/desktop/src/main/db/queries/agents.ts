@@ -50,6 +50,10 @@ export function listAgents(db: Database.Database, projectId: string): Agent[] {
 }
 
 /** T160: set/clear the session alias (addressing name for agent_send + UI). */
+export function setAgentYolo(db: Database.Database, id: string, yolo: boolean): void {
+  db.prepare("UPDATE agents SET yolo = ? WHERE id = ?").run(yolo ? 1 : 0, id);
+}
+
 export function setAgentAlias(db: Database.Database, id: string, alias: string | null): void {
   db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(alias, id);
 }
