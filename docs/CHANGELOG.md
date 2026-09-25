@@ -13,7 +13,6 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
 - Dropping a file from Finder onto a terminal pastes its path
 - Each project in the sidebar has a Files section: browse the folder, create, rename or delete files, drag one onto a terminal; a click opens it in the workspace's Files pane
-- Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
 
 ### Changed
 - Sidebar shows each project the way its workspace is laid out: every tab with its panes (agents
