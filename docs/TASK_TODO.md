@@ -482,7 +482,6 @@ past it. It is also arm64 only.
     folder names (adapter reads hashed `tmp/`); no "resume from history" button.
 17. Parallel runs: no Cancel in the UI; if every spawn fails the run stays `running` forever.
 18. QA Run does nothing unless the browser pane is focused (`use-browser-qa.ts:252`).
-19. Files pane: no size/binary guard before Monaco.
 21. Knowledge, Tasks and Add Memory swallow errors; archiving can overwrite `tasks_completed.md`
     (`task-file-actions.ts:40`).
 22. P2 debt: `trpcMutate<any>("agents.spawn")` x9; ~30 stale biome suppressions; unused renderer

@@ -1,23 +1,27 @@
 import { cn } from "@exegol/ui";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
+  ExternalLink,
   File,
   FilePlus,
   Folder,
   FolderOpen,
   FolderPlus,
+  FolderSearch,
+  Pencil,
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcMutate } from "../../lib/trpc-client";
 import { ConfirmDialog } from "../common/ConfirmDialog";
-
-const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
+import { FilePreview } from "./FilePreview";
 
 // ─── Extension Labels ────────────────────────────────────────────────────────
 
@@ -61,13 +65,17 @@ interface ContextMenuState {
 
 function FileContextMenu({
   menu,
+  rootPath,
   onClose,
   onRequestDelete,
+  onRequestRename,
   onStartCreate,
 }: {
   menu: ContextMenuState;
+  rootPath: string;
   onClose: () => void;
   onRequestDelete: (path: string) => void;
+  onRequestRename: (path: string) => void;
   onStartCreate: (parentDir: string, type: "file" | "folder") => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -108,6 +116,45 @@ function FileContextMenu({
         borderColor: "var(--border)",
       }}
     >
+      {(
+        [
+          [
+            "Open with default app",
+            ExternalLink,
+            () => trpcMutate("files.openExternal", { path: menu.targetPath }),
+          ],
+          [
+            "Reveal in Finder",
+            FolderSearch,
+            () => trpcMutate("files.reveal", { path: menu.targetPath }),
+          ],
+          ["Copy path", Copy, () => navigator.clipboard.writeText(menu.targetPath)],
+          [
+            "Copy relative path",
+            Copy,
+            () =>
+              navigator.clipboard.writeText(
+                menu.targetPath.slice(rootPath.length).replace(/^\//, ""),
+              ),
+          ],
+          ["Rename", Pencil, () => onRequestRename(menu.targetPath)],
+        ] as const
+      ).map(([label, Icon, run]) => (
+        <button
+          key={label}
+          type="button"
+          onClick={() => {
+            onClose();
+            Promise.resolve(run()).catch((err) =>
+              console.error(`[FileExplorer] ${label} failed:`, err),
+            );
+          }}
+          className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-text-secondary hover:bg-white/10"
+        >
+          <Icon className="h-3.5 w-3.5" /> {label}
+        </button>
+      ))}
+      <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
       <button
         type="button"
         onClick={() => handleCreate("file")}
@@ -171,6 +218,8 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
   const [inlineCreate, setInlineCreate] = useState<InlineCreateState | null>(null);
   const { data: fileData, error: fileError } = useFileContent(selectedFile);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const closePreview = useCallback(() => setSelectedFile(null), []);
   const queryClient = useQueryClient();
 
   // T155: drag a file onto a terminal pane → pasted as @rel/path mention
@@ -280,52 +329,28 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
       </div>
 
       {/* File preview */}
-      {/* Whenever a file is selected: the tree shrinks to 200px, so a failed or
-          slow read used to leave an empty area with no message */}
       {selectedFile && (
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3">
-            <span className="truncate text-[10px] text-text-secondary">
-              {selectedFile.split("/").pop()}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedFile(null)}
-              className="shrink-0 text-[10px] text-text-muted hover:text-text-primary"
-            >
-              Close
-            </button>
-          </div>
-          <div className="flex-1 overflow-auto">
-            <Suspense
-              fallback={
-                <div className="flex h-full items-center justify-center text-xs text-text-muted">
-                  Loading editor...
-                </div>
-              }
-            >
-              {fileData ? (
-                <CodeViewer content={fileData.content} fileName={selectedFile} />
-              ) : (
-                <div className="flex h-full items-center justify-center px-4 text-center text-xs text-text-muted">
-                  {fileError
-                    ? `Cannot open this file: ${fileError instanceof Error ? fileError.message : String(fileError)}`
-                    : "Loading..."}
-                </div>
-              )}
-            </Suspense>
-          </div>
-        </div>
+        <FilePreview path={selectedFile} file={fileData} error={fileError} onClose={closePreview} />
       )}
 
       {contextMenu && (
         <FileContextMenu
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
+          rootPath={rootPath}
           onRequestDelete={setPendingDelete}
+          onRequestRename={setRenaming}
           onStartCreate={startInlineCreate}
         />
       )}
+      <RenameDialog
+        path={renaming}
+        onClose={() => setRenaming(null)}
+        onRenamed={(from, to) => {
+          if (selectedFile === from) setSelectedFile(to);
+          refreshAll();
+        }}
+      />
       <ConfirmDialog
         open={!!pendingDelete}
         onOpenChange={(open) => !open && setPendingDelete(null)}
@@ -558,5 +583,70 @@ function FileNode({
         {formatSize(entry.size)}
       </span>
     </button>
+  );
+}
+
+/** Rename in place (Electron has no window.prompt) */
+function RenameDialog({
+  path,
+  onClose,
+  onRenamed,
+}: {
+  path: string | null;
+  onClose: () => void;
+  onRenamed: (from: string, to: string) => void;
+}) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const current = path?.split("/").pop() ?? "";
+  const dir = path ? path.slice(0, path.length - current.length) : "";
+
+  const submit = async () => {
+    const next = name.trim();
+    if (!path || !next || next === current || next.includes("/")) return onClose();
+    try {
+      await trpcMutate("files.rename", { from: path, to: `${dir}${next}` });
+      onRenamed(path, `${dir}${next}`);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  return (
+    <Dialog.Root
+      open={!!path}
+      onOpenChange={(open) => {
+        if (open) return;
+        onClose();
+      }}
+    >
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
+        <Dialog.Content
+          className="fixed left-1/2 top-1/3 z-50 w-full max-w-sm -translate-x-1/2 rounded-lg border p-4 shadow-2xl"
+          style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
+          onOpenAutoFocus={() => {
+            setName(current);
+            setError(null);
+          }}
+        >
+          <Dialog.Title className="mb-2 text-sm font-semibold text-text-primary">
+            Rename {current}
+          </Dialog.Title>
+          <input
+            // biome-ignore lint/a11y/noAutofocus: the dialog exists to type a name
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+            }}
+            className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
+          />
+          {error && <p className="mt-2 text-[11px] text-red-400">{error}</p>}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
