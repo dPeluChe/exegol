@@ -48,6 +48,8 @@ const REDACTIONS: Array<[RegExp, string]> = [
     /((?:TOKEN|SECRET|PASSWORD|PASSWD|KEY)[A-Z_]*\\?["']?\s*[:=]\s*\\?["']?)[^\s"'\\,}[]{4,}/gi,
     "$1[redacted]",
   ],
+  // Cookie headers (an updater 404 once logged GitHub's _gh_sess); logs from older builds keep them
+  [/("?(?:set-)?cookie"?\s*:\s*)(?:\[[^\]]{0,8192}\]|[^\n]{0,4096})/gi, "$1[redacted]"],
   [/("taskDescription"\s*:\s*")(?:[^"\\]|\\.)*"/g, '$1[redacted]"'],
   // Quoted free text (prompts are sentences); single words like a CLI or model name stay
   // A real quotation opens after a space and closes before one: the span

@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   conversation in the CLI's history (Claude Code, Codex, Gemini, OpenCode, Droid) instead of
   reopening the project's latest one, and the Dashboard (fleet cards and pinned cards) has a
   Resume button for ended sessions
+- Bug reports no longer carry GitHub cookies: the updater logged a 404's full response headers
 - Claude Code sessions resume after the Mac restarts or shuts down: Exegol now keeps each
   session's id (from Claude's hooks), so "Resume" on a crashed session reopens the conversation.
   Before, the id was never saved and there was nothing to resume
