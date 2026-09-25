@@ -1,4 +1,5 @@
 import { RUNNING_STATUSES } from "@exegol/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
@@ -9,9 +10,11 @@ import {
   useSetPreferredPort,
 } from "../../hooks/use-trpc-scheduler";
 import { buildDesignIssue } from "../../lib/design-capture";
+import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { IssueBubble } from "../common/IssueBubble";
 import { BrowserAddressBar } from "./BrowserAddressBar";
 import { BrowserQaRecordingBar } from "./BrowserQaRecordingBar";
@@ -49,6 +52,10 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [loadError, setLoadError] = useState<{ code: number; desc: string } | null>(null);
+  const queryClient = useQueryClient();
+  const [pendingStop, setPendingStop] = useState<PortInfo | null>(null);
+  // The page could not reach this port: its chip turns red until a load succeeds
+  const deadPort = loadError ? Number(currentUrl.match(/:(\d+)/)?.[1]) || null : null;
   const [issueMessage, setIssueMessage] = useState("");
   const allAgents = useAgentStore((s) => s.agents);
   const runningAgents = useMemo(
@@ -122,6 +129,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       };
       if (e.isMainFrame) {
         setLoadError({ code: e.errorCode, desc: e.errorDescription });
+        // The server may be gone: re-detect now instead of on the next poll
+        queryClient.invalidateQueries({ queryKey: ["resources", "ports"] });
       }
     };
     const onStartLoad = () => setLoadError(null);
@@ -222,6 +231,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         onToggleDesignMode={toggleDesignMode}
         onToggleQaMode={toggleQaMode}
         onNavigateToPort={navigateToPort}
+        deadPort={deadPort}
+        onStopPort={setPendingStop}
         onSetPreferredPort={(port) => {
           if (projectId) setPreferred.mutate({ projectId, port });
         }}
@@ -235,6 +246,20 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           className="h-full w-full"
           /* @ts-expect-error Electron webview attributes */
           allowpopups="true"
+        />
+        <ConfirmDialog
+          open={!!pendingStop}
+          onOpenChange={(open) => !open && setPendingStop(null)}
+          title={`Stop the server on :${pendingStop?.port ?? ""}?`}
+          description={`${pendingStop && "process" in pendingStop ? pendingStop.process : "The process"} (pid ${pendingStop && "pid" in pendingStop ? pendingStop.pid : "?"}) gets SIGTERM, then SIGKILL if it is still running after 3 seconds. Useful when its terminal was closed but the server kept running.`}
+          confirmLabel="Stop"
+          variant="destructive"
+          onConfirm={() => {
+            if (!pendingStop || !("pid" in pendingStop)) return;
+            trpcMutate("resources.killDevServer", { pid: pendingStop.pid })
+              .catch((err) => console.error("[Browser] Stop failed:", err))
+              .finally(() => queryClient.invalidateQueries({ queryKey: ["resources"] }));
+          }}
         />
         {loadError && (
           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-bg-primary/95 p-4 text-center">
