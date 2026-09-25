@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { useProject } from "../../hooks/use-trpc";
+import { useProject, useProjects } from "../../hooks/use-trpc";
 import {
   type AgentState,
   type AttentionItem,
@@ -20,6 +20,7 @@ import {
   useAgentStore,
 } from "../../stores/agents";
 import { AgentIcon } from "../common/AgentIcon";
+import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
 
 // ─── Level config ────────────────────────────────────────────────────────
 
@@ -140,6 +141,12 @@ const ACTIVE_STATUSES = new Set(["running", "spawning", "waiting_input"]);
 
 export function AttentionSection() {
   const agents = useAgentStore((s) => s.agents);
+  // Names alone ("ember", "koi") didn't say which project is waiting
+  const { data: projects } = useProjects();
+  const projectById = useMemo(
+    () => new Map((projects ?? []).map((p) => [p.id, { name: p.name, color: null }])),
+    [projects],
+  );
   const rawItems = useAgentStore((s) => s.attentionItems);
   const dismiss = useAgentStore((s) => s.dismissAttention);
   const togglePin = useAgentStore((s) => s.toggleAttentionPin);
@@ -211,6 +218,7 @@ export function AttentionSection() {
               key={item.agentId}
               item={item}
               name={agents[item.agentId]?.alias ?? item.cliType}
+              project={projectById.get(item.projectId)}
               onNavigate={() => navigateToAgent(item.agentId, item.projectId)}
               onDismiss={() => dismiss(item.agentId)}
               onTogglePin={() => togglePin(item.agentId)}
@@ -345,6 +353,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
 function AttentionCard({
   item,
   name,
+  project,
   onNavigate,
   onDismiss,
   onTogglePin,
@@ -352,6 +361,7 @@ function AttentionCard({
   item: AttentionItem;
   /** The session's name (alias) — the same one the project list and panes show */
   name: string;
+  project: ProjectMeta | undefined;
   onNavigate: () => void;
   onDismiss: () => void;
   onTogglePin: () => void;
@@ -384,6 +394,7 @@ function AttentionCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
           <span className="text-[10px] font-medium text-text-primary">{name}</span>
+          {project && <ProjectChip project={project} className="py-0 text-[9px]" />}
           {item.pinned && <Pin className="h-2.5 w-2.5 shrink-0 text-amber-400" />}
           {!item.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
         </div>

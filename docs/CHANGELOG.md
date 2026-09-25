@@ -14,8 +14,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Dropping a file from Finder onto a terminal pastes its path
 - Each project in the sidebar has a Files section: browse the folder, create, rename or delete files, drag one onto a terminal; a click opens it in the workspace's Files pane
 - The launcher's "Run in" row: a chip per project folder that is its own git repo or package (a workspace of repos had nothing to run at its root), each with a terminal already in that folder and its commands, `convex dev` included when the folder uses Convex; pin the ones you use
+- Mute a session to keep it running but out of Needs attention and notifications, or Suspend it to stop it quietly and Resume it when you come back to the project (terminal toolbar, or right-click it in the sidebar)
 
 ### Changed
+- Needs attention shows each session's project next to its name ("ember" alone didn't say which project was waiting)
 - Sidebar shows each project the way its workspace is laid out: every tab with its panes (agents
   by their name, the shell, the browser's address), then worktrees, then agents not open in any
   tab. The branch and dev-server port share one line; nothing is listed twice

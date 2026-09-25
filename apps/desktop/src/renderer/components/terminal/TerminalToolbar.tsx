@@ -1,4 +1,4 @@
-import type { AgentAccessMode, IsolationMode } from "@exegol/shared";
+import { type AgentAccessMode, type IsolationMode, LIVE_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   AlertCircle,
@@ -12,12 +12,13 @@ import {
   TerminalSquare,
   X,
 } from "lucide-react";
+import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
 import { WatchToggle } from "../common/WatchToggle";
 
 interface TerminalToolbarProps {
   /** T160: live agent identity for the session-name chip (omit for shells). */
-  agent?: { id: string; alias?: string | null; cliType: string } | null;
+  agent?: QuietAgent | null;
   accessMode?: AgentAccessMode | null;
   isolationMode?: IsolationMode | null;
   branchName?: string | null;
@@ -50,6 +51,9 @@ export function TerminalToolbar({
         <>
           <SessionAlias agent={agent} textClassName="text-[10px]" />
           <WatchToggle agentId={agent.id} className="py-0 text-[9px]" />
+          {LIVE_STATUSES.has(agent.status) && (
+            <QuietControls agent={agent} className="py-0 text-[9px]" />
+          )}
         </>
       )}
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}

@@ -72,6 +72,8 @@ export const agentRowSchema = z.object({
   isolation_mode: optStr,
   resume_command: optStr,
   yolo: optNum,
+  muted: optNum,
+  suspended_at: optNum,
 });
 
 export const worktreeRowSchema = z.object({

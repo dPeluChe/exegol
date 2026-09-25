@@ -19,6 +19,8 @@ export type ScrollbackAgent = Pick<
   resumeCommand?: string | null;
   /** Last scraped line — the only readable trace of why a spawn died. */
   currentStep?: string | null;
+  /** Stopped on purpose with Suspend: nothing went wrong */
+  suspended?: boolean;
 };
 
 interface TerminalScrollbackProps {
@@ -70,7 +72,7 @@ export function TerminalScrollback({
             className={`h-3.5 w-3.5 shrink-0 ${isCrashed ? "text-red-400" : "text-yellow-400"}`}
           />
           <span className={isCrashed ? "text-red-200/80" : "text-yellow-200/80"}>
-            {isCrashed ? "Crashed" : "Ended"}
+            {isCrashed ? "Crashed" : agent?.suspended ? "Suspended: Resume to continue" : "Ended"}
           </span>
         </div>
         <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">

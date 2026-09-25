@@ -50,6 +50,26 @@ export function listAgents(db: Database.Database, projectId: string): Agent[] {
 }
 
 /** T160: set/clear the session alias (addressing name for agent_send + UI). */
+export function setAgentMuted(db: Database.Database, id: string, muted: boolean): void {
+  db.prepare("UPDATE agents SET muted = ? WHERE id = ?").run(muted ? 1 : 0, id);
+}
+
+export function setAgentSuspended(db: Database.Database, id: string, at: number | null): void {
+  db.prepare("UPDATE agents SET suspended_at = ? WHERE id = ?").run(at, id);
+}
+
+/** Muted or suspended: it must not ask for attention */
+export function isAgentQuiet(db: Database.Database, id: string): boolean {
+  try {
+    const row = db.prepare("SELECT muted, suspended_at FROM agents WHERE id = ?").get(id) as
+      | { muted: number; suspended_at: number | null }
+      | undefined;
+    return !!row && (row.muted === 1 || row.suspended_at != null);
+  } catch {
+    return false; // never let this check swallow an attention event
+  }
+}
+
 export function setAgentYolo(db: Database.Database, id: string, yolo: boolean): void {
   db.prepare("UPDATE agents SET yolo = ? WHERE id = ?").run(yolo ? 1 : 0, id);
 }

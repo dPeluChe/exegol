@@ -5,7 +5,7 @@ import {
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type Database from "libsql";
-import { updateAgentStatus } from "../db/queries";
+import { isAgentQuiet, updateAgentStatus } from "../db/queries";
 import { setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
@@ -111,7 +111,8 @@ export function applyAgentSignals(
     logger.info(
       `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}`,
     );
-    if (needsAttention) {
+    // Muted or suspended sessions stay quiet
+    if (needsAttention && !isAgentQuiet(db, agent.id)) {
       // T124: include the agent's pending question (scrollback tail) so a
       // context switch isn't required just to find out why it's waiting.
       // stripOscSequences first: the attention moment coincides with our
