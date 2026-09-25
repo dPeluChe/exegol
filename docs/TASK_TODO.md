@@ -462,8 +462,6 @@ past it. It is also arm64 only.
 6. `@exegol/core-rust` undeclared in `apps/desktop`; `vitest` undeclared in `packages/shared`. P2.
 
 **Agents**
-7. `onExit` ignores the signal (`pty-host.ts:67`): a manual Stop records completed/failed, not
-   stopped (pipelines now guard on paused).
 8. Memory extraction on exit is dead (`extractAndStoreMemories` only via `memory.extract`, never
    called since 8b26000). Decide: wire on exit or drop from CLAUDE.md.
 9. Reattach doesn't recreate title trackers.
