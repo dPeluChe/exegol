@@ -55,6 +55,7 @@ export class AgentManager {
   private dataCallbacks: Map<string, (data: string) => void> = new Map();
   /** Agents whose Claude session ID has already been stored (T101). */
   private sessionIdsCaptured: Set<string> = new Set();
+  private stopRequested: Set<string> = new Set();
 
   /** T123: NotifyHandler file events (Claude Code hooks) → signal pipeline. */
   handleAgentFileEvent(
@@ -74,6 +75,7 @@ export class AgentManager {
       initialSnapshots: this.initialSnapshots,
       dataCallbacks: this.dataCallbacks,
       sessionIdsCaptured: this.sessionIdsCaptured,
+      stopRequested: this.stopRequested,
     };
   }
 
@@ -247,6 +249,7 @@ export class AgentManager {
   async stop(db: Database.Database, agentId: string): Promise<void> {
     const ptyHost = getPtyHost();
     if (ptyHost.isAlive(agentId)) {
+      this.stopRequested.add(agentId);
       ptyHost.kill(agentId);
       await ptyHost.waitForExit(agentId, STOP_TIMEOUT_MS);
     } else {
