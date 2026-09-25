@@ -68,10 +68,12 @@
       "ports",
       "preferredPort",
       "project",
-      "scripts",
+      "runPins",
+      "runTargets",
       "setPreferredPort",
       "sidecarMemory",
-      "system"
+      "system",
+      "toggleRunPin"
     ],
     "apiKeys": [
       "delete",

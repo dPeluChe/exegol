@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseFlatConfig } from "../lib/flat-config";
 import { logger } from "../lib/logger";
@@ -51,9 +51,14 @@ async function detectNodeScripts(projectPath: string): Promise<DetectedScript[]>
       devDependencies?: Record<string, string>;
     };
 
-    if (!pkg.scripts) return [];
-
     const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+    // Convex backends run their own dev process next to the app's
+    const convex: DetectedScript[] =
+      allDeps.convex && existsSync(join(projectPath, "convex"))
+        ? [{ name: "convex dev", command: "npx convex dev", source: "convex" }]
+        : [];
+    if (!pkg.scripts) return convex;
+
     const framework = detectFramework(allDeps);
 
     // Detect package manager
@@ -65,7 +70,7 @@ async function detectNodeScripts(projectPath: string): Promise<DetectedScript[]>
           ? "yarn"
           : "npm";
 
-    const results: DetectedScript[] = [];
+    const results: DetectedScript[] = [...convex];
 
     for (const name of KNOWN_SCRIPTS) {
       if (pkg.scripts[name]) {
@@ -328,6 +333,96 @@ export async function detectProjectScripts(projectPath: string): Promise<Detecte
   ]);
 
   const scripts = [...node, ...python, ...other, ...actions];
-  scriptsCache.set(projectPath, { at: Date.now(), scripts });
+  // Per-folder now (up to ~30 paths a project): drop expired entries as we go
+  const now = Date.now();
+  for (const [path, entry] of scriptsCache) {
+    if (now - entry.at >= SCRIPTS_TTL_MS) scriptsCache.delete(path);
+  }
+  scriptsCache.set(projectPath, { at: now, scripts });
   return scripts;
+}
+
+// ─── Run targets (T197: per-folder launcher) ───────────────────────────────
+
+export interface RunTarget {
+  /** Folder relative to the project ("" for the project root) */
+  rel: string;
+  path: string;
+  /** Its own git repo (the workspace-of-repos layout) */
+  git: boolean;
+  scripts: DetectedScript[];
+}
+
+const SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  "target",
+  "vendor",
+  "tmp",
+  "__pycache__",
+]);
+/** Monorepo containers whose children are the packages */
+const CONTAINER_DIRS = new Set(["apps", "packages", "services", "libs", "projects"]);
+const MAX_SUBFOLDERS = 12;
+
+async function childDirs(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    return (
+      entries
+        // Symlinks out: their target may sit outside the project, where spawn refuses to start
+        .filter(
+          (e) =>
+            e.isDirectory() &&
+            !e.isSymbolicLink() &&
+            !e.name.startsWith(".") &&
+            !SKIP_DIRS.has(e.name),
+        )
+        .map((e) => e.name)
+        .sort()
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The project root plus the subfolders worth a terminal of their own: nested
+ * git repos (a workspace of repos has no package.json at its root, so the
+ * launcher showed no commands at all) and packages with something to run.
+ * Two levels deep only inside apps/, packages/ and the like.
+ */
+export async function detectRunTargets(projectPath: string): Promise<RunTarget[]> {
+  const candidates: string[] = [];
+  for (const name of await childDirs(projectPath)) {
+    if (CONTAINER_DIRS.has(name)) {
+      for (const child of await childDirs(join(projectPath, name))) {
+        candidates.push(`${name}/${child}`);
+      }
+    } else {
+      candidates.push(name);
+    }
+  }
+
+  const sub = await Promise.all(
+    candidates.map(async (rel): Promise<RunTarget> => {
+      const path = join(projectPath, rel);
+      return {
+        rel,
+        path,
+        git: existsSync(join(path, ".git")),
+        scripts: await detectProjectScripts(path),
+      };
+    }),
+  );
+  const root: RunTarget = {
+    rel: "",
+    path: projectPath,
+    git: existsSync(join(projectPath, ".git")),
+    scripts: await detectProjectScripts(projectPath),
+  };
+  return [root, ...sub.filter((t) => t.git || t.scripts.length > 0).slice(0, MAX_SUBFOLDERS)];
 }
