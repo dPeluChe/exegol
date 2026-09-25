@@ -129,16 +129,17 @@ export function initAutoUpdater(): void {
   });
 
   autoUpdater.on("error", (error) => {
+    // First line only: the rest is response headers, GitHub session cookies
+    // included, and the log ends up in public bug reports
+    const firstLine = error.message.split("\n")[0]?.slice(0, 300) ?? "";
     const silenced = silencedReason(error);
     if (silenced) {
-      logger.info(`[AutoUpdater] ${silenced}:`, error.message);
+      logger.info(`[AutoUpdater] ${silenced}: ${firstLine}`);
       broadcastUpdateStatus("idle");
       return;
     }
-    logger.error("[AutoUpdater] Error:", error.message);
-    // The banner gets one line: the full message carries response headers
-    // (GitHub session cookies included). The log keeps the detail.
-    broadcastUpdateStatus("error", { message: error.message.split("\n")[0]?.slice(0, 200) });
+    logger.error(`[AutoUpdater] Error: ${firstLine}`);
+    broadcastUpdateStatus("error", { message: firstLine.slice(0, 200) });
   });
 
   // ── Initial check + periodic interval ─────────────────────────────
