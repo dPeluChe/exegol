@@ -16,12 +16,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { type PortInfo, useProjectScripts } from "../../hooks/use-trpc-scheduler";
+import type { PortInfo } from "../../hooks/use-trpc-scheduler";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { type SessionChoice, SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { AgentIcon } from "../common";
+import { RunTargets } from "./RunTargets";
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
 
@@ -30,12 +31,6 @@ import { AgentIcon } from "../common";
 const NO_PROVIDERS: AgentProvider[] = [];
 
 /** Only the non-obvious runners earn a badge; package.json is the default. */
-function runnerLabel(source: string): string | null {
-  if (source.toLowerCase().includes("makefile")) return "make";
-  if (source.toLowerCase().includes("justfile")) return "just";
-  if (source.startsWith(".exegol/")) return "custom";
-  return null;
-}
 
 function relativeTime(epoch: number | null): string {
   if (!epoch) return "";
@@ -50,8 +45,6 @@ function relativeTime(epoch: number | null): string {
 
 export function EmptyPane({ paneId }: { paneId: string }) {
   const { projectId, project } = useProjectContext();
-  const { data: scripts } = useProjectScripts(project?.path ?? null);
-  const [launching, setLaunching] = useState<string | null>(null);
   const [modalProvider, setModalProvider] = useState<AgentProvider | null>(null);
   const [modalSession, setModalSession] = useState<SessionChoice>(null);
   const [search, setSearch] = useState("");
@@ -168,22 +161,6 @@ export function EmptyPane({ paneId }: { paneId: string }) {
       console.error("[EmptyPane] Shell spawn failed:", err);
     }
   }, [spawnShellInPane]);
-
-  const handleRunScript = useCallback(
-    async (command: string, label: string) => {
-      setLaunching(`script-${label}`);
-      try {
-        const agentId = await spawnShellInPane(label);
-        // Inject command into shell (queued until PTY is ready)
-        if (agentId) window.api.terminal.write(agentId, `${command}\n`);
-      } catch (err) {
-        console.error("[EmptyPane] Script launch failed:", err);
-      } finally {
-        setLaunching(null);
-      }
-    },
-    [spawnShellInPane],
-  );
 
   const isMini = size === "mini";
   const isCompact = size === "compact" || isMini;
@@ -330,39 +307,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         </div>
       )}
 
-      {/* Dev scripts quick-launch */}
-      {scripts && scripts.length > 0 && (
-        <div className={cn("flex w-full flex-col items-center", isMini ? "mt-1.5" : "mt-3")}>
-          {!isMini && <span className="mb-1 text-[9px] text-text-muted">Dev Scripts</span>}
-          <div className="flex flex-wrap justify-center gap-1">
-            {scripts.map((s) => (
-              <button
-                key={s.command}
-                type="button"
-                disabled={launching === `script-${s.name}`}
-                onClick={() => handleRunScript(s.command, s.name)}
-                title={s.command}
-                className={cn(
-                  "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
-                  isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
-                  launching === `script-${s.name}` && "opacity-50",
-                )}
-              >
-                <Terminal className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
-                {s.name}
-                {/* `build` from package.json and `build` from a Makefile are
-                    different commands with one label — name the runner, not the
-                    file, and only when it is not the default one. */}
-                {!isMini && (s.framework || runnerLabel(s.source)) && (
-                  <span className="text-[9px] text-text-muted">
-                    ({s.framework ?? runnerLabel(s.source)})
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {projectId && <RunTargets projectId={projectId} paneId={paneId} compact={isCompact} />}
 
       {/* Pane options — compact in small sizes */}
       <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>

@@ -29,6 +29,7 @@ import {
   listParallelRuns,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
+import { isPathAllowed } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 
 export const agentRouter = router({
@@ -238,6 +239,13 @@ export const agentRouter = router({
     }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {
+    // A renderer-chosen start folder (the launcher's "run in") stays inside the project
+    if (input.cwdOverride) {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project || !(await isPathAllowed(input.cwdOverride, [project.path]))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Start folder is outside the project" });
+      }
+    }
     const agent = createAgent(ctx.db, input);
     const manager = ctx.agentManager;
 
