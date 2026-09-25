@@ -14,6 +14,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
   conversation in the CLI's history (Claude Code, Codex, Gemini, OpenCode, Droid) instead of
   reopening the project's latest one, and the Dashboard (fleet cards and pinned cards) has a
   Resume button for ended sessions
+- Claude Code sessions resume after the Mac restarts or shuts down: Exegol now keeps each
+  session's id (from Claude's hooks), so "Resume" on a crashed session reopens the conversation.
+  Before, the id was never saved and there was nothing to resume
 - No more "Token limit approaching" banner: it matched any line mentioning "context window" (a
   resumed Devin session hit it in 10 seconds) and "Continue with new agent" spawned successors that
   tripped it again. The automatic handoff is gone; CLIs compact their own context and the session
