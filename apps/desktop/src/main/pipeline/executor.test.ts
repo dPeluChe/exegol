@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => {
     }),
     onAgentData: vi.fn(() => () => {}),
   };
-  return { completionCallbacks, manager };
+  return { completionCallbacks, manager, alive: new Set<string>() };
 });
 
 vi.mock("../agents/manager", () => ({ getAgentManager: () => mocks.manager }));
@@ -46,7 +46,7 @@ vi.mock("./evidence", () => ({
 }));
 vi.mock("./evaluator-step-handler", () => ({ handleEvaluatorStep: vi.fn(async () => {}) }));
 vi.mock("../terminal/pty-host", () => ({
-  getPtyHost: () => ({ isAlive: () => false, kill: vi.fn() }),
+  getPtyHost: () => ({ isAlive: (id: string) => mocks.alive.has(id), kill: vi.fn() }),
 }));
 vi.mock("./pipeline-helpers", () => ({
   YOLO_FLAGS: {},
@@ -210,6 +210,22 @@ describe("PipelineExecutor", () => {
     expect(fresh?.status).toBe("running");
     expect(fresh?.currentStepIndex).toBe(0);
     expect(mocks.manager.spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it("after a restart, resume re-attaches to the step's live agent instead of spawning another", async () => {
+    const templateId = makeTemplate([step()]);
+    const run = await executor.startRun(db, templateId, projectId, "task", 5, false);
+    const agentId = lastAgentId(db, run.id);
+    // What startup recovery does: the run is paused, the agent is still alive
+    db.prepare("UPDATE pipeline_runs SET status = 'paused' WHERE id = ?").run(run.id);
+    mocks.completionCallbacks.clear();
+    mocks.alive.add(agentId);
+
+    await executor.resumeRun(db, run.id);
+    expect(getPipelineRun(db, run.id)?.status).toBe("running");
+    expect(mocks.manager.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.completionCallbacks.has(agentId)).toBe(true);
+    mocks.alive.clear();
   });
 
   it("refuses to resume a run that is not paused", async () => {

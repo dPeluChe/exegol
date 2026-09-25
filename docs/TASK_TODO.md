@@ -467,7 +467,6 @@ past it. It is also arm64 only.
 10. `getAppSettings` falls back to defaults on bad JSON; the next update saves over the row.
 
 **Pipelines and git**
-11. After a restart a paused run's step agent is still alive; resume spawns a second one.
 12. `{{diff}}` (up to 16 MiB) goes into argv; over ~1MB the spawn fails. Pass via file (T183.11).
 13. Without core-rust (`dev:ui`) runs silently use the project root.
 14. Resume/Export pipeline mutations and Git stage/unstage have no onError; renamed or quoted
