@@ -13,6 +13,8 @@ export interface Pane {
   filePath?: string;
   /** Files pane: the file it shows (the tree roots at filePath or the project) */
   openFile?: string;
+  /** Bumped on every open: reopening the file after closing its preview must remount */
+  openFileAt?: number;
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }

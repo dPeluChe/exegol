@@ -21,7 +21,13 @@ export function ProjectFiles({ projectId, path }: { projectId: string; path: str
         Files
       </button>
       {open && (
-        <div className="h-72 overflow-hidden rounded-md border border-border/60">
+        // A file drag bubbled to the project row (draggable) and reordered projects on drop
+        // biome-ignore lint/a11y/noStaticElementInteractions: stops drag events from reaching the project row
+        <div
+          className="h-72 overflow-hidden rounded-md border border-border/60"
+          onDragStart={(e) => e.stopPropagation()}
+          onDrop={(e) => e.stopPropagation()}
+        >
           <FileExplorer
             rootPath={path}
             onOpenFile={(file) => openFileInWorkspace(projectId, file)}

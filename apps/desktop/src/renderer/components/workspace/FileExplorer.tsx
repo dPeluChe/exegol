@@ -15,6 +15,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcMutate } from "../../lib/trpc-client";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 
 const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
 
@@ -61,12 +62,12 @@ interface ContextMenuState {
 function FileContextMenu({
   menu,
   onClose,
-  onRefresh,
+  onRequestDelete,
   onStartCreate,
 }: {
   menu: ContextMenuState;
   onClose: () => void;
-  onRefresh: () => void;
+  onRequestDelete: (path: string) => void;
   onStartCreate: (parentDir: string, type: "file" | "folder") => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -90,17 +91,11 @@ function FileContextMenu({
     [menu, onClose, onStartCreate],
   );
 
-  const handleDelete = useCallback(async () => {
-    const name = menu.targetPath.split("/").pop();
-    if (!window.confirm(`Delete "${name}"?`)) return;
-    try {
-      await trpcMutate("files.delete", { path: menu.targetPath });
-      onRefresh();
-    } catch (err) {
-      console.error("[FileExplorer] Failed to delete:", err);
-    }
+  // The explorer asks (a blocking window.confirm froze the renderer's IPC)
+  const handleDelete = useCallback(() => {
+    onRequestDelete(menu.targetPath);
     onClose();
-  }, [menu, onClose, onRefresh]);
+  }, [menu, onClose, onRequestDelete]);
 
   return (
     <div
@@ -174,7 +169,8 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
   });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [inlineCreate, setInlineCreate] = useState<InlineCreateState | null>(null);
-  const { data: fileData } = useFileContent(selectedFile);
+  const { data: fileData, error: fileError } = useFileContent(selectedFile);
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   // T155: drag a file onto a terminal pane → pasted as @rel/path mention
@@ -284,7 +280,9 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
       </div>
 
       {/* File preview */}
-      {selectedFile && fileData && (
+      {/* Whenever a file is selected: the tree shrinks to 200px, so a failed or
+          slow read used to leave an empty area with no message */}
+      {selectedFile && (
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3">
             <span className="truncate text-[10px] text-text-secondary">
@@ -306,7 +304,15 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
                 </div>
               }
             >
-              <CodeViewer content={fileData.content} fileName={selectedFile} />
+              {fileData ? (
+                <CodeViewer content={fileData.content} fileName={selectedFile} />
+              ) : (
+                <div className="flex h-full items-center justify-center px-4 text-center text-xs text-text-muted">
+                  {fileError
+                    ? `Cannot open this file: ${fileError instanceof Error ? fileError.message : String(fileError)}`
+                    : "Loading..."}
+                </div>
+              )}
             </Suspense>
           </div>
         </div>
@@ -316,10 +322,24 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorer
         <FileContextMenu
           menu={contextMenu}
           onClose={() => setContextMenu(null)}
-          onRefresh={refreshAll}
+          onRequestDelete={setPendingDelete}
           onStartCreate={startInlineCreate}
         />
       )}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete ${pendingDelete?.split("/").pop() ?? ""}?`}
+        description={pendingDelete ?? ""}
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          trpcMutate("files.delete", { path: pendingDelete })
+            .then(refreshAll)
+            .catch((err) => console.error("[FileExplorer] Failed to delete:", err));
+        }}
+      />
     </div>
   );
 }

@@ -272,13 +272,13 @@ export function openFileInWorkspace(projectId: string, filePath: string): void {
     ? collectPaneIds(tab.layout).find((id) => pw.panes[id]?.type === "files")
     : undefined;
   if (filesPane) {
-    ws.updatePane(filesPane, { openFile: filePath });
+    ws.updatePane(filesPane, { openFile: filePath, openFileAt: Date.now() });
     ws.setFocusedPane(filesPane);
     return;
   }
   ws.addTab("Files");
   const paneId = useWorkspaceStore.getState().focusedPaneId;
-  if (paneId) ws.updatePane(paneId, { type: "files", openFile: filePath });
+  if (paneId) ws.updatePane(paneId, { type: "files", openFile: filePath, openFileAt: Date.now() });
 }
 
 /** Show a project's tab (and pane) */
