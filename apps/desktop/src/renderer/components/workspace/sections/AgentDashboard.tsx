@@ -26,6 +26,7 @@ import { useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
 import { ResumeButton } from "../../agents/ResumeButton";
 import { AgentIcon } from "../../common/AgentIcon";
+import { AgentSpinner } from "../../common/AgentSpinner";
 import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { QuietBadge } from "../../common/QuietControls";
@@ -84,35 +85,6 @@ const DEFAULT_STATUS = {
   bg: "border-border",
   label: "Unknown",
 };
-
-const SPINNER_SETS = [
-  ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"],
-  ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-  ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"],
-  ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█", "▉", "▊", "▋", "▌", "▍", "▎"],
-  ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"],
-  ["♡", "♥", "♡", "♡"],
-  ["✦", "✧", "✦", "⊹", "✧", "⊹"],
-  ["░", "▒", "▓", "█", "▓", "▒", "░"],
-];
-
-function getSpinnerSet(id: string): string[] {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return SPINNER_SETS[Math.abs(hash) % SPINNER_SETS.length] ?? ["⠋", "⠙", "⠹", "⠸"];
-}
-
-function Spinner({ agentId }: { agentId: string }) {
-  const frames = useMemo(() => getSpinnerSet(agentId), [agentId]);
-  const [frame, setFrame] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), 100);
-    return () => clearInterval(id);
-  }, [frames.length]);
-  return (
-    <span className="inline-block w-4 text-center font-mono text-accent">{frames[frame]}</span>
-  );
-}
 
 function elapsedStr(startedAt: number): string {
   const s = Math.floor(Date.now() / 1000 - startedAt);
@@ -475,7 +447,9 @@ function AgentCard({
         {/* Left: icon + spinner */}
         <div className="flex flex-col items-center gap-1.5 pt-0.5">
           <AgentIcon provider={agent.cliType} size={28} />
-          {!hasUnread && isWorking(agent) && <Spinner agentId={agent.id} />}
+          {!hasUnread && isWorking(agent) && (
+            <AgentSpinner agentId={agent.id} className="text-accent" />
+          )}
         </div>
 
         {/* Center: info */}

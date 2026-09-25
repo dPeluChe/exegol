@@ -57,6 +57,10 @@ export default defineConfig({
       rollupOptions: {
         output: {
           manualChunks: (id) => {
+            // Vite's preload helper lands in the first chunk that uses it: it sat in monaco, so
+            // index.js imported (and preloaded) all 8 MB of monaco at startup just to get it
+            if (id.includes("vite/preload-helper") || id.includes("commonjsHelpers"))
+              return "runtime";
             if (id.includes("node_modules/@xterm/")) return "xterm";
             if (
               id.includes("node_modules/monaco-editor") ||

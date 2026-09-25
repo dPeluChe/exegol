@@ -25,7 +25,7 @@ export const knowledgeRouter = router({
    * focus/refetch — creating files from here dirtied git status on tab open).
    * File creation lives in `initialize`/`refreshDigest`/`saveBrief` mutations.
    */
-  get: publicProcedure.input(z.object({ projectId: z.string() })).query(({ ctx, input }) => {
+  get: publicProcedure.input(z.object({ projectId: z.string() })).query(async ({ ctx, input }) => {
     const projectPath = requireProjectPath(ctx.db, input.projectId);
     const brief = readProjectBrief(projectPath);
     const digestPath = getDigestPath(projectPath);
@@ -36,7 +36,7 @@ export const knowledgeRouter = router({
       initialized: brief !== null,
       brief,
       digest,
-      digestStale: isDigestStale(projectPath),
+      digestStale: await isDigestStale(projectPath),
       memoryBridgeExists,
     };
   }),
@@ -47,10 +47,10 @@ export const knowledgeRouter = router({
    */
   initialize: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const projectPath = requireProjectPath(ctx.db, input.projectId);
       const brief = ensureProjectBrief(projectPath);
-      const { digest } = refreshDigestIfStale(projectPath);
+      const { digest } = await refreshDigestIfStale(projectPath);
       syncManagedBlock(projectPath, { createIfMissing: true });
       return { brief, digest };
     }),

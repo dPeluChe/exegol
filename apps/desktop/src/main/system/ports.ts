@@ -91,10 +91,29 @@ export async function listTcpListeners(
   return entries;
 }
 
+// Each sidebar project row polls its ports: N rows ran the same two lsof scans N times
+const SCAN_TTL_MS = 3_000;
+let scan: {
+  at: number;
+  result: Promise<{
+    listeners: Awaited<ReturnType<typeof listTcpListeners>>;
+    cwds: Map<number, string>;
+  }>;
+} | null = null;
+
+function scanListeners() {
+  if (scan && Date.now() - scan.at < SCAN_TTL_MS) return scan.result;
+  const result = listTcpListeners().then(async (listeners) => ({
+    listeners,
+    cwds: await getProcessCwds([...new Set(listeners.map((l) => l.pid))]),
+  }));
+  scan = { at: Date.now(), result };
+  return result;
+}
+
 /** Listening TCP ports whose process runs inside projectPath */
 async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]> {
-  const listeners = await listTcpListeners();
-  const cwds = await getProcessCwds([...new Set(listeners.map((l) => l.pid))]);
+  const { listeners, cwds } = await scanListeners();
   return listeners
     .filter((l) => isInside(cwds.get(l.pid), projectPath))
     .map(({ port, pid, process: proc }) => ({
