@@ -20,24 +20,30 @@ export interface ConfiguredPort {
 
 export type PortInfo = DetectedPort | ConfiguredPort;
 
-/** Resolve the CWD for a given PID. Returns null if it can't be determined. */
-async function getProcessCwd(pid: number): Promise<string | null> {
+/** The cwd of each pid, from one lsof call (it used to be one lsof per pid) */
+export async function getProcessCwds(pids: number[]): Promise<Map<number, string>> {
+  const cwds = new Map<number, string>();
+  if (pids.length === 0) return cwds;
+  let stdout = "";
   try {
-    const { stdout } = await execFileAsync("lsof", ["-p", String(pid), "-Fn"], {
-      timeout: 3000,
-    });
-    // lsof -Fn outputs lines like "fcwd\nn/path/to/dir" — find the cwd entry
-    const lines = stdout.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i] === "fcwd") {
-        const next = lines[i + 1];
-        if (next?.startsWith("n")) return next.slice(1);
-      }
-    }
-  } catch {
-    // Process may have exited
+    ({ stdout } = await execFileAsync("lsof", ["-a", "-d", "cwd", "-p", pids.join(","), "-Fpn"], {
+      timeout: 5000,
+    }));
+  } catch (err) {
+    // lsof exits 1 when one of the pids is gone; the rest still printed
+    stdout = (err as { stdout?: string }).stdout ?? "";
   }
-  return null;
+  let pid = 0;
+  for (const line of stdout.split("\n")) {
+    if (line.startsWith("p")) pid = Number(line.slice(1));
+    else if (line.startsWith("n") && pid && !cwds.has(pid)) cwds.set(pid, line.slice(1));
+  }
+  return cwds;
+}
+
+/** `cwd` is `root` or inside it (a path boundary: /repo-2 is not in /repo) */
+export function isInside(cwd: string | null | undefined, root: string): boolean {
+  return !!cwd && (cwd === root || cwd.startsWith(`${root}/`));
 }
 
 /**
@@ -59,45 +65,44 @@ export function parseLsofListenLine(
   };
 }
 
-/** Detect active listening TCP ports, filtered to those whose CWD is under projectPath */
-async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]> {
+/** TCP listeners, one entry per pid:port; `uid` limits them to that user's processes */
+export async function listTcpListeners(
+  uid?: string,
+): Promise<{ port: number; pid: number; process: string }[]> {
+  let stdout = "";
   try {
-    const { stdout } = await execFileAsync("lsof", ["-iTCP", "-sTCP:LISTEN", "-P", "-n"], {
-      timeout: 5000,
-    });
-
-    const lines = stdout.split("\n").slice(1); // skip header
-    const candidates: { port: number; pid: number; process: string }[] = [];
-    const seen = new Set<string>();
-
-    for (const line of lines) {
-      const entry = parseLsofListenLine(line);
-      if (!entry) continue;
-      const key = `${entry.pid}:${entry.port}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      candidates.push(entry);
-    }
-
-    // Resolve CWDs in parallel and filter to those under projectPath
-    const cwdChecks = await Promise.all(
-      candidates.map(async (c) => {
-        const cwd = await getProcessCwd(c.pid);
-        return { ...c, cwd };
-      }),
-    );
-
-    return cwdChecks
-      .filter((c) => c.cwd === projectPath || c.cwd?.startsWith(`${projectPath}/`))
-      .map(({ port, pid, process: proc }) => ({
-        port,
-        pid,
-        process: proc,
-        source: "runtime" as const,
-      }));
-  } catch {
-    return [];
+    ({ stdout } = await execFileAsync(
+      "lsof",
+      [...(uid ? ["-a", "-u", uid] : []), "-iTCP", "-sTCP:LISTEN", "-P", "-n"],
+      { timeout: 5000 },
+    ));
+  } catch (err) {
+    // lsof exits 1 when nothing matches
+    stdout = (err as { stdout?: string }).stdout ?? "";
   }
+  const seen = new Set<string>();
+  const entries: { port: number; pid: number; process: string }[] = [];
+  for (const line of stdout.split("\n").slice(1)) {
+    const entry = parseLsofListenLine(line);
+    if (!entry || seen.has(`${entry.pid}:${entry.port}`)) continue;
+    seen.add(`${entry.pid}:${entry.port}`);
+    entries.push(entry);
+  }
+  return entries;
+}
+
+/** Listening TCP ports whose process runs inside projectPath */
+async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]> {
+  const listeners = await listTcpListeners();
+  const cwds = await getProcessCwds([...new Set(listeners.map((l) => l.pid))]);
+  return listeners
+    .filter((l) => isInside(cwds.get(l.pid), projectPath))
+    .map(({ port, pid, process: proc }) => ({
+      port,
+      pid,
+      process: proc,
+      source: "runtime" as const,
+    }));
 }
 
 function parsePortFromMatch(match: RegExpMatchArray | null, index: number): number | null {
@@ -178,27 +183,4 @@ export async function getProjectPorts(projectPath: string): Promise<PortInfo[]> 
   ]);
 
   return [...runtime, ...config];
-}
-
-/** Detect port conflicts: returns port numbers that are listening from multiple PIDs */
-export async function detectPortConflicts(): Promise<Map<number, string[]>> {
-  const conflicts = new Map<number, string[]>();
-  try {
-    const { stdout } = await execFileAsync("lsof", ["-iTCP", "-sTCP:LISTEN", "-P", "-n"], {
-      timeout: 5000,
-    });
-    const portPids = new Map<number, Set<string>>();
-    for (const line of stdout.split("\n").slice(1)) {
-      const entry = parseLsofListenLine(line);
-      if (!entry) continue;
-      if (!portPids.has(entry.port)) portPids.set(entry.port, new Set());
-      portPids.get(entry.port)?.add(`${entry.process}(${entry.pid})`);
-    }
-    for (const [port, pids] of portPids) {
-      if (pids.size > 1) conflicts.set(port, Array.from(pids));
-    }
-  } catch {
-    /* lsof failed */
-  }
-  return conflicts;
 }

@@ -1,6 +1,6 @@
-import type { MetricsSnapshot } from "@exegol/shared";
-import { useQuery } from "@tanstack/react-query";
-import { trpcInvoke } from "../lib/trpc-client";
+import type { DevServer, MetricsSnapshot } from "@exegol/shared";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
 // ─── Resources ──────────────────────────────────────────────────────────────
 
@@ -74,5 +74,23 @@ export function useSidecarMemory() {
     queryFn: () => trpcInvoke<SidecarMemoryReport | null>("resources.sidecarMemory"),
     refetchInterval: 15_000,
     staleTime: 10_000,
+  });
+}
+
+export function useDevServers() {
+  return useQuery({
+    queryKey: ["resources", "devServers"],
+    queryFn: () => trpcInvoke<DevServer[]>("resources.devServers"),
+    refetchInterval: 10_000,
+    staleTime: 5_000,
+  });
+}
+
+export function useKillDevServer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (pid: number) =>
+      trpcMutate<{ stopped: boolean; forced: boolean }>("resources.killDevServer", { pid }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["resources", "devServers"] }),
   });
 }
