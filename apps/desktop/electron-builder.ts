@@ -1,5 +1,11 @@
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Configuration } from "electron-builder";
+
+// One folder per version (dist/0.5.1/...) so builds don't pile up side by side
+const { version } = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
+  version: string;
+};
 
 const iconPath = resolve("src/resources/build/icons");
 
@@ -16,7 +22,7 @@ const config: Configuration = {
   copyright: "Copyright 2026 Exegol",
 
   directories: {
-    output: "dist",
+    output: `dist/${version}`,
     buildResources: "src/resources/build",
   },
 
