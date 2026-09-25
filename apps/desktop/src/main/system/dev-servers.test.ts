@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findAgentAncestor, matchProject, parseEtime } from "./dev-servers";
+import { findAncestorIn, matchProject, parseEtime } from "./dev-servers";
 
 describe("parseEtime", () => {
   it("reads ps elapsed times", () => {
@@ -25,7 +25,7 @@ describe("matchProject", () => {
   });
 });
 
-describe("findAgentAncestor", () => {
+describe("findAncestorIn", () => {
   // shell(100) → pnpm(200) → node vite(300)
   const parentOf = new Map([
     [300, 200],
@@ -33,7 +33,7 @@ describe("findAgentAncestor", () => {
     [100, 1],
   ]);
   it("finds the Exegol terminal up the parent chain", () => {
-    expect(findAgentAncestor(300, parentOf, new Set([100]))).toBe(100);
-    expect(findAgentAncestor(300, parentOf, new Set([999]))).toBeNull();
+    expect(findAncestorIn(300, parentOf, new Set([100]))).toBe(100);
+    expect(findAncestorIn(300, parentOf, new Set([999]))).toBeNull();
   });
 });

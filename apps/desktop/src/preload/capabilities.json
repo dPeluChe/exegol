@@ -65,7 +65,6 @@
       "devServers",
       "history",
       "killDevServer",
-      "portConflicts",
       "ports",
       "preferredPort",
       "project",
