@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { useResumableCliTypes } from "../../hooks/use-resume-agent";
 import { useAgent, useScrollback, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -29,7 +28,6 @@ const STOPPED_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   // Use push-driven store for instant status updates (not 30s polling)
-  const resumableCliTypes = useResumableCliTypes();
   const { projectId: activeProjectId } = useProjectContext();
   const storeAgent = useAgentStore((s) => s.agents[agentId]);
   const { data: dbAgent } = useAgent(agentId);
@@ -237,7 +235,6 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         agent={agent}
         agentId={agentId}
         scrollbackContent={scrollbackContent}
-        resumableCliTypes={resumableCliTypes}
         paneId={paneId}
         viewMode={viewMode}
         setViewMode={setViewMode}

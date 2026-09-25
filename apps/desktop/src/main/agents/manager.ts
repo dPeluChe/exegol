@@ -117,10 +117,12 @@ export class AgentManager {
 
     const cwd = setupAgentCwd(db, agent, config, project, this.worktrees, this.initialSnapshots);
 
-    if (config.resumeSession) {
-      await recoverLostSessionId(db, config.resumeFromAgentId ?? agent.id, cwd);
-    }
-    const priorSession = config.resumeSession ? await hasLocalSession(agent.cliType, cwd) : null;
+    // A known session id makes the store check moot; it only guards the generic resume flag
+    const knownSession = config.resumeSession
+      ? await recoverLostSessionId(db, config.resumeFromAgentId ?? agent.id, cwd)
+      : false;
+    const priorSession =
+      config.resumeSession && !knownSession ? await hasLocalSession(agent.cliType, cwd) : null;
     const { shell, args, env, stdinCommand, enableMarker, isPlainShell } = buildPtyInvocation(
       db,
       agent,

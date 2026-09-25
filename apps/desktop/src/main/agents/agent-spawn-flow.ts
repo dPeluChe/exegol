@@ -264,6 +264,15 @@ export function buildPtyInvocation(
       if (row?.alias && sourceAgentId !== agent.id) {
         db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(row.alias, agent.id);
       }
+      // The old row is deleted after a resume: keep the id on the new one, or a
+      // second crash before the CLI prints its resume line has to search again
+      if (sourceAgentId !== agent.id && (row?.claude_session_id || row?.resume_command)) {
+        db.prepare("UPDATE agents SET claude_session_id = ?, resume_command = ? WHERE id = ?").run(
+          row.claude_session_id,
+          row.resume_command,
+          agent.id,
+        );
+      }
 
       if (row?.resume_command) {
         fullCommand = row.resume_command;

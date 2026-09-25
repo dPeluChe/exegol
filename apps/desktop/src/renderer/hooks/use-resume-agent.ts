@@ -9,7 +9,7 @@ import { useWorkspaceStore } from "../stores/workspace";
 import { useSpawnAgent } from "./use-trpc";
 
 /** CLI types that support session resume (from the provider registry) */
-export function useResumableCliTypes(): Set<string> {
+function useResumableCliTypes(): Set<string> {
   const { data: providers } = useQuery({
     queryKey: ["enabledProviders"],
     queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),

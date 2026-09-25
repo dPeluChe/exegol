@@ -77,12 +77,22 @@ async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
  * this CLI, so the caller can't tell and keeps the flag.
  */
 export async function hasLocalSession(provider: string, cwd: string): Promise<boolean | null> {
+  // A recent window: codex stores rollouts by day across every repo, and
+  // since=0 read the head of every one of them before each resume spawn
+  const sessions = await listLocal(provider, cwd, Date.now() / 1000 - RESUME_WINDOW_S);
+  return sessions && sessions.length > 0;
+}
+
+/** One provider's sessions in `cwd`; null = no adapter or an unreadable store */
+async function listLocal(
+  provider: string,
+  cwd: string,
+  since: number,
+): Promise<LocalSession[] | null> {
   const adapter = PROVIDERS.find((p) => p.id === provider);
   if (!adapter) return null;
   try {
-    // A recent window: codex stores rollouts by day across every repo, and
-    // since=0 read the head of every one of them before each resume spawn
-    return (await adapter.list([cwd], Date.now() / 1000 - RESUME_WINDOW_S)).length > 0;
+    return await adapter.list([cwd], since);
   } catch (err) {
     logger.warn(`[History] ${provider} store unreadable:`, err);
     return null;
@@ -124,13 +134,7 @@ export async function findLostSession(
   agentStartedAt: number,
   claimed: Set<string>,
 ): Promise<LocalSession | null> {
-  const adapter = PROVIDERS.find((p) => p.id === provider);
-  if (!adapter) return null;
-  try {
-    // Modified since the agent started: the session it ran was written to after that
-    return pickLostSession(await adapter.list([cwd], agentStartedAt), agentStartedAt, claimed);
-  } catch (err) {
-    logger.warn(`[History] ${provider} store unreadable:`, err);
-    return null;
-  }
+  // Modified since the agent started: the session it ran was written to after that
+  const sessions = await listLocal(provider, cwd, agentStartedAt);
+  return sessions ? pickLostSession(sessions, agentStartedAt, claimed) : null;
 }

@@ -25,7 +25,6 @@ interface TerminalScrollbackProps {
   agent: ScrollbackAgent | null;
   agentId: string;
   scrollbackContent: string;
-  resumableCliTypes: Set<string>;
   paneId?: string;
   viewMode: "terminal" | "chat";
   setViewMode: (mode: "terminal" | "chat") => void;
@@ -42,7 +41,6 @@ export function TerminalScrollback({
   agent,
   agentId,
   scrollbackContent,
-  resumableCliTypes,
   paneId,
   viewMode,
   setViewMode,
@@ -51,10 +49,11 @@ export function TerminalScrollback({
   floatingButtons,
 }: TerminalScrollbackProps) {
   const [showOutput, setShowOutput] = useState(false);
-  const { resume } = useResumeAgent();
+  const { resume, pending, resumableCliTypes } = useResumeAgent();
+  // One click, one agent: a double-click spawned two
   const handleResume = useCallback(() => {
-    if (agent) resume(agent, paneId).catch(() => {});
-  }, [agent, paneId, resume]);
+    if (agent && !pending) resume(agent, paneId).catch(() => {});
+  }, [agent, paneId, pending, resume]);
 
   const canResume = agent ? resumableCliTypes.has(agent.cliType) : false;
   const ResumeIcon = canResume ? Play : RotateCcw;
@@ -81,6 +80,7 @@ export function TerminalScrollback({
               size="sm"
               className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
               onClick={handleResume}
+              disabled={pending}
             >
               <ResumeIcon className="h-3 w-3" />
               {resumeLabel}
