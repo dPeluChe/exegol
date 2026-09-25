@@ -26,12 +26,11 @@
 2. opencode TUI dies across app quit (Wave 2 checklist below)
 3. Sidecar terminal correctness: T184.2 (unanswered DA1/colour queries), T184.3 (replay re-asks
    queries), T184.4 (kills a pid without identity check), T185.14 (backpressure), T185.8 (reattach replay)
-4. T184.5: a failing `beforeAgent` silently prevents the spawn
-5. T181 purge UI + one retention policy (nothing is deleted any more; oplog keeps git trees)
-6. T183.2: AI features dark without an API key (Sparkles commit, scoring, evaluator)
-7. T185.11: scheduler timeout records two results and frees capacity early; T185.1 scheduler UI
-8. T185.6 / T185.7 / T185.9: main-process freezes (token scan, idle serialize, worktree status)
-9. T182.8: History pagination
+4. T181 purge UI + one retention policy (nothing is deleted any more; oplog keeps git trees)
+5. T183.2: AI features dark without an API key (Sparkles commit, scoring, evaluator)
+6. T185.11: scheduler timeout records two results and frees capacity early; T185.1 scheduler UI
+7. T185.6 / T185.7 / T185.9: main-process freezes (token scan, idle serialize, worktree status)
+8. T182.8: History pagination
 
 **Wave 2.6 status (2026-07-06 → 2026-08-11)**: T149-T152 shipped (`TASK_COMPLETED/2608.md`).
 Open exit criteria: both manual checklists below, and cut **v0.5.0** (T156 dashboard landed;
@@ -555,11 +554,9 @@ and are recorded as refuted at the end.
 
 **Spawn and lifecycle (pullfrog).**
 
-5. **A failing `beforeAgent` silently prevents the agent from starting.** `agent-spawn-flow.ts:300-301`
-   builds `beforeAgent && <command>`; `&&` short-circuits, so a failed `npm install` means the CLI
-   never launches and nothing says why. They run the hook separately, capture structured failure, and
-   TELL THE AGENT in a dedicated `SETUP HOOK FAILED` prompt section. Their hook timeout is 10 min;
-   ours is 2, too short for a cold install.
+5. **beforeAgent (rest)**: the terminal now says the hook failed and the agent starts anyway
+   (TASK_COMPLETED 2026-09-24). Still missing: tell the agent in a `SETUP HOOK FAILED` prompt
+   section, and a longer hook timeout (theirs 10 min, ours 2).
 6. **We check that an API key exists, never that it works** (pairs with T183.2: prefer the logged-in CLI, probe the key as fallback). `doctor.ts:339` tests for a non-empty
    string, so a revoked key passes the doctor and fails inside a PTY at spawn. Their 40-line liveness
    probe returns `alive | dead | unknown` with a 5s timeout, and only lists providers whose live-200
