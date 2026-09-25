@@ -9,6 +9,7 @@ import { getPtyHost } from "../terminal/pty-host";
 import { createOutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, hydrateTrackedWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { readableStep } from "./readable-step";
 import { getProviderRegistry } from "./registry";
 import {
   type AgentContext,
@@ -193,7 +194,7 @@ export async function reattachSidecarAgents(
         agentId,
         projectId,
         status: "waiting_input",
-        currentStep: row.current_step as string | null,
+        currentStep: readableStep((row.current_step as string | null) ?? undefined) ?? null,
         cliType,
         timestamp: Date.now(),
       });

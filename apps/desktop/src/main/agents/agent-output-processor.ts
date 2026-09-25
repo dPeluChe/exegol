@@ -1,5 +1,6 @@
 import type { AgentCliType } from "@exegol/shared";
 import { logger } from "../lib/logger";
+import { readableStep } from "./readable-step";
 import { coreRust } from "./spawn-env";
 import { AgentStatusParser } from "./status-parser";
 
@@ -17,6 +18,16 @@ export type ProcessResult = {
 export type OutputProcessor = { process(data: string): ProcessResult };
 
 // ─── Factory ────────────────────────────────────────────────────────────────
+
+/**
+ * One place for both paths: a TUI's status bar or border scraped as the step
+ * painted glyph soup in the sidebar, and its status came from the same chrome
+ * line (a bar ending in "?" read as waiting_input). Chrome drops both.
+ */
+export function readableScrape(status: string | undefined, step: string | undefined) {
+  const currentStep = readableStep(step);
+  return step && !currentStep ? { status: undefined, currentStep } : { status, currentStep };
+}
 
 const useRustProcessor = !!coreRust?.AgentOutputStream;
 if (useRustProcessor) {
@@ -43,8 +54,7 @@ export function createOutputProcessor(
         process(data: string) {
           const r = stream.processChunk(data);
           return {
-            status: r.status ?? undefined,
-            currentStep: r.currentStep ?? undefined,
+            ...readableScrape(r.status ?? undefined, r.currentStep ?? undefined),
             sessionId: r.sessionId ?? undefined,
             resumeCommand: r.resumeCommand ?? undefined,
             signals: r.signals?.length
@@ -63,8 +73,7 @@ export function createOutputProcessor(
     process(data: string) {
       const u = parser.parse(data);
       return {
-        status: u?.status,
-        currentStep: u?.currentStep,
+        ...readableScrape(u?.status, u?.currentStep),
         sessionId: u?.sessionId,
         resumeCommand: u?.resumeCommand,
         signals: u?.signals,
