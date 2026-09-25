@@ -102,6 +102,8 @@ export interface WorkspaceStore {
   ensureDefaultTab: () => void;
   /** Reset all split sizes in the active tab to equal proportions */
   equalizeSplits: (tabId: string) => void;
+  /** Sizes of the split at `path` (child indexes from the tab's root), after a drag */
+  setSplitSizes: (tabId: string, path: number[], sizes: number[]) => void;
   /**
    * Replace the tab layout with a built-in preset, reusing existing panes.
    * Returns the IDs of any new panes that were created as terminal slots,

@@ -42,6 +42,7 @@ export type TabsPanesSlice = Pick<
   | "getActiveTab"
   | "ensureDefaultTab"
   | "equalizeSplits"
+  | "setSplitSizes"
   | "setPaneCwd"
   | "setPaneLastExit"
 >;
@@ -363,6 +364,32 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       return setPw(s, {
         tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
       });
+    }),
+
+  setSplitSizes: (tabId, path, sizes) =>
+    set((s) => {
+      const pw = getPw(s);
+      const tab = pw.tabs.find((t) => t.id === tabId);
+      if (!tab) return s;
+      const update = (node: LayoutNode, depth: number): LayoutNode => {
+        if (node.type === "pane") return node;
+        if (depth === path.length) {
+          const same =
+            node.sizes.length === sizes.length &&
+            node.sizes.every((v, i) => Math.abs(v - (sizes[i] ?? 0)) < 0.1);
+          return same ? node : { ...node, sizes };
+        }
+        const index = path[depth] ?? -1;
+        const child = node.children[index];
+        if (!child) return node;
+        const next = update(child, depth + 1);
+        return next === child
+          ? node
+          : { ...node, children: node.children.map((c, i) => (i === index ? next : c)) };
+      };
+      const layout = update(tab.layout, 0);
+      if (layout === tab.layout) return s;
+      return setPw(s, { tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)) });
     }),
 
   setPaneCwd: (paneId, cwd) =>
