@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Sidebar: a pause badge on projects with suspended sessions (also on the collapsed rail); the running count leaves them out
 - Terminal toolbar: a link to the repo on GitHub/GitLab, opened in a browser pane beside the terminal or in your browser
 - Files: search file names or text across the project and its subrepos (a text hit opens the file at the line), and edit text files with Save / Cmd+S, a warning if the file changed on disk, and a prompt before leaving unsaved changes
 - Projects can have their own icon and color (right-click → Icon and color): the app's favicon or icon found in the repo or any of its subrepos, or a built-in icon, shown in the sidebar, the icon rail, the title bar and the project chips

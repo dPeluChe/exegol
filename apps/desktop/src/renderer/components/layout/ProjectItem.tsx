@@ -10,6 +10,7 @@ import {
   Globe,
   Layers,
   Palette,
+  Pause,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -140,9 +141,10 @@ export function ProjectItem({
   onDragOver,
   onDrop,
 }: ProjectItemProps) {
-  const runningCount = agents.filter((a) =>
-    ["running", "spawning", "waiting_input"].includes(a.status),
-  ).length;
+  const live = agents.filter((a) => ["running", "spawning", "waiting_input"].includes(a.status));
+  // A suspended session still reads as running: counted apart so it is easy to spot
+  const pausedCount = live.filter((a) => a.suspended).length;
+  const runningCount = live.length - pausedCount;
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(project.name);
@@ -250,6 +252,15 @@ export function ProjectItem({
           <span className="flex-1 truncate font-medium">{project.name}</span>
         )}
 
+        {pausedCount > 0 && (
+          <span
+            className="flex h-4 items-center gap-0.5 rounded-full bg-white/5 px-1 text-[10px] text-text-muted"
+            title={`${pausedCount} suspended session${pausedCount === 1 ? "" : "s"}`}
+          >
+            <Pause className="h-2.5 w-2.5" />
+            {pausedCount > 1 && pausedCount}
+          </span>
+        )}
         {runningCount > 0 && (
           <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent/20 px-1 text-[10px] text-accent">
             {runningCount}
