@@ -1,11 +1,12 @@
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Folder, FolderGit2, Play, Star, Terminal, Zap } from "lucide-react";
+import { Folder, FolderGit2, FolderTree, GitBranch, Play, Star, Terminal, Zap } from "lucide-react";
 import { useState } from "react";
 import type { DetectedScript } from "../../hooks/use-trpc-scheduler";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useToastStore } from "../../stores/toasts";
+import { useWorkspaceStore } from "../../stores/workspace";
 
 interface RunTarget {
   rel: string;
@@ -28,8 +29,8 @@ function runnerLabel(s: DetectedScript): string | null {
 /**
  * T197: where to run and what. A workspace of repos has nothing to run at its
  * root, so the launcher showed no commands; each folder is a chip, and the
- * row below it holds a terminal already in that folder plus its commands
- * (pinned first, the rest behind "+N").
+ * row below it opens that folder's Terminal, Files and Git, then its commands
+ * (pinned first, the rest behind "+N"). Always shown, so those three stay.
  */
 export function RunTargets({
   projectId,
@@ -59,17 +60,17 @@ export function RunTargets({
   const [chosen, setChosen] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [launching, setLaunching] = useState<string | null>(null);
-
-  const withSomething = targets.filter((t) => (t.rel === "" ? t.scripts.length > 0 : true));
-  if (withSomething.length === 0) return null;
+  const updatePane = useWorkspaceStore((s) => s.updatePane);
 
   // Default: a folder holding a pin, else the root when it has commands, else the first repo
   const pinnedRel = pins[0]?.split("\u0000")[0];
   const selected =
     targets.find((t) => t.rel === chosen) ??
     targets.find((t) => t.rel === pinnedRel) ??
-    withSomething[0];
+    targets.find((t) => t.rel !== "" || t.scripts.length > 0) ??
+    targets[0];
   if (!selected) return null;
+  const inFolder = selected.rel !== "";
 
   const pinned = selected.scripts.filter((s) => pins.includes(pinKey(selected.rel, s.command)));
   const rest = selected.scripts.filter((s) => !pins.includes(pinKey(selected.rel, s.command)));
@@ -79,7 +80,13 @@ export function RunTargets({
   const run = async (label: string, command?: string) => {
     setLaunching(label);
     try {
-      const agentId = await spawnShellIntoPane(projectId, paneId, label, selected.path);
+      // The root keeps the normal start folder rules (worktrees included)
+      const agentId = await spawnShellIntoPane(
+        projectId,
+        paneId,
+        label,
+        inFolder ? selected.path : undefined,
+      );
       if (command) window.api.terminal.write(agentId, `${command}\n`);
     } catch (err) {
       useToastStore.getState().addToast({
@@ -132,22 +139,58 @@ export function RunTargets({
       )}
 
       <div className="flex max-w-full flex-wrap justify-center gap-1">
-        {selected.rel !== "" && (
+        {/* The folder's own views: a terminal in it, its files, its git (when it is a repo) */}
+        <button
+          type="button"
+          disabled={!!launching}
+          onClick={() => run(inFolder ? (selected.rel.split("/").pop() ?? "Terminal") : "Terminal")}
+          className={cn(
+            chip,
+            size,
+            "border-border bg-bg-secondary text-text-secondary hover:border-accent/50",
+          )}
+          title={`Terminal in ${selected.path}`}
+        >
+          <Terminal className="h-3 w-3" />
+          Terminal
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            updatePane(paneId, {
+              type: "files",
+              filePath: inFolder ? selected.path : undefined,
+              openFile: undefined,
+            })
+          }
+          className={cn(
+            chip,
+            size,
+            "border-border bg-bg-secondary text-text-secondary hover:border-accent/50",
+          )}
+          title={`Files of ${selected.path}`}
+        >
+          <FolderTree className="h-3 w-3" />
+          Files
+        </button>
+        {(!inFolder || selected.git) && (
           <button
             type="button"
-            disabled={!!launching}
-            onClick={() => run(selected.rel.split("/").pop() ?? "Terminal")}
+            onClick={() =>
+              updatePane(paneId, { type: "git", filePath: inFolder ? selected.path : undefined })
+            }
             className={cn(
               chip,
               size,
               "border-border bg-bg-secondary text-text-secondary hover:border-accent/50",
             )}
-            title={`Terminal in ${selected.path}`}
+            title={`Git of ${selected.path}`}
           >
-            <Terminal className="h-3 w-3" />
-            terminal here
+            <GitBranch className="h-3 w-3" />
+            Git
           </button>
         )}
+        {selected.scripts.length > 0 && <span className="mx-0.5 w-px self-stretch bg-border" />}
         {[...pinned, ...shown].map((s) => {
           const key = pinKey(selected.rel, s.command);
           const isPinned = pins.includes(key);

@@ -13,6 +13,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - JSON and JSONL files open as a collapsible tree (Code/Tree toggle, like the markdown preview)
 - Files right-click menu: open with the default app, reveal in Finder, copy path, rename
 
+### Changed
+- Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
+
 ### Fixed
 - Files: images and PDFs open as themselves (they showed as garbled text), other binaries and very large files offer the default app; the viewer's Close was hidden under the pane's buttons (now on the left, Esc closes); New File no longer overwrites an existing file with an empty one
 
