@@ -10,6 +10,21 @@ import { redact, tailFile } from "./diagnostics";
 describe("redact", () => {
   const home = "/Users/someone";
 
+  it("redacts the cookie headers an updater 404 logged", () => {
+    const logged = `Headers: {
+  "server": "github.com",
+  "set-cookie": [
+    "_gh_sess=%2FKbunX4SBdna--Cfgw9j1CPwPgI%2Bza; path=/; HttpOnly; secure; SameSite=Lax",
+    "_octo=GH1.1.1802973033.1790292546; expires=Fri, 24 Sep 2027 23:29:06 GMT; domain=.github.com"
+  ]
+}`;
+    const out = redact(logged, home);
+    expect(out).not.toContain("_gh_sess");
+    expect(out).not.toContain("_octo");
+    expect(out).toContain('"server": "github.com"');
+    expect(redact("Cookie: sid=abc123; theme=dark", home)).toBe("Cookie: [redacted]");
+  });
+
   it("hides the home directory", () => {
     expect(redact("cwd: /Users/someone/code/app", home)).toBe("cwd: ~/<path>");
   });

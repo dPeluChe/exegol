@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Bug reports no longer carry GitHub cookies: the updater logged a 404's full response headers
 - A new browser pane opens the project's running dev server (the port `pnpm dev` is listening on)
   instead of always :3000. Running-port detection never matched anything
 
