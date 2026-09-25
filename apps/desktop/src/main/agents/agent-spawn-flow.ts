@@ -63,7 +63,9 @@ export function setupAgentCwd(
   if (config.cwdOverride) {
     cwd = config.cwdOverride;
     logger.info("[AgentManager] Using cwdOverride:", { cwd });
-    setIsolationMode(db, agent.id, "pipeline");
+    // A folder of the checkout itself (the launcher's "run in") is not a pipeline worktree
+    const inCheckout = cwd === project.path || cwd.startsWith(`${project.path}/`);
+    setIsolationMode(db, agent.id, inCheckout ? "project-root" : "pipeline");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
     return cwd;
   }

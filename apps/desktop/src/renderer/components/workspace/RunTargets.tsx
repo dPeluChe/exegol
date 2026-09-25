@@ -2,15 +2,11 @@ import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Folder, FolderGit2, Play, Star, Terminal, Zap } from "lucide-react";
 import { useState } from "react";
+import type { DetectedScript } from "../../hooks/use-trpc-scheduler";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { useToastStore } from "../../stores/toasts";
 
-interface DetectedScript {
-  name: string;
-  command: string;
-  source: string;
-  framework?: string;
-}
 interface RunTarget {
   rel: string;
   path: string;
@@ -53,6 +49,8 @@ export function RunTargets({
   const { data: pins = [] } = useQuery({
     queryKey: ["resources", "runPins", projectId],
     queryFn: () => trpcInvoke<string[]>("resources.runPins", { projectId }),
+    // Only this client changes them, and the mutation writes the result back
+    staleTime: Number.POSITIVE_INFINITY,
   });
   const togglePin = useMutation({
     mutationFn: (key: string) => trpcMutate<string[]>("resources.toggleRunPin", { projectId, key }),
@@ -84,7 +82,11 @@ export function RunTargets({
       const agentId = await spawnShellIntoPane(projectId, paneId, label, selected.path);
       if (command) window.api.terminal.write(agentId, `${command}\n`);
     } catch (err) {
-      console.error("[RunTargets] Launch failed:", err);
+      useToastStore.getState().addToast({
+        type: "error",
+        title: `Could not start ${label}`,
+        body: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setLaunching(null);
     }

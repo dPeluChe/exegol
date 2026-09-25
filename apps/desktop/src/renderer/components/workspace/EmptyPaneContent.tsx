@@ -30,8 +30,6 @@ import { RunTargets } from "./RunTargets";
  *  invalidates every callback that depends on it. */
 const NO_PROVIDERS: AgentProvider[] = [];
 
-/** Only the non-obvious runners earn a badge; package.json is the default. */
-
 function relativeTime(epoch: number | null): string {
   if (!epoch) return "";
   const ms = epoch > 1e12 ? epoch : epoch * 1000;

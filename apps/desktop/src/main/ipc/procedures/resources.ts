@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getProject, listAgents } from "../../db/queries";
+import { getJsonSetting, setJsonSetting } from "../../db/queries/settings";
 import { killDevServer, listDevServers } from "../../system/dev-servers";
 import { getProjectPorts } from "../../system/ports";
 import {
@@ -9,28 +10,12 @@ import {
   getSystemMetrics,
 } from "../../system/resources";
 import { detectRunTargets } from "../../system/scripts";
-import type { Context } from "../context";
 import { publicProcedure, router } from "../trpc";
 
 // ─── Preferred Ports (per-project, stored in settings table) ──────────────
 
 const RUN_PINS_KEY = "project_run_pins";
-
-function readJsonSetting<T>(db: Context["db"], key: string, fallback: T): T {
-  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key) as
-    | { value: string }
-    | undefined;
-  if (!row) return fallback;
-  try {
-    return JSON.parse(row.value) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-function getPreferredPorts(db: Context["db"]): Record<string, number> {
-  return readJsonSetting<Record<string, number>>(db, "project_preferred_ports", {});
-}
+const PREFERRED_PORTS_KEY = "project_preferred_ports";
 
 export const resourcesRouter = router({
   system: publicProcedure.query(() => {
@@ -82,25 +67,19 @@ export const resourcesRouter = router({
   preferredPort: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(({ ctx, input }) => {
-      const ports = getPreferredPorts(ctx.db);
+      const ports = getJsonSetting<Record<string, number>>(ctx.db, PREFERRED_PORTS_KEY, {});
       return ports[input.projectId] ?? null;
     }),
 
   setPreferredPort: publicProcedure
     .input(z.object({ projectId: z.string(), port: z.number() }))
     .mutation(({ ctx, input }) => {
-      const current = getPreferredPorts(ctx.db);
+      const current = getJsonSetting<Record<string, number>>(ctx.db, PREFERRED_PORTS_KEY, {});
       current[input.projectId] = input.port;
-      ctx.db
-        .prepare(
-          `INSERT INTO settings (key, value) VALUES ('project_preferred_ports', ?)
-           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-        )
-        .run(JSON.stringify(current));
+      setJsonSetting(ctx.db, PREFERRED_PORTS_KEY, current);
       return input.port;
     }),
 
-  /** Detected dev scripts for a project */
   /** T197: project root + subfolders (nested repos, packages) and what each can run */
   runTargets: publicProcedure
     .input(z.object({ projectId: z.string() }))
@@ -114,22 +93,18 @@ export const resourcesRouter = router({
     .input(z.object({ projectId: z.string() }))
     .query(
       ({ ctx, input }) =>
-        readJsonSetting<Record<string, string[]>>(ctx.db, RUN_PINS_KEY, {})[input.projectId] ?? [],
+        getJsonSetting<Record<string, string[]>>(ctx.db, RUN_PINS_KEY, {})[input.projectId] ?? [],
     ),
 
   toggleRunPin: publicProcedure
     .input(z.object({ projectId: z.string(), key: z.string().max(2000) }))
     .mutation(({ ctx, input }) => {
-      const all = readJsonSetting<Record<string, string[]>>(ctx.db, RUN_PINS_KEY, {});
+      const all = getJsonSetting<Record<string, string[]>>(ctx.db, RUN_PINS_KEY, {});
       const pins = all[input.projectId] ?? [];
       all[input.projectId] = pins.includes(input.key)
         ? pins.filter((k) => k !== input.key)
         : [...pins, input.key];
-      ctx.db
-        .prepare(
-          "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        )
-        .run(RUN_PINS_KEY, JSON.stringify(all));
+      setJsonSetting(ctx.db, RUN_PINS_KEY, all);
       return all[input.projectId];
     }),
 

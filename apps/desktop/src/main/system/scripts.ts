@@ -333,7 +333,12 @@ export async function detectProjectScripts(projectPath: string): Promise<Detecte
   ]);
 
   const scripts = [...node, ...python, ...other, ...actions];
-  scriptsCache.set(projectPath, { at: Date.now(), scripts });
+  // Per-folder now (up to ~30 paths a project): drop expired entries as we go
+  const now = Date.now();
+  for (const [path, entry] of scriptsCache) {
+    if (now - entry.at >= SCRIPTS_TTL_MS) scriptsCache.delete(path);
+  }
+  scriptsCache.set(projectPath, { at: now, scripts });
   return scripts;
 }
 
@@ -366,10 +371,19 @@ const MAX_SUBFOLDERS = 12;
 async function childDirs(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isDirectory() && !e.name.startsWith(".") && !SKIP_DIRS.has(e.name))
-      .map((e) => e.name)
-      .sort();
+    return (
+      entries
+        // Symlinks out: their target may sit outside the project, where spawn refuses to start
+        .filter(
+          (e) =>
+            e.isDirectory() &&
+            !e.isSymbolicLink() &&
+            !e.name.startsWith(".") &&
+            !SKIP_DIRS.has(e.name),
+        )
+        .map((e) => e.name)
+        .sort()
+    );
   } catch {
     return [];
   }
