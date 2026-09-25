@@ -7,7 +7,7 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.2] — 2026-09-24 — YOLO on resume, CLI flags, sidebar by tabs, daily fixes
 
 ### Changed
 - Sidebar shows each project the way its workspace is laid out: every tab with its panes (agents
