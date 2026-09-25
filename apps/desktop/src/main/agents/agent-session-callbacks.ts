@@ -28,6 +28,7 @@ import {
 } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
+import { readableStep } from "./readable-step";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -252,6 +253,8 @@ export function createSpawnCallbacks(
       const processor = maps.outputProcessors.get(agent.id);
       if (!processor) return;
       const result = processor.process(data);
+      // A TUI's status bar scraped as the "step" painted glyph soup in the sidebar
+      result.currentStep = readableStep(result.currentStep);
 
       // T123: deterministic hook/OSC-777 signals take priority over scraped status.
       if (result.signals?.length) {
