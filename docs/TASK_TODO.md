@@ -13,7 +13,22 @@
 
 ## Priority Order
 
-### Daily readiness (2026-09-22): ACTIVE
+### 0.5.3 queue (2026-09-25): ACTIVE
+> Reported while using 0.5.2. Done so far is in TASK_COMPLETED/2609.md (files viewer, launcher
+> folder actions, sidebar layout + rail).
+
+1. **File and text search**: a search box over the project (file names + contents). The backend
+   exists: core-rust `search/` (fuzzy finder + grep) and the search router; the renderer hook is
+   unused (T193.22).
+2. **Project icon and color**: "Change icon & color" on a project (reuse `GroupIconColorPicker`);
+   detect the app's icon (favicon.ico, icon.png, apple-touch-icon, src-tauri/icons, public/...)
+   in the root and in each subrepo of a workspace (the run-targets scan), offer the ones found;
+   show it in the sidebar, the icon rail and wherever the project is named.
+3. **Edit files with save**: the viewer is read-only; editing needs a modified marker, Cmd+S and
+   a prompt before closing unsaved changes.
+4. **Verify opencode across app quit** (P1 #2 below).
+
+
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.
 > Goal: an installed build Antonio can use every day. Features wait.
 

@@ -1,4 +1,4 @@
-import { cn, ScrollArea, Separator } from "@exegol/ui";
+import { cn, Separator } from "@exegol/ui";
 import { Activity, Cuboid, History, LayoutDashboard, Plus, Rss } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useAgentStore } from "../../stores/agents";
@@ -51,20 +51,27 @@ export function Sidebar() {
         )}
       </button>
 
-      {/* Scrollable middle — Agent Monitor + Projects + Sessions */}
-      <ScrollArea className="flex-1">
+      {/* Sections size themselves: Agents capped, Projects takes the rest */}
+      <div className="flex min-h-0 flex-1 flex-col">
         {/* T57: Agent monitor — running agents + attention inbox */}
-        <SidebarSection title="Agents" icon={Activity} defaultOpen={true} count={agentBadge}>
+        <SidebarSection
+          title="Agents"
+          icon={Activity}
+          defaultOpen={true}
+          count={agentBadge}
+          size="cap"
+        >
           <AttentionSection />
         </SidebarSection>
 
-        <Separator className="mx-3 bg-border" />
+        <Separator className="mx-3 shrink-0 bg-border" />
 
         <SidebarSection
           title="Projects"
           icon={Cuboid}
           defaultOpen={true}
           count={projectCount}
+          size="fill"
           action={
             <button
               type="button"
@@ -79,18 +86,18 @@ export function Sidebar() {
           <ProjectsSection onAddProject={() => useAppStore.getState().setActiveProject(null)} />
         </SidebarSection>
 
-        <Separator className="mx-3 bg-border" />
+        <Separator className="mx-3 shrink-0 bg-border" />
 
         <SidebarSection title="Recent Sessions" icon={History} defaultOpen={false}>
           <RecentSessions />
         </SidebarSection>
 
-        <Separator className="mx-3 bg-border" />
+        <Separator className="mx-3 shrink-0 bg-border" />
 
         <SidebarSection title="Activity" icon={Rss} defaultOpen={false}>
           <ActivityFeed />
         </SidebarSection>
-      </ScrollArea>
+      </div>
 
       <Separator className="bg-border" />
 
