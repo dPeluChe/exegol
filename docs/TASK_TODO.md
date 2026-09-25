@@ -484,7 +484,6 @@ past it. It is also arm64 only.
 17. Parallel runs: no Cancel in the UI; if every spawn fails the run stays `running` forever.
 18. QA Run does nothing unless the browser pane is focused (`use-browser-qa.ts:252`).
 19. Files pane: no size/binary guard before Monaco.
-20. Global hotkey stops working after the main window closes (`window.ts:10`).
 21. Knowledge, Tasks and Add Memory swallow errors; archiving can overwrite `tasks_completed.md`
     (`task-file-actions.ts:40`).
 24. A theme toggle rebuilds every terminal (`isLight` in the mount deps) instead of setting
