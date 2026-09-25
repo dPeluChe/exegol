@@ -14,6 +14,8 @@ import {
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
+  setAgentMuted,
+  setAgentSuspended,
   updateAgentStatus,
 } from "../../db/queries";
 import {
@@ -272,6 +274,22 @@ export const agentRouter = router({
   // Idempotent: if the agent is already gone (race with a concurrent close),
   // return success instead of NOT_FOUND so the renderer's double-call
   // cleanup pattern (stop + delete) doesn't spam the console.
+  /** Keep a live session out of Needs attention and notifications, or bring it back */
+  setMuted: publicProcedure
+    .input(z.object({ id: z.string(), muted: z.boolean() }))
+    .mutation(({ ctx, input }) => {
+      setAgentMuted(ctx.db, input.id, input.muted);
+      return getAgent(ctx.db, input.id);
+    }),
+
+  /** Stop quietly and keep the session for Resume (marked before the stop, so its exit is quiet too) */
+  suspend: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
+    if (!getAgent(ctx.db, input.id)) return null;
+    setAgentSuspended(ctx.db, input.id, Math.floor(Date.now() / 1000));
+    await ctx.agentManager.stop(ctx.db, input.id);
+    return getAgent(ctx.db, input.id);
+  }),
+
   stop: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);
     if (!agent) return null;

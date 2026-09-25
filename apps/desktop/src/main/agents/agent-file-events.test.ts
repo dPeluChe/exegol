@@ -11,7 +11,9 @@ function setupDb(): Database.Database {
     task_description TEXT,
     status TEXT,
     current_step TEXT,
-    claude_session_id TEXT
+    claude_session_id TEXT,
+    muted INTEGER NOT NULL DEFAULT 0,
+    suspended_at INTEGER
   )`);
   return db;
 }
@@ -105,6 +107,13 @@ describe("dispatchAgentFileEvent", () => {
     // Anything that is not an id shape is ignored
     dispatchAgentFileEvent(db, emptyMaps(), { type: "stop", agentId: "a7", sessionId: "x'; --" });
     expect(sid()).toBe(second);
+  });
+
+  it("a muted session still changes status but raises no attention", () => {
+    insertAgent(db, "a9", "claude-code", "running");
+    db.prepare("UPDATE agents SET muted = 1 WHERE id = ?").run("a9");
+    dispatchAgentFileEvent(db, emptyMaps(), { type: "permission_needed", agentId: "a9" });
+    expect(status(db, "a9")).toBe("waiting_input");
   });
 
   it("does not store a session id for other CLIs", () => {

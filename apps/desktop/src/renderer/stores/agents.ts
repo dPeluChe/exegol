@@ -144,6 +144,8 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     accessMode: agent.accessMode ?? null,
     claudeSessionId: null,
     activityLevel: classifyActivity(agent.status, agent.currentStep),
+    muted: agent.muted ?? false,
+    suspended: agent.suspendedAt != null,
     ...overrides,
   };
 }
@@ -169,6 +171,10 @@ export interface AgentState {
    *  the row makes an open terminal pane look like a leftover from a previous
    *  session, and WorkspacePane converts it to empty, destroying the transcript. */
   archived?: boolean;
+  /** Alive but quiet: no Needs attention entry, no notifications */
+  muted?: boolean;
+  /** Stopped on purpose to resume later; quiet like muted */
+  suspended?: boolean;
 }
 
 interface AgentStore {
@@ -404,6 +410,8 @@ export const useAgentStore = create<AgentStore>()(
                 branchName: dbAgent.branchName ?? existing.branchName ?? null,
                 alias: dbAgent.alias ?? existing.alias ?? null,
                 currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
+                muted: dbAgent.muted ?? existing.muted ?? false,
+                suspended: dbAgent.suspendedAt != null,
               };
             } else {
               added++;
@@ -423,6 +431,8 @@ export const useAgentStore = create<AgentStore>()(
                 accessMode: dbAgent.accessMode ?? null,
                 claudeSessionId: null,
                 activityLevel: classifyActivity(dbStatus, dbAgent.currentStep),
+                muted: dbAgent.muted ?? false,
+                suspended: dbAgent.suspendedAt != null,
               };
             }
           }
@@ -461,7 +471,8 @@ export const useAgentStore = create<AgentStore>()(
       addAttentionItem: (agentId) =>
         set((s) => {
           const agent = s.agents[agentId];
-          if (!agent) return s;
+          // Muted and suspended sessions never ask for attention
+          if (!agent || agent.muted || agent.suspended) return s;
           const att = statusToAttention(agent.status, agent.cliType);
           if (!att) return s;
           const existing = s.attentionItems[agentId];

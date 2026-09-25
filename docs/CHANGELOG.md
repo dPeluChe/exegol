@@ -37,6 +37,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   does not have
 
 ### Added
+- Mute a session to keep it running but out of Needs attention and notifications, or Suspend it to stop it quietly and Resume it when you come back to the project (terminal toolbar, or right-click it in the sidebar)
 - The launcher's "Run in" row: a chip per project folder that is its own git repo or package (a workspace of repos had nothing to run at its root), each with a terminal already in that folder and its commands, `convex dev` included when the folder uses Convex; pin the ones you use
 - Dropping a file from Finder onto a terminal pastes its path
 - Each project in the sidebar has a Files section: browse the folder, create, rename or delete files, drag one onto a terminal; a click opens it in the workspace's Files pane

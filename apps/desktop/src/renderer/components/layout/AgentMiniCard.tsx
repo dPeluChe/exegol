@@ -1,11 +1,13 @@
 import { cn } from "@exegol/ui";
-import { Trash2 } from "lucide-react";
+import { BellOff, Moon, Pause, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDeleteAgent } from "../../hooks/use-delete-agent";
 import { formatTimeAgo } from "../../lib/format";
 import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
+import { setAgentMuted, suspendAgent } from "../../lib/session-quiet";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../stores/agents";
 import { AgentIcon } from "../common/AgentIcon";
+import { QuietBadge } from "../common/QuietControls";
 
 export const VISIBLE_STATUSES = new Set([
   "running",
@@ -99,6 +101,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
               )}
             />
             <span className="flex-1 truncate text-[10px] font-medium">{displayName}</span>
+            <QuietBadge agent={agent} />
             {agent.tokenUsage.cost > 0 && (
               <span className="shrink-0 text-[8px] tabular-nums text-accent">
                 $
@@ -130,6 +133,32 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
           className="fixed z-50 min-w-[140px] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
+          {isActive && agent.cliType !== "shell" && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  closeContextMenu();
+                  setAgentMuted(agent.id, !agent.muted).catch(() => {});
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+              >
+                {agent.muted ? <Moon className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+                {agent.muted ? "Unmute" : "Mute"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  closeContextMenu();
+                  suspendAgent(agent.id).catch(() => {});
+                }}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+              >
+                <Pause className="h-3 w-3" />
+                Suspend
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={handleRemove}
