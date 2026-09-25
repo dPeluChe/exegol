@@ -3,12 +3,7 @@ import { Button } from "@exegol/ui";
 import { AlertCircle, ChevronDown, Play, RotateCcw } from "lucide-react";
 import type { Ref } from "react";
 import { useCallback, useState } from "react";
-import { useSpawnAgent } from "../../hooks/use-trpc";
-import { trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
-import { useTerminalStore } from "../../stores/terminals";
-import { useWatchStore } from "../../stores/watch";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { AgentStopReason } from "./AgentStopReason";
 import { ChatView } from "./ChatView";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
@@ -30,7 +25,6 @@ interface TerminalScrollbackProps {
   agent: ScrollbackAgent | null;
   agentId: string;
   scrollbackContent: string;
-  resumableCliTypes: Set<string>;
   paneId?: string;
   viewMode: "terminal" | "chat";
   setViewMode: (mode: "terminal" | "chat") => void;
@@ -47,7 +41,6 @@ export function TerminalScrollback({
   agent,
   agentId,
   scrollbackContent,
-  resumableCliTypes,
   paneId,
   viewMode,
   setViewMode,
@@ -56,52 +49,11 @@ export function TerminalScrollback({
   floatingButtons,
 }: TerminalScrollbackProps) {
   const [showOutput, setShowOutput] = useState(false);
-  const spawnAgent = useSpawnAgent();
-  const addAgent = useAgentStore((s) => s.addAgent);
-  const removeAgent = useAgentStore((s) => s.removeAgent);
-  const createTerminal = useTerminalStore((s) => s.createTerminal);
-
-  const handleResume = useCallback(async () => {
-    if (!agent) return;
-    const canResume = resumableCliTypes.has(agent.cliType);
-    const newAgent = await spawnAgent.mutateAsync({
-      projectId: agent.projectId,
-      cliType: agent.cliType,
-      taskDescription: agent.taskDescription,
-      useWorktree: !!agent.branchName,
-      branchName: agent.branchName ?? undefined,
-      accessMode: agent.accessMode ?? undefined,
-      resumeSession: canResume,
-      resumeFromAgentId: canResume ? agent.id : undefined,
-    });
-
-    if (newAgent?.id) useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
-    if (paneId && newAgent?.id) {
-      removeAgent(agent.id);
-      trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
-
-      addAgent({
-        id: newAgent.id,
-        projectId: newAgent.projectId,
-        cliType: newAgent.cliType,
-        status: newAgent.status,
-        currentStep: newAgent.currentStep,
-        taskDescription: newAgent.taskDescription,
-        branchName: newAgent.branchName ?? null,
-        alias: newAgent.alias ?? null,
-        tokenUsage: { input: 0, output: 0, cost: 0 },
-        startedAt: newAgent.startedAt,
-        accessMode: newAgent.accessMode ?? null,
-        claudeSessionId: null,
-        activityLevel: "busy",
-      });
-      createTerminal(newAgent.id);
-      useWorkspaceStore.getState().updatePane(paneId, {
-        type: "terminal",
-        agentId: newAgent.id,
-      });
-    }
-  }, [agent, paneId, resumableCliTypes, spawnAgent, addAgent, removeAgent, createTerminal]);
+  const { resume, pending, resumableCliTypes } = useResumeAgent();
+  // One click, one agent: a double-click spawned two
+  const handleResume = useCallback(() => {
+    if (agent && !pending) resume(agent, paneId).catch(() => {});
+  }, [agent, paneId, pending, resume]);
 
   const canResume = agent ? resumableCliTypes.has(agent.cliType) : false;
   const ResumeIcon = canResume ? Play : RotateCcw;
@@ -128,6 +80,7 @@ export function TerminalScrollback({
               size="sm"
               className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
               onClick={handleResume}
+              disabled={pending}
             >
               <ResumeIcon className="h-3 w-3" />
               {resumeLabel}

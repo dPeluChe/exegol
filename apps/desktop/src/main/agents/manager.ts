@@ -19,6 +19,7 @@ import {
   type ReattachResult,
   reattachSidecarAgents as reattachSidecarAgentsImpl,
 } from "./reattach-sidecar-agents";
+import { recoverLostSessionId } from "./recover-lost-session";
 import { getProviderRegistry } from "./registry";
 import { broadcastAgentStatus, coreRust, DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "./spawn-env";
 import { createTitleStatusTracker } from "./title-status";
@@ -119,7 +120,12 @@ export class AgentManager {
 
     const cwd = setupAgentCwd(db, agent, config, project, this.worktrees, this.initialSnapshots);
 
-    const priorSession = config.resumeSession ? await hasLocalSession(agent.cliType, cwd) : null;
+    // A known session id makes the store check moot; it only guards the generic resume flag
+    const knownSession = config.resumeSession
+      ? await recoverLostSessionId(db, config.resumeFromAgentId ?? agent.id, cwd)
+      : false;
+    const priorSession =
+      config.resumeSession && !knownSession ? await hasLocalSession(agent.cliType, cwd) : null;
     const { shell, args, env, stdinCommand, enableMarker, isPlainShell } = buildPtyInvocation(
       db,
       agent,

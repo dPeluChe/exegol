@@ -24,6 +24,7 @@ import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
+import { ResumeButton } from "../../agents/ResumeButton";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
@@ -538,6 +539,7 @@ function AgentCard({
                 Peek
               </button>
             )}
+            {onArchive && <ResumeButton agent={agent} className="ml-auto" />}
             {onArchive && (
               <button
                 type="button"
@@ -545,7 +547,7 @@ function AgentCard({
                   e.stopPropagation();
                   onArchive();
                 }}
-                className="ml-auto flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
+                className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
                 title="Archive — keeps the session, removes the card"
               >
                 <Archive className="h-3 w-3" />

@@ -77,12 +77,22 @@ async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
  * this CLI, so the caller can't tell and keeps the flag.
  */
 export async function hasLocalSession(provider: string, cwd: string): Promise<boolean | null> {
+  // A recent window: codex stores rollouts by day across every repo, and
+  // since=0 read the head of every one of them before each resume spawn
+  const sessions = await listLocal(provider, cwd, Date.now() / 1000 - RESUME_WINDOW_S);
+  return sessions && sessions.length > 0;
+}
+
+/** One provider's sessions in `cwd`; null = no adapter or an unreadable store */
+async function listLocal(
+  provider: string,
+  cwd: string,
+  since: number,
+): Promise<LocalSession[] | null> {
   const adapter = PROVIDERS.find((p) => p.id === provider);
   if (!adapter) return null;
   try {
-    // A recent window: codex stores rollouts by day across every repo, and
-    // since=0 read the head of every one of them before each resume spawn
-    return (await adapter.list([cwd], Date.now() / 1000 - RESUME_WINDOW_S)).length > 0;
+    return await adapter.list([cwd], since);
   } catch (err) {
     logger.warn(`[History] ${provider} store unreadable:`, err);
     return null;
@@ -90,3 +100,41 @@ export async function hasLocalSession(provider: string, cwd: string): Promise<bo
 }
 
 const RESUME_WINDOW_S = 90 * 24 * 3600;
+
+/** A CLI writes its first transcript line within seconds of launch; minutes covers a slow start */
+const START_MATCH_S = 300;
+
+/**
+ * Which recorded session an agent was running, when Exegol never learned its id
+ * (a reboot kills the PTY before the CLI prints its resume line). The one that
+ * began right after the agent did; else one already open when it began (a
+ * resumed conversation). Sessions another agent owns are never picked.
+ */
+export function pickLostSession(
+  sessions: LocalSession[],
+  agentStartedAt: number,
+  claimed: Set<string>,
+): LocalSession | null {
+  const free = sessions.flatMap((s) =>
+    s.startedAt !== null && !claimed.has(s.sessionId) ? [{ s, start: s.startedAt }] : [],
+  );
+  const byStart = free
+    .filter(({ start }) => start >= agentStartedAt - 30 && start <= agentStartedAt + START_MATCH_S)
+    .sort((a, b) => Math.abs(a.start - agentStartedAt) - Math.abs(b.start - agentStartedAt));
+  if (byStart[0]) return byStart[0].s;
+  const spanning = free
+    .filter(({ s, start }) => start < agentStartedAt && (s.endedAt ?? 0) >= agentStartedAt)
+    .sort((a, b) => (b.s.endedAt ?? 0) - (a.s.endedAt ?? 0));
+  return spanning[0]?.s ?? null;
+}
+
+export async function findLostSession(
+  provider: string,
+  cwd: string,
+  agentStartedAt: number,
+  claimed: Set<string>,
+): Promise<LocalSession | null> {
+  // Modified since the agent started: the session it ran was written to after that
+  const sessions = await listLocal(provider, cwd, agentStartedAt);
+  return sessions ? pickLostSession(sessions, agentStartedAt, claimed) : null;
+}

@@ -13,6 +13,7 @@ import { type DragEvent, useState } from "react";
 import { useSettings } from "../../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
+import { ResumeButton } from "../../agents/ResumeButton";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
@@ -309,9 +310,10 @@ function WatchCard({
           />
         </div>
       ) : (
-        <p className="mx-3 mb-2 text-[11px] text-text-muted">
-          Session ended ({agent.status}). Open it to read the transcript or resume.
-        </p>
+        <div className="mx-3 mb-2 flex items-center gap-2 text-[11px] text-text-muted">
+          <span>Session ended ({agent.status}).</span>
+          <ResumeButton agent={agent} />
+        </div>
       )}
     </div>
   );
