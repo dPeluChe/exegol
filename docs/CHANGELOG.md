@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Needs attention shows each session's project next to its name ("ember" alone didn't say which project was waiting)
 - Sidebar shows each project the way its workspace is laid out: every tab with its panes (agents
   by their name, the shell, the browser's address), then worktrees, then agents not open in any
   tab. The branch and dev-server port share one line; nothing is listed twice
