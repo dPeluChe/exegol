@@ -54,6 +54,8 @@ export interface SessionMaps {
   dataCallbacks: Map<string, (data: string) => void>;
   /** Agents whose Claude session ID has already been captured + stored (T101). */
   sessionIdsCaptured: Set<string>;
+  /** Stop pressed: the kill's exit code (often non-zero) must not read as a failure */
+  stopRequested: Set<string>;
 }
 
 /** Agents that have received ≥1 OSC-777 signal through the PTY. When the OSC
@@ -376,7 +378,7 @@ export function createSpawnCallbacks(
         }
       }
 
-      finalizeAgentStatus(db, agent, exitCode);
+      finalizeAgentStatus(db, agent, exitCode, maps.stopRequested.delete(agent.id));
 
       // T145: dead agents must not stay live credentials — revoke the MCP
       // token; a committed/leaked .mcp.json then authorizes nothing.

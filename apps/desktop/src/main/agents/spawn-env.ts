@@ -345,6 +345,7 @@ export function finalizeAgentStatus(
   db: Database.Database,
   agent: AgentContext,
   exitCode: number,
+  stoppedByUser = false,
 ): AgentStatus | null {
   try {
     const currentAgent = getAgent(db, agent.id);
@@ -355,7 +356,11 @@ export function finalizeAgentStatus(
       return null;
     }
 
-    const finalStatus: AgentStatus = exitCode === 0 ? "completed" : "failed";
+    const finalStatus: AgentStatus = stoppedByUser
+      ? "stopped"
+      : exitCode === 0
+        ? "completed"
+        : "failed";
     logger.info(`[Finalize] ${agent.id} (${agent.cliType}) → ${finalStatus} (exit=${exitCode})`);
     stopAgent(db, agent.id, finalStatus);
     const statusEvent: AgentStatusEvent = {
@@ -367,7 +372,8 @@ export function finalizeAgentStatus(
       timestamp: Date.now(),
     };
     broadcastAgentStatus(statusEvent);
-    if (agent.cliType !== "shell") {
+    // The user just pressed Stop: no desktop notification about it
+    if (agent.cliType !== "shell" && !stoppedByUser) {
       getNotificationBus().emit({
         type: finalStatus === "completed" ? "agent:finished" : "agent:failed",
         title: `Agent ${finalStatus}`,
@@ -378,10 +384,17 @@ export function finalizeAgentStatus(
       });
     }
 
-    const actType = finalStatus === "completed" ? "agent_completed" : "agent_failed";
+    const actType = {
+      completed: "agent_completed",
+      failed: "agent_failed",
+      stopped: "agent_stopped",
+    }[finalStatus as "completed" | "failed" | "stopped"] as
+      | "agent_completed"
+      | "agent_failed"
+      | "agent_stopped";
     try {
       insertActivity(db, {
-        type: actType as "agent_completed" | "agent_failed",
+        type: actType,
         entityType: "agent",
         entityId: agent.id,
         projectId: agent.projectId,
