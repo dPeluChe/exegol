@@ -14,6 +14,7 @@ import {
 } from "../../../hooks/use-trpc";
 import { EmptyState } from "../../common";
 import { AgentProcessTable } from "./AgentProcessTable";
+import { DevServersCard } from "./DevServersCard";
 import { PtyMemoryCard } from "./PtyMemoryCard";
 import { formatBytes, formatUptime, thresholdBarColor, thresholdColor } from "./resource-format";
 
@@ -255,6 +256,8 @@ export function ResourcesSection() {
           />
           <PtyMemoryCard />
         </div>
+
+        <DevServersCard />
 
         {/* Project stats */}
         <div>
