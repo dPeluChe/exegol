@@ -238,7 +238,7 @@ export function sortAttentionItems(items: AttentionItem[]): AttentionItem[] {
 }
 
 /** Locate the workspace tab + pane showing a given agent, across all projects. */
-function findAgentPane(
+export function findAgentPane(
   agentId: string,
   projectId: string,
 ): { tabId: string; paneId: string } | null {

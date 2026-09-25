@@ -10,6 +10,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Sessions killed by a restart come back where you left them: Resume finds each agent's own
+  conversation in the CLI's history (Claude Code, Codex, Gemini, OpenCode, Droid) instead of
+  reopening the project's latest one, and the Dashboard (fleet cards and pinned cards) has a
+  Resume button for ended sessions
 - No more "Token limit approaching" banner: it matched any line mentioning "context window" (a
   resumed Devin session hit it in 10 seconds) and "Continue with new agent" spawned successors that
   tripped it again. The automatic handoff is gone; CLIs compact their own context and the session
