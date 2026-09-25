@@ -22,6 +22,14 @@
    run per folder on the main process (fine at 3-10ms per repo, a freeze on a 30-repo workspace);
    make them `AsyncTask` and give the Rust walker a nested-`.git` scope instead of the per-folder
    loop. Unsaved edits are lost on rename of the open file or pane close (keep drafts in a store).
+3. **Performance follow-ups** (0.5.3 audit, not done in the perf pass):
+   - `diff.gitState` every 15s per GitPane spawns 4 git + `gh pr view` (network): poll the PR on
+     its own 2-5 min interval and invalidate after push/commit; `diff.status` repeats its git status
+   - Polls keep running while the window is unfocused and hidden panes stay mounted: wire
+     TanStack `focusManager` to window blur/focus and `enabled: isVisible` on pane queries
+   - Main process: sync `emulator.snapshot()` per scrollback flush, `appendFileSync` per log line,
+     sync napi `getDiff`/`getWorktreeDiff` on polled paths, sync log scan in `tokens.scan`
+   - `FloatingBrowser` polls `agents.list` every 5s (shared key makes it win over 30s)
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.

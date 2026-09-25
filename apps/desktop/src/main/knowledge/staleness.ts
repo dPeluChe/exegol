@@ -5,9 +5,10 @@
  * No dedicated DB table — the marker lives inline in the (gitignored) file.
  */
 
-import { execSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { logger } from "../lib/logger";
+import { execFile, execSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { computeDigest } from "./digest";
 import { ensureDigestGitignored, ensureKnowledgeDir, getDigestPath } from "./paths";
 
@@ -24,41 +25,35 @@ function getGitHead(projectPath: string): string | null {
   }
 }
 
-function getCommitsBehind(projectPath: string, sha: string): number | null {
+const execFileAsync = promisify(execFile);
+
+async function gitOut(projectPath: string, args: string[]): Promise<string | null> {
   try {
-    const out = execSync(`git rev-list --count ${sha}..HEAD`, {
-      cwd: projectPath,
-      timeout: 5_000,
-    }).toString("utf-8");
-    const n = Number.parseInt(out.trim(), 10);
-    return Number.isNaN(n) ? null : n;
+    const { stdout } = await execFileAsync("git", args, { cwd: projectPath, timeout: 5_000 });
+    return stdout.trim();
   } catch {
     return null;
   }
 }
 
-export function isDigestStale(projectPath: string): boolean {
+/**
+ * N commits behind the stamped sha. An unknown sha in a live repo (rebase,
+ * squash-merge, gc) is stale; outside a repo it is not (no refresh loop).
+ * Async: knowledge.get is a polled query and ran two execSync on the main process.
+ */
+export async function isDigestStale(projectPath: string): Promise<boolean> {
   const path = getDigestPath(projectPath);
-  if (!existsSync(path)) return true;
-
   let content: string;
   try {
-    content = readFileSync(path, "utf-8");
-  } catch (err) {
-    logger.warn("[Knowledge] Failed to read DIGEST.md for staleness check:", err);
+    content = await readFile(path, "utf-8");
+  } catch {
     return true;
   }
-
   const match = content.match(DIGEST_HEAD_MARKER);
   if (!match?.[1]) return true;
-
-  const behind = getCommitsBehind(projectPath, match[1]);
-  if (behind === null) {
-    // rev-list fails for two very different reasons: not a git repo (don't
-    // loop refreshes) vs the stamped sha no longer existing (rebase, squash-
-    // merge, gc) — in a live repo an unknown sha means definitively stale.
-    return getGitHead(projectPath) !== null;
-  }
+  const out = await gitOut(projectPath, ["rev-list", "--count", `${match[1]}..HEAD`]);
+  const behind = Number.parseInt(out ?? "", 10);
+  if (Number.isNaN(behind)) return (await gitOut(projectPath, ["rev-parse", "HEAD"])) !== null;
   return behind >= STALE_COMMIT_THRESHOLD;
 }
 
@@ -75,8 +70,10 @@ export function refreshDigest(projectPath: string): string {
 }
 
 /** Read the current digest, regenerating first if missing or stale. */
-export function refreshDigestIfStale(projectPath: string): { digest: string; refreshed: boolean } {
-  if (isDigestStale(projectPath)) {
+export async function refreshDigestIfStale(
+  projectPath: string,
+): Promise<{ digest: string; refreshed: boolean }> {
+  if (await isDigestStale(projectPath)) {
     return { digest: refreshDigest(projectPath), refreshed: true };
   }
   return { digest: readFileSync(getDigestPath(projectPath), "utf-8"), refreshed: false };

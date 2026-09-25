@@ -57,6 +57,11 @@ export default defineConfig({
       rollupOptions: {
         output: {
           manualChunks: (id) => {
+            // Vite's preload helper lands in the first chunk that uses it: it sat in monaco, so
+            // index.js imported (and preloaded) all 8 MB of monaco at startup just to get it.
+            // The monaco rule stays: without it Rollup merged monaco into streamdown's lazy mermaid chunk
+            if (id.includes("vite/preload-helper") || id.includes("commonjsHelpers"))
+              return "runtime";
             if (id.includes("node_modules/@xterm/")) return "xterm";
             if (
               id.includes("node_modules/monaco-editor") ||

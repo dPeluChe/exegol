@@ -183,7 +183,7 @@ export async function killDevServer(
   pid: number,
 ): Promise<{ stopped: boolean; forced: boolean }> {
   const uid = String(userInfo().uid);
-  const listening = (await listTcpListeners(uid)).some((l) => l.pid === pid);
+  const listening = (await listTcpListeners(uid, true)).some((l) => l.pid === pid);
   if (!listening) throw new Error(`Process ${pid} is not listening on a port`);
 
   const { parentOf } = await readProcTable();

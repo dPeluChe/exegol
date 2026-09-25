@@ -144,6 +144,18 @@ body {
 }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.6); }
 
+/* AgentSpinner: a strip of --frames glyphs (1rem each) stepping sideways */
+.glyph-spin {
+  animation-name: glyph-spin;
+  animation-iteration-count: infinite;
+  animation-timing-function: steps(var(--frames));
+}
+@keyframes glyph-spin {
+  to {
+    transform: translateX(calc(-1rem * var(--frames)));
+  }
+}
+
 /* Pulse animation for agent status */
 @keyframes status-pulse {
   0%, 100% { opacity: 1; }

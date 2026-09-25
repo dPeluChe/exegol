@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { AsyncLruCache } from "../lib/lru-cache";
 
 const execFileAsync = promisify(execFile);
 
@@ -20,8 +21,24 @@ export interface ConfiguredPort {
 
 export type PortInfo = DetectedPort | ConfiguredPort;
 
+// Every sidebar project row and the dev-server list poll ports on their own: without a
+// short cache N rows ran the same lsof scans N times per tick
+const SCAN_TTL_MS = 3_000;
+const cwdScans = new AsyncLruCache<string, Map<number, string>>(4, SCAN_TTL_MS);
+const listenerScans = new AsyncLruCache<string, TcpListener[]>(4, SCAN_TTL_MS);
+
+export interface TcpListener {
+  port: number;
+  pid: number;
+  process: string;
+}
+
 /** The cwd of each pid, from one lsof call (it used to be one lsof per pid) */
-export async function getProcessCwds(pids: number[]): Promise<Map<number, string>> {
+export function getProcessCwds(pids: number[]): Promise<Map<number, string>> {
+  return cwdScans.getOrCompute([...pids].sort().join(","), () => scanProcessCwds(pids));
+}
+
+async function scanProcessCwds(pids: number[]): Promise<Map<number, string>> {
   const cwds = new Map<number, string>();
   if (pids.length === 0) return cwds;
   let stdout = "";
@@ -51,9 +68,7 @@ export function isInside(cwd: string | null | undefined, root: string): boolean 
  * the address: reading the port from it matched nothing, so no dev server was
  * ever detected and the browser pane fell back to :3000.
  */
-export function parseLsofListenLine(
-  line: string,
-): { port: number; pid: number; process: string } | null {
+export function parseLsofListenLine(line: string): TcpListener | null {
   const parts = line.trim().split(/\s+/);
   if (parts.length < 9) return null;
   const portMatch = line.match(/:(\d+)\s+\(LISTEN\)\s*$/) ?? line.match(/:(\d+)\s*$/);
@@ -65,10 +80,17 @@ export function parseLsofListenLine(
   };
 }
 
-/** TCP listeners, one entry per pid:port; `uid` limits them to that user's processes */
-export async function listTcpListeners(
-  uid?: string,
-): Promise<{ port: number; pid: number; process: string }[]> {
+/**
+ * TCP listeners, one entry per pid:port; `uid` limits them to that user's processes.
+ * `fresh` skips the 3s cache (a kill check must see the process listening now).
+ */
+export function listTcpListeners(uid?: string, fresh = false): Promise<TcpListener[]> {
+  return fresh
+    ? scanTcpListeners(uid)
+    : listenerScans.getOrCompute(uid ?? "", () => scanTcpListeners(uid));
+}
+
+async function scanTcpListeners(uid?: string): Promise<TcpListener[]> {
   let stdout = "";
   try {
     ({ stdout } = await execFileAsync(
@@ -81,7 +103,7 @@ export async function listTcpListeners(
     stdout = (err as { stdout?: string }).stdout ?? "";
   }
   const seen = new Set<string>();
-  const entries: { port: number; pid: number; process: string }[] = [];
+  const entries: TcpListener[] = [];
   for (const line of stdout.split("\n").slice(1)) {
     const entry = parseLsofListenLine(line);
     if (!entry || seen.has(`${entry.pid}:${entry.port}`)) continue;

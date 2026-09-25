@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProject, useProjects } from "../../hooks/use-trpc";
 import {
   type AgentState,
@@ -20,6 +20,7 @@ import {
   useAgentStore,
 } from "../../stores/agents";
 import { AgentIcon } from "../common/AgentIcon";
+import { AgentSpinner } from "../common/AgentSpinner";
 import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
 
 // ─── Level config ────────────────────────────────────────────────────────
@@ -50,75 +51,6 @@ const LEVEL_CONFIG: Record<
     bgClass: "border-blue-400/10 bg-blue-400/5",
   },
 };
-
-// ─── Animated agent spinners — each agent gets a unique "pet" animation ──
-
-interface SpinnerPreset {
-  frames: string[];
-  interval: number;
-  color: string;
-}
-
-const SPINNER_PRESETS: SpinnerPreset[] = [
-  // Braille wave
-  { frames: ["⣾", "⣷", "⣯", "⣟", "⡿", "⢿", "⣻", "⣽"], interval: 80, color: "text-accent" },
-  // Braille dots orbit
-  {
-    frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-    interval: 80,
-    color: "text-purple-400",
-  },
-  // Moon phases
-  { frames: ["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"], interval: 150, color: "" },
-  // Bouncing ball
-  { frames: ["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"], interval: 100, color: "text-green-400" },
-  // Growing bar
-  {
-    frames: ["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█", "▉", "▊", "▋", "▌", "▍", "▎", "▏"],
-    interval: 60,
-    color: "text-cyan-400",
-  },
-  // Arrows dance
-  { frames: ["←", "↖", "↑", "↗", "→", "↘", "↓", "↙"], interval: 100, color: "text-amber-400" },
-  // DNA helix
-  { frames: ["╫", "╪", "╫", "╬", "╪", "╫"], interval: 120, color: "text-pink-400" },
-  // Heartbeat
-  { frames: ["♡", "♥", "♡", "♡"], interval: 200, color: "text-red-400" },
-  // Stars twinkle
-  { frames: ["✦", "✧", "✦", "⊹", "✧", "⊹"], interval: 180, color: "text-yellow-400" },
-  // Blocks build
-  { frames: ["░", "▒", "▓", "█", "▓", "▒", "░"], interval: 100, color: "text-blue-400" },
-];
-
-/** Deterministic spinner selection based on agent ID — same agent always gets the same animation */
-function getSpinnerIndex(agentId: string): number {
-  let hash = 0;
-  for (let i = 0; i < agentId.length; i++) {
-    hash = (hash * 31 + agentId.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash) % SPINNER_PRESETS.length;
-}
-
-const AgentSpinner = memo(function AgentSpinner({
-  agentId,
-  className,
-}: {
-  agentId: string;
-  className?: string;
-}) {
-  const preset = SPINNER_PRESETS[getSpinnerIndex(agentId)] ?? SPINNER_PRESETS[0];
-  const frames = preset?.frames ?? ["⣾"];
-  const [frame, setFrame] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setFrame((f) => (f + 1) % frames.length), preset?.interval ?? 80);
-    return () => clearInterval(id);
-  }, [frames.length, preset?.interval]);
-  return (
-    <span className={cn("inline-block w-4 text-center font-mono", preset?.color, className)}>
-      {frames[frame]}
-    </span>
-  );
-});
 
 // ─── Time formatting ─────────────────────────────────────────────────────
 
