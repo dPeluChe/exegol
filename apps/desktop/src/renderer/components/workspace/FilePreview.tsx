@@ -1,32 +1,28 @@
 import { ExternalLink, FolderSearch, X } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { FileContent } from "../../hooks/use-trpc";
 import { trpcMutate } from "../../lib/trpc-client";
+import { formatBytes } from "./sections/resource-format";
 
 const CodeViewer = lazy(() => import("./CodeViewer").then((m) => ({ default: m.CodeViewer })));
 
 const openExternal = (path: string) => trpcMutate("files.openExternal", { path }).catch(() => {});
 const reveal = (path: string) => trpcMutate("files.reveal", { path }).catch(() => {});
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-/** PDF bytes as a blob URL (a data: URL is refused for PDFs in frames) */
+/** PDF bytes as a blob URL (a data: URL is refused for PDFs in frames). Made and
+ *  revoked in one effect: a memo + cleanup pair lost the URL on StrictMode's remount */
 function usePdfUrl(file: FileContent | undefined): string | null {
-  const url = useMemo(() => {
-    if (file?.kind !== "pdf" || !file.base64) return null;
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (file?.kind !== "pdf" || !file.base64) {
+      setUrl(null);
+      return;
+    }
     const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
-    return URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    const next = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
   }, [file]);
-  useEffect(
-    () => () => {
-      if (url) URL.revokeObjectURL(url);
-    },
-    [url],
-  );
   return url;
 }
 

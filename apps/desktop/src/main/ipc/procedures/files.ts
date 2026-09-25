@@ -1,6 +1,6 @@
 import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, extname, join, resolve } from "node:path";
+import { extname, join, resolve } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog, shell } from "electron";
 import { z } from "zod";
@@ -77,7 +77,29 @@ const PREVIEW_MIME: Record<string, string> = {
   ".ico": "image/x-icon",
   ".pdf": "application/pdf",
 };
-const MAX_PREVIEW_BYTES = 25 * 1024 * 1024;
+/** Opening these runs them; the viewer reveals them in Finder instead */
+const RUNNABLE_EXT = new Set([
+  ".app",
+  ".command",
+  ".sh",
+  ".bash",
+  ".zsh",
+  ".tool",
+  ".terminal",
+  ".workflow",
+  ".action",
+  ".scpt",
+  ".applescript",
+  ".pkg",
+  ".mpkg",
+  ".dmg",
+  ".jar",
+  ".py",
+  ".rb",
+  ".pl",
+]);
+// Base64 over IPC costs ~3x the file in memory: previews stay modest
+const MAX_PREVIEW_BYTES = 15 * 1024 * 1024;
 /** Monaco chokes well before this; the viewer offers the default app instead */
 const MAX_TEXT_BYTES = 5 * 1024 * 1024;
 
@@ -152,25 +174,40 @@ export const filesRouter = router({
     return { success: true };
   }),
 
-  /** Open with the app macOS uses for it (Preview for a PDF, etc.) */
+  /**
+   * Open with the app macOS uses for it (Preview for a PDF, etc.). A cloned repo
+   * carries no quarantine flag, so "open" on a script or an app would RUN it:
+   * those, and anything executable, are shown in Finder instead.
+   */
   openExternal: publicProcedure
     .input(z.object({ path: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertPathInsideProject(input.path, ctx);
+      const info = await stat(input.path);
+      const runnable =
+        info.isDirectory() ||
+        (info.mode & 0o111) !== 0 ||
+        RUNNABLE_EXT.has(extname(input.path).toLowerCase());
+      if (runnable) {
+        shell.showItemInFolder(input.path);
+        return { opened: false, revealed: true };
+      }
       const error = await shell.openPath(input.path);
       if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error });
-      return { success: true };
+      return { opened: true, revealed: false };
     }),
 
   rename: publicProcedure
     .input(z.object({ from: z.string(), to: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertPathInsideProject(input.from, ctx);
-      await assertPathInsideProject(dirname(input.to), ctx);
-      if (isProtectedRoot(input.from, allowedBases(ctx))) {
+      await assertPathInsideProject(input.to, ctx);
+      // Into or out of .git (hooks run on the next commit) is never a rename from the tree
+      const touchesGit = [input.from, input.to].some((p) => p.split(/[\\/]/).includes(".git"));
+      if (touchesGit || isProtectedRoot(input.from, allowedBases(ctx))) {
         throw new TRPCError({
           code: "FORBIDDEN",
-          message: "Refusing to rename a project root or .git",
+          message: "Refusing to rename a project root or anything in .git",
         });
       }
       if (await exists(input.to)) {

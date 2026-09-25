@@ -219,6 +219,8 @@ export function useFileContent(path: string | null) {
     queryKey: ["file", path],
     queryFn: () => trpcInvoke<FileContent>("files.readFile", { path }),
     enabled: !!path,
+    // Previews carry base64 images/PDFs: keeping five minutes of them cached added up
+    gcTime: 0,
   });
 }
 

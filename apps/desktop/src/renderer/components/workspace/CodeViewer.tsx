@@ -163,7 +163,10 @@ export function CodeViewer({ content, fileName }: CodeViewerProps) {
       : JSON_EXT.test(fileName) || JSONL_EXT.test(fileName)
         ? ({ label: "Tree", icon: ListTree, first: true } as const)
         : null;
-  const [showRendered, setShowRendered] = useState(rendered?.first ?? false);
+  // Past 1MB the tree starts behind the Code tab: parsing is paid only on request
+  const [showRendered, setShowRendered] = useState(
+    (rendered?.first ?? false) && content.length < 1_000_000,
+  );
 
   if (!fileName || !rendered) {
     return <MonacoViewer content={content} language={language} />;

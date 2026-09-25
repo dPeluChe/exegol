@@ -32,10 +32,15 @@ function Value({ value }: { value: unknown }) {
   );
 }
 
+/** Children rendered per step: a 50k-line JSONL opened all at once froze the UI */
+const PAGE = 200;
+
 function Node({ name, value, depth }: { name: string | null; value: unknown; depth: number }) {
   const isArray = Array.isArray(value);
   const isObject = value !== null && typeof value === "object";
-  const [open, setOpen] = useState(depth < 2);
+  const size = isObject ? Object.keys(value as object).length : 0;
+  const [open, setOpen] = useState(depth === 0 || (depth < 2 && size <= PAGE));
+  const [limit, setLimit] = useState(PAGE);
   const label = name !== null && <span className="text-text-secondary">{name}</span>;
 
   if (!isObject) {
@@ -69,7 +74,20 @@ function Node({ name, value, depth }: { name: string | null; value: unknown; dep
         {label ?? <span className="text-text-muted">{isArray ? "array" : "object"}</span>}
         <span className="text-text-muted">{isArray ? `[${count}]` : `{${count}}`}</span>
       </button>
-      {open && entries.map(([k, v]) => <Node key={k} name={k} value={v} depth={depth + 1} />)}
+      {open &&
+        entries
+          .slice(0, limit)
+          .map(([k, v]) => <Node key={k} name={k} value={v} depth={depth + 1} />)}
+      {open && count > limit && (
+        <button
+          type="button"
+          onClick={() => setLimit((l) => l + PAGE)}
+          className="py-px text-[11px] text-accent hover:underline"
+          style={{ paddingLeft: (depth + 1) * 14 + 14 }}
+        >
+          Show {Math.min(PAGE, count - limit)} more of {count - limit}
+        </button>
+      )}
     </div>
   );
 }
