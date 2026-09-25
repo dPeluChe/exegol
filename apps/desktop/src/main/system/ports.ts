@@ -21,7 +21,7 @@ export interface ConfiguredPort {
 export type PortInfo = DetectedPort | ConfiguredPort;
 
 /** Resolve the CWD for a given PID. Returns null if it can't be determined. */
-async function getProcessCwd(pid: number): Promise<string | null> {
+export async function getProcessCwd(pid: number): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync("lsof", ["-p", String(pid), "-Fn"], {
       timeout: 3000,

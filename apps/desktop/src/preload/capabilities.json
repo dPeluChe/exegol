@@ -62,7 +62,9 @@
       "summary"
     ],
     "resources": [
+      "devServers",
       "history",
+      "killDevServer",
       "portConflicts",
       "ports",
       "preferredPort",

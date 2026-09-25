@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { listAgents } from "../../db/queries";
+import { killDevServer, listDevServers } from "../../system/dev-servers";
 import { detectPortConflicts, getProjectPorts } from "../../system/ports";
 import {
   getMetricsHistory,
@@ -73,6 +74,13 @@ export const resourcesRouter = router({
     }
     return result;
   }),
+
+  /** Every port the user's processes listen on, with project and Exegol terminal */
+  devServers: publicProcedure.query(({ ctx }) => listDevServers(ctx.db)),
+
+  killDevServer: publicProcedure
+    .input(z.object({ pid: z.number().int().positive() }))
+    .mutation(({ ctx, input }) => killDevServer(ctx.db, input.pid)),
 
   /** Preferred port per project */
   preferredPort: publicProcedure
