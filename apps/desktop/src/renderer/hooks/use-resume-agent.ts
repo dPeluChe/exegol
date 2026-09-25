@@ -46,7 +46,8 @@ export function useResumeAgent() {
         branchName: agent.branchName ?? undefined,
         accessMode: agent.accessMode ?? undefined,
         resumeSession: canResume,
-        resumeFromAgentId: canResume ? agent.id : undefined,
+        // Always the source: a re-launch (no resume) still inherits its YOLO choice
+        resumeFromAgentId: agent.id,
       });
       if (!newAgent?.id) return;
 

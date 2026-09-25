@@ -1,6 +1,6 @@
 import { type Agent, type AgentCreate, YOLO_FLAGS } from "@exegol/shared";
 import type Database from "libsql";
-import { activateAgent, getAgent, insertActivity, stopAgent } from "../db/queries";
+import { activateAgent, getAgent, insertActivity, setAgentYolo, stopAgent } from "../db/queries";
 import { hasLocalSession } from "../history";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
@@ -89,20 +89,17 @@ export class AgentManager {
     // T161: per-launch YOLO override. Undefined keeps the provider's configured
     // args; an explicit value wins for THIS session only, so "just this once,
     // skip the prompts" doesn't mean editing settings and remembering to undo it.
-    // A resume keeps the choice the session was launched with (stored per row)
+    // A resume or re-launch keeps the choice the session was launched with
     let yolo = config.yolo;
-    if (yolo === undefined && config.resumeSession && config.resumeFromAgentId) {
-      const source = db
-        .prepare("SELECT yolo FROM agents WHERE id = ?")
-        .get(config.resumeFromAgentId) as { yolo: number | null } | undefined;
-      if (source?.yolo !== null && source?.yolo !== undefined) yolo = source.yolo === 1;
+    if (yolo === undefined && config.resumeFromAgentId) {
+      yolo = getAgent(db, config.resumeFromAgentId)?.yolo ?? undefined;
     }
     const yoloFlag = YOLO_FLAGS[agent.cliType];
     if (yoloFlag && yolo !== undefined) {
       const has = cliConfig.args.includes(yoloFlag);
       if (yolo && !has) cliConfig.args = [...cliConfig.args, yoloFlag];
       else if (!yolo && has) cliConfig.args = cliConfig.args.filter((a) => a !== yoloFlag);
-      db.prepare("UPDATE agents SET yolo = ? WHERE id = ?").run(yolo ? 1 : 0, agent.id);
+      setAgentYolo(db, agent.id, yolo);
     }
 
     const project = db
@@ -252,8 +249,11 @@ export class AgentManager {
       this.stopRequested.add(agentId);
       ptyHost.kill(agentId);
       await ptyHost.waitForExit(agentId, STOP_TIMEOUT_MS);
+      // onExit consumes the mark; if the exit never came, a later natural
+      // exit must not be recorded as this Stop
+      this.stopRequested.delete(agentId);
     } else {
-      stopAgent(db, agentId, "completed");
+      stopAgent(db, agentId, "stopped");
       cleanupWorktree(db, agentId, this.worktrees);
       try {
         const stoppedAgent = getAgent(db, agentId);

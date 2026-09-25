@@ -356,7 +356,7 @@ export function finalizeAgentStatus(
       return null;
     }
 
-    const finalStatus: AgentStatus = stoppedByUser
+    const finalStatus: "completed" | "failed" | "stopped" = stoppedByUser
       ? "stopped"
       : exitCode === 0
         ? "completed"
@@ -384,14 +384,7 @@ export function finalizeAgentStatus(
       });
     }
 
-    const actType = {
-      completed: "agent_completed",
-      failed: "agent_failed",
-      stopped: "agent_stopped",
-    }[finalStatus as "completed" | "failed" | "stopped"] as
-      | "agent_completed"
-      | "agent_failed"
-      | "agent_stopped";
+    const actType = `agent_${finalStatus}` as const;
     try {
       insertActivity(db, {
         type: actType,

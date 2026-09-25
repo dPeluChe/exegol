@@ -1,9 +1,10 @@
+import { execFileSync } from "node:child_process";
 import type { Agent, AgentCreate } from "@exegol/shared";
 import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { createAgent } from "../db/queries";
-import { buildPtyInvocation } from "./agent-spawn-flow";
+import { beforeAgentPrefix, buildPtyInvocation } from "./agent-spawn-flow";
 import type { AgentProviderRegistry } from "./registry";
 
 const mocks = vi.hoisted(() => ({
@@ -288,6 +289,23 @@ describe("buildPtyInvocation", () => {
     expect(inv.args[1]).toContain("beforeAgent failed");
     expect(inv.args[1]).not.toContain("&& claude");
     expect(inv.args[1]).toMatch(/; claude/);
+  });
+
+  it("builds the beforeAgent prefix per shell and always reaches the CLI", () => {
+    const fish = beforeAgentPrefix("npm install", "/opt/homebrew/bin/fish");
+    expect(fish).toContain("begin; npm install\nend; or printf");
+    expect(fish).toContain("$status");
+    expect(fish).not.toContain("$?");
+    // sh form, run for real: failing and succeeding hooks both reach the CLI
+    const run = (hook: string) =>
+      execFileSync("/bin/sh", [
+        "-c",
+        `${beforeAgentPrefix(hook, "/bin/zsh")}echo CLI_OK`,
+      ]).toString();
+    expect(run("false")).toContain("beforeAgent failed (exit 1)");
+    expect(run("false")).toContain("CLI_OK");
+    expect(run("true")).not.toContain("beforeAgent failed");
+    expect(run("true")).toContain("CLI_OK");
   });
 
   it("refuses destructive commands at the spawn boundary", () => {
