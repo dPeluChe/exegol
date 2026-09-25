@@ -7,6 +7,15 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Sidebar shows each project the way its workspace is laid out: every tab with its panes (agents
+  by their name, the shell, the browser's address), then worktrees, then agents not open in any
+  tab. The branch and dev-server port share one line; nothing is listed twice
+- Clicking an agent in the sidebar goes to its own pane (or opens it in a new tab); it used to
+  replace the first pane of the active tab
+
 ## [0.5.1] — 2026-09-24 — Fixes from the first days on 0.5.0
 
 ### Fixed

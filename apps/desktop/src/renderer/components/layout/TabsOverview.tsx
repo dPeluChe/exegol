@@ -1,7 +1,7 @@
 import { cn } from "@exegol/ui";
 import { FolderTree, GitBranch, Globe } from "lucide-react";
 import type { ComponentType } from "react";
-import { type AgentState, useAgentStore } from "../../stores/agents";
+import { focusPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
 import { AgentMiniCard } from "./AgentMiniCard";
@@ -24,9 +24,16 @@ function hostOf(url: string | undefined): string {
   }
 }
 
+/** Selects its own agent: a status push re-renders this row, not the whole tree */
+function PaneAgentRow({ agentId }: { agentId: string }) {
+  const agent = useAgentStore((s) => s.agents[agentId]);
+  return agent ? <AgentMiniCard agent={agent} /> : null;
+}
+
 /** One row per pane, in layout order: agents as agent rows, the rest by what they show */
-function PaneRow({ pane, agent, onOpen }: { pane: Pane; agent?: AgentState; onOpen: () => void }) {
-  if (pane.type === "terminal") return agent ? <AgentMiniCard agent={agent} /> : null;
+function PaneRow({ pane, onOpen }: { pane: Pane; onOpen: () => void }) {
+  if (pane.type === "terminal")
+    return pane.agentId ? <PaneAgentRow agentId={pane.agentId} /> : null;
   if (pane.type === "empty") return null;
   const Icon = PANE_ICON[pane.type] ?? Globe;
   return (
@@ -50,18 +57,10 @@ function PaneRow({ pane, agent, onOpen }: { pane: Pane; agent?: AgentState; onOp
  */
 export function TabsOverview({ projectId }: { projectId: string }) {
   const pw = useWorkspaceStore((s) => s.projectWorkspaces[projectId]);
-  const agents = useAgentStore((s) => s.agents);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
 
   const tabs = pw?.tabs ?? [];
   if (tabs.length === 0) return null;
-
-  const open = (tabId: string, paneId?: string) => {
-    if (activeProjectId !== projectId) useAppStore.getState().setActiveProject(projectId);
-    const ws = useWorkspaceStore.getState();
-    ws.setActiveTab(tabId);
-    if (paneId) ws.setFocusedPane(paneId);
-  };
 
   return (
     <div className="space-y-1">
@@ -71,7 +70,7 @@ export function TabsOverview({ projectId }: { projectId: string }) {
           <div key={tab.id}>
             <button
               type="button"
-              onClick={() => open(tab.id)}
+              onClick={() => focusPane(projectId, tab.id)}
               className={cn(
                 "flex w-full items-center gap-1.5 px-1 py-0.5 text-left text-[9px] font-medium uppercase tracking-wider",
                 isActive ? "text-text-secondary" : "text-text-muted hover:text-text-secondary",
@@ -93,8 +92,7 @@ export function TabsOverview({ projectId }: { projectId: string }) {
                   <PaneRow
                     key={paneId}
                     pane={pane}
-                    agent={pane.agentId ? agents[pane.agentId] : undefined}
-                    onOpen={() => open(tab.id, paneId)}
+                    onOpen={() => focusPane(projectId, tab.id, paneId)}
                   />
                 );
               })}
