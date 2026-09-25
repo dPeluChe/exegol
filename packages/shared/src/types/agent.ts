@@ -85,12 +85,21 @@ export function classifyActivity(
  * read this. The two former copies had already drifted — crush's flag existed
  * in the pipeline but not in settings, so its toggle silently did nothing.
  */
+/** One token each (the settings toggle finds the flag by exact match). Checked
+ *  against each CLI's --help, 2026-09-24; codex dropped --full-auto. */
 export const YOLO_FLAGS: Record<string, string> = {
   "claude-code": "--dangerously-skip-permissions",
-  codex: "--full-auto",
+  codex: "--dangerously-bypass-approvals-and-sandbox",
+  gemini: "--yolo",
+  agy: "--dangerously-skip-permissions",
+  devin: "--permission-mode=dangerous",
+  opencode: "--auto",
+  amp: "--dangerously-allow-all",
+  kilocode: "--auto",
+  crush: "--yolo",
+  "factory-droid": "--auto=high",
   aider: "--yes-always",
   goose: "--no-confirm",
-  crush: "--yolo",
 };
 
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;

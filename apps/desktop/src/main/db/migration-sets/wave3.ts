@@ -126,4 +126,9 @@ export const wave3Migrations: Migration[] = [
     sql: `ALTER TABLE agents ADD COLUMN pty_cols INTEGER;
     ALTER TABLE agents ADD COLUMN pty_rows INTEGER;`,
   },
+  {
+    // A per-launch YOLO choice was lost on resume: null = the provider's configured args
+    id: "w3_011_agent_yolo",
+    sql: "ALTER TABLE agents ADD COLUMN yolo INTEGER;",
+  },
 ];

@@ -242,6 +242,21 @@ describe("buildPtyInvocation", () => {
     expect(inv.args[1]).toContain("claude --resume sess-42");
   });
 
+  it("keeps the configured args (YOLO) on every resume form, once", () => {
+    const yolo = { ...cliConfig, args: ["--dangerously-skip-permissions"] };
+    const [agent, config] = makeAgent("claude-code", { resumeSession: true });
+    db.prepare(
+      "UPDATE agents SET resume_command = 'claude --resume abc --dangerously-skip-permissions' WHERE id = ?",
+    ).run(agent.id);
+    const stored = buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, yolo, "/tmp/p1");
+    expect(stored.args[1]).toContain("claude --resume abc --dangerously-skip-permissions");
+    expect(stored.args[1]?.match(/dangerously-skip-permissions/g)).toHaveLength(1);
+
+    const [fresh, freshConfig] = makeAgent("claude-code", { resumeSession: true });
+    const flag = buildPtyInvocation(db, fresh, freshConfig, "/tmp/cwd", registry, yolo, "/tmp/p1");
+    expect(flag.args[1]).toContain("claude --continue --dangerously-skip-permissions");
+  });
+
   it("falls back to the provider resumeFlag when nothing is stored", () => {
     const [agent, config] = makeAgent("claude-code", { resumeSession: true });
     const inv = buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
