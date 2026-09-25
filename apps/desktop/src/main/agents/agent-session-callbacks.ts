@@ -28,7 +28,6 @@ import {
 } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
-import { createHandoff, generateHandoffFromScrollback } from "./handoff";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -50,7 +49,6 @@ export interface SessionMaps {
   titleTrackers: Map<string, (data: string) => void>;
   scrollbackBuffers: Map<string, string[]>;
   scrollbackSizes: Map<string, number>;
-  tokenLimitDetected: Set<string>;
   completionCallbacks: Map<string, (exitCode: number) => void>;
   initialSnapshots: Map<string, { headSha: string; cwd: string; projectId: string }>;
   dataCallbacks: Map<string, (data: string) => void>;
@@ -328,25 +326,6 @@ export function createSpawnCallbacks(
           });
         }
       }
-
-      if (
-        result.tokenLimitWarning &&
-        !echoingOwnMessage &&
-        !maps.tokenLimitDetected.has(agent.id)
-      ) {
-        maps.tokenLimitDetected.add(agent.id);
-        try {
-          const scrollback = maps.scrollbackBuffers.get(agent.id)?.join("") ?? "";
-          const summary = generateHandoffFromScrollback(agent.taskDescription, scrollback);
-          const handoff = createHandoff(db, { agentId: agent.id, ...summary });
-          broadcast("agent:handoff-ready", agent.id, handoff.id);
-          logger.info(
-            `[AgentManager] Token limit detected for ${agent.id}, handoff created: ${handoff.id}`,
-          );
-        } catch (err) {
-          logger.error(`[AgentManager] Failed to create handoff for ${agent.id}:`, err);
-        }
-      }
     },
 
     onExit: (exitCode: number) => {
@@ -358,7 +337,6 @@ export function createSpawnCallbacks(
 
       maps.outputProcessors.delete(agent.id);
       maps.titleTrackers.delete(agent.id);
-      maps.tokenLimitDetected.delete(agent.id);
       maps.sessionIdsCaptured.delete(agent.id);
       maps.scrollbackBuffers.delete(agent.id);
       maps.scrollbackSizes.delete(agent.id);

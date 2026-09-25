@@ -132,19 +132,6 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("menu:close-pane", onClosePane as never);
     };
   },
-  onAgentHandoff: (callback: (agentId: string, handoffId: string) => void) => {
-    const handler = (
-      _event: Electron.IpcRendererEvent,
-      agentId: string,
-      handoffId: string,
-    ): void => {
-      callback(agentId, handoffId);
-    };
-    safe.on("agent:handoff-ready", handler as never);
-    return () => {
-      safe.off("agent:handoff-ready", handler as never);
-    };
-  },
   // Push event subscriptions (T17: push-first status updates)
   onAgentStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);

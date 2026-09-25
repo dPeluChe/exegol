@@ -156,7 +156,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything â
 - `processing/osc_notify.rs`, `status_matchers.rs`: OSC-777 signal parsing, status matchers
 - `search/`: fuzzy file finder + grep
 - `git/` â€” worktree, diff, oplog, repo info via git2
-- 55 `#[test]` functions, Clippy pedantic clean
+- 54 `#[test]` functions, Clippy pedantic clean
 
 ## Monorepo Structure
 
@@ -164,7 +164,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything â
 apps/desktop/src/
   main/
     agents/         manager, spawn-env (hooks/OSC + signal mapping), spawn-context, registry,
-                    handoff, scoring, queue, status-parser (+ stripOscSequences), race-mode (T131)
+                    scoring, queue, status-parser (+ stripOscSequences), race-mode (T131)
     bootstrap/      window, ipc-handlers, recovery, shutdown, deep-link, global-hotkey
     db/             client, migrations (36 base) + migration-sets/ (per-group wave files),
                     queries/ (21 domain modules + helpers)

@@ -71,15 +71,6 @@ pub(super) fn parse_resume_command_pattern(pattern: &str, line: &str) -> Option<
     }
 }
 
-/// Check if a line indicates a token limit warning.
-pub(super) fn check_token_limit(line: &str) -> bool {
-    contains_ci(line, "context window")
-        || contains_ci(line, "token limit")
-        || contains_ci(line, "maximum context")
-        || contains_ci(line, "conversation too long")
-        || contains_ci(line, "truncating context")
-}
-
 /// Parse a single cleaned line for status updates.
 /// Returns (optional_status, optional_current_step).
 pub(super) fn parse_line(cli_type: &str, line: &str) -> Option<(Option<String>, Option<String>)> {

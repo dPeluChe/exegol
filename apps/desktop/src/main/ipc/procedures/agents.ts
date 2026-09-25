@@ -3,11 +3,6 @@ import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exego
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
-import {
-  formatHandoffForInjection,
-  getHandoffByAgent,
-  setHandoffSuccessor,
-} from "../../agents/handoff";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
@@ -331,73 +326,6 @@ export const agentRouter = router({
     .query(({ ctx, input }) => {
       const wt = getWorktreeByAgentId(ctx.db, input.agentId);
       return wt?.path ?? null;
-    }),
-
-  // ─── Handoff ────────────────────────────────────────────────────────────
-
-  getHandoff: publicProcedure.input(z.object({ agentId: z.string() })).query(({ ctx, input }) => {
-    return getHandoffByAgent(ctx.db, input.agentId);
-  }),
-
-  continueWithHandoff: publicProcedure
-    .input(
-      z.object({
-        agentId: z.string(),
-        cliType: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const originalAgent = getAgent(ctx.db, input.agentId);
-      if (!originalAgent) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Original agent not found" });
-      }
-
-      const handoff = getHandoffByAgent(ctx.db, input.agentId);
-      if (!handoff) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "No handoff found for this agent" });
-      }
-
-      // Build successor task description with handoff context
-      const handoffContext = formatHandoffForInjection(handoff);
-      const cliType = input.cliType ?? originalAgent.cliType;
-
-      const successor = createAgent(ctx.db, {
-        projectId: originalAgent.projectId,
-        cliType: cliType as Parameters<typeof createAgent>[1]["cliType"],
-        taskDescription: handoffContext,
-      });
-
-      // Link handoff to successor
-      setHandoffSuccessor(ctx.db, handoff.id, successor.id);
-
-      // Spawn the successor — reuse existing worktree if preserved
-      const manager = ctx.agentManager;
-      const existingWt = originalAgent.worktreeId
-        ? getWorktreeByAgentId(ctx.db, originalAgent.id)
-        : null;
-      try {
-        await manager.spawn(ctx.db, successor, {
-          projectId: originalAgent.projectId,
-          cliType: successor.cliType,
-          taskDescription: handoffContext,
-          // Reuse preserved worktree path instead of creating a new one
-          cwdOverride: existingWt?.path,
-          useWorktree: !existingWt && originalAgent.worktreeId != null,
-          branchName: originalAgent.branchName ?? undefined,
-        });
-      } catch (err) {
-        updateAgentStatus(ctx.db, successor.id, "failed", String(err));
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: `Failed to spawn successor: ${err instanceof Error ? err.message : String(err)}`,
-        });
-      }
-
-      const spawned = getAgent(ctx.db, successor.id);
-      if (!spawned) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Successor not found after spawn" });
-      }
-      return spawned;
     }),
 
   // ─── T65: Parallel Multi-Agent ────────────────────────────────────────

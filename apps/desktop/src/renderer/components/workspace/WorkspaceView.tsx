@@ -4,7 +4,7 @@ import { useMountEffect } from "../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { SWITCH_SECTION_EVENT, switchSection } from "../../lib/switch-section";
 import { trpcInvoke } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
+import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { ParallelSpawnModal } from "../agents/ParallelSpawnModal";
@@ -121,14 +121,14 @@ export function WorkspaceView() {
     return () => window.removeEventListener("exegol:spawn-agent", handler);
   });
 
-  // T107 comparator "Open" → focus an existing agent's pane (or create one
-  // in the active tab if none exists).
+  // T107 comparator "Open" → the agent's pane, or a new tab if it has none
   useMountEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
       const agentId = detail?.agentId;
       if (!agentId) return;
-      focusAgentPane(agentId);
+      const agent = useAgentStore.getState().agents[agentId];
+      if (agent) jumpToAgent(agentId, agent.projectId);
     };
     window.addEventListener("exegol:focus-agent", handler);
     return () => window.removeEventListener("exegol:focus-agent", handler);
@@ -263,53 +263,6 @@ export function WorkspaceView() {
       )}
     </div>
   );
-}
-
-/**
- * Find the (tab, pane) that hosts a terminal for `agentId` and make it the
- * active focus. Falls back to creating a terminal pane in the active tab if
- * no pane currently references the agent.
- */
-function focusAgentPane(agentId: string): void {
-  const ws = useWorkspaceStore.getState();
-  const pw = getProjectState();
-
-  for (const tab of pw.tabs) {
-    for (const [paneId, pane] of Object.entries(pw.panes)) {
-      if (pane.type === "terminal" && pane.agentId === agentId) {
-        const tabContainsPane = tabIncludesPane(tab.layout, paneId);
-        if (tabContainsPane) {
-          ws.setActiveTab(tab.id);
-          ws.setFocusedPane(paneId);
-          useAgentStore.getState().setFocusedAgent(agentId);
-          switchSection("agents");
-          return;
-        }
-      }
-    }
-  }
-
-  const activeTab = pw.tabs.find((t) => t.id === pw.activeTabId);
-  if (activeTab) {
-    const paneId = findFirstPaneId(activeTab.layout);
-    if (paneId) {
-      ws.updatePane(paneId, { type: "terminal", agentId });
-      ws.setFocusedPane(paneId);
-      useAgentStore.getState().setFocusedAgent(agentId);
-    }
-  }
-  switchSection("agents");
-}
-
-function tabIncludesPane(
-  node: { type: "pane"; paneId: string } | { type: "split"; children: unknown[] },
-  paneId: string,
-): boolean {
-  if (node.type === "pane") return node.paneId === paneId;
-  for (const child of node.children) {
-    if (tabIncludesPane(child as Parameters<typeof tabIncludesPane>[0], paneId)) return true;
-  }
-  return false;
 }
 
 /**

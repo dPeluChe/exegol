@@ -1,5 +1,5 @@
 use super::osc_notify::{AgentSignal, OscNotifyScanner};
-use super::status_matchers::{check_token_limit, parse_line, parse_resume_command_pattern, parse_session_id};
+use super::status_matchers::{parse_line, parse_resume_command_pattern, parse_session_id};
 use super::strip_ansi::strip_ansi_bytes;
 use napi::Error;
 use napi_derive::napi;
@@ -26,8 +26,6 @@ pub struct ProcessedOutput {
     pub status: Option<String>,
     /// Current step/tool being executed.
     pub current_step: Option<String>,
-    /// Whether a token limit warning was detected.
-    pub token_limit_warning: bool,
     /// Claude session ID parsed from startup output (T101, kept for backwards compat).
     pub session_id: Option<String>,
     /// Full resume command extracted from agent shutdown output (T101).
@@ -92,7 +90,6 @@ impl AgentOutputStream {
         // Split into complete lines
         let mut status: Option<String> = None;
         let mut current_step: Option<String> = None;
-        let mut token_limit_warning = false;
         let mut session_id: Option<String> = None;
         let mut resume_command: Option<String> = None;
 
@@ -106,11 +103,6 @@ impl AgentOutputStream {
                 let trimmed = line.trim();
                 if trimmed.is_empty() || trimmed.len() < 3 {
                     continue;
-                }
-
-                // Check token limit warning (all CLI types)
-                if check_token_limit(trimmed) {
-                    token_limit_warning = true;
                 }
 
                 // Parse session ID from startup (claude-code only, kept for backwards compat)
@@ -140,7 +132,6 @@ impl AgentOutputStream {
             clean_text: clean,
             status,
             current_step,
-            token_limit_warning,
             session_id,
             resume_command,
             signals,
