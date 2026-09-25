@@ -9,11 +9,12 @@ import {
   Rows,
   X,
 } from "lucide-react";
-import { type DragEvent, lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { collectPaneIds, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
@@ -250,6 +251,20 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
     }
   }, [isError, paneId, agentId, updatePane]);
 
+  // A shell killed by a reboot can't get its process back, but its pane can
+  // get a terminal back: a fresh shell in the project folder, same pane
+  const respawned = useRef(false);
+  useEffect(() => {
+    if (respawned.current || agent?.cliType !== "shell" || agent.status !== "crashed") return;
+    respawned.current = true;
+    spawnShellIntoPane(agent.projectId, paneId)
+      .then(() => {
+        useAgentStore.getState().removeAgent(agentId);
+        return trpcMutate("agents.delete", { id: agentId });
+      })
+      .catch((err) => console.error("[PaneRecovery] Could not reopen the shell:", err));
+  }, [agent, agentId, paneId]);
+
   // Agent in terminal state with no live store entry — stale pane from previous session
   // (store only has agents that were spawned or reattached in this session)
   // Gated on the store having actually synced: panes mount first, so before
@@ -257,7 +272,11 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
   // crashed session's pane — and its resume card — on every restart.
   const hasSynced = useAgentStore((s) => s.hasSyncedFromDb);
   const isStaleFromPreviousSession =
-    hasSynced && agent && TERMINAL_STATUSES.has(agent.status) && !storeAgent;
+    hasSynced &&
+    agent &&
+    TERMINAL_STATUSES.has(agent.status) &&
+    !storeAgent &&
+    !(agent.cliType === "shell" && agent.status === "crashed");
 
   useEffect(() => {
     if (isStaleFromPreviousSession && agent) {
