@@ -24,9 +24,10 @@ import {
 } from "../../hooks/use-trpc";
 import { switchSection } from "../../lib/switch-section";
 import type { AgentState } from "../../stores/agents";
+import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { ConfirmDialog } from "../common/ConfirmDialog";
-import { VISIBLE_STATUSES } from "./AgentMiniCard";
+import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
 import { TabsOverview } from "./TabsOverview";
 
@@ -44,7 +45,7 @@ function PortBadges({ projectPath }: { projectPath: string }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1 py-0.5">
+    <div className="ml-1 flex min-w-0 flex-wrap items-center gap-1">
       <Globe className="h-2.5 w-2.5 text-text-muted" />
       {Array.from(uniquePorts.values()).map((p) => (
         <button
@@ -140,6 +141,7 @@ export function ProjectItem({
     ["running", "spawning", "waiting_input"].includes(a.status),
   ).length;
   const queryClient = useQueryClient();
+  const workspace = useWorkspaceStore((s) => s.projectWorkspaces[project.id]);
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(project.name);
@@ -305,10 +307,11 @@ export function ProjectItem({
 
       {isExpanded && (
         <div className="ml-5 border-l border-border/50 pl-2">
-          <div className="flex items-center justify-between py-1">
-            <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
-              <GitBranch className="h-2.5 w-2.5" />
-              <span>{project.defaultBranch}</span>
+          <div className="flex items-center justify-between gap-1 py-1">
+            <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-text-muted">
+              <GitBranch className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{project.defaultBranch}</span>
+              <PortBadges projectPath={project.path} />
             </div>
             <div className="flex items-center gap-0.5">
               <AgentLauncher projectId={project.id} />
@@ -327,12 +330,15 @@ export function ProjectItem({
             </div>
           </div>
 
-          <PortBadges projectPath={project.path} />
+          <TabsOverview projectId={project.id} />
 
           {(() => {
             const visible = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
-
-            const mainAgents = visible.filter((a) => !a.branchName);
+            // Worktree agents live under their branch; the rest under the tab that shows them
+            const inPanes = new Set(
+              Object.values(workspace?.panes ?? {}).flatMap((p) => (p.agentId ? [p.agentId] : [])),
+            );
+            const loose = visible.filter((a) => !a.branchName && !inPanes.has(a.id));
             const branchAgentMap = new Map<string, AgentState[]>();
             for (const a of visible) {
               if (a.branchName) {
@@ -347,14 +353,6 @@ export function ProjectItem({
 
             return (
               <>
-                {mainAgents.length > 0 && (
-                  <BranchGroup
-                    branchName={project.defaultBranch}
-                    agents={mainAgents}
-                    isWorktree={false}
-                    projectId={project.id}
-                  />
-                )}
                 {Array.from(allBranches).map((branch) => (
                   <BranchGroup
                     key={branch}
@@ -368,14 +366,22 @@ export function ProjectItem({
                     }}
                   />
                 ))}
-                {visible.length === 0 && worktrees.length === 0 && (
+                {loose.length > 0 && (
+                  <div className="space-y-px">
+                    <p className="px-1 py-0.5 text-[9px] font-medium uppercase tracking-wider text-text-muted">
+                      Not open in a tab
+                    </p>
+                    {loose.map((a) => (
+                      <AgentMiniCard key={a.id} agent={a} />
+                    ))}
+                  </div>
+                )}
+                {visible.length === 0 && worktrees.length === 0 && !workspace?.tabs.length && (
                   <p className="py-1 text-[10px] italic text-text-muted">No agents</p>
                 )}
               </>
             );
           })()}
-
-          {isSelected && <TabsOverview />}
         </div>
       )}
       <ConfirmDialog
