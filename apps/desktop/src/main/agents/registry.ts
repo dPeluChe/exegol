@@ -63,8 +63,9 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     capabilities: {
       supportsWorktree: true,
       supportsResume: true,
-      resumeFlag: "--resume",
-      resumeCommandPattern: "gemini --resume ",
+      // Takes "latest" or an index, never a session id
+      resumeFlag: "--resume latest",
+      resumeCommandPattern: "",
       supportsRPC: false,
       supportsVision: true,
       supportsPromptArg: false,
@@ -110,8 +111,9 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     capabilities: {
       supportsWorktree: true,
       supportsResume: true,
-      resumeFlag: "-r",
-      resumeCommandPattern: "",
+      // Bare -r opens a session picker; -c continues the latest
+      resumeFlag: "-c",
+      resumeCommandPattern: "devin -r ",
       supportsRPC: false,
       supportsVision: false,
       supportsPromptArg: true,
@@ -199,8 +201,9 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     color: "#06B6D4",
     capabilities: {
       supportsWorktree: false,
-      supportsResume: false,
-      resumeFlag: "",
+      supportsResume: true,
+      resumeFlag: "threads continue --last",
+      resumeCommandPattern: "amp threads continue ",
       supportsRPC: false,
       supportsVision: false,
       supportsPromptArg: true,
@@ -243,8 +246,9 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     color: "#7C3AED",
     capabilities: {
       supportsWorktree: false,
-      supportsResume: false,
-      resumeFlag: "",
+      supportsResume: true,
+      resumeFlag: "--continue",
+      resumeCommandPattern: "kilocode -s ",
       supportsRPC: false,
       supportsVision: false,
       supportsPromptArg: false,
@@ -265,8 +269,9 @@ const BUILTIN_PROVIDERS: AgentProvider[] = [
     color: "#F472B6",
     capabilities: {
       supportsWorktree: false,
-      supportsResume: true,
-      resumeFlag: "--continue",
+      // No resume: its -c is --cwd, --continue does not exist
+      supportsResume: false,
+      resumeFlag: "",
       supportsRPC: false,
       supportsVision: false,
       supportsPromptArg: false,

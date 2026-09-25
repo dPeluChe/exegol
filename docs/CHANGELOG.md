@@ -7,6 +7,18 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- YOLO survives a resume: resuming used the bare CLI command and dropped every configured flag,
+  so a session launched with `--dangerously-skip-permissions` came back asking for permission.
+  The per-launch YOLO choice is now saved with the session and reapplied
+- CLI flags checked against each CLI's `--help`: Codex YOLO is `--dangerously-bypass-approvals-and-sandbox`
+  (`--full-auto` no longer exists and made Codex exit); YOLO added for Gemini, Antigravity, Devin,
+  OpenCode, Amp, Kilo Code and Droid; Devin continues with `-c` (`-r` opened a picker); Gemini
+  resumes with `--resume latest`; Kilo Code and Amp can resume; Crush no longer offers a resume it
+  does not have
+
 ## [0.5.1] — 2026-09-24 — Fixes from the first days on 0.5.0
 
 ### Fixed
