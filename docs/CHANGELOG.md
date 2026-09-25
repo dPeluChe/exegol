@@ -7,17 +7,14 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.1] — 2026-09-24 — Fixes from the first days on 0.5.0
 
 ### Fixed
-- Sessions killed by a restart come back where you left them: Resume finds each agent's own
-  conversation in the CLI's history (Claude Code, Codex, Gemini, OpenCode, Droid) instead of
-  reopening the project's latest one, and the Dashboard (fleet cards and pinned cards) has a
-  Resume button for ended sessions
-- Bug reports no longer carry GitHub cookies: the updater logged a 404's full response headers
-- Claude Code sessions resume after the Mac restarts or shuts down: Exegol now keeps each
-  session's id (from Claude's hooks), so "Resume" on a crashed session reopens the conversation.
-  Before, the id was never saved and there was nothing to resume
+- Sessions killed by a restart or shutdown come back where you left them. Exegol keeps each Claude
+  session's id (from Claude's hooks), and for sessions that died before it had one, Resume finds the
+  agent's own conversation in the CLI's history (Claude Code, Codex, Gemini, OpenCode, Droid)
+  instead of reopening the project's latest one. Ended sessions have a Resume button on the
+  Dashboard too (fleet cards and pinned cards)
 - No more "Token limit approaching" banner: it matched any line mentioning "context window" (a
   resumed Devin session hit it in 10 seconds) and "Continue with new agent" spawned successors that
   tripped it again. The automatic handoff is gone; CLIs compact their own context and the session
@@ -26,6 +23,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   pane in a new tab; it did nothing before
 - A new browser pane opens the project's running dev server (the port `pnpm dev` is listening on)
   instead of always :3000. Running-port detection never matched anything
+- Bug reports no longer carry GitHub cookies: the updater logged a 404's full response headers
 
 ## [0.5.0] — 2026-09-22 — Waves 1-3 consolidated, daily-readiness fixes
 

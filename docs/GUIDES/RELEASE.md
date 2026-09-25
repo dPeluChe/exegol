@@ -38,7 +38,7 @@ bun run package:mac      # electron-vite build + electron-builder (also runs the
 
 Skipping `build:rust` ships no `.node` file and the app falls back to the JS output path.
 
-Output: `apps/desktop/dist/Exegol-<version>-<arch>.dmg` (name from `DMG_NAME` in `electron-builder.ts`), plus the `-mac.zip` and `latest-mac.yml`.
+Output: `apps/desktop/dist/<version>/Exegol-<version>-<arch>.dmg` (one folder per version) (name from `DMG_NAME` in `electron-builder.ts`), plus the `-mac.zip` and `latest-mac.yml`.
 
 ### 4. Install and first launch (unsigned build)
 
@@ -68,11 +68,11 @@ cd apps/desktop
 
 # Create GitHub Release (manual for now, T45 automates this).
 # Existing tags use the vX.Y.Z form; the updater reads releases/latest, so the tag name is free.
-gh release create v0.5.0 \
-  dist/Exegol-0.5.0-arm64.dmg \
-  dist/Exegol-0.5.0-arm64-mac.zip \
-  dist/latest-mac.yml \
-  --title "Exegol v0.5.0" \
+gh release create v0.5.1 \
+  dist/0.5.1/Exegol-0.5.1-arm64.dmg \
+  dist/0.5.1/Exegol-0.5.1-arm64-mac.zip \
+  dist/0.5.1/latest-mac.yml \
+  --title "Exegol v0.5.1" \
   --notes "Release notes here"
 ```
 
