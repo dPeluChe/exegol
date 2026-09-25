@@ -13,7 +13,7 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type PortInfo,
   useDeleteProject,
@@ -140,10 +140,6 @@ export function ProjectItem({
   const runningCount = agents.filter((a) =>
     ["running", "spawning", "waiting_input"].includes(a.status),
   ).length;
-  const workspace = useWorkspaceStore((s) => s.projectWorkspaces[project.id]);
-  const paneAgentIds = new Set(
-    Object.values(workspace?.panes ?? {}).flatMap((p) => (p.agentId ? [p.agentId] : [])),
-  );
 
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(project.name);
@@ -334,13 +330,7 @@ export function ProjectItem({
 
           <TabsOverview projectId={project.id} />
 
-          <ProjectAgentGroups
-            project={project}
-            agents={agents}
-            worktrees={worktrees}
-            paneAgentIds={paneAgentIds}
-            hasTabs={!!workspace?.tabs.length}
-          />
+          <ProjectAgentGroups project={project} agents={agents} worktrees={worktrees} />
         </div>
       )}
       <ConfirmDialog
@@ -368,15 +358,20 @@ function ProjectAgentGroups({
   project,
   agents,
   worktrees,
-  paneAgentIds,
-  hasTabs,
 }: {
   project: Project;
   agents: AgentState[];
   worktrees: Worktree[];
-  paneAgentIds: Set<string>;
-  hasTabs: boolean;
 }) {
+  // Primitive selectors: a cwd or focus change in the workspace re-rendered the whole row
+  const paneAgentKey = useWorkspaceStore((s) =>
+    Object.values(s.projectWorkspaces[project.id]?.panes ?? {})
+      .flatMap((p) => (p.agentId ? [p.agentId] : []))
+      .sort()
+      .join(","),
+  );
+  const hasTabs = useWorkspaceStore((s) => !!s.projectWorkspaces[project.id]?.tabs.length);
+  const paneAgentIds = useMemo(() => new Set(paneAgentKey.split(",")), [paneAgentKey]);
   const queryClient = useQueryClient();
   const visible = agents.filter((a) => VISIBLE_STATUSES.has(a.status));
   const offTab = visible.filter((a) => !paneAgentIds.has(a.id));

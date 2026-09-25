@@ -17,6 +17,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   replace the first pane of the active tab
 
 ### Fixed
+- From the 0.5.2 review: with fish as your shell, a project with a `beforeAgent` hook no longer fails to start its agents; Re-launch keeps the YOLO choice too (not only Resume); a pipeline step whose agent finished while the app was closed is judged on Resume instead of run again
 - Changing the theme recolors open terminals in place instead of rebuilding every one of them (and re-replaying each session). Switching between Dark and Dark Black now reaches the terminals too
 - The global hotkey and the Dock icon bring the window back after you close it (the hotkey stopped working; the Dock did nothing while a floating or settings window was open)
 - Resuming a pipeline after an app restart continues with the step's agent that is still running, instead of starting a second agent on the same worktree

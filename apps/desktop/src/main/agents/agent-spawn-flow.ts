@@ -329,9 +329,7 @@ export function buildPtyInvocation(
     // `npm install` stop the agent with nothing on screen, and `exec hook && cli`
     // (stdin-prompt CLIs) replaced the shell with the hook, so the CLI never ran
     const beforeAgent = loadLifecycleConfig(projectPath)?.beforeAgent;
-    const hookPrefix = beforeAgent
-      ? `{ ${beforeAgent}\n} || printf '\\n\\033[33m[Exegol] beforeAgent failed (exit %s); starting the agent anyway\\033[0m\\n\\n' "$?"; `
-      : "";
+    const hookPrefix = beforeAgent ? beforeAgentPrefix(beforeAgent, userShell) : "";
 
     // Spawn-boundary guard: refuse obviously destructive commands. Scans the
     // final string handed to the shell (prompt + resume + lifecycle included).
@@ -442,4 +440,19 @@ export function buildPtyInvocation(
   }
 
   return { shell, args, env, stdinCommand, enableMarker, isPlainShell };
+}
+
+const HOOK_FAILED_MSG =
+  "\\n\\033[33m[Exegol] beforeAgent failed (exit %s); starting the agent anyway\\033[0m\\n\\n";
+
+/**
+ * Run the hook, report a failure, and fall through to the CLI either way.
+ * fish has no `$?` (a parse error there, so no agent ever started) and only
+ * recent fish has `{ }`: it gets `begin; end; or` and `$status`.
+ */
+export function beforeAgentPrefix(hook: string, userShell: string): string {
+  if (userShell.endsWith("/fish")) {
+    return `begin; ${hook}\nend; or printf '${HOOK_FAILED_MSG}' $status; `;
+  }
+  return `{ ${hook}\n} || printf '${HOOK_FAILED_MSG}' "$?"; `;
 }

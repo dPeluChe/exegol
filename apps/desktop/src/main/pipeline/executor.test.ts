@@ -228,6 +228,20 @@ describe("PipelineExecutor", () => {
     mocks.alive.clear();
   });
 
+  it("after a restart, resume judges a step whose agent finished while the app was closed", async () => {
+    const templateId = makeTemplate([step()]);
+    const run = await executor.startRun(db, templateId, projectId, "task", 5, false);
+    const agentId = lastAgentId(db, run.id);
+    db.prepare("UPDATE pipeline_runs SET status = 'paused' WHERE id = ?").run(run.id);
+    db.prepare("UPDATE agents SET status = 'completed' WHERE id = ?").run(agentId);
+    mocks.completionCallbacks.clear();
+
+    await executor.resumeRun(db, run.id);
+    // The finished step is not run again
+    expect(mocks.manager.spawn).toHaveBeenCalledTimes(1);
+    expect(getPipelineRun(db, run.id)?.status).not.toBe("paused");
+  });
+
   it("refuses to resume a run that is not paused", async () => {
     const templateId = makeTemplate([step()]);
     const run = await executor.startRun(db, templateId, projectId, "task", 5, false);

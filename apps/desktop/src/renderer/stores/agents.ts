@@ -254,12 +254,17 @@ export function findAgentPane(
   return null;
 }
 
-/** Show a project's tab (and pane) from anywhere, the Dashboard included */
-export function focusPane(projectId: string, tabId: string, paneId?: string): void {
+/** Bring a project's workspace on screen from anywhere, the Dashboard included */
+function showProject(projectId: string): void {
   if (useAppStore.getState().activeProjectId !== projectId) {
     useAppStore.getState().setActiveProject(projectId);
   }
   switchSection("agents");
+}
+
+/** Show a project's tab (and pane) */
+export function focusPane(projectId: string, tabId: string, paneId?: string): void {
+  showProject(projectId);
   const ws = useWorkspaceStore.getState();
   ws.setActiveTab(tabId);
   if (paneId) ws.setFocusedPane(paneId);
@@ -274,10 +279,7 @@ export function jumpToAgent(agentId: string, projectId: string): void {
   if (location) {
     focusPane(projectId, location.tabId, location.paneId);
   } else {
-    if (useAppStore.getState().activeProjectId !== projectId) {
-      useAppStore.getState().setActiveProject(projectId);
-    }
-    switchSection("agents");
+    showProject(projectId);
     const ws = useWorkspaceStore.getState();
     // No pane shows it (closed, or spawned headless): a new tab, never replacing the user's panes
     const agent = useAgentStore.getState().agents[agentId];
