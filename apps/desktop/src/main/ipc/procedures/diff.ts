@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { TimeoutError, TransientError, withRetry } from "../../lib/errors";
+import { remoteWebUrl } from "../../lib/remote-web-url";
 import { publicProcedure, router } from "../trpc";
 import { aiProcedures } from "./diff-ai";
 import {
@@ -244,6 +245,21 @@ export const diffRouter = router({
         return stdout.trim();
       } catch {
         return "unknown";
+      }
+    }),
+
+  /** The repo's web page (origin), for the terminal toolbar's repo chip; null without a web remote */
+  remoteWebUrl: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const cwd = resolveProjectPath(ctx.db, input.projectId);
+      try {
+        const { stdout } = await execFileAsync("git", ["config", "--get", "remote.origin.url"], {
+          cwd,
+        });
+        return remoteWebUrl(stdout);
+      } catch {
+        return null;
       }
     }),
 

@@ -125,6 +125,7 @@
       "mergePullRequest",
       "projectDiff",
       "push",
+      "remoteWebUrl",
       "reviewSummary",
       "stage",
       "stagedDiff",

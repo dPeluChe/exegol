@@ -82,6 +82,13 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     refetchInterval: 15_000,
   });
 
+  const { data: repoUrl } = useQuery({
+    queryKey: ["git", "remoteWebUrl", toolbarProjectId],
+    queryFn: () => trpcInvoke<string | null>("diff.remoteWebUrl", { projectId: toolbarProjectId }),
+    enabled: !!toolbarProjectId,
+    staleTime: 5 * 60_000,
+  });
+
   const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean, wrote?: boolean) => {
     setScrollAtTop(atTop);
     setScrollAtBottom(atBottom);
@@ -204,16 +211,20 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   // T128: localhost URL detector → "Open preview" toolbar chip
   const [previewUrl, dismissPreview] = useTerminalUrlDetector(agentId, !isStopped);
+  const openBesideInBrowser = useCallback(
+    (url: string) => {
+      if (!paneId) return;
+      const tab = getProjectState().tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
+      if (tab)
+        useWorkspaceStore.getState().splitPane(tab.id, paneId, "vertical", "browser", { url });
+    },
+    [paneId],
+  );
   const handleOpenPreview = useCallback(() => {
-    if (!previewUrl || !paneId) return;
-    const tab = getProjectState().tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
-    if (tab) {
-      useWorkspaceStore
-        .getState()
-        .splitPane(tab.id, paneId, "vertical", "browser", { url: previewUrl });
-    }
+    if (!previewUrl) return;
+    openBesideInBrowser(previewUrl);
     dismissPreview();
-  }, [previewUrl, paneId, dismissPreview]);
+  }, [previewUrl, openBesideInBrowser, dismissPreview]);
 
   const floatingButtons = (
     <TerminalFloatingButtons
@@ -283,6 +294,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           previewUrl={previewUrl}
           onOpenPreview={handleOpenPreview}
           onDismissPreview={dismissPreview}
+          repoUrl={repoUrl}
+          onOpenRepo={openBesideInBrowser}
         />
       )}
       {/* min-h-0: a flex item never shrinks below its content by default, so the

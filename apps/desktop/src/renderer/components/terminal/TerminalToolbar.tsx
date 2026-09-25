@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   ExternalLink,
   GitBranch,
+  Github,
   Loader2,
   MessageSquare,
   Shield,
@@ -29,6 +30,10 @@ interface TerminalToolbarProps {
   previewUrl?: string | null;
   onOpenPreview?: () => void;
   onDismissPreview?: () => void;
+  /** The repo's web page (origin remote) */
+  repoUrl?: string | null;
+  /** Open a URL in a browser pane next to this terminal */
+  onOpenRepo?: (url: string) => void;
 }
 
 export function TerminalToolbar({
@@ -42,6 +47,8 @@ export function TerminalToolbar({
   previewUrl,
   onOpenPreview,
   onDismissPreview,
+  repoUrl,
+  onOpenRepo,
 }: TerminalToolbarProps) {
   return (
     // Badges live on the LEFT — the pane's hover actions (float/split/close)
@@ -66,6 +73,7 @@ export function TerminalToolbar({
           <span className="max-w-36 truncate">{branchName}</span>
         </span>
       )}
+      {repoUrl && <RepoLink url={repoUrl} onOpenInPane={onOpenRepo} />}
       {dirtyCount > 0 && (
         <span
           className="rounded bg-yellow-500/15 px-1 py-0.5 text-[9px] tabular-nums text-yellow-400"
@@ -174,6 +182,38 @@ export function IsolationModeBadge({
     >
       <Icon className="h-2.5 w-2.5" />
       {config.label}
+    </span>
+  );
+}
+
+// ─── Repo web page: a pane beside the terminal, or the system browser ───────
+
+function RepoLink({ url, onOpenInPane }: { url: string; onOpenInPane?: (url: string) => void }) {
+  const host = new URL(url).hostname.replace(/^www\./, "");
+  const btn =
+    "flex items-center gap-1 text-[9px] text-text-muted transition-colors hover:text-text-primary";
+  return (
+    <span className="flex shrink-0 items-center gap-1">
+      {onOpenInPane && (
+        <button
+          type="button"
+          onClick={() => onOpenInPane(url)}
+          className={btn}
+          title={`Open ${url} in a browser pane (its login is kept)`}
+        >
+          <Github className="h-2.5 w-2.5" />
+          {host.split(".")[0]}
+        </button>
+      )}
+      {/* window.open goes to the system browser (main's setWindowOpenHandler), where the user is signed in */}
+      <button
+        type="button"
+        onClick={() => window.open(url, "_blank")}
+        className={btn}
+        title={`Open ${url} in your browser`}
+      >
+        <ExternalLink className="h-2.5 w-2.5" />
+      </button>
     </span>
   );
 }
