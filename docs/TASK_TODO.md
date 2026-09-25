@@ -18,6 +18,10 @@
 > folder actions, sidebar layout + rail, project appearance, port status, files search + editing).
 
 1. **Verify opencode across app quit** (P1 #2 below).
+2. **Search follow-ups** (from the #151 simplify pass): `fsSearch`/`fsGrep` are sync napi calls
+   run per folder on the main process (fine at 3-10ms per repo, a freeze on a 30-repo workspace);
+   make them `AsyncTask` and give the Rust walker a nested-`.git` scope instead of the per-folder
+   loop. Unsaved edits are lost on rename of the open file or pane close (keep drafts in a store).
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.
