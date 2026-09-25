@@ -5,6 +5,7 @@ import { LoadingSpinner } from "./components/common";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
 import { Sidebar } from "./components/layout/Sidebar";
+import { SidebarRail } from "./components/layout/SidebarRail";
 import { StatusBar } from "./components/layout/StatusBar";
 import { TitleBar } from "./components/layout/TitleBar";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
@@ -87,21 +88,29 @@ export default function App() {
 
         <div className="flex-1 overflow-hidden">
           {showSidebar ? (
-            <PanelGroup direction="horizontal" autoSaveId="exegol-layout">
-              {!sidebarCollapsed && (
-                <>
-                  <Panel id="sidebar" order={1} defaultSize={20} minSize={10} maxSize={40}>
-                    <Sidebar />
-                  </Panel>
-                  <PanelResizeHandle className="group relative w-1.5 shrink-0">
-                    <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-all group-hover:w-[3px] group-hover:bg-accent/60 group-data-[resize-handle-active]:w-[3px] group-data-[resize-handle-active]:bg-accent" />
-                  </PanelResizeHandle>
-                </>
-              )}
-              <Panel id="main" order={2} defaultSize={80}>
-                <MainContent />
-              </Panel>
-            </PanelGroup>
+            <div className="flex h-full">
+              {/* Collapsed = icon rail, not gone */}
+              {sidebarCollapsed && <SidebarRail />}
+              <PanelGroup
+                direction="horizontal"
+                autoSaveId="exegol-layout"
+                className="min-w-0 flex-1"
+              >
+                {!sidebarCollapsed && (
+                  <>
+                    <Panel id="sidebar" order={1} defaultSize={20} minSize={10} maxSize={40}>
+                      <Sidebar />
+                    </Panel>
+                    <PanelResizeHandle className="group relative w-1.5 shrink-0">
+                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-all group-hover:w-[3px] group-hover:bg-accent/60 group-data-[resize-handle-active]:w-[3px] group-data-[resize-handle-active]:bg-accent" />
+                    </PanelResizeHandle>
+                  </>
+                )}
+                <Panel id="main" order={2} defaultSize={80}>
+                  <MainContent />
+                </Panel>
+              </PanelGroup>
+            </div>
           ) : (
             <MainContent />
           )}

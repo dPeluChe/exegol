@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Files right-click menu: open with the default app, reveal in Finder, copy path, rename
 
 ### Changed
+- Sidebar: Agents and Projects scroll separately with their headers always visible (a long agent list pushed Projects and its + out of view), and collapsing leaves an icon rail with the Dashboard, each project with its running count and an attention dot, Add project and Settings
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
