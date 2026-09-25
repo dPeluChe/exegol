@@ -212,6 +212,8 @@ export interface FileContent {
   size: number;
   mime?: string;
   base64?: string;
+  /** Text only: the edit base for the on-disk conflict check */
+  mtimeMs?: number;
 }
 
 export function useFileContent(path: string | null) {
@@ -250,10 +252,14 @@ export function usePickFile() {
 export function useWriteFile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (params: { path: string; content: string }) =>
-      trpcMutate<{ success: boolean }>("files.writeFile", params),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["file", variables.path] });
+    mutationFn: (params: { path: string; content: string; expectedMtimeMs?: number }) =>
+      trpcMutate<{ success: boolean; mtimeMs: number }>("files.writeFile", params),
+    onSuccess: ({ mtimeMs }, { path, content }) => {
+      // Written content in the cache at once: the viewer drops its draft and must not flash the old text
+      queryClient.setQueryData<FileContent>(["file", path], (prev) =>
+        prev ? { ...prev, content, mtimeMs } : prev,
+      );
+      queryClient.invalidateQueries({ queryKey: ["file", path] });
     },
   });
 }

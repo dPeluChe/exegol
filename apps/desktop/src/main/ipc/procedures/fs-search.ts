@@ -1,10 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
-import { getProject, listProjects } from "../../db/queries";
+import { getProject } from "../../db/queries";
+import { escapeRegExp } from "../../lib/escape-regexp";
 import { isPathAllowed } from "../../security/path-guard";
 import { detectRunTargets } from "../../system/scripts";
 import { publicProcedure, router } from "../trpc";
+import { assertPathInsideProject } from "./project-paths";
 
 const fuzzyFindInput = z.object({
   query: z.string(),
@@ -37,24 +39,11 @@ function requireCoreRust(): NonNullable<typeof coreRust> {
 }
 
 /** `root` came from the renderer unchecked: grep could read any folder on disk */
-async function assertProjectRoot(
-  root: string,
-  ctx: { db: import("libsql").Database },
-): Promise<void> {
-  const bases = listProjects(ctx.db).map((p) => p.path);
-  if (!(await isPathAllowed(root, bases))) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Search root is outside the registered projects",
-    });
-  }
-}
-
 export const fsSearchRouter = router({
   /** Filename fuzzy-finder backed by Rust `ignore` crate (gitignore-aware). */
   fuzzyFind: publicProcedure.input(fuzzyFindInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
-    await assertProjectRoot(input.root, ctx);
+    await assertPathInsideProject(input.root, ctx);
     return rust.fsSearch(input.query, input.root, {
       maxResults: input.maxResults,
       maxDepth: input.maxDepth,
@@ -66,7 +55,7 @@ export const fsSearchRouter = router({
   /** Regex content search backed by Rust `grep-regex` + `grep-searcher`. */
   grep: publicProcedure.input(grepInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
-    await assertProjectRoot(input.root, ctx);
+    await assertPathInsideProject(input.root, ctx);
     return rust.fsGrep(input.pattern, input.root, {
       caseInsensitive: input.caseInsensitive,
       includeHidden: input.includeHidden,
@@ -120,7 +109,7 @@ export const fsSearchRouter = router({
       const hits = folders
         .flatMap((f) =>
           rust
-            .fsGrep(escapeRegex(input.query), f.path, {
+            .fsGrep(escapeRegExp(input.query), f.path, {
               caseInsensitive: input.caseInsensitive ?? true,
               maxMatches: 300,
             })
@@ -134,8 +123,3 @@ export const fsSearchRouter = router({
       return { mode: input.mode, names: [], hits };
     }),
 });
-
-/** The search box is plain text, not a regex: "a.b(" must not throw or over-match */
-function escapeRegex(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}

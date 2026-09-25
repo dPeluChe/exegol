@@ -1,8 +1,7 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, FolderSearch, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import type { FileContent } from "../../hooks/use-trpc";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { type FileContent, useWriteFile } from "../../hooks/use-trpc";
+import { trpcMutate } from "../../lib/trpc-client";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "./sections/resource-format";
 
@@ -52,47 +51,37 @@ export function FilePreview({
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const pdfUrl = usePdfUrl(file);
-  const queryClient = useQueryClient();
+  const writeFile = useWriteFile();
   const [draft, setDraft] = useState<string | null>(null);
-  // What the edit started from: the file query refetches on its own, so an
-  // agent's change on disk would otherwise be overwritten without a word
-  const baseRef = useRef<string | null>(null);
+  // What the edit started from: the file query refetches on its own, so without
+  // this an agent's change on disk would be overwritten without a word
+  const baseRef = useRef<{ content: string; mtimeMs?: number } | null>(null);
   const [conflict, setConflict] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const dirty = draft !== null && draft !== baseRef.current;
+  const dirty = draft !== null && draft !== baseRef.current?.content;
 
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
 
-  const write = async () => {
-    if (draft === null) return;
-    setSaving(true);
+  const save = async (force = false) => {
+    if (!dirty || draft === null || writeFile.isPending) return;
     try {
-      await trpcMutate("files.writeFile", { path, content: draft });
-      baseRef.current = draft;
-      queryClient.setQueryData<FileContent>(["file", path], (prev) =>
-        prev ? { ...prev, content: draft } : prev,
-      );
+      await writeFile.mutateAsync({
+        path,
+        content: draft,
+        expectedMtimeMs: force ? undefined : baseRef.current?.mtimeMs,
+      });
+      baseRef.current = null;
       setDraft(null);
-      setSaveError(null);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
+      // Main checks the mtime; the error code does not survive IPC, the message does
+      if (String(err).includes("changed on disk")) setConflict(true);
     }
   };
-
-  const save = async () => {
-    if (!dirty || saving) return;
-    const onDisk = await trpcInvoke<FileContent>("files.readFile", { path }).catch(() => null);
-    if (onDisk && onDisk.content !== baseRef.current) {
-      setConflict(true);
-      return;
-    }
-    await write();
-  };
+  const saveError =
+    writeFile.error && !String(writeFile.error).includes("changed on disk")
+      ? writeFile.error.message
+      : null;
 
   const action =
     "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
@@ -127,7 +116,7 @@ export function FilePreview({
           fileName={path}
           revealLine={revealLine}
           onChange={(value) => {
-            if (baseRef.current === null) baseRef.current = file.content;
+            baseRef.current ??= { content: file.content, mtimeMs: file.mtimeMs };
             setDraft(value);
           }}
           onSave={save}
@@ -176,11 +165,11 @@ export function FilePreview({
             <button
               type="button"
               onClick={() => save()}
-              disabled={saving}
+              disabled={writeFile.isPending}
               className="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent hover:bg-accent/30 disabled:opacity-50"
               title="Save (Cmd+S)"
             >
-              {saving ? "Saving..." : "Save"}
+              {writeFile.isPending ? "Saving..." : "Save"}
             </button>
           </>
         )}
@@ -212,7 +201,7 @@ export function FilePreview({
         description={`${path.split("/").pop()} was modified since you started editing (an agent, or another editor). Overwrite it with your version?`}
         confirmLabel="Overwrite"
         variant="destructive"
-        onConfirm={() => write()}
+        onConfirm={() => save(true)}
       />
     </div>
   );

@@ -81,6 +81,13 @@ interface EditProps {
   revealLine?: number;
 }
 
+function revealAt(editor: monaco.editor.IStandaloneCodeEditor, line: number | undefined) {
+  if (!line) return;
+  editor.revealLineInCenter(line);
+  const end = editor.getModel()?.getLineMaxColumn(line) ?? 1;
+  editor.setSelection(new monaco.Selection(line, 1, line, end));
+}
+
 function MonacoViewer({
   content,
   language,
@@ -95,17 +102,7 @@ function MonacoViewer({
   const readOnly = !onChange;
 
   useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || !revealLine) return;
-    editor.revealLineInCenter(revealLine);
-    editor.setSelection(
-      new monaco.Selection(
-        revealLine,
-        1,
-        revealLine,
-        editor.getModel()?.getLineMaxColumn(revealLine) ?? 1,
-      ),
-    );
+    if (editorRef.current) revealAt(editorRef.current, revealLine);
   }, [revealLine]);
 
   return (
@@ -118,17 +115,7 @@ function MonacoViewer({
       onMount={(editor) => {
         editorRef.current = editor;
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current?.());
-        if (revealLine) {
-          editor.revealLineInCenter(revealLine);
-          editor.setSelection(
-            new monaco.Selection(
-              revealLine,
-              1,
-              revealLine,
-              editor.getModel()?.getLineMaxColumn(revealLine) ?? 1,
-            ),
-          );
-        }
+        revealAt(editor, revealLine);
       }}
       loading={
         <div className="flex h-full items-center justify-center text-xs text-text-muted">

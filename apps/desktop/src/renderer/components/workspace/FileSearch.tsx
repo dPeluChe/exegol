@@ -111,55 +111,69 @@ export function FileSearch({
         ))}
       </div>
 
-      {!active ? (
-        children
-      ) : (
+      {active ? (
         <div className="min-h-0 flex-1 overflow-auto py-1 text-[11px]">
-          {error ? (
-            <p className="px-3 py-2 text-red-400">
-              {error instanceof Error ? error.message : String(error)}
-            </p>
-          ) : !data ? (
-            <p className="px-3 py-2 text-text-muted">{isFetching ? "Searching..." : ""}</p>
-          ) : data.mode === "name" ? (
-            data.names.length === 0 ? (
-              <p className="px-3 py-2 text-text-muted">No file matches "{query}".</p>
-            ) : (
-              data.names.map((n) => (
-                <button
-                  key={n.path}
-                  type="button"
-                  onClick={() => onPick(n.path)}
-                  className="flex w-full items-baseline gap-1.5 px-3 py-0.5 text-left hover:bg-white/5"
-                  title={n.relativePath}
-                >
-                  <span className="shrink-0 text-text-primary">
-                    {n.relativePath.split("/").pop()}
-                  </span>
-                  <span className="truncate text-[10px] text-text-muted">{n.relativePath}</span>
-                </button>
-              ))
-            )
-          ) : data.hits.length === 0 ? (
-            <p className="px-3 py-2 text-text-muted">No text matches "{query}".</p>
-          ) : (
-            data.hits.map((h) => (
-              <button
-                key={`${h.path}:${h.lineNumber}`}
-                type="button"
-                onClick={() => onPick(h.path, h.lineNumber)}
-                className="flex w-full flex-col px-3 py-0.5 text-left hover:bg-white/5"
-                title={`${h.relativePath}:${h.lineNumber}`}
-              >
-                <span className="truncate text-[10px] text-text-muted">
-                  {h.relativePath}:{h.lineNumber}
-                </span>
-                <span className="truncate font-mono text-text-secondary">{h.line.trim()}</span>
-              </button>
-            ))
-          )}
+          <SearchResults
+            data={data}
+            error={error}
+            isFetching={isFetching}
+            query={query}
+            onPick={onPick}
+          />
         </div>
+      ) : (
+        children
       )}
     </>
   );
+}
+
+function SearchResults({
+  data,
+  error,
+  isFetching,
+  query,
+  onPick,
+}: {
+  data: SearchResponse | undefined;
+  error: unknown;
+  isFetching: boolean;
+  query: string;
+  onPick: (path: string, line?: number) => void;
+}) {
+  const note = (text: string, className = "text-text-muted") => (
+    <p className={cn("px-3 py-2", className)}>{text}</p>
+  );
+  if (error) return note(error instanceof Error ? error.message : String(error), "text-red-400");
+  if (!data) return note(isFetching ? "Searching..." : "");
+  if (data.mode === "name") {
+    if (data.names.length === 0) return note(`No file matches "${query}".`);
+    return data.names.map((n) => (
+      <button
+        key={n.path}
+        type="button"
+        onClick={() => onPick(n.path)}
+        className="flex w-full items-baseline gap-1.5 px-3 py-0.5 text-left hover:bg-white/5"
+        title={n.relativePath}
+      >
+        <span className="shrink-0 text-text-primary">{n.relativePath.split("/").pop()}</span>
+        <span className="truncate text-[10px] text-text-muted">{n.relativePath}</span>
+      </button>
+    ));
+  }
+  if (data.hits.length === 0) return note(`No text matches "${query}".`);
+  return data.hits.map((h) => (
+    <button
+      key={`${h.path}:${h.lineNumber}`}
+      type="button"
+      onClick={() => onPick(h.path, h.lineNumber)}
+      className="flex w-full flex-col px-3 py-0.5 text-left hover:bg-white/5"
+      title={`${h.relativePath}:${h.lineNumber}`}
+    >
+      <span className="truncate text-[10px] text-text-muted">
+        {h.relativePath}:{h.lineNumber}
+      </span>
+      <span className="truncate font-mono text-text-secondary">{h.line.trim()}</span>
+    </button>
+  ));
 }

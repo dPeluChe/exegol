@@ -225,6 +225,9 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile, projectId }: F
   const [revealLine, setRevealLine] = useState<number | undefined>(undefined);
   // Unsaved edits in the viewer: switching files or closing asks first
   const dirtyRef = useRef(false);
+  const setDirty = useCallback((d: boolean) => {
+    dirtyRef.current = d;
+  }, []);
   const [pendingSelect, setPendingSelect] = useState<{ path: string | null; line?: number } | null>(
     null,
   );
@@ -373,9 +376,7 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile, projectId }: F
           error={fileError}
           onClose={closePreview}
           revealLine={revealLine}
-          onDirtyChange={(d) => {
-            dirtyRef.current = d;
-          }}
+          onDirtyChange={setDirty}
         />
       )}
 
