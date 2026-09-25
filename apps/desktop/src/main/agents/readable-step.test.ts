@@ -22,3 +22,19 @@ describe("readableStep", () => {
     expect(readableStep("")).toBeUndefined();
   });
 });
+
+describe("readableScrape", () => {
+  it("drops the status that came from a chrome line along with its step", async () => {
+    const { readableScrape } = await import("./agent-output-processor");
+    expect(readableScrape("waiting_input", "│ ⡿ continue? │")).toEqual({
+      status: undefined,
+      currentStep: undefined,
+    });
+    expect(readableScrape("running", "Tool: Read")).toEqual({
+      status: "running",
+      currentStep: "Tool: Read",
+    });
+    // No step at all: the status stands on its own
+    expect(readableScrape("waiting_input", undefined).status).toBe("waiting_input");
+  });
+});

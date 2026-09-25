@@ -23,6 +23,7 @@ import {
   tokenUsageRowSchema,
   worktreeRowSchema,
 } from "@exegol/shared";
+import { readableStep } from "../../agents/readable-step";
 
 export { nanoid } from "nanoid";
 
@@ -89,7 +90,8 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     cliType: r.cli_type as Agent["cliType"],
     status: r.status as AgentStatus,
     taskDescription: r.task_description,
-    currentStep: r.current_step,
+    // Rows written before steps were filtered can still hold TUI chrome
+    currentStep: readableStep(r.current_step ?? undefined) ?? null,
     pid: r.pid,
     startedAt: r.started_at,
     stoppedAt: r.stopped_at,
