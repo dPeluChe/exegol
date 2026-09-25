@@ -29,6 +29,7 @@ import { AgentLauncher } from "../agents/AgentLauncher";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
+import { ProjectFiles } from "./ProjectFiles";
 import { TabsOverview } from "./TabsOverview";
 
 function PortBadges({ projectPath }: { projectPath: string }) {
@@ -329,6 +330,8 @@ export function ProjectItem({
           </div>
 
           <TabsOverview projectId={project.id} />
+
+          <ProjectFiles projectId={project.id} path={project.path} />
 
           <ProjectAgentGroups project={project} agents={agents} worktrees={worktrees} />
         </div>

@@ -1,7 +1,8 @@
 /**
  * T155: drag a file from FileExplorer / GitPane and drop it on a terminal
  * pane — it lands as an `@rel/path ` mention (Claude's native attachment
- * syntax); files outside the project land as quoted absolute paths.
+ * syntax); files outside the project, and files dropped from Finder, land as
+ * quoted absolute paths.
  */
 
 export const FILE_DRAG_MIME = "application/x-exegol-file";
@@ -17,8 +18,10 @@ export function setFileDragData(e: React.DragEvent, items: FileDragItem[]): void
   e.dataTransfer.effectAllowed = "copy";
 }
 
+/** Exegol's own file drags, or files from Finder */
 export function hasFileDragData(e: React.DragEvent): boolean {
-  return e.dataTransfer.types.includes(FILE_DRAG_MIME);
+  const types = e.dataTransfer.types;
+  return types.includes(FILE_DRAG_MIME) || types.includes("Files");
 }
 
 function quote(p: string): string {
@@ -28,7 +31,13 @@ function quote(p: string): string {
 /** Build the text to paste into the terminal, trailing space included. */
 export function fileDragToPaste(e: React.DragEvent): string | null {
   const raw = e.dataTransfer.getData(FILE_DRAG_MIME);
-  if (!raw) return null;
+  if (!raw) {
+    // From Finder: absolute paths, quoted when they need it
+    const paths = Array.from(e.dataTransfer.files)
+      .map((f) => window.api?.pathForFile?.(f))
+      .filter((p): p is string => !!p);
+    return paths.length ? `${paths.map(quote).join(" ")} ` : null;
+  }
   try {
     const items = JSON.parse(raw) as FileDragItem[];
     const parts = items

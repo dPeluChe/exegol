@@ -143,6 +143,10 @@ function FileContextMenu({
 
 interface FileExplorerProps {
   rootPath: string;
+  /** File to show when it mounts */
+  initialFile?: string;
+  /** Set (the sidebar): a click hands the file over instead of opening the inline viewer */
+  onOpenFile?: (path: string) => void;
 }
 
 interface InlineCreateState {
@@ -150,9 +154,24 @@ interface InlineCreateState {
   type: "file" | "folder";
 }
 
-export function FileExplorer({ rootPath }: FileExplorerProps) {
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => new Set([rootPath]));
+export function FileExplorer({ rootPath, initialFile, onOpenFile }: FileExplorerProps) {
+  const [selectedFile, setSelectedFile] = useState<string | null>(initialFile ?? null);
+  // The initial file's folders start open so it is visible in the tree
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
+    const open = new Set([rootPath]);
+    if (initialFile?.startsWith(`${rootPath}/`)) {
+      const parts = initialFile
+        .slice(rootPath.length + 1)
+        .split("/")
+        .slice(0, -1);
+      let dir = rootPath;
+      for (const part of parts) {
+        dir = `${dir}/${part}`;
+        open.add(dir);
+      }
+    }
+    return open;
+  });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [inlineCreate, setInlineCreate] = useState<InlineCreateState | null>(null);
   const { data: fileData } = useFileContent(selectedFile);
@@ -250,7 +269,7 @@ export function FileExplorer({ rootPath }: FileExplorerProps) {
             <DirectoryNode
               path={rootPath}
               depth={0}
-              onSelectFile={setSelectedFile}
+              onSelectFile={onOpenFile ?? setSelectedFile}
               selectedFile={selectedFile}
               expandedDirs={expandedDirs}
               onToggleDir={toggleDir}
@@ -389,7 +408,7 @@ function DirectoryNode({
   onInlineCancel: () => void;
 }) {
   const expanded = expandedDirs.has(path);
-  const { data: entries } = useDirectoryListing(expanded ? path : null);
+  const { data: entries, error } = useDirectoryListing(expanded ? path : null);
   const showInlineInput = inlineCreate?.parentDir === path;
 
   return (
@@ -417,6 +436,15 @@ function DirectoryNode({
           )}
           <span className="truncate font-medium">{path.split("/").pop()}</span>
         </button>
+      )}
+      {/* It failed silently: an unreadable root left the whole pane blank */}
+      {expanded && error && (
+        <p
+          className="px-2 py-1 text-[10px] text-red-400"
+          style={{ paddingLeft: `${depth * 12 + 20}px` }}
+        >
+          Cannot list {path}: {error instanceof Error ? error.message : String(error)}
+        </p>
       )}
 
       {showInlineInput && (

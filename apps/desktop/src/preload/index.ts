@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import capabilities from "./capabilities.json";
 
 type TrpcAllow = "*" | readonly string[];
@@ -69,6 +69,8 @@ const safe = {
 };
 
 contextBridge.exposeInMainWorld("api", {
+  /** Absolute path of a file dropped from Finder (File.path was removed in Electron 32) */
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
   trpc: {
     invoke: (path: string, input: unknown) => {
       if (!trpcAllowed(path)) return Promise.reject(makeDenialError(path, "trpc"));
