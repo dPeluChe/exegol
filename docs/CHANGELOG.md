@@ -17,6 +17,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
   replace the first pane of the active tab
 
 ### Fixed
+- Stopping an agent records it as stopped, not as failed or completed (the kill's exit code decided it), and no longer fires a "failed" notification
 - YOLO survives a resume: resuming used the bare CLI command and dropped every configured flag,
   so a session launched with `--dangerously-skip-permissions` came back asking for permission.
   The per-launch YOLO choice is now saved with the session and reapplied

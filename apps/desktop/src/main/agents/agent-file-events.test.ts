@@ -32,6 +32,7 @@ function emptyMaps(): SessionMaps {
     initialSnapshots: new Map(),
     dataCallbacks: new Map(),
     sessionIdsCaptured: new Set(),
+    stopRequested: new Set(),
   };
 }
 
