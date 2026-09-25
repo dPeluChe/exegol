@@ -7,6 +7,11 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
+
 ## [0.5.2] — 2026-09-24 — YOLO on resume, CLI flags, sidebar by tabs, daily fixes
 
 ### Added

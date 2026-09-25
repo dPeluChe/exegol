@@ -7,17 +7,13 @@ import {
   Cpu,
   Eye,
   FileEdit,
-  FolderTree,
-  GitBranch,
   Globe,
   History,
   Map as MapIcon,
-  Terminal,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import type { PortInfo } from "../../hooks/use-trpc-scheduler";
-import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { type SessionChoice, SpawnAgentModal } from "../agents/SpawnAgentModal";
@@ -135,30 +131,6 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     }
     updatePane(paneId, { type: "browser", url });
   }, [paneId, projectId, project?.path, updatePane]);
-
-  const handleFiles = useCallback(() => {
-    // A path left from the pane's previous view (a git worktree) would become the tree root
-    updatePane(paneId, { type: "files", filePath: undefined });
-  }, [paneId, updatePane]);
-
-  const handleGit = useCallback(() => {
-    updatePane(paneId, { type: "git", filePath: undefined });
-  }, [paneId, updatePane]);
-
-  /** Spawn a shell into THIS pane. Both callers below did this verbatim. */
-  const spawnShellInPane = useCallback(
-    async (taskDescription: string): Promise<string | null> =>
-      projectId ? spawnShellIntoPane(projectId, paneId, taskDescription) : null,
-    [projectId, paneId],
-  );
-
-  const handleShell = useCallback(async () => {
-    try {
-      await spawnShellInPane("Terminal");
-    } catch (err) {
-      console.error("[EmptyPane] Shell spawn failed:", err);
-    }
-  }, [spawnShellInPane]);
 
   const isMini = size === "mini";
   const isCompact = size === "compact" || isMini;
@@ -305,30 +277,28 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         </div>
       )}
 
-      {projectId && <RunTargets projectId={projectId} paneId={paneId} compact={isCompact} />}
-
       {/* Pane options — compact in small sizes */}
       <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>
-        {[
-          { handler: handleShell, icon: Terminal, label: "Terminal" },
-          { handler: handleBrowser, icon: Globe, label: "Browser" },
-          { handler: handleFiles, icon: FolderTree, label: "Files" },
-          { handler: handleGit, icon: GitBranch, label: "Git" },
-        ].map(({ handler, icon: PaneIcon, label }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={handler}
-            className={cn(
-              "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
-              isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
-            )}
-          >
-            <PaneIcon className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
-            {!isMini && label}
-          </button>
-        ))}
+        {/* Terminal, Files and Git act on a folder: they live in the Run-in row below */}
+        {[{ handler: handleBrowser, icon: Globe, label: "Browser" }].map(
+          ({ handler, icon: PaneIcon, label }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={handler}
+              className={cn(
+                "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+                isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
+              )}
+            >
+              <PaneIcon className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
+              {!isMini && label}
+            </button>
+          ),
+        )}
       </div>
+
+      {projectId && <RunTargets projectId={projectId} paneId={paneId} compact={isCompact} />}
       {modalProvider && (
         <SpawnAgentModal
           projectId={projectId ?? ""}
