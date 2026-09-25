@@ -230,20 +230,6 @@ export type AgentMessage = {
   readAt: number | null;
 };
 
-// ─── Handoff ────────────────────────────────────────────────────────────────
-
-export type HandoffSummary = {
-  id: string;
-  agentId: string;
-  successorAgentId: string | null;
-  goal: string;
-  progress: string;
-  filesModified: string;
-  nextSteps: string;
-  criticalContext: string;
-  createdAt: number;
-};
-
 // ─── Task Queue ─────────────────────────────────────────────────────────────
 
 export const QUEUE_TASK_STATUSES = [

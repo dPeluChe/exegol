@@ -1,9 +1,8 @@
 import type { AgentAccessMode, IsolationMode } from "@exegol/shared";
-import { Button, cn } from "@exegol/ui";
+import { cn } from "@exegol/ui";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
   ExternalLink,
   GitBranch,
   Loader2,
@@ -278,33 +277,6 @@ export function LiveStartOverlay({
           <span className="text-[11px] text-text-muted">Starting {cliType ?? "agent"}...</span>
         </>
       )}
-    </div>
-  );
-}
-
-// ─── Handoff "token limit approaching" banner shown on live agents ──────────
-
-export function LiveHandoffBanner({
-  onContinue,
-  loading,
-}: {
-  onContinue: () => void;
-  loading: boolean;
-}) {
-  return (
-    <div className="flex shrink-0 items-center gap-2 bg-orange-500/10 px-3 py-1.5 text-[11px]">
-      <AlertCircle className="h-3.5 w-3.5 text-orange-400" />
-      <span className="text-orange-200/80">Token limit approaching — handoff ready</span>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="ml-auto h-6 gap-1 px-2 text-[11px] text-accent"
-        onClick={onContinue}
-        disabled={loading}
-      >
-        <ArrowRight className="h-3 w-3" />
-        {loading ? "Spawning..." : "Continue with new agent"}
-      </Button>
     </div>
   );
 }

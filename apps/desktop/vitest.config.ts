@@ -9,7 +9,6 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/main/agents/scoring.ts",
-        "src/main/agents/handoff.ts",
         "src/main/agents/spawn-env.ts",
         "src/main/agents/status-parser.ts",
         "src/main/terminal/ring-buffer.ts",

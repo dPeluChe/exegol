@@ -46,8 +46,6 @@ struct StatusCase {
     expected_status: Option<String>,
     expected_step: Option<String>,
     #[serde(default)]
-    expected_token_limit: bool,
-    #[serde(default)]
     expected_session_id: Option<String>,
     #[serde(default)]
     expected_resume: Option<String>,
@@ -96,7 +94,6 @@ fn parity_status_vectors() {
         );
         let mut status: Option<String> = None;
         let mut step: Option<String> = None;
-        let mut token_limit = false;
         let mut session_id: Option<String> = None;
         let mut resume: Option<String> = None;
 
@@ -106,7 +103,6 @@ fn parity_status_vectors() {
                 status = out.status;
                 step = out.current_step;
             }
-            token_limit |= out.token_limit_warning;
             if out.session_id.is_some() {
                 session_id = out.session_id;
             }
@@ -117,7 +113,6 @@ fn parity_status_vectors() {
 
         assert_eq!(status, case.expected_status, "status mismatch: {}", case.name);
         assert_eq!(step, case.expected_step, "step mismatch: {}", case.name);
-        assert_eq!(token_limit, case.expected_token_limit, "tokenLimit mismatch: {}", case.name);
         assert_eq!(session_id, case.expected_session_id, "sessionId mismatch: {}", case.name);
         assert_eq!(resume, case.expected_resume, "resume mismatch: {}", case.name);
     }

@@ -44,7 +44,6 @@ export class AgentManager {
   private completionCallbacks: Map<string, (exitCode: number) => void> = new Map();
   private initialSnapshots: Map<string, { headSha: string; cwd: string; projectId: string }> =
     new Map();
-  private tokenLimitDetected: Set<string> = new Set();
   /** Track scrollback text for scoring (status parsing produces clean text) */
   private scrollbackBuffers: Map<string, string[]> = new Map();
   private scrollbackSizes: Map<string, number> = new Map();
@@ -67,7 +66,6 @@ export class AgentManager {
       titleTrackers: this.titleTrackers,
       scrollbackBuffers: this.scrollbackBuffers,
       scrollbackSizes: this.scrollbackSizes,
-      tokenLimitDetected: this.tokenLimitDetected,
       completionCallbacks: this.completionCallbacks,
       initialSnapshots: this.initialSnapshots,
       dataCallbacks: this.dataCallbacks,

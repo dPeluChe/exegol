@@ -11,6 +11,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - Bug reports no longer carry GitHub cookies: the updater logged a 404's full response headers
+- No more "Token limit approaching" banner: it matched any line mentioning "context window" (a
+  resumed Devin session hit it in 10 seconds) and "Continue with new agent" spawned successors that
+  tripped it again. The automatic handoff is gone; CLIs compact their own context and the session
+  you have stays the one you use
+- "Needs attention" (and the dashboard, toasts and the attention hotkey) opens an agent that has no
+  pane in a new tab; it did nothing before
 - A new browser pane opens the project's running dev server (the port `pnpm dev` is listening on)
   instead of always :3000. Running-port detection never matched anything
 

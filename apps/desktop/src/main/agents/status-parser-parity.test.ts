@@ -28,7 +28,6 @@ interface StatusCase {
   chunks: string[];
   expectedStatus: string | null;
   expectedStep: string | null;
-  expectedTokenLimit?: boolean;
   expectedSessionId?: string | null;
   expectedResume?: string | null;
 }
@@ -68,7 +67,6 @@ describe("parity: AgentStatusParser", () => {
       const parser = new AgentStatusParser("test", c.cliType as AgentCliType, c.resumePattern);
       let status: string | null = null;
       let step: string | null = null;
-      let tokenLimit = false;
       let sessionId: string | null = null;
       let resume: string | null = null;
 
@@ -79,14 +77,12 @@ describe("parity: AgentStatusParser", () => {
           status = update.status ?? null;
           step = update.currentStep ?? null;
         }
-        tokenLimit = tokenLimit || update.tokenLimitWarning === true;
         if (update.sessionId !== undefined) sessionId = update.sessionId;
         if (update.resumeCommand !== undefined) resume = update.resumeCommand;
       }
 
       expect(status).toBe(c.expectedStatus);
       expect(step).toBe(c.expectedStep);
-      expect(tokenLimit).toBe(c.expectedTokenLimit ?? false);
       expect(sessionId).toBe(c.expectedSessionId ?? null);
       expect(resume).toBe(c.expectedResume ?? null);
     });

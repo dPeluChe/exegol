@@ -1,10 +1,8 @@
 import type { AgentCliType, AgentStatus } from "@exegol/shared";
-import { detectTokenLimitWarning } from "./handoff";
 
 type StatusUpdate = {
   status?: AgentStatus;
   currentStep?: string;
-  tokenLimitWarning?: boolean;
   sessionId?: string;
   resumeCommand?: string;
   /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
@@ -126,11 +124,6 @@ export class AgentStatusParser {
       for (const line of complete.split("\n")) {
         const cleaned = line.trim();
         if (!cleaned || cleaned.length < 3) continue;
-
-        // Check for token limit warnings across all CLI types
-        if (detectTokenLimitWarning(cleaned)) {
-          lastUpdate = { ...(lastUpdate ?? {}), tokenLimitWarning: true };
-        }
 
         // Parse session ID for claude-code (T101, startup)
         if (this.cliType === "claude-code" && !lastUpdate?.sessionId) {

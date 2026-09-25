@@ -27,7 +27,6 @@ function emptyMaps(): SessionMaps {
     titleTrackers: new Map(),
     scrollbackBuffers: new Map(),
     scrollbackSizes: new Map(),
-    tokenLimitDetected: new Set(),
     completionCallbacks: new Map(),
     initialSnapshots: new Map(),
     dataCallbacks: new Map(),
@@ -79,7 +78,7 @@ describe("dispatchAgentFileEvent", () => {
 
   it("ignores unknown event types and unknown agents", () => {
     insertAgent(db, "a6", "claude-code", "running");
-    dispatchAgentFileEvent(db, emptyMaps(), { type: "token_limit", agentId: "a6" });
+    dispatchAgentFileEvent(db, emptyMaps(), { type: "bogus" as never, agentId: "a6" });
     expect(status(db, "a6")).toBe("running");
     expect(() =>
       dispatchAgentFileEvent(db, emptyMaps(), { type: "stop", agentId: "ghost" }),
