@@ -1,6 +1,6 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { LayoutDashboard, PanelLeftOpen, Plus, Settings } from "lucide-react";
+import { LayoutDashboard, PanelLeftOpen, Pause, Plus, Settings } from "lucide-react";
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useAgentStore } from "../../stores/agents";
@@ -22,17 +22,18 @@ export function SidebarRail() {
 
   const perProject = useMemo(() => {
     const live = new Map<string, number>();
+    const paused = new Set<string>();
     for (const a of Object.values(agents)) {
-      if (LIVE_STATUSES.has(a.status) && a.cliType !== "shell") {
-        live.set(a.projectId, (live.get(a.projectId) ?? 0) + 1);
-      }
+      if (!LIVE_STATUSES.has(a.status) || a.cliType === "shell") continue;
+      if (a.suspended) paused.add(a.projectId);
+      else live.set(a.projectId, (live.get(a.projectId) ?? 0) + 1);
     }
     const waiting = new Set(
       Object.values(attentionItems)
         .filter((i) => !i.read)
         .map((i) => i.projectId),
     );
-    return { live, waiting };
+    return { live, paused, waiting };
   }, [agents, attentionItems]);
 
   const railButton =
@@ -84,7 +85,7 @@ export function SidebarRail() {
                   ? "bg-white/10 text-text-primary"
                   : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
               )}
-              title={`${p.name}${live ? ` · ${live} running` : ""}`}
+              title={`${p.name}${live ? ` · ${live} running` : ""}${perProject.paused.has(p.id) ? " · suspended sessions" : ""}`}
             >
               <ProjectAvatar project={p} className="h-4 w-4" active={active} />
               <span className="absolute bottom-0 right-0 text-[7px] font-semibold uppercase leading-none text-text-muted">
@@ -94,6 +95,9 @@ export function SidebarRail() {
                 <span className="absolute -right-0.5 -top-0.5 flex h-3 min-w-3 items-center justify-center rounded-full bg-accent/80 px-0.5 text-[7px] font-bold text-white">
                   {live}
                 </span>
+              )}
+              {perProject.paused.has(p.id) && (
+                <Pause className="absolute bottom-0 left-0 h-2 w-2 text-text-muted" />
               )}
               {perProject.waiting.has(p.id) && (
                 <span className="absolute -left-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
