@@ -204,10 +204,20 @@ export function useDeleteApiKey() {
 
 // ─── Files ──────────────────────────────────────────────────────────────────
 
+/** `kind` decides the viewer; text keeps content/language */
+export interface FileContent {
+  kind: "text" | "image" | "pdf" | "binary" | "too-large";
+  content: string;
+  language: string;
+  size: number;
+  mime?: string;
+  base64?: string;
+}
+
 export function useFileContent(path: string | null) {
   return useQuery({
     queryKey: ["file", path],
-    queryFn: () => trpcInvoke<{ content: string; language: string }>("files.readFile", { path }),
+    queryFn: () => trpcInvoke<FileContent>("files.readFile", { path }),
     enabled: !!path,
   });
 }

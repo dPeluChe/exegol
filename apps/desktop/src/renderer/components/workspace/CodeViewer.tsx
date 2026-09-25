@@ -1,9 +1,10 @@
 import { cn } from "@exegol/ui";
 import Editor, { loader } from "@monaco-editor/react";
-import { Code2, Eye } from "lucide-react";
+import { Code2, Eye, ListTree } from "lucide-react";
 import * as monaco from "monaco-editor";
 import { useState } from "react";
 import { Streamdown } from "streamdown";
+import { JsonTree } from "./JsonTree";
 
 // Use local monaco-editor instance instead of CDN
 loader.config({ monaco });
@@ -123,56 +124,76 @@ interface CodeViewerProps {
   fileName: string | null;
 }
 
+const JSON_EXT = /\.(json|jsonc|geojson|webmanifest)$/i;
+const JSONL_EXT = /\.(jsonl|ndjson)$/i;
+
+function ModeButton({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: typeof Code2;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
+        active ? "bg-white/10 text-text-primary" : "text-text-muted hover:text-text-secondary",
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {label}
+    </button>
+  );
+}
+
 export function CodeViewer({ content, fileName }: CodeViewerProps) {
-  const isMd = fileName ? isMarkdown(fileName) : false;
-  const [mdMode, setMdMode] = useState<"code" | "render">("code");
   const language = fileName ? getMonacoLanguage(fileName) : "plaintext";
+  // Files with a rendered view: markdown (Preview) and JSON/JSONL (Tree, shown first)
+  const rendered = !fileName
+    ? null
+    : isMarkdown(fileName)
+      ? ({ label: "Preview", icon: Eye, first: false } as const)
+      : JSON_EXT.test(fileName) || JSONL_EXT.test(fileName)
+        ? ({ label: "Tree", icon: ListTree, first: true } as const)
+        : null;
+  const [showRendered, setShowRendered] = useState(rendered?.first ?? false);
 
-  if (!fileName) {
-    return <MonacoViewer content={content} language="plaintext" />;
+  if (!fileName || !rendered) {
+    return <MonacoViewer content={content} language={language} />;
   }
 
-  if (isMd) {
-    return (
-      <div className="flex h-full flex-col">
-        <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-bg-tertiary px-2">
-          <button
-            type="button"
-            onClick={() => setMdMode("code")}
-            className={cn(
-              "flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
-              mdMode === "code"
-                ? "bg-white/10 text-text-primary"
-                : "text-text-muted hover:text-text-secondary",
-            )}
-          >
-            <Code2 className="h-3 w-3" />
-            Code
-          </button>
-          <button
-            type="button"
-            onClick={() => setMdMode("render")}
-            className={cn(
-              "flex items-center gap-1 rounded px-2 py-0.5 text-[10px] font-medium transition-colors",
-              mdMode === "render"
-                ? "bg-white/10 text-text-primary"
-                : "text-text-muted hover:text-text-secondary",
-            )}
-          >
-            <Eye className="h-3 w-3" />
-            Preview
-          </button>
-        </div>
-        <div className="flex-1">
-          {mdMode === "render" ? (
-            <MarkdownViewer content={content} />
-          ) : (
-            <MonacoViewer content={content} language="markdown" />
-          )}
-        </div>
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-bg-tertiary px-2">
+        <ModeButton
+          active={!showRendered}
+          onClick={() => setShowRendered(false)}
+          icon={Code2}
+          label="Code"
+        />
+        <ModeButton
+          active={showRendered}
+          onClick={() => setShowRendered(true)}
+          icon={rendered.icon}
+          label={rendered.label}
+        />
       </div>
-    );
-  }
-
-  return <MonacoViewer content={content} language={language} />;
+      <div className="min-h-0 flex-1">
+        {!showRendered ? (
+          <MonacoViewer content={content} language={language} />
+        ) : rendered.label === "Preview" ? (
+          <MarkdownViewer content={content} />
+        ) : (
+          <JsonTree content={content} lines={JSONL_EXT.test(fileName)} />
+        )}
+      </div>
+    </div>
+  );
 }
