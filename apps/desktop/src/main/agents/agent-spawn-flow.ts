@@ -325,10 +325,13 @@ export function buildPtyInvocation(
 
     const apiKeyEnv = buildApiKeyEnv(db);
 
-    const lifecycle = loadLifecycleConfig(projectPath);
-    if (lifecycle?.beforeAgent) {
-      fullCommand = `${lifecycle.beforeAgent} && ${fullCommand}`;
-    }
+    // beforeAgent runs first but never gates the CLI: `hook && cli` let a failed
+    // `npm install` stop the agent with nothing on screen, and `exec hook && cli`
+    // (stdin-prompt CLIs) replaced the shell with the hook, so the CLI never ran
+    const beforeAgent = loadLifecycleConfig(projectPath)?.beforeAgent;
+    const hookPrefix = beforeAgent
+      ? `{ ${beforeAgent}\n} || printf '\\n\\033[33m[Exegol] beforeAgent failed (exit %s); starting the agent anyway\\033[0m\\n\\n' "$?"; `
+      : "";
 
     // Spawn-boundary guard: refuse obviously destructive commands. Scans the
     // final string handed to the shell (prompt + resume + lifecycle included).
@@ -366,7 +369,7 @@ export function buildPtyInvocation(
       logger.warn("[AgentManager] Failed to wire Exegol MCP config:", err);
     }
 
-    const verdict = inspectCommand(fullCommand);
+    const verdict = inspectCommand(`${hookPrefix}${fullCommand}`);
     if (!verdict.ok) {
       logger.error(
         `[AgentManager] Refusing to spawn ${agent.cliType}: ${verdict.reason} (matched: ${JSON.stringify(verdict.matched)})`,
@@ -397,9 +400,9 @@ export function buildPtyInvocation(
       // the pane keeps a live shell prompt, and the session ends with no
       // "Ended" card and no Resume — opencode/gemini/kiro all behaved this way
       // (verify 2026-08-12: "en opencode ctrl-C cierra directo, sin resume").
-      stdinCommand = `exec ${fullCommand}`;
+      stdinCommand = `${hookPrefix}exec ${fullCommand}`;
     } else {
-      args = ["-ic", fullCommand];
+      args = ["-ic", `${hookPrefix}${fullCommand}`];
     }
     env = {
       ...process.env,
