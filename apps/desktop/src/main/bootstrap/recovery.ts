@@ -18,8 +18,16 @@ export function cleanupStaleData(): void {
     // this repo" could never be answered past a day.
     //
     // Shells stay ephemeral: no task, no score, no memory (they bypass all of
-    // it by design), so they are terminal tabs rather than sessions.
-    const shellCleanup = getDb().prepare("DELETE FROM agents WHERE cli_type = 'shell'").run();
+    // it by design), so they are terminal tabs rather than sessions. Only ENDED
+    // ones go: this ran before the sidecar was even queried, deleted a live
+    // shell's row, and the orphan sweep then killed its PTY (a `pnpm dev` died
+    // on every app restart). Live ones reattach; dead ones are marked crashed
+    // and their pane opens a fresh shell, then drops the row.
+    const shellCleanup = getDb()
+      .prepare(
+        "DELETE FROM agents WHERE cli_type = 'shell' AND status IN ('completed', 'failed', 'stopped', 'crashed')",
+      )
+      .run();
     if (shellCleanup.changes > 0) {
       logger.info(`[Startup] Cleaned ${shellCleanup.changes} shell terminal(s)`);
     }

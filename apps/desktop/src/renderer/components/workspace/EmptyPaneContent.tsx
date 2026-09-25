@@ -17,9 +17,8 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { type PortInfo, useProjectScripts } from "../../hooks/use-trpc-scheduler";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
-import { useTerminalStore } from "../../stores/terminals";
+import { spawnShellIntoPane } from "../../lib/spawn-shell";
+import { trpcInvoke } from "../../lib/trpc-client";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { type SessionChoice, SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { AgentIcon } from "../common";
@@ -57,8 +56,6 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const [modalSession, setModalSession] = useState<SessionChoice>(null);
   const [search, setSearch] = useState("");
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
-  const addAgent = useAgentStore((s) => s.addAgent);
-  const createTerminal = useTerminalStore((s) => s.createTerminal);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<"full" | "compact" | "mini">("full");
@@ -158,34 +155,9 @@ export function EmptyPane({ paneId }: { paneId: string }) {
 
   /** Spawn a shell into THIS pane. Both callers below did this verbatim. */
   const spawnShellInPane = useCallback(
-    async (taskDescription: string): Promise<string | null> => {
-      if (!projectId) return null;
-      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-      const agent = await trpcMutate<any>("agents.spawn", {
-        projectId,
-        cliType: "shell",
-        taskDescription,
-      });
-      addAgent({
-        id: agent.id,
-        projectId,
-        cliType: agent.cliType,
-        status: agent.status,
-        currentStep: agent.currentStep,
-        taskDescription: agent.taskDescription,
-        branchName: agent.branchName ?? null,
-        alias: agent.alias ?? null,
-        tokenUsage: { input: 0, output: 0, cost: 0 },
-        startedAt: agent.startedAt,
-        accessMode: agent.accessMode ?? null,
-        claudeSessionId: null,
-        activityLevel: "busy",
-      });
-      createTerminal(agent.id);
-      updatePane(paneId, { type: "terminal", agentId: agent.id });
-      return agent.id as string;
-    },
-    [projectId, paneId, addAgent, createTerminal, updatePane],
+    async (taskDescription: string): Promise<string | null> =>
+      projectId ? spawnShellIntoPane(projectId, paneId, taskDescription) : null,
+    [projectId, paneId],
   );
 
   const handleShell = useCallback(async () => {
