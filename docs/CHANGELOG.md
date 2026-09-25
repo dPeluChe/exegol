@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [0.5.2] — 2026-09-24 — YOLO on resume, CLI flags, sidebar by tabs, daily fixes
 
+### Added
+- Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
+
 ### Changed
 - Sidebar shows each project the way its workspace is laid out: every tab with its panes (agents
   by their name, the shell, the browser's address), then worktrees, then agents not open in any
@@ -32,9 +35,6 @@ and the project follows [Semantic Versioning](https://semver.org/).
   OpenCode, Amp, Kilo Code and Droid; Devin continues with `-c` (`-r` opened a picker); Gemini
   resumes with `--resume latest`; Kilo Code and Amp can resume; Crush no longer offers a resume it
   does not have
-
-### Added
-- Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
 
 ## [0.5.1] — 2026-09-24 — Fixes from the first days on 0.5.0
 
