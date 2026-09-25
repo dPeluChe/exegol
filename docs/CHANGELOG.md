@@ -7,7 +7,14 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.2] — 2026-09-24 — YOLO on resume, CLI flags, sidebar by tabs, daily fixes
+
+### Added
+- Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
+- Dropping a file from Finder onto a terminal pastes its path
+- Each project in the sidebar has a Files section: browse the folder, create, rename or delete files, drag one onto a terminal; a click opens it in the workspace's Files pane
+- The launcher's "Run in" row: a chip per project folder that is its own git repo or package (a workspace of repos had nothing to run at its root), each with a terminal already in that folder and its commands, `convex dev` included when the folder uses Convex; pin the ones you use
+- Mute a session to keep it running but out of Needs attention and notifications, or Suspend it to stop it quietly and Resume it when you come back to the project (terminal toolbar, or right-click it in the sidebar)
 
 ### Changed
 - Needs attention shows each session's project next to its name ("ember" alone didn't say which project was waiting)
@@ -35,13 +42,6 @@ and the project follows [Semantic Versioning](https://semver.org/).
   OpenCode, Amp, Kilo Code and Droid; Devin continues with `-c` (`-r` opened a picker); Gemini
   resumes with `--resume latest`; Kilo Code and Amp can resume; Crush no longer offers a resume it
   does not have
-
-### Added
-- Mute a session to keep it running but out of Needs attention and notifications, or Suspend it to stop it quietly and Resume it when you come back to the project (terminal toolbar, or right-click it in the sidebar)
-- The launcher's "Run in" row: a chip per project folder that is its own git repo or package (a workspace of repos had nothing to run at its root), each with a terminal already in that folder and its commands, `convex dev` included when the folder uses Convex; pin the ones you use
-- Dropping a file from Finder onto a terminal pastes its path
-- Each project in the sidebar has a Files section: browse the folder, create, rename or delete files, drag one onto a terminal; a click opens it in the workspace's Files pane
-- Monitor → Resources lists every dev server and port your processes listen on: the project it runs in, the Exegol terminal that started it (click to go there), uptime and port conflicts. A server left behind by a closed pane shows "no terminal" and can be stopped from the list
 
 ## [0.5.1] — 2026-09-24 — Fixes from the first days on 0.5.0
 

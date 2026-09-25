@@ -18,12 +18,15 @@
 > Goal: an installed build Antonio can use every day. Features wait.
 
 **P0**
-1. **Installable build**: version is 0.5.0. `bun run package:mac`, install to /Applications, then
-   run both manual-verification checklists below on the PACKAGED app. Tag v0.5.0. Open items from
-   the pre-build audit are T193.
+1. **Installable build**: DONE. 0.5.0 installed; v0.5.1 published on GitHub releases
+   (2026-09-24); 0.5.2 built from main. Still open: both manual-verification checklists below on
+   the packaged app, and T195 (notarized + universal build) before sharing more widely.
 
 **P1**
-2. opencode TUI dies across app quit (Wave 2 checklist below)
+2. opencode TUI dies across app quit: VERIFY on 0.5.2 (reported 2026-08-11, before the two
+   likely causes changed on 2026-08-12: interactive CLIs now `exec` (no wrapper shell left behind)
+   and the MCP shim reconnects instead of exiting when the app quits). Launch opencode, quit
+   Exegol, reopen: the session should still be alive. If it dies, `exegol.log` says how
 3. Sidecar terminal correctness: T184.2 (unanswered DA1/colour queries), T184.3 (replay re-asks
    queries), T184.4 (kills a pid without identity check), T185.14 (backpressure), T185.8 (reattach replay)
 4. T181 purge UI + one retention policy (nothing is deleted any more; oplog keeps git trees)
@@ -97,7 +100,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Race promote & clean: dirty loser prompts; live-agent loser refuses cleanup
 - Onboarding wizard on fresh profile: CLIs detected (packaged build especially — PATH fix)
 - Monitor → Resources: eviction actually drops RSS; budget alert fires once per period
-- **🐛 FOUND 2026-08-11 (investigate): opencode TUI child dies across app quit** — the
+- **🐛 FOUND 2026-08-11 (verify on 0.5.2, see P1 #2): opencode TUI child dies across app quit** — the
   wrapper shell survives in the sidecar (reattach OK, prompt shows `took 18m48s`) but the
   opencode process exits, printing its `Continue: opencode -s ses_…` message; typing then
   goes to the stale shell over a dead TUI screen. claude-code survives the identical flow.
