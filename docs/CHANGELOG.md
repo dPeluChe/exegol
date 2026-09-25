@@ -7,6 +7,15 @@ For day-to-day development history, see `git log`.
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/),
 and the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- JSON and JSONL files open as a collapsible tree (Code/Tree toggle, like the markdown preview)
+- Files right-click menu: open with the default app, reveal in Finder, copy path, rename
+
+### Fixed
+- Files: images and PDFs open as themselves (they showed as garbled text), other binaries and very large files offer the default app; the viewer's Close was hidden under the pane's buttons (now on the left, Esc closes); New File no longer overwrites an existing file with an empty one
+
 ## [0.5.2] — 2026-09-24 — YOLO on resume, CLI flags, sidebar by tabs, daily fixes
 
 ### Added
