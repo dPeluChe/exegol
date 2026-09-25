@@ -28,6 +28,8 @@ import { getAppSettings } from "../../db/queries/settings";
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde } from "../../ide/opener";
 import { logger } from "../../lib/logger";
+import { isPathAllowed } from "../../security/path-guard";
+import { detectProjectIcons, iconDataUrl, isIconFile } from "../../system/project-icons";
 import { publicProcedure, router } from "../trpc";
 
 async function isGitRepo(path: string): Promise<boolean> {
@@ -109,6 +111,49 @@ export const projectRouter = router({
         updateProjectSortOrder(ctx.db, input.orderedIds[i] as string, i);
       }
       return { success: true };
+    }),
+
+  /** Icons found in the project and its subrepos, as thumbnails to pick from */
+  detectIcons: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const project = getProject(ctx.db, input.id);
+    return project ? detectProjectIcons(project.path) : [];
+  }),
+
+  /** The chosen image icon as a data URL (null when the project uses a built-in icon) */
+  iconImage: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
+    const project = getProject(ctx.db, input.id);
+    return project?.iconImage ? iconDataUrl(project.iconImage) : null;
+  }),
+
+  setAppearance: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        color: z
+          .string()
+          .regex(/^#[0-9a-fA-F]{6}$/)
+          .nullable(),
+        icon: z.string().max(40).nullable(),
+        iconImage: z.string().nullable(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.id);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      // The image must be an icon file inside the project: this path is read back as a data URL
+      if (
+        input.iconImage &&
+        (!isIconFile(input.iconImage) || !(await isPathAllowed(input.iconImage, [project.path])))
+      ) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Icon must be an image inside the project",
+        });
+      }
+      ctx.db
+        .prepare("UPDATE projects SET color = ?, icon = ?, icon_image = ? WHERE id = ?")
+        .run(input.color, input.icon, input.iconImage, input.id);
+      return getProject(ctx.db, input.id);
     }),
 
   /** T146: move a project into a group (or ungroup with groupId: null). */

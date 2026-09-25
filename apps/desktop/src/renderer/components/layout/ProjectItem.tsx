@@ -5,11 +5,11 @@ import {
   ChevronDown,
   ChevronRight,
   Code2,
-  Cuboid,
   ExternalLink,
   GitBranch,
   Globe,
   Layers,
+  Palette,
   Pencil,
   Trash2,
 } from "lucide-react";
@@ -27,8 +27,10 @@ import type { AgentState } from "../../stores/agents";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentLauncher } from "../agents/AgentLauncher";
 import { ConfirmDialog } from "../common/ConfirmDialog";
+import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
+import { ProjectAppearanceDialog } from "./ProjectAppearanceDialog";
 import { ProjectFiles } from "./ProjectFiles";
 import { TabsOverview } from "./TabsOverview";
 
@@ -148,6 +150,7 @@ export function ProjectItem({
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useSettings();
@@ -226,7 +229,7 @@ export function ProjectItem({
           {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         </span>
 
-        <Cuboid className="h-3.5 w-3.5 shrink-0 text-accent" />
+        <ProjectAvatar project={project} />
 
         {editing ? (
           <input
@@ -271,6 +274,17 @@ export function ProjectItem({
           >
             <Pencil className="h-3 w-3" />
             Rename
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
+              setAppearanceOpen(true);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+          >
+            <Palette className="h-3 w-3" />
+            Icon and color...
           </button>
           <button
             type="button"
@@ -336,6 +350,11 @@ export function ProjectItem({
           <ProjectAgentGroups project={project} agents={agents} worktrees={worktrees} />
         </div>
       )}
+      <ProjectAppearanceDialog
+        project={project}
+        open={appearanceOpen}
+        onOpenChange={setAppearanceOpen}
+      />
       <ConfirmDialog
         open={confirmRemove}
         onOpenChange={setConfirmRemove}

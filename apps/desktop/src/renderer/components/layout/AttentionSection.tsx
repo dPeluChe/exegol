@@ -144,7 +144,7 @@ export function AttentionSection() {
   // Names alone ("ember", "koi") didn't say which project is waiting
   const { data: projects } = useProjects();
   const projectById = useMemo(
-    () => new Map((projects ?? []).map((p) => [p.id, { name: p.name, color: null }])),
+    () => new Map((projects ?? []).map((p) => [p.id, { name: p.name, color: p.color ?? null }])),
     [projects],
   );
   const rawItems = useAgentStore((s) => s.attentionItems);

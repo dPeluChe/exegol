@@ -42,6 +42,9 @@ export const projectRowSchema = z.object({
   last_opened_at: z.number(),
   group_id: optStr,
   sort_order: z.number().catch(0),
+  color: optStr,
+  icon: optStr,
+  icon_image: optStr,
 });
 
 export const projectGroupRowSchema = z.object({
