@@ -280,11 +280,14 @@ describe("buildPtyInvocation", () => {
     expect(inv.args[1]).not.toContain("do the task");
   });
 
-  it("prepends the lifecycle beforeAgent hook to the command", () => {
+  it("runs beforeAgent first without letting its failure stop the CLI", () => {
     mocks.lifecycle = { beforeAgent: "npm install" };
     const [agent, config] = makeAgent("claude-code");
     const inv = buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
-    expect(inv.args[1]?.startsWith("npm install && claude")).toBe(true);
+    expect(inv.args[1]?.startsWith("{ npm install\n} || printf")).toBe(true);
+    expect(inv.args[1]).toContain("beforeAgent failed");
+    expect(inv.args[1]).not.toContain("&& claude");
+    expect(inv.args[1]).toMatch(/; claude/);
   });
 
   it("refuses destructive commands at the spawn boundary", () => {
