@@ -102,7 +102,10 @@ app.whenReady().then(async () => {
   // Background services (non-blocking, start after window)
   cleanupOldEvents(getDb());
   startNotifyHandler((event) => {
-    logger.info(`[NotifyHandler] Agent event: ${event.type} from ${event.agentId}`);
+    // tool_use fires on every tool call: logging it buried everything else in bug reports
+    if (event.type !== "tool_use") {
+      logger.info(`[NotifyHandler] Agent event: ${event.type} from ${event.agentId}`);
+    }
     try {
       getAgentManager().handleAgentFileEvent(getDb(), event);
     } catch (err) {
