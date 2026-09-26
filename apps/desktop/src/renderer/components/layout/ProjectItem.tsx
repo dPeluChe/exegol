@@ -179,7 +179,11 @@ export function ProjectItem({
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
+    // Kept inside the window: a right-click near the bottom opened it half off-screen
+    setContextMenu({
+      x: Math.min(e.clientX, window.innerWidth - 200),
+      y: Math.min(e.clientY, window.innerHeight - 150),
+    });
   }, []);
 
   const submitRename = useCallback(() => {
@@ -295,7 +299,7 @@ export function ProjectItem({
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
           >
             <Palette className="h-3 w-3" />
-            Icon and color...
+            Edit name, icon and color...
           </button>
           <button
             type="button"
@@ -361,11 +365,15 @@ export function ProjectItem({
           <ProjectAgentGroups project={project} agents={agents} worktrees={worktrees} />
         </div>
       )}
-      <ProjectAppearanceDialog
-        project={project}
-        open={appearanceOpen}
-        onOpenChange={setAppearanceOpen}
-      />
+      {/* Mounted only while open: one per project row kept a dialog and its hooks alive for nothing */}
+      {appearanceOpen && (
+        <ProjectAppearanceDialog
+          project={project}
+          open
+          onOpenChange={setAppearanceOpen}
+          onRename={(name) => onRename(project.id, name)}
+        />
+      )}
       <ConfirmDialog
         open={confirmRemove}
         onOpenChange={setConfirmRemove}
