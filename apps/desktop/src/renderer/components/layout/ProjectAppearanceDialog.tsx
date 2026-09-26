@@ -6,17 +6,19 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { GroupIconColorPicker } from "./GroupIconColorPicker";
 
 /**
- * Icon and color for a project: an image found in the repo (the app's own
- * favicon or icon, root or any subrepo) or a built-in icon, plus a color.
+ * Edit a project in one place: its name, and its icon (an image found in the repo,
+ * the app's own favicon or icon, root or any subrepo, or a built-in one) and color.
  */
 export function ProjectAppearanceDialog({
   project,
   open,
   onOpenChange,
+  onRename,
 }: {
   project: Project;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onRename: (name: string) => void;
 }) {
   const queryClient = useQueryClient();
   const { data: found = [], isLoading } = useQuery({
@@ -33,6 +35,10 @@ export function ProjectAppearanceDialog({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
   const color = project.color ?? null;
+  const rename = (value: string) => {
+    const name = value.trim();
+    if (name && name !== project.name) onRename(name);
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -44,12 +50,26 @@ export function ProjectAppearanceDialog({
         >
           <div className="mb-3 flex items-center justify-between">
             <Dialog.Title className="text-sm font-semibold text-text-primary">
-              {project.name}: icon and color
+              Edit project
             </Dialog.Title>
             <Dialog.Close className="rounded p-1 text-text-muted hover:bg-white/10">
               <X className="h-3.5 w-3.5" />
             </Dialog.Close>
           </div>
+
+          <label className="mb-3 block">
+            <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+              Name
+            </span>
+            <input
+              defaultValue={project.name}
+              onBlur={(e) => rename(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur(); // blur saves: one write, not two
+              }}
+              className="w-full min-w-0 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
+            />
+          </label>
 
           <p className="mb-1 text-[10px] uppercase tracking-wider text-text-muted">
             Found in the project
