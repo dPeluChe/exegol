@@ -8,6 +8,10 @@ const Tooltip = TooltipPrimitive.Root;
 
 const TooltipTrigger = TooltipPrimitive.Trigger;
 
+/** The tooltip surface, shared with the app-wide `title` tooltips */
+export const tooltipSurfaceClass =
+  "z-50 max-w-xs overflow-hidden rounded-md border border-border bg-secondary px-3 py-1.5 text-xs text-foreground shadow-lg";
+
 const TooltipContent = React.forwardRef<
   React.ComponentRef<typeof TooltipPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
@@ -21,7 +25,8 @@ const TooltipContent = React.forwardRef<
         // text over whatever was behind it. The tokens are defined in the app's
         // @theme now, so the shadcn vocabulary these primitives are written in
         // finally resolves.
-        "z-50 max-w-xs overflow-hidden rounded-md border border-border bg-secondary px-3 py-1.5 text-xs text-foreground shadow-lg animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+        tooltipSurfaceClass,
+        "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
         className,
       )}
       {...props}

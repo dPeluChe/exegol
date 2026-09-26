@@ -3,6 +3,7 @@ import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LoadingSpinner } from "./components/common";
+import { TitleTooltips } from "./components/common/TitleTooltips";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installRendererErrorReporting } from "./lib/report-error";
 import "./styles/globals.css";
@@ -50,6 +51,7 @@ ReactDOM.createRoot(rootEl).render(
         ) : (
           <App />
         )}
+        <TitleTooltips />
       </QueryClientProvider>
     </ErrorBoundary>
   </React.StrictMode>,

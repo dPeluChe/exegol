@@ -18,6 +18,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Files right-click menu: open with the default app, reveal in Finder, copy path, rename
 
 ### Changed
+- Tooltips across the app use Exegol's own style and appear faster, instead of the native macOS ones
 - Faster startup: the code editor (~8 MB) loads when a file is opened instead of at launch, and the startup bundle is 14% smaller; busy-agent spinners no longer re-render the app several times a second; port detection runs one scan for all projects
 - Sidebar: Agents and Projects scroll separately with their headers always visible (a long agent list pushed Projects and its + out of view), and collapsing leaves an icon rail with the Dashboard, each project with its running count and an attention dot, Add project and Settings
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
