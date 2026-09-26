@@ -17,6 +17,7 @@ import { LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_SLUG, EXEGOL_REPO_URL } from "../lib/repo";
 import { SIDECAR_LOG } from "../terminal/pty-sidecar-discovery";
 import { SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
+import { consoleTail } from "./console-capture";
 import { runDoctorChecks } from "./doctor";
 
 const execFileAsync = promisify(execFile);
@@ -166,6 +167,7 @@ export async function collectDiagnostics(
     .map((t) => compactLog(t))
     .join("\n");
   const sidecar = compactLog(tailFile(SIDECAR_LOG, 80));
+  const devConsole = redact(compactLog(consoleTail()));
   const lastError = [...current.split("\n"), ...previous.split("\n")]
     .reverse()
     .find((l) => l.includes("[ERROR]"));
@@ -193,10 +195,12 @@ export async function collectDiagnostics(
     section("Log (this session, last 300 lines)", current),
     section("Warnings and errors (previous two sessions)", previous),
     section("Sidecar log (last 80 lines)", sidecar),
+    section("Developer console (Exegol windows, last 300 messages)", devConsole),
   ].join("\n");
 
   return {
     text: redact(text),
+    console: devConsole,
     version,
     lastError: lastError ? redact(lastError).replace(/^\S+ \[ERROR\] /, "") : null,
   };
@@ -219,7 +223,7 @@ async function ghCanFile(): Promise<boolean> {
  * `diag` is what the user reviewed; the description is redacted like the logs.
  */
 export async function fileBugReport(
-  diag: BugDiagnostics,
+  diag: Omit<BugDiagnostics, "console">,
   description: string,
 ): Promise<{ url: string; via: "gh" | "browser" }> {
   const said = redact(description.trim());

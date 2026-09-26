@@ -2,7 +2,7 @@ import type { BugDiagnostics } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Bug, ClipboardCopy, ExternalLink, FolderOpen, X } from "lucide-react";
+import { Bug, ClipboardCopy, ExternalLink, FolderOpen, Terminal, X } from "lucide-react";
 import { useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 
@@ -34,6 +34,7 @@ function BugReportDialog() {
   const [description, setDescription] = useState("");
   const [showPreview, setShowPreview] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [consoleCopied, setConsoleCopied] = useState(false);
   // Collected once per dialog: copy and report reuse what the user reviewed
   const diagnostics = useQuery({
     queryKey: ["diagnostics"],
@@ -101,6 +102,22 @@ function BugReportDialog() {
           >
             <ClipboardCopy className="h-3.5 w-3.5" />
             {copied ? "Copied" : "Copy diagnostics"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!diag?.console}
+            title="Only the DevTools console of Exegol's windows (already inside the diagnostics)"
+            onClick={() =>
+              diag &&
+              navigator.clipboard
+                .writeText(diag.console)
+                .then(() => setConsoleCopied(true))
+                .catch(() => {})
+            }
+          >
+            <Terminal className="h-3.5 w-3.5" />
+            {consoleCopied ? "Copied" : "Copy console"}
           </Button>
           <Button
             size="sm"

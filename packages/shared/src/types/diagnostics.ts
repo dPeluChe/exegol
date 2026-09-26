@@ -2,6 +2,8 @@
 export interface BugDiagnostics {
   /** Full redacted report (markdown) */
   text: string;
+  /** The DevTools console of Exegol's windows, redacted, for its own copy button */
+  console: string;
   version: string;
   /** Last error line, redacted: the default issue title */
   lastError: string | null;
