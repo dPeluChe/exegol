@@ -36,3 +36,16 @@ export async function readHead(path: string, bytes = HEAD_BYTES): Promise<FileHe
     await handle.close();
   }
 }
+
+/** The last `bytes` of a file: append-only stores re-write late metadata (a renamed title) at the end */
+export async function readTail(path: string, size: number, bytes = HEAD_BYTES): Promise<string> {
+  const start = Math.max(0, size - bytes);
+  const handle = await open(path, "r");
+  try {
+    const buffer = Buffer.allocUnsafe(size - start);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, start);
+    return buffer.subarray(0, bytesRead).toString("utf-8");
+  } finally {
+    await handle.close();
+  }
+}

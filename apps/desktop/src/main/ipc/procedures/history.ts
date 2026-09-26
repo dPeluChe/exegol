@@ -65,6 +65,21 @@ export const historyRouter = router({
       };
     }),
 
+  /** Claude Code sessions in the project folder, newest first, for the launcher's resume picker
+   *  (a folder with several: pick one by its /rename name instead of --continue's latest) */
+  resumableLocal: publicProcedure
+    .input(z.object({ projectId: z.string(), provider: z.literal("claude-code") }))
+    .query(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) return [];
+      const since = Math.floor(Date.now() / 1000) - DEFAULT_WINDOW_DAYS * 86_400;
+      const local = await listLocalSessions([project.path], since, String(DEFAULT_WINDOW_DAYS));
+      return local
+        .filter((s) => s.provider === input.provider && s.cwd === project.path)
+        .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
+        .slice(0, 15);
+    }),
+
   /** The tail of what a past Exegol session said. Local sessions have none —
    *  their transcripts belong to the CLI and are not ours to reformat. */
   finalOutput: publicProcedure

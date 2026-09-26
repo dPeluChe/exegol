@@ -65,6 +65,22 @@ describe("claudeCodeHistory", () => {
     expect(session?.title).toBe("hola");
   });
 
+  it("takes the /rename name from the end of a long transcript (real line shape)", async () => {
+    const filler = { type: "assistant", cwd: REPO, text: "x".repeat(2000) };
+    writeTranscript("sess-named.jsonl", [
+      { type: "user", cwd: REPO, message: { content: [{ type: "text", text: "hola" }] } },
+      { type: "ai-title", aiTitle: "Auto title", sessionId: "sess-named" },
+      ...Array.from({ length: 60 }, () => filler),
+      { type: "custom-title", customTitle: "old name", sessionId: "sess-named" },
+      ...Array.from({ length: 5 }, () => filler),
+      { type: "custom-title", customTitle: "ligamuyx", sessionId: "sess-named" },
+    ]);
+
+    const [session] = await claudeCodeHistory.list([REPO], 0);
+    expect(session?.name).toBe("ligamuyx");
+    expect(session?.title).toBe("ligamuyx");
+  });
+
   it("survives a truncated tail — only a prefix of the file is read", async () => {
     const dir = join(home.dir, ".claude", "projects", REPO.replace(/\//g, "-"));
     mkdirSync(dir, { recursive: true });

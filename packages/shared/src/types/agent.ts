@@ -175,6 +175,8 @@ export type AgentCreate = {
   resumeSession?: boolean;
   /** T101: ID of the agent whose claude_session_id should be used for --resume */
   resumeFromAgentId?: string;
+  /** A Claude Code session from its own store (picked by name or title): `--resume <id>` */
+  resumeLocalSessionId?: string;
   /** T58: access mode — "read" for explore-only, "write" for full access (default), "plan" for analysis-only */
   accessMode?: AgentAccessMode;
   /** T161: per-launch YOLO override; undefined keeps the provider's setting. */

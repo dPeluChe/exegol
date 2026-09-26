@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { scanPerCwdDir } from "../pool";
-import { readHead } from "../read-head";
+import { readHead, readTail } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 /**
@@ -46,6 +46,8 @@ function firstPromptText(line: HeadLine): string | null {
  * first few lines, and the file's mtime is a better end time than parsing to
  * the last line would be.
  */
+const CUSTOM_TITLE = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
+
 export const claudeCodeHistory: LocalHistoryProvider = {
   id: "claude-code",
 
@@ -99,6 +101,18 @@ async function readTranscript(
       if (!session.title && line.type === "user") {
         const prompt = firstPromptText(line);
         if (prompt) session.title = normalizeTitle(prompt);
+      }
+    }
+
+    // `/rename` re-appends a custom-title line through the whole transcript: the tail has the latest
+    const tail = sizeBytes > head.length ? await readTail(path, sizeBytes, 32 * 1024) : head;
+    const renamed = [...tail.matchAll(CUSTOM_TITLE)].pop()?.[1];
+    if (renamed) {
+      try {
+        session.name = normalizeTitle(JSON.parse(`"${renamed}"`) as string);
+        session.title = session.name;
+      } catch {
+        /* a cut escape at the chunk edge: keep the AI title */
       }
     }
 

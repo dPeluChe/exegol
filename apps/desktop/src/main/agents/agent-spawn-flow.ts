@@ -201,6 +201,12 @@ function captureInitialSnapshot(
   }
 }
 
+/** process.env minus EXEGOL_*: Exegol started from an agent's terminal (dev) would hand
+ *  that agent's MCP token and id to every session it spawns */
+function inheritedEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("EXEGOL_")));
+}
+
 /**
  * Build the PTY shell, args, and env for an agent. Handles plain-shell mode,
  * interactive CLIs (which need stdin injection after shell ready), and the
@@ -236,7 +242,7 @@ export function buildPtyInvocation(
     shell = userShell;
     args = ["-il"];
     env = {
-      ...process.env,
+      ...inheritedEnv(),
       ...shellInitGuards,
       TERM: "xterm-256color",
       EXEGOL_AGENT_ID: agent.id,
@@ -285,7 +291,15 @@ export function buildPtyInvocation(
         const args = cliConfig.args.filter((a) => !inResume.has(a));
         return [cliConfig.command, resumePart, ...args].filter(Boolean).join(" ");
       };
-      if (row?.resume_command) {
+      if (config.resumeLocalSessionId && agent.cliType === "claude-code") {
+        // Picked from Claude's own store; kept on the row so a crash resumes the same one
+        fullCommand = withArgs(`--resume ${config.resumeLocalSessionId}`);
+        db.prepare("UPDATE agents SET claude_session_id = ? WHERE id = ?").run(
+          config.resumeLocalSessionId,
+          agent.id,
+        );
+        logger.info(`[AgentManager] Resuming Claude session ${config.resumeLocalSessionId}`);
+      } else if (row?.resume_command) {
         // The stored line names the binary as the CLI printed it; use ours
         fullCommand = withArgs(row.resume_command.trim().split(/\s+/).slice(1).join(" "));
         logger.info(
@@ -405,7 +419,7 @@ export function buildPtyInvocation(
       args = ["-ic", `${hookPrefix}${fullCommand}`];
     }
     env = {
-      ...process.env,
+      ...inheritedEnv(),
       ...shellInitGuards,
       ...apiKeyEnv,
       ...cliConfig.env,

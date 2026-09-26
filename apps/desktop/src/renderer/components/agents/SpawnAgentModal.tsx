@@ -137,6 +137,18 @@ export function SpawnAgentModal({
   // Only this provider's sessions: `claude --resume` cannot open a codex session.
   const resumableHere = resumable.filter((r) => r.cliType === selectedProviderId);
 
+  // Claude's own sessions in this folder, by /rename name: --continue only reaches the latest
+  const [localSessionId, setLocalSessionId] = useState<string | null>(null);
+  const { data: localSessions = [] } = useQuery({
+    queryKey: ["history", "resumableLocal", projectId],
+    queryFn: () =>
+      trpcInvoke<
+        { sessionId: string; title: string | null; name?: string | null; endedAt: number | null }[]
+      >("history.resumableLocal", { projectId, provider: "claude-code" }),
+    enabled: selectedProviderId === "claude-code",
+    staleTime: 10_000,
+  });
+
   const { data: branchInfo } = useQuery({
     queryKey: ["projectBranches", projectId],
     queryFn: () =>
@@ -205,6 +217,7 @@ export function SpawnAgentModal({
     setSession((current) =>
       current === "last" || (current && current.cliType !== selectedProviderId) ? null : current,
     );
+    setLocalSessionId(null);
   }, [selectedProviderId]);
 
   // Auto-select first provider if none selected
@@ -236,11 +249,13 @@ export function SpawnAgentModal({
         skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
         yolo: yoloFlag && yolo !== null ? yolo : undefined,
         baseBranch: useWorktree && baseBranch ? baseBranch : undefined,
-        ...(session === "last"
-          ? { resumeSession: true }
-          : session
-            ? { resumeSession: true, resumeFromAgentId: session.agentId }
-            : {}),
+        ...(localSessionId && !useWorktree
+          ? { resumeSession: true, resumeLocalSessionId: localSessionId }
+          : session === "last"
+            ? { resumeSession: true }
+            : session
+              ? { resumeSession: true, resumeFromAgentId: session.agentId }
+              : {}),
       });
       addAgent({
         id: agent.id,
@@ -299,6 +314,7 @@ export function SpawnAgentModal({
     branchName,
     selectedSkills,
     session,
+    localSessionId,
     yolo,
     yoloFlag,
     baseBranch,
@@ -376,10 +392,13 @@ export function SpawnAgentModal({
               <div className="flex flex-wrap gap-1.5">
                 <button
                   type="button"
-                  onClick={() => setSession(null)}
+                  onClick={() => {
+                    setSession(null);
+                    setLocalSessionId(null);
+                  }}
                   className={cn(
                     "rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                    session === null
+                    session === null && !localSessionId
                       ? "border-accent/50 bg-accent/10 text-accent"
                       : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
                   )}
@@ -391,7 +410,10 @@ export function SpawnAgentModal({
                 {resumeFlag && (
                   <button
                     type="button"
-                    onClick={() => setSession("last")}
+                    onClick={() => {
+                      setSession("last");
+                      setLocalSessionId(null);
+                    }}
                     title={`Launches with ${resumeFlag}`}
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
@@ -409,7 +431,10 @@ export function SpawnAgentModal({
                   <button
                     key={past.agentId}
                     type="button"
-                    onClick={() => setSession(past)}
+                    onClick={() => {
+                      setSession(past);
+                      setLocalSessionId(null);
+                    }}
                     title={past.taskDescription}
                     className={cn(
                       "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
@@ -427,6 +452,30 @@ export function SpawnAgentModal({
                   </button>
                 ))}
               </div>
+              {selectedProviderId === "claude-code" && !useWorktree && localSessions.length > 0 && (
+                <select
+                  value={localSessionId ?? ""}
+                  onChange={(e) => {
+                    setLocalSessionId(e.target.value || null);
+                    setSession(null);
+                  }}
+                  className={cn(
+                    "rounded-lg border bg-bg-secondary px-2 py-1.5 text-[11px] outline-none",
+                    localSessionId
+                      ? "border-accent/50 text-accent"
+                      : "border-border text-text-secondary",
+                  )}
+                  title="Resume a specific Claude session in this folder (claude --resume <id>)"
+                >
+                  <option value="">Resume a session by name...</option>
+                  {localSessions.map((l) => (
+                    <option key={l.sessionId} value={l.sessionId}>
+                      {(l.name ?? l.title ?? l.sessionId.slice(0, 8)).slice(0, 60)}
+                      {l.endedAt ? ` · ${formatTimeAgo(l.endedAt)}` : ""}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           )}
 
