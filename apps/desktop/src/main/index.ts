@@ -29,6 +29,7 @@ import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
 import { ensureCanonicalPaths } from "./skills/paths";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
+import { captureConsole } from "./system/console-capture";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 import { destroyTray, initTray } from "./system/tray";
 import { getPtyHost } from "./terminal/pty-host";
@@ -138,6 +139,8 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (reason) => {
   logger.error("[Crash] Unhandled rejection:", reason);
 });
+app.on("web-contents-created", (_event, contents) => captureConsole(contents));
+
 app.on("render-process-gone", (_event, contents, details) => {
   // A reload or a closed window, not a crash
   if (details.reason === "clean-exit") return;

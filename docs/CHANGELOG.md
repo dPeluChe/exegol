@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Bug reports include the developer console of Exegol's windows (redacted), with a "Copy console" button
 - An agent started by hand in a plain terminal (claude, devin, agy...) is recognized and shows its icon
 - Launch Agent: resume a specific Claude Code session in the folder, listed by its /rename name
 - Terminal and browser panes: a button to add the other one beside it, to the right or below
