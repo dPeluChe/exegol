@@ -351,7 +351,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
     const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
     if (isVisible && !webglRef.current && !useCanvas) {
-      const controller = createWebglController(terminal);
+      // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
+      const controller = createWebglController(terminal, () =>
+        window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
+      );
       controller.attach();
       webglRef.current = controller;
     } else if (!isVisible && webglRef.current) {
