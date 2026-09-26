@@ -27,6 +27,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- Terminals no longer go blank when the window moves to another display (GPU process restart)
 - Sessions no longer inherit Exegol's own EXEGOL_* variables (a dev build started from an agent terminal passed that agent's MCP token on)
 - A narrow sidebar truncates project names instead of hiding the counts, badges and the "+" to add a project
 - Renaming a project or group no longer leaves the sidebar shifted sideways until a reload

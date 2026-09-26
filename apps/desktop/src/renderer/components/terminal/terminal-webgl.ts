@@ -1,8 +1,9 @@
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
 
-const MAX_RETRIES = 3;
-const RETRY_DELAY_MS = 250;
+/** Backoff: a crashed GPU process (window moved to another display) takes seconds to return */
+const RETRY_DELAYS_MS = [250, 1_000, 3_000];
+const MAX_RETRIES = RETRY_DELAYS_MS.length;
 
 export interface WebglController {
   attach: () => void;
@@ -37,10 +38,17 @@ export function createWebglController(terminal: Terminal): WebglController {
     }
   }
 
+  // Losing the addon leaves the DOM renderer with nothing drawn until new output: an idle
+  // terminal stayed blank after a GPU crash
+  function repaint(): void {
+    terminal.refresh(0, Math.max(0, terminal.rows - 1));
+  }
+
   function onContextLost(): void {
     if (disposed) return;
     addon?.dispose();
     addon = null;
+    repaint();
     if (retries >= MAX_RETRIES) {
       fellBack = true;
       if (typeof console !== "undefined") {
@@ -50,6 +58,7 @@ export function createWebglController(terminal: Terminal): WebglController {
       }
       return;
     }
+    const delay = RETRY_DELAYS_MS[retries] ?? 3_000;
     retries++;
     // Always clear before reassigning so a redundant loss event doesn't leak
     // the previously-scheduled retry timer (which would still attach()).
@@ -58,7 +67,8 @@ export function createWebglController(terminal: Terminal): WebglController {
       scheduledTimer = null;
       if (disposed) return;
       attach();
-    }, RETRY_DELAY_MS);
+      repaint();
+    }, delay);
   }
 
   function attach(): void {
@@ -71,6 +81,7 @@ export function createWebglController(terminal: Terminal): WebglController {
     } catch {
       // WebGL not supported by this device — silently fall back to canvas.
       fellBack = true;
+      repaint();
     }
   }
 
