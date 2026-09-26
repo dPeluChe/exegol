@@ -6,7 +6,7 @@ import { formatTimeAgo } from "../../lib/format";
 import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { setAgentMuted, suspendAgent } from "../../lib/session-quiet";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../stores/agents";
-import { AgentIcon } from "../common/AgentIcon";
+import { AgentCliIcon } from "../common/AgentCliIcon";
 import { QuietBadge } from "../common/QuietControls";
 
 export const VISIBLE_STATUSES = new Set([
@@ -88,7 +88,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
         className="flex flex-1 items-center gap-2 text-left"
       >
         {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
-        <AgentIcon provider={agent.cliType} size={16} />
+        <AgentCliIcon agent={agent} size={16} />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">

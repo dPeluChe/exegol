@@ -14,7 +14,7 @@ import { useSettings } from "../../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
 import { ResumeButton } from "../../agents/ResumeButton";
-import { AgentIcon } from "../../common/AgentIcon";
+import { AgentCliIcon } from "../../common/AgentCliIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
@@ -196,7 +196,7 @@ function CollapsedStrip({
         title={agent ? `Open ${name} here` : undefined}
       >
         {agent && <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />}
-        {agent && <AgentIcon provider={agent.cliType} size={16} />}
+        {agent && <AgentCliIcon agent={agent} size={16} />}
         {needsInput && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
         <span
           className="min-h-0 truncate text-[11px] font-medium"
@@ -260,7 +260,7 @@ function WatchCard({
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
           <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />
-          <AgentIcon provider={agent.cliType} size={16} />
+          <AgentCliIcon agent={agent} size={16} />
           <span className="min-w-0 shrink truncate">
             <SessionAlias agent={agent} textClassName="text-xs" />
           </span>
