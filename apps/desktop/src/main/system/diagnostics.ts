@@ -95,6 +95,43 @@ export function tailFile(path: string, lines: number, maxBytes = 512 * 1024): st
   return all.slice(-lines).join("\n").trimEnd();
 }
 
+const LOG_LINE = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:\.\d+)?Z? (.*)$/;
+
+/**
+ * Log text for a bug report, cheaper to read (it is pasted into agents as input):
+ * a date line once per day, then HH:MM:SS (UTC, as logged), and a line that repeats
+ * one of the last few lines is folded into it as "(xN, last HH:MM:SS)". Agents
+ * interleave, so only exact neighbors would miss most repeats.
+ */
+export function compactLog(text: string, window = 6): string {
+  const out: { day?: string; time: string; msg: string; count: number; last: string }[] = [];
+  let day = "";
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    const m = line.match(LOG_LINE);
+    const [d, time, msg] = m ? [m[1] ?? "", m[2] ?? "", m[3] ?? ""] : ["", "", line];
+    const recent = out.slice(-window).find((e) => e.msg === msg && !e.day);
+    if (recent && (!d || d === day)) {
+      recent.count++;
+      recent.last = time;
+      continue;
+    }
+    if (d && d !== day) {
+      day = d;
+      out.push({ day: d, time: "", msg: "", count: 1, last: "" });
+    }
+    out.push({ time, msg, count: 1, last: time });
+  }
+  return out
+    .map((e) => {
+      if (e.day) return `-- ${e.day} (UTC) --`;
+      const n =
+        e.count > 1 ? ` (x${e.count}${e.last && e.last !== e.time ? `, last ${e.last}` : ""})` : "";
+      return `${e.time ? `${e.time} ` : ""}${e.msg}${n}`;
+    })
+    .join("\n");
+}
+
 function problemLines(path: string, limit: number): string {
   return tailFile(path, 5000)
     .split("\n")
@@ -122,12 +159,13 @@ export async function collectDiagnostics(
 ): Promise<BugDiagnostics> {
   const version = app.getVersion();
   const doctor = await runDoctorChecks(db).catch(() => null);
-  const current = tailFile(join(LOG_DIR, "exegol.log"), 300);
+  const current = compactLog(tailFile(join(LOG_DIR, "exegol.log"), 300));
   const previous = [1, 2]
     .map((i) => problemLines(join(LOG_DIR, `exegol.${i}.log`), 40))
     .filter(Boolean)
+    .map((t) => compactLog(t))
     .join("\n");
-  const sidecar = tailFile(SIDECAR_LOG, 80);
+  const sidecar = compactLog(tailFile(SIDECAR_LOG, 80));
   const lastError = [...current.split("\n"), ...previous.split("\n")]
     .reverse()
     .find((l) => l.includes("[ERROR]"));

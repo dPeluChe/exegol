@@ -28,6 +28,8 @@ describe("silencedReason", () => {
 
   it("silences network failures", () => {
     expect(silencedReason(new Error("net::ERR_INTERNET_DISCONNECTED"))).toMatch(/Network/);
+    // The exact text a user saw in the title bar (2026-09-25)
+    expect(silencedReason(new Error("net::ERR_FAILED"))).toMatch(/Network/);
   });
 
   it("lets a real updater failure through", () => {

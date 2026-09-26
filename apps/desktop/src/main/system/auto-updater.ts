@@ -32,6 +32,8 @@ const SILENCED: Array<{ reason: string; needles: string[] }> = [
     reason: "Network error (will retry later)",
     needles: [
       "net::ERR_INTERNET_DISCONNECTED",
+      // Chromium's generic failure (a dropped or blocked request); the 4h check retries it
+      "net::ERR_FAILED",
       "net::ERR_NETWORK_CHANGED",
       "net::ERR_CONNECTION_REFUSED",
       "net::ERR_CONNECTION_RESET",

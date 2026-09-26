@@ -23,6 +23,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- A dropped network request no longer shows "Update error: net::ERR_FAILED" in the title bar; the next check retries it
+- Bug reports are about 4x shorter: repeated log lines are folded into "(xN)" and timestamps shortened, and per-tool-call events are no longer logged
 - File search from the renderer could read any folder; its root must now be inside a project
 - Browser port chips: a port the page cannot reach turns red (it stayed green up to 30s after the server stopped), and a green chip has a stop button on hover for a server left running after its terminal was closed
 - Files: images and PDFs open as themselves (they showed as garbled text), other binaries and very large files offer the default app; the viewer's Close was hidden under the pane's buttons (now on the left, Esc closes); New File no longer overwrites an existing file with an empty one

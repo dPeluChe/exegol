@@ -111,9 +111,12 @@ export function applyAgentSignals(
     if (signalStatus) {
       updateAgentStatus(db, agent.id, signalStatus, currentStep ?? undefined);
     }
-    logger.info(
-      `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}`,
-    );
+    // Turn boundaries and attention only: a "running" per tool call was most of the log
+    if (turnStarted || turnEnded || needsAttention) {
+      logger.info(
+        `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}`,
+      );
+    }
     // Muted or suspended sessions stay quiet
     if (needsAttention && !isAgentQuiet(db, agent.id)) {
       // T124: include the agent's pending question (scrollback tail) so a

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", isPackaged: false } }));
 
-import { redact, tailFile } from "./diagnostics";
+import { compactLog, redact, tailFile } from "./diagnostics";
 
 describe("redact", () => {
   const home = "/Users/someone";
@@ -137,5 +137,33 @@ describe("tailFile", () => {
     expect(tailFile(file, 3)).toBe("line 47\nline 48\nline 49");
     expect(tailFile(file, 100, 20).split("\n")[0]).toMatch(/^line \d+$/);
     expect(tailFile(join(dir, "missing.log"), 5)).toBe("");
+  });
+});
+
+describe("compactLog", () => {
+  it("folds interleaved repeats and shortens timestamps (real report lines)", () => {
+    const log = [
+      "2026-09-25T23:44:16.729Z [INFO] [NotifyHandler] Agent event: stop from xHfle",
+      "2026-09-25T23:44:16.730Z [INFO] [AgentCallback] Signal: xHfle (claude-code) → status=waiting_input needsAttention=false",
+      "2026-09-25T23:44:24.456Z [INFO] [NotifyHandler] Agent event: stop from xHfle",
+      "2026-09-25T23:44:24.457Z [INFO] [AgentCallback] Signal: xHfle (claude-code) → status=waiting_input needsAttention=false",
+      "2026-09-25T23:44:30.429Z [INFO] [NotifyHandler] Agent event: stop from xHfle",
+      "2026-09-26T00:02:51.607Z [WARN] [Sidecar] slow",
+    ].join("\n");
+    expect(compactLog(log)).toBe(
+      [
+        "-- 2026-09-25 (UTC) --",
+        "23:44:16 [INFO] [NotifyHandler] Agent event: stop from xHfle (x3, last 23:44:30)",
+        "23:44:16 [INFO] [AgentCallback] Signal: xHfle (claude-code) → status=waiting_input needsAttention=false (x2, last 23:44:24)",
+        "-- 2026-09-26 (UTC) --",
+        "00:02:51 [WARN] [Sidecar] slow",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps lines without a timestamp (stack traces) as they are", () => {
+    expect(compactLog("    at foo (bar.js:1)\n    at baz")).toBe(
+      "    at foo (bar.js:1)\n    at baz",
+    );
   });
 });
