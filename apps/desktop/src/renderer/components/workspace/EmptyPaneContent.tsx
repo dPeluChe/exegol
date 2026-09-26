@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import type { PortInfo } from "../../hooks/use-trpc-scheduler";
+import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { type SessionChoice, SpawnAgentModal } from "../agents/SpawnAgentModal";
@@ -111,25 +111,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   );
 
   const handleBrowser = useCallback(async () => {
-    let url = "http://localhost:3000";
-    try {
-      if (projectId) {
-        const preferred = await trpcInvoke<number | null>("resources.preferredPort", { projectId });
-        if (preferred) {
-          url = `http://localhost:${preferred}`;
-        } else if (project?.path) {
-          const ports = await trpcInvoke<PortInfo[]>("resources.ports", {
-            projectPath: project.path,
-          });
-          const runtime = ports?.find((p) => p.source === "runtime");
-          const first = runtime ?? ports?.[0];
-          if (first) url = `http://localhost:${first.port}`;
-        }
-      }
-    } catch {
-      /* fallback to default */
-    }
-    updatePane(paneId, { type: "browser", url });
+    updatePane(paneId, { type: "browser", url: await projectBrowserUrl(projectId, project?.path) });
   }, [paneId, projectId, project?.path, updatePane]);
 
   const isMini = size === "mini";

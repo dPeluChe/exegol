@@ -4,16 +4,20 @@ import {
   ArrowUpRight,
   Code2,
   Columns,
+  Globe,
   GripVertical,
   PictureInPicture2,
   Rows,
+  TerminalSquare,
   X,
 } from "lucide-react";
+import { nanoid } from "nanoid";
 import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -49,7 +53,29 @@ function PaneToolbar({
   const markPaneFloating = useWorkspaceStore((s) => s.markPaneFloating);
   const panes = useWorkspaceStore(selectPanes);
   const removeAgent = useAgentStore((s) => s.removeAgent);
-  const { projectId } = useProjectContext();
+  const { projectId, project } = useProjectContext();
+  // A terminal offers a browser beside it and a browser a terminal
+  const companion =
+    paneType === "terminal" ? "browser" : paneType === "browser" ? "terminal" : null;
+  const [addOpen, setAddOpen] = useState(false);
+
+  const addCompanion = useCallback(
+    async (direction: "horizontal" | "vertical") => {
+      setAddOpen(false);
+      const id = nanoid(8);
+      if (companion === "browser") {
+        const url = await projectBrowserUrl(projectId, project?.path);
+        splitPane(tabId, paneId, direction, "browser", { id, url });
+      } else if (companion === "terminal" && projectId) {
+        splitPane(tabId, paneId, direction, "empty", { id });
+        await spawnShellIntoPane(projectId, id).catch((err) =>
+          console.error("[PaneToolbar] Shell spawn failed:", err),
+        );
+      }
+      dispatchRefitTerminals();
+    },
+    [companion, projectId, project?.path, splitPane, tabId, paneId],
+  );
 
   const showIdeButton = paneType === "terminal" || paneType === "files";
   const showFloatButton = paneType === "terminal" || paneType === "browser";
@@ -117,7 +143,7 @@ function PaneToolbar({
         <div
           draggable
           onDragStart={handleDragStart}
-          className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary active:cursor-grabbing"
+          className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-accent hover:bg-accent/15 active:cursor-grabbing"
           title="Drag to tab bar to extract"
         >
           <GripVertical className="h-3 w-3" />
@@ -152,6 +178,46 @@ function PaneToolbar({
         >
           <PictureInPicture2 className="h-3 w-3" />
         </button>
+      )}
+      {companion && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: closes the side menu when the pointer leaves it
+        <div className="relative" onMouseLeave={() => setAddOpen(false)}>
+          <button
+            type="button"
+            onClick={() => setAddOpen((v) => !v)}
+            className={cn(
+              "flex h-5 w-5 items-center justify-center rounded hover:bg-white/10 hover:text-text-primary",
+              addOpen ? "bg-white/10 text-text-primary" : "text-text-muted",
+            )}
+            title={companion === "browser" ? "Add a browser beside" : "Add a terminal beside"}
+          >
+            {companion === "browser" ? (
+              <Globe className="h-3 w-3" />
+            ) : (
+              <TerminalSquare className="h-3 w-3" />
+            )}
+          </button>
+          {addOpen && (
+            <div className="absolute right-0 top-6 z-20 w-28 rounded-md border border-border bg-bg-secondary py-1 shadow-lg">
+              {(
+                [
+                  ["horizontal", Columns, "To the right"],
+                  ["vertical", Rows, "Below"],
+                ] as const
+              ).map(([dir, Icon, label]) => (
+                <button
+                  key={dir}
+                  type="button"
+                  onClick={() => addCompanion(dir)}
+                  className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] text-text-secondary hover:bg-white/10"
+                >
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       )}
       <button
         type="button"
