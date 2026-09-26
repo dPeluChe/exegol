@@ -19,6 +19,7 @@ import {
   jumpToAgent,
   useAgentStore,
 } from "../../stores/agents";
+import { AgentCliIcon } from "../common/AgentCliIcon";
 import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
 import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
@@ -265,7 +266,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
       )}
 
       {/* Provider icon */}
-      <AgentIcon provider={agent.cliType} size={14} />
+      <AgentCliIcon agent={agent} size={14} />
 
       {/* Agent info */}
       <span className="font-medium text-text-primary">{agent.alias ?? agent.cliType}</span>

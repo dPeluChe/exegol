@@ -32,6 +32,7 @@ import {
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { isPathAllowed } from "../../security/path-guard";
+import { detectShellClis } from "../../system/shell-clis";
 import { publicProcedure, router } from "../trpc";
 
 export const agentRouter = router({
@@ -143,6 +144,9 @@ export const agentRouter = router({
 
   /** T156: cross-project non-terminal agents (project name + group color). */
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  /** Shell id → provider of an agent CLI typed inside it (`claude` in a plain terminal) */
+  detectShellClis: publicProcedure.query(({ ctx }) => detectShellClis(ctx.db)),
 
   /** T176: dismiss ended sessions from the dashboard. Archive, not delete —
    *  the row keeps its scoring, oplog attribution and resume handle. */

@@ -22,6 +22,7 @@
       "archiveEnded",
       "cancelParallelRun",
       "delete",
+      "detectShellClis",
       "get",
       "getParallelRun",
       "getParallelRunDetails",

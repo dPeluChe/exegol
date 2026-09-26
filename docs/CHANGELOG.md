@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- An agent started by hand in a plain terminal (claude, devin, agy...) is recognized and shows its icon
 - Launch Agent: resume a specific Claude Code session in the folder, listed by its /rename name
 - Terminal and browser panes: a button to add the other one beside it, to the right or below
 - Sidebar: a pause badge on projects with suspended sessions (also on the collapsed rail); the running count leaves them out

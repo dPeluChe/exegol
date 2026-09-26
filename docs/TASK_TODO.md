@@ -30,6 +30,9 @@
    - Main process: sync `emulator.snapshot()` per scrollback flush, `appendFileSync` per log line,
      sync napi `getDiff`/`getWorktreeDiff` on polled paths, sync log scan in `tokens.scan`
    - `FloatingBrowser` polls `agents.list` every 5s (shared key makes it win over 30s)
+4. **Status for a CLI typed in a terminal**: `detectShellClis` recognizes it (icon only). Next:
+   run the status parser for that shell while a CLI is detected, so running / waiting and Needs
+   attention work too (no hooks: it was not launched by Exegol)
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.
