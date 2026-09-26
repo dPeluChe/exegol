@@ -131,9 +131,9 @@ export function ProjectGroupHeader({
               className="w-0 min-w-0 flex-1 rounded bg-bg-tertiary px-1 py-0 text-[11px] normal-case text-text-primary outline-none ring-1 ring-accent/50"
             />
           ) : (
-            <span className="flex-1 truncate normal-case">{group.name}</span>
+            <span className="min-w-0 flex-1 truncate normal-case">{group.name}</span>
           )}
-          <span className="text-[9px] tabular-nums text-text-muted">{projectCount}</span>
+          <span className="shrink-0 text-[9px] tabular-nums text-text-muted">{projectCount}</span>
         </button>
       </div>
 
