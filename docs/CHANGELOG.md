@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Terminal and browser panes: a button to add the other one beside it, to the right or below
 - Sidebar: a pause badge on projects with suspended sessions (also on the collapsed rail); the running count leaves them out
 - Terminal toolbar: a link to the repo on GitHub/GitLab, opened in a browser pane beside the terminal or in your browser
 - Files: search file names or text across the project and its subrepos (a text hit opens the file at the line), and edit text files with Save / Cmd+S, a warning if the file changed on disk, and a prompt before leaving unsaved changes

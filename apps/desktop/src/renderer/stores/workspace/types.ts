@@ -88,7 +88,8 @@ export interface WorkspaceStore {
     paneId: string | null,
     direction: "horizontal" | "vertical",
     newPaneType: PaneType,
-    config?: { agentId?: string; url?: string },
+    /** `id`: the caller needs the new pane (to spawn a shell into it) */
+    config?: { agentId?: string; url?: string; id?: string },
   ) => void;
   updatePane: (paneId: string, updates: Partial<Pane>) => void;
   setFocusedPane: (paneId: string | null) => void;

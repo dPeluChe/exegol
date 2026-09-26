@@ -214,7 +214,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       if (!targetId) return s;
 
       const newPane: Pane = {
-        id: nanoid(8),
+        id: config?.id ?? nanoid(8),
         type: newPaneType,
         agentId: config?.agentId,
         url: config?.url,
