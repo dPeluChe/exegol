@@ -35,6 +35,11 @@ export const agentCreateSchema = z.object({
   resumeSession: z.boolean().optional(),
   /** T101: ID of the agent whose claude_session_id should be used for --resume */
   resumeFromAgentId: z.string().optional(),
+  /** A Claude Code session from its own store (picked by name or title): `--resume <id>` */
+  resumeLocalSessionId: z
+    .string()
+    .regex(/^[\w-]{8,64}$/)
+    .optional(),
   /** T58: read = explore-only, write = full access (default), plan = analysis-only */
   accessMode: agentAccessModeSchema.optional(),
   /** T161: per-launch override of the provider's YOLO setting. Undefined keeps

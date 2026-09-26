@@ -287,7 +287,8 @@
     ],
     "history": [
       "list",
-      "finalOutput"
+      "finalOutput",
+      "resumableLocal"
     ]
   },
   "ipc": [

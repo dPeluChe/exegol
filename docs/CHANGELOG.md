@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Launch Agent: resume a specific Claude Code session in the folder, listed by its /rename name
 - Terminal and browser panes: a button to add the other one beside it, to the right or below
 - Sidebar: a pause badge on projects with suspended sessions (also on the collapsed rail); the running count leaves them out
 - Terminal toolbar: a link to the repo on GitHub/GitLab, opened in a browser pane beside the terminal or in your browser
@@ -25,6 +26,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- Sessions no longer inherit Exegol's own EXEGOL_* variables (a dev build started from an agent terminal passed that agent's MCP token on)
 - A narrow sidebar truncates project names instead of hiding the counts, badges and the "+" to add a project
 - Renaming a project or group no longer leaves the sidebar shifted sideways until a reload
 - A dropped network request no longer shows "Update error: net::ERR_FAILED" in the title bar; the next check retries it

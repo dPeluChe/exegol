@@ -13,6 +13,8 @@ export interface LocalSession {
   /** The provider's own session id — also what its resume flag takes. */
   sessionId: string;
   title: string | null;
+  /** The name the user gave it (`/rename` in Claude Code); resume pickers show it first */
+  name?: string | null;
   cwd: string;
   branch: string | null;
   startedAt: number | null;
