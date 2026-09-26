@@ -246,7 +246,7 @@ export function ProjectItem({
             }}
             onBlur={submitRename}
             onClick={(e) => e.stopPropagation()}
-            className="flex-1 rounded bg-bg-tertiary px-1 py-0 text-xs text-text-primary outline-none ring-1 ring-accent/50"
+            className="w-0 min-w-0 flex-1 rounded bg-bg-tertiary px-1 py-0 text-xs text-text-primary outline-none ring-1 ring-accent/50"
           />
         ) : (
           <span className="flex-1 truncate font-medium">{project.name}</span>

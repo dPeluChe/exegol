@@ -27,7 +27,8 @@ export function Sidebar() {
     attentionCount > 0 ? attentionCount : runningCount > 0 ? runningCount : undefined;
 
   return (
-    <div className="flex h-full flex-col bg-bg-secondary">
+    // clip, not hidden: focusing a too-wide input scrolled a hidden box sideways and it stayed shifted
+    <div className="flex h-full flex-col overflow-x-clip bg-bg-secondary">
       <SidebarHeader />
 
       {/* Exegol's main view (Antonio 2026-08-11): the cross-project fleet
