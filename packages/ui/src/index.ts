@@ -12,4 +12,5 @@ export {
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
+  tooltipSurfaceClass,
 } from "./primitives/Tooltip";
