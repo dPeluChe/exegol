@@ -63,9 +63,9 @@ export function SidebarSection({
           <ChevronRight className="h-2.5 w-2.5 shrink-0" />
         )}
         {Icon && <Icon className="h-3 w-3 shrink-0" />}
-        <span className="flex-1 text-left">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-left">{title}</span>
         {count !== undefined && count > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/10 px-1 text-[9px] font-normal text-text-muted">
+          <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-white/10 px-1 text-[9px] font-normal text-text-muted">
             {count}
           </span>
         )}

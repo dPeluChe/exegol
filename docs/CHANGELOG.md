@@ -25,6 +25,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- A narrow sidebar truncates project names instead of hiding the counts, badges and the "+" to add a project
 - Renaming a project or group no longer leaves the sidebar shifted sideways until a reload
 - A dropped network request no longer shows "Update error: net::ERR_FAILED" in the title bar; the next check retries it
 - Bug reports are about 4x shorter: repeated log lines are folded into "(xN)" and timestamps shortened, and per-tool-call events are no longer logged

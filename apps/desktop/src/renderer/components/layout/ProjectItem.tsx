@@ -253,12 +253,12 @@ export function ProjectItem({
             className="w-0 min-w-0 flex-1 rounded bg-bg-tertiary px-1 py-0 text-xs text-text-primary outline-none ring-1 ring-accent/50"
           />
         ) : (
-          <span className="flex-1 truncate font-medium">{project.name}</span>
+          <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
         )}
 
         {pausedCount > 0 && (
           <span
-            className="flex h-4 items-center gap-0.5 rounded-full bg-white/5 px-1 text-[10px] text-text-muted"
+            className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-white/5 px-1 text-[10px] text-text-muted"
             title={`${pausedCount} suspended session${pausedCount === 1 ? "" : "s"}`}
           >
             <Pause className="h-2.5 w-2.5" />
@@ -266,7 +266,7 @@ export function ProjectItem({
           </span>
         )}
         {runningCount > 0 && (
-          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent/20 px-1 text-[10px] text-accent">
+          <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-accent/20 px-1 text-[10px] text-accent">
             {runningCount}
           </span>
         )}

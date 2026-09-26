@@ -43,10 +43,10 @@ export function Sidebar() {
             : "border-border bg-transparent text-text-secondary hover:bg-white/5",
         )}
       >
-        <LayoutDashboard className="h-3.5 w-3.5 text-accent" />
-        Dashboard
+        <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-accent" />
+        <span className="min-w-0 truncate">Dashboard</span>
         {attentionCount > 0 && (
-          <span className="ml-auto rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+          <span className="ml-auto shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
             {attentionCount}
           </span>
         )}
