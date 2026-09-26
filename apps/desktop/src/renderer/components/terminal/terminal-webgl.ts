@@ -3,31 +3,33 @@ import type { Terminal } from "@xterm/xterm";
 
 /** Backoff: a crashed GPU process (window moved to another display) takes seconds to return */
 const RETRY_DELAYS_MS = [250, 1_000, 3_000];
-const MAX_RETRIES = RETRY_DELAYS_MS.length;
+/** Up this long without a loss and the retry budget starts over */
+const STABLE_RESET_MS = 60_000;
+/** Every terminal loses its context in the same tick: spread the rebuilds */
+const JITTER_MS = 200;
 
 export interface WebglController {
   attach: () => void;
   detach: () => void;
   dispose: () => void;
-  /** Whether WebGL ultimately failed and we're on the canvas fallback. */
+  /** Whether WebGL ultimately failed and we're on the DOM renderer. */
   hasFallenBack: () => boolean;
 }
 
 /**
  * Attach the WebGL addon to a terminal with context-loss recovery.
  *
- * Terax retries forever — we cap at MAX_RETRIES and fall back to the canvas
- * renderer so a broken GPU doesn't loop wedging the renderer.
- *
- * We rely solely on xterm's `WebglAddon.onContextLoss` callback. Adding a
- * second `webglcontextlost` DOM listener on the same canvas would double-fire
- * for a single GPU loss (xterm's internal listener targets the same node),
- * eating half the retry budget. xterm handles the restore path internally.
+ * xterm's own `webglcontextrestored` path redraws; `onContextLoss` fires only when that
+ * failed (3s later). Disposing the addon swaps in the DOM renderer with a full refresh, then
+ * we retry with backoff, and fall back for good once the delays run out. `onLost` lets the
+ * owner kick the PTY: a TUI stayed blank after a GPU crash until it was resized.
+ * Only `onContextLoss`: a second DOM listener on the same canvas double-fires per loss.
  */
-export function createWebglController(terminal: Terminal): WebglController {
+export function createWebglController(terminal: Terminal, onLost?: () => void): WebglController {
   let addon: WebglAddon | null = null;
   let scheduledTimer: ReturnType<typeof setTimeout> | null = null;
   let retries = 0;
+  let lastLossAt = 0;
   let fellBack = false;
   let disposed = false;
 
@@ -38,37 +40,31 @@ export function createWebglController(terminal: Terminal): WebglController {
     }
   }
 
-  // Losing the addon leaves the DOM renderer with nothing drawn until new output: an idle
-  // terminal stayed blank after a GPU crash
-  function repaint(): void {
-    terminal.refresh(0, Math.max(0, terminal.rows - 1));
-  }
-
   function onContextLost(): void {
     if (disposed) return;
     addon?.dispose();
     addon = null;
-    repaint();
-    if (retries >= MAX_RETRIES) {
+    onLost?.();
+    const now = Date.now();
+    if (now - lastLossAt > STABLE_RESET_MS) retries = 0;
+    lastLossAt = now;
+    const delay = RETRY_DELAYS_MS[retries];
+    if (delay === undefined) {
       fellBack = true;
-      if (typeof console !== "undefined") {
-        console.warn(
-          "[TerminalWebgl] context lost; max retries exhausted, falling back to canvas renderer",
-        );
-      }
+      console.warn("[TerminalWebgl] context lost; retries exhausted, staying on the DOM renderer");
       return;
     }
-    const delay = RETRY_DELAYS_MS[retries] ?? 3_000;
     retries++;
     // Always clear before reassigning so a redundant loss event doesn't leak
     // the previously-scheduled retry timer (which would still attach()).
     clearScheduled();
-    scheduledTimer = setTimeout(() => {
-      scheduledTimer = null;
-      if (disposed) return;
-      attach();
-      repaint();
-    }, delay);
+    scheduledTimer = setTimeout(
+      () => {
+        scheduledTimer = null;
+        if (!disposed) attach();
+      },
+      delay + Math.random() * JITTER_MS,
+    );
   }
 
   function attach(): void {
@@ -79,9 +75,8 @@ export function createWebglController(terminal: Terminal): WebglController {
       terminal.loadAddon(webgl);
       addon = webgl;
     } catch {
-      // WebGL not supported by this device — silently fall back to canvas.
+      // WebGL unavailable on this device: xterm keeps the DOM renderer
       fellBack = true;
-      repaint();
     }
   }
 

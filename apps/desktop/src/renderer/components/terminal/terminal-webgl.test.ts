@@ -31,8 +31,6 @@ import { createWebglController } from "./terminal-webgl";
 function makeFakeTerminal(): Terminal {
   return {
     loadAddon: vi.fn(),
-    refresh: vi.fn(),
-    rows: 24,
     element: null,
   } as unknown as Terminal;
 }
@@ -46,37 +44,46 @@ describe("createWebglController — max retries", () => {
     vi.useRealTimers();
   });
 
-  it("attempts up to 3 retries then falls back to canvas renderer", () => {
-    const term = makeFakeTerminal();
-    const controller = createWebglController(term);
+  it("retries with backoff (250ms, 1s, 3s), then stays on the DOM renderer", () => {
+    const controller = createWebglController(makeFakeTerminal());
     controller.attach();
-    expect(addonInstances).toHaveLength(1);
 
-    // Loss → schedule retry with backoff (250ms, 1s, 3s): a GPU process restart takes seconds
-    for (let i = 0; i < 3; i++) {
-      addonInstances[i]?.trigger();
-      expect(controller.hasFallenBack()).toBe(false);
-      vi.advanceTimersByTime(3_100);
-    }
-    // After 3 retries we've created 4 addons total (initial + 3).
+    addonInstances[0]?.trigger();
+    vi.advanceTimersByTime(200);
+    expect(addonInstances).toHaveLength(1);
+    vi.advanceTimersByTime(260);
+    expect(addonInstances).toHaveLength(2);
+
+    addonInstances[1]?.trigger();
+    vi.advanceTimersByTime(900);
+    expect(addonInstances).toHaveLength(2);
+    vi.advanceTimersByTime(310);
+    expect(addonInstances).toHaveLength(3);
+
+    addonInstances[2]?.trigger();
+    vi.advanceTimersByTime(3_210);
     expect(addonInstances).toHaveLength(4);
 
-    // 4th loss exhausts the budget → no further addon created → fallback.
     addonInstances[3]?.trigger();
-    vi.advanceTimersByTime(3_100);
+    vi.advanceTimersByTime(5_000);
     expect(addonInstances).toHaveLength(4);
     expect(controller.hasFallenBack()).toBe(true);
   });
 
-  it("repaints on every loss and retry: an idle terminal stayed blank after a GPU crash", () => {
-    const term = makeFakeTerminal();
-    const controller = createWebglController(term);
+  it("calls onLost on each loss, and a minute without losses restores the budget", () => {
+    const onLost = vi.fn();
+    const controller = createWebglController(makeFakeTerminal(), onLost);
     controller.attach();
-    addonInstances[0]?.trigger();
-    expect(term.refresh).toHaveBeenCalledWith(0, 23);
-    vi.advanceTimersByTime(260);
-    expect(addonInstances).toHaveLength(2);
-    expect(term.refresh).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 3; i++) {
+      addonInstances[i]?.trigger();
+      vi.advanceTimersByTime(3_300);
+    }
+    expect(onLost).toHaveBeenCalledTimes(3);
+    vi.advanceTimersByTime(61_000);
+    addonInstances[3]?.trigger();
+    vi.advanceTimersByTime(460);
+    expect(addonInstances).toHaveLength(5);
+    expect(controller.hasFallenBack()).toBe(false);
   });
 
   it("dispose() detaches the current addon and stops retries", () => {

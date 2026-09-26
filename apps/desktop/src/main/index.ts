@@ -38,6 +38,9 @@ import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/fl
 import { closeSettingsWindow, registerSettingsIpcHandlers } from "./windows/settings";
 
 app.setName("Exegol");
+// After a GPU crash (moving the window across displays) Chromium may block WebGL for the
+// origin until restart, leaving every terminal on the slower DOM renderer
+app.disableDomainBlockingFor3DAPIs();
 
 installDeepLinkHandling();
 
