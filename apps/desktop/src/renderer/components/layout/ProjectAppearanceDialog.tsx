@@ -2,6 +2,7 @@ import type { Project } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
+import { useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { GroupIconColorPicker } from "./GroupIconColorPicker";
 
@@ -35,9 +36,12 @@ export function ProjectAppearanceDialog({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
   const color = project.color ?? null;
-  const rename = (value: string) => {
-    const name = value.trim();
-    if (name && name !== project.name) onRename(name);
+  const [name, setName] = useState(project.name);
+  // Icon and color apply as they are picked; Save commits the name and closes
+  const saveAndClose = () => {
+    const trimmed = name.trim();
+    if (trimmed && trimmed !== project.name) onRename(trimmed);
+    onOpenChange(false);
   };
 
   return (
@@ -62,10 +66,10 @@ export function ProjectAppearanceDialog({
               Name
             </span>
             <input
-              defaultValue={project.name}
-              onBlur={(e) => rename(e.currentTarget.value)}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur(); // blur saves: one write, not two
+                if (e.key === "Enter") saveAndClose();
               }}
               className="w-full min-w-0 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
             />
@@ -113,14 +117,23 @@ export function ProjectAppearanceDialog({
               })
             }
           />
-          <button
-            type="button"
-            onClick={() => save.mutate({ color: null, icon: null, iconImage: null })}
-            className="mt-2 text-[11px] text-text-muted hover:text-text-primary"
-          >
-            Reset to default
-          </button>
           {save.isError && <p className="mt-2 text-[11px] text-red-400">{String(save.error)}</p>}
+          <div className="mt-4 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => save.mutate({ color: null, icon: null, iconImage: null })}
+              className="text-[11px] text-text-muted hover:text-text-primary"
+            >
+              Reset to default
+            </button>
+            <button
+              type="button"
+              onClick={saveAndClose}
+              className="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white hover:bg-accent/90"
+            >
+              Save
+            </button>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
