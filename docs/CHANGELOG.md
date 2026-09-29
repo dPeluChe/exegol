@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Cmd+1 opens the Dashboard and Cmd+2..9 jump to the tabs with live sessions; the sidebar groups sessions by tab with their shortcut, and groups can be dragged to reorder
 - After a system restart, the sessions that were open resume by themselves in their panes
 - While agents are working the Mac does not idle-sleep, and quitting Exegol asks first
 - Bug reports include the developer console of Exegol's windows (redacted), with a "Copy console" button
@@ -24,6 +25,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Files right-click menu: open with the default app, reveal in Finder, copy path, rename
 
 ### Changed
+- Switching a project's tabs by number is now Cmd+Option+1..9
 - Sidebar: Recent Sessions and Activity join Prompts and Resources at the bottom, so Agents and Projects get the space; each list scrolls on its own with a thin scrollbar
 - Tooltips across the app use Exegol's own style and appear faster, instead of the native macOS ones
 - Faster startup: the code editor (~8 MB) loads when a file is opened instead of at launch, and the startup bundle is 14% smaller; busy-agent spinners no longer re-render the app several times a second; port detection runs one scan for all projects

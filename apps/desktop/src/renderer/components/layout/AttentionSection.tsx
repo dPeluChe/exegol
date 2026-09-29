@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProject, useProjects } from "../../hooks/use-trpc";
+import { groupShortcut, type LiveTabGroup, useLiveTabGroups } from "../../lib/live-tabs";
 import {
   type AgentState,
   type AttentionItem,
@@ -19,9 +20,11 @@ import {
   jumpToAgent,
   useAgentStore,
 } from "../../stores/agents";
+import { useAppStore } from "../../stores/app";
 import { AgentCliIcon } from "../common/AgentCliIcon";
 import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
+import { ProjectAvatar } from "../common/ProjectAvatar";
 import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
 
 // ─── Level config ────────────────────────────────────────────────────────
@@ -109,8 +112,14 @@ export function AttentionSection() {
   const activeAgents = Object.values(agents).filter(
     (a) => ACTIVE_STATUSES.has(a.status) && !rawItems[a.id],
   );
+  // Grouped by workspace tab (layout), in the user's order: the same list Cmd+2..9 walks.
+  // A session no pane shows falls back to a per-project group with no shortcut.
+  const groups = useLiveTabGroups();
+  const setOrder = useAppStore((s) => s.setLiveTabOrder);
+  const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();
   for (const agent of activeAgents) {
+    if (inGroups.has(agent.id)) continue;
     const list = byProject.get(agent.projectId) ?? [];
     list.push(agent);
     byProject.set(agent.projectId, list);
@@ -124,7 +133,15 @@ export function AttentionSection() {
     [markRead],
   );
 
-  const hasRunning = byProject.size > 0;
+  const hasRunning = groups.length > 0 || byProject.size > 0;
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const dropOn = (target: string) => {
+    if (!dragKey || dragKey === target) return;
+    const keys = groups.map((g) => g.key).filter((k) => k !== dragKey);
+    keys.splice(keys.indexOf(target), 0, dragKey);
+    setOrder(keys);
+    setDragKey(null);
+  };
   const hasAttention = attentionItems.length > 0;
   const hasRead = attentionItems.some((i) => i.read && !i.pinned);
 
@@ -170,9 +187,23 @@ export function AttentionSection() {
         </div>
       )}
 
-      {/* Running agents grouped by project */}
       {hasRunning && (
         <div className="space-y-1.5">
+          {groups.map((group, index) => (
+            <TabAgentGroup
+              key={group.key}
+              group={group}
+              shortcut={groupShortcut(index)}
+              agents={group.agentIds
+                .map((id) => agents[id])
+                .filter((a): a is AgentState => !!a && !rawItems[a.id])}
+              onNavigate={navigateToAgent}
+              dragging={dragKey === group.key}
+              onDragStart={() => setDragKey(group.key)}
+              onDragEnd={() => setDragKey(null)}
+              onDrop={() => dropOn(group.key)}
+            />
+          ))}
           {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
             <ProjectAgentGroup
               key={projectId}
@@ -182,6 +213,87 @@ export function AttentionSection() {
             />
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Tab Agent Group ─────────────────────────────────────────────────────
+
+function TabAgentGroup({
+  group,
+  shortcut,
+  agents,
+  onNavigate,
+  dragging,
+  onDragStart,
+  onDragEnd,
+  onDrop,
+}: {
+  group: LiveTabGroup;
+  shortcut: string | null;
+  /** Its sessions minus those already listed under Needs attention */
+  agents: AgentState[];
+  onNavigate: (agentId: string, projectId: string) => void;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDrop: () => void;
+}) {
+  const { data: project } = useProject(group.projectId);
+  const first = group.agentIds[0];
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drop target for reordering groups
+    <div
+      className={cn(
+        "rounded-lg border border-border/50 bg-bg-tertiary/30 p-1.5",
+        dragging && "opacity-50",
+      )}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop();
+      }}
+    >
+      <button
+        type="button"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          onDragStart();
+        }}
+        onDragEnd={onDragEnd}
+        onClick={() => first && onNavigate(first, group.projectId)}
+        className="mb-1 flex w-full min-w-0 cursor-grab items-center gap-1.5 px-0.5 text-left active:cursor-grabbing"
+        title="Go to this tab; drag to reorder"
+      >
+        {project ? (
+          <ProjectAvatar project={project} className="h-3 w-3" />
+        ) : (
+          <Cuboid className="h-3 w-3 shrink-0 text-accent/70" />
+        )}
+        <span className="min-w-0 truncate text-[10px] font-medium text-text-secondary">
+          {project?.name ?? group.projectId.slice(0, 12)}
+        </span>
+        <span className="min-w-0 truncate text-[9px] text-text-muted">{group.tabLabel}</span>
+        {shortcut && (
+          <kbd className="ml-auto shrink-0 rounded border border-border px-1 font-mono text-[9px] text-text-muted">
+            {shortcut}
+          </kbd>
+        )}
+      </button>
+      {agents.length > 0 ? (
+        <div className="space-y-0.5">
+          {agents.map((agent) => (
+            <RunningAgentRow
+              key={agent.id}
+              agent={agent}
+              onClick={() => onNavigate(agent.id, agent.projectId)}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="px-0.5 text-[9px] text-text-muted">Waiting on you, see Needs attention</p>
       )}
     </div>
   );

@@ -22,6 +22,10 @@ interface AppStore {
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
 
+  /** Sidebar order of the live tab groups (Cmd+2..9), by `projectId:tabId` */
+  liveTabOrder: string[];
+  setLiveTabOrder: (order: string[]) => void;
+
   /** T148: first-run onboarding wizard completed (or skipped) */
   onboardingComplete: boolean;
   setOnboardingComplete: (complete: boolean) => void;
@@ -46,6 +50,9 @@ export const useAppStore = create<AppStore>()(
 
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+
+      liveTabOrder: [],
+      setLiveTabOrder: (order) => set({ liveTabOrder: order }),
 
       onboardingComplete: false,
       setOnboardingComplete: (complete) => set({ onboardingComplete: complete }),
@@ -72,6 +79,7 @@ export const useAppStore = create<AppStore>()(
         activeView: state.activeView,
         sidebarCollapsed: state.sidebarCollapsed,
         onboardingComplete: state.onboardingComplete,
+        liveTabOrder: state.liveTabOrder,
       }),
     },
   ),

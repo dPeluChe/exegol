@@ -42,10 +42,24 @@ const DEFAULT_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "dashboard",
+    label: "Dashboard",
+    description: "Open the Dashboard",
+    keys: "Cmd+1",
+    category: "navigation",
+  },
+  {
+    id: "live-tab-n",
+    label: "Live Tab N",
+    description: "Jump to the Nth tab with live sessions, in the sidebar's order (drag to reorder)",
+    keys: "Cmd+2-9",
+    category: "navigation",
+  },
+  {
     id: "workspace-tab-n",
     label: "Workspace Tab N",
-    description: "Switch to workspace tab by number (1-9)",
-    keys: "Cmd+1-9",
+    description: "Switch to this project's workspace tab by number (1-9)",
+    keys: "Cmd+Option+1-9",
     category: "navigation",
   },
   // Agents
