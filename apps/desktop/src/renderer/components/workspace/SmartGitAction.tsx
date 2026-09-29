@@ -11,6 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useCallback } from "react";
+import { openInBrowser } from "../../lib/open-in-browser";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useToastStore } from "../../stores/toasts";
 
@@ -284,10 +285,10 @@ export function SmartGitAction({
         mergePrMutation.mutate();
         break;
       case "view-pr":
-        if (state?.pr.url) window.open(state.pr.url, "_blank");
+        if (state?.pr.url) openInBrowser(state.pr.url);
         break;
       case "install-gh":
-        window.open("https://cli.github.com/", "_blank");
+        openInBrowser("https://cli.github.com/");
         break;
       case "conflicts":
       case "commit-disabled":

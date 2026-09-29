@@ -185,7 +185,7 @@ function PromptCard({ prompt, onEdit }: { prompt: Prompt; onEdit: () => void }) 
         <button
           type="button"
           onClick={() => setConfirmDelete(true)}
-          className="ml-auto flex h-6 w-6 items-center justify-center rounded text-text-muted opacity-0 transition-all hover:text-error group-hover:opacity-100"
+          className="ml-auto flex h-6 w-6 items-center justify-center rounded text-text-muted opacity-0 transition-[opacity,color] hover:text-error group-hover:opacity-100"
         >
           <Trash2 className="h-3 w-3" />
         </button>

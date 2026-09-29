@@ -57,7 +57,7 @@ function ProviderCard({
   onRemove?: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [args, setArgs] = useState(provider.args.join(", "));
+  const [args, setArgs] = useState(() => provider.args.join(", "));
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);

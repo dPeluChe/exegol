@@ -96,6 +96,12 @@ export function splitNodeByPaneId(
   return changed ? { ...node, children: newChildren } : node;
 }
 
+/** Whether a pane lives in this layout: stops at the first hit, builds no list */
+export function layoutHasPane(node: LayoutNode, paneId: string): boolean {
+  if (node.type === "pane") return node.paneId === paneId;
+  return node.children.some((child) => layoutHasPane(child, paneId));
+}
+
 export function collectPaneIds(node: LayoutNode): string[] {
   if (node.type === "pane") return [node.paneId];
   return node.children.flatMap(collectPaneIds);

@@ -167,7 +167,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
             type="button"
             onClick={() => handleLaunchAgent(cli)}
             className={cn(
-              "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+              "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
               isMini ? "gap-0.5 p-1.5" : isCompact ? "gap-1 p-2" : "gap-1.5 p-2.5",
             )}
           >
@@ -214,7 +214,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
                   key={s.agentId}
                   type="button"
                   onClick={() => handleResumeSession(s)}
-                  className="flex w-full items-center gap-1.5 rounded border border-border/50 bg-bg-secondary px-2 py-1 transition-all hover:border-accent/50 hover:bg-white/[0.03]"
+                  className="flex w-full items-center gap-1.5 rounded border border-border/50 bg-bg-secondary px-2 py-1 transition-colors hover:border-accent/50 hover:bg-white/[0.03]"
                   title={`Resume: ${s.taskDescription || s.cliType}`}
                 >
                   <AgentIcon provider={s.cliType} size={12} />
@@ -247,7 +247,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
               title={title}
               onClick={() => setAccessMode(mode)}
               className={cn(
-                "flex items-center justify-center rounded-md border p-1 transition-all",
+                "flex items-center justify-center rounded-md border p-1 transition-colors",
                 accessMode === mode
                   ? "bg-accent/10 text-accent border-accent/50"
                   : "border-border bg-bg-secondary text-text-muted hover:border-accent/30",
@@ -269,7 +269,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
               type="button"
               onClick={handler}
               className={cn(
-                "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-all hover:border-accent/50 hover:bg-white/[0.03]",
+                "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
                 isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
               )}
             >

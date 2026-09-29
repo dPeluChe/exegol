@@ -82,7 +82,7 @@ export function TasksToolbar({
       <div className="flex items-center gap-1">
         <div className="h-1 w-16 overflow-hidden rounded-full bg-bg-tertiary">
           <div
-            className="h-full rounded-full bg-accent transition-all"
+            className="h-full rounded-full bg-accent transition-[width]"
             style={{ width: `${progress}%` }}
           />
         </div>

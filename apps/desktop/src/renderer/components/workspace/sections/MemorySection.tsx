@@ -190,7 +190,7 @@ function MemoryCard({ memory }: { memory: MemoryEntry }) {
       <button
         type="button"
         onClick={() => setConfirmDelete(true)}
-        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted opacity-0 transition-all hover:text-error group-hover:opacity-100"
+        className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted opacity-0 transition-[opacity,color] hover:text-error group-hover:opacity-100"
       >
         <Trash2 className="h-3 w-3" />
       </button>

@@ -85,7 +85,7 @@ export function FontCard({
           <button
             type="button"
             onClick={() => onDeselect(font.family)}
-            className="rounded-md bg-accent/15 px-2 py-1 text-[9px] font-medium text-accent transition-all hover:bg-accent/25"
+            className="rounded-md bg-accent/15 px-2 py-1 text-[9px] font-medium text-accent transition-colors hover:bg-accent/25"
             title="Click to remove from the font chain"
           >
             Remove
@@ -94,7 +94,7 @@ export function FontCard({
           <button
             type="button"
             onClick={() => onSelect(font.family)}
-            className="rounded-md bg-white/5 px-2 py-1 text-[9px] font-medium text-text-muted transition-all hover:bg-white/10 hover:text-text-primary"
+            className="rounded-md bg-white/5 px-2 py-1 text-[9px] font-medium text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
             title="Click to use this font as primary"
           >
             Use
@@ -105,10 +105,6 @@ export function FontCard({
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 rounded-md bg-white/5 px-2 py-1 text-[9px] font-medium text-text-muted hover:bg-white/10 hover:text-text-secondary"
-            onClick={(e) => {
-              e.preventDefault();
-              window.open(font.url, "_blank");
-            }}
           >
             <Download className="h-2.5 w-2.5" />
             Install

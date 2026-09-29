@@ -1,5 +1,6 @@
 import { AlertTriangle, Check, CheckCircle2, Copy, RefreshCw, XCircle } from "lucide-react";
 import { useState } from "react";
+import { openInBrowser } from "../../lib/open-in-browser";
 import { FilterChip } from "../common/FilterChip";
 import type { DoctorCategory, DoctorCheck, DoctorStatus } from "./use-doctor";
 
@@ -62,9 +63,10 @@ export function DoctorChecklist({
   defaultOnlyIssues = false,
   foldMissingClis = false,
 }: DoctorChecklistProps) {
-  const missing = foldMissingClis ? checks.filter(isMissingCli) : [];
+  const folded = (c: DoctorCheck) => foldMissingClis && isMissingCli(c);
+  const missing = checks.filter(folded);
   const [showMissing, setShowMissing] = useState(false);
-  const issueCount = checks.filter((c) => c.status !== "ok" && !missing.includes(c)).length;
+  const issueCount = checks.filter((c) => c.status !== "ok" && !folded(c)).length;
   // What actually needs review is the warns — default to them when any exist.
   const [onlyIssues, setOnlyIssues] = useState(defaultOnlyIssues);
 
@@ -73,7 +75,7 @@ export function DoctorChecklist({
   }
 
   const showOnlyIssues = onlyIssues && issueCount > 0;
-  const listed = checks.filter((c) => !missing.includes(c));
+  const listed = checks.filter((c) => !folded(c));
   const visible = showOnlyIssues ? listed.filter((c) => c.status !== "ok") : listed;
 
   return (
@@ -203,7 +205,7 @@ function CheckRow({ check, muted }: { check: DoctorCheck; muted?: boolean }) {
       {check.actionUrl && (
         <button
           type="button"
-          onClick={() => window.open(check.actionUrl, "_blank")}
+          onClick={() => check.actionUrl && openInBrowser(check.actionUrl)}
           className="shrink-0 text-[11px] text-accent hover:underline"
         >
           {/* With a command to copy the link is the docs; alone it is where to get it */}

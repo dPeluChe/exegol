@@ -139,7 +139,7 @@ export function parseTaskBoard(content: string, filePath: string): TaskBoard {
     archived: [],
     done: [],
   };
-  const columnOrder: TaskColumn[] = [];
+  const seenColumns = new Set<TaskColumn>();
   let currentColumn: TaskColumn = "backlog";
 
   for (let i = 0; i < lines.length; i++) {
@@ -151,9 +151,7 @@ export function parseTaskBoard(content: string, filePath: string): TaskBoard {
       const col = detectColumn(headingMatch[1]);
       if (col) {
         currentColumn = col;
-        if (!columnOrder.includes(col)) {
-          columnOrder.push(col);
-        }
+        seenColumns.add(col);
       }
       continue;
     }
@@ -185,6 +183,8 @@ export function parseTaskBoard(content: string, filePath: string): TaskBoard {
     }
   }
 
+  // A Set keeps first-seen order
+  const columnOrder = [...seenColumns];
   // If no columns were detected from headings, use backlog as default
   if (columnOrder.length === 0) {
     columnOrder.push("backlog");

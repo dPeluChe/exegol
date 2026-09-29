@@ -108,6 +108,8 @@ export function FilePreview({
       </div>
     );
   } else if (file.kind === "pdf" && pdfUrl) {
+    // No `sandbox`: Chromium blocks its PDF viewer in a sandboxed frame (ERR_BLOCKED_BY_CLIENT,
+    // checked on Electron 41). The viewer runs out of process, with no access to the app
     body = <iframe src={pdfUrl} title={path} className="h-full w-full border-0 bg-white" />;
   } else if (file.kind === "text") {
     body = (

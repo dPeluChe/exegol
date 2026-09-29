@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { app } from "electron";
 import { z } from "zod";
+import { isPathInside } from "../../security/path-guard";
 import { getPtyHost } from "../../terminal/pty-host";
 import { publicProcedure, router } from "../trpc";
 
@@ -16,30 +17,21 @@ function getScrollbackDir(): string {
   return dir;
 }
 
-function getScrollbackPath(agentId: string): string {
+function scrollbackFile(agentId: string, ext: "log" | "serialized"): string {
   if (!safeAgentIdPattern.test(agentId)) {
     throw new Error(`Invalid agentId: ${agentId}`);
   }
   const dir = getScrollbackDir();
-  const filePath = resolve(dir, `${agentId}.log`);
-  // Belt-and-suspenders: ensure resolved path stays within scrollback dir
-  if (!filePath.startsWith(dir)) {
+  const filePath = resolve(dir, `${agentId}.${ext}`);
+  // The id regex is the guard; this is the backstop, boundary-aware unlike a prefix check
+  if (!isPathInside(dir, filePath)) {
     throw new Error(`Path traversal detected for agentId: ${agentId}`);
   }
   return filePath;
 }
 
-function getSerializedPath(agentId: string): string {
-  if (!safeAgentIdPattern.test(agentId)) {
-    throw new Error(`Invalid agentId: ${agentId}`);
-  }
-  const dir = getScrollbackDir();
-  const filePath = resolve(dir, `${agentId}.serialized`);
-  if (!filePath.startsWith(dir)) {
-    throw new Error(`Path traversal detected for agentId: ${agentId}`);
-  }
-  return filePath;
-}
+const getScrollbackPath = (agentId: string) => scrollbackFile(agentId, "log");
+const getSerializedPath = (agentId: string) => scrollbackFile(agentId, "serialized");
 
 export const scrollbackRouter = router({
   /** Get scrollback content. Prefers: live snapshot > serialized file > raw log. */

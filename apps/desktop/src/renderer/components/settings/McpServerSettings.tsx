@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpen, CheckCircle2, Circle, ExternalLink, Network } from "lucide-react";
 import { useState } from "react";
 import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
+import { openInBrowser } from "../../lib/open-in-browser";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { SegmentedTabs } from "../common/SegmentedTabs";
 
@@ -223,7 +224,7 @@ export function McpServerSettings() {
                 {p.docsUrl && (
                   <button
                     type="button"
-                    onClick={() => window.open(p.docsUrl ?? undefined, "_blank")}
+                    onClick={() => p.docsUrl && openInBrowser(p.docsUrl)}
                     className="ml-auto flex items-center gap-1 text-[10px] text-accent hover:underline"
                   >
                     <BookOpen className="h-2.5 w-2.5" />
@@ -256,7 +257,7 @@ function DocsLink({ href, label }: { href: string; label: string }) {
   return (
     <button
       type="button"
-      onClick={() => window.open(href, "_blank")}
+      onClick={() => openInBrowser(href)}
       className="flex w-full items-center gap-2 rounded-md border border-border bg-bg-tertiary px-3 py-2 text-[11px] text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
     >
       <BookOpen className="h-3 w-3 shrink-0 text-accent" />

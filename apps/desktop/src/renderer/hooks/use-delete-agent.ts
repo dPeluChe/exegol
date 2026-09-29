@@ -1,7 +1,12 @@
 import { useCallback } from "react";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
-import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
+import {
+  collectPaneIds,
+  getProjectState,
+  layoutHasPane,
+  useWorkspaceStore,
+} from "../stores/workspace";
 
 /** Clean up panes and remove tabs that become all-empty after agent deletion */
 function cleanupAgentPanes(agentId: string): void {
@@ -11,7 +16,7 @@ function cleanupAgentPanes(agentId: string): void {
   for (const [paneId, pane] of Object.entries(pw.panes)) {
     if (pane.type === "terminal" && pane.agentId === agentId) {
       // Find the tab that owns this pane
-      const ownerTab = pw.tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
+      const ownerTab = pw.tabs.find((t) => layoutHasPane(t.layout, paneId));
       if (!ownerTab) continue;
 
       const paneIds = collectPaneIds(ownerTab.layout);

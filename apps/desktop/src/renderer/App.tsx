@@ -106,7 +106,7 @@ export default function App() {
                       <Sidebar />
                     </Panel>
                     <PanelResizeHandle className="group relative w-1.5 shrink-0">
-                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-all group-hover:w-[3px] group-hover:bg-accent/60 group-data-[resize-handle-active]:w-[3px] group-data-[resize-handle-active]:bg-accent" />
+                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-[width,background-color] group-hover:w-[3px] group-hover:bg-accent/60 group-data-[resize-handle-active]:w-[3px] group-data-[resize-handle-active]:bg-accent" />
                     </PanelResizeHandle>
                   </>
                 )}

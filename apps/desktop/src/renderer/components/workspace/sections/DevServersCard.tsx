@@ -3,6 +3,7 @@ import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, ExternalLink, Network, RefreshCw, Square } from "lucide-react";
 import { useState } from "react";
 import { useDevServers, useKillDevServer } from "../../../hooks/use-trpc-resources";
+import { openInBrowser } from "../../../lib/open-in-browser";
 import { jumpToAgent } from "../../../stores/agents";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { formatUptime } from "./resource-format";
@@ -99,7 +100,7 @@ function ServerRow({ server: s, onStop }: { server: DevServer; onStop: () => voi
           <button
             key={port}
             type="button"
-            onClick={() => window.open(`http://localhost:${port}`, "_blank")}
+            onClick={() => openInBrowser(`http://localhost:${port}`)}
             className={cn(
               "inline-flex items-center gap-0.5 rounded px-1 font-mono text-[10px] hover:bg-white/10",
               s.conflict ? "text-amber-400" : "text-green-400",

@@ -6,6 +6,7 @@ import {
   createEmptyPane,
   findFirstPaneId,
   getPw,
+  layoutHasPane,
   removeNodeByPaneId,
   setPw,
   splitNodeByPaneId,
@@ -241,7 +242,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       const withoutSource = removeNodeByPaneId(tab.layout, sourcePaneId);
       // Removing the source can collapse its parent split; if the target went
       // with it (it was the only sibling) there is nothing to attach to.
-      if (!withoutSource || !collectPaneIds(withoutSource).includes(targetPaneId)) return s;
+      if (!withoutSource || !layoutHasPane(withoutSource, targetPaneId)) return s;
 
       const direction = side === "left" || side === "right" ? "horizontal" : "vertical";
       const sourceFirst = side === "left" || side === "top";

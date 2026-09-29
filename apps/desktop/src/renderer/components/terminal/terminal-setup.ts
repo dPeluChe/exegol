@@ -174,15 +174,10 @@ export function setupTerminalSession(
 
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of items) {
-        if (item.type.startsWith("image/")) {
-          e.preventDefault();
-          const filePath = await window.api.terminal.saveClipboardImage();
-          if (filePath) window.api.terminal.write(deps.agentId, filePath);
-          return;
-        }
-      }
+      if (!items || ![...items].some((item) => item.type.startsWith("image/"))) return;
+      e.preventDefault();
+      const filePath = await window.api.terminal.saveClipboardImage();
+      if (filePath) window.api.terminal.write(deps.agentId, filePath);
     };
     container.addEventListener("paste", handlePaste);
     disposables.push({ dispose: () => container.removeEventListener("paste", handlePaste) });

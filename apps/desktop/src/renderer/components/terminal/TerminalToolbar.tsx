@@ -14,6 +14,7 @@ import {
   TerminalSquare,
   X,
 } from "lucide-react";
+import { openInBrowser } from "../../lib/open-in-browser";
 import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
 import { WatchToggle } from "../common/WatchToggle";
@@ -229,10 +230,10 @@ function RepoLink({ url, onOpenInPane }: { url: string; onOpenInPane?: (url: str
           {host.split(".")[0]}
         </button>
       )}
-      {/* window.open goes to the system browser (main's setWindowOpenHandler), where the user is signed in */}
+      {/* The system browser: that is where the user is signed in */}
       <button
         type="button"
-        onClick={() => window.open(url, "_blank")}
+        onClick={() => openInBrowser(url)}
         className={btn}
         title={`Open ${url} in your browser`}
       >
