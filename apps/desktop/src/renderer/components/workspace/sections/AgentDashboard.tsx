@@ -7,6 +7,7 @@ import {
   Archive,
   CheckCircle,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Clock,
   Coins,
@@ -383,22 +384,38 @@ export function AgentDashboard() {
                     </button>
                   )}
                 </h3>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {group.agents.map((agent) => (
-                    <AgentCard
-                      key={agent.id}
-                      agent={agent}
-                      projectMeta={
-                        groupBy === "state" ? projectMeta.get(agent.projectId) : undefined
-                      }
-                      hasUnread={group.unread.has(agent.id)}
-                      onClick={() => navigateToAgent(agent)}
-                      onArchive={
-                        LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
-                      }
-                    />
-                  ))}
-                </div>
+                {group.key === "recent" ? (
+                  <RecentByDay
+                    agents={group.agents}
+                    renderCard={(agent) => (
+                      <AgentCard
+                        key={agent.id}
+                        agent={agent}
+                        projectMeta={projectMeta.get(agent.projectId)}
+                        hasUnread={group.unread.has(agent.id)}
+                        onClick={() => navigateToAgent(agent)}
+                        onArchive={() => archiveOne(agent.id)}
+                      />
+                    )}
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {group.agents.map((agent) => (
+                      <AgentCard
+                        key={agent.id}
+                        agent={agent}
+                        projectMeta={
+                          groupBy === "state" ? projectMeta.get(agent.projectId) : undefined
+                        }
+                        hasUnread={group.unread.has(agent.id)}
+                        onClick={() => navigateToAgent(agent)}
+                        onArchive={
+                          LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </>
@@ -406,6 +423,73 @@ export function AgentDashboard() {
       </div>
     </ScrollArea>
   );
+}
+
+/**
+ * Ended sessions by the day they started, each day collapsed: dozens of crashed cards after a
+ * restart pulled the eye away from the live ones. A day header says how many and how many failed.
+ */
+function RecentByDay({
+  agents,
+  renderCard,
+}: {
+  agents: AgentState[];
+  renderCard: (agent: AgentState) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const days = new Map<string, AgentState[]>();
+  for (const a of [...agents].sort((x, y) => (y.startedAt ?? 0) - (x.startedAt ?? 0))) {
+    const key = dayLabel(a.startedAt);
+    days.set(key, [...(days.get(key) ?? []), a]);
+  }
+  return (
+    <div className="space-y-1">
+      {[...days.entries()].map(([day, list]) => {
+        const failed = list.filter((a) => a.status === "failed" || a.status === "crashed").length;
+        const isOpen = open.has(day);
+        return (
+          <div key={day}>
+            <button
+              type="button"
+              onClick={() =>
+                setOpen((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(day)) next.delete(day);
+                  else next.add(day);
+                  return next;
+                })
+              }
+              className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[11px] text-text-secondary hover:bg-white/5"
+            >
+              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <span className="font-medium">{day}</span>
+              <span className="text-text-muted">
+                {list.length} session{list.length === 1 ? "" : "s"}
+              </span>
+              {failed > 0 && (
+                <span className="text-[10px] text-red-400/80">{failed} crashed or failed</span>
+              )}
+            </button>
+            {isOpen && (
+              <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {list.map(renderCard)}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function dayLabel(startedAt: number | null): string {
+  if (!startedAt) return "Earlier";
+  const d = new Date(startedAt * 1000);
+  const today = new Date();
+  const yesterday = new Date(today.getTime() - 86_400_000);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
 function AgentCard({
@@ -433,7 +517,8 @@ function AgentCard({
     <div
       className={cn(
         "group flex flex-col rounded-xl border p-3 transition-all",
-        config.bg,
+        // Ended sessions stay quiet: a wall of red cards drowned the live ones (the icon keeps the state)
+        canPeek ? config.bg : "border-border bg-bg-secondary/40",
         "cursor-pointer hover:shadow-lg hover:shadow-black/10",
       )}
       onClick={onClick}
