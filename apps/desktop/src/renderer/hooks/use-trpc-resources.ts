@@ -9,6 +9,14 @@ export interface SystemMetrics {
   memory: { total: number; used: number; free: number; usagePercent: number };
   disk: { total: number; used: number; free: number; usagePercent: number };
   uptime: number;
+  /** Of the machine's use: Exegol (app + sidecar) and the agent CLIs it runs */
+  usage: {
+    exegolCpu: number;
+    exegolMemory: number;
+    agentsCpu: number;
+    agentsMemory: number;
+    agentProcesses: number;
+  } | null;
 }
 
 export interface ProjectMetrics {
