@@ -26,7 +26,7 @@ import { useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
 import { ResumeButton } from "../../agents/ResumeButton";
 import { AccessModeBadge } from "../../common/AccessModeBadge";
-import { AgentCliIcon } from "../../common/AgentCliIcon";
+import { AgentIcon } from "../../common/AgentIcon";
 import { AgentSpinner } from "../../common/AgentSpinner";
 import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
@@ -526,7 +526,7 @@ function AgentCard({
       <div className="flex items-start gap-3">
         {/* Left: icon + spinner */}
         <div className="flex flex-col items-center gap-1.5 pt-0.5">
-          <AgentCliIcon agent={agent} size={28} />
+          <AgentIcon provider={agent.cliType} size={28} />
           {!hasUnread && isWorking(agent) && (
             <AgentSpinner agentId={agent.id} className="text-accent" />
           )}

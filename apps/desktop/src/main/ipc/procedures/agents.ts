@@ -33,7 +33,6 @@ import {
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { isPathAllowed } from "../../security/path-guard";
-import { detectShellClis } from "../../system/shell-clis";
 import { publicProcedure, router } from "../trpc";
 
 export const agentRouter = router({
@@ -184,7 +183,25 @@ export const agentRouter = router({
   ),
 
   /** Shell id → provider of an agent CLI typed inside it (`claude` in a plain terminal) */
-  detectShellClis: publicProcedure.query(({ ctx }) => detectShellClis(ctx.db)),
+  /** A CLI typed in a terminal exited back to the prompt: start it again there, continuing
+   *  its last conversation (the provider's resume flag), in the same shell and cwd */
+  continueInShell: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(({ ctx, input }) => {
+      const agent = getAgent(ctx.db, input.id);
+      if (!agent?.launchedInShell || agent.status !== "idle") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Not at its shell prompt" });
+      }
+      const provider = ctx.providerRegistry.get(agent.cliType);
+      if (!provider?.command || provider.command.startsWith("__")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No command for this CLI" });
+      }
+      const command = [provider.command, provider.capabilities?.resumeFlag]
+        .filter(Boolean)
+        .join(" ");
+      ctx.agentManager.write(agent.id, `${command}\r`);
+      return { command };
+    }),
 
   /** T176: dismiss ended sessions from the dashboard. Archive, not delete —
    *  the row keeps its scoring, oplog attribution and resume handle. */

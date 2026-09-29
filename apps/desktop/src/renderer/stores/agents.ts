@@ -86,6 +86,10 @@ export function startAgentStatusPush(): void {
         activityLevel: classifyActivity(newStatus, event.currentStep),
       };
       if (event.claudeSessionId) update.claudeSessionId = event.claudeSessionId;
+      // A CLI typed in the terminal made it that agent (or another one)
+      if (event.cliType !== existing.cliType) update.cliType = event.cliType as AgentCliType;
+      if (event.alias !== undefined) update.alias = event.alias;
+      if (event.launchedInShell !== undefined) update.launchedInShell = event.launchedInShell;
       store.updateAgent(event.agentId, update);
 
       // Add to attention inbox (markUnread is now derived from this).
@@ -146,6 +150,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     activityLevel: classifyActivity(agent.status, agent.currentStep),
     muted: agent.muted ?? false,
     suspended: agent.suspendedAt != null,
+    launchedInShell: agent.launchedInShell ?? false,
     ...overrides,
   };
 }
@@ -175,6 +180,8 @@ export interface AgentState {
   muted?: boolean;
   /** Stopped on purpose to resume later; quiet like muted */
   suspended?: boolean;
+  /** Typed in a plain terminal: its CLI can exit back to the shell prompt (Continue) */
+  launchedInShell?: boolean;
 }
 
 interface AgentStore {
@@ -411,6 +418,8 @@ export const useAgentStore = create<AgentStore>()(
                 currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
                 muted: dbAgent.muted ?? existing.muted ?? false,
                 suspended: dbAgent.suspendedAt != null,
+                cliType: dbAgent.cliType as AgentCliType,
+                launchedInShell: dbAgent.launchedInShell ?? existing.launchedInShell ?? false,
               };
             } else {
               added++;
@@ -432,6 +441,7 @@ export const useAgentStore = create<AgentStore>()(
                 activityLevel: classifyActivity(dbStatus, dbAgent.currentStep),
                 muted: dbAgent.muted ?? false,
                 suspended: dbAgent.suspendedAt != null,
+                launchedInShell: dbAgent.launchedInShell ?? false,
               };
             }
           }

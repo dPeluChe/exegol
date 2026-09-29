@@ -77,6 +77,7 @@ export const agentRowSchema = z.object({
   yolo: optNum,
   muted: optNum,
   suspended_at: optNum,
+  launched_in_shell: optNum,
 });
 
 export const worktreeRowSchema = z.object({

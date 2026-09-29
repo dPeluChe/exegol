@@ -59,6 +59,8 @@ export interface SessionMaps {
   sessionIdsCaptured: Set<string>;
   /** Stop pressed: the kill's exit code (often non-zero) must not read as a failure */
   stopRequested: Set<string>;
+  /** Each live session's context, so a shell can be promoted in place */
+  contexts: Map<string, AgentContext>;
 }
 
 /** Agents that have received ≥1 OSC-777 signal through the PTY. When the OSC
@@ -230,6 +232,7 @@ export function createSpawnCallbacks(
   onCleanupWorktree: (db: Database.Database, agentId: string) => void | Promise<void>,
   maxScrollbackBytes: number,
 ) {
+  maps.contexts.set(agent.id, agent);
   return {
     onData: (data: string) => {
       // T178: the renderer only needs bytes it can draw. Everything below this
@@ -369,6 +372,7 @@ export function createSpawnCallbacks(
       maps.scrollbackBuffers.delete(agent.id);
       maps.scrollbackSizes.delete(agent.id);
       maps.dataCallbacks.delete(agent.id);
+      maps.contexts.delete(agent.id);
 
       if (!isShell) {
         try {
@@ -443,7 +447,8 @@ export function createSpawnCallbacks(
       // T65: if this agent was part of a parallel run, check if the run is done.
       handleParallelAgentExit(db, agent.id);
 
-      if (!isShell) {
+      // Typed in a terminal: Exegol did not run a task there, so there is nothing to score
+      if (!isShell && !agent.launchedInShell) {
         scoreAndRecordOplog(
           db,
           agent,

@@ -232,7 +232,8 @@ export function recoverStaleAgents(
 ): { crashed: number; alive: number; crashedIds: string[] } {
   const stale = db
     .prepare(
-      "SELECT id, cli_type, status, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')",
+      `SELECT id, cli_type, status, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
+       OR (launched_in_shell = 1 AND status = 'idle')`,
     )
     .all() as Array<{ id: string; cli_type: string; status: string; pid: number | null }>;
 

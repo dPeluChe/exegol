@@ -145,4 +145,9 @@ export const wave3Migrations: Migration[] = [
     ALTER TABLE projects ADD COLUMN icon TEXT;
     ALTER TABLE projects ADD COLUMN icon_image TEXT;`,
   },
+  {
+    // A CLI typed in a plain terminal promotes the row to that agent; the shell stays below it
+    id: "w3_014_launched_in_shell",
+    sql: "ALTER TABLE agents ADD COLUMN launched_in_shell INTEGER NOT NULL DEFAULT 0;",
+  },
 ];

@@ -27,7 +27,6 @@ import {
 } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { AgentCliIcon } from "../common/AgentCliIcon";
 import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
 import { ProjectAvatar } from "../common/ProjectAvatar";
@@ -420,7 +419,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
       )}
 
       {/* Provider icon */}
-      <AgentCliIcon agent={agent} size={14} />
+      <AgentIcon provider={agent.cliType} size={14} />
 
       {/* Agent info */}
       <span className="font-medium text-text-primary">{agent.alias ?? agent.cliType}</span>
