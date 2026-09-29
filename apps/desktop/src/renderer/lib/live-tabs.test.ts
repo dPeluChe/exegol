@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeLiveTabGroups, groupShortcut } from "./live-tabs";
+import { computeLiveTabGroups, groupShortcut, reorderKeys } from "./live-tabs";
 
 const pane = (paneId: string) => ({ type: "pane" as const, paneId });
 const pw = (tabs: { id: string; label: string; panes: Record<string, string> }[]) =>
@@ -58,5 +58,15 @@ describe("computeLiveTabGroups", () => {
 
   it("Cmd+1 is the Dashboard: the first group is ⌘2, the eighth ⌘9, then none", () => {
     expect([groupShortcut(0), groupShortcut(7), groupShortcut(8)]).toEqual(["⌘2", "⌘9", null]);
+  });
+});
+
+describe("reorderKeys", () => {
+  it("dropping on the group below moves it down (it used to land back in place)", () => {
+    expect(reorderKeys(["a", "b", "c"], "a", "b")).toEqual(["b", "a", "c"]);
+    expect(reorderKeys(["a", "b", "c"], "a", "c")).toEqual(["b", "c", "a"]);
+  });
+  it("dropping on a group above moves it up", () => {
+    expect(reorderKeys(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);
   });
 });

@@ -12,7 +12,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useProject, useProjects } from "../../hooks/use-trpc";
-import { groupShortcut, type LiveTabGroup, useLiveTabGroups } from "../../lib/live-tabs";
+import {
+  groupShortcut,
+  type LiveTabGroup,
+  reorderKeys,
+  useLiveTabGroups,
+} from "../../lib/live-tabs";
 import {
   type AgentState,
   type AttentionItem,
@@ -21,6 +26,7 @@ import {
   useAgentStore,
 } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
+import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentCliIcon } from "../common/AgentCliIcon";
 import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
@@ -136,12 +142,33 @@ export function AttentionSection() {
   const hasRunning = groups.length > 0 || byProject.size > 0;
   const [dragKey, setDragKey] = useState<string | null>(null);
   const dropOn = (target: string) => {
-    if (!dragKey || dragKey === target) return;
-    const keys = groups.map((g) => g.key).filter((k) => k !== dragKey);
-    keys.splice(keys.indexOf(target), 0, dragKey);
-    setOrder(keys);
+    if (!dragKey) return;
+    // Dropped on the group below it goes after it (inserting before put it back where it was)
+    setOrder(
+      reorderKeys(
+        groups.map((g) => g.key),
+        dragKey,
+        target,
+      ),
+    );
     setDragKey(null);
   };
+  // The tab on screen stands out, and blinks when a Cmd+n jump lands on it
+  const activeProjectId = useAppStore((s) =>
+    s.activeView === "workspace" ? s.activeProjectId : null,
+  );
+  const activeTabByProject = useWorkspaceStore((s) =>
+    activeProjectId ? s.projectWorkspaces[activeProjectId]?.activeTabId : null,
+  );
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+  useEffect(() => {
+    const onFlash = (e: Event) => {
+      setFlashKey((e as CustomEvent<string>).detail);
+      setTimeout(() => setFlashKey(null), 700);
+    };
+    window.addEventListener("exegol:live-tab-flash", onFlash);
+    return () => window.removeEventListener("exegol:live-tab-flash", onFlash);
+  }, []);
   const hasAttention = attentionItems.length > 0;
   const hasRead = attentionItems.some((i) => i.read && !i.pinned);
 
@@ -199,6 +226,8 @@ export function AttentionSection() {
                 .filter((a): a is AgentState => !!a && !rawItems[a.id])}
               onNavigate={navigateToAgent}
               dragging={dragKey === group.key}
+              active={group.projectId === activeProjectId && group.tabId === activeTabByProject}
+              flashing={flashKey === group.key}
               onDragStart={() => setDragKey(group.key)}
               onDragEnd={() => setDragKey(null)}
               onDrop={() => dropOn(group.key)}
@@ -226,11 +255,15 @@ function TabAgentGroup({
   agents,
   onNavigate,
   dragging,
+  active,
+  flashing,
   onDragStart,
   onDragEnd,
   onDrop,
 }: {
   group: LiveTabGroup;
+  active: boolean;
+  flashing: boolean;
   shortcut: string | null;
   /** Its sessions minus those already listed under Needs attention */
   agents: AgentState[];
@@ -246,7 +279,9 @@ function TabAgentGroup({
     // biome-ignore lint/a11y/noStaticElementInteractions: drop target for reordering groups
     <div
       className={cn(
-        "rounded-lg border border-border/50 bg-bg-tertiary/30 p-1.5",
+        "rounded-lg border bg-bg-tertiary/30 p-1.5 transition-colors",
+        active ? "border-accent/60" : "border-border/50",
+        flashing && "animate-flash-once",
         dragging && "opacity-50",
       )}
       onDragOver={(e) => e.preventDefault()}
@@ -260,6 +295,8 @@ function TabAgentGroup({
         draggable
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = "move";
+          // Some Chromium builds start no drag without data
+          e.dataTransfer.setData("text/plain", group.key);
           onDragStart();
         }}
         onDragEnd={onDragEnd}
