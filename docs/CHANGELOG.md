@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Terminals: Option+←/→ move by word and Option+Backspace deletes a word (a plain shell printed "D")
 - Doctor and setup wizard: each agent CLI shows its installed version and the vendor's install or update command to copy; Kilo Code's new `kilo` binary is found and launched
 
 ### Fixed
