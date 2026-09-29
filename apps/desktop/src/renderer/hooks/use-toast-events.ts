@@ -1,11 +1,12 @@
 import type { NotificationMuteChannel, Settings } from "@exegol/shared";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { switchSection } from "../lib/switch-section";
 import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useNotificationPrefsStore } from "../stores/notification-prefs";
 import type { ToastType } from "../stores/toasts";
 import { useToastStore } from "../stores/toasts";
+import { useLatest } from "./use-latest";
 import { useSettings } from "./use-trpc";
 
 // ─── Status → toast mapping ─────────────────────────────────────────────────
@@ -28,8 +29,7 @@ const TOAST_THROTTLE_MS = 10_000;
  * Call once in App.tsx.
  */
 export function useToastEvents(): void {
-  const toastsEnabled = useRef(true);
-  toastsEnabled.current = useSettings().data?.toastsEnabled ?? true;
+  const toastsEnabled = useLatest(useSettings().data?.toastsEnabled ?? true);
 
   useEffect(() => {
     const cleanups: (() => void)[] = [];
@@ -97,5 +97,5 @@ export function useToastEvents(): void {
         cleanup();
       }
     };
-  }, []);
+  }, [toastsEnabled]);
 }

@@ -1,4 +1,4 @@
-import { type EffectCallback, useEffect } from "react";
+import { type EffectCallback, useEffect, useRef } from "react";
 
 /**
  * Explicit mount effect — runs once on mount, cleanup on unmount.
@@ -6,6 +6,7 @@ import { type EffectCallback, useEffect } from "react";
  * See: https://react.dev/learn/you-might-not-need-an-effect
  */
 export function useMountEffect(callback: EffectCallback) {
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional mount-only effect
-  useEffect(callback, []);
+  // The first render's callback, by design: later renders never re-run it
+  const onMount = useRef(callback);
+  useEffect(() => onMount.current(), []);
 }

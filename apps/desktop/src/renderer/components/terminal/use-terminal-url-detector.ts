@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /** `http(s)://localhost[:port]` or `http(s)://127.0.0.1[:port]`, optional path. */
 const LOCALHOST_URL_RE = /\bhttps?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/[^\s]*)?/gi;
@@ -22,29 +22,26 @@ export function useTerminalUrlDetector(
   enabled: boolean,
 ): [url: string | null, dismiss: () => void] {
   const [url, setUrl] = useState<string | null>(null);
-  const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!enabled) {
-      // Agent stopped/pane changed: a stale "Open preview" chip would point
-      // at a dev server that is likely dead.
-      seenRef.current = new Set();
-      setUrl(null);
-      return;
-    }
-    seenRef.current = new Set();
-    setUrl(null);
-
-    return window.api.terminal.onData(agentId, (data) => {
+    if (!enabled) return;
+    const seen = new Set<string>();
+    const unsubscribe = window.api.terminal.onData(agentId, (data) => {
       const matches = data.match(LOCALHOST_URL_RE);
       if (!matches) return;
       for (const raw of matches) {
         const clean = trimTrailingPunctuation(raw);
-        if (seenRef.current.has(clean)) continue;
-        seenRef.current.add(clean);
+        if (seen.has(clean)) continue;
+        seen.add(clean);
         setUrl(clean);
       }
     });
+    // Agent stopped or pane changed: a stale "Open preview" chip would point
+    // at a dev server that is likely dead
+    return () => {
+      unsubscribe();
+      setUrl(null);
+    };
   }, [agentId, enabled]);
 
   return [url, () => setUrl(null)];

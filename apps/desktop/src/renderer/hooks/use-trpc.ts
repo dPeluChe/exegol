@@ -134,11 +134,11 @@ export function useRecentSessions(limit = 10) {
 
 // ─── Open in IDE ─────────────────────────────────────────────────────────────
 
-export function useOpenInIde() {
-  return useMutation({
-    mutationFn: (data: { projectId: string; ide?: string; customPath?: string }) =>
-      trpcMutate<{ success: boolean }>("projects.openInIde", data),
-  });
+/** A command, not server state: nothing to cache or invalidate */
+export function openInIde(data: { projectId: string; ide?: string; customPath?: string }) {
+  trpcMutate<{ success: boolean }>("projects.openInIde", data).catch((err) =>
+    console.error("[IDE] Open failed:", err),
+  );
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
@@ -242,11 +242,9 @@ export function useDirectoryListing(path: string | null) {
   });
 }
 
-export function usePickFile() {
-  return useMutation({
-    mutationFn: (params: { projectPath: string }) =>
-      trpcMutate<string | null>("files.pickFile", params),
-  });
+/** The native file dialog: null when cancelled */
+export function pickFile(projectPath: string) {
+  return trpcMutate<string | null>("files.pickFile", { projectPath });
 }
 
 export function useWriteFile() {

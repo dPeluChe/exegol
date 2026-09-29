@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useLatest } from "../../hooks/use-latest";
 import {
   type PortInfo,
   usePreferredPort,
@@ -44,10 +45,24 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     return Array.from(map.values());
   }, [ports]);
 
-  const initUrl = pane.url ?? "http://localhost:3000";
-  const [urlInput, setUrlInput] = useState(initUrl);
-  const [currentUrl, setCurrentUrl] = useState(initUrl);
-  const [didAutoSync, setDidAutoSync] = useState(!!pane.url);
+  // The pane's saved URL wins; until there is one, follow the project's dev server
+  const autoPort =
+    preferredPort ?? uniquePorts.find((p) => p.source === "runtime")?.port ?? uniquePorts[0]?.port;
+  const currentUrl = pane.url ?? `http://localhost:${autoPort ?? 3000}`;
+  // What the user is typing; null shows the page's URL
+  const [draft, setDraft] = useState<string | null>(null);
+  const urlInput = draft ?? currentUrl;
+  const goTo = useCallback(
+    (url: string) => {
+      setDraft(null);
+      updatePane(pane.id, { url });
+    },
+    [pane.id, updatePane],
+  );
+  // The first page that loads keeps its URL, so a server started later does not move it
+  const keepAutoUrl = useLatest(() => {
+    if (!pane.url) updatePane(pane.id, { url: currentUrl });
+  });
   const webviewRef = useRef<HTMLElement | null>(null);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -92,12 +107,9 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   } = useBrowserQa({
     webviewRef,
     paneId,
-    paneInternalId: pane.id,
     projectId,
     currentUrl,
-    setUrlInput,
-    setCurrentUrl,
-    updatePane,
+    goTo,
   });
 
   const sendToAgent = useCallback((agentId: string, text: string) => {
@@ -105,7 +117,6 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   }, []);
 
   // Track navigation history availability + load-failure state on the webview
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-attach listeners when URL changes
   useEffect(() => {
     const webview = webviewRef.current as unknown as {
       addEventListener: (e: string, fn: (ev: Event) => void) => void;
@@ -135,19 +146,22 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       }
     };
     const onStartLoad = () => setLoadError(null);
+    const onFinishLoad = () => keepAutoUrl.current();
     webview.addEventListener("did-navigate", update as (ev: Event) => void);
     webview.addEventListener("did-navigate-in-page", update as (ev: Event) => void);
     webview.addEventListener("did-finish-load", update as (ev: Event) => void);
     webview.addEventListener("did-fail-load", onFailLoad);
     webview.addEventListener("did-start-loading", onStartLoad);
+    webview.addEventListener("did-finish-load", onFinishLoad);
     return () => {
+      webview.removeEventListener("did-finish-load", onFinishLoad);
       webview.removeEventListener("did-navigate", update as (ev: Event) => void);
       webview.removeEventListener("did-navigate-in-page", update as (ev: Event) => void);
       webview.removeEventListener("did-finish-load", update as (ev: Event) => void);
       webview.removeEventListener("did-fail-load", onFailLoad);
       webview.removeEventListener("did-start-loading", onStartLoad);
     };
-  }, [currentUrl]);
+  }, [queryClient, keepAutoUrl]);
 
   const handleBack = useCallback(() => {
     const wv = webviewRef.current as unknown as { goBack?: () => void } | null;
@@ -171,40 +185,15 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     else wv?.openDevTools?.();
   }, []);
 
-  // Auto-sync to preferred or first detected port on initial load (once)
-  useEffect(() => {
-    if (didAutoSync) return;
-    const port =
-      preferredPort ??
-      uniquePorts.find((p) => p.source === "runtime")?.port ??
-      uniquePorts[0]?.port;
-    if (port) {
-      const url = `http://localhost:${port}`;
-      setUrlInput(url);
-      setCurrentUrl(url);
-      updatePane(pane.id, { url });
-      setDidAutoSync(true);
-    }
-  }, [didAutoSync, preferredPort, uniquePorts, pane.id, updatePane]);
-
   const navigate = useCallback(() => {
     let url = urlInput.trim();
     if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
       url = `http://${url}`;
     }
-    setCurrentUrl(url);
-    updatePane(pane.id, { url });
-  }, [urlInput, pane.id, updatePane]);
+    goTo(url);
+  }, [urlInput, goTo]);
 
-  const navigateToPort = useCallback(
-    (port: number) => {
-      const url = `http://localhost:${port}`;
-      setUrlInput(url);
-      setCurrentUrl(url);
-      updatePane(pane.id, { url });
-    },
-    [pane.id, updatePane],
-  );
+  const navigateToPort = useCallback((port: number) => goTo(`http://localhost:${port}`), [goTo]);
 
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFocused = focusedPaneId === paneId;
@@ -222,7 +211,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         uniquePorts={uniquePorts}
         projectId={projectId}
         preferredPort={preferredPort}
-        setUrlInputValue={setUrlInput}
+        setUrlInputValue={setDraft}
         onFocus={() => setFocusedPane(paneId)}
         onNavigate={navigate}
         onBack={handleBack}

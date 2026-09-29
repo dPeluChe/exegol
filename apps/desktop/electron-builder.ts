@@ -3,9 +3,15 @@ import { resolve } from "node:path";
 import type { Configuration } from "electron-builder";
 
 // One folder per version (dist/0.5.1/...) so builds don't pile up side by side
-const { version } = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
-  version: string;
-};
+const version = readVersion();
+
+function readVersion(): string {
+  const pkg: unknown = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
+  const found = pkg && typeof pkg === "object" && "version" in pkg ? pkg.version : undefined;
+  // A build must never land in dist/undefined
+  if (typeof found !== "string") throw new Error("apps/desktop/package.json has no version");
+  return found;
+}
 
 const iconPath = resolve("src/resources/build/icons");
 

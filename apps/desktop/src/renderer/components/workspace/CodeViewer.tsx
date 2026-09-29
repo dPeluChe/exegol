@@ -4,6 +4,7 @@ import { Code2, Eye, ListTree } from "lucide-react";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
+import { useLatest } from "../../hooks/use-latest";
 import { JsonTree } from "./JsonTree";
 
 // Use local monaco-editor instance instead of CDN
@@ -97,8 +98,7 @@ function MonacoViewer({
 }: { content: string; language: string } & EditProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   // Monaco keeps the command from mount: read the latest save through a ref
-  const saveRef = useRef(onSave);
-  saveRef.current = onSave;
+  const saveRef = useLatest(onSave);
   const readOnly = !onChange;
 
   useEffect(() => {

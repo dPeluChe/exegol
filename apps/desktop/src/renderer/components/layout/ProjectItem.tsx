@@ -16,9 +16,9 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  openInIde,
   type PortInfo,
   useDeleteProject,
-  useOpenInIde,
   useProjectPorts,
   useSettings,
   useWorktrees,
@@ -81,7 +81,6 @@ function PortBadges({ projectPath }: { projectPath: string }) {
 
 function OpenInIdeButton({ projectId }: { projectId: string }) {
   const { data: settings } = useSettings();
-  const openInIde = useOpenInIde();
   const ideName = settings?.defaultIde ?? "vscode";
 
   return (
@@ -91,14 +90,11 @@ function OpenInIdeButton({ projectId }: { projectId: string }) {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            openInIde.mutate(
-              {
-                projectId,
-                ide: settings?.defaultIde,
-                customPath: settings?.customIdePath ?? undefined,
-              },
-              { onError: (err) => console.error("[IDE] Open failed:", err) },
-            );
+            openInIde({
+              projectId,
+              ide: settings?.defaultIde,
+              customPath: settings?.customIdePath ?? undefined,
+            });
           }}
           className="rounded p-0.5 text-text-muted hover:bg-white/5 hover:text-text-secondary"
           title={`Open in ${ideName}`}
@@ -156,7 +152,6 @@ export function ProjectItem({
   const menuRef = useRef<HTMLDivElement>(null);
 
   const { data: settings } = useSettings();
-  const openInIde = useOpenInIde();
   const deleteProject = useDeleteProject();
 
   const { data: worktrees = [] } = useWorktrees(project.id, isExpanded);
@@ -305,14 +300,11 @@ export function ProjectItem({
             type="button"
             onClick={() => {
               setContextMenu(null);
-              openInIde.mutate(
-                {
-                  projectId: project.id,
-                  ide: settings?.defaultIde,
-                  customPath: settings?.customIdePath ?? undefined,
-                },
-                { onError: (err) => console.error("[IDE] Open failed:", err) },
-              );
+              openInIde({
+                projectId: project.id,
+                ide: settings?.defaultIde,
+                customPath: settings?.customIdePath ?? undefined,
+              });
             }}
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
           >

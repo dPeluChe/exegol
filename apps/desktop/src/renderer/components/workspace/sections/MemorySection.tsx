@@ -223,18 +223,24 @@ function CreateMemoryDialog({
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("convention");
 
+  // isPending lands a render late: a double Enter would save the memory twice
+  const submittingRef = useRef(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!content.trim() || !projectId) return;
-
-    await createMemory.mutateAsync({
-      projectId,
-      category,
-      content: content.trim(),
-      relevanceScore: 0.7,
-    });
-    setContent("");
-    onOpenChange(false);
+    if (!content.trim() || !projectId || submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      await createMemory.mutateAsync({
+        projectId,
+        category,
+        content: content.trim(),
+        relevanceScore: 0.7,
+      });
+      setContent("");
+      onOpenChange(false);
+    } finally {
+      submittingRef.current = false;
+    }
   };
 
   return (

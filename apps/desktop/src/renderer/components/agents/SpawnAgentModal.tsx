@@ -98,7 +98,7 @@ export function SpawnAgentModal({
   initialAccessMode = "write",
 }: SpawnAgentModalProps) {
   const [task, setTask] = useState(initialTask ?? "");
-  const [selectedProviderId, setSelectedProviderId] = useState(
+  const [pickedProviderId, setPickedProviderId] = useState(
     initialCliType ?? initialProvider?.id ?? "",
   );
   const [accessMode, setAccessMode] = useState<AgentAccessMode>(initialAccessMode);
@@ -128,6 +128,8 @@ export function SpawnAgentModal({
     queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
     staleTime: 30_000,
   });
+  // None picked yet: the first enabled provider
+  const selectedProviderId = pickedProviderId || enabledProviders[0]?.id || "";
 
   const { data: resumable = [] } = useQuery({
     queryKey: ["resumableSessions", projectId],
@@ -139,6 +141,16 @@ export function SpawnAgentModal({
 
   // Claude's own sessions in this folder, by /rename name: --continue only reaches the latest
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
+  // Switching provider must drop a selection that belongs to the old one —
+  // "Continue last" included: left set, it sent resumeSession for a CLI with no
+  // resume flag at all.
+  const chooseProvider = (id: string) => {
+    setPickedProviderId(id);
+    setSession((current) =>
+      current === "last" || (current && current.cliType !== id) ? null : current,
+    );
+    setLocalSessionId(null);
+  };
   const { data: localSessions = [] } = useQuery({
     queryKey: ["history", "resumableLocal", projectId],
     queryFn: () =>
@@ -209,23 +221,6 @@ export function SpawnAgentModal({
   // rather than silently overriding.
   const providerYolo = !!yoloFlag && !!selectedProvider?.args.includes(yoloFlag);
   const yoloChecked = yolo ?? providerYolo;
-
-  // Switching provider must drop a selection that belongs to the old one —
-  // "Continue last" included: left set, it sent resumeSession for a CLI with no
-  // resume flag at all.
-  useEffect(() => {
-    setSession((current) =>
-      current === "last" || (current && current.cliType !== selectedProviderId) ? null : current,
-    );
-    setLocalSessionId(null);
-  }, [selectedProviderId]);
-
-  // Auto-select first provider if none selected
-  useEffect(() => {
-    if (!selectedProviderId && enabledProviders.length > 0) {
-      setSelectedProviderId(enabledProviders[0]?.id ?? "");
-    }
-  }, [selectedProviderId, enabledProviders]);
 
   // Focus textarea on mount
   useEffect(() => {
@@ -370,7 +365,7 @@ export function SpawnAgentModal({
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => setSelectedProviderId(p.id)}
+                  onClick={() => chooseProvider(p.id)}
                   className={cn(
                     "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
                     selectedProviderId === p.id

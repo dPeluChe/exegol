@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
 import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
 import { useTerminalStore } from "../../stores/terminals";
@@ -135,10 +136,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
   // A card that sizes its session behaves like an owner pane for sizing only;
   // read through a ref so toggling it never rebuilds the terminal
-  const cardOwnsRef = useRef(false);
-  cardOwnsRef.current = mirror && cardFont !== undefined;
-  const cardFontRef = useRef(cardFont);
-  cardFontRef.current = cardFont;
+  const cardOwnsRef = useLatest(mirror && cardFont !== undefined);
+  const cardFontRef = useLatest(cardFont);
 
   /** One sizing path: a plain mirror follows the PTY's grid and rescales its
    *  font; a pane (or a card that sizes its session) fits and tells the PTY. */
@@ -152,8 +151,16 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       const onSize = mirror ? () => {} : (c: number, r: number) => setTerminalSize(agentId, c, r);
       fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
     },
-    [agentId, setTerminalSize, readOnly, mirror, fontSize],
+    [agentId, setTerminalSize, readOnly, mirror, fontSize, cardOwnsRef],
   );
+
+  // Read at call time so a new callback or theme never rebuilds the terminal
+  const sizeTerminalRef = useLatest(sizeTerminal);
+  const themeRef = useLatest(terminalTheme);
+  const cliTypeRef = useLatest(cliType);
+  const scrollRef = useLatest(onScrollPosition);
+  const openFileRef = useLatest(onOpenFileLink);
+  const openUrlRef = useLatest(onOpenUrlInPane);
 
   const handleResize = useCallback(() => {
     const fit = fitAddonRef.current;
@@ -162,7 +169,6 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   }, [sizeTerminal]);
 
   // Rule 4: external system sync — xterm.js setup/teardown, PTY wiring, resize observer
-  // biome-ignore lint/correctness/useExhaustiveDependencies: onScrollPosition is stable (useCallback), adding it would remount the entire terminal
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -181,7 +187,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     const session = setupTerminalSession(container, {
       agentId,
       paneId,
-      cliType,
+      cliType: cliTypeRef.current,
       readOnly,
       liveFeed,
       mirror,
@@ -195,10 +201,10 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       initialContent,
       fontSize,
       fontFamily,
-      theme: terminalTheme,
-      onScrollPosition,
-      onOpenFileLink,
-      onOpenUrlInPane,
+      theme: themeRef.current,
+      onScrollPosition: forward(scrollRef),
+      onOpenFileLink: forward(openFileRef),
+      onOpenUrlInPane: forward(openUrlRef),
       setPaneCwd,
       setPaneLastExit,
     });
@@ -211,7 +217,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     if (cardOwnsRef.current && cardFontRef.current) {
       session.terminal.options.fontSize = cardFontRef.current;
     }
-    const refit = () => sizeTerminal(session.terminal, session.fitAddon);
+    const refit = () => sizeTerminalRef.current(session.terminal, session.fitAddon);
     refitRef.current = refit;
 
     // Double-RAF: first frame settles layout, second fits terminal accurately
@@ -271,7 +277,6 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     agentId,
     paneId,
     setTerminalReady,
-    setTerminalSize,
     setPaneCwd,
     setPaneLastExit,
     onReady,
@@ -281,6 +286,14 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     liveFeed,
     mirror,
     initialContent,
+    cliTypeRef,
+    cardOwnsRef,
+    themeRef,
+    scrollRef,
+    openFileRef,
+    openUrlRef,
+    cardFontRef,
+    sizeTerminalRef,
   ]);
 
   // A theme change repaints in place: it used to be a mount dependency, so a
@@ -347,7 +360,6 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     dormantPipeRef.current?.setVisible(isVisible);
   }, [isVisible]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cliType is stable per terminal instance
   useEffect(() => {
     const terminal = terminalRef.current;
     if (!terminal) return;
@@ -370,7 +382,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       }, HIDE_DEBOUNCE_MS);
       return () => clearTimeout(timer);
     }
-  }, [isVisible]);
+  }, [isVisible, mirror, cliType, agentId]);
 
   // T155 (verify session): manual "Refresh Terminal" from the pane menu —
   // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
@@ -453,3 +465,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     />
   );
 });
+
+/** A stable forwarder to the ref's current callback; absent when no callback was given */
+function forward<A extends unknown[]>(ref: { current: ((...args: A) => void) | undefined }) {
+  return ref.current ? (...args: A) => ref.current?.(...args) : undefined;
+}

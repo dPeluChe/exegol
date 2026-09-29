@@ -70,14 +70,13 @@ function UnifiedView({
 
   return (
     <div className="font-mono text-[12px] leading-[18px]">
-      {lines.map((line, idx) => {
+      {lines.map((line) => {
         const lineNum = line.newLineNumber ?? line.oldLineNumber;
         const lineComments = lineNum != null ? commentsByLine?.[lineNum] : undefined;
         const hasCommentUI = onAddComment != null;
 
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: diff lines lack stable unique id
-          <div key={idx}>
+          <div key={`${line.type}:${line.oldLineNumber ?? ""}:${line.newLineNumber ?? ""}`}>
             <div
               className={cn(
                 "group/line flex",
@@ -209,8 +208,7 @@ function SplitView({
         const lineComments = lineNum != null ? commentsByLine?.[lineNum] : undefined;
 
         return (
-          // biome-ignore lint/suspicious/noArrayIndexKey: split view rows lack stable unique id
-          <div key={idx}>
+          <div key={`${leftLine?.oldLineNumber ?? ""}:${rightLine?.newLineNumber ?? ""}`}>
             <div className="group/line flex">
               {/* Gutter for adding comments */}
               {hasCommentUI && (

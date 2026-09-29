@@ -13,7 +13,7 @@ import {
   Rows,
   ShieldAlert,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   type ReviewSignal,
@@ -29,6 +29,8 @@ type DiffMode = "unstaged" | "staged";
 type ViewMode = "unified" | "split";
 
 // ─── Signal icon helper ────────────────────────────────────────────────────
+
+const NO_FILES: ReadonlySet<string> = new Set();
 
 const RISK_COLORS: Record<ReviewSignal["type"], { border: string; badge: string }> = {
   info: { border: "border-border", badge: "bg-blue-400/15 text-blue-400" },
@@ -162,20 +164,27 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
   } = useDiff(projectId, diffMode, overridePath, autoRefresh ? 5000 : undefined);
   const { data: reviewSummary } = useReviewSummary(projectId, overridePath, diffMode === "staged");
 
-  // Track collapsed state per file (all collapsed by default)
-  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  // Expanded files belong to the diff they were opened in: new diff data starts collapsed
+  const [expanded, setExpanded] = useState<{ diff: typeof rawDiff; files: ReadonlySet<string> }>({
+    diff: rawDiff,
+    files: new Set(),
+  });
+  const expandedFiles = expanded.diff === rawDiff ? expanded.files : NO_FILES;
+  const setExpandedFiles = useCallback(
+    (next: ReadonlySet<string> | ((prev: ReadonlySet<string>) => ReadonlySet<string>)) =>
+      setExpanded((prev) => ({
+        diff: rawDiff,
+        files:
+          typeof next === "function" ? next(prev.diff === rawDiff ? prev.files : NO_FILES) : next,
+      })),
+    [rawDiff],
+  );
 
   // Derive parsed files from raw diff (Rule 1: derive, don't sync)
   const parsedFiles = useMemo<DiffFile[]>(
     () => (rawDiff !== undefined ? parseUnifiedDiff(rawDiff ?? "") : []),
     [rawDiff],
   );
-
-  // Reset expanded state when diff changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: rawDiff is intentional — reset on new diff data
-  useEffect(() => {
-    setExpandedFiles(new Set());
-  }, [rawDiff]);
 
   const allExpanded =
     parsedFiles.length > 0 && parsedFiles.every((f) => expandedFiles.has(f.newPath));
@@ -185,16 +194,19 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
     } else {
       setExpandedFiles(new Set(parsedFiles.map((f) => f.newPath)));
     }
-  }, [allExpanded, parsedFiles]);
+  }, [allExpanded, parsedFiles, setExpandedFiles]);
 
-  const toggleFile = useCallback((path: string) => {
-    setExpandedFiles((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
-  }, []);
+  const toggleFile = useCallback(
+    (path: string) => {
+      setExpandedFiles((prev) => {
+        const next = new Set(prev);
+        if (next.has(path)) next.delete(path);
+        else next.add(path);
+        return next;
+      });
+    },
+    [setExpandedFiles],
+  );
 
   const handleRefresh = useCallback(() => {
     refetch();

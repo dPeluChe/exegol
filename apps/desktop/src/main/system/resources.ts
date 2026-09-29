@@ -117,13 +117,13 @@ async function collectMetrics(): Promise<void> {
   // Memory — use vm_stat on macOS for accurate "available" memory
   // os.freemem() on macOS only shows truly free pages, ignoring
   // inactive/purgeable/cached memory that apps can reclaim
-  const memory = await getMemoryMetrics();
-
-  // Disk (async, non-blocking)
-  const disk = await getDiskMetrics();
-
+  // Disk (async, non-blocking); the three probes are independent
   const cpus = os.cpus();
-  const usage = await getProcessUsage(cpus.length).catch(() => null);
+  const [memory, disk, usage] = await Promise.all([
+    getMemoryMetrics(),
+    getDiskMetrics(),
+    getProcessUsage(cpus.length).catch(() => null),
+  ]);
   cachedMetrics = {
     cpu: {
       usage: Math.max(0, Math.min(100, cpuUsage)),

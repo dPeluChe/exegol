@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { QaTest, QaTestRun, QaTestStatus } from "@exegol/shared";
 import type Database from "libsql";
+import { z } from "zod";
+import { parseJson } from "../../lib/parse-json";
 
 // ─── QA Tests ─────────────────────────────────────────────────────────────
 
@@ -15,7 +17,10 @@ export function createQaTest(
 ): QaTest {
   const id = randomUUID();
   const now = Math.floor(Date.now() / 1000);
-  const actionCount = JSON.parse(data.actions).length as number;
+  // Comes from the renderer: store only a real list of recorded actions
+  const actions = parseJson(data.actions, z.array(z.unknown()));
+  if (!actions) throw new Error("QA test actions must be a JSON array");
+  const actionCount = actions.length;
 
   db.prepare(
     `INSERT INTO qa_tests (id, project_id, name, start_url, actions, action_count, created_at, last_status)

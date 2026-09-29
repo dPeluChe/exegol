@@ -1,10 +1,11 @@
 import { spawn as cpSpawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import { logger } from "../lib/logger";
+import { parseJson } from "../lib/parse-json";
 import { HeadlessEmulator } from "./headless-emulator";
 import {
-  type ExitPayload,
   encodeJson,
   FRAME_DATA,
   FRAME_ERROR,
@@ -13,7 +14,6 @@ import {
   FRAME_SPAWN,
   FRAME_SPAWNED,
   FrameDecoder,
-  type SpawnedPayload,
   type SpawnPayload,
 } from "./pty-ipc";
 import { flushScrollbackSync, scheduleScrollbackFlush } from "./pty-scrollback";
@@ -24,6 +24,10 @@ import {
   SUBPROCESS_READY_TIMEOUT_MS,
 } from "./pty-session-types";
 import { scanForMarker } from "./pty-shell-ready";
+
+const SPAWNED_FRAME = z.object({ pid: z.number() });
+const EXIT_FRAME = z.object({ exitCode: z.number(), signal: z.number().optional() });
+const ERROR_FRAME = z.object({ message: z.string() });
 
 function resolveSubprocessPath(): string {
   const primary = join(__dirname, "pty-subprocess.js");
@@ -96,10 +100,18 @@ export function doCreateLegacy(
             break;
 
           case FRAME_SPAWNED: {
-            const { pid } = JSON.parse(payload.toString()) as SpawnedPayload;
-            session.pid = pid;
+            const spawned = parseJson(payload.toString(), SPAWNED_FRAME);
+            if (!spawned) {
+              if (!resolved) {
+                resolved = true;
+                host.cleanup(id);
+                reject(new Error("PTY subprocess sent a malformed spawned frame"));
+              }
+              break;
+            }
+            session.pid = spawned.pid;
             resolved = true;
-            resolve({ pid });
+            resolve({ pid: spawned.pid });
             break;
           }
 
@@ -123,7 +135,10 @@ export function doCreateLegacy(
           }
 
           case FRAME_EXIT: {
-            const { exitCode, signal } = JSON.parse(payload.toString()) as ExitPayload;
+            // A garbled exit frame still means the process is gone
+            const { exitCode, signal } = parseJson(payload.toString(), EXIT_FRAME) ?? {
+              exitCode: 1,
+            };
             session.alive = false;
             flushScrollbackSync(session);
             host.cleanup(id);
@@ -132,7 +147,8 @@ export function doCreateLegacy(
           }
 
           case FRAME_ERROR: {
-            const { message } = JSON.parse(payload.toString()) as { message: string };
+            const message =
+              parseJson(payload.toString(), ERROR_FRAME)?.message ?? "PTY subprocess error";
             callbacks.onError(message);
             if (!resolved) {
               resolved = true;

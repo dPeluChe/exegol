@@ -1,4 +1,7 @@
-import { app, dialog, ipcMain, webContents } from "electron";
+import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { app, clipboard, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { broadcast } from "../lib/event-bus";
@@ -101,12 +104,8 @@ export function registerIpcHandlers(): void {
 
   // Save clipboard image as temp file for terminal paste
   ipcMain.handle("terminal:save-clipboard-image", async () => {
-    const { clipboard } = await import("electron");
     const img = clipboard.readImage();
     if (img.isEmpty()) return null;
-    const { writeFile } = await import("node:fs/promises");
-    const { join } = await import("node:path");
-    const { tmpdir } = await import("node:os");
     const name = `exegol-paste-${Date.now()}.png`;
     const filePath = join(tmpdir(), name);
     await writeFile(filePath, img.toPNG());
