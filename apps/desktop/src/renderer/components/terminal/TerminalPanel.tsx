@@ -9,7 +9,7 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { useToastStore } from "../../stores/toasts";
-import { collectPaneIds, getProjectState, useWorkspaceStore } from "../../stores/workspace";
+import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
 import { FilesPeek } from "./FilesPeek";
@@ -166,11 +166,11 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     }
   }, [agent?.projectId, activeProjectId, paneId, agentId, stopAgent, addAgent, createTerminal]);
 
-  // T155: Cmd+click on a URL → in-app browser pane (plain click = external browser)
-  const handleOpenUrlInPane = useCallback(
+  // A browser pane beside this one: Cmd+click on a URL (T155), the preview chip, the repo button
+  const openBesideInBrowser = useCallback(
     (url: string) => {
       if (!paneId) return;
-      const tab = getProjectState().tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
+      const tab = getProjectState().tabs.find((t) => layoutHasPane(t.layout, paneId));
       if (tab) {
         useWorkspaceStore.getState().splitPane(tab.id, paneId, "vertical", "browser", { url });
       }
@@ -218,15 +218,6 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   // T128: localhost URL detector → "Open preview" toolbar chip
   const [previewUrl, dismissPreview] = useTerminalUrlDetector(agentId, !isStopped);
-  const openBesideInBrowser = useCallback(
-    (url: string) => {
-      if (!paneId) return;
-      const tab = getProjectState().tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
-      if (tab)
-        useWorkspaceStore.getState().splitPane(tab.id, paneId, "vertical", "browser", { url });
-    },
-    [paneId],
-  );
   const handleOpenPreview = useCallback(() => {
     if (!previewUrl) return;
     openBesideInBrowser(previewUrl);
@@ -342,7 +333,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                 onReady={onReady}
                 onScrollPosition={handleScrollPosition}
                 onOpenFileLink={handleOpenFileLink}
-                onOpenUrlInPane={handleOpenUrlInPane}
+                onOpenUrlInPane={openBesideInBrowser}
               />
               {floatingButtons}
             </>

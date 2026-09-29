@@ -39,12 +39,12 @@ export const resourcesRouter = router({
     .query(async ({ ctx, input }) => {
       // Collect PIDs of running agents for this project
       const manager = ctx.agentManager;
-      const runningIds = manager.listRunning();
+      const runningIds = new Set(manager.listRunning());
       const agents = listAgents(ctx.db, input.projectId);
       const pids: number[] = [];
 
       for (const agent of agents) {
-        if (agent.pid && runningIds.includes(agent.id)) {
+        if (agent.pid && runningIds.has(agent.id)) {
           pids.push(agent.pid);
         }
       }

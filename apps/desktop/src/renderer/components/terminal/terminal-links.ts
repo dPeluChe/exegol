@@ -1,4 +1,5 @@
 import type { IDisposable, ILink, Terminal } from "@xterm/xterm";
+import { openInBrowser } from "../../lib/open-in-browser";
 
 /**
  * T155: link providers for terminal panes (klaudio-panels pattern).
@@ -140,8 +141,7 @@ export function registerTerminalLinkProviders(
             if ((event.metaKey || event.ctrlKey) && handlers.onOpenUrlInPane) {
               handlers.onOpenUrlInPane(url);
             } else {
-              // main's window-open handler routes this to the default browser
-              window.open(url, "_blank", "noopener");
+              openInBrowser(url);
             }
           }),
         );

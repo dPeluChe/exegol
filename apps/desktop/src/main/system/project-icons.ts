@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
 import type Database from "libsql";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { mapWithConcurrency } from "../lib/concurrency";
 import { broadcast } from "../lib/event-bus";
 import { detectRunTargets } from "./scripts";
 
@@ -127,8 +128,11 @@ const BACKFILL_KEY = "projectIconsBackfilled";
 export async function backfillProjectIcons(db: Database.Database): Promise<void> {
   if (getJsonSetting(db, BACKFILL_KEY, false)) return;
   const ids = db.prepare("SELECT id FROM projects").all() as { id: string }[];
-  let adopted = 0;
-  for (const { id } of ids) if (await adoptDetectedIcon(db, id).catch(() => false)) adopted++;
+  // A few at a time: this runs at startup, next to the reattach
+  const results = await mapWithConcurrency(ids, 4, ({ id }) =>
+    adoptDetectedIcon(db, id).catch(() => false),
+  );
+  const adopted = results.filter(Boolean).length;
   setJsonSetting(db, BACKFILL_KEY, true);
   // The windows loaded the project list before this ran: have them refetch it
   if (adopted > 0) broadcast("settings:changed");

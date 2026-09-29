@@ -3,7 +3,7 @@ import { persist } from "zustand/middleware";
 import { useAppStore } from "./app";
 import { createCustomLayoutsSlice } from "./workspace/custom-layouts-slice";
 import { createFloatingPanesSlice } from "./workspace/floating-panes-slice";
-import { collectPaneIds, findFirstPaneId, getPw } from "./workspace/helpers";
+import { collectPaneIds, findFirstPaneId, getPw, layoutHasPane } from "./workspace/helpers";
 import { migrateWorkspaceState, onWorkspaceRehydrate } from "./workspace/recovery";
 import { createTabsPanesSlice } from "./workspace/tabs-panes-slice";
 import type { Pane, ProjectWorkspace, WorkspaceStore, WorkspaceTab } from "./workspace/types";
@@ -68,10 +68,10 @@ export function getProjectState(): ProjectWorkspace {
  */
 export function getFocusedOrFirstPaneId(tab: WorkspaceTab): string | null {
   const { focusedPaneId } = useWorkspaceStore.getState();
-  if (focusedPaneId && collectPaneIds(tab.layout).includes(focusedPaneId)) {
+  if (focusedPaneId && layoutHasPane(tab.layout, focusedPaneId)) {
     return focusedPaneId;
   }
   return findFirstPaneId(tab.layout);
 }
 
-export { collectPaneIds, findFirstPaneId };
+export { collectPaneIds, findFirstPaneId, layoutHasPane };

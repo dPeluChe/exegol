@@ -14,6 +14,7 @@ import {
   Sun,
 } from "lucide-react";
 import { useState } from "react";
+import { openInBrowser } from "../../lib/open-in-browser";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 
@@ -438,7 +439,7 @@ function OllamaStatusSection({
               download from{" "}
               <button
                 type="button"
-                onClick={() => window.open("https://ollama.ai", "_blank")}
+                onClick={() => openInBrowser("https://ollama.ai")}
                 className="text-accent underline"
               >
                 ollama.ai

@@ -23,6 +23,7 @@ import {
   useSettings,
   useWorktrees,
 } from "../../hooks/use-trpc";
+import { openInBrowser } from "../../lib/open-in-browser";
 import { switchSection } from "../../lib/switch-section";
 import type { AgentState } from "../../stores/agents";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -55,7 +56,7 @@ function PortBadges({ projectPath }: { projectPath: string }) {
         <button
           key={p.port}
           type="button"
-          onClick={() => window.open(`http://localhost:${p.port}`, "_blank")}
+          onClick={() => openInBrowser(`http://localhost:${p.port}`)}
           className={cn(
             "inline-flex items-center gap-0.5 rounded px-1 py-px text-[9px] transition-colors hover:bg-white/10",
             p.source === "runtime" ? "text-green-400" : "text-text-muted",

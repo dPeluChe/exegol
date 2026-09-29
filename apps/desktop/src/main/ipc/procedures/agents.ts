@@ -515,13 +515,15 @@ export const agentRouter = router({
       const run = getParallelRun(ctx.db, input.id);
       if (!run) throw new TRPCError({ code: "NOT_FOUND" });
       const manager = ctx.agentManager;
-      // Stop all running agents in the group
-      for (const agentId of run.agentIds) {
-        const agent = getAgent(ctx.db, agentId);
-        if (agent && ["running", "spawning", "waiting_input"].includes(agent.status)) {
-          await manager.stop(ctx.db, agentId);
-        }
-      }
+      // Stop all running agents in the group: each stop is independent
+      await Promise.all(
+        run.agentIds
+          .filter((agentId) => {
+            const status = getAgent(ctx.db, agentId)?.status;
+            return status === "running" || status === "spawning" || status === "waiting_input";
+          })
+          .map((agentId) => manager.stop(ctx.db, agentId)),
+      );
       updateParallelRunStatus(ctx.db, input.id, "cancelled");
       return { success: true };
     }),

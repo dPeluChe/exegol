@@ -72,8 +72,9 @@ export function RunTargets({
   if (!selected) return null;
   const inFolder = selected.rel !== "";
 
-  const pinned = selected.scripts.filter((s) => pins.includes(pinKey(selected.rel, s.command)));
-  const rest = selected.scripts.filter((s) => !pins.includes(pinKey(selected.rel, s.command)));
+  const isPinnedScript = (s: { command: string }) => pins.includes(pinKey(selected.rel, s.command));
+  const pinned = selected.scripts.filter(isPinnedScript);
+  const rest = selected.scripts.filter((s) => !isPinnedScript(s));
   const shown = expanded ? rest : rest.slice(0, Math.max(0, VISIBLE_COMMANDS - pinned.length));
   const hidden = rest.length - shown.length;
 

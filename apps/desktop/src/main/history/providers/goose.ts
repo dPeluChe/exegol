@@ -1,7 +1,8 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { FILE_CONCURRENCY, mapWithConcurrency, mentionsAnyCwd } from "../pool";
+import { mapWithConcurrency } from "../../lib/concurrency";
+import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
 import { readHead } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
