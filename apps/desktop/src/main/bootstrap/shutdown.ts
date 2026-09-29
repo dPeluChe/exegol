@@ -23,6 +23,7 @@
 
 import { app } from "electron";
 import { logger } from "../lib/logger";
+import { allowQuit } from "../system/work-guard";
 
 export interface TeardownStep {
   name: string;
@@ -75,6 +76,7 @@ export function installSignalHandlers(onForceExit: () => void): void {
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.on(signal, () => {
       logger.info(`[Shutdown] ${signal} received — quitting`);
+      allowQuit();
       app.quit();
       // app.quit() returns immediately, so this timer CAN fire — unlike one
       // wrapped around the synchronous teardown. Armed once: repeated signals
