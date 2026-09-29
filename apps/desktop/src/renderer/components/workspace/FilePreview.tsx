@@ -59,9 +59,11 @@ export function FilePreview({
   const [conflict, setConflict] = useState(false);
   const dirty = draft !== null && draft !== baseRef.current?.content;
 
-  useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
+  // Every draft change goes through here, so the explorer hears it from the same event
+  const updateDraft = (next: string | null) => {
+    setDraft(next);
+    onDirtyChange?.(next !== null && next !== baseRef.current?.content);
+  };
 
   const save = async (force = false) => {
     if (!dirty || draft === null || writeFile.isPending) return;
@@ -72,7 +74,7 @@ export function FilePreview({
         expectedMtimeMs: force ? undefined : baseRef.current?.mtimeMs,
       });
       baseRef.current = null;
-      setDraft(null);
+      updateDraft(null);
     } catch (err) {
       // Main checks the mtime; the error code does not survive IPC, the message does
       if (String(err).includes("changed on disk")) setConflict(true);
@@ -117,7 +119,7 @@ export function FilePreview({
           revealLine={revealLine}
           onChange={(value) => {
             baseRef.current ??= { content: file.content, mtimeMs: file.mtimeMs };
-            setDraft(value);
+            updateDraft(value);
           }}
           onSave={save}
         />

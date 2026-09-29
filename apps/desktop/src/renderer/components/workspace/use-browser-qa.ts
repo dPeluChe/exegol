@@ -12,12 +12,9 @@ const QA_NAV_DELAY_MS = 800;
 
 interface UseBrowserQaParams {
   paneId: string;
-  paneInternalId: string;
   projectId: string | null;
   currentUrl: string;
-  setUrlInput: (v: string) => void;
-  setCurrentUrl: (v: string) => void;
-  updatePane: (id: string, updates: { url: string }) => void;
+  goTo: (url: string) => void;
   webviewRef: React.RefObject<HTMLElement | null>;
 }
 
@@ -30,12 +27,9 @@ function webviewIdOf(ref: React.RefObject<HTMLElement | null>): number | undefin
 
 export function useBrowserQa({
   paneId,
-  paneInternalId,
   projectId,
   currentUrl,
-  setUrlInput,
-  setCurrentUrl,
-  updatePane,
+  goTo,
   webviewRef,
 }: UseBrowserQaParams) {
   const queryClient = useQueryClient();
@@ -263,9 +257,7 @@ export function useBrowserQa({
       if (!testId || !actions) return;
       // The section names the pane; the focused one answers an event without a target
       if ((target ?? useWorkspaceStore.getState().focusedPaneId) !== paneId) return;
-      setUrlInput(startUrl);
-      setCurrentUrl(startUrl);
-      updatePane(paneInternalId, { url: startUrl });
+      goTo(startUrl);
       await new Promise((r) => setTimeout(r, QA_NAV_DELAY_MS));
       setQaRecording({ startUrl, startedAt: Date.now(), actions, consoleErrors: [] });
       setSavedTestId(testId);
@@ -273,7 +265,7 @@ export function useBrowserQa({
     };
     window.addEventListener("exegol:qa-run-test", handler);
     return () => window.removeEventListener("exegol:qa-run-test", handler);
-  }, [handleReplay, paneId, paneInternalId, setUrlInput, setCurrentUrl, updatePane]);
+  }, [handleReplay, paneId, goTo]);
 
   return {
     designMode,

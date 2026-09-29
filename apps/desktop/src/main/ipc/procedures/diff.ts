@@ -61,21 +61,23 @@ export const diffRouter = router({
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
       const cwd = resolveProjectPath(ctx.db, input.projectId);
-      const current = await execFileAsync("git", ["branch", "--show-current"], { cwd })
-        .then((r) => r.stdout.trim())
-        .catch(() => "");
-      const all = await execFileAsync(
-        "git",
-        ["for-each-ref", "--format=%(refname:short)", "--sort=-committerdate", "refs/heads"],
-        { cwd },
-      )
-        .then((r) =>
-          r.stdout
-            .split("\n")
-            .map((b) => b.trim())
-            .filter(Boolean),
+      const [current, all] = await Promise.all([
+        execFileAsync("git", ["branch", "--show-current"], { cwd })
+          .then((r) => r.stdout.trim())
+          .catch(() => ""),
+        execFileAsync(
+          "git",
+          ["for-each-ref", "--format=%(refname:short)", "--sort=-committerdate", "refs/heads"],
+          { cwd },
         )
-        .catch(() => [] as string[]);
+          .then((r) =>
+            r.stdout
+              .split("\n")
+              .map((b) => b.trim())
+              .filter(Boolean),
+          )
+          .catch(() => [] as string[]),
+      ]);
       return { current, branches: [current, ...all.filter((b) => b !== current)].filter(Boolean) };
     }),
 

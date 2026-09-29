@@ -2,9 +2,9 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import {
+  pickFile,
   useFileContent,
   useGitHubIssues,
-  usePickFile,
   useUpdateIssueLabels,
   useUpdateIssueState,
   useWriteFile,
@@ -43,7 +43,6 @@ export function TasksSection() {
   const [filter, setFilter] = useState<TaskFilter>("all");
   const probeRan = useRef(false);
   const { data: fileData, refetch } = useFileContent(filePath);
-  const pickFile = usePickFile();
   const writeFile = useWriteFile();
 
   // GitHub integration
@@ -112,12 +111,11 @@ export function TasksSection() {
     })();
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: setFilePath is stable from usePersistedTaskFile
   const handlePickFile = useCallback(async () => {
     if (!project) return;
-    const selected = await pickFile.mutateAsync({ projectPath: project.path });
+    const selected = await pickFile(project.path);
     if (selected) setFilePath(selected);
-  }, [project, pickFile]);
+  }, [project, setFilePath]);
 
   const writeAndRefresh = useCallback(
     async (newContent: string) => {

@@ -56,14 +56,14 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const didSerializeRef = useRef(false);
   const stopAgent = useStopAgent();
   const { resume, pending, resumableCliTypes } = useResumeAgent();
-  const { hasData, hasEverHadData, startTimedOut } = useTerminalLifecycle({
+  const { hasData, startTimedOut } = useTerminalLifecycle({
     agentId,
     isStopped: rawIsStopped,
   });
 
   // Don't show "Ended" UI until we've received at least one data chunk,
   // OR until scrollback is available in DB (reattach/reload scenario)
-  const isStopped = rawIsStopped && (hasEverHadData || !!scrollbackContent);
+  const isStopped = rawIsStopped && (hasData || !!scrollbackContent);
 
   const allAgents = useAgentStore((s) => s.agents);
 

@@ -87,7 +87,10 @@ export function EvaluatorStepFields({
             min={1}
             max={EVALUATOR_HARD_MAX_LOOPS}
             value={evaluator.maxLoops ?? EVALUATOR_HARD_MAX_LOOPS}
-            onChange={(e) => onChange({ ...evaluator, maxLoops: Number(e.target.value) })}
+            onChange={(e) => {
+              const n = clampInt(e.target.valueAsNumber, 1, EVALUATOR_HARD_MAX_LOOPS);
+              if (n !== null) onChange({ ...evaluator, maxLoops: n });
+            }}
             className="w-14 rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none"
           />
         </label>
@@ -98,11 +101,20 @@ export function EvaluatorStepFields({
             min={1}
             max={9}
             value={evaluator.judgeCalls ?? 3}
-            onChange={(e) => onChange({ ...evaluator, judgeCalls: Number(e.target.value) })}
+            onChange={(e) => {
+              const n = clampInt(e.target.valueAsNumber, 1, 9);
+              if (n !== null) onChange({ ...evaluator, judgeCalls: n });
+            }}
             className="w-14 rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[10px] text-text-primary focus:outline-none"
           />
         </label>
       </div>
     </div>
   );
+}
+
+/** A cleared or partial number field reads as NaN: keep the last good value instead */
+function clampInt(value: number, min: number, max: number): number | null {
+  if (!Number.isFinite(value)) return null;
+  return Math.min(max, Math.max(min, Math.round(value)));
 }

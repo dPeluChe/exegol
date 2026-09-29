@@ -1,7 +1,7 @@
 import { Button, Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { FolderSearch, X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useCreateProject } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 
@@ -49,9 +49,12 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
     }
   };
 
+  // isPending lands a render late: a double Enter would create the project twice
+  const submittingRef = useRef(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!folderPath.trim() || !projectName.trim()) return;
+    if (!folderPath.trim() || !projectName.trim() || submittingRef.current) return;
+    submittingRef.current = true;
 
     try {
       const project = await createProject.mutateAsync({
@@ -71,6 +74,8 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
       onOpenChange(false);
     } catch {
       // Error handled by mutation state
+    } finally {
+      submittingRef.current = false;
     }
   };
 

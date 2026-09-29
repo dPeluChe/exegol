@@ -25,6 +25,12 @@ function defaultEvaluator(): EvaluatorStepDef {
   return { acceptanceCriteria: "" };
 }
 
+type EditorStep = PipelineStepDef & { key: string };
+
+function withKey(step: PipelineStepDef): EditorStep {
+  return { ...step, key: crypto.randomUUID() };
+}
+
 export function PipelineTemplateEditor({
   existingId,
   existingName,
@@ -47,8 +53,9 @@ export function PipelineTemplateEditor({
   const cliOptions = (enabledProviders ?? []).map((p) => p.id);
   const [name, setName] = useState(existingName ?? "");
   const [description, setDescription] = useState(existingDescription ?? "");
-  const [steps, setSteps] = useState<PipelineStepDef[]>(
-    existingSteps ?? [emptyStep(), emptyStep()],
+  // Each row keeps its own key, so removing a middle step never shifts another's inputs
+  const [steps, setSteps] = useState<EditorStep[]>(() =>
+    (existingSteps ?? [emptyStep(), emptyStep()]).map(withKey),
   );
 
   const createMutation = useCreatePipelineTemplate();
@@ -59,7 +66,7 @@ export function PipelineTemplateEditor({
     if (!projectId || !name.trim() || steps.length === 0) return;
 
     // Ensure all steps have labels
-    const cleanSteps = steps.map((s, i) => ({
+    const cleanSteps = steps.map(({ key: _key, ...s }, i) => ({
       ...s,
       label: s.label.trim() || `Step ${i + 1}`,
     }));
@@ -86,7 +93,7 @@ export function PipelineTemplateEditor({
   };
 
   const addStep = () => {
-    setSteps((prev) => [...prev, emptyStep()]);
+    setSteps((prev) => [...prev, withKey(emptyStep())]);
   };
 
   return (
@@ -137,11 +144,7 @@ export function PipelineTemplateEditor({
           </label>
           <div className="space-y-3">
             {steps.map((step, i) => (
-              <div
-                // biome-ignore lint/suspicious/noArrayIndexKey: steps have no stable id, index is fine for non-reorderable list
-                key={i}
-                className="rounded-lg border border-border bg-bg-secondary p-3"
-              >
+              <div key={step.key} className="rounded-lg border border-border bg-bg-secondary p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <GripVertical className="h-3 w-3 text-text-muted/40" />

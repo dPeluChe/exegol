@@ -1,7 +1,7 @@
 import type { MetricsSnapshot } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Cpu, FolderGit2, GitBranch, HardDrive, MemoryStick, Server } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import {
@@ -145,29 +145,32 @@ export function ResourcesSection() {
 
   // Live metrics from push events (T17)
   const [liveMetrics, setLiveMetrics] = useState<SystemMetricsEvent | null>(null);
-  const historyRef = useRef<MetricsSnapshot[]>([]);
+  const [liveHistory, setLiveHistory] = useState<MetricsSnapshot[]>([]);
 
   // External system sync: IPC push events for live metrics (Rule 4)
   useMountEffect(() => {
     const cleanup = window.api.onMetrics((m) => {
       setLiveMetrics(m);
       // Append to local history for sparklines between tRPC refreshes
-      historyRef.current = [
-        ...historyRef.current.slice(-29),
+      setLiveHistory((prev) => [
+        ...prev.slice(-29),
         {
           cpu: m.cpu.usage,
           memoryPercent: m.memory.usagePercent,
           diskPercent: m.disk.usagePercent,
           timestamp: Date.now(),
         },
-      ];
+      ]);
     });
     return cleanup;
   });
 
   // Merge: prefer pushed live metrics, fall back to tRPC query
   const metrics = liveMetrics ?? systemMetrics;
-  const history = historyRef.current.length > 1 ? historyRef.current : (historyData ?? []);
+  const history = useMemo(
+    () => (liveHistory.length > 1 ? liveHistory : (historyData ?? [])),
+    [liveHistory, historyData],
+  );
 
   const cpuHistory = useMemo(() => history.map((h) => h.cpu), [history]);
   const memHistory = useMemo(() => history.map((h) => h.memoryPercent), [history]);
@@ -178,9 +181,10 @@ export function ResourcesSection() {
   const agentProcessMap = useMemo(() => {
     const map = new Map<string, { cpu: number; memory: number }>();
     if (!dbAgents || !projectMetrics?.agentProcesses) return map;
+    const byPid = new Map(projectMetrics.agentProcesses.map((p) => [p.pid, p]));
     for (const dbAgent of dbAgents) {
       if (!dbAgent.pid) continue;
-      const proc = projectMetrics.agentProcesses.find((p) => p.pid === dbAgent.pid);
+      const proc = byPid.get(dbAgent.pid);
       if (proc) {
         map.set(dbAgent.id, { cpu: proc.cpu, memory: proc.memory });
       }

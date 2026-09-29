@@ -162,12 +162,17 @@ export function AttentionSection() {
   );
   const [flashKey, setFlashKey] = useState<string | null>(null);
   useEffect(() => {
+    let timer: number | undefined;
     const onFlash = (e: Event) => {
       setFlashKey((e as CustomEvent<string>).detail);
-      setTimeout(() => setFlashKey(null), 700);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setFlashKey(null), 700);
     };
     window.addEventListener("exegol:live-tab-flash", onFlash);
-    return () => window.removeEventListener("exegol:live-tab-flash", onFlash);
+    return () => {
+      window.removeEventListener("exegol:live-tab-flash", onFlash);
+      window.clearTimeout(timer);
+    };
   }, []);
   const hasAttention = attentionItems.length > 0;
   const hasRead = attentionItems.some((i) => i.read && !i.pinned);

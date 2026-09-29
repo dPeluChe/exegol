@@ -8,7 +8,6 @@ interface UseTerminalLifecycleArgs {
 
 interface TerminalLifecycle {
   hasData: boolean;
-  hasEverHadData: boolean;
   startTimedOut: boolean;
   markData: () => void;
 }
@@ -24,8 +23,6 @@ export function useTerminalLifecycle({
   startTimeoutMs = 8_000,
 }: UseTerminalLifecycleArgs): TerminalLifecycle {
   const [hasData, setHasData] = useState(false);
-  const hasEverHadDataRef = useRef(false);
-  if (hasData) hasEverHadDataRef.current = true;
   const [startTimedOut, setStartTimedOut] = useState(false);
   const startTimerRef = useRef<number | null>(null);
 
@@ -60,7 +57,6 @@ export function useTerminalLifecycle({
 
   return {
     hasData,
-    hasEverHadData: hasEverHadDataRef.current,
     startTimedOut,
     markData,
   };
