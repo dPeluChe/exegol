@@ -15,9 +15,11 @@ export interface GitState {
     mergeStateStatus?: string;
   };
   ghInstalled: boolean;
+  /** The repo's default branch: nothing to open a PR from there */
+  defaultBranch: string;
 }
 
-export async function buildGitState(cwd: string): Promise<GitState> {
+export async function buildGitState(cwd: string, defaultBranch = "main"): Promise<GitState> {
   const branch = await execFileAsync("git", ["branch", "--show-current"], { cwd })
     .then(({ stdout }) => stdout.trim())
     .catch(() => "unknown");
@@ -79,7 +81,8 @@ export async function buildGitState(cwd: string): Promise<GitState> {
   // GitHub PR state (optional; only if gh is installed)
   const ghInstalled = await detectGhCli();
   let pr: GitState["pr"] = { state: "none" };
-  if (ghInstalled && branch !== "unknown" && branch !== "main" && branch !== "master") {
+  const onDefault = branch === defaultBranch || branch === "main" || branch === "master";
+  if (ghInstalled && branch !== "unknown" && !onDefault) {
     try {
       const { stdout } = await execFileAsync(
         "gh",
@@ -105,6 +108,7 @@ export async function buildGitState(cwd: string): Promise<GitState> {
 
   return {
     branch,
+    defaultBranch,
     hasUpstream,
     ahead,
     behind,

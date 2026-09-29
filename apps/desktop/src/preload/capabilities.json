@@ -320,7 +320,6 @@
     "updater:status",
     "browser:execute-js",
     "browser:capture-screenshot",
-    "browser:capture-element",
     "floating:open",
     "floating:close",
     "floating:self-close",

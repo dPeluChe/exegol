@@ -4,7 +4,7 @@ import { Notification } from "electron";
 import type Database from "libsql";
 import { getAppSettings } from "../../db/queries/settings";
 import { logger } from "../../lib/logger";
-import { mainAppWindow } from "../../lib/main-app-window";
+import { getMainWindow } from "../../windows/main-window-ref";
 import type { NotificationChannel } from "../bus";
 
 // ─── Settings cache (avoid a DB hit on every event) ──────────────────────
@@ -72,8 +72,9 @@ export const desktopChannel: NotificationChannel = {
       });
 
       notification.on("click", () => {
-        const win = mainAppWindow();
+        const win = getMainWindow();
         if (!win) return;
+        if (win.isMinimized()) win.restore();
         win.show();
         win.focus();
         if (event.agentId) {

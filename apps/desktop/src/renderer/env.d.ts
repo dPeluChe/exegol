@@ -33,22 +33,6 @@ interface PipelineStatusEvent {
   timestamp: number;
 }
 
-interface BrowserElementInfo {
-  selector: string;
-  tagName: string;
-  text: string;
-  html: string;
-  rect: { x: number; y: number; width: number; height: number };
-  styles: {
-    color: string;
-    backgroundColor: string;
-    fontSize: string;
-    fontFamily: string;
-    padding: string;
-    margin: string;
-  };
-}
-
 interface Window {
   api: {
     trpc: {
@@ -101,10 +85,6 @@ interface Window {
       /** `webContentsId`: the pane's own webview; without it the window's first one */
       executeJs: (code: string, webContentsId?: number) => Promise<unknown>;
       captureScreenshot: (webContentsId?: number) => Promise<string | null>;
-      captureElement: (
-        selector: string,
-        webContentsId?: number,
-      ) => Promise<BrowserElementInfo | null>;
     };
     floating: {
       open: (config: {

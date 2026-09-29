@@ -65,10 +65,11 @@ export function PipelineSection() {
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [task, setTask] = useState("");
   const trimmedTask = task.trim();
-  const canRun = !!selectedTemplateId && !!trimmedTask;
   const [gitWarning, setGitWarning] = useState<string | null>(null);
 
   const selectedTemplate = templates?.find((t) => t.id === selectedTemplateId);
+  // Derived: a template deleted (here or elsewhere) can no longer be run
+  const canRun = !!selectedTemplate && !!trimmedTask;
 
   if (view.type === "editor") {
     return (
@@ -88,7 +89,7 @@ export function PipelineSection() {
 
   // `worktree` passed in: "Run without worktree" set the state and ran with the stale value
   const handleStartRun = async (worktree = useWorktree) => {
-    if (!projectId || !canRun) return;
+    if (!projectId || !canRun || !selectedTemplate) return;
 
     // Check git sync before creating worktree
     if (worktree) {
@@ -109,7 +110,7 @@ export function PipelineSection() {
 
     startRun.mutate(
       {
-        templateId: selectedTemplateId,
+        templateId: selectedTemplate.id,
         projectId,
         task: trimmedTask,
         useWorktree: worktree,
@@ -134,8 +135,6 @@ export function PipelineSection() {
         onConfirm={() => {
           if (!pendingDelete) return;
           deleteTemplate.mutate(pendingDelete.id);
-          // Run stayed enabled for the deleted template
-          if (selectedTemplateId === pendingDelete.id) setSelectedTemplateId(null);
         }}
       />
       {/* Start Run Bar */}

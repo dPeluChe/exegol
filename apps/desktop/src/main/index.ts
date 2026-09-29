@@ -152,6 +152,13 @@ app.on("web-contents-created", (_event, contents) => {
       if (/^https?:\/\//.test(url)) shell.openExternal(url).catch(() => {});
       return { action: "deny" };
     });
+    // A plain link click navigated the window itself away from the app, preload included
+    contents.on("will-navigate", (event, url) => {
+      if (url.startsWith("file://") || url.startsWith(process.env.ELECTRON_RENDERER_URL ?? "\0"))
+        return;
+      event.preventDefault();
+      if (/^https?:\/\//.test(url)) shell.openExternal(url).catch(() => {});
+    });
   }
 });
 

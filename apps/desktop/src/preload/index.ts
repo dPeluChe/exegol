@@ -204,8 +204,6 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("browser:execute-js", { code, webContentsId }),
     captureScreenshot: (webContentsId?: number) =>
       safe.invoke("browser:capture-screenshot", { webContentsId }),
-    captureElement: (selector: string, webContentsId?: number) =>
-      safe.invoke("browser:capture-element", { selector, webContentsId }),
   },
   // T120: Settings as a separate BrowserWindow
   settings: {
