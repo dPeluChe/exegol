@@ -1,6 +1,7 @@
 {
   "name": "exegol",
   "private": true,
+  "author": "Antonio <antonio@iteris.tech>",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bun run build:rust && turbo run dev",

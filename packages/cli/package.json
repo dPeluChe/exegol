@@ -2,6 +2,7 @@
   "name": "@exegol/cli",
   "version": "0.4.0",
   "private": true,
+  "author": "Antonio <antonio@iteris.tech>",
   "description": "Exegol CLI — query agents, projects, and search from the terminal",
   "bin": {
     "exegol": "./dist/index.js"
