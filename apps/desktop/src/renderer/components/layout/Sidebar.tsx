@@ -1,12 +1,10 @@
 import { cn, Separator } from "@exegol/ui";
-import { Activity, Cuboid, History, LayoutDashboard, Plus, Rss } from "lucide-react";
+import { Activity, Cuboid, LayoutDashboard, Plus } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { ActivityFeed } from "./ActivityFeed";
 import { AttentionSection } from "./AttentionSection";
 import { ProjectsSection } from "./ProjectsSection";
-import { RecentSessions } from "./RecentSessions";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarSection } from "./SidebarSection";
@@ -52,7 +50,8 @@ export function Sidebar() {
         )}
       </button>
 
-      {/* Sections size themselves: Agents capped, Projects takes the rest */}
+      {/* Live work first: Agents sized to content (capped), Projects fills the rest with its own
+          scroll; the reference sections sit collapsed at the bottom (SidebarFooter) */}
       <div className="flex min-h-0 flex-1 flex-col">
         {/* T57: Agent monitor — running agents + attention inbox */}
         <SidebarSection
@@ -85,18 +84,6 @@ export function Sidebar() {
           }
         >
           <ProjectsSection onAddProject={() => useAppStore.getState().setActiveProject(null)} />
-        </SidebarSection>
-
-        <Separator className="mx-3 shrink-0 bg-border" />
-
-        <SidebarSection title="Recent Sessions" icon={History} defaultOpen={false}>
-          <RecentSessions />
-        </SidebarSection>
-
-        <Separator className="mx-3 shrink-0 bg-border" />
-
-        <SidebarSection title="Activity" icon={Rss} defaultOpen={false}>
-          <ActivityFeed />
         </SidebarSection>
       </div>
 
