@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { useAgent, useScrollback, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -53,6 +54,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const terminalRef = useRef<TerminalInstanceHandle>(null);
   const didSerializeRef = useRef(false);
   const stopAgent = useStopAgent();
+  const { resume, pending, resumableCliTypes } = useResumeAgent();
   const { hasData, hasEverHadData, startTimedOut } = useTerminalLifecycle({
     agentId,
     isStopped: rawIsStopped,
@@ -261,11 +263,30 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     if (scrollbackLoading) {
       return <LoadingSpinner label="Loading session history..." className="h-full" />;
     }
+    // A restart that killed the sidecar before history was saved landed here with no way back
     return (
       <EmptyState
         icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
-        title="Session ended"
-        description="No history available"
+        title={agent?.status === "crashed" ? "Session lost" : "Session ended"}
+        description={
+          agent?.status === "crashed"
+            ? "It was interrupted (app or system restart) before its history was saved"
+            : "No history available"
+        }
+        action={
+          agent
+            ? {
+                label: pending
+                  ? "Starting..."
+                  : resumableCliTypes.has(agent.cliType)
+                    ? "Resume"
+                    : "Re-launch",
+                onClick: () => {
+                  if (!pending) resume(agent, paneId).catch(() => {});
+                },
+              }
+            : undefined
+        }
         className="h-full"
       />
     );

@@ -7,6 +7,7 @@ import { autoUpdater } from "electron-updater";
 import { prerelease } from "semver";
 import { logger } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";
+import { allowQuit } from "./work-guard";
 
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 let checkTimer: ReturnType<typeof setInterval> | null = null;
@@ -175,5 +176,6 @@ export function checkForUpdatesManual(): void {
 
 /** Install a downloaded update now (restarts the app). */
 export function installUpdate(): void {
+  allowQuit();
   autoUpdater.quitAndInstall(false, true);
 }

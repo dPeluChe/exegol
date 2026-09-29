@@ -32,6 +32,7 @@ import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 import { destroyTray, initTray } from "./system/tray";
+import { startWorkGuard } from "./system/work-guard";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
 import { installAppMenu } from "./windows/app-menu";
@@ -105,6 +106,7 @@ app.whenReady().then(async () => {
 
   // Background services (non-blocking, start after window)
   cleanupOldEvents(getDb());
+  stopWorkGuard = startWorkGuard(getDb());
   startNotifyHandler((event) => {
     // tool_use fires on every tool call: logging it buried everything else in bug reports
     if (event.type !== "tool_use") {
@@ -139,6 +141,8 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (reason) => {
   logger.error("[Crash] Unhandled rejection:", reason);
 });
+let stopWorkGuard: (() => void) | null = null;
+
 app.on("web-contents-created", (_event, contents) => captureConsole(contents));
 
 app.on("render-process-gone", (_event, contents, details) => {
@@ -183,6 +187,7 @@ function teardownSteps() {
         else ptyHost.destroyAll();
       },
     },
+    { name: "workGuard", run: () => stopWorkGuard?.() },
     { name: "tray", run: destroyTray },
     { name: "autoUpdater", run: stopAutoUpdater },
     { name: "notifyHandler", run: stopNotifyHandler },
