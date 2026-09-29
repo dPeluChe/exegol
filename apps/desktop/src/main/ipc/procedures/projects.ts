@@ -29,7 +29,12 @@ import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde } from "../../ide/opener";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
-import { detectProjectIcons, iconDataUrl, isIconFile } from "../../system/project-icons";
+import {
+  adoptDetectedIcon,
+  detectProjectIcons,
+  iconDataUrl,
+  isIconFile,
+} from "../../system/project-icons";
 import { publicProcedure, router } from "../trpc";
 
 async function isGitRepo(path: string): Promise<boolean> {
@@ -91,10 +96,13 @@ export const projectRouter = router({
 
     const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));
 
-    return createProject(ctx.db, {
+    const project = createProject(ctx.db, {
       ...input,
       gitRemote,
     });
+    // Its app icon found once and kept, so the sidebar shows it without scanning again
+    await adoptDetectedIcon(ctx.db, project.id).catch(() => {});
+    return getProject(ctx.db, project.id) ?? project;
   }),
 
   rename: publicProcedure
