@@ -1,10 +1,13 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import * as os from "node:os";
 import { promisify } from "node:util";
 import type { MetricsSnapshot } from "@exegol/shared";
+import { app } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
+import { readPidFile } from "../terminal/pty-sidecar-discovery";
 import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
 
 const execFileAsync = promisify(execFile);
@@ -30,6 +33,17 @@ export interface SystemMetrics {
     usagePercent: number;
   };
   uptime: number;
+  /** What Exegol itself (app + PTY sidecar) and the agent CLIs under it use, of the above */
+  usage: ProcessUsage | null;
+}
+
+export interface ProcessUsage {
+  /** Share of the whole machine (all cores), like `cpu.usage` */
+  exegolCpu: number;
+  exegolMemory: number;
+  agentsCpu: number;
+  agentsMemory: number;
+  agentProcesses: number;
 }
 
 export interface ProjectMetrics {
@@ -108,6 +122,7 @@ async function collectMetrics(): Promise<void> {
   const disk = await getDiskMetrics();
 
   const cpus = os.cpus();
+  const usage = await getProcessUsage(cpus.length).catch(() => null);
   cachedMetrics = {
     cpu: {
       usage: Math.max(0, Math.min(100, cpuUsage)),
@@ -117,6 +132,7 @@ async function collectMetrics(): Promise<void> {
     memory,
     disk,
     uptime: os.uptime(),
+    usage,
   };
 
   // Track history for sparkline charts
@@ -188,6 +204,7 @@ export function getSystemMetrics(): SystemMetrics {
     },
     disk: { total: 0, used: 0, free: 0, usagePercent: 0 },
     uptime: os.uptime(),
+    usage: null,
   };
 }
 
@@ -249,17 +266,72 @@ async function getMemoryMetrics(): Promise<SystemMetrics["memory"]> {
 
 // ─── Disk Metrics ───────────────────────────────────────────────────────────────
 
+/**
+ * Exegol = its Electron processes + the PTY sidecar; agents = everything below the sidecar
+ * (the CLIs and their children). One `ps`; per-core percentages are divided by the cores.
+ */
+async function getProcessUsage(cores: number): Promise<ProcessUsage> {
+  let exegolCpu = 0;
+  let exegolMemory = 0;
+  for (const m of app.getAppMetrics()) {
+    exegolCpu += m.cpu.percentCPUUsage;
+    exegolMemory += m.memory.workingSetSize * 1024;
+  }
+  const sidecarPid = readPidFile()?.pid ?? 0;
+  const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,rss=,%cpu="], {
+    timeout: 5_000,
+  });
+  const rows = stdout
+    .trim()
+    .split("\n")
+    .map((l) => l.trim().split(/\s+/).map(Number))
+    .filter((r) => r.length === 4) as [number, number, number, number][];
+  const children = new Map<number, [number, number, number, number][]>();
+  for (const r of rows) children.set(r[1], [...(children.get(r[1]) ?? []), r]);
+
+  let agentsCpu = 0;
+  let agentsMemory = 0;
+  let agentProcesses = 0;
+  const sidecar = rows.find((r) => r[0] === sidecarPid);
+  if (sidecar) {
+    exegolCpu += sidecar[3];
+    exegolMemory += sidecar[2] * 1024;
+    let level = children.get(sidecarPid) ?? [];
+    while (level.length > 0) {
+      for (const r of level) {
+        agentsCpu += r[3];
+        agentsMemory += r[2] * 1024;
+        agentProcesses++;
+      }
+      level = level.flatMap((r) => children.get(r[0]) ?? []);
+    }
+  }
+  const share = (pct: number) => Math.round((pct / Math.max(1, cores)) * 10) / 10;
+  return {
+    exegolCpu: share(exegolCpu),
+    exegolMemory,
+    agentsCpu: share(agentsCpu),
+    agentsMemory,
+    agentProcesses,
+  };
+}
+
+/** macOS: `/` is the sealed system snapshot (a few %), user data lives on the Data volume */
+const DATA_VOLUME = existsSync("/System/Volumes/Data") ? "/System/Volumes/Data" : "/";
+
 async function getDiskMetrics() {
   try {
-    const { stdout } = await execFileAsync("df", ["-k", "/"], { timeout: 5_000 });
+    const { stdout } = await execFileAsync("df", ["-k", DATA_VOLUME], { timeout: 5_000 });
     const line = stdout.trim().split("\n")[1];
     if (!line) return { total: 0, used: 0, free: 0, usagePercent: 0 };
     const parts = line.split(/\s+/);
     const total = parseInt(parts[1] ?? "0", 10) * 1024;
     const used = parseInt(parts[2] ?? "0", 10) * 1024;
     const free = parseInt(parts[3] ?? "0", 10) * 1024;
-    const usagePercent = total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
-    return { total, used, free, usagePercent };
+    // APFS volumes share one container: "used" of one volume undercounts; total - free does not
+    const taken = total - free;
+    const usagePercent = total > 0 ? Math.round((taken / total) * 1000) / 10 : 0;
+    return { total, used: Math.max(used, taken), free, usagePercent };
   } catch {
     return { total: 0, used: 0, free: 0, usagePercent: 0 };
   }

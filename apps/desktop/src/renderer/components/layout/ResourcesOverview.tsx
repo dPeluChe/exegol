@@ -10,26 +10,39 @@ function barColor(pct: number): string {
   return "bg-red-500";
 }
 
+const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(bytes >= 10 * 1024 ** 3 ? 0 : 1)} GB`;
+
 function MiniMetric({
   icon: Icon,
   label,
   percentage,
+  of,
+  detail,
+  title,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   percentage: number | undefined;
+  /** What the percentage is of: "12 cores", "14.7 of 32 GB" */
+  of?: string;
+  /** Exegol's and the agents' share */
+  detail?: string;
+  title?: string;
 }) {
   const pct = percentage ?? 0;
   const loading = percentage === undefined;
 
   return (
-    <div className="space-y-0.5">
-      <div className="flex items-center justify-between text-[10px]">
-        <span className="flex items-center gap-1 text-text-muted">
+    <div className="space-y-0.5" title={title}>
+      <div className="flex items-center justify-between gap-2 text-[10px]">
+        <span className="flex shrink-0 items-center gap-1 text-text-muted">
           <Icon className="h-2.5 w-2.5" />
           {label}
         </span>
-        <span className="text-text-secondary">{loading ? "..." : `${pct.toFixed(0)}%`}</span>
+        <span className="min-w-0 truncate text-text-secondary">
+          {loading ? "..." : `${pct.toFixed(0)}%`}
+          {!loading && of && <span className="text-text-muted"> · {of}</span>}
+        </span>
       </div>
       <div className="h-[2px] w-full rounded-full bg-bg-tertiary">
         <div
@@ -37,6 +50,7 @@ function MiniMetric({
           style={{ width: `${loading ? 0 : pct}%` }}
         />
       </div>
+      {detail && <p className="truncate text-[9px] text-text-muted">{detail}</p>}
     </div>
   );
 }
@@ -67,12 +81,45 @@ export function ResourcesOverview() {
   });
 
   const metrics = liveMetrics ?? queryMetrics;
+  const u = metrics?.usage;
 
   return (
     <div className="space-y-1.5">
-      <MiniMetric icon={Cpu} label="CPU" percentage={metrics?.cpu.usage} />
-      <MiniMetric icon={MemoryStick} label="Memory" percentage={metrics?.memory.usagePercent} />
-      <MiniMetric icon={HardDrive} label="Disk" percentage={metrics?.disk.usagePercent} />
+      <MiniMetric
+        icon={Cpu}
+        label="CPU"
+        percentage={metrics?.cpu.usage}
+        of={metrics ? `${metrics.cpu.cores} cores` : undefined}
+        detail={u ? `Exegol ${u.exegolCpu}% · agents ${u.agentsCpu}%` : undefined}
+        title={
+          metrics
+            ? `Whole machine, all ${metrics.cpu.cores} cores (${metrics.cpu.model})`
+            : undefined
+        }
+      />
+      <MiniMetric
+        icon={MemoryStick}
+        label="Memory"
+        percentage={metrics?.memory.usagePercent}
+        of={metrics ? `${gb(metrics.memory.used)} of ${gb(metrics.memory.total)}` : undefined}
+        detail={
+          u
+            ? `Exegol ${gb(u.exegolMemory)} · agents ${gb(u.agentsMemory)} (${u.agentProcesses} proc.)`
+            : undefined
+        }
+        title="Whole machine. Agents are the CLIs Exegol runs (claude, devin...) and their children; suspend or close idle sessions to free it"
+      />
+      <MiniMetric
+        icon={HardDrive}
+        label="Disk"
+        percentage={metrics?.disk.usagePercent}
+        of={
+          metrics
+            ? `${gb(metrics.disk.total - metrics.disk.free)} of ${gb(metrics.disk.total)}`
+            : undefined
+        }
+        title="Your data volume (on macOS / is the read-only system volume)"
+      />
     </div>
   );
 }

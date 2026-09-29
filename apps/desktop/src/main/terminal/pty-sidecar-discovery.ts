@@ -31,7 +31,7 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
-function readPidFile(): PidFile | null {
+export function readPidFile(): PidFile | null {
   try {
     if (!existsSync(SIDECAR_PID_PATH)) return null;
     return JSON.parse(readFileSync(SIDECAR_PID_PATH, "utf-8")) as PidFile;
