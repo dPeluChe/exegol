@@ -49,10 +49,17 @@ interface GroupIconColorPickerProps {
   color: string | null;
   icon: string | null;
   onChange: (color: string, icon: string) => void;
+  /** Show nothing as picked (the project uses an image instead) */
+  unselected?: boolean;
 }
 
 /** T146: color/icon picker for a project group — no shared picker exists, built here. */
-export function GroupIconColorPicker({ color, icon, onChange }: GroupIconColorPickerProps) {
+export function GroupIconColorPicker({
+  color,
+  icon,
+  onChange,
+  unselected,
+}: GroupIconColorPickerProps) {
   const activeColor = color ?? GROUP_COLORS[0] ?? "#3B82F6";
   const activeIcon = icon ?? "Folder";
 
@@ -66,7 +73,7 @@ export function GroupIconColorPicker({ color, icon, onChange }: GroupIconColorPi
             onClick={() => onChange(c, activeIcon)}
             className={cn(
               "h-5 w-5 rounded-full ring-offset-1 ring-offset-bg-secondary transition-transform hover:scale-110",
-              activeColor === c && "ring-2 ring-white/80",
+              !unselected && activeColor === c && "ring-2 ring-white/80",
             )}
             style={{ backgroundColor: c }}
             title={c}
@@ -81,7 +88,9 @@ export function GroupIconColorPicker({ color, icon, onChange }: GroupIconColorPi
             onClick={() => onChange(activeColor, name)}
             className={cn(
               "flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-white/10",
-              activeIcon === name && "bg-white/10 text-text-primary ring-1 ring-accent/50",
+              !unselected &&
+                activeIcon === name &&
+                "bg-white/10 text-text-primary ring-1 ring-accent/50",
             )}
             title={name}
           >
