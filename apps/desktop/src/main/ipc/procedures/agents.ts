@@ -77,6 +77,32 @@ export const agentRouter = router({
       return ctx.providerRegistry.register(ctx.db, input);
     }),
 
+  /** A custom CLI's name and command (it was created as "New Agent" / my-agent with no way to
+   *  change either). Built-ins keep theirs */
+  updateCustomProvider: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        name: z.string().trim().min(1).max(60),
+        command: z
+          .string()
+          .trim()
+          .min(1)
+          .max(200)
+          .regex(/^[^\n\r]+$/),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const provider = ctx.providerRegistry.get(input.id);
+      if (!provider || provider.isBuiltin) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only a custom CLI can be edited" });
+      }
+      provider.name = input.name;
+      provider.command = input.command;
+      ctx.providerRegistry.saveCustomToDb(ctx.db);
+      return { success: true };
+    }),
+
   unregisterProvider: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ ctx, input }) => {

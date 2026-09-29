@@ -34,6 +34,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- Settings: the global hotkey is recorded by pressing it and never left unregistered; custom CLIs can be renamed and given a command; CLI changes reach the main window at once; the shortcut lists match the real shortcuts
 - Links in Settings and floating windows open in your browser instead of an app window
 - Uninstalling a project skill no longer removes the global one of the same name, and asks first
 - With two browser panes, QA replay, Design Mode and screenshots act on the right page

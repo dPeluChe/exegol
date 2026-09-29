@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { SHORTCUTS } from "../../lib/shortcuts";
 import { SWITCH_SECTION_EVENT, switchSection } from "../../lib/switch-section";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../../stores/agents";
@@ -14,28 +15,6 @@ import { AgentsSection } from "./sections/AgentsSection";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
 
 // ─── Shortcuts for the help overlay (Cmd+/) ────────────────────────────────
-
-const SHORTCUTS: { key: string; label: string }[] = [
-  { key: "Cmd+B", label: "Toggle Sidebar" },
-  { key: "Cmd+T", label: "New Tab" },
-  { key: "Cmd+W", label: "Close Pane / Tab" },
-  { key: "Cmd+D", label: "Split Horizontal" },
-  { key: "Cmd+Shift+D", label: "Split Vertical" },
-  { key: "Cmd+,", label: "Settings" },
-  { key: "Cmd+K", label: "Command Palette" },
-  { key: "Cmd+Shift+P", label: "Command Palette (alt)" },
-  { key: "Cmd+N", label: "New Agent" },
-  { key: "Cmd+Shift+N", label: "Parallel Spawn" },
-  { key: "Cmd+.", label: "Stop Focused Agent" },
-  { key: "Cmd+1", label: "Dashboard" },
-  { key: "Cmd+2-9", label: "Live Tabs (sidebar order)" },
-  { key: "Cmd+Option+1-9", label: "Switch Tab by Number" },
-  { key: "Cmd+]", label: "Next Tab" },
-  { key: "Cmd+[", label: "Previous Tab" },
-  { key: "Ctrl+Tab", label: "Cycle Tabs Forward" },
-  { key: "Ctrl+Shift+Tab", label: "Cycle Tabs Backward" },
-  { key: "Cmd+/", label: "Show This Help" },
-];
 
 // Lazy: non-default sections are only rendered on user demand.
 // Each section bundles its own deps (PipelineSection pulls xterm via PipelineRunView).
@@ -248,7 +227,7 @@ export function WorkspaceView() {
           <div className="relative z-10 w-[400px] rounded-xl border border-border bg-bg-primary p-4 shadow-2xl">
             <h2 className="mb-3 text-sm font-semibold text-text-primary">Keyboard Shortcuts</h2>
             <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
-              {SHORTCUTS.map((s) => (
+              {SHORTCUTS.map((s) => ({ key: s.keys, label: s.label })).map((s) => (
                 <React.Fragment key={s.key}>
                   <span className="text-text-muted">{s.label}</span>
                   <kbd className="text-right font-mono text-text-secondary">{s.key}</kbd>

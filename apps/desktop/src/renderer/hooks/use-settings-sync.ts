@@ -12,6 +12,9 @@ export function useSettingsSync(): void {
   useMountEffect(() => {
     return window.api.settings.onChanged(() => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      // CLIs edited in Settings (enable, reorder, custom ones): the launcher read them 30s stale
+      queryClient.invalidateQueries({ queryKey: ["enabledProviders"] });
+      queryClient.invalidateQueries({ queryKey: ["providers"] });
     });
   });
 }

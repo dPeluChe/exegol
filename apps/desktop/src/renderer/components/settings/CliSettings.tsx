@@ -26,6 +26,25 @@ function useProviders() {
 
 // ─── Provider Card (full visible, no collapse) ─────────────────────────────
 
+/** Every CLI change: refresh both windows (the launcher read providers 30s stale) and say why it
+ *  failed instead of swallowing it */
+async function mutateCli(
+  queryClient: ReturnType<typeof useQueryClient>,
+  run: () => Promise<unknown>,
+  onError: (message: string) => void,
+): Promise<boolean> {
+  try {
+    await run();
+    queryClient.invalidateQueries({ queryKey: ["providers"] });
+    queryClient.invalidateQueries({ queryKey: ["enabledProviders"] });
+    window.api.settings.broadcastChanged();
+    return true;
+  } catch (err) {
+    onError(err instanceof Error ? err.message : String(err));
+    return false;
+  }
+}
+
 function ProviderCard({
   provider,
   onMoveUp,
@@ -41,6 +60,21 @@ function ProviderCard({
   const [args, setArgs] = useState(provider.args.join(", "));
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const flash = () => {
+    setError(null);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+  const saveIdentity = async (name: string, command: string) => {
+    if (name === provider.name && command === provider.command) return;
+    const ok = await mutateCli(
+      queryClient,
+      () => trpcMutate("agents.updateCustomProvider", { id: provider.id, name, command }),
+      setError,
+    );
+    if (ok) flash();
+  };
 
   const yoloFlag = YOLO_FLAGS[provider.id];
   const isYolo = yoloFlag ? provider.args.includes(yoloFlag) : false;
@@ -48,14 +82,16 @@ function ProviderCard({
 
   const saveArgs = useCallback(
     async (newArgs: string[]) => {
-      try {
-        await trpcMutate("agents.updateProviderArgs", { id: provider.id, args: newArgs });
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
+      const ok = await mutateCli(
+        queryClient,
+        () => trpcMutate("agents.updateProviderArgs", { id: provider.id, args: newArgs }),
+        setError,
+      );
+      if (ok) {
         setDirty(false);
+        setError(null);
         setSaved(true);
         setTimeout(() => setSaved(false), 1500);
-      } catch {
-        /* ignore */
       }
     },
     [provider.id, queryClient],
@@ -83,14 +119,15 @@ function ProviderCard({
   }, [yoloFlag, isYolo, args, saveArgs]);
 
   const toggleEnabled = useCallback(async () => {
-    try {
-      await trpcMutate("agents.toggleProviderEnabled", { id: provider.id, enabled: !isEnabled });
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
-      queryClient.invalidateQueries({ queryKey: ["enabledProviders"] });
+    const ok = await mutateCli(
+      queryClient,
+      () => trpcMutate("agents.toggleProviderEnabled", { id: provider.id, enabled: !isEnabled }),
+      setError,
+    );
+    if (ok) {
+      setError(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
-    } catch {
-      /* ignore */
     }
   }, [provider.id, isEnabled, queryClient]);
 
@@ -148,12 +185,33 @@ function ProviderCard({
 
         {/* Name + command */}
         <div className="flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-text-primary">{provider.name}</span>
-            <code className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] text-text-muted">
-              {provider.command}
-            </code>
-          </div>
+          {provider.isBuiltin ? (
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold text-text-primary">{provider.name}</span>
+              <code className="rounded bg-bg-tertiary px-1.5 py-0.5 text-[9px] text-text-muted">
+                {provider.command}
+              </code>
+            </div>
+          ) : (
+            // A custom CLI names itself: saved on blur or Enter
+            <div className="flex items-center gap-1.5">
+              <input
+                defaultValue={provider.name}
+                aria-label="Name"
+                onBlur={(e) => saveIdentity(e.currentTarget.value.trim(), provider.command)}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                className="w-32 min-w-0 rounded border border-border bg-bg-tertiary px-1.5 py-0.5 text-sm font-semibold text-text-primary outline-none focus:border-accent/50"
+              />
+              <input
+                defaultValue={provider.command}
+                aria-label="Command"
+                onBlur={(e) => saveIdentity(provider.name, e.currentTarget.value.trim())}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                className="w-36 min-w-0 rounded border border-border bg-bg-tertiary px-1.5 py-0.5 font-mono text-[10px] text-text-secondary outline-none focus:border-accent/50"
+              />
+            </div>
+          )}
+          {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
           {/* Capability badges */}
           <div className="mt-1 flex flex-wrap gap-1">
             {provider.capabilities.supportsPromptArg && <CapBadge label="prompt" />}
@@ -245,53 +303,43 @@ export function CliSettings() {
   const { data: providers, isLoading } = useProviders();
   const queryClient = useQueryClient();
 
+  const [error, setError] = useState<string | null>(null);
   const builtins = providers?.filter((p) => p.isBuiltin && p.id !== "shell") ?? [];
   const customs = providers?.filter((p) => !p.isBuiltin) ?? [];
 
   const handleAddCustom = useCallback(async () => {
-    try {
-      await trpcMutate("agents.registerProvider", {
-        id: `custom-${Date.now()}`,
-        name: "New Agent",
-        command: "my-agent",
-      });
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
-    } catch {
-      /* ignore */
-    }
+    await mutateCli(
+      queryClient,
+      () =>
+        trpcMutate("agents.registerProvider", {
+          id: `custom-${Date.now()}`,
+          name: "New Agent",
+          command: "my-agent",
+        }),
+      setError,
+    );
   }, [queryClient]);
 
   const handleRemoveCustom = useCallback(
     async (id: string) => {
-      try {
-        await trpcMutate("agents.unregisterProvider", { id });
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
-      } catch {
-        /* ignore */
-      }
+      await mutateCli(queryClient, () => trpcMutate("agents.unregisterProvider", { id }), setError);
     },
     [queryClient],
   );
 
   const handleResetArgs = useCallback(async () => {
-    try {
-      await trpcMutate("agents.resetProviderArgs");
-      queryClient.invalidateQueries({ queryKey: ["providers"] });
-    } catch {
-      /* ignore */
-    }
+    await mutateCli(queryClient, () => trpcMutate("agents.resetProviderArgs"), setError);
   }, [queryClient]);
 
   const allProviders = [...builtins, ...customs];
 
   const handleSwap = useCallback(
     async (idA: string, idB: string) => {
-      try {
-        await trpcMutate("agents.swapProviders", { idA, idB });
-        queryClient.invalidateQueries({ queryKey: ["providers"] });
-      } catch {
-        /* ignore */
-      }
+      await mutateCli(
+        queryClient,
+        () => trpcMutate("agents.swapProviders", { idA, idB }),
+        setError,
+      );
     },
     [queryClient],
   );
@@ -302,6 +350,9 @@ export function CliSettings() {
 
   return (
     <div className="space-y-4">
+      {error && (
+        <p className="rounded-lg bg-red-500/10 px-3 py-2 text-[11px] text-red-400">{error}</p>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <Button
