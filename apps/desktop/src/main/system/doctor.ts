@@ -387,15 +387,32 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
   checks.push(checkPtySidecar());
   checks.push(mcpCheck);
 
+  // Linux without a keyring (libsecret / kwallet) "encrypts" with a built-in key: say so
+  const weakLinuxKeyring =
+    process.platform === "linux" && safeStorage.getSelectedStorageBackend?.() === "basic_text";
   checks.push({
     id: "keystore",
     label: "Keystore encryption",
-    status: safeStorage.isEncryptionAvailable() ? "ok" : "warn",
-    detail: safeStorage.isEncryptionAvailable()
-      ? "OS keychain encryption available — API keys stored encrypted"
-      : "OS keychain encryption UNAVAILABLE — API keys are stored in plaintext in the local database",
+    status: safeStorage.isEncryptionAvailable() && !weakLinuxKeyring ? "ok" : "warn",
+    detail: weakLinuxKeyring
+      ? "No desktop keyring found (install gnome-keyring or kwallet): API keys use a weak built-in key"
+      : safeStorage.isEncryptionAvailable()
+        ? "OS keychain encryption available — API keys stored encrypted"
+        : "OS keychain encryption UNAVAILABLE — API keys are stored in plaintext in the local database",
     category: "config",
   });
+
+  // Ports and dev servers are read with lsof, which minimal Linux installs lack
+  if (process.platform === "linux" && !(await checkCommandAvailable("lsof"))) {
+    checks.push({
+      id: "lsof",
+      label: "lsof",
+      status: "warn",
+      detail:
+        "Not installed: the browser port chips and dev server list stay empty (apt install lsof)",
+      category: "system",
+    });
+  }
 
   checks.push(checkStaleWorktrees(db));
 

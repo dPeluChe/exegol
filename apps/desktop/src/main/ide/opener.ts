@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { loginShell } from "../agents/spawn-env";
 
 const execFileAsync = promisify(execFile);
 
@@ -20,7 +21,7 @@ export async function openInIde(
   customPath?: string,
   line?: number,
 ): Promise<void> {
-  const shell = process.env.SHELL || "/bin/zsh";
+  const shell = loginShell();
 
   if (ide === "custom" && customPath) {
     await execFileAsync(shell, ["-ilc", `${shellEscape(customPath)} ${shellEscape(path)}`], {

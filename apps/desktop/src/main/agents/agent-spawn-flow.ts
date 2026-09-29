@@ -26,7 +26,13 @@ import {
 import type { WorktreeRecord } from "./agent-worktree-ops";
 import type { AgentProviderRegistry } from "./registry";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
-import { _getFullPath, buildApiKeyEnv, buildClaudeCodeHooksFile, coreRust } from "./spawn-env";
+import {
+  _getFullPath,
+  buildApiKeyEnv,
+  buildClaudeCodeHooksFile,
+  coreRust,
+  loginShell,
+} from "./spawn-env";
 import { findReusableWorktree, requestedBranchFor } from "./spawn-target";
 import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
 
@@ -224,7 +230,7 @@ export function buildPtyInvocation(
   priorSession: boolean | null = null,
 ): PtyInvocation {
   const isPlainShell = agent.cliType === "shell";
-  const userShell = process.env.SHELL || "/bin/zsh";
+  const userShell = loginShell();
 
   let shell: string;
   let args: string[];

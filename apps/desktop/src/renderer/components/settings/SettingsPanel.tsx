@@ -102,8 +102,13 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
   return (
     <div className="flex h-full flex-col bg-bg-primary">
       {/* Header — draggable (standalone hiddenInset window); pl-20 clears the
-          macOS traffic lights at x:16 which otherwise overlap the title */}
-      <div className="titlebar-drag flex items-center gap-3 border-b border-border py-3 pl-20 pr-4">
+          macOS traffic lights at x:16. Linux and Windows get the system frame instead */}
+      <div
+        className={cn(
+          "titlebar-drag flex items-center gap-3 border-b border-border py-3 pr-4",
+          (window.api?.app?.getPlatform?.() ?? "darwin") === "darwin" ? "pl-20" : "pl-4",
+        )}
+      >
         <button
           type="button"
           onClick={onClose}

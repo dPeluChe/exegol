@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import * as os from "node:os";
 import { promisify } from "node:util";
 import type { MetricsSnapshot } from "@exegol/shared";
@@ -253,7 +254,27 @@ async function getMemoryMetrics(): Promise<SystemMetrics["memory"]> {
     }
   }
 
-  // Linux / Windows / fallback
+  // Linux: MemAvailable counts reclaimable page cache; os.freemem() does not, so it read ~100%
+  if (process.platform === "linux") {
+    try {
+      const meminfo = await readFile("/proc/meminfo", "utf-8");
+      const kb = Number(/MemAvailable:\s+(\d+)/.exec(meminfo)?.[1]);
+      if (kb > 0) {
+        const available = kb * 1024;
+        const used = total - available;
+        return {
+          total,
+          used: Math.max(0, used),
+          free: available,
+          usagePercent: total > 0 ? Math.round((Math.max(0, used) / total) * 1000) / 10 : 0,
+        };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  // Windows / fallback
   const free = os.freemem();
   const used = total - free;
   return {
@@ -316,8 +337,13 @@ async function getProcessUsage(cores: number): Promise<ProcessUsage> {
   };
 }
 
-/** macOS: `/` is the sealed system snapshot (a few %), user data lives on the Data volume */
-const DATA_VOLUME = existsSync("/System/Volumes/Data") ? "/System/Volumes/Data" : "/";
+/** Where the user's data lives. macOS: `/` is the sealed system snapshot (a few %), data is on the
+ *  Data volume. Linux: home can be its own partition, so measure that */
+const DATA_VOLUME = existsSync("/System/Volumes/Data")
+  ? "/System/Volumes/Data"
+  : process.platform === "linux"
+    ? os.homedir()
+    : "/";
 
 async function getDiskMetrics() {
   try {

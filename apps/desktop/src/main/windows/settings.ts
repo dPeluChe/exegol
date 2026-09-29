@@ -70,8 +70,11 @@ export function openSettingsWindow(tab?: SettingsTab): void {
     minHeight: 480,
     show: false,
     backgroundColor: "#09090b",
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
+    // macOS: inset traffic lights over our header. Elsewhere hiddenInset is frameless with no
+    // controls at all, so the settings window keeps the system frame
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 16, y: 16 } }
+      : {}),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       sandbox: false,
