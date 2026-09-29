@@ -3,6 +3,7 @@ import { cn } from "@exegol/ui";
 import { X } from "lucide-react";
 import type { Dispatch, DragEvent, Ref, SetStateAction } from "react";
 import type { WorkspaceTab } from "../../stores/workspace";
+import { AgentIcon } from "../common/AgentIcon";
 import { ACTIVITY_DOT_CLASS } from "./tab-bar-helpers";
 
 interface WorkspaceTabItemProps {
@@ -11,6 +12,8 @@ interface WorkspaceTabItemProps {
   isEditing: boolean;
   displayName: string;
   TabIcon: React.ComponentType<{ className?: string }> | null;
+  /** An agent tab: that CLI's icon instead of the generic one */
+  agentCliType: string | null;
   tabActivity: AgentActivityLevel | undefined;
   /** T155.3: the tab's agent has an unread attention item — amber pulse wins */
   tabAttention?: boolean;
@@ -36,6 +39,7 @@ export function WorkspaceTabItem({
   isEditing,
   displayName,
   TabIcon,
+  agentCliType,
   tabActivity,
   tabAttention = false,
   dragOverTabId,
@@ -93,7 +97,11 @@ export function WorkspaceTabItem({
         />
       ) : (
         <>
-          {TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />}
+          {agentCliType ? (
+            <AgentIcon provider={agentCliType} size={12} />
+          ) : (
+            TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />
+          )}
           <span className="max-w-[140px] truncate">{displayName}</span>
           {tabAttention ? (
             <span

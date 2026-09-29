@@ -286,7 +286,7 @@ export function SpawnAgentModal({
       if (focusedPane?.type === "empty" && focusedId) {
         store.updatePane(focusedId, { type: "terminal", agentId: agent.id });
       } else {
-        const newTabId = store.addTab(agent.cliType);
+        const newTabId = store.addTab();
         const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
         if (newTab) {
           const paneId = findFirstPaneId(newTab.layout);

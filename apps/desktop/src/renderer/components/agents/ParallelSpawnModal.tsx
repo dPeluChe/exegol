@@ -99,7 +99,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
         }
 
         // Create a new tab for each agent
-        const newTabId = store.addTab(cliType);
+        const newTabId = store.addTab();
         const freshPw = getProjectState();
         const newTab = freshPw.tabs.find((t) => t.id === newTabId);
         if (newTab) {
