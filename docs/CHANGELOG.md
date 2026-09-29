@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Add project shows the icon step: images found in the folder, or a built-in icon and color
+
 ### Changed
 - Exegol is now MIT licensed
 - After an update or restart, each terminal appears as soon as its own session is back instead of waiting for all of them

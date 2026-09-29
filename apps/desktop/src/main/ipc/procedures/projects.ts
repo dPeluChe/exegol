@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -60,6 +61,40 @@ async function getGitRemote(path: string): Promise<string | null> {
   }
 }
 
+const appearanceSchema = z.object({
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .nullable(),
+  icon: z.string().max(40).nullable(),
+  iconImage: z.string().nullable(),
+});
+
+/** Color, built-in icon or an image from the repo. The image must be an icon file inside the
+ *  project: its path is read back as a data URL */
+async function applyAppearance(
+  db: Parameters<typeof getProject>[0],
+  project: { id: string; path: string },
+  appearance: z.infer<typeof appearanceSchema>,
+) {
+  if (
+    appearance.iconImage &&
+    (!isIconFile(appearance.iconImage) ||
+      !(await isPathAllowed(appearance.iconImage, [project.path])))
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Icon must be an image inside the project",
+    });
+  }
+  db.prepare("UPDATE projects SET color = ?, icon = ?, icon_image = ? WHERE id = ?").run(
+    appearance.color,
+    appearance.icon,
+    appearance.iconImage,
+    project.id,
+  );
+}
+
 export const projectRouter = router({
   list: publicProcedure.query(({ ctx }) => {
     return listProjects(ctx.db);
@@ -71,39 +106,42 @@ export const projectRouter = router({
     return getProject(ctx.db, input.id) ?? null;
   }),
 
-  create: publicProcedure.input(projectCreateSchema).mutation(async ({ ctx, input }) => {
-    if (!existsSync(input.path)) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `Path does not exist: ${input.path}`,
+  create: publicProcedure
+    .input(projectCreateSchema.extend({ appearance: appearanceSchema.optional() }))
+    .mutation(async ({ ctx, input: { appearance, ...input } }) => {
+      if (!existsSync(input.path)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Path does not exist: ${input.path}`,
+        });
+      }
+
+      const stats = statSync(input.path);
+      if (!stats.isDirectory()) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Path is not a directory: ${input.path}`,
+        });
+      }
+
+      if (!(await isGitRepo(input.path))) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Path is not a git repository: ${input.path}`,
+        });
+      }
+
+      const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));
+
+      const project = createProject(ctx.db, {
+        ...input,
+        gitRemote,
       });
-    }
-
-    const stats = statSync(input.path);
-    if (!stats.isDirectory()) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `Path is not a directory: ${input.path}`,
-      });
-    }
-
-    if (!(await isGitRepo(input.path))) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: `Path is not a git repository: ${input.path}`,
-      });
-    }
-
-    const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));
-
-    const project = createProject(ctx.db, {
-      ...input,
-      gitRemote,
-    });
-    // Its app icon found once and kept, so the sidebar shows it without scanning again
-    await adoptDetectedIcon(ctx.db, project.id).catch(() => {});
-    return getProject(ctx.db, project.id) ?? project;
-  }),
+      // What the user picked in the dialog; otherwise its app icon, found once and kept
+      if (appearance) await applyAppearance(ctx.db, project, appearance);
+      else await adoptDetectedIcon(ctx.db, project.id).catch(() => {});
+      return getProject(ctx.db, project.id) ?? project;
+    }),
 
   rename: publicProcedure
     .input(z.object({ id: z.string(), name: z.string().min(1) }))
@@ -127,6 +165,16 @@ export const projectRouter = router({
     return project ? detectProjectIcons(project.path) : [];
   }),
 
+  /** Add project: the folder the user picked, before it is a project. Reads only the fixed
+   *  icon file names, so a path from the renderer cannot read anything else */
+  detectIconsAt: publicProcedure
+    .input(z.object({ path: z.string().min(1) }))
+    .query(async ({ input }) => {
+      if (!isAbsolute(input.path) || !existsSync(input.path) || !statSync(input.path).isDirectory())
+        return [];
+      return detectProjectIcons(input.path);
+    }),
+
   /** The chosen image icon as a data URL (null when the project uses a built-in icon) */
   iconImage: publicProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const project = getProject(ctx.db, input.id);
@@ -134,34 +182,12 @@ export const projectRouter = router({
   }),
 
   setAppearance: publicProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        color: z
-          .string()
-          .regex(/^#[0-9a-fA-F]{6}$/)
-          .nullable(),
-        icon: z.string().max(40).nullable(),
-        iconImage: z.string().nullable(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const project = getProject(ctx.db, input.id);
+    .input(appearanceSchema.extend({ id: z.string() }))
+    .mutation(async ({ ctx, input: { id, ...appearance } }) => {
+      const project = getProject(ctx.db, id);
       if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-      // The image must be an icon file inside the project: this path is read back as a data URL
-      if (
-        input.iconImage &&
-        (!isIconFile(input.iconImage) || !(await isPathAllowed(input.iconImage, [project.path])))
-      ) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Icon must be an image inside the project",
-        });
-      }
-      ctx.db
-        .prepare("UPDATE projects SET color = ?, icon = ?, icon_image = ? WHERE id = ?")
-        .run(input.color, input.icon, input.iconImage, input.id);
-      return getProject(ctx.db, input.id);
+      await applyAppearance(ctx.db, project, appearance);
+      return getProject(ctx.db, id);
     }),
 
   /** T146: move a project into a group (or ungroup with groupId: null). */

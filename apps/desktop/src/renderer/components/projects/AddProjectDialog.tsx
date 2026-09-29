@@ -1,9 +1,16 @@
 import { Button, Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
+import { useQuery } from "@tanstack/react-query";
 import { FolderSearch, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useCreateProject } from "../../hooks/use-trpc";
+import { trpcInvoke } from "../../lib/trpc-client";
 import { useAppStore } from "../../stores/app";
+import {
+  type FoundIcon,
+  type ProjectAppearance,
+  ProjectIconPicker,
+} from "../layout/ProjectIconPicker";
 
 interface AddProjectDialogProps {
   open: boolean;
@@ -19,6 +26,20 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
   const [folderPath, setFolderPath] = useState("");
   const [projectName, setProjectName] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("main");
+  // Nothing picked: the first image found, which is what create adopts on its own
+  const [picked, setPicked] = useState<ProjectAppearance | null>(null);
+  const scanPath = folderPath.trim();
+  const { data: found = [], isFetching: scanning } = useQuery({
+    queryKey: ["projects", "detectIconsAt", scanPath],
+    queryFn: () => trpcInvoke<FoundIcon[]>("projects.detectIconsAt", { path: scanPath }),
+    enabled: open && /^(\/|[A-Za-z]:[\\/])/.test(scanPath),
+    staleTime: 30_000,
+  });
+  const appearance = picked ?? {
+    color: null,
+    icon: null,
+    iconImage: found[0]?.path ?? null,
+  };
 
   const createProject = useCreateProject();
   const setActiveProject = useAppStore((s) => s.setActiveProject);
@@ -33,6 +54,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
       if (result && !result.canceled && result.filePaths?.[0]) {
         const selected = result.filePaths[0];
         setFolderPath(selected);
+        setPicked(null);
         if (!projectName) {
           setProjectName(deriveProjectName(selected));
         }
@@ -44,6 +66,8 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
 
   const handlePathChange = (value: string) => {
     setFolderPath(value);
+    // A choice from another folder would point outside this one
+    setPicked(null);
     if (!projectName || projectName === deriveProjectName(folderPath)) {
       setProjectName(deriveProjectName(value));
     }
@@ -63,6 +87,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
         gitRemote: null,
         defaultBranch: defaultBranch || "main",
         defaultIde: "vscode",
+        appearance: picked ?? undefined,
       });
 
       setActiveProject(project.id);
@@ -71,6 +96,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
       setFolderPath("");
       setProjectName("");
       setDefaultBranch("main");
+      setPicked(null);
       onOpenChange(false);
     } catch {
       // Error handled by mutation state
@@ -157,6 +183,18 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
                 className="border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
               />
             </div>
+
+            {/* Icon: scanned as soon as the folder is known */}
+            {scanPath && (
+              <div>
+                <ProjectIconPicker
+                  found={found}
+                  isLoading={scanning}
+                  value={appearance}
+                  onChange={setPicked}
+                />
+              </div>
+            )}
 
             {/* Error */}
             {createProject.isError && (

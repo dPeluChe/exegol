@@ -48,7 +48,11 @@ export function useProject(id: string | null) {
 export function useCreateProject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: ProjectCreate) => trpcMutate<Project>("projects.create", data),
+    mutationFn: (
+      data: ProjectCreate & {
+        appearance?: { color: string | null; icon: string | null; iconImage: string | null };
+      },
+    ) => trpcMutate<Project>("projects.create", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
