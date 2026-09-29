@@ -1,5 +1,5 @@
 import { Button } from "@exegol/ui";
-import { DoctorChecklist } from "../DoctorChecklist";
+import { DoctorChecklist, resolveCategory } from "../DoctorChecklist";
 import { type DoctorCategory, useDoctorReport } from "../use-doctor";
 
 interface CliDoctorStepProps {
@@ -30,12 +30,12 @@ export function CliDoctorStep({
       {/* The list scrolls; Back / Continue stay in view (they fell off the window) */}
       <div className="min-h-0 flex-1 overflow-y-auto pr-1">
         <DoctorChecklist
-          checks={data?.checks ?? []}
+          // Only this step's groups: the wizard splits them so no screen is a wall of checks
+          checks={(data?.checks ?? []).filter((c) => categories.includes(resolveCategory(c)))}
           isLoading={isLoading}
           onRefresh={() => refetch()}
           isRefreshing={isFetching}
           foldMissingClis
-          categories={categories}
         />
       </div>
 

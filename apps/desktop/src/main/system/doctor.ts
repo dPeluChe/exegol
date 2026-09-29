@@ -4,6 +4,7 @@ import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
 import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
@@ -23,34 +24,15 @@ const shellEnv = () => ({ ...process.env, PATH: _getFullPath() });
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type DoctorStatus = "ok" | "warn" | "fail";
-
-/** Grouping for the Doctor UI: agent CLIs vs system services/deps vs configuration. */
-export type DoctorCategory = "agents" | "system" | "config";
-
-export interface DoctorCheck {
-  id: string;
-  label: string;
-  status: DoctorStatus;
-  detail: string;
-  actionUrl?: string;
-  /** Agent CLIs: the vendor's install command (shown to copy when missing) */
-  installCommand?: string;
-  /** Agent CLIs: the vendor's update command (shown to copy when installed) */
-  updateCommand?: string;
-  category: DoctorCategory;
-}
-
-export interface DoctorReport {
-  checks: DoctorCheck[];
-  generatedAt: number;
-}
+export type { DoctorCategory, DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
 
 // ─── Install and update per CLI (vendor docs, verified 2026-09-29) ─────────
 
 /** The vendor's recommended macOS install, its update command and docs. Re-verify when a CLI
  *  changes how it ships: sources in docs/TASK_COMPLETED/2609.md (2026-09-29 entry) */
-const CLI_SETUP: Partial<Record<string, { install: string; update?: string; docs: string }>> = {
+const CLI_SETUP: Partial<
+  Record<string, { install: string; update?: string; docs: string; deprecated?: string }>
+> = {
   "claude-code": {
     install: "curl -fsSL https://claude.ai/install.sh | bash",
     update: "claude update",
@@ -65,10 +47,11 @@ const CLI_SETUP: Partial<Record<string, { install: string; update?: string; docs
     install: "npm install -g @google/gemini-cli",
     update: "gemini update",
     docs: "https://geminicli.com/docs/get-started/installation/",
+    deprecated: "Replaced upstream by Antigravity CLI (agy) on 2026-06-18",
   },
+  // The install script also upgrades (no update command)
   agy: {
     install: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-    update: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
     docs: "https://antigravity.google/docs/cli/install/",
   },
   devin: {
@@ -119,11 +102,6 @@ const CLI_SETUP: Partial<Record<string, { install: string; update?: string; docs
   },
 };
 
-/** Retired upstream: say so instead of offering it as a normal install */
-const CLI_DEPRECATED: Partial<Record<string, string>> = {
-  gemini: "Replaced upstream by Antigravity CLI (agy) on 2026-06-18",
-};
-
 // ─── Individual checks ──────────────────────────────────────────────────────
 
 function checkCommandAvailable(command: string): Promise<boolean> {
@@ -152,8 +130,25 @@ async function checkGitVersion(): Promise<string | null> {
   }
 }
 
-/** Best-effort `--version` for a specific binary path (duplicate-install detail). */
-function readBinaryVersion(binPath: string): Promise<string | null> {
+/** Best-effort `--version` of a binary, cached until the file changes (an update replaces it):
+ *  every Doctor run started one process per installed CLI */
+const versionCache = new Map<string, { mtimeMs: number; version: string | null }>();
+
+async function readBinaryVersion(binPath: string): Promise<string | null> {
+  let mtimeMs = 0;
+  try {
+    mtimeMs = statSync(binPath).mtimeMs;
+  } catch {
+    return null;
+  }
+  const hit = versionCache.get(binPath);
+  if (hit && hit.mtimeMs === mtimeMs) return hit.version;
+  const version = await runVersion(binPath);
+  versionCache.set(binPath, { mtimeMs, version });
+  return version;
+}
+
+function runVersion(binPath: string): Promise<string | null> {
   return new Promise((resolve) => {
     exec(`"${binPath}" --version`, { env: shellEnv(), timeout: 3_000 }, (err, stdout) => {
       if (err) return resolve(null);
@@ -230,9 +225,12 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
   return Promise.all(
     providers.map(async (provider) => {
       // A renamed binary (kilocode → kilo) counts as installed under its new name
-      let paths = await findAllOnPath(provider.command);
-      for (const alias of COMMAND_ALIASES[provider.command] ?? []) {
-        if (paths.length === 0) paths = await findAllOnPath(alias);
+      let paths: string[] = [];
+      let found = provider.command;
+      for (const cmd of [provider.command, ...(COMMAND_ALIASES[provider.command] ?? [])]) {
+        paths = await findAllOnPath(cmd);
+        found = cmd;
+        if (paths.length > 0) break;
       }
       const installed = paths.length > 0;
       // Duplicate installs (e.g. Homebrew + bun copies of codex) cause
@@ -248,14 +246,13 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
         detail = `Multiple installs — PATH resolves to ${first}; updates may land in the losing copy: ${rest}`;
       } else if (installed) {
         // The version answers "is mine current?" before launching it
-        const version = await readBinaryVersion(paths[0] ?? provider.command);
-        detail = version ? `v${version} · ${paths[0]}` : `Found '${provider.command}' on PATH`;
+        const version = await readBinaryVersion(paths[0] ?? "");
+        detail = version ? `v${version} · ${paths[0]}` : `Found '${found}' on PATH`;
       } else {
         detail = `'${provider.command}' not found on PATH`;
       }
-      const deprecated = CLI_DEPRECATED[provider.id];
-      if (deprecated) detail = `${detail} · ${deprecated}`;
       const setup = CLI_SETUP[provider.id];
+      if (setup?.deprecated) detail = `${detail} · ${setup.deprecated}`;
       return {
         id: `cli:${provider.id}`,
         label: provider.name,
@@ -263,7 +260,7 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
         detail,
         actionUrl: installed ? undefined : setup?.docs,
         installCommand: installed ? undefined : setup?.install,
-        updateCommand: installed ? setup?.update : undefined,
+        updateCommand: installed ? (setup?.update ?? setup?.install) : undefined,
         category: "agents",
       } satisfies DoctorCheck;
     }),

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import { takeLostOnRestart } from "../../agents/lost-sessions";
 import { runPreflight } from "../../agents/preflight";
-import { coreRust } from "../../agents/spawn-env";
+import { coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
 import { resolveTaskLabel } from "../../agents/task-label";
 import {
@@ -553,7 +553,7 @@ export const agentRouter = router({
       }
       return runPreflight({
         cliType: input.cliType as Parameters<typeof runPreflight>[0]["cliType"],
-        command: provider.command,
+        command: resolveCommand(provider.command),
         projectPath: project.path,
         useWorktree: input.useWorktree,
         coreRustLoaded: !!coreRust,

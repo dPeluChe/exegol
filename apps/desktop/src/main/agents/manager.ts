@@ -20,13 +20,13 @@ import {
   reattachSidecarAgents as reattachSidecarAgentsImpl,
 } from "./reattach-sidecar-agents";
 import { recoverLostSessionId } from "./recover-lost-session";
-import { COMMAND_ALIASES, getProviderRegistry } from "./registry";
+import { getProviderRegistry } from "./registry";
 import {
   broadcastAgentStatus,
-  commandOnPath,
   coreRust,
   DEFAULT_PTY_COLS,
   DEFAULT_PTY_ROWS,
+  resolveCommand,
 } from "./spawn-env";
 import { createTitleStatusTracker } from "./title-status";
 
@@ -92,10 +92,7 @@ export class AgentManager {
       throw new Error(`No CLI configuration found for agent type: ${agent.cliType}`);
     }
     // A CLI that renamed its binary (kilocode → kilo): launch whichever this machine has
-    if (!commandOnPath(cliConfig.command)) {
-      const alias = COMMAND_ALIASES[cliConfig.command]?.find(commandOnPath);
-      if (alias) cliConfig.command = alias;
-    }
+    cliConfig.command = resolveCommand(cliConfig.command);
 
     // T161: per-launch YOLO override. Undefined keeps the provider's configured
     // args; an explicit value wins for THIS session only, so "just this once,
