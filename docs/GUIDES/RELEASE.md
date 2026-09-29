@@ -6,7 +6,9 @@
 - **Auto-updater**: `apps/desktop/src/main/system/auto-updater.ts` (electron-updater, GitHub Releases, feed `dPeluChe/exegol`)
 - **Icons**: `apps/desktop/src/resources/build/icons/` (icns, ico, png)
 - **Version**: `0.5.0` in `apps/desktop/package.json` and `docs/CHANGELOG.md` (0.4.2-0.4.4 were CHANGELOG-only; the last tag is `v0.4.1`).
-- **Signing**: `notarize: false`, no signing identity configured. Builds are unsigned.
+- **Signing**: builds are signed with the Developer ID Application certificate in the login keychain
+  (team `NQHHJ85736`, found automatically) and hardened runtime. **Notarized only when
+  `APPLE_KEYCHAIN_PROFILE` is set** (step 5); without it a downloaded DMG is refused by Gatekeeper.
 
 ## Steps to First Release
 
@@ -44,21 +46,27 @@ Output: `apps/desktop/dist/<version>/Exegol-<version>-<arch>.dmg` (one folder pe
 
 Open the DMG and drag Exegol to Applications. The app is not signed or notarized, so Gatekeeper blocks a double-click on first launch: right-click Exegol in Applications and choose Open, then confirm. A DMG downloaded from GitHub also carries the quarantine flag; clear it with `xattr -dr com.apple.quarantine /Applications/Exegol.app` if Open is not offered.
 
-### 5. Enable macOS Code Signing (for distribution)
+### 5. Notarize (required for anything downloaded)
 
-In `electron-builder.ts`, change:
-```typescript
-notarize: true,  // ← change from false
-```
+A signed but not notarized app gets "Apple could not verify Exegol is free of malware" when it
+came from the internet (GitHub, Slack...). Notarization needs Apple credentials once per machine:
 
-Required environment variables (set in CI or local):
-```bash
-export CSC_LINK="base64-encoded-p12-certificate"
-export CSC_KEY_PASSWORD="certificate-password"
-export APPLE_ID="your@apple.id"
-export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"  # Generate at appleid.apple.com
-export APPLE_TEAM_ID="XXXXXXXXXX"
-```
+1. At appleid.apple.com → Sign-In and Security → App-Specific Passwords, create one ("exegol-notary").
+2. Store it in the keychain (run it yourself: it asks for the password, never put it in a file):
+   ```bash
+   xcrun notarytool store-credentials exegol-notary \
+     --apple-id <your Apple ID email> --team-id NQHHJ85736
+   ```
+3. Build with the profile; electron-builder signs, submits, waits and staples:
+   ```bash
+   APPLE_KEYCHAIN_PROFILE=exegol-notary bun run package:mac
+   ```
+4. Check before publishing: `spctl -a -vv -t install apps/desktop/dist/<v>/mac-arm64/Exegol.app`
+   must say `source=Notarized Developer ID`.
+
+Until a build is notarized, a user can still open it: System Settings → Privacy & Security →
+"Open Anyway" (on macOS 15 right-click → Open no longer offers it), or
+`xattr -dr com.apple.quarantine /Applications/Exegol.app`.
 
 ### 6. Publish to GitHub Releases
 
