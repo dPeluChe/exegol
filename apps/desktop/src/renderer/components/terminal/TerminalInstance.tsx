@@ -167,6 +167,17 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     const container = containerRef.current;
     if (!container) return;
 
+    // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to a black pane after
+    // a reload; only the app can repaint an alt screen. Once per session per renderer, and main
+    // does the jiggle without telling mirrors
+    const kickAltScreen = () => {
+      const t = terminalRef.current;
+      if (!t || readOnly || mirror || kickedSessions.has(agentId)) return;
+      if (t.buffer.active.type !== "alternate") return;
+      kickedSessions.add(agentId);
+      window.api.terminal.redraw(agentId);
+    };
+
     const session = setupTerminalSession(container, {
       agentId,
       paneId,
@@ -177,6 +188,9 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
       mirrorOwnsSize: () => cardOwnsRef.current,
       onSnapshotApplied: () => {
         if (cardOwnsRef.current) requestAnimationFrame(() => refitRef.current());
+        // The alt-screen kick needs the snapshot in the buffer; at startup it waits for the
+        // reattach, so a fixed timer ran before it and never kicked
+        kickAltScreen();
       },
       initialContent,
       fontSize,
@@ -207,17 +221,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
 
     const settleTimer = setTimeout(refit, 150);
 
-    // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to
-    // a black pane after window reload — the ring replay can't repaint an alt
-    // screen, only the app can. Once per session per renderer: a pane that
-    // remounts on a project switch doesn't need it (two redraws for nothing),
-    // and a reload clears the set. Main does the jiggle without telling mirrors.
-    const kickTimer = setTimeout(() => {
-      if (readOnly || mirror || kickedSessions.has(agentId)) return;
-      if (session.terminal.buffer.active.type !== "alternate") return;
-      kickedSessions.add(agentId);
-      window.api.terminal.redraw(agentId);
-    }, 350);
+    const kickTimer = setTimeout(kickAltScreen, 350);
 
     if (!mirror) setTerminalReady(agentId);
     onReady?.();

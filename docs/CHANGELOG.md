@@ -13,6 +13,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Title bar: check for updates, see the download and restart to install from one button
 
 ### Fixed
+- After an update or restart, terminals show their session at once (they could stay blank until touched) and the sidebar counts every project's sessions
 - The notifications panel opens inside the window instead of past its left edge
 
 ## [0.5.4] — 2026-09-29 — Notarized build, quit guard for open sessions, setup wizard in steps

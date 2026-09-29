@@ -14,6 +14,7 @@ import {
 /** webContents we already wired a destroy listener for. */
 const trackedSenders = new Set<number>();
 
+import { whenRecovered } from "../agents/lost-sessions";
 import { getMainWindow } from "./window";
 
 export function registerIpcHandlers(): void {
@@ -61,7 +62,10 @@ export function registerIpcHandlers(): void {
   });
 
   // Terminal snapshot: replay ring buffer content for late-mounting terminals
-  ipcMain.handle("terminal:get-snapshot", (_event, agentId: string) => {
+  // A pane mounted during startup asked before its session was reattached and got nothing: an
+  // idle TUI (claude at its prompt) then stayed blank until touched. Wait for the reattach
+  ipcMain.handle("terminal:get-snapshot", async (_event, agentId: string) => {
+    await whenRecovered();
     return getPtyHost().getSnapshot(agentId);
   });
 

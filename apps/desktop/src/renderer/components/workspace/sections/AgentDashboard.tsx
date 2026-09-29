@@ -20,6 +20,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFleetSync } from "../../../hooks/use-fleet-sync";
 import { submitToAgent } from "../../../lib/agent-input";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
@@ -136,16 +137,8 @@ export function AgentDashboard() {
   const [showAll, setShowAll] = useState(false);
   const showFleet = watchingCount === 0 || showAll;
 
-  // DB truth for the whole fleet — hydrated INTO the store so every consumer
-  // (attention, badges) sees cross-project agents, not just this dashboard.
-  const { data: activeRows } = useQuery({
-    queryKey: ["agents", "listActive"],
-    queryFn: () => trpcInvoke<ActiveAgent[]>("agents.listActive"),
-    refetchInterval: 60_000,
-  });
-  useEffect(() => {
-    if (activeRows?.length) useAgentStore.getState().syncFromDb("__fleet__", activeRows);
-  }, [activeRows]);
+  // The fleet is hydrated into the store app-wide (useFleetSync); same query, same cache
+  const activeRows = useFleetSync<ActiveAgent>();
 
   const queryClient = useQueryClient();
   const [archiving, setArchiving] = useState(false);
