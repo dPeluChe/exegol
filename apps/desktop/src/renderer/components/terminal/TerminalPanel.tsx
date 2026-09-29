@@ -1,24 +1,29 @@
 import { deriveIsolationMode } from "@exegol/shared";
-import { useQuery } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
-import { useAgent, useProject, useScrollback, useStopAgent } from "../../hooks/use-trpc";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { useAgent, useStopAgent } from "../../hooks/use-trpc";
+import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
-import { useTerminalStore } from "../../stores/terminals";
-import { useToastStore } from "../../stores/toasts";
 import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
 import { FilesPeek } from "./FilesPeek";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
-import { TerminalScrollback } from "./TerminalScrollback";
+import { type ScrollbackAgent, TerminalScrollback } from "./TerminalScrollback";
 import { LiveStartOverlay, TerminalToolbar } from "./TerminalToolbar";
+import { useOpenShellHere } from "./use-open-shell-here";
+import { useTerminalGitInfo } from "./use-terminal-git-info";
 import { useTerminalLifecycle } from "./use-terminal-lifecycle";
-import { useTerminalUrlDetector } from "./use-terminal-url-detector";
+import {
+  useFilesPeek,
+  useLiveViewMode,
+  useLocalhostPreview,
+  useSendTo,
+} from "./use-terminal-panel-actions";
+import { useTerminalScrollState } from "./use-terminal-scroll-state";
 
 interface TerminalPanelProps {
   agentId: string;
@@ -26,146 +31,44 @@ interface TerminalPanelProps {
   onReady?: () => void;
 }
 
-const STOPPED_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
-
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   // Use push-driven store for instant status updates (not 30s polling)
   const { projectId: activeProjectId } = useProjectContext();
-  const storeAgent = useAgentStore((s) => s.agents[agentId]);
-  const { data: dbAgent } = useAgent(agentId);
-  // Prefer store (push events) over DB query (polling fallback). Merge in
-  // dbAgent-only fields (resumeCommand) so T106 Resume gating works even
-  // when the push-event store is the source for the rest of the shape.
-  const agent = useMemo(() => {
-    if (!storeAgent) return dbAgent ?? null;
-    return { ...storeAgent, resumeCommand: dbAgent?.resumeCommand ?? null };
-  }, [storeAgent, dbAgent]);
-  const rawIsStopped = agent ? STOPPED_STATUSES.has(agent.status) : false;
-  const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
-    rawIsStopped ? agentId : null,
-  );
-  const [scrollAtTop, setScrollAtTop] = useState(true);
-  const [scrollAtBottom, setScrollAtBottom] = useState(true);
-  const [hasNewOutput, setHasNewOutput] = useState(false);
-  const [showSendTo, setShowSendTo] = useState(false);
-  const [viewMode, setViewMode] = useState<"terminal" | "chat">("terminal");
-  const [liveSnapshot, setLiveSnapshot] = useState("");
-  const addAgent = useAgentStore((s) => s.addAgent);
-  const createTerminal = useTerminalStore((s) => s.createTerminal);
+  const { storeAgent, isolationMode, agent } = usePanelAgent(agentId);
+  const { scrollAtTop, scrollAtBottom, hasNewOutput, handleScrollPosition } =
+    useTerminalScrollState();
   const terminalRef = useRef<TerminalInstanceHandle>(null);
-  const didSerializeRef = useRef(false);
+  const { sendTargets, showSendTo, setShowSendTo, handleSendTo } = useSendTo(agentId, terminalRef);
+  const { viewMode, setViewMode, liveSnapshot, toggleLiveView } = useLiveViewMode(terminalRef);
   const stopAgent = useStopAgent();
-  const { resume, pending, resumableCliTypes } = useResumeAgent();
-  const { hasData, startTimedOut } = useTerminalLifecycle({
-    agentId,
-    isStopped: rawIsStopped,
-  });
+  const resumeAgent = useResumeAgent();
+  const { hasData, startTimedOut, isStopped, scrollbackContent, scrollbackLoading } =
+    useTerminalLifecycle({ agentId, status: agent?.status });
 
-  // Don't show "Ended" UI until we've received at least one data chunk,
-  // OR until scrollback is available in DB (reattach/reload scenario)
-  const isStopped = rawIsStopped && (hasData || !!scrollbackContent);
-
-  const allAgents = useAgentStore((s) => s.agents);
-
-  // T155 (verify session): repo-root agents have no worktree branch — show the
-  // repo's current branch + dirty count instead. Query keys shared with
-  // GitPane, so this costs zero extra polling.
   const toolbarProjectId = agent?.projectId ?? activeProjectId ?? undefined;
-  const { data: repoBranch } = useQuery({
-    queryKey: ["git", "branch", toolbarProjectId],
-    queryFn: () => trpcInvoke<string>("diff.branch", { projectId: toolbarProjectId }),
-    enabled: !!toolbarProjectId && !agent?.branchName,
-    staleTime: 30_000,
-  });
-  const { data: gitStatusFiles } = useQuery({
-    queryKey: ["git", "status", toolbarProjectId],
-    queryFn: () =>
-      trpcInvoke<Array<{ path: string }>>("diff.status", { projectId: toolbarProjectId }),
-    enabled: !!toolbarProjectId,
-    refetchInterval: 15_000,
-  });
-
-  // Files beside the terminal for a quick look or a drag in, without touching the layout
-  const [filesOpen, setFilesOpen] = useState(false);
-  const { data: peekProject } = useProject(filesOpen ? (toolbarProjectId ?? null) : null);
-
-  const { data: repoUrl } = useQuery({
-    queryKey: ["git", "remoteWebUrl", toolbarProjectId],
-    queryFn: () => trpcInvoke<string | null>("diff.remoteWebUrl", { projectId: toolbarProjectId }),
-    enabled: !!toolbarProjectId,
-    staleTime: 5 * 60_000,
-  });
-
-  const handleScrollPosition = useCallback((atTop: boolean, atBottom: boolean, wrote?: boolean) => {
-    setScrollAtTop(atTop);
-    setScrollAtBottom(atBottom);
-    // T155: pulse the scroll-to-bottom button when output lands off-screen
-    if (atBottom) setHasNewOutput(false);
-    else if (wrote) setHasNewOutput(true);
-  }, []);
-
+  const gitInfo = useTerminalGitInfo(toolbarProjectId, agent?.branchName);
+  const filesPeek = useFilesPeek(toolbarProjectId);
+  const agentProjectId = agent?.projectId;
   // T155: Cmd+click on a file path in the terminal → open in the IDE at line
   const handleOpenFileLink = useCallback(
     (path: string, line?: number) => {
-      const pid = agent?.projectId;
-      if (!pid) return;
-      trpcMutate("projects.openInIde", { projectId: pid, file: path, line, agentId }).catch(
-        () => {},
-      );
+      if (!agentProjectId) return;
+      trpcMutate("projects.openInIde", {
+        projectId: agentProjectId,
+        file: path,
+        line,
+        agentId,
+      }).catch(() => {});
     },
-    [agent?.projectId, agentId],
+    [agentProjectId, agentId],
   );
-
-  // T155 (verify session): a "Failed to start" pane becomes a plain shell in
-  // the same project so the user can diagnose (rerun the CLI by hand, etc.)
-  const handleOpenShellHere = useCallback(async () => {
-    // A "Failed to start" agent may already be gone from store+DB — fall back
-    // to the workspace's active project (the pane lives in its view anyway).
-    const pid = agent?.projectId ?? activeProjectId;
-    if (!pid || !paneId) {
-      useToastStore.getState().addToast({
-        type: "error",
-        title: "Open Terminal failed",
-        body: !pid ? "No active project" : "Pane not resolved",
-      });
-      return;
-    }
-    try {
-      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-      const shellAgent = await trpcMutate<any>("agents.spawn", {
-        projectId: pid,
-        cliType: "shell",
-        taskDescription: "Shell",
-      });
-      addAgent({
-        id: shellAgent.id,
-        projectId: pid,
-        cliType: shellAgent.cliType,
-        status: shellAgent.status,
-        currentStep: shellAgent.currentStep,
-        taskDescription: shellAgent.taskDescription,
-        branchName: shellAgent.branchName ?? null,
-        alias: shellAgent.alias ?? null,
-        tokenUsage: { input: 0, output: 0, cost: 0 },
-        startedAt: shellAgent.startedAt,
-        accessMode: shellAgent.accessMode ?? null,
-        claudeSessionId: null,
-        activityLevel: "neutral",
-      });
-      createTerminal(shellAgent.id);
-      useWorkspaceStore.getState().updatePane(paneId, { type: "terminal", agentId: shellAgent.id });
-      // Stop the dead agent AFTER the pane swapped — stopping first raced the
-      // pane cleanup and the button appeared to do nothing.
-      stopAgent.mutate(agentId);
-    } catch (err) {
-      useToastStore.getState().addToast({
-        type: "error",
-        title: "Open Terminal failed",
-        body: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }, [agent?.projectId, activeProjectId, paneId, agentId, stopAgent, addAgent, createTerminal]);
-
+  const handleOpenShellHere = useOpenShellHere({
+    agentId,
+    paneId,
+    agentProjectId,
+    activeProjectId,
+    stopAgent,
+  });
   // A browser pane beside this one: Cmd+click on a URL (T155), the preview chip, the repo button
   const openBesideInBrowser = useCallback(
     (url: string) => {
@@ -178,51 +81,9 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     [paneId],
   );
 
-  /** Running agents in other panes (targets for "Send to") */
-  const sendTargets = Object.values(allAgents).filter(
-    (a) => a.id !== agentId && ["running", "waiting_input"].includes(a.status),
-  );
+  usePersistSerializedOnStop(agentId, isStopped, terminalRef);
 
-  const handleSendTo = useCallback((targetId: string) => {
-    const text = terminalRef.current?.getSelection();
-    if (!text) return;
-    window.api.terminal.write(targetId, text);
-    setShowSendTo(false);
-  }, []);
-
-  // When agent transitions to stopped, serialize terminal state and persist it
-  const persistSerializedState = useCallback(() => {
-    if (didSerializeRef.current) return;
-    const serialized = terminalRef.current?.serialize();
-    if (!serialized) return;
-    didSerializeRef.current = true;
-    trpcMutate("scrollback.saveSerialized", { agentId, content: serialized }).catch(() => {
-      // Non-fatal: raw scrollback still available as fallback
-    });
-  }, [agentId]);
-
-  useEffect(() => {
-    if (isStopped) {
-      persistSerializedState();
-    }
-  }, [isStopped, persistSerializedState]);
-
-  const handleToggleLiveView = useCallback(() => {
-    if (viewMode === "terminal") {
-      setLiveSnapshot(terminalRef.current?.serialize() ?? "");
-      setViewMode("chat");
-    } else {
-      setViewMode("terminal");
-    }
-  }, [viewMode]);
-
-  // T128: localhost URL detector → "Open preview" toolbar chip
-  const [previewUrl, dismissPreview] = useTerminalUrlDetector(agentId, !isStopped);
-  const handleOpenPreview = useCallback(() => {
-    if (!previewUrl) return;
-    openBesideInBrowser(previewUrl);
-    dismissPreview();
-  }, [previewUrl, openBesideInBrowser, dismissPreview]);
+  const preview = useLocalhostPreview(agentId, !isStopped, openBesideInBrowser);
 
   const floatingButtons = (
     <TerminalFloatingButtons
@@ -256,34 +117,12 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   // If stopped with no scrollback yet (loading or no data)
   if (isStopped && !scrollbackContent) {
-    if (scrollbackLoading) {
-      return <LoadingSpinner label="Loading session history..." className="h-full" />;
-    }
-    // A restart that killed the sidecar before history was saved landed here with no way back
     return (
-      <EmptyState
-        icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
-        title={agent?.status === "crashed" ? "Session lost" : "Session ended"}
-        description={
-          agent?.status === "crashed"
-            ? "It was interrupted (app or system restart) before its history was saved"
-            : "No history available"
-        }
-        action={
-          agent
-            ? {
-                label: pending
-                  ? "Starting..."
-                  : resumableCliTypes.has(agent.cliType)
-                    ? "Resume"
-                    : "Re-launch",
-                onClick: () => {
-                  if (!pending) resume(agent, paneId).catch(() => {});
-                },
-              }
-            : undefined
-        }
-        className="h-full"
+      <SessionEndedState
+        agent={agent}
+        paneId={paneId}
+        loading={scrollbackLoading}
+        resumeAgent={resumeAgent}
       />
     );
   }
@@ -303,18 +142,16 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         <TerminalToolbar
           agent={storeAgent ?? null}
           accessMode={agent?.accessMode}
-          isolationMode={dbAgent ? deriveIsolationMode(dbAgent) : null}
-          branchName={agent?.branchName ?? repoBranch ?? null}
-          dirtyCount={gitStatusFiles?.length ?? 0}
+          isolationMode={isolationMode}
+          branchName={gitInfo.branchName}
+          dirtyCount={gitInfo.dirtyCount}
           viewMode={viewMode}
-          onToggleView={handleToggleLiveView}
-          previewUrl={previewUrl}
-          onOpenPreview={handleOpenPreview}
-          onDismissPreview={dismissPreview}
-          repoUrl={repoUrl}
+          onToggleView={toggleLiveView}
+          preview={preview}
+          repoUrl={gitInfo.repoUrl}
           onOpenRepo={openBesideInBrowser}
-          filesOpen={filesOpen}
-          onToggleFiles={() => setFilesOpen((v) => !v)}
+          filesOpen={filesPeek.filesOpen}
+          onToggleFiles={filesPeek.toggleFiles}
         />
       )}
       {/* min-h-0: a flex item never shrinks below its content by default, so the
@@ -339,14 +176,102 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
             </>
           )}
         </div>
-        {filesOpen && peekProject && (
+        {filesPeek.filesOpen && filesPeek.peekProject && (
           <FilesPeek
-            projectId={peekProject.id}
-            rootPath={peekProject.path}
-            onClose={() => setFilesOpen(false)}
+            projectId={filesPeek.peekProject.id}
+            rootPath={filesPeek.peekProject.path}
+            onClose={filesPeek.closeFiles}
           />
         )}
       </div>
     </div>
+  );
+}
+
+/** Prefer store (push events) over DB query (polling fallback). Merge in
+ *  dbAgent-only fields (resumeCommand) so T106 Resume gating works even
+ *  when the push-event store is the source for the rest of the shape. */
+function usePanelAgent(agentId: string) {
+  const storeAgent = useAgentStore((s) => s.agents[agentId]);
+  const { data: dbAgent } = useAgent(agentId);
+  const agent = useMemo(() => {
+    if (!storeAgent) return dbAgent ?? null;
+    return { ...storeAgent, resumeCommand: dbAgent?.resumeCommand ?? null };
+  }, [storeAgent, dbAgent]);
+  return {
+    storeAgent,
+    isolationMode: dbAgent ? deriveIsolationMode(dbAgent) : null,
+    agent,
+  };
+}
+
+/** When the agent stops, serialize the terminal state once and persist it */
+function usePersistSerializedOnStop(
+  agentId: string,
+  isStopped: boolean,
+  terminalRef: RefObject<TerminalInstanceHandle | null>,
+) {
+  const didSerializeRef = useRef(false);
+
+  const persistSerializedState = useCallback(() => {
+    if (didSerializeRef.current) return;
+    const serialized = terminalRef.current?.serialize();
+    if (!serialized) return;
+    didSerializeRef.current = true;
+    trpcMutate("scrollback.saveSerialized", { agentId, content: serialized }).catch(() => {
+      // Non-fatal: raw scrollback still available as fallback
+    });
+  }, [agentId, terminalRef]);
+
+  useEffect(() => {
+    if (isStopped) {
+      persistSerializedState();
+    }
+  }, [isStopped, persistSerializedState]);
+}
+
+/** Stopped with no saved history (or still loading it): a restart that killed the sidecar before
+ *  history was saved landed here with no way back, so offer Resume/Re-launch */
+function SessionEndedState({
+  agent,
+  paneId,
+  loading,
+  resumeAgent,
+}: {
+  agent: ScrollbackAgent | null;
+  paneId: string | undefined;
+  loading: boolean;
+  resumeAgent: ReturnType<typeof useResumeAgent>;
+}) {
+  const { resume, pending, resumableCliTypes } = resumeAgent;
+  if (loading) {
+    return <LoadingSpinner label="Loading session history..." className="h-full" />;
+  }
+  const crashed = agent?.status === "crashed";
+  return (
+    <EmptyState
+      icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
+      title={crashed ? "Session lost" : "Session ended"}
+      description={
+        crashed
+          ? "It was interrupted (app or system restart) before its history was saved"
+          : "No history available"
+      }
+      action={
+        agent
+          ? {
+              label: pending
+                ? "Starting..."
+                : resumableCliTypes.has(agent.cliType)
+                  ? "Resume"
+                  : "Re-launch",
+              onClick: () => {
+                if (!pending) resume(agent, paneId).catch(() => {});
+              },
+            }
+          : undefined
+      }
+      className="h-full"
+    />
   );
 }

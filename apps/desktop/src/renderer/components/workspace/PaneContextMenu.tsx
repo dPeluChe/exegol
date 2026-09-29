@@ -14,13 +14,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useContextMenu } from "../../hooks/use-context-menu";
 import type { PaneType } from "../../stores/workspace";
-
-interface MenuPosition {
-  x: number;
-  y: number;
-}
 
 interface PaneContextMenuProps {
   tabId: string;
@@ -73,122 +68,98 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
   );
 }
 
-export function PaneContextMenu({
-  paneType,
+type MenuActions = Omit<PaneContextMenuProps, "children">;
+
+const present = (items: (MenuItem | false | undefined)[]): MenuItem[] =>
+  items.filter((item): item is MenuItem => Boolean(item));
+
+function clipboardSection({ onCopy, onPaste }: MenuActions): MenuItem[] {
+  return present([
+    onCopy && { label: "Copy", icon: Clipboard, shortcut: "⌘C", action: onCopy },
+    onPaste && { label: "Paste", icon: ClipboardPaste, shortcut: "⌘V", action: onPaste },
+  ]);
+}
+
+function terminalActionsSection({
   agentId,
-  isSplitPane,
-  onSplit,
-  onExtractToTab,
-  onEqualize,
-  onClose,
-  onFloat,
-  onCopy,
-  onPaste,
   onClear,
   onScrollTop,
   onScrollBottom,
-  children,
-}: PaneContextMenuProps) {
-  const [menu, setMenu] = useState<MenuPosition | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setMenu({ x: e.clientX, y: e.clientY });
-  }, []);
-
-  const closeMenu = useCallback(() => setMenu(null), []);
-
-  useEffect(() => {
-    if (!menu) return;
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu();
-    };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeMenu();
-    };
-    window.addEventListener("mousedown", handleClick);
-    window.addEventListener("keydown", handleEsc);
-    return () => {
-      window.removeEventListener("mousedown", handleClick);
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [menu, closeMenu]);
-
-  const isTerminal = paneType === "terminal";
-
-  const sections: MenuSection[] = [];
-
-  // Terminal clipboard section
-  if (isTerminal && (onCopy || onPaste)) {
-    const items: MenuItem[] = [];
-    if (onCopy) items.push({ label: "Copy", icon: Clipboard, shortcut: "⌘C", action: onCopy });
-    if (onPaste)
-      items.push({ label: "Paste", icon: ClipboardPaste, shortcut: "⌘V", action: onPaste });
-    if (items.length > 0) sections.push({ items });
+}: MenuActions): MenuItem[] {
+  const items = present([
+    onClear && { label: "Clear Terminal", icon: X, shortcut: "⌘K", action: onClear },
+    onScrollTop && { label: "Scroll to Top", icon: ArrowUpToLine, action: onScrollTop },
+    onScrollBottom && { label: "Scroll to Bottom", icon: ArrowDownToLine, action: onScrollBottom },
+  ]);
+  // T155 (verify session): manual repaint escape hatch — refit + SIGWINCH
+  // jiggle for alt-screen TUIs that come back black after a reload.
+  if (agentId) {
+    // T160: alias = the agent_send addressing name; the SessionAlias chip in
+    // the toolbar listens for this event and enters edit mode.
+    items.push({
+      label: "Rename Session",
+      icon: Pencil,
+      action: () =>
+        window.dispatchEvent(new CustomEvent("exegol:rename-session", { detail: { agentId } })),
+    });
+    items.push({
+      label: "Refresh Terminal",
+      icon: RefreshCw,
+      action: () =>
+        window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
+    });
   }
+  return items;
+}
 
-  // Terminal actions section
-  if (isTerminal) {
-    const items: MenuItem[] = [];
-    if (onClear) items.push({ label: "Clear Terminal", icon: X, shortcut: "⌘K", action: onClear });
-    if (onScrollTop)
-      items.push({ label: "Scroll to Top", icon: ArrowUpToLine, action: onScrollTop });
-    if (onScrollBottom)
-      items.push({ label: "Scroll to Bottom", icon: ArrowDownToLine, action: onScrollBottom });
-    // T155 (verify session): manual repaint escape hatch — refit + SIGWINCH
-    // jiggle for alt-screen TUIs that come back black after a reload.
-    if (agentId) {
-      // T160: alias = the agent_send addressing name; the SessionAlias chip in
-      // the toolbar listens for this event and enters edit mode.
-      items.push({
-        label: "Rename Session",
-        icon: Pencil,
-        action: () =>
-          window.dispatchEvent(new CustomEvent("exegol:rename-session", { detail: { agentId } })),
-      });
-      items.push({
-        label: "Refresh Terminal",
-        icon: RefreshCw,
-        action: () =>
-          window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
-      });
-    }
-    if (items.length > 0) sections.push({ items });
-  }
+function splitSection({
+  isSplitPane,
+  onSplit,
+  onFloat,
+  onEqualize,
+  onExtractToTab,
+}: MenuActions): MenuItem[] {
+  return [
+    {
+      label: "Split Horizontally",
+      icon: Columns,
+      shortcut: "⌘D",
+      action: () => onSplit("horizontal"),
+    },
+    { label: "Split Vertically", icon: Rows, shortcut: "⌘⇧D", action: () => onSplit("vertical") },
+    { label: "Split with Browser", icon: Globe, action: () => onSplit("horizontal", "browser") },
+    ...(onFloat ? [{ label: "Float to Window", icon: PictureInPicture2, action: onFloat }] : []),
+    ...(isSplitPane
+      ? [
+          { label: "Equalize Splits", icon: Equal, shortcut: "⌘⇧0", action: onEqualize },
+          { label: "Move to New Tab", icon: MoveRight, action: onExtractToTab },
+        ]
+      : []),
+  ];
+}
 
-  // Split section (all pane types)
-  sections.push({
-    items: [
-      {
-        label: "Split Horizontally",
-        icon: Columns,
-        shortcut: "⌘D",
-        action: () => onSplit("horizontal"),
-      },
-      { label: "Split Vertically", icon: Rows, shortcut: "⌘⇧D", action: () => onSplit("vertical") },
-      { label: "Split with Browser", icon: Globe, action: () => onSplit("horizontal", "browser") },
-      ...(onFloat ? [{ label: "Float to Window", icon: PictureInPicture2, action: onFloat }] : []),
-      ...(isSplitPane
-        ? [
-            { label: "Equalize Splits", icon: Equal, shortcut: "⌘⇧0", action: onEqualize },
-            { label: "Move to New Tab", icon: MoveRight, action: onExtractToTab },
-          ]
-        : []),
-    ],
-  });
+function buildMenuSections(actions: MenuActions): MenuSection[] {
+  const isTerminal = actions.paneType === "terminal";
+  const candidates = isTerminal ? [clipboardSection(actions), terminalActionsSection(actions)] : [];
+  return [
+    ...candidates.filter((items) => items.length > 0).map((items) => ({ items })),
+    { items: splitSection(actions) },
+    {
+      items: [
+        {
+          label: `Close ${isTerminal ? "Terminal" : "Pane"}`,
+          icon: Trash2,
+          action: actions.onClose,
+          danger: true,
+        },
+      ],
+    },
+  ];
+}
 
-  // Close section
-  sections.push({
-    items: [
-      {
-        label: `Close ${isTerminal ? "Terminal" : "Pane"}`,
-        icon: Trash2,
-        action: onClose,
-        danger: true,
-      },
-    ],
-  });
+export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) {
+  const { contextMenu: menu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
+  const sections = buildMenuSections(actions);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: context menu wrapper
@@ -210,7 +181,7 @@ export function PaneContextMenu({
             <div key={section.items[0]?.label ?? si}>
               {si > 0 && <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />}
               {section.items.map((item) => (
-                <MenuItemButton key={item.label} item={item} onClose={closeMenu} />
+                <MenuItemButton key={item.label} item={item} onClose={closeContextMenu} />
               ))}
             </div>
           ))}

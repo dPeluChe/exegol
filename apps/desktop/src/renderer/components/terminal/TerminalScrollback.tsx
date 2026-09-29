@@ -58,43 +58,17 @@ export function TerminalScrollback({
   }, [agent, paneId, pending, resume]);
 
   const canResume = agent ? resumableCliTypes.has(agent.cliType) : false;
-  const ResumeIcon = canResume ? Play : RotateCcw;
-  const resumeLabel = canResume ? "Resume" : "Re-launch";
-  const isCrashed = agent?.status === "crashed";
 
   return (
     <div className="relative flex h-full flex-col">
-      <div
-        className={`relative flex shrink-0 items-center px-3 py-1.5 text-[11px] ${isCrashed ? "bg-red-500/10" : "bg-yellow-500/10"}`}
-      >
-        <div className="flex items-center gap-1.5">
-          <AlertCircle
-            className={`h-3.5 w-3.5 shrink-0 ${isCrashed ? "text-red-400" : "text-yellow-400"}`}
-          />
-          <span className={isCrashed ? "text-red-200/80" : "text-yellow-200/80"}>
-            {isCrashed ? "Crashed" : agent?.suspended ? "Suspended: Resume to continue" : "Ended"}
-          </span>
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-          {agent && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
-              onClick={handleResume}
-              disabled={pending}
-            >
-              <ResumeIcon className="h-3 w-3" />
-              {resumeLabel}
-            </Button>
-          )}
-        </div>
-        <TerminalViewToggle
-          viewMode={viewMode}
-          onToggle={() => setViewMode(viewMode === "terminal" ? "chat" : "terminal")}
-          className="ml-auto"
-        />
-      </div>
+      <ScrollbackStatusBar
+        agent={agent}
+        canResume={canResume}
+        pending={pending}
+        onResume={handleResume}
+        viewMode={viewMode}
+        onToggleView={() => setViewMode(viewMode === "terminal" ? "chat" : "terminal")}
+      />
       {agent && (
         <AgentStopReason
           agent={agent}
@@ -146,6 +120,57 @@ export function TerminalScrollback({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Crashed / Ended / Suspended strip with the resume action and the view toggle */
+function ScrollbackStatusBar({
+  agent,
+  canResume,
+  pending,
+  onResume,
+  viewMode,
+  onToggleView,
+}: {
+  agent: ScrollbackAgent | null;
+  canResume: boolean;
+  pending: boolean;
+  onResume: () => void;
+  viewMode: "terminal" | "chat";
+  onToggleView: () => void;
+}) {
+  const ResumeIcon = canResume ? Play : RotateCcw;
+  const resumeLabel = canResume ? "Resume" : "Re-launch";
+  const isCrashed = agent?.status === "crashed";
+
+  return (
+    <div
+      className={`relative flex shrink-0 items-center px-3 py-1.5 text-[11px] ${isCrashed ? "bg-red-500/10" : "bg-yellow-500/10"}`}
+    >
+      <div className="flex items-center gap-1.5">
+        <AlertCircle
+          className={`h-3.5 w-3.5 shrink-0 ${isCrashed ? "text-red-400" : "text-yellow-400"}`}
+        />
+        <span className={isCrashed ? "text-red-200/80" : "text-yellow-200/80"}>
+          {isCrashed ? "Crashed" : agent?.suspended ? "Suspended: Resume to continue" : "Ended"}
+        </span>
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
+        {agent && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
+            onClick={onResume}
+            disabled={pending}
+          >
+            <ResumeIcon className="h-3 w-3" />
+            {resumeLabel}
+          </Button>
+        )}
+      </div>
+      <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} className="ml-auto" />
     </div>
   );
 }

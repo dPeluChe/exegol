@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { TaskColumn, TaskItem } from "../../../../lib/markdown-tasks";
 import { switchSection } from "../../../../lib/switch-section";
 import { COLUMN_CONFIG } from "./config";
+import { TaskBadges } from "./TaskBadges";
 
 export function TaskDetailModal({
   task,
@@ -19,16 +20,7 @@ export function TaskDetailModal({
 }) {
   const [copied, setCopied] = useState(false);
 
-  // Build prompt text for agent assignment
-  const promptText = [
-    `Task: ${task.text}`,
-    task.tags.length > 0 ? `Tags: ${task.tags.map((t) => `#${t}`).join(" ")}` : "",
-    task.priority ? `Priority: ${task.priority}` : "",
-    `Source: ${filePath}:${task.line + 1}`,
-    `Status: ${COLUMN_CONFIG[task.column].label}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const promptText = buildTaskPromptText(task, filePath);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(promptText);
@@ -81,61 +73,11 @@ export function TaskDetailModal({
           {task.text}
         </h3>
 
-        {/* GitHub info */}
-        {task.source === "github" && (
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            {task.issueUrl && (
-              <a
-                href={task.issueUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded bg-white/5 px-2 py-0.5 text-[9px] font-medium text-accent hover:bg-accent/15"
-              >
-                Open on GitHub
-              </a>
-            )}
-            {task.issueAssignees && task.issueAssignees.length > 0 && (
-              <div className="flex items-center gap-1">
-                {task.issueAssignees.map((a) => (
-                  <span
-                    key={a}
-                    className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-400"
-                  >
-                    @{a}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {task.source === "github" && <TaskGithubInfo task={task} />}
 
         {/* Metadata */}
         <div className="mb-3 flex flex-wrap gap-1.5">
-          {task.tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded bg-accent/10 px-2 py-0.5 text-[9px] font-medium text-accent"
-            >
-              #{tag}
-            </span>
-          ))}
-          {task.assignedAgent && (
-            <span className="rounded bg-purple-500/10 px-2 py-0.5 text-[9px] font-medium text-purple-400">
-              @{task.assignedAgent}
-            </span>
-          )}
-          {task.priority && (
-            <span
-              className={cn(
-                "rounded px-2 py-0.5 text-[9px] font-medium",
-                task.priority === "high" && "bg-red-500/10 text-red-400",
-                task.priority === "medium" && "bg-yellow-500/10 text-yellow-400",
-                task.priority === "low" && "bg-blue-500/10 text-blue-400",
-              )}
-            >
-              !{task.priority}
-            </span>
-          )}
+          <TaskBadges task={task} badgeClassName="rounded px-2 py-0.5 text-[9px] font-medium" />
         </div>
 
         {/* Source file / GitHub issue */}
@@ -203,6 +145,48 @@ export function TaskDetailModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Prompt text for agent assignment. */
+function buildTaskPromptText(task: TaskItem, filePath: string): string {
+  return [
+    `Task: ${task.text}`,
+    task.tags.length > 0 ? `Tags: ${task.tags.map((t) => `#${t}`).join(" ")}` : "",
+    task.priority ? `Priority: ${task.priority}` : "",
+    `Source: ${filePath}:${task.line + 1}`,
+    `Status: ${COLUMN_CONFIG[task.column].label}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function TaskGithubInfo({ task }: { task: TaskItem }) {
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-2">
+      {task.issueUrl && (
+        <a
+          href={task.issueUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded bg-white/5 px-2 py-0.5 text-[9px] font-medium text-accent hover:bg-accent/15"
+        >
+          Open on GitHub
+        </a>
+      )}
+      {task.issueAssignees && task.issueAssignees.length > 0 && (
+        <div className="flex items-center gap-1">
+          {task.issueAssignees.map((a) => (
+            <span
+              key={a}
+              className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-400"
+            >
+              @{a}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

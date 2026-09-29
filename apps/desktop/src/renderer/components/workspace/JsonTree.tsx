@@ -35,28 +35,31 @@ function Value({ value }: { value: unknown }) {
 /** Children rendered per step: a 50k-line JSONL opened all at once froze the UI */
 const PAGE = 200;
 
-function Node({ name, value, depth }: { name: string | null; value: unknown; depth: number }) {
+function NodeLabel({ name }: { name: string | null }) {
+  return name !== null && <span className="text-text-secondary">{name}</span>;
+}
+
+function LeafNode({ name, value, depth }: { name: string | null; value: unknown; depth: number }) {
+  return (
+    <div className="flex gap-1.5 py-px" style={{ paddingLeft: depth * 14 + 14 }}>
+      <NodeLabel name={name} />
+      {name !== null && <span className="text-text-muted">:</span>}
+      <Value value={value} />
+    </div>
+  );
+}
+
+function BranchNode({ name, value, depth }: { name: string | null; value: object; depth: number }) {
   const isArray = Array.isArray(value);
-  const isObject = value !== null && typeof value === "object";
-  const size = isObject ? Object.keys(value as object).length : 0;
+  const size = Object.keys(value).length;
   const [open, setOpen] = useState(depth === 0 || (depth < 2 && size <= PAGE));
   const [limit, setLimit] = useState(PAGE);
-  const label = name !== null && <span className="text-text-secondary">{name}</span>;
-
-  if (!isObject) {
-    return (
-      <div className="flex gap-1.5 py-px" style={{ paddingLeft: depth * 14 + 14 }}>
-        {label}
-        {label && <span className="text-text-muted">:</span>}
-        <Value value={value} />
-      </div>
-    );
-  }
 
   const entries = isArray
     ? (value as unknown[]).map((v, i) => [String(i), v] as const)
     : Object.entries(value as Record<string, unknown>);
   const count = entries.length;
+  const Chevron = open ? ChevronDown : ChevronRight;
 
   return (
     <div>
@@ -66,12 +69,8 @@ function Node({ name, value, depth }: { name: string | null; value: unknown; dep
         className="flex items-center gap-1 py-px text-left hover:bg-white/5"
         style={{ paddingLeft: depth * 14 }}
       >
-        {open ? (
-          <ChevronDown className="h-3 w-3 text-text-muted" />
-        ) : (
-          <ChevronRight className="h-3 w-3 text-text-muted" />
-        )}
-        {label ?? <span className="text-text-muted">{isArray ? "array" : "object"}</span>}
+        <Chevron className="h-3 w-3 text-text-muted" />
+        <NodeLabel name={name} />
         <span className="text-text-muted">{isArray ? `[${count}]` : `{${count}}`}</span>
       </button>
       {open &&
@@ -90,6 +89,13 @@ function Node({ name, value, depth }: { name: string | null; value: unknown; dep
       )}
     </div>
   );
+}
+
+function Node({ name, value, depth }: { name: string | null; value: unknown; depth: number }) {
+  if (value !== null && typeof value === "object") {
+    return <BranchNode name={name} value={value} depth={depth} />;
+  }
+  return <LeafNode name={name} value={value} depth={depth} />;
 }
 
 /**

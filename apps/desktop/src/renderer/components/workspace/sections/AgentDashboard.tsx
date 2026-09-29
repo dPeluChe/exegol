@@ -12,8 +12,6 @@ import {
   Clock,
   Coins,
   Cpu,
-  Eye,
-  Map as MapIcon,
   Plus,
   Send,
   Square,
@@ -27,6 +25,7 @@ import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/age
 import { useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
 import { ResumeButton } from "../../agents/ResumeButton";
+import { AccessModeBadge } from "../../common/AccessModeBadge";
 import { AgentCliIcon } from "../../common/AgentCliIcon";
 import { AgentSpinner } from "../../common/AgentSpinner";
 import { FilterChip } from "../../common/FilterChip";
@@ -505,7 +504,6 @@ function AgentCard({
   onArchive?: () => void;
 }) {
   const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
-  const StatusIcon = config.icon;
   const canPeek = LIVE_STATUSES.has(agent.status);
   const [peekOpen, setPeekOpen] = useState(false);
 
@@ -536,18 +534,7 @@ function AgentCard({
 
         {/* Center: info */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <SessionAlias agent={agent} />
-            <QuietBadge agent={agent} />
-            {agent.alias && (
-              <span className="shrink-0 text-[10px] text-text-muted">{agent.cliType}</span>
-            )}
-            <span className={cn("flex items-center gap-1 text-[10px]", config.color)}>
-              <StatusIcon className="h-3 w-3" />
-              {agent.suspended ? "Suspended" : hasUnread ? "Needs input" : config.label}
-            </span>
-            {projectMeta && <ProjectChip project={projectMeta} className="ml-auto text-[9px]" />}
-          </div>
+          <AgentCardTitle agent={agent} projectMeta={projectMeta} hasUnread={hasUnread} />
           <p className="mt-0.5 truncate text-xs text-text-muted">{agent.taskDescription}</p>
           {agent.currentStep && (
             <p className="mt-0.5 truncate text-[10px] text-text-muted/70 italic">
@@ -556,69 +543,112 @@ function AgentCard({
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
             {agent.startedAt && <Elapsed startedAt={agent.startedAt} />}
-            {(agent.tokenUsage.input > 0 || agent.tokenUsage.output > 0) && (
-              <span className="flex items-center gap-0.5">
-                <Coins className="h-2.5 w-2.5" />
-                {((agent.tokenUsage.input + agent.tokenUsage.output) / 1000).toFixed(1)}k
-                {agent.tokenUsage.cost > 0 && (
-                  <span className="ml-0.5 text-text-muted/60">
-                    ${agent.tokenUsage.cost.toFixed(3)}
-                  </span>
-                )}
-              </span>
-            )}
-            {agent.accessMode === "read" && (
-              <span className="flex items-center gap-0.5 text-sky-400/80">
-                <Eye className="h-2.5 w-2.5" />
-                read-only
-              </span>
-            )}
-            {agent.accessMode === "plan" && (
-              <span className="flex items-center gap-0.5 text-amber-400/80">
-                <MapIcon className="h-2.5 w-2.5" />
-                plan
-              </span>
-            )}
+            <AgentTokenUsage usage={agent.tokenUsage} />
+            <AccessModeBadge mode={agent.accessMode} variant="inline" />
             {agent.branchName && (
               <span className="truncate rounded bg-white/5 px-1 py-0.5 font-mono text-[9px]">
                 {agent.branchName}
               </span>
             )}
-            {canPeek && <WatchToggle agentId={agent.id} className="text-[10px]" />}
             {canPeek && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPeekOpen((v) => !v);
-                }}
-                className="ml-auto flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary"
-                title="Peek at the terminal and reply inline"
-              >
-                {peekOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                Peek
-              </button>
+              <PeekControls
+                agentId={agent.id}
+                peekOpen={peekOpen}
+                onTogglePeek={() => setPeekOpen((v) => !v)}
+              />
             )}
-            {onArchive && <ResumeButton agent={agent} className="ml-auto" />}
-            {onArchive && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onArchive();
-                }}
-                className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
-                title="Archive — keeps the session, removes the card"
-              >
-                <Archive className="h-3 w-3" />
-              </button>
-            )}
+            {onArchive && <EndedSessionActions agent={agent} onArchive={onArchive} />}
           </div>
         </div>
       </div>
 
       {peekOpen && <PeekPanel agent={agent} />}
     </div>
+  );
+}
+
+function AgentCardTitle({
+  agent,
+  projectMeta,
+  hasUnread,
+}: {
+  agent: AgentState;
+  projectMeta?: ProjectMeta;
+  hasUnread: boolean;
+}) {
+  const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
+  const StatusIcon = config.icon;
+  return (
+    <div className="flex items-center gap-2">
+      <SessionAlias agent={agent} />
+      <QuietBadge agent={agent} />
+      {agent.alias && <span className="shrink-0 text-[10px] text-text-muted">{agent.cliType}</span>}
+      <span className={cn("flex items-center gap-1 text-[10px]", config.color)}>
+        <StatusIcon className="h-3 w-3" />
+        {agent.suspended ? "Suspended" : hasUnread ? "Needs input" : config.label}
+      </span>
+      {projectMeta && <ProjectChip project={projectMeta} className="ml-auto text-[9px]" />}
+    </div>
+  );
+}
+
+function AgentTokenUsage({ usage }: { usage: AgentState["tokenUsage"] }) {
+  if (!(usage.input > 0 || usage.output > 0)) return null;
+  return (
+    <span className="flex items-center gap-0.5">
+      <Coins className="h-2.5 w-2.5" />
+      {((usage.input + usage.output) / 1000).toFixed(1)}k
+      {usage.cost > 0 && (
+        <span className="ml-0.5 text-text-muted/60">${usage.cost.toFixed(3)}</span>
+      )}
+    </span>
+  );
+}
+
+function PeekControls({
+  agentId,
+  peekOpen,
+  onTogglePeek,
+}: {
+  agentId: string;
+  peekOpen: boolean;
+  onTogglePeek: () => void;
+}) {
+  return (
+    <>
+      <WatchToggle agentId={agentId} className="text-[10px]" />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onTogglePeek();
+        }}
+        className="ml-auto flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary"
+        title="Peek at the terminal and reply inline"
+      >
+        {peekOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        Peek
+      </button>
+    </>
+  );
+}
+
+function EndedSessionActions({ agent, onArchive }: { agent: AgentState; onArchive: () => void }) {
+  return (
+    <>
+      <ResumeButton agent={agent} className="ml-auto" />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onArchive();
+        }}
+        className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
+        title="Archive — keeps the session, removes the card"
+      >
+        <Archive className="h-3 w-3" />
+      </button>
+    </>
   );
 }
 

@@ -1,33 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useScrollback } from "../../hooks/use-trpc";
 
-interface UseTerminalLifecycleArgs {
-  agentId: string;
-  isStopped: boolean;
-  startTimeoutMs?: number;
-}
-
-interface TerminalLifecycle {
-  hasData: boolean;
-  startTimedOut: boolean;
-  markData: () => void;
-}
+const STOPPED_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 
 /**
  * Track first-data arrival on a freshly mounted terminal pane. The PTY may
  * already have buffered content from before app restart, so this also probes
- * the ring-buffer snapshot once on mount.
+ * the ring-buffer snapshot once on mount. Once the agent stops, loads its saved history.
  */
 export function useTerminalLifecycle({
   agentId,
-  isStopped,
+  status,
   startTimeoutMs = 8_000,
-}: UseTerminalLifecycleArgs): TerminalLifecycle {
+}: {
+  agentId: string;
+  status: string | undefined;
+  startTimeoutMs?: number;
+}) {
+  const rawIsStopped = status ? STOPPED_STATUSES.has(status) : false;
+  const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
+    rawIsStopped ? agentId : null,
+  );
   const [hasData, setHasData] = useState(false);
   const [startTimedOut, setStartTimedOut] = useState(false);
   const startTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (isStopped || hasData) return;
+    if (rawIsStopped || hasData) return;
     const unsub = window.api.terminal.onData(agentId, () => {
       setHasData(true);
       unsub();
@@ -36,10 +35,10 @@ export function useTerminalLifecycle({
       if (snapshot && snapshot.length > 0) setHasData(true);
     });
     return unsub;
-  }, [agentId, isStopped, hasData]);
+  }, [agentId, rawIsStopped, hasData]);
 
   useEffect(() => {
-    if (hasData || isStopped) {
+    if (hasData || rawIsStopped) {
       if (startTimerRef.current) {
         window.clearTimeout(startTimerRef.current);
         startTimerRef.current = null;
@@ -51,13 +50,15 @@ export function useTerminalLifecycle({
       startTimerRef.current = null;
       setStartTimedOut(true);
     }, startTimeoutMs);
-  }, [hasData, isStopped, startTimeoutMs]);
-
-  const markData = useCallback(() => setHasData(true), []);
+  }, [hasData, rawIsStopped, startTimeoutMs]);
 
   return {
     hasData,
     startTimedOut,
-    markData,
+    // Don't show "Ended" UI until we've received at least one data chunk,
+    // OR until scrollback is available in DB (reattach/reload scenario)
+    isStopped: rawIsStopped && (hasData || !!scrollbackContent),
+    scrollbackContent,
+    scrollbackLoading,
   };
 }

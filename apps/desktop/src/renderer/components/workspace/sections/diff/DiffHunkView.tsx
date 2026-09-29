@@ -3,11 +3,12 @@ import { cn } from "@exegol/ui";
 import { MessageSquarePlus } from "lucide-react";
 import { useState } from "react";
 import { CommentCard, CommentInput } from "./DiffLineComment";
-import type { DiffHunk, DiffLine } from "./diff-parser";
+import type { DiffHunk, DiffLine, ViewMode } from "./diff-parser";
+import { pairSplitRows } from "./split-rows";
 
 interface DiffHunkViewProps {
   hunk: DiffHunk;
-  viewMode: "unified" | "split";
+  viewMode: ViewMode;
   /** Comments keyed by line number */
   commentsByLine?: Record<number, DiffComment[]>;
   onAddComment?: (lineNumber: number, content: string) => void;
@@ -72,7 +73,6 @@ function UnifiedView({
     <div className="font-mono text-[12px] leading-[18px]">
       {lines.map((line) => {
         const lineNum = line.newLineNumber ?? line.oldLineNumber;
-        const lineComments = lineNum != null ? commentsByLine?.[lineNum] : undefined;
         const hasCommentUI = onAddComment != null;
 
         return (
@@ -86,18 +86,11 @@ function UnifiedView({
             >
               {/* Clickable gutter for adding comments */}
               {hasCommentUI && (
-                <button
-                  type="button"
-                  className="w-4 shrink-0 flex items-center justify-center opacity-0 group-hover/line:opacity-100 transition-opacity text-accent/50 hover:text-accent"
-                  onClick={() => {
-                    if (lineNum != null) {
-                      setCommentingLine(commentingLine === lineNum ? null : lineNum);
-                    }
-                  }}
-                  title="Add comment"
-                >
-                  {lineNum != null && <MessageSquarePlus className="h-3 w-3" />}
-                </button>
+                <CommentGutter
+                  lineNum={lineNum}
+                  commentingLine={commentingLine}
+                  onCommentingLineChange={setCommentingLine}
+                />
               )}
               <span className="w-10 shrink-0 select-none pr-1 text-right text-text-muted/50">
                 {line.oldLineNumber ?? ""}
@@ -119,26 +112,15 @@ function UnifiedView({
               </span>
             </div>
 
-            {/* Existing comments */}
-            {lineComments?.map((c) => (
-              <CommentCard
-                key={c.id}
-                comment={c}
-                onDelete={onDeleteComment ?? noop}
-                onToggleResolve={onToggleResolve ?? noop}
-              />
-            ))}
-
-            {/* Comment input */}
-            {commentingLine === lineNum && lineNum != null && onAddComment && (
-              <CommentInput
-                onSubmit={(content) => {
-                  onAddComment(lineNum, content);
-                  setCommentingLine(null);
-                }}
-                onCancel={() => setCommentingLine(null)}
-              />
-            )}
+            <LineCommentThread
+              lineNum={lineNum}
+              commentsByLine={commentsByLine}
+              commentingLine={commentingLine}
+              onCommentingLineChange={setCommentingLine}
+              onAddComment={onAddComment}
+              onDeleteComment={onDeleteComment}
+              onToggleResolve={onToggleResolve}
+            />
           </div>
         );
       })}
@@ -154,106 +136,108 @@ function SplitView({
   onToggleResolve,
 }: ViewProps) {
   const [commentingLine, setCommentingLine] = useState<number | null>(null);
-
-  const left: (DiffLine | null)[] = [];
-  const right: (DiffLine | null)[] = [];
-
-  let i = 0;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (!line) {
-      i++;
-      continue;
-    }
-
-    if (line.type === "context") {
-      left.push(line);
-      right.push(line);
-      i++;
-    } else if (line.type === "deletion") {
-      const deletions: DiffLine[] = [];
-      while (i < lines.length && lines[i]?.type === "deletion") {
-        const del = lines[i];
-        if (del) deletions.push(del);
-        i++;
-      }
-      const additions: DiffLine[] = [];
-      while (i < lines.length && lines[i]?.type === "addition") {
-        const add = lines[i];
-        if (add) additions.push(add);
-        i++;
-      }
-      const maxLen = Math.max(deletions.length, additions.length);
-      for (let j = 0; j < maxLen; j++) {
-        left.push(j < deletions.length ? (deletions[j] ?? null) : null);
-        right.push(j < additions.length ? (additions[j] ?? null) : null);
-      }
-    } else if (line.type === "addition") {
-      left.push(null);
-      right.push(line);
-      i++;
-    } else {
-      i++;
-    }
-  }
-
+  const rows = pairSplitRows(lines);
   const hasCommentUI = onAddComment != null;
 
   return (
     <div className="font-mono text-[12px] leading-[18px]">
-      {left.map((leftLine, idx) => {
-        const rightLine = right[idx] ?? null;
+      {rows.map(({ left: leftLine, right: rightLine }) => {
         const lineNum =
           rightLine?.newLineNumber ?? leftLine?.newLineNumber ?? leftLine?.oldLineNumber;
-        const lineComments = lineNum != null ? commentsByLine?.[lineNum] : undefined;
 
         return (
           <div key={`${leftLine?.oldLineNumber ?? ""}:${rightLine?.newLineNumber ?? ""}`}>
             <div className="group/line flex">
               {/* Gutter for adding comments */}
               {hasCommentUI && (
-                <button
-                  type="button"
-                  className="w-4 shrink-0 flex items-center justify-center opacity-0 group-hover/line:opacity-100 transition-opacity text-accent/50 hover:text-accent"
-                  onClick={() => {
-                    if (lineNum != null) {
-                      setCommentingLine(commentingLine === lineNum ? null : lineNum);
-                    }
-                  }}
-                  title="Add comment"
-                >
-                  {lineNum != null && <MessageSquarePlus className="h-3 w-3" />}
-                </button>
+                <CommentGutter
+                  lineNum={lineNum}
+                  commentingLine={commentingLine}
+                  onCommentingLineChange={setCommentingLine}
+                />
               )}
               <SplitSide line={leftLine} side="old" />
               <div className="w-px shrink-0 bg-border/50" />
               <SplitSide line={rightLine} side="new" />
             </div>
 
-            {/* Existing comments */}
-            {lineComments?.map((c) => (
-              <CommentCard
-                key={c.id}
-                comment={c}
-                onDelete={onDeleteComment ?? noop}
-                onToggleResolve={onToggleResolve ?? noop}
-              />
-            ))}
-
-            {/* Comment input */}
-            {commentingLine === lineNum && lineNum != null && onAddComment && (
-              <CommentInput
-                onSubmit={(content) => {
-                  onAddComment(lineNum, content);
-                  setCommentingLine(null);
-                }}
-                onCancel={() => setCommentingLine(null)}
-              />
-            )}
+            <LineCommentThread
+              lineNum={lineNum}
+              commentsByLine={commentsByLine}
+              commentingLine={commentingLine}
+              onCommentingLineChange={setCommentingLine}
+              onAddComment={onAddComment}
+              onDeleteComment={onDeleteComment}
+              onToggleResolve={onToggleResolve}
+            />
           </div>
         );
       })}
     </div>
+  );
+}
+
+function CommentGutter({
+  lineNum,
+  commentingLine,
+  onCommentingLineChange,
+}: {
+  lineNum: number | null | undefined;
+  commentingLine: number | null;
+  onCommentingLineChange: (line: number | null) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="w-4 shrink-0 flex items-center justify-center opacity-0 group-hover/line:opacity-100 transition-opacity text-accent/50 hover:text-accent"
+      onClick={() => {
+        if (lineNum != null) {
+          onCommentingLineChange(commentingLine === lineNum ? null : lineNum);
+        }
+      }}
+      title="Add comment"
+    >
+      {lineNum != null && <MessageSquarePlus className="h-3 w-3" />}
+    </button>
+  );
+}
+
+/** Existing comments on a line plus the input when that line is being commented. */
+function LineCommentThread({
+  lineNum,
+  commentsByLine,
+  commentingLine,
+  onCommentingLineChange,
+  onAddComment,
+  onDeleteComment,
+  onToggleResolve,
+}: Omit<ViewProps, "lines"> & {
+  lineNum: number | null | undefined;
+  commentingLine: number | null;
+  onCommentingLineChange: (line: number | null) => void;
+}) {
+  const lineComments = lineNum != null ? commentsByLine?.[lineNum] : undefined;
+  return (
+    <>
+      {lineComments?.map((c) => (
+        <CommentCard
+          key={c.id}
+          comment={c}
+          onDelete={onDeleteComment ?? noop}
+          onToggleResolve={onToggleResolve ?? noop}
+        />
+      ))}
+
+      {commentingLine === lineNum && lineNum != null && onAddComment && (
+        <CommentInput
+          onSubmit={(content) => {
+            onAddComment(lineNum, content);
+            onCommentingLineChange(null);
+          }}
+          onCancel={() => onCommentingLineChange(null)}
+        />
+      )}
+    </>
   );
 }
 

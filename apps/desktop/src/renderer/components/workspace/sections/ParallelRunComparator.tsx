@@ -189,7 +189,7 @@ function ColumnCard({
   onPromote,
   pending,
 }: ColumnCardProps) {
-  const { agent, diffStat, score, cost, durationSeconds, lastLines } = column;
+  const { agent, score, lastLines } = column;
   return (
     <div
       className={cn(
@@ -206,30 +206,7 @@ function ColumnCard({
         {isPromoted && <Trophy className="h-4 w-4 text-success" />}
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 text-[10px]">
-        <Stat
-          label="Diff"
-          value={diffStat ? `+${diffStat.insertions} / -${diffStat.deletions}` : "—"}
-          detail={diffStat ? `${diffStat.filesChanged} files` : undefined}
-        />
-        <Stat
-          label="Score"
-          value={score ? `${Math.round(score.overallScore * 100)}%` : "—"}
-          detail={score?.exitReason}
-        />
-        <Stat
-          label="Cost"
-          value={cost ? formatCost(cost.totalCostUsd) : "—"}
-          detail={
-            cost ? `${formatTokens(cost.totalInputTokens + cost.totalOutputTokens)} tok` : undefined
-          }
-        />
-        <Stat
-          label="Duration"
-          value={durationSeconds != null ? formatDuration(durationSeconds) : "—"}
-          detail={score ? `${score.turnsUsed} turns` : undefined}
-        />
-      </div>
+      <ColumnStats column={column} />
 
       {lastLines.length > 0 && (
         <div className="mt-1 max-h-24 overflow-hidden rounded bg-bg-primary/70 p-2 font-mono text-[9px] leading-tight text-text-muted">
@@ -242,53 +219,105 @@ function ColumnCard({
         </div>
       )}
 
-      <div className="mt-auto flex gap-1.5 pt-2">
-        <Button
-          variant={isPromoted ? "ghost" : "default"}
-          size="sm"
-          disabled={pending || isRunning}
-          onClick={onPromote}
-          className="h-7 flex-1 gap-1 text-[10px]"
-          title={
-            isRunning
-              ? "Wait for all variants to finish before promoting"
-              : isPromoted
-                ? "Already promoted — calling again leaves state unchanged"
-                : "Promote this variant as the winner and clean up the losers' worktrees/branches"
-          }
-        >
-          {isPromoted ? (
-            <>
-              <CheckCircle2 className="h-3 w-3" />
-              Promoted
-            </>
-          ) : (
-            <>
-              <Trophy className="h-3 w-3" />
-              {pending ? "..." : "Promote & Clean"}
-            </>
-          )}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            window.dispatchEvent(
-              new CustomEvent("exegol:focus-agent", { detail: { agentId: agent.id } }),
-            );
-            switchSection("agents");
-          }}
-          className="h-7 gap-1 px-2 text-[10px]"
-          title="Open this agent's terminal pane"
-        >
-          <ExternalLink className="h-3 w-3" />
-          Open
-        </Button>
-      </div>
+      <ColumnActions
+        agentId={agent.id}
+        isPromoted={isPromoted}
+        isRunning={isRunning}
+        pending={pending}
+        onPromote={onPromote}
+      />
 
       {runSettled && !isPromoted && score && score.taskCompleted === false && (
         <p className="text-[9px] text-text-muted">Task did not complete.</p>
       )}
+    </div>
+  );
+}
+
+function ColumnStats({ column }: { column: ColumnCardProps["column"] }) {
+  const { diffStat, score, cost, durationSeconds } = column;
+  return (
+    <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+      <Stat
+        label="Diff"
+        value={diffStat ? `+${diffStat.insertions} / -${diffStat.deletions}` : "—"}
+        detail={diffStat ? `${diffStat.filesChanged} files` : undefined}
+      />
+      <Stat
+        label="Score"
+        value={score ? `${Math.round(score.overallScore * 100)}%` : "—"}
+        detail={score?.exitReason}
+      />
+      <Stat
+        label="Cost"
+        value={cost ? formatCost(cost.totalCostUsd) : "—"}
+        detail={
+          cost ? `${formatTokens(cost.totalInputTokens + cost.totalOutputTokens)} tok` : undefined
+        }
+      />
+      <Stat
+        label="Duration"
+        value={durationSeconds != null ? formatDuration(durationSeconds) : "—"}
+        detail={score ? `${score.turnsUsed} turns` : undefined}
+      />
+    </div>
+  );
+}
+
+function promoteTitle(isRunning: boolean, isPromoted: boolean): string {
+  if (isRunning) return "Wait for all variants to finish before promoting";
+  if (isPromoted) return "Already promoted — calling again leaves state unchanged";
+  return "Promote this variant as the winner and clean up the losers' worktrees/branches";
+}
+
+function ColumnActions({
+  agentId,
+  isPromoted,
+  isRunning,
+  pending,
+  onPromote,
+}: {
+  agentId: string;
+  isPromoted: boolean;
+  isRunning: boolean;
+  pending: boolean;
+  onPromote: () => void;
+}) {
+  return (
+    <div className="mt-auto flex gap-1.5 pt-2">
+      <Button
+        variant={isPromoted ? "ghost" : "default"}
+        size="sm"
+        disabled={pending || isRunning}
+        onClick={onPromote}
+        className="h-7 flex-1 gap-1 text-[10px]"
+        title={promoteTitle(isRunning, isPromoted)}
+      >
+        {isPromoted ? (
+          <>
+            <CheckCircle2 className="h-3 w-3" />
+            Promoted
+          </>
+        ) : (
+          <>
+            <Trophy className="h-3 w-3" />
+            {pending ? "..." : "Promote & Clean"}
+          </>
+        )}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("exegol:focus-agent", { detail: { agentId } }));
+          switchSection("agents");
+        }}
+        className="h-7 gap-1 px-2 text-[10px]"
+        title="Open this agent's terminal pane"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Open
+      </Button>
     </div>
   );
 }

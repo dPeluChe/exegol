@@ -1,3 +1,6 @@
+export type DiffMode = "unstaged" | "staged";
+export type ViewMode = "unified" | "split";
+
 export interface DiffLine {
   type: "context" | "addition" | "deletion" | "header";
   content: string;

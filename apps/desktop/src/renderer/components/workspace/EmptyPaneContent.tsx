@@ -1,18 +1,10 @@
 import type { AgentAccessMode, AgentProvider, ResumableSession } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  ChevronRight,
-  Cpu,
-  Eye,
-  FileEdit,
-  Globe,
-  History,
-  Map as MapIcon,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Cpu, Globe, History } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { ACCESS_MODES } from "../../lib/access-modes";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -37,6 +29,80 @@ function relativeTime(epoch: number | null): string {
   return `${Math.round(hours / 24)}d`;
 }
 
+type PaneSize = "full" | "compact" | "mini";
+
+/** Everything that changes with the pane size, so the JSX reads one row instead of ternaries */
+const SIZE_LAYOUT: Record<
+  PaneSize,
+  {
+    isMini: boolean;
+    isCompact: boolean;
+    iconSize: number;
+    gridCols: string;
+    maxWidth: string;
+    card: string;
+    sessionRows: number;
+  }
+> = {
+  full: {
+    isMini: false,
+    isCompact: false,
+    iconSize: 28,
+    gridCols: "grid-cols-4",
+    maxWidth: "max-w-sm",
+    card: "gap-1.5 p-2.5",
+    sessionRows: 5,
+  },
+  compact: {
+    isMini: false,
+    isCompact: true,
+    iconSize: 22,
+    gridCols: "grid-cols-4",
+    maxWidth: "max-w-sm",
+    card: "gap-1 p-2",
+    sessionRows: 3,
+  },
+  mini: {
+    isMini: true,
+    isCompact: true,
+    iconSize: 18,
+    gridCols: "grid-cols-3",
+    maxWidth: "max-w-xs",
+    card: "gap-0.5 p-1.5",
+    sessionRows: 1,
+  },
+};
+
+type SizeLayout = (typeof SIZE_LAYOUT)[PaneSize];
+
+/** Observes the pane size for the responsive layout */
+function usePaneSize() {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<PaneSize>("full");
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const w = entry.contentRect.width;
+      const h = entry.contentRect.height;
+      if (w < 300 || h < 250) setSize("mini");
+      else if (w < 500 || h < 400) setSize("compact");
+      else setSize("full");
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { containerRef, size };
+}
+
+function matchesSearch(cli: AgentProvider, search: string): boolean {
+  return (
+    cli.name.toLowerCase().includes(search.toLowerCase()) ||
+    cli.id.toLowerCase().includes(search.toLowerCase())
+  );
+}
+
 export function EmptyPane({ paneId }: { paneId: string }) {
   const { projectId, project } = useProjectContext();
   const [modalProvider, setModalProvider] = useState<AgentProvider | null>(null);
@@ -44,8 +110,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const [search, setSearch] = useState("");
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const updatePane = useWorkspaceStore((s) => s.updatePane);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<"full" | "compact" | "mini">("full");
+  const { containerRef, size } = usePaneSize();
   const { data: providers } = useQuery({
     queryKey: ["enabledProviders"],
     queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
@@ -65,28 +130,8 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     cliOptions.some((c) => c.id === s.cliType),
   );
   const filteredOptions = search
-    ? cliOptions.filter(
-        (cli) =>
-          cli.name.toLowerCase().includes(search.toLowerCase()) ||
-          cli.id.toLowerCase().includes(search.toLowerCase()),
-      )
+    ? cliOptions.filter((cli) => matchesSearch(cli, search))
     : cliOptions;
-
-  // Observe pane size for responsive layout
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([entry]) => {
-      if (!entry) return;
-      const w = entry.contentRect.width;
-      const h = entry.contentRect.height;
-      if (w < 300 || h < 250) setSize("mini");
-      else if (w < 500 || h < 400) setSize("compact");
-      else setSize("full");
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   // Opens the spawn modal instead of launching immediately. This grid used to
   // fire a bare `cli.name` task with no session choice, no worktree decision
@@ -114,10 +159,8 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     updatePane(paneId, { type: "browser", url: await projectBrowserUrl(projectId, project?.path) });
   }, [paneId, projectId, project?.path, updatePane]);
 
-  const isMini = size === "mini";
-  const isCompact = size === "compact" || isMini;
-  const iconSize = isMini ? 18 : isCompact ? 22 : 28;
-  const gridCols = isMini ? "grid-cols-3" : isCompact ? "grid-cols-4" : "grid-cols-4";
+  const layout = SIZE_LAYOUT[size];
+  const { isMini, isCompact } = layout;
 
   return (
     <div
@@ -125,28 +168,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
       className="flex h-full flex-col items-center justify-center overflow-y-auto p-3"
     >
       {/* Header — hidden in mini */}
-      {!isMini && (
-        <div className="mb-3 flex shrink-0 flex-col items-center gap-2">
-          <div
-            className={cn(
-              "flex items-center justify-center rounded-2xl bg-bg-secondary",
-              isCompact ? "h-9 w-9" : "h-12 w-12",
-            )}
-          >
-            <Cpu className={cn("text-text-muted", isCompact ? "h-4 w-4" : "h-6 w-6")} />
-          </div>
-          <div className="text-center">
-            <h2
-              className={cn("font-semibold text-text-primary", isCompact ? "text-xs" : "text-sm")}
-            >
-              Launch an Agent
-            </h2>
-            {!isCompact && (
-              <p className="mt-0.5 text-[11px] text-text-muted">Select an agent or open a pane.</p>
-            )}
-          </div>
-        </div>
-      )}
+      {!isMini && <LauncherHeader compact={isCompact} />}
 
       {/* Search filter — only shown when enough agents */}
       {!isMini && cliOptions.length > 6 && (
@@ -159,126 +181,22 @@ export function EmptyPane({ paneId }: { paneId: string }) {
         />
       )}
 
-      {/* Agent grid — responsive columns and sizes */}
-      <div className={cn("grid w-full gap-1.5", gridCols, isMini ? "max-w-xs" : "max-w-sm")}>
-        {filteredOptions.map((cli) => (
-          <button
-            key={cli.id}
-            type="button"
-            onClick={() => handleLaunchAgent(cli)}
-            className={cn(
-              "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
-              isMini ? "gap-0.5 p-1.5" : isCompact ? "gap-1 p-2" : "gap-1.5 p-2.5",
-            )}
-          >
-            <AgentIcon
-              provider={cli.id}
-              size={iconSize}
-              fallback={cli.icon}
-              fallbackColor={cli.color}
-            />
-            {!isMini && (
-              <span
-                className={cn(
-                  "font-medium text-text-secondary",
-                  isCompact ? "text-[8px]" : "text-[9px]",
-                )}
-              >
-                {cli.name}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <AgentGrid options={filteredOptions} layout={layout} onLaunch={handleLaunchAgent} />
 
-      {/* T155.5: resumable session history — collapsed by default, 1-5 rows by pane size */}
       {sessions.length > 0 && (
-        <div className={cn("mt-2 w-full shrink-0", isMini ? "max-w-xs" : "max-w-sm")}>
-          <button
-            type="button"
-            onClick={() => setShowSessions(!showSessions)}
-            className="flex w-full items-center gap-1 text-[9px] font-medium uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary"
-          >
-            {showSessions ? (
-              <ChevronDown className="h-2.5 w-2.5" />
-            ) : (
-              <ChevronRight className="h-2.5 w-2.5" />
-            )}
-            <History className="h-2.5 w-2.5" />
-            <span>Recent sessions ({sessions.length})</span>
-          </button>
-          {showSessions && (
-            <div className="mt-1 space-y-0.5">
-              {sessions.slice(0, isMini ? 1 : isCompact ? 3 : 5).map((s) => (
-                <button
-                  key={s.agentId}
-                  type="button"
-                  onClick={() => handleResumeSession(s)}
-                  className="flex w-full items-center gap-1.5 rounded border border-border/50 bg-bg-secondary px-2 py-1 transition-colors hover:border-accent/50 hover:bg-white/[0.03]"
-                  title={`Resume: ${s.taskDescription || s.cliType}`}
-                >
-                  <AgentIcon provider={s.cliType} size={12} />
-                  <span className="flex-1 truncate text-left text-[10px] text-text-secondary">
-                    {s.taskDescription || s.cliType}
-                  </span>
-                  <span className="shrink-0 text-[9px] tabular-nums text-text-muted">
-                    {relativeTime(s.endedAt)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <RecentSessions
+          sessions={sessions}
+          layout={layout}
+          open={showSessions}
+          onToggle={() => setShowSessions(!showSessions)}
+          onResume={handleResumeSession}
+        />
       )}
 
       {/* Access mode toggle — hidden in mini */}
-      {!isMini && (
-        <div className="flex items-center justify-center gap-1 mt-1.5 mb-1">
-          {(
-            [
-              { mode: "write" as const, icon: FileEdit, title: "Write — full code edits" },
-              { mode: "plan" as const, icon: MapIcon, title: "Plan — suggest changes only" },
-              { mode: "read" as const, icon: Eye, title: "Read — no file writes" },
-            ] as const
-          ).map(({ mode, icon: ModeIcon, title }) => (
-            <button
-              key={mode}
-              type="button"
-              title={title}
-              onClick={() => setAccessMode(mode)}
-              className={cn(
-                "flex items-center justify-center rounded-md border p-1 transition-colors",
-                accessMode === mode
-                  ? "bg-accent/10 text-accent border-accent/50"
-                  : "border-border bg-bg-secondary text-text-muted hover:border-accent/30",
-              )}
-            >
-              <ModeIcon className="h-3 w-3" />
-            </button>
-          ))}
-        </div>
-      )}
+      {!isMini && <AccessModeToggle value={accessMode} onChange={setAccessMode} />}
 
-      {/* Pane options — compact in small sizes */}
-      <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>
-        {/* Terminal, Files and Git act on a folder: they live in the Run-in row below */}
-        {[{ handler: handleBrowser, icon: Globe, label: "Browser" }].map(
-          ({ handler, icon: PaneIcon, label }) => (
-            <button
-              key={label}
-              type="button"
-              onClick={handler}
-              className={cn(
-                "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
-                isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
-              )}
-            >
-              <PaneIcon className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
-              {!isMini && label}
-            </button>
-          ),
-        )}
-      </div>
+      <PaneOptions isMini={isMini} onBrowser={handleBrowser} />
 
       {projectId && <RunTargets projectId={projectId} paneId={paneId} compact={isCompact} />}
       {modalProvider && (
@@ -291,6 +209,178 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           targetPaneId={paneId}
           onClose={() => setModalProvider(null)}
         />
+      )}
+    </div>
+  );
+}
+
+function LauncherHeader({ compact }: { compact: boolean }) {
+  return (
+    <div className="mb-3 flex shrink-0 flex-col items-center gap-2">
+      <div
+        className={cn(
+          "flex items-center justify-center rounded-2xl bg-bg-secondary",
+          compact ? "h-9 w-9" : "h-12 w-12",
+        )}
+      >
+        <Cpu className={cn("text-text-muted", compact ? "h-4 w-4" : "h-6 w-6")} />
+      </div>
+      <div className="text-center">
+        <h2 className={cn("font-semibold text-text-primary", compact ? "text-xs" : "text-sm")}>
+          Launch an Agent
+        </h2>
+        {!compact && (
+          <p className="mt-0.5 text-[11px] text-text-muted">Select an agent or open a pane.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Agent grid — responsive columns and sizes */
+function AgentGrid({
+  options,
+  layout,
+  onLaunch,
+}: {
+  options: AgentProvider[];
+  layout: SizeLayout;
+  onLaunch: (cli: AgentProvider) => void;
+}) {
+  return (
+    <div className={cn("grid w-full gap-1.5", layout.gridCols, layout.maxWidth)}>
+      {options.map((cli) => (
+        <button
+          key={cli.id}
+          type="button"
+          onClick={() => onLaunch(cli)}
+          className={cn(
+            "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
+            layout.card,
+          )}
+        >
+          <AgentIcon
+            provider={cli.id}
+            size={layout.iconSize}
+            fallback={cli.icon}
+            fallbackColor={cli.color}
+          />
+          {!layout.isMini && (
+            <span
+              className={cn(
+                "font-medium text-text-secondary",
+                layout.isCompact ? "text-[8px]" : "text-[9px]",
+              )}
+            >
+              {cli.name}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** T155.5: resumable session history — collapsed by default, 1-5 rows by pane size */
+function RecentSessions({
+  sessions,
+  layout,
+  open,
+  onToggle,
+  onResume,
+}: {
+  sessions: ResumableSession[];
+  layout: SizeLayout;
+  open: boolean;
+  onToggle: () => void;
+  onResume: (session: ResumableSession) => void;
+}) {
+  const Chevron = open ? ChevronDown : ChevronRight;
+  return (
+    <div className={cn("mt-2 w-full shrink-0", layout.maxWidth)}>
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center gap-1 text-[9px] font-medium uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary"
+      >
+        <Chevron className="h-2.5 w-2.5" />
+        <History className="h-2.5 w-2.5" />
+        <span>Recent sessions ({sessions.length})</span>
+      </button>
+      {open && (
+        <div className="mt-1 space-y-0.5">
+          {sessions.slice(0, layout.sessionRows).map((s) => (
+            <button
+              key={s.agentId}
+              type="button"
+              onClick={() => onResume(s)}
+              className="flex w-full items-center gap-1.5 rounded border border-border/50 bg-bg-secondary px-2 py-1 transition-colors hover:border-accent/50 hover:bg-white/[0.03]"
+              title={`Resume: ${s.taskDescription || s.cliType}`}
+            >
+              <AgentIcon provider={s.cliType} size={12} />
+              <span className="flex-1 truncate text-left text-[10px] text-text-secondary">
+                {s.taskDescription || s.cliType}
+              </span>
+              <span className="shrink-0 text-[9px] tabular-nums text-text-muted">
+                {relativeTime(s.endedAt)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccessModeToggle({
+  value,
+  onChange,
+}: {
+  value: AgentAccessMode;
+  onChange: (mode: AgentAccessMode) => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-1 mt-1.5 mb-1">
+      {ACCESS_MODES.map(({ mode, icon: ModeIcon, label, hint }) => (
+        <button
+          key={mode}
+          type="button"
+          title={`${label}: ${hint}`}
+          onClick={() => onChange(mode)}
+          className={cn(
+            "flex items-center justify-center rounded-md border p-1 transition-colors",
+            value === mode
+              ? "bg-accent/10 text-accent border-accent/50"
+              : "border-border bg-bg-secondary text-text-muted hover:border-accent/30",
+          )}
+        >
+          <ModeIcon className="h-3 w-3" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Pane options — compact in small sizes */
+function PaneOptions({ isMini, onBrowser }: { isMini: boolean; onBrowser: () => void }) {
+  return (
+    <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>
+      {/* Terminal, Files and Git act on a folder: they live in the Run-in row below */}
+      {[{ handler: onBrowser, icon: Globe, label: "Browser" }].map(
+        ({ handler, icon: PaneIcon, label }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={handler}
+            className={cn(
+              "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
+              isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
+            )}
+          >
+            <PaneIcon className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
+            {!isMini && label}
+          </button>
+        ),
       )}
     </div>
   );

@@ -183,8 +183,6 @@ function SkillCard({
 }) {
   const toggleSkill = useToggleSkill();
   const uninstall = useUninstallSkill();
-  const category = skill.category as SkillCategory;
-  const trust = skill.source?.trust as SkillTrust | undefined;
 
   const handleToggle = useCallback(() => {
     if (!projectId) return;
@@ -228,116 +226,22 @@ function SkillCard({
               {skill.name}
             </button>
 
-            <Badge
-              className={cn(
-                "text-[9px] shrink-0",
-                CATEGORY_COLORS[category] ?? CATEGORY_COLORS.custom,
-              )}
-            >
-              {CATEGORY_LABELS[category] ?? skill.category}
-            </Badge>
-
-            {trust && <TrustBadge trust={trust} />}
-
-            <span title={skill.scope === "project" ? "Project skill" : "Global skill"}>
-              {skill.scope === "project" ? (
-                <FolderOpen className="h-3 w-3 shrink-0 text-amber-400" />
-              ) : (
-                <Globe className="h-3 w-3 shrink-0 text-text-muted" />
-              )}
-            </span>
-
-            {!skill.available && (
-              <span title="Missing requirements">
-                <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
-              </span>
-            )}
+            <SkillBadges skill={skill} />
           </div>
 
           {skill.role && <p className="mt-0.5 text-[10px] text-accent">{skill.role}</p>}
           <p className="mt-0.5 text-[11px] text-text-muted truncate">{skill.description}</p>
         </div>
 
-        {/* Enable/disable toggle */}
-        <button
-          type="button"
-          onClick={handleToggle}
-          disabled={!skill.available}
-          className={cn(
-            "flex h-6 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors",
-            skill.enabled && skill.available ? "bg-accent" : "bg-bg-tertiary",
-            !skill.available && "cursor-not-allowed opacity-50",
-          )}
-        >
-          <span
-            className={cn(
-              "h-5 w-5 rounded-full bg-white shadow transition-transform",
-              skill.enabled && skill.available ? "translate-x-4" : "translate-x-0",
-            )}
-          />
-        </button>
+        <SkillEnableToggle
+          enabled={skill.enabled}
+          available={skill.available}
+          onToggle={handleToggle}
+        />
       </div>
 
       {/* Expanded content */}
-      {expanded && (
-        <div className="border-t border-border px-3 pb-3 pt-2">
-          {/* Metadata */}
-          <div className="mb-3 flex flex-wrap gap-2">
-            {skill.allowedTools.length > 0 && (
-              <div className="flex items-center gap-1">
-                <Shield className="h-3 w-3 text-text-muted" />
-                <span className="text-[10px] text-text-muted">
-                  Tools: {skill.allowedTools.join(", ")}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Source info */}
-          {skill.source?.repo && (
-            <div className="mb-3 flex items-center gap-1.5 text-[10px] text-text-muted">
-              <span>From {skill.source.repo}</span>
-              {skill.source.trust === "community" && (
-                <span className="text-yellow-400">(community — review before use)</span>
-              )}
-            </div>
-          )}
-
-          {/* Requirements */}
-          {(skill.requires.bins.length > 0 || skill.requires.env.length > 0) && (
-            <div className="mb-3 rounded bg-bg-tertiary p-2">
-              <p className="text-[10px] font-medium text-text-secondary mb-1">Requirements</p>
-              {skill.requires.bins.map((bin) => (
-                <RequirementItem key={bin} label={bin} type="bin" />
-              ))}
-              {skill.requires.env.map((env) => (
-                <RequirementItem key={env} label={env} type="env" />
-              ))}
-            </div>
-          )}
-
-          {/* Content preview */}
-          <div className="max-h-60 overflow-y-auto rounded bg-bg-tertiary p-2">
-            <pre className="whitespace-pre-wrap text-[11px] text-text-secondary font-mono">
-              {skill.content.slice(0, 1500)}
-              {skill.content.length > 1500 && "\n\n... (truncated)"}
-            </pre>
-          </div>
-
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-[9px] text-text-muted truncate">{skill.filePath}</p>
-            {skill.source && (
-              <button
-                type="button"
-                onClick={() => setConfirmUninstall(true)}
-                className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 shrink-0 ml-2"
-              >
-                <Trash2 className="h-3 w-3" /> Uninstall
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {expanded && <SkillDetails skill={skill} onUninstall={() => setConfirmUninstall(true)} />}
       <ConfirmDialog
         open={confirmUninstall}
         onOpenChange={setConfirmUninstall}
@@ -357,6 +261,128 @@ function SkillCard({
           })
         }
       />
+    </div>
+  );
+}
+
+function SkillBadges({ skill }: { skill: SkillWithState }) {
+  const category = skill.category as SkillCategory;
+  const trust = skill.source?.trust as SkillTrust | undefined;
+  return (
+    <>
+      <Badge
+        className={cn("text-[9px] shrink-0", CATEGORY_COLORS[category] ?? CATEGORY_COLORS.custom)}
+      >
+        {CATEGORY_LABELS[category] ?? skill.category}
+      </Badge>
+
+      {trust && <TrustBadge trust={trust} />}
+
+      <span title={skill.scope === "project" ? "Project skill" : "Global skill"}>
+        {skill.scope === "project" ? (
+          <FolderOpen className="h-3 w-3 shrink-0 text-amber-400" />
+        ) : (
+          <Globe className="h-3 w-3 shrink-0 text-text-muted" />
+        )}
+      </span>
+
+      {!skill.available && (
+        <span title="Missing requirements">
+          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
+        </span>
+      )}
+    </>
+  );
+}
+
+function SkillEnableToggle({
+  enabled,
+  available,
+  onToggle,
+}: {
+  enabled: boolean;
+  available: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={!available}
+      className={cn(
+        "flex h-6 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors",
+        enabled && available ? "bg-accent" : "bg-bg-tertiary",
+        !available && "cursor-not-allowed opacity-50",
+      )}
+    >
+      <span
+        className={cn(
+          "h-5 w-5 rounded-full bg-white shadow transition-transform",
+          enabled && available ? "translate-x-4" : "translate-x-0",
+        )}
+      />
+    </button>
+  );
+}
+
+function SkillDetails({ skill, onUninstall }: { skill: SkillWithState; onUninstall: () => void }) {
+  return (
+    <div className="border-t border-border px-3 pb-3 pt-2">
+      {/* Metadata */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {skill.allowedTools.length > 0 && (
+          <div className="flex items-center gap-1">
+            <Shield className="h-3 w-3 text-text-muted" />
+            <span className="text-[10px] text-text-muted">
+              Tools: {skill.allowedTools.join(", ")}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Source info */}
+      {skill.source?.repo && (
+        <div className="mb-3 flex items-center gap-1.5 text-[10px] text-text-muted">
+          <span>From {skill.source.repo}</span>
+          {skill.source.trust === "community" && (
+            <span className="text-yellow-400">(community — review before use)</span>
+          )}
+        </div>
+      )}
+
+      {/* Requirements */}
+      {(skill.requires.bins.length > 0 || skill.requires.env.length > 0) && (
+        <div className="mb-3 rounded bg-bg-tertiary p-2">
+          <p className="text-[10px] font-medium text-text-secondary mb-1">Requirements</p>
+          {skill.requires.bins.map((bin) => (
+            <RequirementItem key={bin} label={bin} type="bin" />
+          ))}
+          {skill.requires.env.map((env) => (
+            <RequirementItem key={env} label={env} type="env" />
+          ))}
+        </div>
+      )}
+
+      {/* Content preview */}
+      <div className="max-h-60 overflow-y-auto rounded bg-bg-tertiary p-2">
+        <pre className="whitespace-pre-wrap text-[11px] text-text-secondary font-mono">
+          {skill.content.slice(0, 1500)}
+          {skill.content.length > 1500 && "\n\n... (truncated)"}
+        </pre>
+      </div>
+
+      <div className="mt-2 flex items-center justify-between">
+        <p className="text-[9px] text-text-muted truncate">{skill.filePath}</p>
+        {skill.source && (
+          <button
+            type="button"
+            onClick={onUninstall}
+            className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 shrink-0 ml-2"
+          >
+            <Trash2 className="h-3 w-3" /> Uninstall
+          </button>
+        )}
+      </div>
     </div>
   );
 }

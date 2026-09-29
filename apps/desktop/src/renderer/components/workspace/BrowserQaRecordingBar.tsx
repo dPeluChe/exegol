@@ -4,6 +4,7 @@ import {
   formatRecordingForAgent,
   type QaRecording,
 } from "../../lib/qa-recorder";
+import { sendToAgent } from "./send-to-agent";
 
 interface RunningAgent {
   id: string;
@@ -14,17 +15,18 @@ interface BrowserQaRecordingBarProps {
   qaRecording: QaRecording;
   replaying: boolean;
   replayStep: number;
-  stopOnFail: boolean;
-  testName: string;
-  savingTest: boolean;
+  /** Omitted: no stop-on-fail toggle */
+  stopOnFail?: boolean;
+  testName?: string;
+  savingTest?: boolean;
+  /** Null hides the save-test row */
   projectId: string | null;
   runningAgents: RunningAgent[];
   onReplay: () => void;
   onCancelReplay: () => void;
-  onSendToAgent: (agentId: string, text: string) => void;
-  onSetStopOnFail: (v: boolean) => void;
-  onSetTestName: (v: string) => void;
-  onSaveTest: () => void;
+  onSetStopOnFail?: (v: boolean) => void;
+  onSetTestName?: (v: string) => void;
+  onSaveTest?: () => void;
   onDismiss: () => void;
 }
 
@@ -33,13 +35,12 @@ export function BrowserQaRecordingBar({
   replaying,
   replayStep,
   stopOnFail,
-  testName,
-  savingTest,
+  testName = "",
+  savingTest = false,
   projectId,
   runningAgents,
   onReplay,
   onCancelReplay,
-  onSendToAgent,
   onSetStopOnFail,
   onSetTestName,
   onSaveTest,
@@ -82,7 +83,7 @@ export function BrowserQaRecordingBar({
               <button
                 key={a.id}
                 type="button"
-                onClick={() => onSendToAgent(a.id, formatRecordingForAgent(qaRecording))}
+                onClick={() => sendToAgent(a.id, formatRecordingForAgent(qaRecording))}
                 className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/10"
                 title={`Send to ${a.cliType}`}
               >
@@ -114,20 +115,20 @@ export function BrowserQaRecordingBar({
           </button>
         </div>
       </div>
-      {/* Stop-on-fail toggle */}
-      <div className="mt-1 flex items-center gap-1.5">
-        <label className="flex cursor-pointer items-center gap-1 text-[9px] text-text-muted">
-          <input
-            type="checkbox"
-            checked={stopOnFail}
-            onChange={(e) => onSetStopOnFail(e.target.checked)}
-            className="h-2.5 w-2.5 accent-accent"
-          />
-          Stop on fail
-        </label>
-      </div>
-      {/* Save test row */}
-      {projectId && (
+      {onSetStopOnFail && (
+        <div className="mt-1 flex items-center gap-1.5">
+          <label className="flex cursor-pointer items-center gap-1 text-[9px] text-text-muted">
+            <input
+              type="checkbox"
+              checked={stopOnFail}
+              onChange={(e) => onSetStopOnFail(e.target.checked)}
+              className="h-2.5 w-2.5 accent-accent"
+            />
+            Stop on fail
+          </label>
+        </div>
+      )}
+      {projectId && onSetTestName && onSaveTest && (
         <div className="mt-1 flex items-center gap-1.5">
           <input
             type="text"

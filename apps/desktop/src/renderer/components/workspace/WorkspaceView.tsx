@@ -1,17 +1,18 @@
-import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { useMountEffect } from "../../hooks/use-mount-effect";
-import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { SHORTCUTS } from "../../lib/shortcuts";
-import { SWITCH_SECTION_EVENT, switchSection } from "../../lib/switch-section";
-import { trpcInvoke } from "../../lib/trpc-client";
-import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { ParallelSpawnModal } from "../agents/ParallelSpawnModal";
 import { SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { LoadingSpinner } from "../common";
 import { AgentsSection } from "./sections/AgentsSection";
+import {
+  useActiveSection,
+  useAgentNavigationEvents,
+  useRefitOnAgentsShown,
+  useShortcutsOverlay,
+  useSpawnModalEvents,
+} from "./use-workspace-events";
 import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
 
 // ─── Shortcuts for the help overlay (Cmd+/) ────────────────────────────────
@@ -52,6 +53,20 @@ const QaTestsSection = lazy(() =>
   import("./sections/QaTestsSection").then((m) => ({ default: m.QaTestsSection })),
 );
 
+/** Non-Agents sections: conditionally rendered + lazy loaded (no terminal state to preserve) */
+const LAZY_SECTIONS: Record<Exclude<WorkspaceSection, "agents">, React.ComponentType> = {
+  tasks: TasksSection,
+  history: HistorySection,
+  "prompts-skills": PromptsSkillsSection,
+  memory: MemorySection,
+  knowledge: KnowledgeSection,
+  pipelines: PipelineSection,
+  "parallel-runs": ParallelRunsSection,
+  "qa-tests": QaTestsSection,
+  "resources-tokens": ResourcesTokensSection,
+  scoring: ScoringSection,
+};
+
 function SectionFallback() {
   return <LoadingSpinner className="h-full" />;
 }
@@ -61,94 +76,12 @@ export function WorkspaceView() {
   // Home = the fleet dashboard (Antonio 2026-08-11): land on the cross-project
   // control center; the Agents tab stays mounted underneath for its terminals.
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
-  // Picking a project from the dashboard lands on its agents, not on
-  // whichever project tab was open before the dashboard
-  const [wasDashboard, setWasDashboard] = useState(onDashboard);
-  if (wasDashboard !== onDashboard) {
-    setWasDashboard(onDashboard);
-    if (!onDashboard) setActiveSection("agents");
-  }
-  const [showSpawnModal, setShowSpawnModal] = useState(false);
-  const [spawnInitialTask, setSpawnInitialTask] = useState<string | undefined>(undefined);
-  const [spawnInitialCliType, setSpawnInitialCliType] = useState<string | undefined>(undefined);
-  const [showParallelModal, setShowParallelModal] = useState(false);
-  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [activeSection, setActiveSection] = useActiveSection(onDashboard);
+  const spawn = useSpawnModalEvents();
+  const { showShortcuts, closeShortcuts } = useShortcutsOverlay();
+  useAgentNavigationEvents();
   const isAgents = activeSection === "agents" && !onDashboard;
-  const prevIsAgents = useRef(isAgents);
-
-  // Listen for section switch events from sidebar (Rule 4: mount effect for event listener)
-  useMountEffect(() => {
-    const handler = (e: Event) => {
-      const section = (e as CustomEvent).detail?.section as WorkspaceSection;
-      if (section) setActiveSection(section);
-    };
-    window.addEventListener(SWITCH_SECTION_EVENT, handler);
-    return () => window.removeEventListener(SWITCH_SECTION_EVENT, handler);
-  });
-
-  // Listen for Cmd+N spawn-agent hotkey OR T106 "New agent with same task"
-  // (which passes detail.taskDescription + detail.cliType for pre-fill).
-  useMountEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as
-        | { taskDescription?: string; cliType?: string }
-        | undefined;
-      setSpawnInitialTask(detail?.taskDescription);
-      setSpawnInitialCliType(detail?.cliType);
-      setShowSpawnModal(true);
-    };
-    window.addEventListener("exegol:spawn-agent", handler);
-    return () => window.removeEventListener("exegol:spawn-agent", handler);
-  });
-
-  // T107 comparator "Open" → the agent's pane, or a new tab if it has none
-  useMountEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
-      const agentId = detail?.agentId;
-      if (!agentId) return;
-      const agent = useAgentStore.getState().agents[agentId];
-      if (agent) jumpToAgent(agentId, agent.projectId);
-    };
-    window.addEventListener("exegol:focus-agent", handler);
-    return () => window.removeEventListener("exegol:focus-agent", handler);
-  });
-
-  // T106 stop-reason "View diff" → repoint the focused (or first) pane of
-  // the active tab to the git view scoped to that agent's worktree.
-  useMountEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
-      const agentId = detail?.agentId;
-      if (!agentId) return;
-      void openDiffForAgent(agentId);
-    };
-    window.addEventListener("exegol:view-diff", handler);
-    return () => window.removeEventListener("exegol:view-diff", handler);
-  });
-
-  // Listen for Cmd+Shift+N parallel-spawn hotkey (Rule 4: mount effect for event listener)
-  useMountEffect(() => {
-    const handler = () => setShowParallelModal(true);
-    window.addEventListener("exegol:spawn-parallel", handler);
-    return () => window.removeEventListener("exegol:spawn-parallel", handler);
-  });
-
-  // Listen for Cmd+/ shortcut help overlay (Rule 4: mount effect for event listener)
-  useMountEffect(() => {
-    const handler = () => setShowShortcuts((prev) => !prev);
-    window.addEventListener("exegol:show-shortcuts", handler);
-    return () => window.removeEventListener("exegol:show-shortcuts", handler);
-  });
-
-  // Force xterm.js terminals to re-fit when switching back to Agents tab
-  useEffect(() => {
-    if (isAgents && !prevIsAgents.current) {
-      dispatchRefitTerminals();
-    }
-    prevIsAgents.current = isAgents;
-  }, [isAgents]);
+  useRefitOnAgentsShown(isAgents);
 
   if (!projectId && !onDashboard) {
     return (
@@ -164,33 +97,12 @@ export function WorkspaceView() {
           behind it taller, so every dashboard toggle resized every PTY twice */}
       <WorkspaceTabs activeSection={activeSection} onSectionChange={setActiveSection} />
 
-      <div className="relative flex-1 overflow-hidden">
-        {/* Agents: always mounted. When hidden, keep in DOM but invisible.
-            Dispatch resize event when becoming visible to trigger xterm.js fit() */}
-        {projectId && (
-          <div className={isAgents ? "absolute inset-0" : "invisible absolute inset-0"}>
-            <AgentsSection />
-          </div>
-        )}
-
-        {/* Other sections: conditionally rendered + lazy loaded (no terminal state to preserve) */}
-        {/* Keyed by project: local state (task file, unsaved brief, open pipeline run) leaked
-            into the next project, and a Save wrote A's brief into B */}
-        {!onDashboard && activeSection !== "agents" && (
-          <Suspense key={projectId ?? "none"} fallback={<SectionFallback />}>
-            {activeSection === "tasks" && <TasksSection />}
-            {activeSection === "history" && <HistorySection />}
-            {activeSection === "prompts-skills" && <PromptsSkillsSection />}
-            {activeSection === "memory" && <MemorySection />}
-            {activeSection === "knowledge" && <KnowledgeSection />}
-            {activeSection === "pipelines" && <PipelineSection />}
-            {activeSection === "parallel-runs" && <ParallelRunsSection />}
-            {activeSection === "qa-tests" && <QaTestsSection />}
-            {activeSection === "resources-tokens" && <ResourcesTokensSection />}
-            {activeSection === "scoring" && <ScoringSection />}
-          </Suspense>
-        )}
-      </div>
+      <SectionArea
+        projectId={projectId}
+        activeSection={activeSection}
+        isAgents={isAgents}
+        onDashboard={onDashboard}
+      />
 
       {onDashboard && (
         <Suspense fallback={<SectionFallback />}>
@@ -200,74 +112,92 @@ export function WorkspaceView() {
         </Suspense>
       )}
 
-      {showSpawnModal && projectId && (
-        <SpawnAgentModal
-          projectId={projectId}
-          initialTask={spawnInitialTask}
-          initialCliType={spawnInitialCliType}
-          onClose={() => {
-            setShowSpawnModal(false);
-            setSpawnInitialTask(undefined);
-            setSpawnInitialCliType(undefined);
-          }}
-        />
-      )}
+      {projectId && <SpawnModals projectId={projectId} spawn={spawn} />}
 
-      {showParallelModal && projectId && (
-        <ParallelSpawnModal projectId={projectId} onClose={() => setShowParallelModal(false)} />
-      )}
+      {showShortcuts && <ShortcutsOverlay onClose={closeShortcuts} />}
+    </div>
+  );
+}
 
-      {showShortcuts && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setShowShortcuts(false)}
-            role="none"
-          />
-          <div className="relative z-10 w-[400px] rounded-xl border border-border bg-bg-primary p-4 shadow-2xl">
-            <h2 className="mb-3 text-sm font-semibold text-text-primary">Keyboard Shortcuts</h2>
-            <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
-              {SHORTCUTS.map((s) => ({ key: s.keys, label: s.label })).map((s) => (
-                <React.Fragment key={s.key}>
-                  <span className="text-text-muted">{s.label}</span>
-                  <kbd className="text-right font-mono text-text-secondary">{s.key}</kbd>
-                </React.Fragment>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowShortcuts(false)}
-              className="mt-3 w-full rounded-lg bg-bg-secondary py-1.5 text-[11px] text-text-muted hover:bg-white/5"
-            >
-              Close
-            </button>
-          </div>
+function SectionArea({
+  projectId,
+  activeSection,
+  isAgents,
+  onDashboard,
+}: {
+  projectId: string | null;
+  activeSection: WorkspaceSection;
+  isAgents: boolean;
+  onDashboard: boolean;
+}) {
+  const LazySection = activeSection === "agents" ? null : LAZY_SECTIONS[activeSection];
+  return (
+    <div className="relative flex-1 overflow-hidden">
+      {/* Agents: always mounted. When hidden, keep in DOM but invisible.
+          Dispatch resize event when becoming visible to trigger xterm.js fit() */}
+      {projectId && (
+        <div className={isAgents ? "absolute inset-0" : "invisible absolute inset-0"}>
+          <AgentsSection />
         </div>
+      )}
+
+      {/* Keyed by project: local state (task file, unsaved brief, open pipeline run) leaked
+          into the next project, and a Save wrote A's brief into B */}
+      {!onDashboard && LazySection && (
+        <Suspense key={projectId ?? "none"} fallback={<SectionFallback />}>
+          <LazySection />
+        </Suspense>
       )}
     </div>
   );
 }
 
-/**
- * Find the agent's worktree on the main process side, then update the
- * currently focused (or first) pane in the active tab to the git view
- * scoped to that worktree.
- */
-async function openDiffForAgent(agentId: string): Promise<void> {
-  let worktreePath: string | undefined;
-  try {
-    const path = await trpcInvoke<string | null>("agents.getWorktreePath", { agentId });
-    worktreePath = path ?? undefined;
-  } catch {
-    /* no worktree row — fall back to project root */
-  }
-  const ws = useWorkspaceStore.getState();
-  const pw = getProjectState();
-  const activeTab = pw.tabs.find((t) => t.id === pw.activeTabId);
-  if (!activeTab) return;
-  const paneId = ws.focusedPaneId ?? findFirstPaneId(activeTab.layout);
-  if (!paneId) return;
-  ws.updatePane(paneId, { type: "git", agentId, filePath: worktreePath });
-  ws.setFocusedPane(paneId);
-  switchSection("agents");
+function SpawnModals({
+  projectId,
+  spawn,
+}: {
+  projectId: string;
+  spawn: ReturnType<typeof useSpawnModalEvents>;
+}) {
+  return (
+    <>
+      {spawn.showSpawnModal && (
+        <SpawnAgentModal
+          projectId={projectId}
+          initialTask={spawn.spawnInitialTask}
+          initialCliType={spawn.spawnInitialCliType}
+          onClose={spawn.closeSpawnModal}
+        />
+      )}
+      {spawn.showParallelModal && (
+        <ParallelSpawnModal projectId={projectId} onClose={spawn.closeParallelModal} />
+      )}
+    </>
+  );
+}
+
+function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} role="none" />
+      <div className="relative z-10 w-[400px] rounded-xl border border-border bg-bg-primary p-4 shadow-2xl">
+        <h2 className="mb-3 text-sm font-semibold text-text-primary">Keyboard Shortcuts</h2>
+        <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
+          {SHORTCUTS.map((s) => ({ key: s.keys, label: s.label })).map((s) => (
+            <React.Fragment key={s.key}>
+              <span className="text-text-muted">{s.label}</span>
+              <kbd className="text-right font-mono text-text-secondary">{s.key}</kbd>
+            </React.Fragment>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 w-full rounded-lg bg-bg-secondary py-1.5 text-[11px] text-text-muted hover:bg-white/5"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
 }

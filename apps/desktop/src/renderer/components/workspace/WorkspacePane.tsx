@@ -21,7 +21,13 @@ import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
-import { collectPaneIds, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
+import {
+  collectPaneIds,
+  type Pane,
+  selectPanes,
+  selectTabs,
+  useWorkspaceStore,
+} from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { FileExplorer } from "../workspace/FileExplorer";
 import { GitPane } from "../workspace/GitPane";
@@ -35,6 +41,37 @@ const TerminalPanel = lazy(() =>
 );
 
 // ─── Pane Toolbar ───────────────────────────────────────────────────────────
+
+/** Opens a terminal (with an agent) or browser (with a URL) pane in an always-on-top window */
+function floatPane(
+  paneId: string,
+  pane: Pane,
+  projectId: string | null | undefined,
+  markPaneFloating: (paneId: string, type: "terminal" | "browser") => void,
+) {
+  if (pane.type === "terminal" && pane.agentId) {
+    markPaneFloating(paneId, "terminal");
+    window.api.floating.open({
+      paneId,
+      type: "terminal",
+      title: `Terminal — ${pane.agentId.slice(0, 8)}`,
+      agentId: pane.agentId,
+    });
+  } else if (pane.type === "browser" && pane.url) {
+    markPaneFloating(paneId, "browser");
+    window.api.floating.open({
+      paneId,
+      type: "browser",
+      title: "Browser",
+      url: pane.url,
+      // The floating browser lists the project's agents from it
+      projectId: projectId ?? undefined,
+    });
+  }
+}
+
+const canFloat = (pane: Pane) =>
+  Boolean((pane.type === "terminal" && pane.agentId) || (pane.type === "browser" && pane.url));
 
 function PaneToolbar({
   tabId,
@@ -83,24 +120,7 @@ function PaneToolbar({
   const handleFloat = useCallback(() => {
     const pane = panes[paneId];
     if (!pane) return;
-    if (pane.type === "terminal" && pane.agentId) {
-      markPaneFloating(paneId, "terminal");
-      window.api.floating.open({
-        paneId,
-        type: "terminal",
-        title: `Terminal — ${pane.agentId.slice(0, 8)}`,
-        agentId: pane.agentId,
-      });
-    } else if (pane.type === "browser" && pane.url) {
-      markPaneFloating(paneId, "browser");
-      window.api.floating.open({
-        paneId,
-        type: "browser",
-        title: "Browser",
-        url: pane.url,
-        projectId: projectId ?? undefined,
-      });
-    }
+    floatPane(paneId, pane, projectId, markPaneFloating);
   }, [panes, paneId, markPaneFloating, projectId]);
 
   const handleOpenInIde = useCallback(() => {
@@ -416,29 +436,65 @@ function FilesPaneContent({
   );
 }
 
-// ─── Main WorkspacePane ─────────────────────────────────────────────────────
+// ─── Pane body by type ──────────────────────────────────────────────────────
 
-interface WorkspacePaneProps {
-  paneId: string;
-  tabId: string;
+type PaneContentProps = { pane: Pane; paneId: string };
+
+const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.ReactNode> = {
+  terminal: ({ pane, paneId }) =>
+    pane.agentId ? (
+      <RecoverableTerminalPane agentId={pane.agentId} paneId={paneId} />
+    ) : (
+      <EmptyPane paneId={paneId} />
+    ),
+  browser: ({ pane, paneId }) => <BrowserPane pane={pane} paneId={paneId} />,
+  files: ({ pane }) => (
+    <FilesPaneContent
+      key={pane.filePath ?? "default"}
+      overridePath={pane.filePath}
+      openFile={pane.openFile}
+      openFileAt={pane.openFileAt}
+    />
+  ),
+  git: ({ pane }) => <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />,
+  empty: ({ paneId }) => <EmptyPane paneId={paneId} />,
+};
+
+function PaneBody({ pane, paneId, isFloating }: PaneContentProps & { isFloating: boolean }) {
+  if (pane.invalidReason) return <InvalidPane reason={pane.invalidReason} paneId={paneId} />;
+  if (isFloating) return <FloatingPlaceholder paneId={paneId} />;
+  const Content = PANE_CONTENT[pane.type];
+  return <Content pane={pane} paneId={paneId} />;
 }
 
-export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
-  const { projectId: paneProjectId } = useProjectContext();
-  const pane = useWorkspaceStore((s) => selectPanes(s)[paneId]);
-  const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
+// ─── Drop target (tab merge / pane rearrange) ───────────────────────────────
+
+type DropSide = "left" | "right" | "top" | "bottom";
+
+function dropSideAt(x: number, y: number): DropSide | null {
+  if (x < 0.3) return "left";
+  if (x > 0.7) return "right";
+  if (y < 0.3) return "top";
+  if (y > 0.7) return "bottom";
+  return null;
+}
+
+const DROP_INDICATOR: Record<DropSide, string> = {
+  left: "inset-y-0 left-0 w-1/2",
+  right: "inset-y-0 right-0 w-1/2",
+  top: "inset-x-0 top-0 h-1/2",
+  bottom: "inset-x-0 bottom-0 h-1/2",
+};
+
+const refitNextFrame = () =>
+  requestAnimationFrame(() => {
+    window.dispatchEvent(new Event("exegol:refit-terminals"));
+  });
+
+function usePaneDropTarget(tabId: string, paneId: string) {
   const mergeTabIntoSplit = useWorkspaceStore((s) => s.mergeTabIntoSplit);
   const movePaneBeside = useWorkspaceStore((s) => s.movePaneBeside);
-  const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
-  const isFloating = useWorkspaceStore((s) => !!s.floatingPanes[paneId]);
-  const isFocused = focusedPaneId === paneId;
-  const [dropSide, setDropSide] = useState<"left" | "right" | "top" | "bottom" | null>(null);
-
-  // Check if this pane is inside a split (has siblings) — enables drag-out
-  const isSplitPane = useWorkspaceStore((s) => {
-    const tab = selectTabs(s).find((t) => t.id === tabId);
-    return tab ? collectPaneIds(tab.layout).length > 1 : false;
-  });
+  const [dropSide, setDropSide] = useState<DropSide | null>(null);
 
   const handlePaneDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     const hasTab = e.dataTransfer.types.includes("application/exegol-tab");
@@ -449,11 +505,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0.3) setDropSide("left");
-    else if (x > 0.7) setDropSide("right");
-    else if (y < 0.3) setDropSide("top");
-    else if (y > 0.7) setDropSide("bottom");
-    else setDropSide(null);
+    setDropSide(dropSideAt(x, y));
   }, []);
 
   const handlePaneDrop = useCallback(
@@ -467,9 +519,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         const direction = dropSide === "left" || dropSide === "right" ? "horizontal" : "vertical";
         const sourceFirst = dropSide === "left" || dropSide === "top";
         mergeTabIntoSplit(sourceTabId, tabId, direction, sourceFirst);
-        requestAnimationFrame(() => {
-          window.dispatchEvent(new Event("exegol:refit-terminals"));
-        });
+        refitNextFrame();
         return;
       }
 
@@ -484,9 +534,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
           };
           if (sourceTabId2 === tabId && sourcePaneId !== paneId) {
             movePaneBeside(tabId, sourcePaneId, paneId, dropSide);
-            requestAnimationFrame(() => {
-              window.dispatchEvent(new Event("exegol:refit-terminals"));
-            });
+            refitNextFrame();
           }
         } catch {
           /* malformed payload — ignore */
@@ -501,6 +549,38 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
     setDropSide(null);
   }, []);
+
+  return {
+    dropSide,
+    dropHandlers: {
+      onDragOver: handlePaneDragOver,
+      onDrop: handlePaneDrop,
+      onDragLeave: handlePaneDragLeave,
+    },
+  };
+}
+
+// ─── Main WorkspacePane ─────────────────────────────────────────────────────
+
+interface WorkspacePaneProps {
+  paneId: string;
+  tabId: string;
+}
+
+export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
+  const { projectId: paneProjectId } = useProjectContext();
+  const pane = useWorkspaceStore((s) => selectPanes(s)[paneId]);
+  const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
+  const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
+  const isFloating = useWorkspaceStore((s) => !!s.floatingPanes[paneId]);
+  const isFocused = focusedPaneId === paneId;
+  const { dropSide, dropHandlers } = usePaneDropTarget(tabId, paneId);
+
+  // Check if this pane is inside a split (has siblings) — enables drag-out
+  const isSplitPane = useWorkspaceStore((s) => {
+    const tab = selectTabs(s).find((t) => t.id === tabId);
+    return tab ? collectPaneIds(tab.layout).length > 1 : false;
+  });
 
   if (!pane) {
     return (
@@ -522,19 +602,14 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         // T155.3: activating an agent's pane clears its attention state
         if (pane.agentId) useAgentStore.getState().setFocusedAgent(pane.agentId);
       }}
-      onDragOver={handlePaneDragOver}
-      onDrop={handlePaneDrop}
-      onDragLeave={handlePaneDragLeave}
+      {...dropHandlers}
     >
       {/* Tab merge drop indicator */}
       {dropSide && (
         <div
           className={cn(
             "pointer-events-none absolute z-20 bg-accent/20 border-2 border-accent/50 rounded transition-all",
-            dropSide === "left" && "inset-y-0 left-0 w-1/2",
-            dropSide === "right" && "inset-y-0 right-0 w-1/2",
-            dropSide === "top" && "inset-x-0 top-0 h-1/2",
-            dropSide === "bottom" && "inset-x-0 bottom-0 h-1/2",
+            DROP_INDICATOR[dropSide],
           )}
         />
       )}
@@ -551,28 +626,14 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}
         onFloat={
-          (pane.type === "terminal" && pane.agentId) || (pane.type === "browser" && pane.url)
-            ? () => {
-                if (pane.type === "terminal" && pane.agentId) {
-                  useWorkspaceStore.getState().markPaneFloating(paneId, "terminal");
-                  window.api.floating.open({
-                    paneId,
-                    type: "terminal",
-                    title: `Terminal — ${pane.agentId.slice(0, 8)}`,
-                    agentId: pane.agentId,
-                  });
-                } else if (pane.type === "browser" && pane.url) {
-                  useWorkspaceStore.getState().markPaneFloating(paneId, "browser");
-                  window.api.floating.open({
-                    paneId,
-                    type: "browser",
-                    title: "Browser",
-                    url: pane.url,
-                    // The floating browser lists the project's agents from it
-                    projectId: paneProjectId ?? undefined,
-                  });
-                }
-              }
+          canFloat(pane)
+            ? () =>
+                floatPane(
+                  paneId,
+                  pane,
+                  paneProjectId,
+                  useWorkspaceStore.getState().markPaneFloating,
+                )
             : undefined
         }
         onClose={() => {
@@ -584,31 +645,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         }}
       >
         <div className="flex-1 overflow-hidden">
-          {pane.invalidReason && <InvalidPane reason={pane.invalidReason} paneId={paneId} />}
-          {!pane.invalidReason && isFloating && <FloatingPlaceholder paneId={paneId} />}
-          {!pane.invalidReason && !isFloating && pane.type === "terminal" && pane.agentId && (
-            <RecoverableTerminalPane agentId={pane.agentId} paneId={paneId} />
-          )}
-          {!pane.invalidReason && !isFloating && pane.type === "browser" && (
-            <BrowserPane pane={pane} paneId={paneId} />
-          )}
-          {!pane.invalidReason && !isFloating && pane.type === "files" && (
-            <FilesPaneContent
-              key={pane.filePath ?? "default"}
-              overridePath={pane.filePath}
-              openFile={pane.openFile}
-              openFileAt={pane.openFileAt}
-            />
-          )}
-          {!pane.invalidReason && !isFloating && pane.type === "git" && (
-            <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />
-          )}
-          {!pane.invalidReason && !isFloating && pane.type === "empty" && (
-            <EmptyPane paneId={paneId} />
-          )}
-          {!pane.invalidReason && !isFloating && pane.type === "terminal" && !pane.agentId && (
-            <EmptyPane paneId={paneId} />
-          )}
+          <PaneBody pane={pane} paneId={paneId} isFloating={isFloating} />
         </div>
       </PaneContextMenu>
     </div>

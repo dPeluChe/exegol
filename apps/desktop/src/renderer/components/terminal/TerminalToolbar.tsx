@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { openInBrowser } from "../../lib/open-in-browser";
+import { AccessModeBadge } from "../common/AccessModeBadge";
 import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
 import { WatchToggle } from "../common/WatchToggle";
@@ -29,9 +30,8 @@ interface TerminalToolbarProps {
   dirtyCount?: number;
   viewMode: "terminal" | "chat";
   onToggleView: () => void;
-  previewUrl?: string | null;
-  onOpenPreview?: () => void;
-  onDismissPreview?: () => void;
+  /** T128: a localhost URL seen in the output */
+  preview?: { previewUrl: string | null; openPreview: () => void; dismissPreview: () => void };
   /** The repo's web page (origin remote) */
   repoUrl?: string | null;
   /** Open a URL in a browser pane next to this terminal */
@@ -49,9 +49,7 @@ export function TerminalToolbar({
   dirtyCount = 0,
   viewMode,
   onToggleView,
-  previewUrl,
-  onOpenPreview,
-  onDismissPreview,
+  preview,
   repoUrl,
   onOpenRepo,
   filesOpen,
@@ -109,8 +107,12 @@ export function TerminalToolbar({
       )}
       {accessMode && accessMode !== "write" && <AccessModeBadge mode={accessMode} />}
       <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} />
-      {previewUrl && onOpenPreview && onDismissPreview && (
-        <PreviewUrlChip url={previewUrl} onOpen={onOpenPreview} onDismiss={onDismissPreview} />
+      {preview?.previewUrl && (
+        <PreviewUrlChip
+          url={preview.previewUrl}
+          onOpen={preview.openPreview}
+          onDismiss={preview.dismissPreview}
+        />
       )}
     </div>
   );
@@ -274,29 +276,6 @@ export function TerminalViewToggle({
         </>
       )}
     </button>
-  );
-}
-
-// ─── T58: Access mode badge ──────────────────────────────────────────────────
-
-const ACCESS_MODE_LABEL: Partial<Record<AgentAccessMode, { label: string; className: string }>> = {
-  read: { label: "read-only", className: "bg-blue-500/20 text-blue-400" },
-  plan: { label: "plan-only", className: "bg-purple-500/20 text-purple-400" },
-};
-
-export function AccessModeBadge({ mode }: { mode: AgentAccessMode }) {
-  const config = ACCESS_MODE_LABEL[mode];
-  if (!config) return null;
-  return (
-    <span
-      className={cn(
-        "rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
-        config.className,
-      )}
-      title={`Agent running in ${config.label} mode`}
-    >
-      {config.label}
-    </span>
   );
 }
 

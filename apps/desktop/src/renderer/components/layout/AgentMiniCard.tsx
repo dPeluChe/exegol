@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { BellOff, Moon, Pause, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
+import { useContextMenu } from "../../hooks/use-context-menu";
 import { useDeleteAgent } from "../../hooks/use-delete-agent";
 import { formatTimeAgo } from "../../lib/format";
 import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
@@ -20,6 +21,16 @@ export const VISIBLE_STATUSES = new Set([
   "crashed",
 ]);
 
+// The alias is the session's name; a quick launch's task is only the CLI's name
+function miniCardName(agent: AgentState): string {
+  return (
+    agent.alias ??
+    (agent.taskDescription && agent.taskDescription !== agent.cliType
+      ? agent.taskDescription.slice(0, 40)
+      : agent.cliType)
+  );
+}
+
 export function AgentMiniCard({ agent }: { agent: AgentState }) {
   const isFocused = useAgentStore((s) => s.focusedAgentId === agent.id);
   const isUnread = useAgentStore((s) => {
@@ -28,29 +39,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
   });
   const deleteAgent = useDeleteAgent();
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
-  const isCrashed = agent.status === "crashed";
-
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY });
-  }, []);
-
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
-
-  useEffect(() => {
-    if (!contextMenu) return;
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        closeContextMenu();
-      }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [contextMenu, closeContextMenu]);
+  const { contextMenu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
 
   const handleRemove = useCallback(async () => {
     closeContextMenu();
@@ -60,13 +49,6 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
       console.error("[AgentMiniCard] Failed to delete agent:", err);
     }
   }, [agent.id, deleteAgent, closeContextMenu]);
-
-  // The alias is the session's name; a quick launch's task is only the CLI's name
-  const displayName =
-    agent.alias ??
-    (agent.taskDescription && agent.taskDescription !== agent.cliType
-      ? agent.taskDescription.slice(0, 40)
-      : agent.cliType);
 
   // Its own pane, or a new tab: never over whatever the active tab shows
   const handleNavigate = () => jumpToAgent(agent.id, agent.projectId);
@@ -89,42 +71,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
       >
         {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
         <AgentCliIcon agent={agent} size={16} />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1">
-            <span
-              className={cn(
-                "h-1.5 w-1.5 shrink-0 rounded-full",
-                STATUS_DOT_COLORS[agent.status] ?? "bg-zinc-500",
-                agent.activityLevel === "busy" && "animate-status-pulse",
-                agent.activityLevel === "idle" && isActive && "opacity-60",
-              )}
-            />
-            <span className="flex-1 truncate text-[10px] font-medium">{displayName}</span>
-            <QuietBadge agent={agent} />
-            {agent.tokenUsage.cost > 0 && (
-              <span className="shrink-0 text-[8px] tabular-nums text-accent">
-                $
-                {agent.tokenUsage.cost < 0.01
-                  ? agent.tokenUsage.cost.toFixed(4)
-                  : agent.tokenUsage.cost.toFixed(2)}
-              </span>
-            )}
-            <span className="shrink-0 text-[8px] tabular-nums text-text-muted">
-              {formatTimeAgo(agent.startedAt)}
-            </span>
-          </div>
-          {(agent.currentStep || isCrashed) && (
-            <p
-              className={cn(
-                "truncate pl-2.5 text-[9px]",
-                isCrashed ? "text-red-400" : "text-text-muted",
-              )}
-            >
-              {isCrashed ? "Crashed — open it to resume" : agent.currentStep}
-            </p>
-          )}
-        </div>
+        <AgentMiniCardDetails agent={agent} isActive={isActive} />
       </button>
 
       {contextMenu && (
@@ -134,30 +81,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
           {isActive && agent.cliType !== "shell" && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  closeContextMenu();
-                  setAgentMuted(agent.id, !agent.muted).catch(() => {});
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
-              >
-                {agent.muted ? <Moon className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
-                {agent.muted ? "Unmute" : "Mute"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  closeContextMenu();
-                  suspendAgent(agent.id).catch(() => {});
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
-              >
-                <Pause className="h-3 w-3" />
-                Suspend
-              </button>
-            </>
+            <QuietMenuItems agent={agent} onDone={closeContextMenu} />
           )}
           <button
             type="button"
@@ -170,5 +94,75 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
         </div>
       )}
     </div>
+  );
+}
+
+function AgentMiniCardDetails({ agent, isActive }: { agent: AgentState; isActive: boolean }) {
+  const isCrashed = agent.status === "crashed";
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-1">
+        <span
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full",
+            STATUS_DOT_COLORS[agent.status] ?? "bg-zinc-500",
+            agent.activityLevel === "busy" && "animate-status-pulse",
+            agent.activityLevel === "idle" && isActive && "opacity-60",
+          )}
+        />
+        <span className="flex-1 truncate text-[10px] font-medium">{miniCardName(agent)}</span>
+        <QuietBadge agent={agent} />
+        {agent.tokenUsage.cost > 0 && (
+          <span className="shrink-0 text-[8px] tabular-nums text-accent">
+            $
+            {agent.tokenUsage.cost < 0.01
+              ? agent.tokenUsage.cost.toFixed(4)
+              : agent.tokenUsage.cost.toFixed(2)}
+          </span>
+        )}
+        <span className="shrink-0 text-[8px] tabular-nums text-text-muted">
+          {formatTimeAgo(agent.startedAt)}
+        </span>
+      </div>
+      {(agent.currentStep || isCrashed) && (
+        <p
+          className={cn(
+            "truncate pl-2.5 text-[9px]",
+            isCrashed ? "text-red-400" : "text-text-muted",
+          )}
+        >
+          {isCrashed ? "Crashed — open it to resume" : agent.currentStep}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function QuietMenuItems({ agent, onDone }: { agent: AgentState; onDone: () => void }) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          onDone();
+          setAgentMuted(agent.id, !agent.muted).catch(() => {});
+        }}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+      >
+        {agent.muted ? <Moon className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+        {agent.muted ? "Unmute" : "Mute"}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onDone();
+          suspendAgent(agent.id).catch(() => {});
+        }}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+      >
+        <Pause className="h-3 w-3" />
+        Suspend
+      </button>
+    </>
   );
 }
