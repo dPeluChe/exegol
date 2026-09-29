@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- After a system restart, the sessions that were open resume by themselves in their panes
 - While agents are working the Mac does not idle-sleep, and quitting Exegol asks first
 - Bug reports include the developer console of Exegol's windows (redacted), with a "Copy console" button
 - An agent started by hand in a plain terminal (claude, devin, agy...) is recognized and shows its icon
@@ -29,6 +30,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- Resume from the Dashboard now updates a pane in another project (it kept showing the old session)
 - A session lost before its history was saved (system restart) now offers Resume instead of a dead "No history available"
 - Terminals no longer go blank when the window moves to another display (GPU process restart)
 - Sessions no longer inherit Exegol's own EXEGOL_* variables (a dev build started from an agent terminal passed that agent's MCP token on)

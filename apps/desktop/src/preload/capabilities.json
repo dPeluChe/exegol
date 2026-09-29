@@ -47,6 +47,7 @@
       "stop",
       "suspend",
       "swapProviders",
+      "takeLostOnRestart",
       "toggleProviderEnabled",
       "unregisterProvider",
       "updateProviderArgs",
