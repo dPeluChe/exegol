@@ -16,6 +16,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Title bar: check for updates, see the download and restart to install from one button
 
 ### Fixed
+- Scrolling over a fullscreen agent (Claude with "tui": "fullscreen") no longer types ↑ and recalls the last message
 - After an update or restart, terminals show their session at once (they could stay blank until touched) and the sidebar counts every project's sessions
 - The notifications panel opens inside the window instead of past its left edge
 

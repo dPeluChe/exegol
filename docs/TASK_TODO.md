@@ -42,10 +42,6 @@
      never retries once the project loads; `.gitkeep` overwrite; GitHub issue cards drag to nothing
    - Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
      stale; Parallel Runs promote has no error; `agentClis` settings field unused
-6. **Trackpad scroll over a TUI sends arrow keys** (reported 2026-09-28): scrolling up in a Claude
-   Code pane to read earlier output types ↑ into its input (recalls the last message). Likely xterm's
-   alternate-scroll: in the alternate screen with no mouse tracking, wheel becomes arrow keys.
-   Check `TerminalInstance` options and whether the wheel should scroll Exegol's scrollback instead
 4. **Status for a CLI typed in a terminal**: `detectShellClis` recognizes it (icon only). Next:
    run the status parser for that shell while a CLI is detected, so running / waiting and Needs
    attention work too (no hooks: it was not launched by Exegol)
