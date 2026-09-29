@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-09-29 — Clean first launch after updates, update button, files beside the terminal
+
 ### Added
 - New projects take their app icon automatically (found once and kept); existing ones get it on the next launch
 - Terminal toolbar: "Files" opens the project files beside the terminal to look or drag a file in, and closes again without changing the layout
@@ -19,6 +21,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Scrolling over a fullscreen agent (Claude with "tui": "fullscreen") no longer types ↑ and recalls the last message
 - After an update or restart, terminals show their session at once (they could stay blank until touched) and the sidebar counts every project's sessions
 - The notifications panel opens inside the window instead of past its left edge
+- First-run setup: the API keys step fits the window, and the last step lists the shortcuts to start with
 
 ## [0.5.4] — 2026-09-29 — Notarized build, quit guard for open sessions, setup wizard in steps
 
