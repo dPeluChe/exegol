@@ -9,8 +9,13 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-09-29 — Linux packages
+
 ### Added
 - Linux: an AppImage and a .deb are built for every release
+
+### Fixed
+- Linux: Settings and floating windows have the system frame (they had no close button), memory and disk report real usage, the login shell falls back to bash, and the Doctor warns about a missing keyring or `lsof`
 
 ## [0.5.5] — 2026-09-29 — Clean first launch after updates, update button, files beside the terminal
 
