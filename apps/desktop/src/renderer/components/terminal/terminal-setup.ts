@@ -104,6 +104,11 @@ export function setupTerminalSession(
     terminal.attachCustomWheelEventHandler(
       () => !!terminal.element?.contains(document.activeElement),
     );
+  } else if (deps.cliType && deps.cliType !== "shell") {
+    // An agent TUI in the alternate screen (claude with "tui": "fullscreen") has no scrollback,
+    // so xterm turns the wheel into ↑/↓, and ↑ in an empty prompt recalls the last message. Only
+    // reached when the app did not ask for mouse events. Shells keep it: vim and less scroll that way
+    terminal.attachCustomWheelEventHandler(() => terminal.buffer.active.type !== "alternate");
   }
 
   const dormantPipe = createDormantPipe(terminal, true);
