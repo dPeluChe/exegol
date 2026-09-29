@@ -12,6 +12,7 @@ import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useDeepLink } from "./hooks/use-deeplink";
+import { useFleetSync } from "./hooks/use-fleet-sync";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { usePanelessAgentSweep } from "./hooks/use-paneless-agent-sweep";
@@ -79,6 +80,7 @@ export default function App() {
   usePanelessAgentSweep();
   useSettingsSync();
   useAutoResumeLost();
+  useFleetSync();
 
   const showSidebar = activeView === "workspace" || activeView === "dashboard";
 

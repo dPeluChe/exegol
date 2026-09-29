@@ -3,7 +3,7 @@ import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exego
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
-import { takeLostOnRestart } from "../../agents/lost-sessions";
+import { takeLostOnRestart, whenRecovered } from "../../agents/lost-sessions";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
@@ -170,7 +170,11 @@ export const agentRouter = router({
   }),
 
   /** T156: cross-project non-terminal agents (project name + group color). */
-  listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+  // After the reattach: asked earlier it returned pre-recovery statuses
+  listActive: publicProcedure.query(async ({ ctx }) => {
+    await whenRecovered();
+    return listActiveAgents(ctx.db);
+  }),
 
   /** Sessions a restart took with the sidecar, to resume in their panes (handed out once) */
   takeLostOnRestart: publicProcedure.query(async ({ ctx }) =>

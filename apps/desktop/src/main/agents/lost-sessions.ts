@@ -16,9 +16,14 @@ export function markRecoveryDone(): void {
   done();
 }
 
+/** Startup recovery (sidecar reattach) finished, or `timeoutMs` passed. Free once it is done */
+export function whenRecovered(timeoutMs = 15_000): Promise<unknown> {
+  return Promise.race([recovered, new Promise((r) => setTimeout(r, timeoutMs))]);
+}
+
 /** Once: a second window or a reload must not resume them again */
 export async function takeLostOnRestart(timeoutMs = 20_000): Promise<string[]> {
-  await Promise.race([recovered, new Promise((r) => setTimeout(r, timeoutMs))]);
+  await whenRecovered(timeoutMs);
   const ids = lost;
   lost = [];
   return ids;
