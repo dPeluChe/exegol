@@ -1,5 +1,8 @@
 # Exegol
 
+> Working in this repo: the rules for every contributor and agent are in [AGENTS.md](AGENTS.md)
+> (short) and [CONTRIBUTING.md](CONTRIBUTING.md) (people). This file is the architecture reference.
+
 Electron + React + Rust desktop app for orchestrating AI coding agents.
 
 ## Tech Stack
@@ -7,6 +10,10 @@ Electron + React + Rust desktop app for orchestrating AI coding agents.
 Electron 41 · React 18 · TailwindCSS 4 · Rust (napi-rs + memchr) · libSQL · tRPC 11 · xterm.js 6 · Monaco Editor · Zustand 5 · Bun · Turborepo · Biome 2.4.7
 
 ## Development
+
+Releases: macOS builds are signed + notarized (`APPLE_KEYCHAIN_PROFILE=exegol-notary`), Linux
+AppImage/.deb come from `.github/workflows/linux.yml` on each published release, installed apps
+auto-update (title-bar button). Steps: `docs/GUIDES/RELEASE.md`.
 
 ```bash
 bun run dev              # Build Rust + start Electron (full pipeline)
@@ -128,7 +135,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 14 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
-- **tRPC over IPC**: 32 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
+- **tRPC over IPC**: 33 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
 - **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
@@ -138,7 +145,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 - **Bug reports** (T196): title-bar bug button → `diagnostics` router (`system/diagnostics.ts`). Collected once per dialog and shown for review (the issue is public): versions, Doctor, agent counts, this session's log, previous sessions' warnings/errors, `sidecar.log`. Exegol's own log lines never carry prompts or agent output (spawns log `commandShape`, status lines drop the step); `redact()` handles third-party text: keys/tokens, URLs, emails, IPs, and paths made generic. Files via `gh issue create` or a prefilled issue URL + clipboard. Main crashes, renderer errors (`log:renderer-error`, deduped and capped) and child-process deaths all go through `logger`.
 - **Activity level** (T70): `classifyActivity(status, step)` derives `busy | idle | neutral` from agent status on every push event. `AgentState.activityLevel` drives the pulsing dot in tab chrome (`WorkspaceTabBar`) and `StatusDot` pulse suppression.
 - **Access modes** (T58): agents spawn with `accessMode: read | write | plan`. `buildShellCommand` prepends a system instruction; `EXEGOL_ACCESS_MODE` env var is set. Pipeline steps inherit per-step `accessMode` from `PipelineStepDef`. Badge shown in terminal toolbar for non-write modes.
-- **Deterministic signals** (T123): Claude Code hooks (per-agent `~/.exegol/hooks/<id>.json` via `--settings`) printf OSC-777 to `/dev/tty` and drop file events in `~/.exegol/events` (NotifyHandler; the path verified to deliver for claude-code) → Rust/JS FSM in the output path emits `agent:signal` events (`AGENT_SIGNAL_TYPES` whitelist in shared `agent-signals.ts`). Scraped parser stays as fallback (`source: "parser"`). Stop = turn boundary (no notification); Notification hook = attention.
+- **Deterministic signals** (T123): Claude Code hooks (per-agent `~/.exegol/hooks/<id>.json` via `--settings`) printf OSC-777 to `/dev/tty` and drop file events in `~/.exegol/events` (NotifyHandler; the path verified to deliver for claude-code) → Rust/JS FSM in the output path emits `agent:signal` events (`AGENT_SIGNAL_TYPES` whitelist in `packages/shared/src/types/agent-signals.ts`). Scraped parser stays as fallback (`source: "parser"`). Stop = turn boundary (no notification); Notification hook = attention.
 - **NotificationBus** (T124): `main/notifications/bus.ts` — channels implement `deliver(event)`; desktop channel (Electron Notification + dock badge) registered by default; `resource:warning`/`budget:warning` emitters in T143/T147. Attention notifications include the scrollback-tail pending question (OSC-stripped).
 - **Knowledge node** (T140): opt-in `.exegol/knowledge/` (committed PROJECT.md + gitignored DIGEST.md + synced MEMORY.md) + managed marker block in AGENTS.md/CLAUDE.md. `knowledge.get` is strictly read-only; file creation only via `knowledge.initialize`. Digest via `trs digest` (execFileSync) with internal fallback.
 - **Exegol MCP server** (T145): Unix socket (`~/.exegol/mcp-server.sock`, chmod 600) + stdio shim written into the agent's `.mcp.json`. Identity = per-agent token (`EXEGOL_MCP_TOKEN`) minted at spawn, revoked on exit; server derives accessMode from DB per call — client claims never trusted. 13 tools (`exegol-protocol.ts`): memory_search, memory_list, memory_save, knowledge_get, agents_list, agent_send, message_status, message_cancel, messages_check, claim_paths, release_paths, list_claims, agent_link. Shells skip.
@@ -167,8 +174,8 @@ apps/desktop/src/
                     scoring, queue, status-parser (+ stripOscSequences), race-mode (T131)
     bootstrap/      window, ipc-handlers, recovery, shutdown, deep-link, global-hotkey
     db/             client, migrations (36 base) + migration-sets/ (per-group wave files),
-                    queries/ (21 domain modules + helpers)
-    ipc/            router (32 routers), procedures/ (37 modules incl. history, knowledge, doctor)
+                    queries/ (22 domain modules + helpers)
+    ipc/            router (33 routers), procedures/ (39 modules incl. history, knowledge, doctor)
     history/        T181 session history: merged timeline + per-CLI local store readers
     terminal/       pty-host, sidecar entry/client/discovery/eviction/flusher, ring-buffer,
                     headless-emulator
@@ -178,7 +185,7 @@ apps/desktop/src/
     pipeline/       executor, context, defaults, state-machine (T78), evaluator +
                     evaluator-step-handler (T88v2), evidence (T130), oplog-snapshots (T129)
     mcp/            host (stdio/HTTP), registry, exegol-server + exegol-protocol +
-                    exegol-tools + shim/ctl bins (T145 agent runtime API)
+                    exegol-tools + the MCP shim and claim-guard bins (T145 agent runtime API)
     memory/         extractor (ANSI-stripped, observeMemory), store (hybrid RRF recall),
                     salience (T126 decay/reinforce/supersede)
     knowledge/      brief, digest, staleness, managed-block, memory-bridge, context (T140)
@@ -194,10 +201,10 @@ apps/desktop/src/
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router)
   renderer/
     components/
-      workspace/    WorkspaceView, WorkspaceTabs (4 main + sub-tabs), WorkspacePane (5 types),
+      workspace/    WorkspaceView, WorkspaceTabs (3 main: Agents, Project, Monitor + sub-tabs; Dashboard is its own view), WorkspacePane (5 types),
                     WorkspaceTabBar (quick launch + LayoutPresets dropdown), WorkspaceLayout,
                     GitPane (with SmartGitAction), LayoutPresets, SmartGitAction,
-                    PaneContextMenu, sections/ (17 section components + pipeline/, tasks/), diff/
+                    PaneContextMenu, sections/ (29 section components + pipeline/, tasks/), diff/
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,
                     YOLO/Active toggles), TerminalSettings (bundled fonts, per-card preview,
                     family chain badges, promote-on-click), ApiKeysSettings
@@ -206,7 +213,8 @@ apps/desktop/src/
       common/       AgentIcon (glob *.{svg,png}, dark/light), EmptyState, StatusDot, ConfirmDialog
       agents/       AgentLauncher (portal dropdown from registry)
       onboarding/   OnboardingWizard (T148 first-run: CLI detect + keys + doctor)
-      layout/       Sidebar, ProjectsSection, StatusBar, TitleBar
+      layout/       Sidebar (+ SidebarRail, SidebarHeader, SidebarFooter), ProjectsSection, AttentionSection,
+                    TitleBar (AttentionQueue, BugReportDialog, UpdateButton), StatusBar, TabsOverview
     FloatingPaneRoot.tsx  (T84 — top-level renderer for floating PiP windows)
     SettingsRoot.tsx      (T120 — top-level renderer for the standalone settings window)
     hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
@@ -222,6 +230,7 @@ apps/desktop/src/
     styles/         globals.css, fonts.css (@font-face for bundled fonts)
   preload/          contextBridge: trpc, terminal, dialog, push events, floating, settings (T120), menu — gated by capabilities.json allowlist
 packages/
+  cli/              `exegol` CLI (`exegol .` opens a folder via exegol://)
   shared/           types (20+), schemas (zod: agent, db-rows, mcp, pipeline, project, project-group, scheduler, settings, token-usage)
   ui/               Radix primitives, cn()
   core-rust/        napi-rs: git2 + processing pipeline + search
@@ -235,7 +244,7 @@ docs/
 
 ## Database
 
-36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_009` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns) = 48 total · 34 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, sessions, port_registry, host_metrics (last three unused, see T185.4)
+36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_013` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns, PTY size, yolo, mute/suspend, project appearance) = 52 total · 34 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, sessions, port_registry, host_metrics (last three unused, see T185.4)
 
 **Migration rule**: parallel work groups append ONLY to their own `db/migration-sets/<group>.ts` file (id prefixes `w2a_`/`w2b_`/`w2d_`/`w3_`) — `migrations.ts` spreads them; never edit another group's set.
 

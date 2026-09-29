@@ -58,7 +58,7 @@ bun run build:rust       # native module, bundled into the app
 bun run package:mac      # electron-vite build + electron-builder
 ```
 
-Output: `apps/desktop/dist/Exegol-<version>-<arch>.dmg`. Open it and drag Exegol to Applications. The build is unsigned (`notarize: false`), so on first launch right-click the app and choose Open. `bun run build` alone only compiles to `apps/desktop/out/`. Full guide: [`docs/GUIDES/RELEASE.md`](docs/GUIDES/RELEASE.md).
+Output: `apps/desktop/dist/Exegol-<version>-<arch>.dmg`. Open it and drag Exegol to Applications. With `APPLE_KEYCHAIN_PROFILE` set the app is signed and notarized; without it the build is unsigned and first launch needs right-click → Open. Linux AppImage and `.deb` are built by CI (`.github/workflows/linux.yml`) for each published release. Installed apps update themselves from GitHub releases. `bun run build` alone only compiles to `apps/desktop/out/`. Full guide: [`docs/GUIDES/RELEASE.md`](docs/GUIDES/RELEASE.md).
 
 ### Lint, Typecheck & Tests
 
@@ -82,7 +82,7 @@ cargo check && cargo test && cargo clippy
 | Desktop | Electron 41 |
 | Frontend | React 18, TailwindCSS 4, Zustand 5, Monaco Editor |
 | IPC | tRPC 11 (over Electron IPC, not HTTP) |
-| Database | libSQL (SQLite fork by Turso), 48 migrations (36 base + wave sets), 34 tables |
+| Database | libSQL (SQLite fork by Turso), 52 migrations (36 base + wave sets), 34 tables |
 | Terminal | xterm.js 6 + WebGL renderer, node-pty, PTY sidecar |
 | Native | Rust via napi-rs (ANSI stripping, status parsing, git2 worktree ops, fuzzy/grep search) |
 | Build | electron-vite 5, Turborepo, Bun, Biome 2.4 |
@@ -91,6 +91,8 @@ cargo check && cargo test && cargo clippy
 
 ```
 exegol/
+├── AGENTS.md               # Rules for AI agents working in this repo
+├── CONTRIBUTING.md         # How to contribute (setup, PR loop, rules)
 ├── apps/desktop/src/
 │   ├── main/               # Main process: agents, DB, tRPC routers, lifecycle
 │   ├── renderer/           # React UI: components, stores, hooks
@@ -98,6 +100,7 @@ exegol/
 ├── packages/
 │   ├── shared/             # TypeScript types + Zod schemas
 │   ├── ui/                 # Radix UI primitives
+│   ├── cli/                # `exegol` CLI (`exegol .` opens a folder)
 │   └── core-rust/          # napi-rs: ANSI strip, status parser, git2
 └── docs/
     ├── README.md           # Documentation index + writing rules
@@ -107,6 +110,7 @@ exegol/
     ├── ARCHITECTURE/       # Technical architecture docs
     ├── PROJECT_DEFINITION/ # Vision, stack, roadmap
     ├── GUIDES/             # Release & how-to guides
+    ├── AGENT_PROMPTS/      # Briefs for agents working in worktrees
     ├── RESEARCH/           # Analyses, audits, benchmarks
     └── ARCHIVED/           # Obsolete docs (historical context)
 ```
@@ -115,7 +119,8 @@ exegol/
 
 ### Workspace
 
-- **Multi-pane tabbed workspace** — 4 main tabs (Dashboard, Agents, Project, Monitor), each with split support (Cmd+D / Cmd+Shift+D)
+- **Dashboard** — its own view (Cmd+1): cross-project fleet plus Watching, pinned sessions as live interactive cards
+- **Multi-pane tabbed workspace** — 3 main tabs (Agents, Project, Monitor), each with split support (Cmd+D / Cmd+Shift+D)
 - **6 layout presets** — Single, Split Horizontal, Split Vertical, Three Columns, Bottom Terminal (70/30), 2×2 Grid; custom saved layouts with per-slot type/url/filePath
 - **5 pane types** — Terminal (agent or plain shell), Browser (Electron webview), Files (FileExplorer + Monaco), Git (diff + oplog), Empty (agent selector grid)
 - **Picture-in-Picture** — Any terminal or browser pane detaches into a frameless always-on-top window (T84)
@@ -160,7 +165,7 @@ exegol/
 
 ### Monitor
 
-- **Dashboard** (top-level home tab) — Live cross-project cards with uptime, token usage (k tokens + cost), status dot, provider icon
+- **Dashboard** (own view, Cmd+1) — Live cross-project cards with uptime, token usage (k tokens + cost), status dot, provider icon
 - **Attention Center** — Inbox for agent events needing review (critical/action_needed/info); click to navigate to pane
 - **Token usage** — Claude Code JSONL log parser; cost breakdown by model
 - **Resource monitor** — CPU, RAM, Disk with background collector (10s interval)
@@ -178,6 +183,9 @@ exegol/
 - **Structured errors** — `ExegolError → TransientError / PermanentError / TimeoutError` with `withRetry()` helper (T80)
 - **DB row validation** — Zod schemas for all 14 row types with graceful degradation on parse failure (T77)
 - **DI context** — All 5 tRPC singletons injected via context (no module-level globals) (T81)
+- **Updates** — title-bar button checks GitHub releases, downloads and restarts into the new version
+- **Bug reports** — title-bar bug button collects redacted diagnostics for review before filing a public issue
+- **Work guard** — keeps the Mac awake while agents run and asks before quitting with sessions open
 
 ## Keyboard Shortcuts
 
@@ -189,12 +197,15 @@ exegol/
 | `Cmd+N` | New Agent |
 | `Cmd+.` | Stop focused agent |
 | `Cmd+T` | New workspace tab |
-| `Cmd+W` | Close focused pane |
+| `Cmd+Shift+N` | Parallel spawn |
+| `Cmd+W` | Close focused pane / tab |
 | `Cmd+D` | Split pane horizontal |
 | `Cmd+Shift+D` | Split pane vertical |
 | `Cmd+Shift+]` / `Cmd+Shift+[` | Next / Previous workspace tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Cycle workspace tabs |
-| `Cmd+1-9` | Switch to workspace tab by position |
+| `Cmd+1` | Dashboard |
+| `Cmd+2-9` | Live tab groups, in the order shown |
+| `Cmd+Option+1-9` | Workspace tab of the current project by position |
 | `Cmd+J` | Jump to next attention item |
 | `Cmd+/` | Keyboard shortcuts overlay |
 | `Cmd+Shift+E` | Bring Exegol to front (global, configurable in Settings) |
@@ -203,7 +214,10 @@ exegol/
 
 | Document | Description |
 |----------|-------------|
-| [CLAUDE.md](CLAUDE.md) | AI assistant context — current state, dev commands, architecture |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, the one-task-one-PR loop, rules that are easy to miss |
+| [AGENTS.md](AGENTS.md) | Rules for AI coding agents working in this repo |
+| [CLAUDE.md](CLAUDE.md) | Architecture reference and dev commands |
+| [docs/README.md](docs/README.md) | Documentation index and writing rules |
 | [CHANGELOG.md](docs/CHANGELOG.md) | Release notes per version |
 | [Task Board](docs/TASK_TODO.md) | Active backlog |
 | [Benchmarks](docs/RESEARCH/BENCHMARKS.md) | First-paint and recovery telemetry |
