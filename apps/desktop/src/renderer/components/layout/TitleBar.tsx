@@ -5,6 +5,7 @@ import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AttentionQueue } from "./AttentionQueue";
 import { BugReportButton } from "./BugReportDialog";
+import { UpdateButton } from "./UpdateButton";
 
 export function TitleBar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
@@ -31,6 +32,7 @@ export function TitleBar() {
           <Code className="h-3.5 w-3.5" />
         </button>
         <BugReportButton />
+        <UpdateButton />
       </div>
 
       {/* Center: Active project */}

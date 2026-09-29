@@ -79,7 +79,9 @@ export function AttentionQueue() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-bg-secondary py-1 shadow-lg">
+        // Opens to the right: the bell sits next to the traffic lights, and opening leftwards
+        // pushed most of the panel off the window
+        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-bg-secondary py-1 shadow-lg">
           <div className="max-h-80 overflow-y-auto">
             {items.length === 0 ? (
               <p className="px-2.5 py-2 text-xs text-text-muted">No pending attention</p>
