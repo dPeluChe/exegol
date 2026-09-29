@@ -6,15 +6,19 @@ const CHECK_MS = 15_000;
 let blockerId: number | null = null;
 let quitAllowed = false;
 
-/** Agents mid-turn (not idle at a prompt, not plain shells) */
-export function workingAgentCount(db: Database.Database): number {
+/** Agent sessions (not plain shells): `working` are mid-turn, `open` also counts the ones at a prompt */
+export function agentSessionCounts(db: Database.Database): { working: number; open: number } {
   try {
     const row = db
-      .prepare("SELECT COUNT(*) AS n FROM agents WHERE status = 'running' AND cli_type != 'shell'")
-      .get() as { n: number };
-    return row.n;
+      .prepare(
+        `SELECT COALESCE(SUM(status = 'running'), 0) AS working,
+                COALESCE(SUM(status IN ('running', 'spawning', 'waiting_input')), 0) AS open
+         FROM agents WHERE cli_type != 'shell'`,
+      )
+      .get() as { working: number; open: number };
+    return { working: Number(row.working), open: Number(row.open) };
   } catch {
-    return 0;
+    return { working: 0, open: 0 };
   }
 }
 
@@ -24,13 +28,13 @@ export function allowQuit(): void {
 }
 
 /**
- * While agents work: keep the Mac from idle-sleeping (a sleep stalls every agent), and ask
- * before Exegol quits. A sleep attempt quit it mid-work with no warning (2026-09-28). A manual
- * sleep still sleeps; only idle sleep is held.
+ * While agents work, keep the Mac from idle-sleeping (a sleep stalls every agent); while any agent
+ * session is open, ask before Exegol quits, which also stops a logout the system started on its
+ * own. A manual sleep still sleeps; only idle sleep is held.
  */
 export function startWorkGuard(db: Database.Database): () => void {
   const sync = () => {
-    const working = workingAgentCount(db) > 0;
+    const working = agentSessionCounts(db).working > 0;
     if (working && blockerId === null) {
       blockerId = powerSaveBlocker.start("prevent-app-suspension");
       logger.info("[WorkGuard] agents working: holding idle sleep");
@@ -45,7 +49,9 @@ export function startWorkGuard(db: Database.Database): () => void {
 
   const onBeforeQuit = (event: Electron.Event) => {
     if (quitAllowed) return;
-    const n = workingAgentCount(db);
+    // Any open session, not only a working one: macOS's auto-logout after inactivity quit Exegol
+    // while its agents sat waiting for permission (2026-09-29); an app that asks stops the logout
+    const { working, open: n } = agentSessionCounts(db);
     if (n === 0) return;
     event.preventDefault();
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
@@ -54,7 +60,10 @@ export function startWorkGuard(db: Database.Database): () => void {
       buttons: ["Keep working", "Quit Exegol"],
       defaultId: 0,
       cancelId: 0,
-      message: `${n} agent${n === 1 ? " is" : "s are"} still working`,
+      message:
+        working > 0
+          ? `${working} agent${working === 1 ? " is" : "s are"} still working`
+          : `${n} agent session${n === 1 ? " is" : "s are"} open`,
       detail:
         "Their sessions keep running in the background and reconnect when you reopen Exegol, but a restart or sleep will stop them.",
     };
