@@ -7,8 +7,14 @@ import { DoneStep } from "./steps/DoneStep";
 import { FirstProjectStep } from "./steps/FirstProjectStep";
 import { WelcomeStep } from "./steps/WelcomeStep";
 
-const STEP_COUNT = 5;
-const STEP_DOT_IDS = ["welcome", "doctor", "api-keys", "first-project", "done"] as const;
+const STEPS = [
+  { id: "welcome", label: "Welcome" },
+  { id: "doctor", label: "Check your setup" },
+  { id: "api-keys", label: "API keys" },
+  { id: "first-project", label: "First project" },
+  { id: "done", label: "Done" },
+] as const;
+const STEP_COUNT = STEPS.length;
 
 export function OnboardingWizard() {
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
@@ -36,26 +42,34 @@ export function OnboardingWizard() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70">
-      <div className="w-full max-w-lg rounded-lg border border-border bg-bg-secondary p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-center gap-1.5">
-          {STEP_DOT_IDS.map((id, i) => (
-            <div
-              key={id}
-              className={`h-1 w-8 rounded-full transition-colors ${
-                i <= step ? "bg-accent" : "bg-white/10"
-              }`}
-            />
-          ))}
+      {/* Capped to the window: a long step scrolls inside instead of pushing its buttons off */}
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-border bg-bg-secondary p-6 shadow-2xl">
+        <div className="mb-5 shrink-0">
+          <div className="flex items-center justify-center gap-1.5">
+            {STEPS.map(({ id }, i) => (
+              <div
+                key={id}
+                className={`h-1 w-8 rounded-full transition-colors ${
+                  i <= step ? "bg-accent" : "bg-white/10"
+                }`}
+              />
+            ))}
+          </div>
+          <p className="mt-2 text-center text-[10px] text-text-muted">
+            Step {step + 1} of {STEPS.length} · {STEPS[step]?.label}
+          </p>
         </div>
 
-        {step === 0 && <WelcomeStep onNext={next} />}
-        {step === 1 && <CliDoctorStep onNext={next} onBack={back} />}
-        {step === 2 && <ApiKeysStep onNext={next} onBack={back} />}
-        {step === 3 && <FirstProjectStep onNext={next} onBack={back} onSkip={next} />}
-        {step === 4 && <DoneStep onFinish={finish} />}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {step === 0 && <WelcomeStep onNext={next} />}
+          {step === 1 && <CliDoctorStep onNext={next} onBack={back} />}
+          {step === 2 && <ApiKeysStep onNext={next} onBack={back} />}
+          {step === 3 && <FirstProjectStep onNext={next} onBack={back} onSkip={next} />}
+          {step === 4 && <DoneStep onFinish={finish} />}
+        </div>
 
         {step > 0 && step < STEP_COUNT - 1 && (
-          <div className="mt-4 text-center">
+          <div className="mt-4 shrink-0 text-center">
             <button
               type="button"
               onClick={finish}
