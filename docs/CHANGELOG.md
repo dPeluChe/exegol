@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- A session pinned to Watching opens sized to its card at font 13 (A−/A+ adjust it)
 - Agent tabs show the session's name once it has one ("lupus") and the CLI's icon, as the sidebar does
 - Add project shows the icon step: images found in the folder, or a built-in icon and color
 

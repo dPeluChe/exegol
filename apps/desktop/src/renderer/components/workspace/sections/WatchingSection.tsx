@@ -10,9 +10,8 @@ import {
   X,
 } from "lucide-react";
 import { type DragEvent, useState } from "react";
-import { useSettings } from "../../../hooks/use-trpc";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
-import { MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
+import { DEFAULT_CARD_FONT, MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
 import { ResumeButton } from "../../agents/ResumeButton";
 import { AgentCliIcon } from "../../common/AgentCliIcon";
 import { FilterChip } from "../../common/FilterChip";
@@ -327,9 +326,8 @@ function WatchCard({
 function CardSizeControls({ agentId }: { agentId: string }) {
   const cardFont = useWatchStore((s) => s.cardFont[agentId]);
   const setCardFont = useWatchStore((s) => s.setCardFont);
-  const base = useSettings().data?.terminalFontSize ?? 14;
   const sizing = cardFont !== undefined;
-  const step = (delta: number) => setCardFont(agentId, (cardFont ?? base) + delta);
+  const step = (delta: number) => setCardFont(agentId, (cardFont ?? DEFAULT_CARD_FONT) + delta);
   const btn =
     "rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
 
@@ -346,7 +344,7 @@ function CardSizeControls({ agentId }: { agentId: string }) {
       </button>
       <button
         type="button"
-        onClick={() => setCardFont(agentId, sizing ? null : base)}
+        onClick={() => setCardFont(agentId, sizing ? null : DEFAULT_CARD_FONT)}
         className={cn(btn, sizing && "text-accent")}
         title={
           sizing
