@@ -6,7 +6,7 @@ import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
 import { getPtyHost } from "../terminal/pty-host";
-import { createOutputProcessor, type OutputProcessor } from "./agent-output-processor";
+import type { OutputProcessor } from "./agent-output-processor";
 import {
   createSpawnCallbacks,
   dispatchAgentFileEvent,
@@ -14,6 +14,7 @@ import {
 } from "./agent-session-callbacks";
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { attachOutputPipeline } from "./output-pipeline";
 import { runPreflight } from "./preflight";
 import {
   type ReattachResult,
@@ -21,14 +22,15 @@ import {
 } from "./reattach-sidecar-agents";
 import { recoverLostSessionId } from "./recover-lost-session";
 import { getProviderRegistry } from "./registry";
+import { startShellPromotion } from "./shell-promotion";
 import {
+  type AgentContext,
   broadcastAgentStatus,
   coreRust,
   DEFAULT_PTY_COLS,
   DEFAULT_PTY_ROWS,
   resolveCommand,
 } from "./spawn-env";
-import { createTitleStatusTracker } from "./title-status";
 
 export type { AgentStatusEvent } from "./spawn-env";
 
@@ -62,6 +64,7 @@ export class AgentManager {
   /** Agents whose Claude session ID has already been stored (T101). */
   private sessionIdsCaptured: Set<string> = new Set();
   private stopRequested: Set<string> = new Set();
+  private contexts: Map<string, AgentContext> = new Map();
 
   /** T123: NotifyHandler file events (Claude Code hooks) → signal pipeline. */
   handleAgentFileEvent(
@@ -82,6 +85,7 @@ export class AgentManager {
       dataCallbacks: this.dataCallbacks,
       sessionIdsCaptured: this.sessionIdsCaptured,
       stopRequested: this.stopRequested,
+      contexts: this.contexts,
     };
   }
 
@@ -155,30 +159,7 @@ export class AgentManager {
       priorSession,
     );
 
-    if (!isPlainShell) {
-      const resumePattern = registry.get(agent.cliType)?.capabilities?.resumeCommandPattern;
-      this.outputProcessors.set(
-        agent.id,
-        createOutputProcessor(agent.id, agent.cliType, resumePattern),
-      );
-      if (["claude-code", "gemini", "codex", "crush"].includes(agent.cliType)) {
-        this.titleTrackers.set(
-          agent.id,
-          createTitleStatusTracker((status, _title) => {
-            broadcastAgentStatus({
-              agentId: agent.id,
-              projectId: agent.projectId,
-              status,
-              currentStep: null,
-              cliType: agent.cliType,
-              timestamp: Date.now(),
-            });
-          }),
-        );
-      }
-      this.scrollbackBuffers.set(agent.id, []);
-      this.scrollbackSizes.set(agent.id, 0);
-    }
+    if (!isPlainShell) attachOutputPipeline(this.getSessionMaps(), agent);
 
     const ptyHost = getPtyHost();
     const scrollbackPath = isPlainShell ? undefined : getScrollbackPath(agent.id);
@@ -280,6 +261,11 @@ export class AgentManager {
         logger.warn("[AgentManager] Failed to log activity:", err);
       }
     }
+  }
+
+  /** A CLI typed in a plain terminal promotes that session to the agent (shell-promotion.ts) */
+  startShellPromotion(db: Database.Database): () => void {
+    return startShellPromotion(db, this.getSessionMaps());
   }
 
   listRunning(): string[] {

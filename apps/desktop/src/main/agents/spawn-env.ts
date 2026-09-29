@@ -23,9 +23,11 @@ import { scoreAgent } from "./scoring";
 
 export interface AgentContext {
   id: string;
+  /** Mutable: a CLI typed in a terminal promotes the live session (shell-promotion.ts) */
   cliType: AgentCliType;
   projectId: string;
   taskDescription: string;
+  launchedInShell?: boolean;
 }
 
 // ─── Push event types ────────────────────────────────────────────────────
@@ -47,6 +49,9 @@ export interface AgentStatusEvent {
   needsAttention?: boolean;
   /** Pending question text extracted from an `attention` signal's detail, if any. */
   attentionDetail?: string;
+  /** Set when a terminal's session became an agent (or went back to its prompt) */
+  alias?: string | null;
+  launchedInShell?: boolean;
 }
 
 // Last status we broadcast per agent — turn-boundary side effects fire on the

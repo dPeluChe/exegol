@@ -9,12 +9,14 @@ import {
   Github,
   Loader2,
   MessageSquare,
+  Play,
   Shield,
   ShieldAlert,
   TerminalSquare,
   X,
 } from "lucide-react";
 import { openInBrowser } from "../../lib/open-in-browser";
+import { trpcMutate } from "../../lib/trpc-client";
 import { AccessModeBadge } from "../common/AccessModeBadge";
 import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
@@ -65,6 +67,21 @@ export function TerminalToolbar({
           <WatchToggle agentId={agent.id} className="py-0 text-[9px]" />
           {LIVE_STATUSES.has(agent.status) && (
             <QuietControls agent={agent} className="py-0 text-[9px]" />
+          )}
+          {agent.launchedInShell && agent.status === "idle" && (
+            <button
+              type="button"
+              onClick={() =>
+                trpcMutate("agents.continueInShell", { id: agent.id }).catch((err) =>
+                  console.error("[Terminal] Continue in shell failed:", err),
+                )
+              }
+              className="flex shrink-0 items-center gap-1 text-[9px] text-accent hover:text-text-primary"
+              title="Its CLI exited to the shell prompt: start it again here, continuing the last conversation"
+            >
+              <Play className="h-2.5 w-2.5" />
+              Continue
+            </button>
           )}
         </>
       )}

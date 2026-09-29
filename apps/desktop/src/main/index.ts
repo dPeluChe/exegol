@@ -124,6 +124,7 @@ app.whenReady().then(async () => {
   startMetricsCollector();
   getSchedulerEngine().start(getDb());
   getQueueExecutor().start(getDb());
+  getAgentManager().startShellPromotion(getDb());
   getPipelineExecutor().recoverOnStartup(getDb());
   initAutoUpdater(); // Deferred: check for updates after window shows
 

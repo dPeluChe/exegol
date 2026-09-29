@@ -159,6 +159,8 @@ export type Agent = {
   muted?: boolean;
   /** Stopped on purpose to come back later (Resume); quiet like muted */
   suspendedAt?: number | null;
+  /** Started by hand in a plain terminal: the CLI can exit back to the shell prompt */
+  launchedInShell?: boolean;
 };
 
 export type AgentCreate = {

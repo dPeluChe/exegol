@@ -1,7 +1,5 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { LIVE_STATUSES } from "@exegol/shared";
-import type Database from "libsql";
 import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
 
 const execFileAsync = promisify(execFile);
@@ -48,20 +46,8 @@ export function matchShellClis(
   return found;
 }
 
-/**
- * Agent CLIs started by hand inside a plain terminal (`claude` typed in a shell pane):
- * the pane stayed "Terminal". One `ps` for all live shells, only while there are any.
- */
-export async function detectShellClis(db: Database.Database): Promise<Record<string, string>> {
-  const statuses = [...LIVE_STATUSES];
-  const shells = db
-    .prepare(
-      `SELECT id, pid FROM agents WHERE cli_type = 'shell' AND pid IS NOT NULL
-       AND status IN (${statuses.map(() => "?").join(",")})`,
-    )
-    .all(...statuses) as { id: string; pid: number }[];
-  if (shells.length === 0) return {};
-
+/** Every process on the machine, one `ps` for all the terminals watched */
+export async function readProcessTable(): Promise<ProcRow[]> {
   const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,args="], {
     timeout: 5000,
     maxBuffer: 8 * 1024 * 1024,
@@ -71,8 +57,12 @@ export async function detectShellClis(db: Database.Database): Promise<Record<str
     const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
     if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] ?? "" });
   }
-  // Renamed binaries count too: `kilo` in a shell is Kilo Code
-  const commands = new Map(
+  return rows;
+}
+
+/** Binary name → provider id. Renamed binaries count too: `kilo` in a shell is Kilo Code */
+export function providerCommands(): Map<string, string> {
+  return new Map(
     getProviderRegistry()
       .list()
       .filter((p) => p.id !== "shell" && p.command && !p.command.startsWith("__"))
@@ -80,5 +70,4 @@ export async function detectShellClis(db: Database.Database): Promise<Record<str
         [p.command, ...(COMMAND_ALIASES[p.command] ?? [])].map((c) => [c, p.id] as const),
       ),
   );
-  return matchShellClis(shells, rows, commands);
 }

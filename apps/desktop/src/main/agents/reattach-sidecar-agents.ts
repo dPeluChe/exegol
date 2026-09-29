@@ -39,7 +39,11 @@ export async function reattachSidecarAgents(
   maxScrollbackBytes: number,
 ): Promise<ReattachResult> {
   const stale = db
-    .prepare("SELECT * FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')")
+    .prepare(
+      // A terminal whose CLI exited sits idle at its prompt, PTY alive: it is reattached too
+      `SELECT * FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
+       OR (launched_in_shell = 1 AND status = 'idle')`,
+    )
     .all() as Array<Record<string, unknown>>;
 
   logger.info(
@@ -105,6 +109,7 @@ export async function reattachSidecarAgents(
         cliType,
         projectId,
         taskDescription: (row.task_description as string) ?? "",
+        launchedInShell: row.launched_in_shell === 1,
       };
 
       const callbacks = createSpawnCallbacks(

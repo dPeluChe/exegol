@@ -6,7 +6,7 @@ import type { AgentState } from "../../stores/agents";
 const chip = "flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-white/10";
 
 export type QuietAgent = Pick<AgentState, "id" | "cliType" | "status"> &
-  Partial<Pick<AgentState, "alias" | "muted" | "suspended">>;
+  Partial<Pick<AgentState, "alias" | "muted" | "suspended" | "launchedInShell">>;
 
 /** Mute / Suspend next to Watch in the terminal toolbar (live agent sessions) */
 export function QuietControls({ agent, className }: { agent: QuietAgent; className?: string }) {

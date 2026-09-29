@@ -47,15 +47,21 @@
    read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
-4. **A CLI typed in a terminal becomes an agent** (any provider in the registry): today
-   `detectShellClis` only swaps the icon and the row stays `cli_type = 'shell'`, so rename, status,
-   attention, resume and scoring are skipped. Migrate the same row: `cli_type` → the provider, a
-   `launched_in_shell` mark (migration-sets), same id / pane / PTY / scrollback. Status comes from
-   the parser (no hooks). CLI exits: the agent ends but the terminal stays usable at the prompt;
-   Restart / resume writes the provider's continue command into that shell; another CLI in the
-   same terminal migrates it again
 8. **Sidebar**: the Projects section cannot be resized to a smaller height; drag to reorder in the
    Agents section above it does nothing
+9. **React health score (react-doctor), keep raising it**: 54 → 66 so far (#204 Bugs, #205
+   Security/Performance, #209 Maintainability). Goal 90+. Measure with
+   `cd apps/desktop && npx -y react-doctor@latest . --yes --score`; the full list with `--json`.
+   Rule: fix the root cause, never a disable, ignore or config entry to lift the number; a
+   finding that is wrong for this app stays listed and is noted in the PR (the score counts it).
+   - Next: **Accessibility (89)**: icon-only buttons without a label (`control-has-associated-label`),
+     inputs labelled only by a placeholder, nested interactive elements (a button inside a
+     clickable row), `role="button"` without keyboard handling, `autoFocus`
+   - Known and kept (not bugs here): sequential loops that must stay so (queue spawns, reattach
+     order, Ollama indexer, auto-resume, the concurrency helper), Monaco already lazy, the PDF
+     iframe without `sandbox` (Chromium blocks its viewer), Doctor only shows install commands,
+     index keys where the position is the identity, two mutations with no cached data
+   - Then: `react-doctor --scope changed` in CI so a PR cannot add findings
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.
