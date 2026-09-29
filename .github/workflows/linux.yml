@@ -43,7 +43,13 @@ jobs:
       # Rust is preinstalled on GitHub's Ubuntu images; this builds core-rust.linux-x64-gnu.node
       - run: bun run build:rust
       - run: bun run rebuild:native
-      - run: bun run package:linux
+      # The .deb needs a homepage; passed here too so tags cut before package.json had one build
+      - name: Package
+        working-directory: apps/desktop
+        run: |
+          npx electron-vite build
+          npx electron-builder --config electron-builder.ts --linux --publish never \
+            -c.extraMetadata.homepage=https://github.com/dPeluChe/exegol
       - name: Attach to the release
         run: |
           VERSION="${{ steps.tag.outputs.tag }}"
