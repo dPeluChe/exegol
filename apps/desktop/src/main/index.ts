@@ -30,6 +30,7 @@ import { ensureDefaultSkills } from "./skills/discovery";
 import { ensureCanonicalPaths } from "./skills/paths";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
+import { backfillProjectIcons } from "./system/project-icons";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 import { destroyTray, initTray } from "./system/tray";
 import { startWorkGuard } from "./system/work-guard";
@@ -100,6 +101,8 @@ app.whenReady().then(async () => {
 
   // Background: stale data cleanup (not needed before first paint)
   cleanupStaleData();
+  // Once: projects added before icons were kept get theirs (off the startup path)
+  setTimeout(() => void backfillProjectIcons(getDb()).catch(() => {}), 5_000);
 
   // Background: sidecar connection + agent recovery (non-blocking)
   void runStartupRecovery();

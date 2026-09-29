@@ -15,6 +15,8 @@ export function useSettingsSync(): void {
       // CLIs edited in Settings (enable, reorder, custom ones): the launcher read them 30s stale
       queryClient.invalidateQueries({ queryKey: ["enabledProviders"] });
       queryClient.invalidateQueries({ queryKey: ["providers"] });
+      // Main also sends it after adopting project icons in the background
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
     });
   });
 }

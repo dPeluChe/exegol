@@ -1,5 +1,8 @@
 import { readFile, stat } from "node:fs/promises";
 import { extname, join } from "node:path";
+import type Database from "libsql";
+import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { broadcast } from "../lib/event-bus";
 import { detectRunTargets } from "./scripts";
 
 /** Where apps keep their icon, checked in the root and in each subrepo */
@@ -96,4 +99,37 @@ export async function detectProjectIcons(
     ),
   );
   return found.filter((i): i is NonNullable<typeof i> => i !== null);
+}
+
+/**
+ * Stores the first icon found as the project's image, once: at creation, and a single backfill for
+ * projects added before this existed. A project whose icon the user set, or reset on purpose after
+ * the backfill, is never touched again; the dialog still scans to offer the others.
+ */
+export async function adoptDetectedIcon(
+  db: Database.Database,
+  projectId: string,
+): Promise<boolean> {
+  const row = db
+    .prepare("SELECT path, icon, icon_image FROM projects WHERE id = ?")
+    .get(projectId) as { path: string; icon: string | null; icon_image: string | null } | undefined;
+  if (!row || row.icon || row.icon_image) return false;
+  const [first] = await detectProjectIcons(row.path);
+  if (!first) return false;
+  db.prepare(
+    "UPDATE projects SET icon_image = ? WHERE id = ? AND icon IS NULL AND icon_image IS NULL",
+  ).run(first.path, projectId);
+  return true;
+}
+
+const BACKFILL_KEY = "projectIconsBackfilled";
+
+export async function backfillProjectIcons(db: Database.Database): Promise<void> {
+  if (getJsonSetting(db, BACKFILL_KEY, false)) return;
+  const ids = db.prepare("SELECT id FROM projects").all() as { id: string }[];
+  let adopted = 0;
+  for (const { id } of ids) if (await adoptDetectedIcon(db, id).catch(() => false)) adopted++;
+  setJsonSetting(db, BACKFILL_KEY, true);
+  // The windows loaded the project list before this ran: have them refetch it
+  if (adopted > 0) broadcast("settings:changed");
 }
