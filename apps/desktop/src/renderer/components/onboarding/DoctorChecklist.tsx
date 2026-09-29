@@ -44,6 +44,8 @@ interface DoctorChecklistProps {
   defaultOnlyIssues?: boolean;
   /** Onboarding: CLIs you don't have are options, not problems; they fold into one line */
   foldMissingClis?: boolean;
+  /** Only these groups (the wizard splits them over steps so no screen is a wall of checks) */
+  categories?: DoctorCategory[];
 }
 
 /** A CLI that simply is not installed (as opposed to a broken or doubled install) */
@@ -54,14 +56,18 @@ function isMissingCli(check: DoctorCheck): boolean {
 }
 
 export function DoctorChecklist({
-  checks,
   isLoading,
   onRefresh,
   isRefreshing,
   generatedAt,
   defaultOnlyIssues = false,
   foldMissingClis = false,
+  categories,
+  checks: allChecks,
 }: DoctorChecklistProps) {
+  const checks = categories
+    ? allChecks.filter((c) => categories.includes(resolveCategory(c)))
+    : allChecks;
   const missing = foldMissingClis ? checks.filter(isMissingCli) : [];
   const [showMissing, setShowMissing] = useState(false);
   const issueCount = checks.filter((c) => c.status !== "ok" && !missing.includes(c)).length;

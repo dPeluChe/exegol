@@ -9,7 +9,8 @@ import { WelcomeStep } from "./steps/WelcomeStep";
 
 const STEPS = [
   { id: "welcome", label: "Welcome" },
-  { id: "doctor", label: "Check your setup" },
+  { id: "clis", label: "Your agent CLIs" },
+  { id: "system", label: "System & services" },
   { id: "api-keys", label: "API keys" },
   { id: "first-project", label: "First project" },
   { id: "done", label: "Done" },
@@ -62,10 +63,27 @@ export function OnboardingWizard() {
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {step === 0 && <WelcomeStep onNext={next} />}
-          {step === 1 && <CliDoctorStep onNext={next} onBack={back} />}
-          {step === 2 && <ApiKeysStep onNext={next} onBack={back} />}
-          {step === 3 && <FirstProjectStep onNext={next} onBack={back} onSkip={next} />}
-          {step === 4 && <DoneStep onFinish={finish} />}
+          {step === 1 && (
+            <CliDoctorStep
+              onNext={next}
+              onBack={back}
+              title="Your agent CLIs"
+              description="The coding agents found on this Mac. Others can be installed any time."
+              categories={["agents"]}
+            />
+          )}
+          {step === 2 && (
+            <CliDoctorStep
+              onNext={next}
+              onBack={back}
+              title="System & services"
+              description="Git, the terminal engine and the local services Exegol relies on."
+              categories={["system", "config"]}
+            />
+          )}
+          {step === 3 && <ApiKeysStep onNext={next} onBack={back} />}
+          {step === 4 && <FirstProjectStep onNext={next} onBack={back} onSkip={next} />}
+          {step === 5 && <DoneStep onFinish={finish} />}
         </div>
 
         {step > 0 && step < STEP_COUNT - 1 && (

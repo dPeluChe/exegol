@@ -1,22 +1,30 @@
 import { Button } from "@exegol/ui";
 import { DoctorChecklist } from "../DoctorChecklist";
-import { useDoctorReport } from "../use-doctor";
+import { type DoctorCategory, useDoctorReport } from "../use-doctor";
 
 interface CliDoctorStepProps {
   onNext: () => void;
   onBack: () => void;
+  title: string;
+  description: string;
+  categories: DoctorCategory[];
 }
 
-export function CliDoctorStep({ onNext, onBack }: CliDoctorStepProps) {
+/** One slice of the Doctor per step: agent CLIs, then system and configuration */
+export function CliDoctorStep({
+  onNext,
+  onBack,
+  title,
+  description,
+  categories,
+}: CliDoctorStepProps) {
   const { data, isLoading, isFetching, refetch } = useDoctorReport();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div>
-        <h2 className="text-base font-semibold text-text-primary">Checking your setup</h2>
-        <p className="text-xs text-text-muted">
-          We looked for the CLIs you have installed and a few tools Exegol relies on.
-        </p>
+        <h2 className="text-base font-semibold text-text-primary">{title}</h2>
+        <p className="text-xs text-text-muted">{description}</p>
       </div>
 
       {/* The list scrolls; Back / Continue stay in view (they fell off the window) */}
@@ -27,6 +35,7 @@ export function CliDoctorStep({ onNext, onBack }: CliDoctorStepProps) {
           onRefresh={() => refetch()}
           isRefreshing={isFetching}
           foldMissingClis
+          categories={categories}
         />
       </div>
 
