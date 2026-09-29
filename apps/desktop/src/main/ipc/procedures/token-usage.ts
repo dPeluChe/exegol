@@ -19,11 +19,13 @@ export const tokenUsageRouter = router({
         .object({
           agentId: z.string().optional(),
           projectId: z.string().optional(),
+          /** The Tokens section's range; the cards said "Last 30 days" over 24h of data */
+          days: z.number().int().min(1).max(365).optional(),
         })
         .optional(),
     )
     .query(({ ctx, input }) => {
-      const since = Math.floor(Date.now() / 1000) - 86400;
+      const since = Math.floor(Date.now() / 1000) - 86400 * (input?.days ?? 1);
 
       if (input?.agentId) {
         return getTokenUsageSummary(ctx.db, input.agentId, since);

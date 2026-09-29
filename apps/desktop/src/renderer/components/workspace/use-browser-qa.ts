@@ -259,10 +259,10 @@ export function useBrowserQa({
   // Only the focused pane responds — prevents multiple panes from running simultaneously
   useEffect(() => {
     const handler = async (e: Event) => {
-      const { testId, startUrl, actions } = (e as CustomEvent).detail ?? {};
+      const { testId, startUrl, actions, paneId: target } = (e as CustomEvent).detail ?? {};
       if (!testId || !actions) return;
-      const focusedId = useWorkspaceStore.getState().focusedPaneId;
-      if (focusedId !== paneId) return;
+      // The section names the pane; the focused one answers an event without a target
+      if ((target ?? useWorkspaceStore.getState().focusedPaneId) !== paneId) return;
       setUrlInput(startUrl);
       setCurrentUrl(startUrl);
       updatePane(paneInternalId, { url: startUrl });

@@ -14,7 +14,7 @@ import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
-import { selectPanes, useWorkspaceStore } from "../../../stores/workspace";
+import { collectPaneIds, getProjectState, useWorkspaceStore } from "../../../stores/workspace";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -202,17 +202,26 @@ export function QaTestsSection() {
       setRunError(`"${test.name}" has no recorded actions.`);
       return;
     }
-    // Check that a browser pane exists before switching away
+    // Pick the pane to run in: the focused browser, else one in the active tab, else any.
+    // Only the focused pane listened, so Run did nothing with a terminal focused
     const ws = useWorkspaceStore.getState();
-    const panes = selectPanes(ws);
-    const hasBrowserPane = Object.values(panes).some((p) => p?.type === "browser");
-    if (!hasBrowserPane) {
+    const pw = getProjectState();
+    const isBrowser = (id: string | null | undefined) => !!id && pw.panes[id]?.type === "browser";
+    const activeTab = pw.tabs.find((t) => t.id === pw.activeTabId);
+    const target = isBrowser(ws.focusedPaneId)
+      ? ws.focusedPaneId
+      : (activeTab && collectPaneIds(activeTab.layout).find(isBrowser)) ||
+        Object.keys(pw.panes).find(isBrowser);
+    if (!target) {
       setRunError("No Browser pane open. Add one from the workspace layout, then try again.");
       return;
     }
+    const tab = pw.tabs.find((t) => collectPaneIds(t.layout).includes(target));
+    if (tab) ws.setActiveTab(tab.id);
+    ws.setFocusedPane(target);
     window.dispatchEvent(
       new CustomEvent("exegol:qa-run-test", {
-        detail: { testId: test.id, startUrl: test.startUrl, actions },
+        detail: { testId: test.id, startUrl: test.startUrl, actions, paneId: target },
       }),
     );
     switchSection("agents");
