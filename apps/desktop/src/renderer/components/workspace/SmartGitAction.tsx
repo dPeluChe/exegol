@@ -163,6 +163,17 @@ function computeNextAction(
       disabled: true,
     };
   }
+  // A clean default branch has nothing to open a PR from: "Create PR" always failed here
+  if (state.branch === "main" || state.branch === "master") {
+    return {
+      kind: "clean",
+      label: "Up to date",
+      hint: `Nothing to push on ${state.branch}. Work on a branch or worktree to open a PR`,
+      icon: CheckCheck,
+      variant: "muted",
+      disabled: true,
+    };
+  }
   // No PR yet
   if (!state.ghInstalled) {
     return {

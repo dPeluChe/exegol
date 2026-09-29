@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
-import { getProject } from "../../db/queries";
+import { getProject, listWorktrees } from "../../db/queries";
 import { escapeRegExp } from "../../lib/escape-regexp";
 import { isPathAllowed } from "../../security/path-guard";
 import { detectRunTargets } from "../../system/scripts";
@@ -87,7 +87,9 @@ export const fsSearchRouter = router({
       const rust = requireCoreRust();
       const project = getProject(ctx.db, input.projectId);
       if (!project) return { mode: input.mode, names: [], hits: [] };
-      if (input.root && !(await isPathAllowed(input.root, [project.path]))) {
+      // A worktree's Files pane searches the worktree, which lives outside the project folder
+      const bases = [project.path, ...listWorktrees(ctx.db, input.projectId).map((w) => w.path)];
+      if (input.root && !(await isPathAllowed(input.root, bases))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Search root is outside the project" });
       }
       const folders = await detectRunTargets(input.root ?? project.path);

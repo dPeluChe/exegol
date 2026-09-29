@@ -2,6 +2,8 @@ import type { SkillRegistryEntry } from "@exegol/shared";
 import { Badge, Button, cn, Input } from "@exegol/ui";
 import { Download, Github, Loader2, Package, ShieldCheck, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useProjectContext } from "../../../contexts/ProjectContext";
+import { useProject } from "../../../hooks/use-trpc";
 import { useInstallSkill, useSkillRegistry } from "../../../hooks/use-trpc-skills";
 
 type Tab = "registry" | "github";
@@ -170,11 +172,18 @@ function GitHubTab({ onClose }: { onClose: () => void }) {
   const [repo, setRepo] = useState("");
   const [scope, setScope] = useState<"global" | "project">("global");
   const install = useInstallSkill();
+  // "project" without its path installed globally
+  const { projectId } = useProjectContext();
+  const { data: project } = useProject(projectId);
 
   const handleSubmit = useCallback(() => {
     if (!repo.trim()) return;
-    install.mutate({ repo: repo.trim(), scope });
-  }, [repo, scope, install]);
+    install.mutate({
+      repo: repo.trim(),
+      scope,
+      projectPath: scope === "project" ? (project?.path ?? undefined) : undefined,
+    });
+  }, [repo, scope, install, project?.path]);
 
   return (
     <div className="space-y-4">

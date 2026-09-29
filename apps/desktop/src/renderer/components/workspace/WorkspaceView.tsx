@@ -195,8 +195,10 @@ export function WorkspaceView() {
         )}
 
         {/* Other sections: conditionally rendered + lazy loaded (no terminal state to preserve) */}
+        {/* Keyed by project: local state (task file, unsaved brief, open pipeline run) leaked
+            into the next project, and a Save wrote A's brief into B */}
         {!onDashboard && activeSection !== "agents" && (
-          <Suspense fallback={<SectionFallback />}>
+          <Suspense key={projectId ?? "none"} fallback={<SectionFallback />}>
             {activeSection === "tasks" && <TasksSection />}
             {activeSection === "history" && <HistorySection />}
             {activeSection === "prompts-skills" && <PromptsSkillsSection />}
