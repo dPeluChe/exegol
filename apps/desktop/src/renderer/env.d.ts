@@ -98,9 +98,13 @@ interface Window {
     };
     // T102: Design Mode + QA — browser pane inspection
     browser: {
-      executeJs: (code: string) => Promise<unknown>;
-      captureScreenshot: () => Promise<string | null>;
-      captureElement: (selector: string) => Promise<BrowserElementInfo | null>;
+      /** `webContentsId`: the pane's own webview; without it the window's first one */
+      executeJs: (code: string, webContentsId?: number) => Promise<unknown>;
+      captureScreenshot: (webContentsId?: number) => Promise<string | null>;
+      captureElement: (
+        selector: string,
+        webContentsId?: number,
+      ) => Promise<BrowserElementInfo | null>;
     };
     floating: {
       open: (config: {
