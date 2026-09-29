@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { GroupIconColorPicker } from "./GroupIconColorPicker";
+import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
 
 /**
  * Edit a project in one place: its name, and its icon (an image found in the repo,
@@ -25,13 +25,13 @@ export function ProjectAppearanceDialog({
   const { data: found = [], isLoading } = useQuery({
     queryKey: ["projects", "detectIcons", project.id],
     queryFn: () =>
-      trpcInvoke<{ path: string; rel: string; dataUrl: string }[]>("projects.detectIcons", {
+      trpcInvoke<FoundIcon[]>("projects.detectIcons", {
         id: project.id,
       }),
     enabled: open,
   });
   const save = useMutation({
-    mutationFn: (next: { color: string | null; icon: string | null; iconImage: string | null }) =>
+    mutationFn: (next: ProjectAppearance) =>
       trpcMutate("projects.setAppearance", { id: project.id, ...next }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
@@ -74,44 +74,15 @@ export function ProjectAppearanceDialog({
             />
           </label>
 
-          <p className="mb-1 text-[10px] uppercase tracking-wider text-text-muted">
-            Found in the project
-          </p>
-          {isLoading ? (
-            <p className="mb-3 text-[11px] text-text-muted">Looking...</p>
-          ) : found.length === 0 ? (
-            <p className="mb-3 text-[11px] text-text-muted">No favicon or app icon found.</p>
-          ) : (
-            <div className="mb-3 flex flex-wrap gap-1.5">
-              {found.map((f) => (
-                <button
-                  key={f.path}
-                  type="button"
-                  onClick={() => save.mutate({ color: null, icon: null, iconImage: f.path })}
-                  className={
-                    project.iconImage === f.path
-                      ? "rounded-md bg-white/10 p-1.5 ring-1 ring-accent/60"
-                      : "rounded-md p-1.5 hover:bg-white/10"
-                  }
-                  title={f.rel}
-                >
-                  <img src={f.dataUrl} alt={f.rel} className="h-7 w-7 object-contain" />
-                </button>
-              ))}
-            </div>
-          )}
-
-          <p className="mb-1 text-[10px] uppercase tracking-wider text-text-muted">
-            Built-in icon and color
-          </p>
-          <GroupIconColorPicker
-            color={project.color ?? null}
-            icon={project.icon ?? null}
-            unselected={!!project.iconImage}
-            // An image and a built-in icon exclude each other: picking here drops the image
-            onChange={(nextColor, nextIcon) =>
-              save.mutate({ color: nextColor, icon: nextIcon, iconImage: null })
-            }
+          <ProjectIconPicker
+            found={found}
+            isLoading={isLoading}
+            value={{
+              color: project.color ?? null,
+              icon: project.icon ?? null,
+              iconImage: project.iconImage ?? null,
+            }}
+            onChange={(next) => save.mutate(next)}
           />
           {save.isError && <p className="mt-2 text-[11px] text-red-400">{String(save.error)}</p>}
           <div className="mt-4 flex items-center justify-between">
