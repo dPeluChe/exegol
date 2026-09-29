@@ -4,9 +4,10 @@ import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import type { DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
-import { getProviderRegistry } from "../agents/registry";
+import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
@@ -23,39 +24,82 @@ const shellEnv = () => ({ ...process.env, PATH: _getFullPath() });
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type DoctorStatus = "ok" | "warn" | "fail";
+export type { DoctorCategory, DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
 
-/** Grouping for the Doctor UI: agent CLIs vs system services/deps vs configuration. */
-export type DoctorCategory = "agents" | "system" | "config";
+// ─── Install and update per CLI (vendor docs, verified 2026-09-29) ─────────
 
-export interface DoctorCheck {
-  id: string;
-  label: string;
-  status: DoctorStatus;
-  detail: string;
-  actionUrl?: string;
-  category: DoctorCategory;
-}
-
-export interface DoctorReport {
-  checks: DoctorCheck[];
-  generatedAt: number;
-}
-
-// ─── Install links (shown next to a missing CLI) ───────────────────────────
-
-const CLI_INSTALL_LINKS: Partial<Record<string, string>> = {
-  "claude-code": "https://docs.claude.com/en/docs/claude-code",
-  codex: "https://github.com/openai/codex",
-  gemini: "https://github.com/google-gemini/gemini-cli",
-  aider: "https://aider.chat",
-  goose: "https://block.github.io/goose",
-  opencode: "https://opencode.ai",
-  amp: "https://ampcode.com",
-  kiro: "https://kiro.dev",
-  kilocode: "https://kilocode.ai",
-  crush: "https://github.com/charmbracelet/crush",
-  "factory-droid": "https://factory.ai",
+/** The vendor's recommended macOS install, its update command and docs. Re-verify when a CLI
+ *  changes how it ships: sources in docs/TASK_COMPLETED/2609.md (2026-09-29 entry) */
+const CLI_SETUP: Partial<
+  Record<string, { install: string; update?: string; docs: string; deprecated?: string }>
+> = {
+  "claude-code": {
+    install: "curl -fsSL https://claude.ai/install.sh | bash",
+    update: "claude update",
+    docs: "https://code.claude.com/docs/en/setup",
+  },
+  codex: {
+    install: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
+    update: "codex update",
+    docs: "https://github.com/openai/codex",
+  },
+  gemini: {
+    install: "npm install -g @google/gemini-cli",
+    update: "gemini update",
+    docs: "https://geminicli.com/docs/get-started/installation/",
+    deprecated: "Replaced upstream by Antigravity CLI (agy) on 2026-06-18",
+  },
+  // The install script also upgrades (no update command)
+  agy: {
+    install: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
+    docs: "https://antigravity.google/docs/cli/install/",
+  },
+  devin: {
+    install: "curl -fsSL https://cli.devin.ai/install.sh | bash",
+    update: "devin update",
+    docs: "https://docs.devin.ai/cli",
+  },
+  aider: {
+    install: "python -m pip install aider-install && aider-install",
+    update: "aider --upgrade",
+    docs: "https://aider.chat/docs/install.html",
+  },
+  goose: {
+    install:
+      "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | bash",
+    update: "goose update",
+    docs: "https://goose-docs.ai/docs/getting-started/installation/",
+  },
+  opencode: {
+    install: "curl -fsSL https://opencode.ai/install | bash",
+    update: "opencode upgrade",
+    docs: "https://opencode.ai/docs/",
+  },
+  amp: {
+    install: "curl -fsSL https://ampcode.com/install.sh | bash",
+    update: "amp update",
+    docs: "https://ampcode.com/docs/cli",
+  },
+  kiro: {
+    install: "curl -fsSL https://cli.kiro.dev/install | bash",
+    update: "kiro-cli update",
+    docs: "https://kiro.dev/docs/cli/installation/",
+  },
+  kilocode: {
+    install: "npm install -g @kilocode/cli",
+    update: "kilo upgrade",
+    docs: "https://kilo.ai/docs/code-with-ai/platforms/cli",
+  },
+  crush: {
+    install: "brew install charmbracelet/tap/crush",
+    update: "brew upgrade charmbracelet/tap/crush",
+    docs: "https://github.com/charmbracelet/crush",
+  },
+  "factory-droid": {
+    install: "curl -fsSL https://app.factory.ai/cli | sh",
+    update: "droid update",
+    docs: "https://docs.factory.ai/droid-cli/quickstart",
+  },
 };
 
 // ─── Individual checks ──────────────────────────────────────────────────────
@@ -86,8 +130,25 @@ async function checkGitVersion(): Promise<string | null> {
   }
 }
 
-/** Best-effort `--version` for a specific binary path (duplicate-install detail). */
-function readBinaryVersion(binPath: string): Promise<string | null> {
+/** Best-effort `--version` of a binary, cached until the file changes (an update replaces it):
+ *  every Doctor run started one process per installed CLI */
+const versionCache = new Map<string, { mtimeMs: number; version: string | null }>();
+
+async function readBinaryVersion(binPath: string): Promise<string | null> {
+  let mtimeMs = 0;
+  try {
+    mtimeMs = statSync(binPath).mtimeMs;
+  } catch {
+    return null;
+  }
+  const hit = versionCache.get(binPath);
+  if (hit && hit.mtimeMs === mtimeMs) return hit.version;
+  const version = await runVersion(binPath);
+  versionCache.set(binPath, { mtimeMs, version });
+  return version;
+}
+
+function runVersion(binPath: string): Promise<string | null> {
   return new Promise((resolve) => {
     exec(`"${binPath}" --version`, { env: shellEnv(), timeout: 3_000 }, (err, stdout) => {
       if (err) return resolve(null);
@@ -163,7 +224,14 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
 
   return Promise.all(
     providers.map(async (provider) => {
-      const paths = await findAllOnPath(provider.command);
+      // A renamed binary (kilocode → kilo) counts as installed under its new name
+      let paths: string[] = [];
+      let found = provider.command;
+      for (const cmd of [provider.command, ...(COMMAND_ALIASES[provider.command] ?? [])]) {
+        paths = await findAllOnPath(cmd);
+        found = cmd;
+        if (paths.length > 0) break;
+      }
       const installed = paths.length > 0;
       // Duplicate installs (e.g. Homebrew + bun copies of codex) cause
       // self-update loops: the update lands in one path while the other
@@ -176,17 +244,23 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
         const first = labeled[0];
         const rest = labeled.slice(1).join(" · ");
         detail = `Multiple installs — PATH resolves to ${first}; updates may land in the losing copy: ${rest}`;
+      } else if (installed) {
+        // The version answers "is mine current?" before launching it
+        const version = await readBinaryVersion(paths[0] ?? "");
+        detail = version ? `v${version} · ${paths[0]}` : `Found '${found}' on PATH`;
       } else {
-        detail = installed
-          ? `Found '${provider.command}' on PATH`
-          : `'${provider.command}' not found on PATH`;
+        detail = `'${provider.command}' not found on PATH`;
       }
+      const setup = CLI_SETUP[provider.id];
+      if (setup?.deprecated) detail = `${detail} · ${setup.deprecated}`;
       return {
         id: `cli:${provider.id}`,
         label: provider.name,
         status: installed ? (duplicated ? "warn" : "ok") : "warn",
         detail,
-        actionUrl: installed ? undefined : CLI_INSTALL_LINKS[provider.id],
+        actionUrl: installed ? undefined : setup?.docs,
+        installCommand: installed ? undefined : setup?.install,
+        updateCommand: installed ? (setup?.update ?? setup?.install) : undefined,
         category: "agents",
       } satisfies DoctorCheck;
     }),

@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
-import { getProviderRegistry } from "../agents/registry";
+import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
 
 const execFileAsync = promisify(execFile);
 
@@ -71,11 +71,14 @@ export async function detectShellClis(db: Database.Database): Promise<Record<str
     const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
     if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] ?? "" });
   }
+  // Renamed binaries count too: `kilo` in a shell is Kilo Code
   const commands = new Map(
     getProviderRegistry()
       .list()
       .filter((p) => p.id !== "shell" && p.command && !p.command.startsWith("__"))
-      .map((p) => [p.command, p.id]),
+      .flatMap((p) =>
+        [p.command, ...(COMMAND_ALIASES[p.command] ?? [])].map((c) => [c, p.id] as const),
+      ),
   );
   return matchShellClis(shells, rows, commands);
 }

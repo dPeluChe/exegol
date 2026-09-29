@@ -21,7 +21,13 @@ import {
 } from "./reattach-sidecar-agents";
 import { recoverLostSessionId } from "./recover-lost-session";
 import { getProviderRegistry } from "./registry";
-import { broadcastAgentStatus, coreRust, DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "./spawn-env";
+import {
+  broadcastAgentStatus,
+  coreRust,
+  DEFAULT_PTY_COLS,
+  DEFAULT_PTY_ROWS,
+  resolveCommand,
+} from "./spawn-env";
 import { createTitleStatusTracker } from "./title-status";
 
 export type { AgentStatusEvent } from "./spawn-env";
@@ -85,6 +91,8 @@ export class AgentManager {
     if (!cliConfig) {
       throw new Error(`No CLI configuration found for agent type: ${agent.cliType}`);
     }
+    // A CLI that renamed its binary (kilocode → kilo): launch whichever this machine has
+    cliConfig.command = resolveCommand(cliConfig.command);
 
     // T161: per-launch YOLO override. Undefined keeps the provider's configured
     // args; an explicit value wins for THIS session only, so "just this once,

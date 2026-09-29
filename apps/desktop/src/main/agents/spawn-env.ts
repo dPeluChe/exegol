@@ -1,5 +1,5 @@
 import { exec, execSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
@@ -18,6 +18,7 @@ import {
   isAgentAwaitingApproval,
   setAgentAwaitingApproval,
 } from "./agent-messaging";
+import { COMMAND_ALIASES } from "./registry";
 import { scoreAgent } from "./scoring";
 
 export interface AgentContext {
@@ -290,6 +291,20 @@ export function warmShellPath(): void {
       process.env.PATH = resolvedPath;
     }
   });
+}
+
+/** Whether `command` resolves to a file on the login shell's PATH */
+export function commandOnPath(command: string): boolean {
+  if (command.includes("/")) return existsSync(command);
+  return _getFullPath()
+    .split(":")
+    .some((dir) => dir && existsSync(join(dir, command)));
+}
+
+/** The binary to launch for a provider command: itself, or the new name it moved to (kilo) */
+export function resolveCommand(command: string): string {
+  if (commandOnPath(command)) return command;
+  return COMMAND_ALIASES[command]?.find(commandOnPath) ?? command;
 }
 
 // Adopted into process.env: main's own execs (gh, git, lsof) otherwise get launchd's PATH from Finder
