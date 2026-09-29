@@ -42,6 +42,11 @@
      never retries once the project loads; `.gitkeep` overwrite; GitHub issue cards drag to nothing
    - Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
      stale; Parallel Runs promote has no error; `agentClis` settings field unused
+7. **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): the `exegol` CLI
+   symlink points inside the AppImage mount (dies on restart: copy it to `~/.local/bin`); ports
+   read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
+   on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
+   covers the macOS keychain folder but not `~/.local/share/keyrings`
 4. **Status for a CLI typed in a terminal**: `detectShellClis` recognizes it (icon only). Next:
    run the status parser for that shell while a CLI is detected, so running / waiting and Needs
    attention work too (no hooks: it was not launched by Exegol)

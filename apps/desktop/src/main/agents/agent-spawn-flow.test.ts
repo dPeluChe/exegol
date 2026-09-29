@@ -22,6 +22,7 @@ vi.mock("./spawn-env", () => ({
   _getFullPath: () => "/usr/local/bin:/usr/bin",
   buildApiKeyEnv: () => ({ ANTHROPIC_API_KEY: "sk-test" }),
   buildClaudeCodeHooksFile: mocks.buildClaudeCodeHooksFile,
+  loginShell: () => process.env.SHELL || "/bin/zsh",
 }));
 vi.mock("./spawn-context", () => ({
   buildSpawnContext: () => ({ contextPrefix: "" }),

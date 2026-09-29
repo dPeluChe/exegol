@@ -1,6 +1,6 @@
 import { exec, execSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
 import type Database from "libsql";
@@ -252,7 +252,18 @@ export const DEFAULT_PTY_ROWS = 30;
  * Get the full user shell PATH. Electron doesn't inherit the full PATH
  * from the user's shell on macOS/Linux.
  */
-const shellPathCommand = () => `${process.env.SHELL || "/bin/zsh"} -ilc 'echo $PATH'`;
+/** The login shell: $SHELL, else the account's, else the platform default (zsh is macOS's, not Linux's) */
+export function loginShell(): string {
+  let account = "";
+  try {
+    account = userInfo().shell ?? "";
+  } catch {
+    /* no passwd entry */
+  }
+  return process.env.SHELL || account || (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
+}
+
+const shellPathCommand = () => `${loginShell()} -ilc 'echo $PATH'`;
 
 export function getShellPath(): string {
   try {
@@ -270,7 +281,9 @@ export function getShellPath(): string {
 function fallbackPath(): string {
   const home = homedir();
   const extra = [
-    "/opt/homebrew/bin",
+    ...(process.platform === "darwin"
+      ? ["/opt/homebrew/bin"]
+      : ["/snap/bin", "/var/lib/flatpak/exports/bin"]),
     "/usr/local/bin",
     join(home, ".local/bin"),
     join(home, ".bun/bin"),

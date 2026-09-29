@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Linux: an AppImage and a .deb are built for every release
+
 ## [0.5.5] — 2026-09-29 — Clean first launch after updates, update button, files beside the terminal
 
 ### Added

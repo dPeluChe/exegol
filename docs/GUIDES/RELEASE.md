@@ -79,6 +79,18 @@ Until a build is notarized, a user can still open it: System Settings → Privac
 "Open Anyway" (on macOS 15 right-click → Open no longer offers it), or
 `xattr -dr com.apple.quarantine /Applications/Exegol.app`.
 
+### 5b. Linux (AppImage + .deb)
+
+Native modules are built per platform, so Linux packages come from CI, not from the Mac:
+`.github/workflows/linux.yml` runs on Ubuntu 22.04 (older glibc, wider distro reach) when a
+release is published, builds core-rust and node-pty for Linux, packages an AppImage and a `.deb`,
+and attaches them plus `latest-linux.yml` (auto-update for the AppImage) to that release. Rerun it
+by hand from Actions → Linux build (optionally with a tag).
+
+Install: `chmod +x Exegol-<v>-x86_64.AppImage && ./Exegol-<v>-x86_64.AppImage`, or
+`sudo apt install ./exegol_<v>_amd64.deb`. Runtime needs: a desktop keyring (gnome-keyring or
+kwallet) for encrypted API keys, and `lsof` for ports (the Doctor warns about both).
+
 ### 6. Publish to GitHub Releases
 
 ```bash

@@ -84,8 +84,9 @@ export function openFloatingPane(config: FloatingPaneConfig): void {
     show: false,
     alwaysOnTop: true,
     frame: false,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 12, y: 12 },
+    ...(process.platform === "darwin"
+      ? { titleBarStyle: "hiddenInset" as const, trafficLightPosition: { x: 12, y: 12 } }
+      : {}),
     backgroundColor: "#0a0a0b",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),

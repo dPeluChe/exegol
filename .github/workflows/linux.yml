@@ -1,0 +1,53 @@
+name: Linux build
+# Native modules (core-rust napi, node-pty) are built per platform, so the Linux packages are
+# made on a Linux runner and attached to the GitHub release the Mac build created.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the packages to (empty: the latest release)"
+        required: false
+permissions:
+  contents: write
+concurrency:
+  group: linux-${{ github.event.release.tag_name || inputs.tag || 'latest' }}
+  cancel-in-progress: true
+jobs:
+  package:
+    # 22.04: an older glibc, so the build runs on more distros than one made on the newest runner
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName); fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: '1.2.23'
+      - name: System packages for node-pty, libsecret and the .deb
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3 libsecret-1-dev fakeroot dpkg
+      - run: bun install --frozen-lockfile
+      # Rust is preinstalled on GitHub's Ubuntu images; this builds core-rust.linux-x64-gnu.node
+      - run: bun run build:rust
+      - run: bun run rebuild:native
+      - run: bun run package:linux
+      - name: Attach to the release
+        run: |
+          VERSION="${{ steps.tag.outputs.tag }}"
+          DIR="apps/desktop/dist/${VERSION#v}"
+          ls -la "$DIR"
+          gh release upload "${{ steps.tag.outputs.tag }}" --repo "${{ github.repository }}" --clobber \
+            "$DIR"/*.AppImage "$DIR"/*.deb "$DIR"/latest-linux.yml

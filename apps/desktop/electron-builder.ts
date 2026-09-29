@@ -15,6 +15,8 @@ const DMG_NAME = "Exegol-${version}-${arch}.dmg";
 const EXE_NAME = "Exegol-${version}-${arch}.exe";
 // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
 const APPIMAGE_NAME = "Exegol-${version}-${arch}.AppImage";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
+const DEB_NAME = "exegol_${version}_${arch}.deb";
 
 const config: Configuration = {
   appId: "com.exegol.desktop",
@@ -114,11 +116,25 @@ const config: Configuration = {
   },
 
   // ─── Linux ──────────────────────────────────────────────────────────
+  // Built on Linux by .github/workflows/linux.yml (native modules cannot be cross-built from a Mac).
+  // AppImage runs on most distros and self-updates; the .deb installs natively on Debian/Ubuntu
   linux: {
     icon: resolve(iconPath, "icon.png"),
-    target: [{ target: "AppImage", arch: ["x64"] }],
+    target: [
+      { target: "AppImage", arch: ["x64"] },
+      { target: "deb", arch: ["x64"] },
+    ],
     category: "Development",
     artifactName: APPIMAGE_NAME,
+    maintainer: "Antonio <antonio@iteris.tech>",
+    synopsis: "Orchestrate AI coding agents",
+    // exegol:// deep links (open a folder from the CLI or a link) reach the installed app
+    mimeTypes: ["x-scheme-handler/exegol"],
+  },
+  deb: {
+    artifactName: DEB_NAME,
+    // safeStorage keeps API keys in the desktop keyring (libsecret); without it they fall back
+    depends: ["libsecret-1-0", "libnotify4", "libxss1", "libnss3"],
   },
 
   // ─── Auto-update publish config (GitHub Releases) ──────────────────
