@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Edit project: a Save button; app icons are found in Electron, Expo/React Native, Android, Flutter and Tauri projects too
 - Title bar: check for updates, see the download and restart to install from one button
 
 ### Fixed

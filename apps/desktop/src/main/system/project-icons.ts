@@ -32,6 +32,20 @@ const CANDIDATES = [
   "assets/logo.png",
   "build/icon.png",
   "resources/icon.png",
+  // Electron (electron-builder buildResources)
+  "build/icons/icon.png",
+  "build/icons/512x512.png",
+  "resources/build/icons/icon.png",
+  "src/resources/icon.png",
+  "src/resources/build/icons/icon.png",
+  // Expo / React Native, Android, Flutter, Tauri
+  "assets/images/icon.png",
+  "assets/images/adaptive-icon.png",
+  "assets/adaptive-icon.png",
+  "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+  "web/icons/Icon-512.png",
+  "web/favicon.png",
+  "src-tauri/icons/128x128@2x.png",
   "static/favicon.ico",
   "static/favicon.png",
 ];
