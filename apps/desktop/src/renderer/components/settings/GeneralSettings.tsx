@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Sun,
 } from "lucide-react";
+import { useState } from "react";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 
@@ -40,6 +41,63 @@ function Kbd({ children }: { children: React.ReactNode }) {
     <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border/80 bg-bg-tertiary px-1.5 text-[10px] font-medium text-text-secondary shadow-[0_1px_0_1px_rgba(0,0,0,0.3)]">
       {children}
     </kbd>
+  );
+}
+
+/** Electron accelerator for a key press, or null while only modifiers are held */
+function acceleratorFor(e: React.KeyboardEvent): string | null {
+  const key = e.key;
+  if (["Meta", "Control", "Shift", "Alt"].includes(key)) return null;
+  const mods = [
+    e.metaKey && "CommandOrControl",
+    e.ctrlKey && !e.metaKey && "Control",
+    e.altKey && "Alt",
+    e.shiftKey && "Shift",
+  ].filter(Boolean);
+  if (mods.length === 0) return null; // a bare key as a global hotkey would swallow typing
+  // e.code keeps the letter when Option turns e.key into a symbol
+  const base = /^Key[A-Z]$/.test(e.code)
+    ? e.code.slice(3)
+    : /^Digit\d$/.test(e.code)
+      ? e.code.slice(5)
+      : key.length === 1
+        ? key.toUpperCase()
+        : key;
+  return [...mods, base].join("+");
+}
+
+/**
+ * Press the combination to set it: saved once, when complete. Typing it as text saved every
+ * keystroke, and a half-typed accelerator unregistered the working hotkey.
+ */
+function HotkeyRecorder({ onRecord }: { onRecord: (accelerator: string) => void }) {
+  const [recording, setRecording] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => setRecording(true)}
+      onBlur={() => setRecording(false)}
+      onKeyDown={(e) => {
+        if (!recording) return;
+        e.preventDefault();
+        if (e.key === "Escape") {
+          setRecording(false);
+          return;
+        }
+        const accelerator = acceleratorFor(e);
+        if (!accelerator) return;
+        setRecording(false);
+        onRecord(accelerator);
+      }}
+      className={cn(
+        "rounded border px-2 py-0.5 text-[10px]",
+        recording
+          ? "border-accent text-accent"
+          : "border-border text-text-muted hover:text-text-secondary",
+      )}
+    >
+      {recording ? "Press the keys... (Esc cancels)" : "Change"}
+    </button>
   );
 }
 
@@ -122,17 +180,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           </h3>
           <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-2.5">
             <KeyCombo combo={settings.globalHotkey} />
-            <details className="group">
-              <summary className="cursor-pointer text-[9px] text-text-muted hover:text-text-secondary">
-                edit
-              </summary>
-              <Input
-                value={settings.globalHotkey}
-                onChange={(e) => onChange({ globalHotkey: e.target.value })}
-                placeholder="CommandOrControl+Shift+E"
-                className="mt-1 w-48 border-[var(--border)] bg-[var(--bg-tertiary)] text-[10px] text-[var(--text-primary)]"
-              />
-            </details>
+            <HotkeyRecorder onRecord={(globalHotkey) => onChange({ globalHotkey })} />
           </div>
         </div>
       </div>
@@ -258,35 +306,9 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       {/* Ollama / Project Indexing status */}
       <OllamaStatusSection settings={settings} onChange={onChange} />
 
-      {/* Keyboard shortcuts reference — same as before */}
-      <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Quick Reference
-        </h3>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-xl border border-border bg-bg-secondary p-4">
-          {[
-            { keys: "⌘+B", desc: "Toggle sidebar" },
-            { keys: "⌘+T", desc: "New tab" },
-            { keys: "⌘+W", desc: "Close pane/tab" },
-            { keys: "⌘+D", desc: "Split horizontal" },
-            { keys: "⌘+⇧+D", desc: "Split vertical" },
-            { keys: "⌘+,", desc: "Settings" },
-            { keys: "⌘1", desc: "Dashboard" },
-            { keys: "⌘2-9", desc: "Live tabs, in the sidebar's order" },
-            { keys: "⌥⌘1-9", desc: "Tab of this project" },
-            { keys: "⌘+[/]", desc: "Navigate tabs" },
-          ].map(({ keys, desc }) => (
-            <div key={keys} className="flex items-center justify-between py-0.5">
-              <span className="text-[10px] text-text-muted">{desc}</span>
-              <div className="flex items-center gap-0.5">
-                {keys.split("+").map((k) => (
-                  <Kbd key={`${keys}-${k}`}>{k}</Kbd>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      <p className="text-[10px] text-text-muted">
+        Every keyboard shortcut is in the Shortcuts tab (or press Cmd+/ in the workspace).
+      </p>
     </div>
   );
 }

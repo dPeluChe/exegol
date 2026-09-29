@@ -1,128 +1,23 @@
 import { useState } from "react";
+import { useSettings } from "../../hooks/use-trpc";
+import { displayAccelerator, SHORTCUTS, type ShortcutCategory } from "../../lib/shortcuts";
 import { type SegmentedTab, SegmentedTabs } from "../common/SegmentedTabs";
-
-type ShortcutCategory = "navigation" | "agents" | "terminal";
-
-interface Shortcut {
-  id: string;
-  label: string;
-  description: string;
-  keys: string;
-  category: ShortcutCategory;
-}
-
-const DEFAULT_SHORTCUTS: Shortcut[] = [
-  // Navigation
-  {
-    id: "toggle-sidebar",
-    label: "Toggle Sidebar",
-    description: "Show/hide the agent sidebar",
-    keys: "Cmd+B",
-    category: "navigation",
-  },
-  {
-    id: "settings",
-    label: "Open Settings",
-    description: "Open settings panel",
-    keys: "Cmd+,",
-    category: "navigation",
-  },
-  {
-    id: "command-palette",
-    label: "Command Palette",
-    description: "Search commands, agents and projects",
-    keys: "Cmd+K / Cmd+Shift+P",
-    category: "navigation",
-  },
-  {
-    id: "global-hotkey",
-    label: "Focus Exegol",
-    description: "Bring Exegol to front",
-    keys: "Cmd+Shift+E",
-    category: "navigation",
-  },
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    description: "Open the Dashboard",
-    keys: "Cmd+1",
-    category: "navigation",
-  },
-  {
-    id: "live-tab-n",
-    label: "Live Tab N",
-    description: "Jump to the Nth tab with live sessions, in the sidebar's order (drag to reorder)",
-    keys: "Cmd+2-9",
-    category: "navigation",
-  },
-  {
-    id: "workspace-tab-n",
-    label: "Workspace Tab N",
-    description: "Switch to this project's workspace tab by number (1-9)",
-    keys: "Cmd+Option+1-9",
-    category: "navigation",
-  },
-  // Agents
-  {
-    id: "new-agent",
-    label: "New Agent",
-    description: "Open spawn agent dialog",
-    keys: "Cmd+N",
-    category: "agents",
-  },
-  {
-    id: "stop-agent",
-    label: "Stop Agent",
-    description: "Stop the focused agent",
-    keys: "Cmd+.",
-    category: "agents",
-  },
-  // Terminal
-  {
-    id: "split-horizontal",
-    label: "Split Horizontal",
-    description: "Split the focused pane",
-    keys: "Cmd+D",
-    category: "terminal",
-  },
-  {
-    id: "split-vertical",
-    label: "Split Vertical",
-    description: "Split the focused pane vertically",
-    keys: "Cmd+Shift+D",
-    category: "terminal",
-  },
-  {
-    id: "next-tab",
-    label: "Next Tab",
-    description: "Switch to the next workspace tab",
-    keys: "Cmd+Shift+]",
-    category: "terminal",
-  },
-  {
-    id: "prev-tab",
-    label: "Previous Tab",
-    description: "Switch to the previous workspace tab",
-    keys: "Cmd+Shift+[",
-    category: "terminal",
-  },
-];
 
 const TABS: SegmentedTab<ShortcutCategory>[] = [
   {
     id: "navigation",
     label: "Navigation",
-    count: DEFAULT_SHORTCUTS.filter((s) => s.category === "navigation").length,
+    count: SHORTCUTS.filter((s) => s.category === "navigation").length,
   },
   {
     id: "agents",
     label: "Agents",
-    count: DEFAULT_SHORTCUTS.filter((s) => s.category === "agents").length,
+    count: SHORTCUTS.filter((s) => s.category === "agents").length,
   },
   {
     id: "terminal",
     label: "Terminal",
-    count: DEFAULT_SHORTCUTS.filter((s) => s.category === "terminal").length,
+    count: SHORTCUTS.filter((s) => s.category === "terminal").length,
   },
 ];
 
@@ -144,7 +39,16 @@ function KeyBadge({ keys }: { keys: string }) {
 
 export function KeyboardShortcuts() {
   const [activeTab, setActiveTab] = useState<ShortcutCategory>("navigation");
-  const filtered = DEFAULT_SHORTCUTS.filter((s) => s.category === activeTab);
+  const { data: settings } = useSettings();
+  // The global hotkey is configurable (General): show the one in effect
+  const globalHotkey = {
+    id: "focus-exegol",
+    label: "Focus Exegol",
+    description: "Bring Exegol to front from any app (change it in General)",
+    keys: displayAccelerator(settings?.globalHotkey ?? "CommandOrControl+Shift+E"),
+    category: "navigation" as const,
+  };
+  const filtered = [...SHORTCUTS, globalHotkey].filter((s) => s.category === activeTab);
 
   return (
     <div className="space-y-4">
@@ -166,9 +70,7 @@ export function KeyboardShortcuts() {
         ))}
       </div>
 
-      <p className="text-[10px] text-text-muted">
-        Custom keybindings coming in a future update. Uses Cmd on macOS, Ctrl on Windows/Linux.
-      </p>
+      <p className="text-[10px] text-text-muted">Uses Cmd on macOS, Ctrl on Windows and Linux.</p>
     </div>
   );
 }

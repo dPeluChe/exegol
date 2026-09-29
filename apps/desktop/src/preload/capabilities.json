@@ -50,6 +50,7 @@
       "takeLostOnRestart",
       "toggleProviderEnabled",
       "unregisterProvider",
+      "updateCustomProvider",
       "updateProviderArgs",
       "updateStatus"
     ],

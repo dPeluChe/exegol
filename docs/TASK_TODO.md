@@ -37,15 +37,15 @@
      delete show no error
    - Tokens: costs are fixed at import from a hardcoded price table (the Pricing editor changes
      only one table); budgets cannot be deleted from the UI (`budgets.delete` unused)
-   - Settings: the global hotkey saves per keystroke (a half-typed accelerator unregisters it);
-     a custom CLI cannot be renamed or given a command; CLI changes do not broadcast to the main
-     window (30s stale); shortcut lists miss Cmd+T/W/J, Cmd+Shift+N, Cmd+/, Ctrl+Tab and show the
-     configurable focus hotkey as fixed; the Cmd+/ overlay shows Cmd+[ ] for Cmd+Shift+[ ]
    - Watching: a card waiting for input cannot be collapsed. QA: saving a test does not refresh
-     the list. Onboarding: creating a project in step 3 skips the Done step. Tasks: auto-detect
+     the list. Tasks: auto-detect
      never retries once the project loads; `.gitkeep` overwrite; GitHub issue cards drag to nothing
    - Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
      stale; Parallel Runs promote has no error; `agentClis` settings field unused
+6. **Trackpad scroll over a TUI sends arrow keys** (reported 2026-09-28): scrolling up in a Claude
+   Code pane to read earlier output types ↑ into its input (recalls the last message). Likely xterm's
+   alternate-scroll: in the alternate screen with no mouse tracking, wheel becomes arrow keys.
+   Check `TerminalInstance` options and whether the wheel should scroll Exegol's scrollback instead
 4. **Status for a CLI typed in a terminal**: `detectShellClis` recognizes it (icon only). Next:
    run the status parser for that shell while a CLI is detected, so running / waiting and Needs
    attention work too (no hooks: it was not launched by Exegol)

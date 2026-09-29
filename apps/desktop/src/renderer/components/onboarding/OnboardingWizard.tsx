@@ -16,7 +16,9 @@ export function OnboardingWizard() {
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const [step, setStep] = useState(0);
 
-  const hasExistingProjects = (projects?.length ?? 0) > 0;
+  // Only projects that existed before the wizard started count: adding one in its own step
+  // hid the wizard before the Done step
+  const hasExistingProjects = step === 0 && (projects?.length ?? 0) > 0;
 
   // Upgrading users who already have projects never saw this wizard and
   // shouldn't be interrupted by it — silently mark onboarding as done.

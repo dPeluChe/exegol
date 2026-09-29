@@ -1,4 +1,5 @@
 import { type Settings, settingsSchema } from "@exegol/shared";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { registerGlobalHotkey } from "../../bootstrap/global-hotkey";
 import { getAppSettings, saveAppSettings } from "../../db/queries/settings";
@@ -42,8 +43,17 @@ export const settingsRouter = router({
   update: publicProcedure.input(settingsSchema.partial()).mutation(({ ctx, input }) => {
     const current = getAppSettings(ctx.db);
     const updated: Settings = { ...current, ...input };
+    // A hotkey that cannot be registered (malformed, or owned by another app) is not saved
+    if (
+      updated.globalHotkey !== current.globalHotkey &&
+      !registerGlobalHotkey(updated.globalHotkey)
+    ) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `${updated.globalHotkey} cannot be used: it is invalid or another app owns it`,
+      });
+    }
     saveAppSettings(ctx.db, updated);
-    if (updated.globalHotkey !== current.globalHotkey) registerGlobalHotkey(updated.globalHotkey);
     // T155.7: notification prefs live in this row — drop the desktop
     // channel's 30s cache so mute toggles apply immediately.
     invalidateDesktopChannelCache();

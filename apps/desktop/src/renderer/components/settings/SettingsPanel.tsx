@@ -86,7 +86,16 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
     // would revert settings saved elsewhere (MCP verbose, notification mutes)
     updateSettings.mutate(updates, {
       onSuccess: () => flashSaved(),
-      onError: (err) => console.error("[Settings] Auto-save failed:", err),
+      onError: (err) => {
+        console.error("[Settings] Auto-save failed:", err);
+        // Refused (e.g. a hotkey another app owns): the fields go back to what is saved
+        if (settings) {
+          const saved = Object.fromEntries(
+            Object.keys(updates).map((k) => [k, settings[k as keyof Settings]]),
+          ) as Partial<Settings>;
+          setForm((prev) => (prev ? { ...prev, ...saved } : prev));
+        }
+      },
     });
   };
 
