@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Edit project: an image found in the project and a built-in icon/color exclude each other; picking one clears the other's selection
+
 ### Changed
 - After an update or restart, each terminal appears as soon as its own session is back instead of waiting for all of them
 

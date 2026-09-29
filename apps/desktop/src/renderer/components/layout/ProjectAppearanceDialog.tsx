@@ -35,7 +35,6 @@ export function ProjectAppearanceDialog({
       trpcMutate("projects.setAppearance", { id: project.id, ...next }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
-  const color = project.color ?? null;
   const [name, setName] = useState(project.name);
   // Icon and color apply as they are picked; Save commits the name and closes
   const saveAndClose = () => {
@@ -88,7 +87,7 @@ export function ProjectAppearanceDialog({
                 <button
                   key={f.path}
                   type="button"
-                  onClick={() => save.mutate({ color, icon: null, iconImage: f.path })}
+                  onClick={() => save.mutate({ color: null, icon: null, iconImage: f.path })}
                   className={
                     project.iconImage === f.path
                       ? "rounded-md bg-white/10 p-1.5 ring-1 ring-accent/60"
@@ -108,13 +107,10 @@ export function ProjectAppearanceDialog({
           <GroupIconColorPicker
             color={project.color ?? null}
             icon={project.icon ?? null}
+            unselected={!!project.iconImage}
+            // An image and a built-in icon exclude each other: picking here drops the image
             onChange={(nextColor, nextIcon) =>
-              // Choosing a built-in icon drops the image; a color applies to either
-              save.mutate({
-                color: nextColor,
-                icon: nextIcon,
-                iconImage: nextIcon === project.icon ? (project.iconImage ?? null) : null,
-              })
+              save.mutate({ color: nextColor, icon: nextIcon, iconImage: null })
             }
           />
           {save.isError && <p className="mt-2 text-[11px] text-red-400">{String(save.error)}</p>}
