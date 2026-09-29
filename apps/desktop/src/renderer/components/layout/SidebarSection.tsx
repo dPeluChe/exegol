@@ -43,7 +43,7 @@ export function SidebarSection({
         !open && "shrink-0",
         open && size === "cap" && "max-h-[45%] shrink-0",
         open && size === "fill" && "flex-1",
-        open && !size && "max-h-[30%] shrink-0",
+        open && !size && "shrink-0",
       )}
     >
       {/* Header — div instead of button because action slot contains buttons (no nesting) */}
@@ -73,7 +73,14 @@ export function SidebarSection({
       </div>
 
       {/* Content — collapsible */}
-      {open && <div className="min-h-0 overflow-y-auto px-3 pt-1">{children}</div>}
+      {/* No size: a bottom section; a % cap means nothing inside an auto-height footer */}
+      {open && (
+        <div
+          className={cn("sidebar-scroll min-h-0 overflow-y-auto px-3 pt-1", !size && "max-h-56")}
+        >
+          {children}
+        </div>
+      )}
     </div>
   );
 }

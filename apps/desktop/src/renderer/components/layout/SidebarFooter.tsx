@@ -1,8 +1,10 @@
-import { Activity, Copy, FileText, LayoutGrid, Plus } from "lucide-react";
+import { Activity, Copy, FileText, History, LayoutGrid, Plus, Rss } from "lucide-react";
 import { useCallback } from "react";
 import { useAppVersion, usePrompts } from "../../hooks/use-trpc";
 import { switchSection } from "../../lib/switch-section";
 import { useAppStore } from "../../stores/app";
+import { ActivityFeed } from "./ActivityFeed";
+import { RecentSessions } from "./RecentSessions";
 import { ResourcesOverview } from "./ResourcesOverview";
 import { SidebarSection } from "./SidebarSection";
 
@@ -81,6 +83,14 @@ export function SidebarFooter() {
 
   return (
     <div className="flex flex-col">
+      <SidebarSection title="Recent Sessions" icon={History} defaultOpen={false}>
+        <RecentSessions />
+      </SidebarSection>
+
+      <SidebarSection title="Activity" icon={Rss} defaultOpen={false}>
+        <ActivityFeed />
+      </SidebarSection>
+
       <SidebarSection title="Prompts" icon={FileText} defaultOpen={false}>
         <PinnedPrompts />
       </SidebarSection>
