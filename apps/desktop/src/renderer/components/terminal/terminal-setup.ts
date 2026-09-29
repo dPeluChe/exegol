@@ -105,10 +105,14 @@ export function setupTerminalSession(
       () => !!terminal.element?.contains(document.activeElement),
     );
   } else if (deps.cliType && deps.cliType !== "shell") {
-    // An agent TUI in the alternate screen (claude with "tui": "fullscreen") has no scrollback,
-    // so xterm turns the wheel into ↑/↓, and ↑ in an empty prompt recalls the last message. Only
-    // reached when the app did not ask for mouse events. Shells keep it: vim and less scroll that way
-    terminal.attachCustomWheelEventHandler(() => terminal.buffer.active.type !== "alternate");
+    // An agent TUI in the alternate screen that did not ask for mouse events gets the wheel as
+    // ↑/↓ from xterm, and ↑ in an empty prompt recalls the last message: drop only that case.
+    // This handler runs before mouse reporting, so a TUI that tracks the mouse (and scrolls
+    // with it) must pass. Shells keep it all: vim and less scroll with the arrows
+    terminal.attachCustomWheelEventHandler(
+      () =>
+        terminal.buffer.active.type !== "alternate" || terminal.modes.mouseTrackingMode !== "none",
+    );
   }
 
   const dormantPipe = createDormantPipe(terminal, true);

@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - After an update or restart, each terminal appears as soon as its own session is back instead of waiting for all of them
 
 ### Fixed
+- Agent terminals scroll with the wheel again in fullscreen TUIs that handle the mouse (0.5.6 blocked it along with the ↑/↓ it meant to stop)
 - Edit project: an image found in the project and a built-in icon/color exclude each other; picking one clears the other's selection
 
 ## [0.5.6] — 2026-09-29 — Linux packages
