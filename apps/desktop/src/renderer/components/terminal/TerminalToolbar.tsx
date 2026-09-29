@@ -4,6 +4,7 @@ import {
   AlertCircle,
   AlertTriangle,
   ExternalLink,
+  FolderTree,
   GitBranch,
   Github,
   Loader2,
@@ -34,6 +35,9 @@ interface TerminalToolbarProps {
   repoUrl?: string | null;
   /** Open a URL in a browser pane next to this terminal */
   onOpenRepo?: (url: string) => void;
+  /** Files panel beside the terminal */
+  filesOpen?: boolean;
+  onToggleFiles?: () => void;
 }
 
 export function TerminalToolbar({
@@ -49,6 +53,8 @@ export function TerminalToolbar({
   onDismissPreview,
   repoUrl,
   onOpenRepo,
+  filesOpen,
+  onToggleFiles,
 }: TerminalToolbarProps) {
   return (
     // Badges live on the LEFT — the pane's hover actions (float/split/close)
@@ -74,6 +80,24 @@ export function TerminalToolbar({
         </span>
       )}
       {repoUrl && <RepoLink url={repoUrl} onOpenInPane={onOpenRepo} />}
+      {onToggleFiles && (
+        <button
+          type="button"
+          onClick={onToggleFiles}
+          className={cn(
+            "flex shrink-0 items-center gap-1 text-[9px] transition-colors hover:text-text-primary",
+            filesOpen ? "text-accent" : "text-text-muted",
+          )}
+          title={
+            filesOpen
+              ? "Hide files"
+              : "Project files beside the terminal (drag one in to type its path)"
+          }
+        >
+          <FolderTree className="h-2.5 w-2.5" />
+          Files
+        </button>
+      )}
       {dirtyCount > 0 && (
         <span
           className="rounded bg-yellow-500/15 px-1 py-0.5 text-[9px] tabular-nums text-yellow-400"

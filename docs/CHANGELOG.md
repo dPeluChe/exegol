@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Terminal toolbar: "Files" opens the project files beside the terminal to look or drag a file in, and closes again without changing the layout
 - Edit project: a Save button; app icons are found in Electron, Expo/React Native, Android, Flutter and Tauri projects too
 - Title bar: check for updates, see the download and restart to install from one button
 

@@ -4,7 +4,7 @@ import { AlertCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
-import { useAgent, useScrollback, useStopAgent } from "../../hooks/use-trpc";
+import { useAgent, useProject, useScrollback, useStopAgent } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
@@ -12,6 +12,7 @@ import { useToastStore } from "../../stores/toasts";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
+import { FilesPeek } from "./FilesPeek";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { TerminalScrollback } from "./TerminalScrollback";
@@ -83,6 +84,10 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     enabled: !!toolbarProjectId,
     refetchInterval: 15_000,
   });
+
+  // Files beside the terminal for a quick look or a drag in, without touching the layout
+  const [filesOpen, setFilesOpen] = useState(false);
+  const { data: peekProject } = useProject(filesOpen ? (toolbarProjectId ?? null) : null);
 
   const { data: repoUrl } = useQuery({
     queryKey: ["git", "remoteWebUrl", toolbarProjectId],
@@ -317,27 +322,38 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           onDismissPreview={dismissPreview}
           repoUrl={repoUrl}
           onOpenRepo={openBesideInBrowser}
+          filesOpen={filesOpen}
+          onToggleFiles={() => setFilesOpen((v) => !v)}
         />
       )}
       {/* min-h-0: a flex item never shrinks below its content by default, so the
           terminal's own rows set the box height and each fit stepped it down a row */}
-      <div className="relative min-h-0 flex-1">
-        {viewMode === "chat" ? (
-          <ChatView scrollback={liveSnapshot} cliType={agent?.cliType} />
-        ) : (
-          <>
-            <TerminalInstance
-              ref={terminalRef}
-              key={agentId}
-              agentId={agentId}
-              cliType={agent?.cliType}
-              onReady={onReady}
-              onScrollPosition={handleScrollPosition}
-              onOpenFileLink={handleOpenFileLink}
-              onOpenUrlInPane={handleOpenUrlInPane}
-            />
-            {floatingButtons}
-          </>
+      <div className="flex min-h-0 flex-1">
+        <div className="relative min-h-0 min-w-0 flex-1">
+          {viewMode === "chat" ? (
+            <ChatView scrollback={liveSnapshot} cliType={agent?.cliType} />
+          ) : (
+            <>
+              <TerminalInstance
+                ref={terminalRef}
+                key={agentId}
+                agentId={agentId}
+                cliType={agent?.cliType}
+                onReady={onReady}
+                onScrollPosition={handleScrollPosition}
+                onOpenFileLink={handleOpenFileLink}
+                onOpenUrlInPane={handleOpenUrlInPane}
+              />
+              {floatingButtons}
+            </>
+          )}
+        </div>
+        {filesOpen && peekProject && (
+          <FilesPeek
+            projectId={peekProject.id}
+            rootPath={peekProject.path}
+            onClose={() => setFilesOpen(false)}
+          />
         )}
       </div>
     </div>
