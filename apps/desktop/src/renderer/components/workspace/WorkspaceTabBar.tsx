@@ -243,6 +243,7 @@ export function WorkspaceTabBar() {
               displayName,
               Icon: TabIcon,
               primaryAgentId,
+              agentCliType,
             } = getTabMeta(tab.label, tab.layout, panes, agents);
             const tabActivity = primaryAgentId ? agents[primaryAgentId]?.activityLevel : undefined;
             // T155.3: unread attention beats activity in the tab dot
@@ -257,6 +258,7 @@ export function WorkspaceTabBar() {
                 isEditing={isEditing}
                 displayName={displayName}
                 TabIcon={TabIcon}
+                agentCliType={agentCliType}
                 tabActivity={tabActivity}
                 tabAttention={tabAttention}
                 dragOverTabId={dragOverTabId}

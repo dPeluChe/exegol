@@ -84,7 +84,7 @@ export function QuickLaunchBar() {
             });
           } else {
             // Pane has a running agent or is browser/files/git: create a new tab
-            const newTabId = addTab(cli.name);
+            const newTabId = addTab();
             const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
             if (newTab) {
               const newPaneId = findFirstPaneId(newTab.layout);
@@ -98,7 +98,7 @@ export function QuickLaunchBar() {
           }
         } else {
           // No active tab: create one
-          const newTabId = addTab(cli.name);
+          const newTabId = addTab();
           const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
           if (newTab) {
             const newPaneId = findFirstPaneId(newTab.layout);

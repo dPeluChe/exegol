@@ -307,8 +307,7 @@ export function jumpToAgent(agentId: string, projectId: string): void {
     showProject(projectId);
     const ws = useWorkspaceStore.getState();
     // No pane shows it (closed, or spawned headless): a new tab, never replacing the user's panes
-    const agent = useAgentStore.getState().agents[agentId];
-    ws.addTab(agent?.alias ?? agent?.cliType);
+    ws.addTab();
     const paneId = useWorkspaceStore.getState().focusedPaneId;
     if (paneId) ws.updatePane(paneId, { type: "terminal", agentId });
   }
