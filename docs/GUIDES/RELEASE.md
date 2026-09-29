@@ -61,8 +61,19 @@ came from the internet (GitHub, Slack...). Notarization needs Apple credentials 
    ```bash
    APPLE_KEYCHAIN_PROFILE=exegol-notary bun run package:mac
    ```
-4. Check before publishing: `spctl -a -vv -t install apps/desktop/dist/<v>/mac-arm64/Exegol.app`
-   must say `source=Notarized Developer ID`.
+4. electron-builder notarizes and staples the **app**, not the DMG. Sign, notarize and staple the
+   DMG too (a downloaded DMG then opens clean, offline included):
+   ```bash
+   cd apps/desktop/dist/<v>
+   codesign --force --timestamp --sign "Developer ID Application: jose antonio martinez quintero (NQHHJ85736)" Exegol-<v>-arm64.dmg
+   xcrun notarytool submit Exegol-<v>-arm64.dmg --keychain-profile exegol-notary --wait
+   xcrun stapler staple Exegol-<v>-arm64.dmg
+   ```
+   Signing rewrites the DMG, so its `.blockmap` is stale: do not publish it (the macOS updater
+   uses the zip and its blockmap).
+5. Check before publishing, both must say `source=Notarized Developer ID`:
+   `spctl -a -vv -t install mac-arm64/Exegol.app` and
+   `spctl -a -vv -t open --context context:primary-signature Exegol-<v>-arm64.dmg`.
 
 Until a build is notarized, a user can still open it: System Settings → Privacy & Security →
 "Open Anyway" (on macOS 15 right-click → Open no longer offers it), or

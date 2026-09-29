@@ -9,12 +9,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-09-29 — Notarized build, quit guard for open sessions, setup wizard in steps
+
 ### Added
 - Terminals: Option+←/→ move by word and Option+Backspace deletes a word (a plain shell printed "D")
 - Doctor and setup wizard: each agent CLI shows its installed version and the vendor's install or update command to copy; Kilo Code's new `kilo` binary is found and launched
 
 ### Fixed
-- First-run setup: the wizard fits the window and scrolls, shows which step you are on, and folds the CLIs you have not installed into one optional line
+- The macOS build is notarized: a downloaded DMG opens without "Apple could not verify Exegol"
+- First-run setup: six short steps (agent CLIs and system checks apart) that fit the window, show which step you are on, and fold the CLIs you have not installed into one optional line
 - Quitting asks first whenever an agent session is open, not only while one is working, so an automatic macOS logout no longer closes Exegol unattended
 - Sidebar tab groups: drag to reorder works, the group on screen is highlighted and blinks after a Cmd+2..9 jump; ⌘1 aligned right
 
