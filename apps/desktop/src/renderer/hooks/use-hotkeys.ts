@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { getLiveTabGroups } from "../lib/live-tabs";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
@@ -127,11 +128,28 @@ export function useHotkeys() {
         return;
       }
 
-      // Cmd+1-9: Switch to workspace tab by position
-      if (e.key >= "1" && e.key <= "9") {
+      // e.code: with Option held, e.key is "¡", "™"...
+      const digit = /^Digit([1-9])$/.exec(e.code)?.[1];
+
+      // Cmd+1: Dashboard; Cmd+2-9: the live tab groups, in the sidebar's order
+      if (digit && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        const n = Number(digit);
+        if (n === 1) {
+          useAppStore.getState().openDashboard();
+          return;
+        }
+        const group = getLiveTabGroups()[n - 2];
+        const first = group?.agentIds[0];
+        if (group && first) jumpToAgent(first, group.projectId);
+        return;
+      }
+
+      // Cmd+Option+1-9: workspace tab of the current project by position
+      if (digit && e.altKey) {
         e.preventDefault();
         const ws = useWorkspaceStore.getState();
-        const index = Number.parseInt(e.key, 10) - 1;
+        const index = Number(digit) - 1;
         const tab = getProjectState().tabs[index];
         if (tab) {
           ws.setActiveTab(tab.id);

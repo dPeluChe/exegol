@@ -43,6 +43,9 @@ export function Sidebar() {
       >
         <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-accent" />
         <span className="min-w-0 truncate">Dashboard</span>
+        <kbd className="shrink-0 rounded border border-border px-1 font-mono text-[9px] font-normal text-text-muted">
+          ⌘1
+        </kbd>
         {attentionCount > 0 && (
           <span className="ml-auto shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
             {attentionCount}

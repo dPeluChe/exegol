@@ -271,7 +271,9 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             { keys: "⌘+D", desc: "Split horizontal" },
             { keys: "⌘+⇧+D", desc: "Split vertical" },
             { keys: "⌘+,", desc: "Settings" },
-            { keys: "⌘+1-9", desc: "Switch agent" },
+            { keys: "⌘1", desc: "Dashboard" },
+            { keys: "⌘2-9", desc: "Live tabs, in the sidebar's order" },
+            { keys: "⌥⌘1-9", desc: "Tab of this project" },
             { keys: "⌘+[/]", desc: "Navigate tabs" },
           ].map(({ keys, desc }) => (
             <div key={keys} className="flex items-center justify-between py-0.5">
