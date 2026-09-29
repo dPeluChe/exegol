@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-09-28 — Sessions that survive restarts, files you can search and edit, Cmd+1..9, a full audit
+
 ### Added
 - Cmd+1 opens the Dashboard and Cmd+2..9 jump to the tabs with live sessions; the sidebar groups sessions by tab with their shortcut, and groups can be dragged to reorder
 - After a system restart, the sessions that were open resume by themselves in their panes
