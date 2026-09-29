@@ -5,6 +5,8 @@ import { persist } from "zustand/middleware";
 export const MAX_OPEN_MIRRORS = 6;
 export const MIN_CARD_FONT = 8;
 export const MAX_CARD_FONT = 22;
+/** A pinned session opens sized to its card at this font: readable side by side */
+export const DEFAULT_CARD_FONT = 13;
 
 interface WatchStore {
   /** T194: sessions pinned to the Dashboard, in pin order, across all projects */
@@ -29,6 +31,10 @@ interface WatchStore {
 }
 
 const pushOpen = (open: string[], id: string) => [...open, id].slice(-MAX_OPEN_MIRRORS);
+const omit = (fonts: Record<string, number>, id: string) => {
+  const { [id]: _, ...rest } = fonts;
+  return rest;
+};
 const swap = (list: string[], oldId: string, newId: string) =>
   list.map((id) => (id === oldId ? newId : id));
 
@@ -44,10 +50,12 @@ export const useWatchStore = create<WatchStore>()(
             ? {
                 watched: s.watched.filter((id) => id !== agentId),
                 open: s.open.filter((id) => id !== agentId),
+                cardFont: omit(s.cardFont, agentId),
               }
             : {
                 watched: [...s.watched, agentId],
                 open: pushOpen(s.open, agentId),
+                cardFont: { ...s.cardFont, [agentId]: s.cardFont[agentId] ?? DEFAULT_CARD_FONT },
               },
         ),
       toggleOpen: (agentId) =>
@@ -68,7 +76,7 @@ export const useWatchStore = create<WatchStore>()(
       cardFont: {},
       setCardFont: (agentId, font) =>
         set((s) => {
-          const { [agentId]: _, ...rest } = s.cardFont;
+          const rest = omit(s.cardFont, agentId);
           if (font === null) return { cardFont: rest };
           const clamped = Math.min(MAX_CARD_FONT, Math.max(MIN_CARD_FONT, font));
           return { cardFont: { ...rest, [agentId]: clamped } };
