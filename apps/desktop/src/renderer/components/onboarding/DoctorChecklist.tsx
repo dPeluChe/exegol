@@ -42,6 +42,15 @@ interface DoctorChecklistProps {
   generatedAt?: number;
   /** Start filtered to warns/fails (Settings > Doctor). Onboarding shows all. */
   defaultOnlyIssues?: boolean;
+  /** Onboarding: CLIs you don't have are options, not problems; they fold into one line */
+  foldMissingClis?: boolean;
+}
+
+/** A CLI that simply is not installed (as opposed to a broken or doubled install) */
+function isMissingCli(check: DoctorCheck): boolean {
+  return (
+    resolveCategory(check) === "agents" && check.status !== "ok" && /not found/i.test(check.detail)
+  );
 }
 
 export function DoctorChecklist({
@@ -51,8 +60,11 @@ export function DoctorChecklist({
   isRefreshing,
   generatedAt,
   defaultOnlyIssues = false,
+  foldMissingClis = false,
 }: DoctorChecklistProps) {
-  const issueCount = checks.filter((c) => c.status !== "ok").length;
+  const missing = foldMissingClis ? checks.filter(isMissingCli) : [];
+  const [showMissing, setShowMissing] = useState(false);
+  const issueCount = checks.filter((c) => c.status !== "ok" && !missing.includes(c)).length;
   // What actually needs review is the warns — default to them when any exist.
   const [onlyIssues, setOnlyIssues] = useState(defaultOnlyIssues);
 
@@ -61,7 +73,8 @@ export function DoctorChecklist({
   }
 
   const showOnlyIssues = onlyIssues && issueCount > 0;
-  const visible = showOnlyIssues ? checks.filter((c) => c.status !== "ok") : checks;
+  const listed = checks.filter((c) => !missing.includes(c));
+  const visible = showOnlyIssues ? listed.filter((c) => c.status !== "ok") : listed;
 
   return (
     <div className="space-y-3">
@@ -112,33 +125,55 @@ export function DoctorChecklist({
               </span>
               <span className="text-[10px] text-text-muted">{group.length}</span>
             </div>
-            {group.map((check) => {
-              const Icon = STATUS_ICON[check.status];
-              return (
-                <div
-                  key={check.id}
-                  className="flex items-start gap-2.5 rounded-md border border-border bg-bg-tertiary px-3 py-2"
+            {group.map((check) => (
+              <CheckRow key={check.id} check={check} />
+            ))}
+            {category === "agents" && missing.length > 0 && (
+              <div className="rounded-md border border-dashed border-border px-3 py-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMissing((v) => !v)}
+                  className="w-full text-left text-[11px] text-text-muted hover:text-text-secondary"
                 >
-                  <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${STATUS_COLOR[check.status]}`} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-text-primary">{check.label}</div>
-                    <div className="text-[11px] text-text-muted">{check.detail}</div>
+                  {showMissing ? "Hide" : "Show"} {missing.length} more CLI
+                  {missing.length === 1 ? "" : "s"} you can install later (optional)
+                </button>
+                {showMissing && (
+                  <div className="mt-2 space-y-1.5">
+                    {missing.map((check) => (
+                      <CheckRow key={check.id} check={check} muted />
+                    ))}
                   </div>
-                  {check.actionUrl && (
-                    <button
-                      type="button"
-                      onClick={() => window.open(check.actionUrl, "_blank")}
-                      className="shrink-0 text-[11px] text-accent hover:underline"
-                    >
-                      Install
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                )}
+              </div>
+            )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function CheckRow({ check, muted }: { check: DoctorCheck; muted?: boolean }) {
+  const Icon = STATUS_ICON[check.status];
+  return (
+    <div className="flex items-start gap-2.5 rounded-md border border-border bg-bg-tertiary px-3 py-2">
+      <Icon
+        className={`mt-0.5 h-4 w-4 shrink-0 ${muted ? "text-text-muted" : STATUS_COLOR[check.status]}`}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-text-primary">{check.label}</div>
+        <div className="text-[11px] text-text-muted">{check.detail}</div>
+      </div>
+      {check.actionUrl && (
+        <button
+          type="button"
+          onClick={() => window.open(check.actionUrl, "_blank")}
+          className="shrink-0 text-[11px] text-accent hover:underline"
+        >
+          Install
+        </button>
+      )}
     </div>
   );
 }
