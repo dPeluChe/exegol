@@ -49,5 +49,8 @@ jobs:
           VERSION="${{ steps.tag.outputs.tag }}"
           DIR="apps/desktop/dist/${VERSION#v}"
           ls -la "$DIR"
-          gh release upload "${{ steps.tag.outputs.tag }}" --repo "${{ github.repository }}" --clobber \
-            "$DIR"/*.AppImage "$DIR"/*.deb "$DIR"/latest-linux.yml
+          # Whatever this version's config builds (an older tag has no .deb target)
+          shopt -s nullglob
+          FILES=("$DIR"/*.AppImage "$DIR"/*.deb "$DIR"/latest-linux.yml)
+          if [ ${#FILES[@]} -eq 0 ]; then echo "No Linux packages were built"; exit 1; fi
+          gh release upload "${{ steps.tag.outputs.tag }}" --repo "${{ github.repository }}" --clobber "${FILES[@]}"
