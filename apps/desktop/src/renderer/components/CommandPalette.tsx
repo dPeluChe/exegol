@@ -17,8 +17,9 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { cleanupAndCloseFocusedPane } from "../hooks/use-hotkeys";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
-import { useAgentStore } from "../stores/agents";
+import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { useTerminalStore } from "../stores/terminals";
 import { getProjectState, useWorkspaceStore } from "../stores/workspace";
@@ -97,7 +98,8 @@ function useCommands(close: () => void): Command[] {
         category: "workspace",
         icon: X,
         shortcut: "⌘W",
-        action: run(() => useWorkspaceStore.getState().closeFocusedPane()),
+        // Same as Cmd+W: the pane's agent is stopped and archived, not left running unseen
+        action: run(cleanupAndCloseFocusedPane),
       },
       {
         id: "ws:split-h",
@@ -142,13 +144,8 @@ function useCommands(close: () => void): Command[] {
           label: `${a.cliType}: ${a.taskDescription || a.id}`,
           category: "agent" as CommandCategory,
           icon: Bot,
-          action: run(() => {
-            const ws = useWorkspaceStore.getState();
-            const pane = Object.values(getProjectState().panes).find(
-              (p) => p.type === "terminal" && p.agentId === a.id,
-            );
-            if (pane) ws.setFocusedPane(pane.id);
-          }),
+          // Any project, any tab (it only looked in the active project's panes)
+          action: run(() => jumpToAgent(a.id, a.projectId)),
         })),
     ];
 

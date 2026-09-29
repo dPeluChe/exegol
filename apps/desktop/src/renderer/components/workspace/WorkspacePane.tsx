@@ -424,6 +424,7 @@ interface WorkspacePaneProps {
 }
 
 export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
+  const { projectId: paneProjectId } = useProjectContext();
   const pane = useWorkspaceStore((s) => selectPanes(s)[paneId]);
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
   const mergeTabIntoSplit = useWorkspaceStore((s) => s.mergeTabIntoSplit);
@@ -567,6 +568,8 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
                     type: "browser",
                     title: "Browser",
                     url: pane.url,
+                    // The floating browser lists the project's agents from it
+                    projectId: paneProjectId ?? undefined,
                   });
                 }
               }

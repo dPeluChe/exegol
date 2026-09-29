@@ -1,7 +1,8 @@
 import { join } from "node:path";
-import { app, BrowserWindow, Menu, nativeImage, Tray } from "electron";
+import { app, Menu, nativeImage, Tray } from "electron";
 import { getDb } from "../db/client";
 import { logger } from "../lib/logger";
+import { mainAppWindow } from "../lib/main-app-window";
 
 let tray: Tray | null = null;
 
@@ -32,7 +33,7 @@ function buildContextMenu(agents: RunningAgent[]): Menu {
           ...agents.map((a) => ({
             label: `${a.cli_type}${a.task_description ? ` — ${a.task_description.slice(0, 40)}` : ""}`,
             click: () => {
-              const win = BrowserWindow.getAllWindows()[0];
+              const win = mainAppWindow();
               if (win) {
                 win.show();
                 win.focus();
@@ -43,14 +44,14 @@ function buildContextMenu(agents: RunningAgent[]): Menu {
         ]
       : [];
 
-  const win = BrowserWindow.getAllWindows()[0];
+  const win = mainAppWindow();
   const isVisible = win?.isVisible() ?? false;
 
   return Menu.buildFromTemplate([
     {
       label: isVisible ? "Hide Exegol" : "Show Exegol",
       click: () => {
-        const w = BrowserWindow.getAllWindows()[0];
+        const w = mainAppWindow();
         if (!w) return;
         if (w.isVisible()) {
           w.hide();
@@ -96,7 +97,7 @@ export function initTray(): void {
     if (process.platform === "darwin") {
       tray?.popUpContextMenu(buildContextMenu(getRunningAgents()));
     } else {
-      const win = BrowserWindow.getAllWindows()[0];
+      const win = mainAppWindow();
       if (win?.isVisible()) {
         win.hide();
       } else {

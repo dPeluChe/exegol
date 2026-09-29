@@ -311,6 +311,10 @@ export function AgentDashboard() {
             </p>
           )}
         </div>
+        {/* Orphaned worktrees are cleaned from here: hiding it with no agents left them stranded */}
+        <div className="w-full max-w-2xl">
+          <WorktreesCard />
+        </div>
       </div>
     );
   }
