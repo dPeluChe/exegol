@@ -3,6 +3,7 @@ import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exego
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
+import { takeLostOnRestart } from "../../agents/lost-sessions";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
@@ -144,6 +145,13 @@ export const agentRouter = router({
 
   /** T156: cross-project non-terminal agents (project name + group color). */
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  /** Sessions a restart took with the sidecar, to resume in their panes (handed out once) */
+  takeLostOnRestart: publicProcedure.query(async ({ ctx }) =>
+    (await takeLostOnRestart())
+      .map((id) => getAgent(ctx.db, id))
+      .filter((a): a is NonNullable<typeof a> => !!a),
+  ),
 
   /** Shell id → provider of an agent CLI typed inside it (`claude` in a plain terminal) */
   detectShellClis: publicProcedure.query(({ ctx }) => detectShellClis(ctx.db)),

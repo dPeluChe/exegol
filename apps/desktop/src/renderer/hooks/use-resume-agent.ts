@@ -1,6 +1,6 @@
 import type { Agent, AgentProvider } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { findAgentPane, toAgentState, useAgentStore } from "../stores/agents";
 import { useTerminalStore } from "../stores/terminals";
@@ -19,6 +19,18 @@ function useResumableCliTypes(): Set<string> {
     () => new Set((providers ?? []).filter((p) => p.capabilities?.supportsResume).map((p) => p.id)),
     [providers],
   );
+}
+
+/** updatePane only reaches the active project: a pane in another project (auto-resume after a
+ *  restart, the Dashboard) kept pointing at the old agent */
+function setPaneAgent(projectId: string, paneId: string, agentId: string): void {
+  useWorkspaceStore.setState((s) => {
+    const pw = s.projectWorkspaces[projectId];
+    const existing = pw?.panes[paneId];
+    if (!pw || !existing) return s;
+    const panes = { ...pw.panes, [paneId]: { ...existing, type: "terminal" as const, agentId } };
+    return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
+  });
 }
 
 export type ResumeSource = Pick<
@@ -58,12 +70,31 @@ export function useResumeAgent() {
       trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
       agents.addAgent(toAgentState(newAgent, { activityLevel: "busy" }));
       useTerminalStore.getState().createTerminal(newAgent.id);
-      if (pane) {
-        useWorkspaceStore.getState().updatePane(pane, { type: "terminal", agentId: newAgent.id });
-      }
+      if (pane) setPaneAgent(agent.projectId, pane, newAgent.id);
     },
     [resumableCliTypes, spawnAgent],
   );
 
   return { resume, pending: spawnAgent.isPending, resumableCliTypes };
+}
+
+/**
+ * After a restart took every session with the sidecar: resume each one into its pane, once,
+ * so the terminals and agents are there again. Waits for the provider list (resume vs re-launch).
+ */
+export function useAutoResumeLost(): void {
+  const { resume, resumableCliTypes } = useResumeAgent();
+  const ran = useRef(false);
+  useEffect(() => {
+    if (ran.current || resumableCliTypes.size === 0) return;
+    ran.current = true;
+    void (async () => {
+      const lost = await trpcInvoke<Agent[]>("agents.takeLostOnRestart").catch(() => []);
+      for (const agent of lost) {
+        const pane = findAgentPane(agent.id, agent.projectId);
+        // Sequential: a burst of CLIs starting at once is what the user just rebooted away from
+        if (pane) await resume(agent, pane.paneId).catch(() => {});
+      }
+    })();
+  }, [resumableCliTypes, resume]);
 }

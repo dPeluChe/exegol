@@ -15,6 +15,7 @@ import { useDeepLink } from "./hooks/use-deeplink";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { usePanelessAgentSweep } from "./hooks/use-paneless-agent-sweep";
+import { useAutoResumeLost } from "./hooks/use-resume-agent";
 import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
@@ -77,6 +78,7 @@ export default function App() {
   useFloatingPaneSync();
   usePanelessAgentSweep();
   useSettingsSync();
+  useAutoResumeLost();
 
   const showSidebar = activeView === "workspace" || activeView === "dashboard";
 

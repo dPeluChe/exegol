@@ -1,3 +1,4 @@
+import { markRecoveryDone, setLostOnRestart } from "../agents/lost-sessions";
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { recoverStaleAgents } from "../db/queries";
@@ -90,6 +91,8 @@ export async function runStartupRecovery(): Promise<void> {
 
   let aliveSessionIds: string[] = [];
   let sidecarConnected = false;
+  /** -1: unknown (old sidecar, or none): never read as "every session was lost" */
+  let sidecarSessionTotal = -1;
   try {
     const sidecarClient = await ensureSidecar();
     getPtyHost().connectToSidecar(sidecarClient);
@@ -104,6 +107,7 @@ export async function runStartupRecovery(): Promise<void> {
   if (sidecarConnected) {
     try {
       const sessionInfo = await getPtyHost().listSidecarSessionsInfo();
+      sidecarSessionTotal = sessionInfo.length;
       aliveSessionIds = sessionInfo.filter((s) => s.alive).map((s) => s.id);
       const deadInfo = sessionInfo.filter((s) => !s.alive);
       logger.info(
@@ -184,6 +188,13 @@ export async function runStartupRecovery(): Promise<void> {
     logger.info(
       `[Startup] Crash sweep: marked ${recovery.crashed} agent(s) as crashed (${recovery.alive} alive)`,
     );
+    // An empty sidecar lost every session at once (restart): bring them back in their panes
+    if (sidecarSessionTotal === 0 && recovery.crashedIds.length > 0) {
+      setLostOnRestart(recovery.crashedIds);
+      logger.info(
+        `[Startup] ${recovery.crashedIds.length} session(s) lost with the sidecar: offered for auto-resume`,
+      );
+    }
 
     // Final snapshot after recovery — verify nothing is stuck
     try {
@@ -200,5 +211,7 @@ export async function runStartupRecovery(): Promise<void> {
     }
   } catch (err) {
     logger.error("[Startup] Agent recovery failed (non-fatal):", err);
+  } finally {
+    markRecoveryDone();
   }
 }

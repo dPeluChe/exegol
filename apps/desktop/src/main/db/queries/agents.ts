@@ -229,7 +229,7 @@ export function listRecentSessions(db: Database.Database, limit = 10): RecentSes
 export function recoverStaleAgents(
   db: Database.Database,
   skipIds?: Set<string>,
-): { crashed: number; alive: number } {
+): { crashed: number; alive: number; crashedIds: string[] } {
   const stale = db
     .prepare(
       "SELECT id, cli_type, status, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')",
@@ -237,6 +237,7 @@ export function recoverStaleAgents(
     .all() as Array<{ id: string; cli_type: string; status: string; pid: number | null }>;
 
   let crashed = 0;
+  const crashedIds: string[] = [];
   const alive = skipIds?.size ?? 0;
   const now = Math.floor(Date.now() / 1000);
 
@@ -257,9 +258,10 @@ export function recoverStaleAgents(
       "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
     ).run(now, agent.id);
     crashed++;
+    crashedIds.push(agent.id);
   }
 
-  return { crashed, alive };
+  return { crashed, alive, crashedIds };
 }
 
 /** T176: hide an ended session from the dashboard. Live agents are refused —
