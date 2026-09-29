@@ -25,6 +25,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Files right-click menu: open with the default app, reveal in Finder, copy path, rename
 
 ### Changed
+- Recent Sessions show the project and a readable task; the Dashboard groups ended sessions by day, collapsed, without the red cards
 - Switching a project's tabs by number is now Cmd+Option+1..9
 - Sidebar: Recent Sessions and Activity join Prompts and Resources at the bottom, so Agents and Projects get the space; each list scrolls on its own with a thin scrollbar
 - Tooltips across the app use Exegol's own style and appear faster, instead of the native macOS ones
