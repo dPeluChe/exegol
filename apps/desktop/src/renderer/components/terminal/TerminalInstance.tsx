@@ -1,42 +1,12 @@
 import { cn } from "@exegol/ui";
-import type { FitAddon } from "@xterm/addon-fit";
-import type { SerializeAddon } from "@xterm/addon-serialize";
-import type { Terminal } from "@xterm/xterm";
-import {
-  type ForwardedRef,
-  forwardRef,
-  useCallback,
-  useEffect,
-  useId,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
-import { useLatest } from "../../hooks/use-latest";
-import { useSettings } from "../../hooks/use-trpc";
-import { fileDragToPaste, hasFileDragData } from "../../lib/file-drag";
-import { useTerminalStore } from "../../stores/terminals";
+import { type ForwardedRef, forwardRef } from "react";
 import { useWorkspaceStore } from "../../stores/workspace";
-import type { DormantPipe } from "./terminal-dormant-wiring";
-import { fitAndSyncSize, fitMirror, setupTerminalSession } from "./terminal-setup";
-import {
-  CANVAS_ONLY_CLI_TYPES,
-  DARK_BLACK_TERMINAL_THEME,
-  DARK_TERMINAL_THEME,
-  LIGHT_TERMINAL_THEME,
-  type TerminalInstanceHandle,
-  type TerminalInstanceProps,
-} from "./terminal-types";
-import { createWebglController, type WebglController } from "./terminal-webgl";
+import type { TerminalInstanceHandle, TerminalInstanceProps } from "./terminal-types";
+import { useTerminalFileDrop } from "./use-terminal-file-drop";
+import { useTerminalHandle } from "./use-terminal-handle";
+import { useXterm } from "./use-xterm";
 
 export type { TerminalInstanceHandle, TerminalInstanceProps } from "./terminal-types";
-
-/** Long enough that scrolling past a pane costs nothing; short enough that a
- *  backgrounded agent stops paying IPC almost immediately. */
-const HIDE_DEBOUNCE_MS = 1_500;
-
-/** Sessions already kicked by this renderer (see the mount kick) */
-const kickedSessions = new Set<string>();
 
 function paneIdForAgentSelector(
   state: ReturnType<typeof useWorkspaceStore.getState>,
@@ -76,377 +46,24 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const paneId = useWorkspaceStore((s) =>
     mirror ? undefined : paneIdForAgentSelector(s, agentId, paneIdProp),
   );
-  const containerRef = useRef<HTMLDivElement>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const serializeAddonRef = useRef<SerializeAddon | null>(null);
-  const webglRef = useRef<WebglController | null>(null);
-  const dormantPipeRef = useRef<DormantPipe | null>(null);
-  const [isVisible, setIsVisible] = useState(true);
-  const refitRef = useRef<() => void>(() => {});
-  const viewId = useId();
-  const reportedVisibleRef = useRef(false);
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  useImperativeHandle(ref, () => ({
-    serialize: () => {
-      const addon = serializeAddonRef.current;
-      const terminal = terminalRef.current;
-      if (!addon || !terminal) return null;
-      try {
-        return addon.serialize({ excludeAltBuffer: true, excludeModes: true });
-      } catch {
-        return null;
-      }
-    },
-    refit: () => {
-      const fit = fitAddonRef.current;
-      const terminal = terminalRef.current;
-      if (!fit || !terminal) return;
-      try {
-        fit.fit();
-        terminal.refresh(0, terminal.rows - 1);
-      } catch {
-        /* container may not be ready */
-      }
-    },
-    scrollToTop: () => terminalRef.current?.scrollToTop(),
-    scrollToBottom: () => terminalRef.current?.scrollToBottom(),
-    getSelection: () => terminalRef.current?.getSelection() ?? "",
-    clear: () => terminalRef.current?.clear(),
-  }));
-
-  const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
-  const setTerminalSize = useTerminalStore((s) => s.setTerminalSize);
-  const setPaneCwd = useWorkspaceStore((s) => s.setPaneCwd);
-  const setPaneLastExit = useWorkspaceStore((s) => s.setPaneLastExit);
-  const { data: settings } = useSettings();
-
-  const fontSize = settings?.terminalFontSize ?? 14;
-  const fontFamily = settings?.terminalFontFamily ?? "Menlo, Monaco, monospace";
-  const theme = settings?.theme ?? "dark";
-  const isLight =
-    theme === "light" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
-  const terminalTheme = isLight
-    ? LIGHT_TERMINAL_THEME
-    : theme === "dark-black"
-      ? DARK_BLACK_TERMINAL_THEME
-      : DARK_TERMINAL_THEME;
-
-  // A card that sizes its session behaves like an owner pane for sizing only;
-  // read through a ref so toggling it never rebuilds the terminal
-  const cardOwnsRef = useLatest(mirror && cardFont !== undefined);
-  const cardFontRef = useLatest(cardFont);
-
-  /** One sizing path: a plain mirror follows the PTY's grid and rescales its
-   *  font; a pane (or a card that sizes its session) fits and tells the PTY. */
-  const sizeTerminal = useCallback(
-    (terminal: Terminal, fit: FitAddon) => {
-      if (mirror && !cardOwnsRef.current) {
-        fitMirror(terminal, fontSize);
-        return;
-      }
-      // A mirror never writes the pane's size into the store
-      const onSize = mirror ? () => {} : (c: number, r: number) => setTerminalSize(agentId, c, r);
-      fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
-    },
-    [agentId, setTerminalSize, readOnly, mirror, fontSize, cardOwnsRef],
-  );
-
-  // Read at call time so a new callback or theme never rebuilds the terminal
-  const sizeTerminalRef = useLatest(sizeTerminal);
-  const themeRef = useLatest(terminalTheme);
-  const cliTypeRef = useLatest(cliType);
-  const scrollRef = useLatest(onScrollPosition);
-  const openFileRef = useLatest(onOpenFileLink);
-  const openUrlRef = useLatest(onOpenUrlInPane);
-
-  const handleResize = useCallback(() => {
-    const fit = fitAddonRef.current;
-    const terminal = terminalRef.current;
-    if (fit && terminal) sizeTerminal(terminal, fit);
-  }, [sizeTerminal]);
-
-  // Rule 4: external system sync — xterm.js setup/teardown, PTY wiring, resize observer
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to a black pane after
-    // a reload; only the app can repaint an alt screen. Once per session per renderer, and main
-    // does the jiggle without telling mirrors
-    const kickAltScreen = () => {
-      const t = terminalRef.current;
-      if (!t || readOnly || mirror || kickedSessions.has(agentId)) return;
-      if (t.buffer.active.type !== "alternate") return;
-      kickedSessions.add(agentId);
-      window.api.terminal.redraw(agentId);
-    };
-
-    const session = setupTerminalSession(container, {
-      agentId,
-      paneId,
-      cliType: cliTypeRef.current,
-      readOnly,
-      liveFeed,
-      mirror,
-      mirrorOwnsSize: () => cardOwnsRef.current,
-      onSnapshotApplied: () => {
-        if (cardOwnsRef.current) requestAnimationFrame(() => refitRef.current());
-        // The alt-screen kick needs the snapshot in the buffer; at startup it waits for the
-        // reattach, so a fixed timer ran before it and never kicked
-        kickAltScreen();
-      },
-      initialContent,
-      fontSize,
-      fontFamily,
-      theme: themeRef.current,
-      onScrollPosition: forward(scrollRef),
-      onOpenFileLink: forward(openFileRef),
-      onOpenUrlInPane: forward(openUrlRef),
-      setPaneCwd,
-      setPaneLastExit,
-    });
-
-    terminalRef.current = session.terminal;
-    fitAddonRef.current = session.fitAddon;
-    serializeAddonRef.current = session.serializeAddon;
-    dormantPipeRef.current = session.dormantPipe;
-
-    if (cardOwnsRef.current && cardFontRef.current) {
-      session.terminal.options.fontSize = cardFontRef.current;
-    }
-    const refit = () => sizeTerminalRef.current(session.terminal, session.fitAddon);
-    refitRef.current = refit;
-
-    // Double-RAF: first frame settles layout, second fits terminal accurately
-    requestAnimationFrame(() => {
-      requestAnimationFrame(refit);
-    });
-
-    const settleTimer = setTimeout(refit, 150);
-
-    const kickTimer = setTimeout(kickAltScreen, 350);
-
-    if (!mirror) setTerminalReady(agentId);
-    onReady?.();
-
-    let mirrorFitTimer: ReturnType<typeof setTimeout> | null = null;
-    let observedBox = "";
-    const resizeObserver = new ResizeObserver(([entry]) => {
-      const width = entry?.contentRect.width ?? -1;
-      if (mirror) {
-        // The card sets both dimensions (the grid never sizes its box), so any
-        // real change is news. A drag changes it every frame; refit once it
-        // stops, since each font step rebuilds the glyph atlas
-        const box = `${Math.round(width)}x${Math.round(entry?.contentRect.height ?? -1)}`;
-        if (box === observedBox) return;
-        observedBox = box;
-        if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
-        mirrorFitTimer = setTimeout(refit, 120);
-        return;
-      }
-      // ResizeObserver already fires at most once per frame
-      refit();
-    });
-    resizeObserver.observe(container);
-
-    return () => {
-      clearTimeout(settleTimer);
-      clearTimeout(kickTimer);
-      if (mirrorFitTimer) clearTimeout(mirrorFitTimer);
-      resizeObserver.disconnect();
-      // WebGL context must be freed before the terminal itself is torn down.
-      webglRef.current?.dispose();
-      webglRef.current = null;
-      // session.dispose() unsubscribes onData/onScroll/OSC handlers + the
-      // dormant ring pipe (T115) before xterm's own teardown runs.
-      session.dispose();
-      // T143 disposal audit: FitAddon/WebLinksAddon/SerializeAddon are not
-      // disposed individually — xterm.js's Terminal.dispose() disposes every
-      // addon still registered via its internal addon manager. Explicit here
-      // so this isn't mistaken for a leak on a future audit.
-      session.terminal.dispose();
-      terminalRef.current = null;
-      fitAddonRef.current = null;
-      serializeAddonRef.current = null;
-      dormantPipeRef.current = null;
-    };
-  }, [
+  const { containerRef, terminalRef, fitAddonRef, serializeAddonRef } = useXterm({
     agentId,
     paneId,
-    setTerminalReady,
-    setPaneCwd,
-    setPaneLastExit,
-    onReady,
-    fontFamily,
-    fontSize,
+    cliType,
     readOnly,
     liveFeed,
     mirror,
+    cardFont,
     initialContent,
-    cliTypeRef,
-    cardOwnsRef,
-    themeRef,
-    scrollRef,
-    openFileRef,
-    openUrlRef,
-    cardFontRef,
-    sizeTerminalRef,
-  ]);
-
-  // A theme change repaints in place: it used to be a mount dependency, so a
-  // toggle tore down every terminal and replayed each PTY's snapshot
-  useEffect(() => {
-    const terminal = terminalRef.current;
-    if (terminal) terminal.options.theme = terminalTheme;
-  }, [terminalTheme]);
-
-  // A card's A-/A+ or its "fit session to card" toggle: new font, then size
-  // again (a sizing card re-fits its grid and tells the PTY; a mirror rescales)
-  useEffect(() => {
-    const terminal = terminalRef.current;
-    if (!terminal || !mirror) return;
-    terminal.options.fontSize = cardFont ?? fontSize;
-    handleResize();
-  }, [cardFont, mirror, fontSize, handleResize]);
-
-  // T38: visibility observer — drives WebGL attach/detach + T115 dormant ring
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry) setIsVisible(entry.isIntersecting);
-      },
-      { threshold: 0.01 },
-    );
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  // Route visibility changes to the dormant pipe so hidden writes get
-  // buffered into the ring and replayed on un-hide (T115).
-  // T178: tell main whether this view can draw, so it stops shipping bytes
-  // across IPC to a pane nobody is looking at. When output was dropped while
-  // hidden, main answers with a snapshot and we repaint from it — resuming
-  // mid-stream would paint onto a screen the app has already moved past.
-  useEffect(() => {
-    // Revealing costs a full serialize in main, so a pane flicking past during
-    // a scroll must not pay for it. Hiding is debounced; showing is immediate,
-    // because a late reveal is a visibly stale terminal.
-    // viewId: main counts views, not windows, so a pane unmounting can't
-    // silence its Dashboard mirror in the same window (T194)
-    if (!isVisible) {
-      const timer = setTimeout(() => {
-        window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
-      }, HIDE_DEBOUNCE_MS);
-      return () => clearTimeout(timer);
-    }
-    // The repaint arrives on terminal:data, in order with live output — this
-    // call only reports. Acquire/release: unmounting while visible must release
-    // too, or the view stays registered and the gate never engages again.
-    // First report of this view: its mount already fetched a snapshot
-    const fresh = !reportedVisibleRef.current;
-    reportedVisibleRef.current = true;
-    window.api.terminal.setVisible(agentId, true, viewId, fresh).catch(() => {});
-    return () => {
-      window.api.terminal.setVisible(agentId, false, viewId).catch(() => {});
-    };
-  }, [agentId, isVisible, viewId]);
-
-  useEffect(() => {
-    dormantPipeRef.current?.setVisible(isVisible);
-  }, [isVisible]);
-
-  useEffect(() => {
-    const terminal = terminalRef.current;
-    if (!terminal) return;
-    // Mirrors draw on canvas: several open at once would eat into Chromium's
-    // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
-    const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
-    if (isVisible && !webglRef.current && !useCanvas) {
-      // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
-      const controller = createWebglController(terminal, () =>
-        window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
-      );
-      controller.attach();
-      webglRef.current = controller;
-    } else if (!isVisible && webglRef.current) {
-      // Debounced like the IPC hide: scrolling past must not tear down and
-      // rebuild a GL context and its glyph atlas every time
-      const timer = setTimeout(() => {
-        webglRef.current?.dispose();
-        webglRef.current = null;
-      }, HIDE_DEBOUNCE_MS);
-      return () => clearTimeout(timer);
-    }
-  }, [isVisible, mirror, cliType, agentId]);
-
-  // T155 (verify session): manual "Refresh Terminal" from the pane menu —
-  // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
-  useEffect(() => {
-    const handleKick = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
-      if (detail?.agentId !== agentId) return;
-      const terminal = terminalRef.current;
-      if (!terminal || mirror) return;
-      try {
-        handleResize();
-        if (!readOnly) window.api.terminal.redraw(agentId);
-        terminal.refresh(0, terminal.rows - 1);
-      } catch {
-        /* not ready */
-      }
-    };
-    window.addEventListener("exegol:kick-terminal", handleKick);
-    return () => window.removeEventListener("exegol:kick-terminal", handleKick);
-  }, [agentId, mirror, readOnly, handleResize]);
-
-  useEffect(() => {
-    const handleWindowResize = () => handleResize();
-    // Also how a pane takes its size back from a card that was sizing the
-    // session (the dashboard hides; the workspace dispatches a refit)
-    const handleRefit = () => {
-      const terminal = terminalRef.current;
-      if (!terminal) return;
-      try {
-        handleResize();
-        terminal.refresh(0, terminal.rows - 1);
-      } catch {
-        /* not ready */
-      }
-    };
-    window.addEventListener("resize", handleWindowResize);
-    window.addEventListener("exegol:refit-terminals", handleRefit);
-    return () => {
-      window.removeEventListener("resize", handleWindowResize);
-      window.removeEventListener("exegol:refit-terminals", handleRefit);
-    };
-  }, [handleResize]);
-
-  // T155: drop a file (from FileExplorer/GitPane) → paste as @path mention
-  const handleDragOver = useCallback(
-    (e: React.DragEvent) => {
-      if (readOnly || !hasFileDragData(e)) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "copy";
-      setIsDragOver(true);
-    },
-    [readOnly],
-  );
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      setIsDragOver(false);
-      if (readOnly) return;
-      const text = fileDragToPaste(e);
-      if (!text) return;
-      e.preventDefault();
-      terminalRef.current?.paste(text);
-      terminalRef.current?.focus();
-    },
-    [readOnly],
+    onReady,
+    onScrollPosition,
+    onOpenFileLink,
+    onOpenUrlInPane,
+  });
+  useTerminalHandle(ref, terminalRef, fitAddonRef, serializeAddonRef);
+  const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useTerminalFileDrop(
+    readOnly,
+    terminalRef,
   );
 
   return (
@@ -460,13 +77,8 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         isDragOver && "ring-2 ring-inset ring-accent/60",
       )}
       onDragOver={handleDragOver}
-      onDragLeave={() => setIsDragOver(false)}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     />
   );
 });
-
-/** A stable forwarder to the ref's current callback; absent when no callback was given */
-function forward<A extends unknown[]>(ref: { current: ((...args: A) => void) | undefined }) {
-  return ref.current ? (...args: A) => ref.current?.(...args) : undefined;
-}

@@ -47,9 +47,15 @@
    read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
-4. **Status for a CLI typed in a terminal**: `detectShellClis` recognizes it (icon only). Next:
-   run the status parser for that shell while a CLI is detected, so running / waiting and Needs
-   attention work too (no hooks: it was not launched by Exegol)
+4. **A CLI typed in a terminal becomes an agent** (any provider in the registry): today
+   `detectShellClis` only swaps the icon and the row stays `cli_type = 'shell'`, so rename, status,
+   attention, resume and scoring are skipped. Migrate the same row: `cli_type` → the provider, a
+   `launched_in_shell` mark (migration-sets), same id / pane / PTY / scrollback. Status comes from
+   the parser (no hooks). CLI exits: the agent ends but the terminal stays usable at the prompt;
+   Restart / resume writes the provider's continue command into that shell; another CLI in the
+   same terminal migrates it again
+8. **Sidebar**: the Projects section cannot be resized to a smaller height; drag to reorder in the
+   Agents section above it does nothing
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.

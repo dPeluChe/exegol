@@ -135,43 +135,12 @@ export function HistorySection() {
 /** Memoized: expanding one row's output must not re-render the whole timeline. */
 const HistoryRow = memo(function HistoryRow({ entry }: { entry: HistoryEntry }) {
   const [showOutput, setShowOutput] = useState(false);
-  const elapsed = formatDuration(entry.startedAt, entry.endedAt);
-  const tokens = entry.inputTokens + entry.outputTokens;
 
   return (
     <div className="rounded-md border border-border bg-bg-secondary px-2.5 py-1.5">
       {/* One line: who, what, how it went, when. The detail line below only
           appears when there is detail — a local session has almost none. */}
-      <div className="flex items-center gap-2">
-        <AgentIcon provider={entry.provider} size={14} />
-        <span className="min-w-0 flex-1 truncate text-[11px] text-text-primary">{entry.label}</span>
-
-        {entry.origin === "local" && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="shrink-0 cursor-help text-[9px] text-text-muted">outside</span>
-            </TooltipTrigger>
-            <TooltipContent side="left">
-              Read from this CLI&apos;s own history — Exegol did not launch it
-            </TooltipContent>
-          </Tooltip>
-        )}
-        {entry.archived && <span className="shrink-0 text-[9px] text-text-muted">archived</span>}
-        {entry.status && (
-          <span
-            className={cn(
-              "shrink-0 rounded px-1 py-px text-[9px]",
-              SEMANTIC_BADGE[statusToSemantic(entry.status)],
-            )}
-          >
-            {entry.status}
-          </span>
-        )}
-        {entry.score !== null && <ScoreExplainer score={entry.score} />}
-        <span className="shrink-0 text-[10px] tabular-nums text-text-muted">
-          {formatTimeAgo(entry.endedAt ?? entry.startedAt)}
-        </span>
-      </div>
+      <HistoryRowSummary entry={entry} />
 
       {/* The task only earns a line when it says something the label does not —
           for an Exegol session the label is usually the codename. */}
@@ -179,45 +148,99 @@ const HistoryRow = memo(function HistoryRow({ entry }: { entry: HistoryEntry }) 
         <p className="truncate text-[10px] text-text-muted">{entry.task}</p>
       )}
 
-      <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-[10px] text-text-muted">
-        {elapsed && <span title="From first activity to last">{elapsed}</span>}
-        {tokens > 0 && (
-          <span>
-            {formatTokens(tokens)}
-            {entry.costUsd > 0 && ` · ${formatCost(entry.costUsd)}`}
-          </span>
-        )}
-        {entry.branch && (
-          <span className="flex items-center gap-0.5">
-            <GitBranch className="h-2.5 w-2.5" />
-            {entry.branch}
-          </span>
-        )}
-        {entry.oplogEntries > 0 && <span>{entry.oplogEntries} ops</span>}
-        {/* A local row has no score and no token count; the transcript size is
-            the only signal of how much happened in it. */}
-        {entry.origin === "local" && entry.sizeBytes > 0 && (
-          <span title="Transcript size on disk">
-            {(entry.sizeBytes / 1024 / 1024).toFixed(1)} MB
-          </span>
-        )}
-        {entry.version && <span title="CLI version that ran it">v{entry.version}</span>}
-        {entry.hasFinalOutput && (
-          <button
-            type="button"
-            onClick={() => setShowOutput((v) => !v)}
-            className="flex items-center gap-0.5 rounded px-1 hover:bg-white/10 hover:text-text-primary"
-          >
-            <Terminal className="h-2.5 w-2.5" />
-            {showOutput ? "hide output" : "output"}
-          </button>
-        )}
-      </div>
+      <HistoryRowDetails
+        entry={entry}
+        showOutput={showOutput}
+        onToggleOutput={() => setShowOutput((v) => !v)}
+      />
 
       {showOutput && <FinalOutput agentId={entry.id} />}
     </div>
   );
 });
+
+function HistoryRowSummary({ entry }: { entry: HistoryEntry }) {
+  return (
+    <div className="flex items-center gap-2">
+      <AgentIcon provider={entry.provider} size={14} />
+      <span className="min-w-0 flex-1 truncate text-[11px] text-text-primary">{entry.label}</span>
+
+      {entry.origin === "local" && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="shrink-0 cursor-help text-[9px] text-text-muted">outside</span>
+          </TooltipTrigger>
+          <TooltipContent side="left">
+            Read from this CLI&apos;s own history — Exegol did not launch it
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {entry.archived && <span className="shrink-0 text-[9px] text-text-muted">archived</span>}
+      {entry.status && (
+        <span
+          className={cn(
+            "shrink-0 rounded px-1 py-px text-[9px]",
+            SEMANTIC_BADGE[statusToSemantic(entry.status)],
+          )}
+        >
+          {entry.status}
+        </span>
+      )}
+      {entry.score !== null && <ScoreExplainer score={entry.score} />}
+      <span className="shrink-0 text-[10px] tabular-nums text-text-muted">
+        {formatTimeAgo(entry.endedAt ?? entry.startedAt)}
+      </span>
+    </div>
+  );
+}
+
+function HistoryRowDetails({
+  entry,
+  showOutput,
+  onToggleOutput,
+}: {
+  entry: HistoryEntry;
+  showOutput: boolean;
+  onToggleOutput: () => void;
+}) {
+  const elapsed = formatDuration(entry.startedAt, entry.endedAt);
+  const tokens = entry.inputTokens + entry.outputTokens;
+
+  return (
+    <div className="mt-0.5 flex flex-wrap items-center gap-x-2.5 text-[10px] text-text-muted">
+      {elapsed && <span title="From first activity to last">{elapsed}</span>}
+      {tokens > 0 && (
+        <span>
+          {formatTokens(tokens)}
+          {entry.costUsd > 0 && ` · ${formatCost(entry.costUsd)}`}
+        </span>
+      )}
+      {entry.branch && (
+        <span className="flex items-center gap-0.5">
+          <GitBranch className="h-2.5 w-2.5" />
+          {entry.branch}
+        </span>
+      )}
+      {entry.oplogEntries > 0 && <span>{entry.oplogEntries} ops</span>}
+      {/* A local row has no score and no token count; the transcript size is
+          the only signal of how much happened in it. */}
+      {entry.origin === "local" && entry.sizeBytes > 0 && (
+        <span title="Transcript size on disk">{(entry.sizeBytes / 1024 / 1024).toFixed(1)} MB</span>
+      )}
+      {entry.version && <span title="CLI version that ran it">v{entry.version}</span>}
+      {entry.hasFinalOutput && (
+        <button
+          type="button"
+          onClick={onToggleOutput}
+          className="flex items-center gap-0.5 rounded px-1 hover:bg-white/10 hover:text-text-primary"
+        >
+          <Terminal className="h-2.5 w-2.5" />
+          {showOutput ? "hide output" : "output"}
+        </button>
+      )}
+    </div>
+  );
+}
 
 /** The tail of what the session last said — a score with no output is a number
  *  nobody can check. */

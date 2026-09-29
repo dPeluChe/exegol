@@ -27,6 +27,61 @@ function usePdfUrl(file: FileContent | undefined): string | null {
   return url;
 }
 
+type EditBase = { content: string; mtimeMs?: number };
+
+/** The unsaved edit of one file, its save, and the changed-on-disk conflict */
+function useFileDraft(path: string, onDirtyChange?: (dirty: boolean) => void) {
+  const writeFile = useWriteFile();
+  const [draft, setDraft] = useState<string | null>(null);
+  // What the edit started from: the file query refetches on its own, so without
+  // this an agent's change on disk would be overwritten without a word
+  const baseRef = useRef<EditBase | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const dirty = draft !== null && draft !== baseRef.current?.content;
+
+  // Every draft change goes through here, so the explorer hears it from the same event
+  const updateDraft = (next: string | null) => {
+    setDraft(next);
+    onDirtyChange?.(next !== null && next !== baseRef.current?.content);
+  };
+
+  const edit = (value: string, base: EditBase) => {
+    baseRef.current ??= base;
+    updateDraft(value);
+  };
+
+  const save = async (force = false) => {
+    if (!dirty || draft === null || writeFile.isPending) return;
+    try {
+      await writeFile.mutateAsync({
+        path,
+        content: draft,
+        expectedMtimeMs: force ? undefined : baseRef.current?.mtimeMs,
+      });
+      baseRef.current = null;
+      updateDraft(null);
+    } catch (err) {
+      // Main checks the mtime; the error code does not survive IPC, the message does
+      if (String(err).includes("changed on disk")) setConflict(true);
+    }
+  };
+  const saveError =
+    writeFile.error && !String(writeFile.error).includes("changed on disk")
+      ? writeFile.error.message
+      : null;
+
+  return {
+    draft,
+    dirty,
+    edit,
+    save,
+    saveError,
+    saving: writeFile.isPending,
+    conflict,
+    setConflict,
+  };
+}
+
 /**
  * The file viewer next to the tree. Images and PDFs render as themselves (they
  * used to open as mojibake in Monaco); other binaries and very large files
@@ -51,98 +106,10 @@ export function FilePreview({
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const pdfUrl = usePdfUrl(file);
-  const writeFile = useWriteFile();
-  const [draft, setDraft] = useState<string | null>(null);
-  // What the edit started from: the file query refetches on its own, so without
-  // this an agent's change on disk would be overwritten without a word
-  const baseRef = useRef<{ content: string; mtimeMs?: number } | null>(null);
-  const [conflict, setConflict] = useState(false);
-  const dirty = draft !== null && draft !== baseRef.current?.content;
-
-  // Every draft change goes through here, so the explorer hears it from the same event
-  const updateDraft = (next: string | null) => {
-    setDraft(next);
-    onDirtyChange?.(next !== null && next !== baseRef.current?.content);
-  };
-
-  const save = async (force = false) => {
-    if (!dirty || draft === null || writeFile.isPending) return;
-    try {
-      await writeFile.mutateAsync({
-        path,
-        content: draft,
-        expectedMtimeMs: force ? undefined : baseRef.current?.mtimeMs,
-      });
-      baseRef.current = null;
-      updateDraft(null);
-    } catch (err) {
-      // Main checks the mtime; the error code does not survive IPC, the message does
-      if (String(err).includes("changed on disk")) setConflict(true);
-    }
-  };
-  const saveError =
-    writeFile.error && !String(writeFile.error).includes("changed on disk")
-      ? writeFile.error.message
-      : null;
-
-  const action =
-    "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
-
-  let body: React.ReactNode;
-  if (error) {
-    body = (
-      <Message>
-        Cannot open this file: {error instanceof Error ? error.message : String(error)}
-      </Message>
-    );
-  } else if (!file) {
-    body = <Message>Loading...</Message>;
-  } else if (file.kind === "image" && file.base64) {
-    body = (
-      <div className="flex h-full items-center justify-center overflow-auto bg-[repeating-conic-gradient(#ffffff08_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] p-4">
-        <img
-          src={`data:${file.mime};base64,${file.base64}`}
-          alt={path}
-          className="max-h-full max-w-full object-contain"
-        />
-      </div>
-    );
-  } else if (file.kind === "pdf" && pdfUrl) {
-    // No `sandbox`: Chromium blocks its PDF viewer in a sandboxed frame (ERR_BLOCKED_BY_CLIENT,
-    // checked on Electron 41). The viewer runs out of process, with no access to the app
-    body = <iframe src={pdfUrl} title={path} className="h-full w-full border-0 bg-white" />;
-  } else if (file.kind === "text") {
-    body = (
-      <Suspense fallback={<Message>Loading editor...</Message>}>
-        <CodeViewer
-          key={path}
-          content={draft ?? file.content}
-          fileName={path}
-          revealLine={revealLine}
-          onChange={(value) => {
-            baseRef.current ??= { content: file.content, mtimeMs: file.mtimeMs };
-            updateDraft(value);
-          }}
-          onSave={save}
-        />
-      </Suspense>
-    );
-  } else {
-    body = (
-      <Message>
-        {file.kind === "too-large"
-          ? `Too large to preview (${formatBytes(file.size)}).`
-          : "Binary file, no preview."}
-        <button
-          type="button"
-          onClick={() => openExternal(path)}
-          className="mt-2 text-accent hover:underline"
-        >
-          Open with its default app
-        </button>
-      </Message>
-    );
-  }
+  const { draft, dirty, edit, save, saveError, saving, conflict, setConflict } = useFileDraft(
+    path,
+    onDirtyChange,
+  );
 
   return (
     // Esc only from inside the viewer: a window listener closed it while typing in a terminal
@@ -153,51 +120,26 @@ export function FilePreview({
         if (e.key === "Escape") onClose();
       }}
     >
-      {/* Actions on the LEFT: the pane's own hover buttons sit top-right and covered "Close" */}
-      <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-bg-secondary px-2">
-        <button type="button" onClick={onClose} className={action} title="Close (Esc)">
-          <X className="h-3 w-3" />
-        </button>
-        <span className="min-w-0 truncate text-[10px] text-text-secondary" title={path}>
-          {path.split("/").pop()}
-        </span>
-        {dirty && (
-          <>
-            <span className="shrink-0 text-[9px] text-amber-400" title="Unsaved changes">
-              ● modified
-            </span>
-            <button
-              type="button"
-              onClick={() => save()}
-              disabled={writeFile.isPending}
-              className="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent hover:bg-accent/30 disabled:opacity-50"
-              title="Save (Cmd+S)"
-            >
-              {writeFile.isPending ? "Saving..." : "Save"}
-            </button>
-          </>
-        )}
-        {saveError && <span className="min-w-0 truncate text-[9px] text-red-400">{saveError}</span>}
-        <button
-          type="button"
-          onClick={() => openExternal(path)}
-          className={action}
-          title="Open with its default app"
-        >
-          <ExternalLink className="h-3 w-3" />
-          Open
-        </button>
-        <button
-          type="button"
-          onClick={() => reveal(path)}
-          className={action}
-          title="Reveal in Finder"
-        >
-          <FolderSearch className="h-3 w-3" />
-          Finder
-        </button>
+      <FilePreviewToolbar
+        path={path}
+        dirty={dirty}
+        saving={saving}
+        saveError={saveError}
+        onClose={onClose}
+        onSave={() => save()}
+      />
+      <div className="min-h-0 flex-1 overflow-auto">
+        <FileBody
+          path={path}
+          file={file}
+          error={error}
+          pdfUrl={pdfUrl}
+          draft={draft}
+          revealLine={revealLine}
+          onEdit={edit}
+          onSave={save}
+        />
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">{body}</div>
       <ConfirmDialog
         open={conflict}
         onOpenChange={setConflict}
@@ -208,6 +150,145 @@ export function FilePreview({
         onConfirm={() => save(true)}
       />
     </div>
+  );
+}
+
+const action =
+  "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
+
+function FilePreviewToolbar({
+  path,
+  dirty,
+  saving,
+  saveError,
+  onClose,
+  onSave,
+}: {
+  path: string;
+  dirty: boolean;
+  saving: boolean;
+  saveError: string | null;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  return (
+    // Actions on the LEFT: the pane's own hover buttons sit top-right and covered "Close"
+    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-bg-secondary px-2">
+      <button type="button" onClick={onClose} className={action} title="Close (Esc)">
+        <X className="h-3 w-3" />
+      </button>
+      <span className="min-w-0 truncate text-[10px] text-text-secondary" title={path}>
+        {path.split("/").pop()}
+      </span>
+      {dirty && (
+        <>
+          <span className="shrink-0 text-[9px] text-amber-400" title="Unsaved changes">
+            ● modified
+          </span>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={saving}
+            className="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent hover:bg-accent/30 disabled:opacity-50"
+            title="Save (Cmd+S)"
+          >
+            {saving ? "Saving..." : "Save"}
+          </button>
+        </>
+      )}
+      {saveError && <span className="min-w-0 truncate text-[9px] text-red-400">{saveError}</span>}
+      <button
+        type="button"
+        onClick={() => openExternal(path)}
+        className={action}
+        title="Open with its default app"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Open
+      </button>
+      <button
+        type="button"
+        onClick={() => reveal(path)}
+        className={action}
+        title="Reveal in Finder"
+      >
+        <FolderSearch className="h-3 w-3" />
+        Finder
+      </button>
+    </div>
+  );
+}
+
+function FileBody({
+  path,
+  file,
+  error,
+  pdfUrl,
+  draft,
+  revealLine,
+  onEdit,
+  onSave,
+}: {
+  path: string;
+  file: FileContent | undefined;
+  error: unknown;
+  pdfUrl: string | null;
+  draft: string | null;
+  revealLine?: number;
+  onEdit: (value: string, base: EditBase) => void;
+  onSave: () => void;
+}) {
+  if (error) {
+    return (
+      <Message>
+        Cannot open this file: {error instanceof Error ? error.message : String(error)}
+      </Message>
+    );
+  }
+  if (!file) return <Message>Loading...</Message>;
+  if (file.kind === "image" && file.base64) {
+    return (
+      <div className="flex h-full items-center justify-center overflow-auto bg-[repeating-conic-gradient(#ffffff08_0%_25%,transparent_0%_50%)] bg-[length:16px_16px] p-4">
+        <img
+          src={`data:${file.mime};base64,${file.base64}`}
+          alt={path}
+          className="max-h-full max-w-full object-contain"
+        />
+      </div>
+    );
+  }
+  if (file.kind === "pdf" && pdfUrl) {
+    // No `sandbox`: Chromium blocks its PDF viewer in a sandboxed frame (ERR_BLOCKED_BY_CLIENT,
+    // checked on Electron 41). The viewer runs out of process, with no access to the app
+    return <iframe src={pdfUrl} title={path} className="h-full w-full border-0 bg-white" />;
+  }
+  if (file.kind === "text") {
+    return (
+      <Suspense fallback={<Message>Loading editor...</Message>}>
+        <CodeViewer
+          key={path}
+          content={draft ?? file.content}
+          fileName={path}
+          revealLine={revealLine}
+          onChange={(value) => onEdit(value, { content: file.content, mtimeMs: file.mtimeMs })}
+          onSave={onSave}
+        />
+      </Suspense>
+    );
+  }
+  return (
+    <Message>
+      {file.kind === "too-large"
+        ? `Too large to preview (${formatBytes(file.size)}).`
+        : "Binary file, no preview."}
+      <button
+        type="button"
+        onClick={() => openExternal(path)}
+        className="mt-2 text-accent hover:underline"
+      >
+        Open with its default app
+      </button>
+    </Message>
   );
 }
 

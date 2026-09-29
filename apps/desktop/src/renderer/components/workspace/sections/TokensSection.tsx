@@ -141,8 +141,7 @@ function ModelBreakdownTable({ projectId, days }: { projectId: string; days: num
             </div>
             {price && (
               <p className="text-[10px] text-text-muted">
-                ${(price.input * 1e6).toFixed(2)}/M in \u00b7 ${(price.output * 1e6).toFixed(2)}/M
-                out
+                ${(price.input * 1e6).toFixed(2)}/M in · ${(price.output * 1e6).toFixed(2)}/M out
               </p>
             )}
           </div>

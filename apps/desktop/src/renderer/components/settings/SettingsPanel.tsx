@@ -11,8 +11,7 @@ import {
   Stethoscope,
   Terminal,
 } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
-import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
+import { type ReactNode, useState } from "react";
 import { ApiKeysSettings } from "./ApiKeysSettings";
 import { CliSettings } from "./CliSettings";
 import { DoctorSettings } from "./DoctorSettings";
@@ -20,6 +19,7 @@ import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { McpServerSettings } from "./McpServerSettings";
 import { TerminalSettings } from "./TerminalSettings";
+import { useSettingsForm } from "./use-settings-form";
 
 export type SettingsTab =
   | "general"
@@ -40,6 +40,21 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "doctor", label: "Doctor", icon: Stethoscope },
 ];
 
+interface TabContentProps {
+  settings: Settings;
+  onChange: (updates: Partial<Settings>) => void;
+}
+
+const TAB_CONTENT: Record<SettingsTab, (props: TabContentProps) => ReactNode> = {
+  general: (props) => <GeneralSettings {...props} />,
+  clis: () => <CliSettings />,
+  terminal: (props) => <TerminalSettings {...props} />,
+  shortcuts: () => <KeyboardShortcuts />,
+  apikeys: () => <ApiKeysSettings />,
+  mcp: () => <McpServerSettings />,
+  doctor: () => <DoctorSettings />,
+};
+
 export interface SettingsPanelProps {
   /** Initial tab selection (used by the standalone settings window for deep-links). */
   initialTab?: SettingsTab;
@@ -50,26 +65,7 @@ export interface SettingsPanelProps {
 export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? "general");
 
-  const { data: settings, isLoading } = useSettings();
-  const updateSettings = useUpdateSettings();
-
-  // ── Auto-save feedback indicator ──────────────────────────────────────
-  const [showSaved, setShowSaved] = useState(false);
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
-
-  const flashSaved = useCallback(() => {
-    setShowSaved(true);
-    clearTimeout(savedTimerRef.current);
-    savedTimerRef.current = setTimeout(() => setShowSaved(false), 1500);
-  }, []);
-
-  // Derive initial form state from settings (Rule 1: derive, don't sync)
-  const [form, setForm] = useState<Settings | null>(() => settings ?? null);
-
-  // If settings loaded after initial render (async), initialize form from it
-  if (settings && !form) {
-    setForm(settings);
-  }
+  const { form, isLoading, updateField, showSaved, saveError } = useSettingsForm();
 
   if (isLoading || !form) {
     return (
@@ -78,26 +74,6 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
       </div>
     );
   }
-
-  // Auto-save on every change (General + Terminal tabs)
-  const updateField = (updates: Partial<Settings>) => {
-    setForm((prev) => (prev ? { ...prev, ...updates } : prev));
-    // Send only the changed fields: the whole form is a mount-time snapshot and
-    // would revert settings saved elsewhere (MCP verbose, notification mutes)
-    updateSettings.mutate(updates, {
-      onSuccess: () => flashSaved(),
-      onError: (err) => {
-        console.error("[Settings] Auto-save failed:", err);
-        // Refused (e.g. a hotkey another app owns): the fields go back to what is saved
-        if (settings) {
-          const saved = Object.fromEntries(
-            Object.keys(updates).map((k) => [k, settings[k as keyof Settings]]),
-          ) as Partial<Settings>;
-          setForm((prev) => (prev ? { ...prev, ...saved } : prev));
-        }
-      },
-    });
-  };
 
   return (
     <div className="flex h-full flex-col bg-bg-primary">
@@ -122,46 +98,46 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
 
       {/* Body: vertical tabs on left + content on right */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Tab nav */}
-        <nav className="flex w-48 shrink-0 flex-col gap-0.5 border-r border-border bg-bg-secondary p-2">
-          {TABS.map((tab) => (
-            <button
-              type="button"
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
-                activeTab === tab.id
-                  ? "bg-white/10 text-text-primary"
-                  : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
-              )}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <SettingsNav activeTab={activeTab} onSelect={setActiveTab} />
 
         {/* Tab content */}
         <div className="flex-1 overflow-auto p-6">
-          {activeTab === "general" && <GeneralSettings settings={form} onChange={updateField} />}
-          {activeTab === "clis" && <CliSettings />}
-          {activeTab === "terminal" && <TerminalSettings settings={form} onChange={updateField} />}
-          {activeTab === "shortcuts" && <KeyboardShortcuts />}
-          {activeTab === "apikeys" && <ApiKeysSettings />}
-          {activeTab === "mcp" && <McpServerSettings />}
-          {activeTab === "doctor" && <DoctorSettings />}
+          {TAB_CONTENT[activeTab]({ settings: form, onChange: updateField })}
 
-          {updateSettings.isError && (
-            <p className="mt-4 text-xs text-error">
-              Failed to save:{" "}
-              {updateSettings.error instanceof Error
-                ? updateSettings.error.message
-                : "Unknown error"}
-            </p>
+          {saveError !== null && (
+            <p className="mt-4 text-xs text-error">Failed to save: {saveError}</p>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function SettingsNav({
+  activeTab,
+  onSelect,
+}: {
+  activeTab: SettingsTab;
+  onSelect: (tab: SettingsTab) => void;
+}) {
+  return (
+    <nav className="flex w-48 shrink-0 flex-col gap-0.5 border-r border-border bg-bg-secondary p-2">
+      {TABS.map((tab) => (
+        <button
+          type="button"
+          key={tab.id}
+          onClick={() => onSelect(tab.id)}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+            activeTab === tab.id
+              ? "bg-white/10 text-text-primary"
+              : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
+          )}
+        >
+          <tab.icon className="h-4 w-4" />
+          {tab.label}
+        </button>
+      ))}
+    </nav>
   );
 }

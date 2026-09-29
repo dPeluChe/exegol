@@ -19,4 +19,10 @@ export const PRIORITY_COLORS: Record<string, string> = {
   low: "border-l-blue-500",
 };
 
+export const PRIORITY_BADGE_COLORS: Record<string, string> = {
+  high: "bg-red-500/10 text-red-400",
+  medium: "bg-yellow-500/10 text-yellow-400",
+  low: "bg-blue-500/10 text-blue-400",
+};
+
 export const CORE_COLUMNS: TaskColumn[] = ["backlog", "todo", "in-progress", "validated", "done"];

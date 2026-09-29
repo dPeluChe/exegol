@@ -1,22 +1,13 @@
-import type { MetricsSnapshot } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Cpu, FolderGit2, GitBranch, HardDrive, MemoryStick, Server } from "lucide-react";
-import { useMemo, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
-import { useMountEffect } from "../../../hooks/use-mount-effect";
-import {
-  type SidecarSessionMemory,
-  useAgents,
-  useMetricsHistory,
-  useProjectMetrics,
-  useSidecarMemory,
-  useSystemMetrics,
-} from "../../../hooks/use-trpc";
+import { type ProjectMetrics, useProjectMetrics } from "../../../hooks/use-trpc";
 import { EmptyState } from "../../common";
 import { AgentProcessTable } from "./AgentProcessTable";
 import { DevServersCard } from "./DevServersCard";
 import { PtyMemoryCard } from "./PtyMemoryCard";
 import { formatBytes, formatUptime, thresholdBarColor, thresholdColor } from "./resource-format";
+import { useAgentResourceMaps, useLiveSystemMetrics } from "./use-resource-metrics";
 
 // ─── Sparkline (inline SVG) ─────────────────────────────────────────────────
 
@@ -132,73 +123,19 @@ function MetricCard({
 
 export function ResourcesSection() {
   const { project, agents } = useProjectContext();
-  const { data: systemMetrics } = useSystemMetrics();
-  const { data: historyData } = useMetricsHistory();
-  const { data: dbAgents } = useAgents(project?.id ?? null);
-  const { data: sidecarMemory } = useSidecarMemory();
+  const { metrics, cpuHistory, memHistory } = useLiveSystemMetrics();
 
   const { data: projectMetrics, isLoading: projectLoading } = useProjectMetrics(
     project?.id ?? null,
     project?.path ?? null,
     project?.name ?? null,
   );
-
-  // Live metrics from push events (T17)
-  const [liveMetrics, setLiveMetrics] = useState<SystemMetricsEvent | null>(null);
-  const [liveHistory, setLiveHistory] = useState<MetricsSnapshot[]>([]);
-
-  // External system sync: IPC push events for live metrics (Rule 4)
-  useMountEffect(() => {
-    const cleanup = window.api.onMetrics((m) => {
-      setLiveMetrics(m);
-      // Append to local history for sparklines between tRPC refreshes
-      setLiveHistory((prev) => [
-        ...prev.slice(-29),
-        {
-          cpu: m.cpu.usage,
-          memoryPercent: m.memory.usagePercent,
-          diskPercent: m.disk.usagePercent,
-          timestamp: Date.now(),
-        },
-      ]);
-    });
-    return cleanup;
-  });
-
-  // Merge: prefer pushed live metrics, fall back to tRPC query
-  const metrics = liveMetrics ?? systemMetrics;
-  const history = useMemo(
-    () => (liveHistory.length > 1 ? liveHistory : (historyData ?? [])),
-    [liveHistory, historyData],
+  const { agentProcessMap, ptyMemoryMap } = useAgentResourceMaps(
+    project?.id ?? null,
+    projectMetrics?.agentProcesses,
   );
 
-  const cpuHistory = useMemo(() => history.map((h) => h.cpu), [history]);
-  const memHistory = useMemo(() => history.map((h) => h.memoryPercent), [history]);
-
   const runningAgents = agents.filter((a) => a.status === "running" || a.status === "spawning");
-
-  // Map agent IDs to their process metrics via PID
-  const agentProcessMap = useMemo(() => {
-    const map = new Map<string, { cpu: number; memory: number }>();
-    if (!dbAgents || !projectMetrics?.agentProcesses) return map;
-    const byPid = new Map(projectMetrics.agentProcesses.map((p) => [p.pid, p]));
-    for (const dbAgent of dbAgents) {
-      if (!dbAgent.pid) continue;
-      const proc = byPid.get(dbAgent.pid);
-      if (proc) {
-        map.set(dbAgent.id, { cpu: proc.cpu, memory: proc.memory });
-      }
-    }
-    return map;
-  }, [dbAgents, projectMetrics?.agentProcesses]);
-
-  // T143: sidecar ring buffer memory per session, keyed by agent id (PTY
-  // sessions are keyed by agent.id — see AgentManager.createSession call site)
-  const ptyMemoryMap = useMemo(() => {
-    const map = new Map<string, SidecarSessionMemory>();
-    for (const s of sidecarMemory?.sessions ?? []) map.set(s.id, s);
-    return map;
-  }, [sidecarMemory]);
 
   if (!project) {
     return (
@@ -211,94 +148,14 @@ export function ResourcesSection() {
     );
   }
 
-  const cpu = metrics?.cpu ?? { usage: 0, cores: 0, model: "Unknown" };
-  const mem = metrics?.memory ?? { total: 0, used: 0, free: 0, usagePercent: 0 };
-  const disk = metrics?.disk ?? { total: 0, used: 0, free: 0, usagePercent: 0 };
-
   return (
     <div className="h-full overflow-auto p-6">
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-text-primary">System Resources</h3>
-            <p className="mt-0.5 text-xs text-text-muted">
-              {cpu.model} \u00b7 {cpu.cores} cores \u00b7 uptime{" "}
-              {formatUptime(metrics?.uptime ?? 0)}
-            </p>
-          </div>
-          <div className="flex items-center gap-1 text-[10px] text-text-muted">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-            Live
-          </div>
-        </div>
-
-        {/* System metrics grid */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <MetricCard
-            icon={Cpu}
-            label="CPU"
-            value={`${cpu.usage.toFixed(1)}%`}
-            percent={cpu.usage}
-            detail={`${cpu.cores} cores`}
-            sparkData={cpuHistory}
-          />
-          <MetricCard
-            icon={MemoryStick}
-            label="Memory"
-            value={`${formatBytes(mem.used)} / ${formatBytes(mem.total)}`}
-            percent={mem.usagePercent}
-            detail={`${formatBytes(mem.free)} available`}
-            sparkData={memHistory}
-          />
-          <MetricCard
-            icon={HardDrive}
-            label="Disk"
-            value={`${formatBytes(disk.used)} / ${formatBytes(disk.total)}`}
-            percent={disk.usagePercent}
-            detail={`${formatBytes(disk.free)} free`}
-          />
-          <PtyMemoryCard />
-        </div>
+        <SystemMetricsPanel metrics={metrics} cpuHistory={cpuHistory} memHistory={memHistory} />
 
         <DevServersCard />
 
-        {/* Project stats */}
-        <div>
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Project: {project.name}
-          </h4>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-bg-secondary p-4">
-              <div className="flex items-center gap-2 text-text-muted">
-                <Server className="h-4 w-4" />
-                <span className="text-xs font-medium">Disk Usage</span>
-              </div>
-              <p className="mt-1 text-xl font-bold text-text-primary">
-                {projectLoading ? "..." : formatBytes(projectMetrics?.diskUsage ?? 0)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-bg-secondary p-4">
-              <div className="flex items-center gap-2 text-text-muted">
-                <GitBranch className="h-4 w-4" />
-                <span className="text-xs font-medium">Worktrees</span>
-              </div>
-              <p className="mt-1 text-xl font-bold text-text-primary">
-                {projectLoading ? "..." : String(projectMetrics?.worktreeCount ?? 1)}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-bg-secondary p-4">
-              <div className="flex items-center gap-2 text-text-muted">
-                <FolderGit2 className="h-4 w-4" />
-                <span className="text-xs font-medium">Branch</span>
-              </div>
-              <p className="mt-1 text-xl font-bold text-text-primary">{project.defaultBranch}</p>
-              <p className="mt-0.5 text-[10px] text-text-muted">
-                {project.gitRemote ?? "No remote"}
-              </p>
-            </div>
-          </div>
-        </div>
+        <ProjectStats project={project} projectMetrics={projectMetrics} loading={projectLoading} />
 
         {/* Per-agent process table */}
         <div>
@@ -310,6 +167,112 @@ export function ResourcesSection() {
             agentProcessMap={agentProcessMap}
             ptyMemoryMap={ptyMemoryMap}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SystemMetricsPanel({
+  metrics,
+  cpuHistory,
+  memHistory,
+}: {
+  metrics: ReturnType<typeof useLiveSystemMetrics>["metrics"];
+  cpuHistory: number[];
+  memHistory: number[];
+}) {
+  const cpu = metrics?.cpu ?? { usage: 0, cores: 0, model: "Unknown" };
+  const mem = metrics?.memory ?? { total: 0, used: 0, free: 0, usagePercent: 0 };
+  const disk = metrics?.disk ?? { total: 0, used: 0, free: 0, usagePercent: 0 };
+
+  return (
+    <>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-text-primary">System Resources</h3>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {cpu.model} · {cpu.cores} cores · uptime {formatUptime(metrics?.uptime ?? 0)}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 text-[10px] text-text-muted">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+          Live
+        </div>
+      </div>
+
+      {/* System metrics grid */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <MetricCard
+          icon={Cpu}
+          label="CPU"
+          value={`${cpu.usage.toFixed(1)}%`}
+          percent={cpu.usage}
+          detail={`${cpu.cores} cores`}
+          sparkData={cpuHistory}
+        />
+        <MetricCard
+          icon={MemoryStick}
+          label="Memory"
+          value={`${formatBytes(mem.used)} / ${formatBytes(mem.total)}`}
+          percent={mem.usagePercent}
+          detail={`${formatBytes(mem.free)} available`}
+          sparkData={memHistory}
+        />
+        <MetricCard
+          icon={HardDrive}
+          label="Disk"
+          value={`${formatBytes(disk.used)} / ${formatBytes(disk.total)}`}
+          percent={disk.usagePercent}
+          detail={`${formatBytes(disk.free)} free`}
+        />
+        <PtyMemoryCard />
+      </div>
+    </>
+  );
+}
+
+function ProjectStats({
+  project,
+  projectMetrics,
+  loading,
+}: {
+  project: NonNullable<ReturnType<typeof useProjectContext>["project"]>;
+  projectMetrics: ProjectMetrics | undefined;
+  loading: boolean;
+}) {
+  return (
+    <div>
+      <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+        Project: {project.name}
+      </h4>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="rounded-lg border border-border bg-bg-secondary p-4">
+          <div className="flex items-center gap-2 text-text-muted">
+            <Server className="h-4 w-4" />
+            <span className="text-xs font-medium">Disk Usage</span>
+          </div>
+          <p className="mt-1 text-xl font-bold text-text-primary">
+            {loading ? "..." : formatBytes(projectMetrics?.diskUsage ?? 0)}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-bg-secondary p-4">
+          <div className="flex items-center gap-2 text-text-muted">
+            <GitBranch className="h-4 w-4" />
+            <span className="text-xs font-medium">Worktrees</span>
+          </div>
+          <p className="mt-1 text-xl font-bold text-text-primary">
+            {loading ? "..." : String(projectMetrics?.worktreeCount ?? 1)}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-bg-secondary p-4">
+          <div className="flex items-center gap-2 text-text-muted">
+            <FolderGit2 className="h-4 w-4" />
+            <span className="text-xs font-medium">Branch</span>
+          </div>
+          <p className="mt-1 text-xl font-bold text-text-primary">{project.defaultBranch}</p>
+          <p className="mt-0.5 text-[10px] text-text-muted">{project.gitRemote ?? "No remote"}</p>
         </div>
       </div>
     </div>

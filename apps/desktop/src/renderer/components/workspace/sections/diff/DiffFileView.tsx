@@ -9,7 +9,7 @@ import {
   useToggleResolveDiffComment,
 } from "../../../../hooks/use-trpc-diff-comments";
 import { DiffHunkView } from "./DiffHunkView";
-import type { DiffFile } from "./diff-parser";
+import type { DiffFile, ViewMode } from "./diff-parser";
 
 const BINARY_EXTENSIONS = new Set([
   ".png",
@@ -46,7 +46,7 @@ function isBinaryFile(filePath: string): boolean {
 
 interface DiffFileViewProps {
   file: DiffFile;
-  viewMode: "unified" | "split";
+  viewMode: ViewMode;
   collapsed: boolean;
   onToggle: () => void;
   projectId: string | null;

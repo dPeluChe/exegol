@@ -3,6 +3,7 @@ import { ArrowRight, CheckSquare, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { TaskColumn, TaskItem } from "../../../../lib/markdown-tasks";
 import { COLUMN_CONFIG, PRIORITY_COLORS } from "./config";
+import { TaskBadges } from "./TaskBadges";
 
 export function TaskCard({
   task,
@@ -74,77 +75,19 @@ export function TaskCard({
       {/* Tags + agent */}
       {(task.tags.length > 0 || task.assignedAgent) && (
         <div className="mt-1.5 flex flex-wrap gap-1 pl-6">
-          {task.tags.map((tag) => (
-            <span
-              key={tag}
-              className="rounded bg-accent/10 px-1.5 py-0.5 text-[8px] font-medium text-accent"
-            >
-              #{tag}
-            </span>
-          ))}
-          {task.assignedAgent && (
-            <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[8px] font-medium text-purple-400">
-              @{task.assignedAgent}
-            </span>
-          )}
-          {task.priority && (
-            <span
-              className={cn(
-                "rounded px-1.5 py-0.5 text-[8px] font-medium",
-                task.priority === "high" && "bg-red-500/10 text-red-400",
-                task.priority === "medium" && "bg-yellow-500/10 text-yellow-400",
-                task.priority === "low" && "bg-blue-500/10 text-blue-400",
-              )}
-            >
-              !{task.priority}
-            </span>
-          )}
+          <TaskBadges task={task} badgeClassName="rounded px-1.5 py-0.5 text-[8px] font-medium" />
         </div>
       )}
 
-      {/* Quick-move arrows + actions (always visible on hover) */}
-      <div className="absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-        {prevColumn && (
-          <button
-            type="button"
-            onClick={() => onMove(prevColumn)}
-            className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-white/10 hover:text-text-primary"
-            title={`Move to ${COLUMN_CONFIG[prevColumn].label}`}
-          >
-            <ArrowRight className="h-3 w-3 rotate-180" />
-          </button>
-        )}
-        {nextColumn && (
-          <button
-            type="button"
-            onClick={() => onMove(nextColumn)}
-            className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-accent/20 hover:text-accent"
-            title={`Move to ${COLUMN_CONFIG[nextColumn].label}`}
-          >
-            <ArrowRight className="h-3 w-3" />
-          </button>
-        )}
-        {otherColumns.length > 2 && (
-          <button
-            type="button"
-            onClick={() => setShowAllMoves(!showAllMoves)}
-            className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-[8px] text-text-muted hover:bg-white/10 hover:text-text-primary"
-            title="More destinations..."
-          >
-            •••
-          </button>
-        )}
-        {task.source !== "github" && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-red-500/10 hover:text-red-400"
-            title="Remove task"
-          >
-            <Trash2 className="h-2.5 w-2.5" />
-          </button>
-        )}
-      </div>
+      <TaskCardQuickActions
+        prevColumn={prevColumn}
+        nextColumn={nextColumn}
+        showMoreToggle={otherColumns.length > 2}
+        canRemove={task.source !== "github"}
+        onMove={onMove}
+        onToggleMoreMoves={() => setShowAllMoves(!showAllMoves)}
+        onRemove={onRemove}
+      />
 
       {/* All destinations menu */}
       {showAllMoves && (
@@ -163,6 +106,70 @@ export function TaskCard({
             </button>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Quick-move arrows + actions, shown on card hover. */
+function TaskCardQuickActions({
+  prevColumn,
+  nextColumn,
+  showMoreToggle,
+  canRemove,
+  onMove,
+  onToggleMoreMoves,
+  onRemove,
+}: {
+  prevColumn?: TaskColumn;
+  nextColumn?: TaskColumn;
+  showMoreToggle: boolean;
+  canRemove: boolean;
+  onMove: (target: TaskColumn) => void;
+  onToggleMoreMoves: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="absolute right-1 top-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      {prevColumn && (
+        <button
+          type="button"
+          onClick={() => onMove(prevColumn)}
+          className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-white/10 hover:text-text-primary"
+          title={`Move to ${COLUMN_CONFIG[prevColumn].label}`}
+        >
+          <ArrowRight className="h-3 w-3 rotate-180" />
+        </button>
+      )}
+      {nextColumn && (
+        <button
+          type="button"
+          onClick={() => onMove(nextColumn)}
+          className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-accent/20 hover:text-accent"
+          title={`Move to ${COLUMN_CONFIG[nextColumn].label}`}
+        >
+          <ArrowRight className="h-3 w-3" />
+        </button>
+      )}
+      {showMoreToggle && (
+        <button
+          type="button"
+          onClick={onToggleMoreMoves}
+          className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-[8px] text-text-muted hover:bg-white/10 hover:text-text-primary"
+          title="More destinations..."
+        >
+          •••
+        </button>
+      )}
+      {canRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex h-5 w-5 items-center justify-center rounded bg-bg-secondary text-text-muted hover:bg-red-500/10 hover:text-red-400"
+          title="Remove task"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
+        </button>
       )}
     </div>
   );

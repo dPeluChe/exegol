@@ -1,49 +1,16 @@
-import {
-  type AgentAccessMode,
-  type AgentCliType,
-  type AgentProvider,
-  type ResumableSession,
-  type SpawnPreview,
-  YOLO_FLAGS,
-} from "@exegol/shared";
+import type { AgentAccessMode, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  Eye,
-  FileEdit,
-  GitBranch,
-  History,
-  Layers,
-  Map as MapIcon,
-  Sparkles,
-  X,
-  Zap,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useProject } from "../../hooks/use-trpc";
-import { useSkills } from "../../hooks/use-trpc-skills";
-import { formatTimeAgo } from "../../lib/format";
-import { switchSection } from "../../lib/switch-section";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
-import { useTerminalStore } from "../../stores/terminals";
-import {
-  findFirstPaneId,
-  getFocusedOrFirstPaneId,
-  getProjectState,
-  useWorkspaceStore,
-} from "../../stores/workspace";
-import { AgentIcon } from "../common/AgentIcon";
+import { X } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { trpcInvoke } from "../../lib/trpc-client";
+import { AccessModePicker, ProviderPicker, SkillPicker } from "./SpawnOptions";
+import { SpawnSessionPicker } from "./SpawnSessionPicker";
+import { SpawnWorkLocation } from "./SpawnWorkLocation";
+import { useSpawnAgent } from "./use-spawn-agent";
+import { type SessionChoice, useSpawnForm } from "./use-spawn-form";
 
-/** Last few segments — enough to recognise the repo without the modal wrapping. */
-function tailPath(path: string | undefined, segments = 3): string {
-  if (!path) return "…";
-  const parts = path.split("/").filter(Boolean);
-  return parts.length <= segments ? path : `…/${parts.slice(-segments).join("/")}`;
-}
+export type { SessionChoice } from "./use-spawn-form";
 
 interface SpawnAgentModalProps {
   projectId: string;
@@ -62,31 +29,6 @@ interface SpawnAgentModalProps {
   initialAccessMode?: AgentAccessMode;
 }
 
-/** One 3-way choice, one state: a new session, the CLI's own last one, or a
- *  specific past session. Two booleans could represent the impossible pair. */
-export type SessionChoice = ResumableSession | "last" | null;
-
-/** Per-project spawn preference. A UI default, deliberately not app config:
- *  it is remembered, never synced, and a wrong value costs one checkbox click. */
-const WORKTREE_PREF_KEY = "exegol.spawn.useWorktree";
-
-function readWorktreePreference(projectId: string): boolean {
-  try {
-    const raw = localStorage.getItem(`${WORKTREE_PREF_KEY}.${projectId}`);
-    return raw === null ? false : raw === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeWorktreePreference(projectId: string, value: boolean): void {
-  try {
-    localStorage.setItem(`${WORKTREE_PREF_KEY}.${projectId}`, value ? "1" : "0");
-  } catch {
-    /* private mode / quota — the default just won't stick */
-  }
-}
-
 export function SpawnAgentModal({
   projectId,
   onClose,
@@ -97,238 +39,38 @@ export function SpawnAgentModal({
   initialSession = null,
   initialAccessMode = "write",
 }: SpawnAgentModalProps) {
-  const [task, setTask] = useState(initialTask ?? "");
-  const [pickedProviderId, setPickedProviderId] = useState(
-    initialCliType ?? initialProvider?.id ?? "",
-  );
-  const [accessMode, setAccessMode] = useState<AgentAccessMode>(initialAccessMode);
-  // Remembered per project: whether a repo is worked in parallel branches or by
-  // several agents on ONE branch is a property of how that project is run, not
-  // a per-spawn decision. Defaulting to "isolated" every time meant unchecking
-  // it on every single launch for review-style work (Antonio, 2026-08-13).
-  const [useWorktree, setUseWorktree] = useState(() => readWorktreePreference(projectId));
-  const [branchName, setBranchName] = useState("");
-  const [branchEdited, setBranchEdited] = useState(false);
-  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-  const [session, setSession] = useState<SessionChoice>(initialSession);
-  /** null = inherit the provider's configured args; a boolean overrides it. */
-  const [yolo, setYolo] = useState<boolean | null>(null);
-  const [showSkills, setShowSkills] = useState(false);
-  /** T177: ref the worktree is cut from. Empty = the project's current branch. */
-  const [baseBranch, setBaseBranch] = useState("");
-  const [spawning, setSpawning] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const addAgent = useAgentStore((s) => s.addAgent);
-  const createTerminal = useTerminalStore((s) => s.createTerminal);
-  const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
-
   const { data: enabledProviders = [] } = useQuery({
     queryKey: ["enabledProviders"],
     queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
     staleTime: 30_000,
   });
-  // None picked yet: the first enabled provider
-  const selectedProviderId = pickedProviderId || enabledProviders[0]?.id || "";
-
-  const { data: resumable = [] } = useQuery({
-    queryKey: ["resumableSessions", projectId],
-    queryFn: () => trpcInvoke<ResumableSession[]>("agents.listResumable", { projectId, limit: 20 }),
-    staleTime: 10_000,
+  const form = useSpawnForm({
+    projectId,
+    enabledProviders,
+    initialProvider,
+    initialTask,
+    initialCliType,
+    initialSession,
+    initialAccessMode,
   });
-  // Only this provider's sessions: `claude --resume` cannot open a codex session.
-  const resumableHere = resumable.filter((r) => r.cliType === selectedProviderId);
-
-  // Claude's own sessions in this folder, by /rename name: --continue only reaches the latest
-  const [localSessionId, setLocalSessionId] = useState<string | null>(null);
-  // Switching provider must drop a selection that belongs to the old one —
-  // "Continue last" included: left set, it sent resumeSession for a CLI with no
-  // resume flag at all.
-  const chooseProvider = (id: string) => {
-    setPickedProviderId(id);
-    setSession((current) =>
-      current === "last" || (current && current.cliType !== id) ? null : current,
-    );
-    setLocalSessionId(null);
-  };
-  const { data: localSessions = [] } = useQuery({
-    queryKey: ["history", "resumableLocal", projectId],
-    queryFn: () =>
-      trpcInvoke<
-        { sessionId: string; title: string | null; name?: string | null; endedAt: number | null }[]
-      >("history.resumableLocal", { projectId, provider: "claude-code" }),
-    enabled: selectedProviderId === "claude-code",
-    staleTime: 10_000,
-  });
-
-  const { data: branchInfo } = useQuery({
-    queryKey: ["projectBranches", projectId],
-    queryFn: () =>
-      trpcInvoke<{ current: string; branches: string[] }>("diff.listBranches", { projectId }),
-    enabled: useWorktree,
-    staleTime: 30_000,
-  });
-
-  const { data: project } = useProject(projectId);
-  const { data: skills = [] } = useSkills(projectId, project?.path ?? null);
-  const availableSkills = skills.filter((s) => s.available);
-
-  const toggleSkill = useCallback((name: string) => {
-    setSelectedSkills((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  }, []);
-
-  // Debounced because both inputs change per keystroke, and each ask is an IPC
-  // round-trip plus a directory read on the thread that pumps PTY output.
-  const [settled, setSettled] = useState({ task: "", branch: "" });
-  useEffect(() => {
-    const t = setTimeout(() => setSettled({ task, branch: branchName }), 300);
-    return () => clearTimeout(t);
-  }, [task, branchName]);
-
-  // Only the worktree path needs resolving, and only the main process can: the
-  // branch may already have a worktree (reused as-is) or collide (suffixed), and
-  // the default branch name is derived from the task by the spawn path itself.
-  const { data: preview } = useQuery({
-    queryKey: ["spawnPreview", projectId, selectedProviderId, settled.task, settled.branch],
-    queryFn: () =>
-      trpcInvoke<SpawnPreview>("agents.previewSpawn", {
-        projectId,
-        cliType: selectedProviderId,
-        useWorktree: true,
-        // Trimmed exactly as the spawn trims it, or a leading space shows
-        // `exegol/-fix-bug` on screen and creates `exegol/fix-bug`.
-        taskDescription: settled.task.trim(),
-        branchName: settled.branch.trim() || undefined,
-      }),
-    enabled: !!projectId && !!selectedProviderId && useWorktree,
-    placeholderData: (prev) => prev,
-    staleTime: 5_000,
-  });
-  const workingPath = useWorktree ? (preview?.cwd ?? "") : (project?.path ?? "");
-  // Empty until edited: the field shows what the spawn resolved, not a guess.
-  const shownBranch = branchEdited ? branchName : (preview?.branchName ?? "");
-
-  const selectedProvider = enabledProviders.find((p) => p.id === selectedProviderId);
-  const yoloFlag = YOLO_FLAGS[selectedProviderId];
-  const resumeFlag = selectedProvider?.capabilities?.resumeFlag;
-  // What Settings > CLIs has configured for this provider — the checkbox shows
-  // that until the user actually changes it, so an untouched launch inherits
-  // rather than silently overriding.
-  const providerYolo = !!yoloFlag && !!selectedProvider?.args.includes(yoloFlag);
-  const yoloChecked = yolo ?? providerYolo;
+  const { spawning, spawn } = useSpawnAgent({ projectId, targetPaneId, onClose });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus textarea on mount
   useEffect(() => {
     textareaRef.current?.focus();
   }, []);
 
-  const canLaunch = !!selectedProviderId && !spawning;
+  const canLaunch = !!form.providerId && !spawning;
 
-  const handleSpawn = useCallback(async () => {
-    if (!canLaunch) return;
-    setSpawning(true);
-    try {
-      // biome-ignore lint/suspicious/noExplicitAny: tRPC proxy returns dynamic shape
-      const agent = await trpcMutate<any>("agents.spawn", {
-        projectId,
-        cliType: selectedProviderId as AgentCliType,
-        taskDescription: task.trim(),
-        useWorktree,
-        branchName: useWorktree && branchName ? branchName : undefined,
-        accessMode,
-        skillNames: selectedSkills.size > 0 ? Array.from(selectedSkills) : undefined,
-        yolo: yoloFlag && yolo !== null ? yolo : undefined,
-        baseBranch: useWorktree && baseBranch ? baseBranch : undefined,
-        ...(localSessionId && !useWorktree
-          ? { resumeSession: true, resumeLocalSessionId: localSessionId }
-          : session === "last"
-            ? { resumeSession: true }
-            : session
-              ? { resumeSession: true, resumeFromAgentId: session.agentId }
-              : {}),
-      });
-      addAgent({
-        id: agent.id,
-        projectId,
-        cliType: agent.cliType,
-        status: agent.status,
-        currentStep: agent.currentStep,
-        taskDescription: agent.taskDescription,
-        branchName: agent.branchName ?? (useWorktree ? branchName : null),
-        alias: agent.alias ?? null,
-        tokenUsage: { input: 0, output: 0, cost: 0 },
-        startedAt: agent.startedAt,
-        accessMode: agent.accessMode ?? null,
-        claudeSessionId: null,
-        activityLevel: "busy",
-      });
-      createTerminal(agent.id);
-      setFocusedAgent(agent.id);
-      // Switch to Agents section
-      switchSection("agents");
-      // T95: Reuse focused empty pane, otherwise create a new tab
-      const store = useWorkspaceStore.getState();
-      if (targetPaneId) {
-        store.updatePane(targetPaneId, { type: "terminal", agentId: agent.id });
-        onClose();
-        return;
-      }
-      const freshPw = getProjectState();
-      const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
-      const focusedId = activeTab ? getFocusedOrFirstPaneId(activeTab) : null;
-      const focusedPane = focusedId ? freshPw.panes[focusedId] : null;
+  const handleSpawn = () => {
+    if (canLaunch) spawn(form);
+  };
 
-      if (focusedPane?.type === "empty" && focusedId) {
-        store.updatePane(focusedId, { type: "terminal", agentId: agent.id });
-      } else {
-        const newTabId = store.addTab();
-        const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
-        if (newTab) {
-          const paneId = findFirstPaneId(newTab.layout);
-          if (paneId) {
-            store.updatePane(paneId, { type: "terminal", agentId: agent.id });
-          }
-        }
-      }
-      onClose();
-    } catch (err) {
-      console.error("[SpawnAgentModal] Spawn failed:", err);
-    } finally {
-      setSpawning(false);
-    }
-  }, [
-    task,
-    selectedProviderId,
-    accessMode,
-    useWorktree,
-    branchName,
-    selectedSkills,
-    session,
-    localSessionId,
-    yolo,
-    yoloFlag,
-    baseBranch,
-    projectId,
-    addAgent,
-    createTerminal,
-    setFocusedAgent,
-    onClose,
-    canLaunch,
-    targetPaneId,
-  ]);
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSpawn();
-    },
-    [onClose, handleSpawn],
-  );
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSpawn();
+  };
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: dialog overlay captures keyboard
@@ -355,326 +97,46 @@ export function SpawnAgentModal({
 
         {/* Body */}
         <div className="flex flex-col gap-4 p-4">
-          {/* Agent selector */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium text-text-muted" htmlFor="agent-select">
-              Agent
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {enabledProviders.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => chooseProvider(p.id)}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                    selectedProviderId === p.id
-                      ? "border-accent/50 bg-accent/10 text-accent"
-                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                  )}
-                >
-                  <AgentIcon provider={p.id} size={16} fallback={p.icon} fallbackColor={p.color} />
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* T161: start fresh, continue the CLI's own last session, or pick one */}
-          {(resumableHere.length > 0 || resumeFlag) && (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-medium text-text-muted">Session</span>
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSession(null);
-                    setLocalSessionId(null);
-                  }}
-                  className={cn(
-                    "rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                    session === null && !localSessionId
-                      ? "border-accent/50 bg-accent/10 text-accent"
-                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                  )}
-                >
-                  New
-                </button>
-                {/* Works without a captured handle: it is the provider's own
-                    flag, which is what the user would type by hand. */}
-                {resumeFlag && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSession("last");
-                      setLocalSessionId(null);
-                    }}
-                    title={`Launches with ${resumeFlag}`}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                      session === "last"
-                        ? "border-accent/50 bg-accent/10 text-accent"
-                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                    )}
-                  >
-                    <History className="h-3 w-3" />
-                    Continue last
-                    <code className="text-text-muted">{resumeFlag}</code>
-                  </button>
-                )}
-                {resumableHere.slice(0, 5).map((past) => (
-                  <button
-                    key={past.agentId}
-                    type="button"
-                    onClick={() => {
-                      setSession(past);
-                      setLocalSessionId(null);
-                    }}
-                    title={past.taskDescription}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                      session !== "last" && session?.agentId === past.agentId
-                        ? "border-accent/50 bg-accent/10 text-accent"
-                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                    )}
-                  >
-                    <History className="h-3 w-3 shrink-0" />
-                    {/* The codename is how the user knew it; task text is the fallback. */}
-                    <span className="max-w-[150px] truncate">
-                      {past.alias ?? past.taskDescription.slice(0, 24)}
-                    </span>
-                    <span className="text-text-muted">{formatTimeAgo(past.endedAt)}</span>
-                  </button>
-                ))}
-              </div>
-              {selectedProviderId === "claude-code" && !useWorktree && localSessions.length > 0 && (
-                <select
-                  value={localSessionId ?? ""}
-                  onChange={(e) => {
-                    setLocalSessionId(e.target.value || null);
-                    setSession(null);
-                  }}
-                  className={cn(
-                    "rounded-lg border bg-bg-secondary px-2 py-1.5 text-[11px] outline-none",
-                    localSessionId
-                      ? "border-accent/50 text-accent"
-                      : "border-border text-text-secondary",
-                  )}
-                  title="Resume a specific Claude session in this folder (claude --resume <id>)"
-                >
-                  <option value="">Resume a session by name...</option>
-                  {localSessions.map((l) => (
-                    <option key={l.sessionId} value={l.sessionId}>
-                      {(l.name ?? l.title ?? l.sessionId.slice(0, 8)).slice(0, 60)}
-                      {l.endedAt ? ` · ${formatTimeAgo(l.endedAt)}` : ""}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </div>
-          )}
-
-          {/* Access mode selector (T58) */}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-medium text-text-muted">Mode</span>
-            <div className="flex gap-1.5">
-              {[
-                {
-                  mode: "write" as const,
-                  label: "Full Access",
-                  icon: FileEdit,
-                  hint: "Read + write files",
-                },
-                {
-                  mode: "plan" as const,
-                  label: "Plan Only",
-                  icon: MapIcon,
-                  hint: "Analyze, no writes",
-                },
-                { mode: "read" as const, label: "Read Only", icon: Eye, hint: "Explore codebase" },
-              ].map(({ mode, label, icon: Icon, hint }) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setAccessMode(mode)}
-                  title={hint}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                    accessMode === mode
-                      ? "border-accent/50 bg-accent/10 text-accent"
-                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                  )}
-                >
-                  <Icon className="h-3 w-3" />
-                  {label}
-                </button>
-              ))}
-            </div>
-            {/* Exegol's access mode instructs the agent; this bypasses the CLI's
-                OWN confirmation prompts. Same question, two layers — so they
-                belong together rather than as a second thing called "mode". */}
-            {yoloFlag && (
-              <label className="mt-0.5 flex cursor-pointer items-center gap-2" htmlFor="yolo-mode">
-                <input
-                  type="checkbox"
-                  id="yolo-mode"
-                  checked={yoloChecked}
-                  onChange={(e) => setYolo(e.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-border accent-accent"
-                />
-                <Zap className="h-3.5 w-3.5 text-text-muted" />
-                <span className="text-[11px] text-text-secondary">
-                  Also skip this CLI's own confirmations{" "}
-                  <code className="text-text-muted">{yoloFlag}</code>
-                </span>
-              </label>
-            )}
-          </div>
-
-          {/* Skill picker — injected into the agent prompt via buildSpawnContext */}
-          {availableSkills.length > 0 && (
-            <div className="flex flex-col gap-1.5">
-              <button
-                type="button"
-                onClick={() => setShowSkills((v) => !v)}
-                className="flex w-fit items-center gap-1 text-[11px] font-medium text-text-muted hover:text-text-secondary"
-              >
-                {showSkills ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
-                Skills (optional)
-                {selectedSkills.size > 0 && (
-                  <span className="text-accent">· {selectedSkills.size} selected</span>
-                )}
-              </button>
-              <div className={cn("flex-wrap gap-1.5", showSkills ? "flex" : "hidden")}>
-                {availableSkills.map((s) => (
-                  <button
-                    key={s.name}
-                    type="button"
-                    onClick={() => toggleSkill(s.name)}
-                    title={s.description}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                      selectedSkills.has(s.name)
-                        ? "border-accent/50 bg-accent/10 text-accent"
-                        : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                    )}
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Where the agent works. Framed as a place, not a git feature: the
-              question the user is answering is "which directory will this touch",
-              and the answer should always be visible — never inferred. */}
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] font-medium text-text-muted">Where to work</span>
-            <div className="flex gap-1.5">
-              {[
-                {
-                  isolated: false,
-                  label: "Here",
-                  hint: "The project checkout, shared with others",
-                },
-                { isolated: true, label: "Worktree", hint: "Its own branch, for parallel work" },
-              ].map(({ isolated, label, hint }) => (
-                <button
-                  key={label}
-                  type="button"
-                  title={hint}
-                  onClick={() => {
-                    setUseWorktree(isolated);
-                    writeWorktreePreference(projectId, isolated);
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all",
-                    useWorktree === isolated
-                      ? "border-accent/50 bg-accent/10 text-accent"
-                      : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-                  )}
-                >
-                  {isolated ? <GitBranch className="h-3 w-3" /> : <Layers className="h-3 w-3" />}
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {/* WHERE the agent will actually run — the project checkout, or the
-                Exegol-owned worktree root, which is not the same directory. Shown,
-                never edited: only the branch is yours to name. */}
-            <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
-              <span className="shrink-0">Path</span>
-              <code title={workingPath}>{tailPath(workingPath)}</code>
-              {workingPath && (
-                <button
-                  type="button"
-                  onClick={() => navigator.clipboard.writeText(workingPath)}
-                  title="Copy full path"
-                  className="text-text-muted hover:text-text-secondary"
-                >
-                  <Copy className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
-            {useWorktree && (
-              <div className="flex flex-col gap-1.5">
-                {/* Which branch it is CUT FROM. Was always the repo's HEAD and
-                    never stated, so an agent silently inherited whatever the
-                    main checkout was on (T177). */}
-                <div className="flex items-center gap-2">
-                  <span className="w-10 shrink-0 text-[10px] text-text-muted">from</span>
-                  <select
-                    value={baseBranch || branchInfo?.current || ""}
-                    onChange={(e) => setBaseBranch(e.target.value)}
-                    className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none focus:border-accent/50"
-                  >
-                    {(branchInfo?.branches ?? []).map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                        {b === branchInfo?.current ? " (current)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-10 shrink-0 text-[10px] text-text-muted">new</span>
-                  <input
-                    type="text"
-                    value={shownBranch}
-                    onChange={(e) => {
-                      setBranchName(e.target.value);
-                      setBranchEdited(true);
-                    }}
-                    placeholder="exegol/branch-name"
-                    className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
-                  />
-                </div>
-                {/* Landing somewhere other than the name on screen is how work
-                    gets lost, so both surprises are stated. */}
-                {preview?.reused && (
-                  <span className="pl-12 text-[10px] text-warning">
-                    a worktree already exists on this branch — it will be reused
-                  </span>
-                )}
-                {!preview?.reused &&
-                  preview?.branchName &&
-                  settled.branch &&
-                  preview.branchName !== settled.branch && (
-                    <span className="pl-12 text-[10px] text-warning">
-                      taken — will create <code>{preview.branchName}</code>
-                    </span>
-                  )}
-              </div>
-            )}
-          </div>
+          <ProviderPicker
+            providers={enabledProviders}
+            selectedId={form.providerId}
+            onChoose={form.chooseProvider}
+          />
+          <SpawnSessionPicker
+            projectId={projectId}
+            providerId={form.providerId}
+            resumeFlag={form.provider?.capabilities?.resumeFlag}
+            useWorktree={form.useWorktree}
+            session={form.session}
+            onSession={form.chooseSession}
+            localSessionId={form.localSessionId}
+            onLocalSession={form.chooseLocalSession}
+          />
+          <AccessModePicker
+            accessMode={form.accessMode}
+            onAccessMode={form.setAccessMode}
+            provider={form.provider}
+            yoloFlag={form.yoloFlag}
+            yolo={form.yolo}
+            onYolo={form.setYolo}
+          />
+          <SkillPicker
+            projectId={projectId}
+            selected={form.selectedSkills}
+            onToggle={form.toggleSkill}
+          />
+          <SpawnWorkLocation
+            projectId={projectId}
+            providerId={form.providerId}
+            task={form.task}
+            useWorktree={form.useWorktree}
+            onWorktree={form.chooseWorktree}
+            branchName={form.branchName}
+            branchEdited={form.branchEdited}
+            onBranch={form.editBranch}
+            baseBranch={form.baseBranch}
+            onBaseBranch={form.setBaseBranch}
+          />
           {/* Task prompt */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[11px] font-medium text-text-muted" htmlFor="task-prompt">
@@ -683,8 +145,8 @@ export function SpawnAgentModal({
             <textarea
               ref={textareaRef}
               id="task-prompt"
-              value={task}
-              onChange={(e) => setTask(e.target.value)}
+              value={form.task}
+              onChange={(e) => form.setTask(e.target.value)}
               placeholder="Sent to the agent as its first message — a task, a prompt, or just a hello"
               rows={3}
               className="resize-none rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
@@ -695,12 +157,7 @@ export function SpawnAgentModal({
         {/* Footer */}
         <div className="flex items-center justify-between border-t border-border px-4 py-3">
           <span className="text-[10px] text-text-muted">
-            {selectedProvider ? `${selectedProvider.name}` : "Select an agent"}
-            {useWorktree ? " · worktree" : " · main repo"}
-            {accessMode !== "write" ? ` · ${accessMode}` : ""}
-            {selectedSkills.size > 0
-              ? ` · ${selectedSkills.size} skill${selectedSkills.size > 1 ? "s" : ""}`
-              : ""}
+            {spawnSummary(form.provider, form.useWorktree, form.accessMode, form.selectedSkills)}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -710,23 +167,51 @@ export function SpawnAgentModal({
             >
               Cancel
             </button>
-            <button
-              type="button"
-              disabled={!canLaunch}
-              onClick={handleSpawn}
-              className={cn(
-                "rounded-lg px-4 py-1.5 text-[11px] font-semibold transition-all",
-                canLaunch
-                  ? "bg-accent text-white hover:bg-accent/90"
-                  : "bg-bg-tertiary text-text-muted cursor-not-allowed",
-              )}
-            >
-              {spawning ? "Launching..." : "Launch"}
-              <span className="ml-1 text-[9px] opacity-60">Cmd+Enter</span>
-            </button>
+            <LaunchButton canLaunch={canLaunch} spawning={spawning} onLaunch={handleSpawn} />
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function spawnSummary(
+  provider: AgentProvider | undefined,
+  useWorktree: boolean,
+  accessMode: AgentAccessMode,
+  skills: Set<string>,
+): string {
+  return [
+    provider ? `${provider.name}` : "Select an agent",
+    useWorktree ? " · worktree" : " · main repo",
+    accessMode !== "write" ? ` · ${accessMode}` : "",
+    skills.size > 0 ? ` · ${skills.size} skill${skills.size > 1 ? "s" : ""}` : "",
+  ].join("");
+}
+
+function LaunchButton({
+  canLaunch,
+  spawning,
+  onLaunch,
+}: {
+  canLaunch: boolean;
+  spawning: boolean;
+  onLaunch: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={!canLaunch}
+      onClick={onLaunch}
+      className={cn(
+        "rounded-lg px-4 py-1.5 text-[11px] font-semibold transition-all",
+        canLaunch
+          ? "bg-accent text-white hover:bg-accent/90"
+          : "bg-bg-tertiary text-text-muted cursor-not-allowed",
+      )}
+    >
+      {spawning ? "Launching..." : "Launch"}
+      <span className="ml-1 text-[9px] opacity-60">Cmd+Enter</span>
+    </button>
   );
 }
