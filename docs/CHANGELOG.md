@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Sidebar tab groups: drag to reorder works, the group on screen is highlighted and blinks after a Cmd+2..9 jump; ⌘1 aligned right
+
 ## [0.5.3] — 2026-09-28 — Sessions that survive restarts, files you can search and edit, Cmd+1..9, a full audit
 
 ### Added

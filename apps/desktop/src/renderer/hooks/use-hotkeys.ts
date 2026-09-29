@@ -141,7 +141,10 @@ export function useHotkeys() {
         }
         const group = getLiveTabGroups()[n - 2];
         const first = group?.agentIds[0];
-        if (group && first) jumpToAgent(first, group.projectId);
+        if (group && first) {
+          jumpToAgent(first, group.projectId);
+          window.dispatchEvent(new CustomEvent("exegol:live-tab-flash", { detail: group.key }));
+        }
         return;
       }
 

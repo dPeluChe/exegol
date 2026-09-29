@@ -150,6 +150,13 @@ body {
 }
 .xterm-viewport::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.6); }
 
+/* A live tab group reached with Cmd+n: one short accent pulse */
+@keyframes flash-once {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  30% { box-shadow: 0 0 0 2px var(--accent); }
+}
+.animate-flash-once { animation: flash-once 0.7s ease-out 1; }
+
 /* AgentSpinner: a strip of --frames glyphs (1rem each) stepping sideways */
 .glyph-spin {
   animation-name: glyph-spin;

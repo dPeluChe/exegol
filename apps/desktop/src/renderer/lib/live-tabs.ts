@@ -70,3 +70,12 @@ export function useLiveTabGroups(): LiveTabGroup[] {
 export function groupShortcut(index: number): string | null {
   return index <= 7 ? `⌘${index + 2}` : null;
 }
+
+/** Drop `drag` on `target`: below it when moving down, above it when moving up */
+export function reorderKeys(all: string[], drag: string, target: string): string[] {
+  if (drag === target || !all.includes(drag) || !all.includes(target)) return all;
+  const movingDown = all.indexOf(drag) < all.indexOf(target);
+  const keys = all.filter((k) => k !== drag);
+  keys.splice(keys.indexOf(target) + (movingDown ? 1 : 0), 0, drag);
+  return keys;
+}
