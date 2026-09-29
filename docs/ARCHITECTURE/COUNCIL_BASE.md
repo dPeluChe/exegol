@@ -1,6 +1,6 @@
 # Council Base (feature definition)
 
-> Status: DEFINED — 2026-07-28. Agreed by Antonio in workspace-dpeluche session. Companion
+> Status: DEFINED — 2026-07-28. Agreed by Antonio in a planning session. Companion
 > to `OWL_FLEET_WATCH.md`; backs T158 (scope) and T160 in `TASK_TODO.md`. This ABSORBS the
 > previously planned standalone "council MCP" project — one server, not two.
 > `labs-council` (multi-provider research/deliberation tool) stays as-is; nothing new built there.
@@ -17,7 +17,7 @@ A per-project execution and exchange base inside Exegol:
    - Cross-family review is ONE preset of this (spawn a different-family agent to review
      what was just built, return discrepancies). It is a preset, not the feature's identity.
 2. **Exchange bus** — thread/message/status tools on the same MCP server so session agents
-   in different repos (henri front ↔ backend, walter client ↔ cloud) post and read instead
+   in different repos (frontend ↔ backend, client ↔ cloud) post and read instead
    of Antonio relaying by hand (friction #1 of the jul-2026 conversation audit).
 
 ## Architecture requirements

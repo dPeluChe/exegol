@@ -1,6 +1,6 @@
 # Owl — Fleet Watch (feature definition)
 
-> Status: DEFINED — 2026-07-28. Agreed by Antonio in workspace-dpeluche session (conversation
+> Status: DEFINED — 2026-07-28. Agreed by Antonio in a planning session (conversation
 > audit → watcher idea → architecture review). This doc is the definition backing tasks
 > T156–T159 in `TASK_TODO.md`. Supersedes the "external watcher project" idea: Owl is a
 > native Exegol feature, not a separate repo.
@@ -22,7 +22,7 @@ re-scanning the repo.
   (`nomic-embed-text`), attention monitoring, desktop UI: all already here.
 - MCP tools layer already exists (`main/mcp/registry.ts`) — Owl extends it, doesn't build it.
 - Only Exegol can close the loop: digest → "launch an agent to do the deep review".
-- Salvage source: `_code_/_archive_/labs-cli-proman` (Dev-Agent v1.6) — 28 CLI commands
+- Salvage source: the archived `cli-proman` project (Dev-Agent v1.6) — 28 CLI commands
   (`status`, `git-status`, `wip`, `blocked`, `review`, `next`, `time-status`, `sync-git`...)
   over a global multi-project SQLite. Its WORKSPACE_PLAN.md "Repository Explorer" mock is
   essentially Owl's UI without the autonomous engine.
@@ -68,7 +68,7 @@ scheduler (interval / on-wake)
 ## Build phases (each useful alone)
 
 1. **Collectors + store + raw digest in UI** (no LLM): port cli-proman commands, loop over
-   the active repos (start: henri ×2, walter ×2, skysset, dpeluche.dev). Already kills the
+   the active repos (start: the maintainer's active repos). Already kills the
    manual "¿qué no he visto?" scan.
 2. **Small-model synthesis + seen/unseen**: classification, priority, summaries via
    InferenceProvider (Ollama backend). Model bake-off happens here.

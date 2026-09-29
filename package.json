@@ -32,8 +32,9 @@
     "turbo": "^2.4.0",
     "typescript": "^5.7.0"
   },
-  "packageManager": "bun@1.2.0",
+  "packageManager": "bun@1.2.23",
   "engines": {
     "node": ">=20"
-  }
+  },
+  "license": "MIT"
 }

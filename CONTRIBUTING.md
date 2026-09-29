@@ -6,7 +6,7 @@ Thanks for helping. This guide is for people; AI agents working in this repo fol
 
 ## Setup
 
-Prerequisites: [Bun](https://bun.sh/) 1.2+, [Node.js](https://nodejs.org/) 22 (20+ works),
+Prerequisites: [Bun](https://bun.sh/) 1.2.23+, [Node.js](https://nodejs.org/) 22 (20+ works),
 [Rust](https://rustup.rs/) stable (the native module), git, and at least one agent CLI
 (`claude`, `codex`, `agy`, `devin`...). macOS is the main platform; Linux builds in CI.
 

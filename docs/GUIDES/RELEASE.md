@@ -5,9 +5,9 @@
 - **Build config**: `apps/desktop/electron-builder.ts` (macOS DMG/ZIP, Windows NSIS, Linux AppImage)
 - **Auto-updater**: `apps/desktop/src/main/system/auto-updater.ts` (electron-updater, GitHub Releases, feed `dPeluChe/exegol`)
 - **Icons**: `apps/desktop/src/resources/build/icons/` (icns, ico, png)
-- **Version**: `0.5.0` in `apps/desktop/package.json` and `docs/CHANGELOG.md` (0.4.2-0.4.4 were CHANGELOG-only; the last tag is `v0.4.1`).
+- **Version**: `apps/desktop/package.json` and the matching heading in `docs/CHANGELOG.md`.
 - **Signing**: builds are signed with the Developer ID Application certificate in the login keychain
-  (team `NQHHJ85736`, found automatically) and hardened runtime. **Notarized only when
+  (found automatically; list it with `security find-identity -v -p codesigning`) and hardened runtime. **Notarized only when
   `APPLE_KEYCHAIN_PROFILE` is set** (step 5); without it a downloaded DMG is refused by Gatekeeper.
 
 ## Steps to First Release
@@ -51,22 +51,22 @@ Open the DMG and drag Exegol to Applications. The app is not signed or notarized
 A signed but not notarized app gets "Apple could not verify Exegol is free of malware" when it
 came from the internet (GitHub, Slack...). Notarization needs Apple credentials once per machine:
 
-1. At appleid.apple.com → Sign-In and Security → App-Specific Passwords, create one ("exegol-notary").
+1. At appleid.apple.com → Sign-In and Security → App-Specific Passwords, create one (any label).
 2. Store it in the keychain (run it yourself: it asks for the password, never put it in a file):
    ```bash
-   xcrun notarytool store-credentials exegol-notary \
-     --apple-id <your Apple ID email> --team-id NQHHJ85736
+   xcrun notarytool store-credentials <profile> \
+     --apple-id <your Apple ID email> --team-id <TEAMID>
    ```
 3. Build with the profile; electron-builder signs, submits, waits and staples:
    ```bash
-   APPLE_KEYCHAIN_PROFILE=exegol-notary bun run package:mac
+   APPLE_KEYCHAIN_PROFILE=<profile> bun run package:mac
    ```
 4. electron-builder notarizes and staples the **app**, not the DMG. Sign, notarize and staple the
    DMG too (a downloaded DMG then opens clean, offline included):
    ```bash
    cd apps/desktop/dist/<v>
-   codesign --force --timestamp --sign "Developer ID Application: jose antonio martinez quintero (NQHHJ85736)" Exegol-<v>-arm64.dmg
-   xcrun notarytool submit Exegol-<v>-arm64.dmg --keychain-profile exegol-notary --wait
+   codesign --force --timestamp --sign "Developer ID Application: <Your Name> (<TEAMID>)" Exegol-<v>-arm64.dmg
+   xcrun notarytool submit Exegol-<v>-arm64.dmg --keychain-profile <profile> --wait
    xcrun stapler staple Exegol-<v>-arm64.dmg
    ```
    Signing rewrites the DMG, so its `.blockmap` is stale: do not publish it (the macOS updater

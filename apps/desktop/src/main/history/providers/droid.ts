@@ -6,7 +6,7 @@ import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "..
 
 /**
  * Factory names a session directory after its cwd — but unlike Claude Code it
- * replaces ONLY `/`, leaving underscores intact (`…-dPeluChe-_code_-labs_irma`).
+ * replaces ONLY `/`, leaving underscores intact (`…-me-_code_-my_repo`).
  * Two CLIs, two slug rules; assuming they matched found nothing at all.
  */
 function projectDirFor(cwd: string): string {
