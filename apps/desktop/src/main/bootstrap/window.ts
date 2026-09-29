@@ -3,15 +3,14 @@ import { is } from "@electron-toolkit/utils";
 import { BrowserWindow } from "electron";
 import windowStateKeeper from "electron-window-state";
 import { registerMainWindow } from "../windows/floating";
+import { getMainWindow, setMainWindowRef } from "../windows/main-window-ref";
 import { registerMainWindowForSettings } from "../windows/settings";
 import { deliverPendingDeepLink } from "./deep-link";
 import { endMark } from "./startup-timings";
 
 let mainWindow: BrowserWindow | null = null;
 
-export function getMainWindow(): BrowserWindow | null {
-  return mainWindow;
-}
+export { getMainWindow };
 
 export function createWindow(): void {
   const state = windowStateKeeper({
@@ -44,8 +43,12 @@ export function createWindow(): void {
   // Closing leaves a destroyed object behind: the global hotkey called
   // isMinimized() on it, threw, and never opened a window again
   const win = mainWindow;
+  setMainWindowRef(win);
   win.on("closed", () => {
-    if (mainWindow === win) mainWindow = null;
+    if (mainWindow === win) {
+      mainWindow = null;
+      setMainWindowRef(null);
+    }
   });
 
   mainWindow.on("ready-to-show", () => {

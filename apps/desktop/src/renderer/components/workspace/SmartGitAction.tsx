@@ -20,6 +20,7 @@ function toast(type: "success" | "error", title: string, body?: string) {
 
 interface GitState {
   branch: string;
+  defaultBranch?: string;
   hasUpstream: boolean;
   ahead: number;
   behind: number;
@@ -164,7 +165,11 @@ function computeNextAction(
     };
   }
   // A clean default branch has nothing to open a PR from: "Create PR" always failed here
-  if (state.branch === "main" || state.branch === "master") {
+  if (
+    state.branch === state.defaultBranch ||
+    state.branch === "main" ||
+    state.branch === "master"
+  ) {
     return {
       kind: "clean",
       label: "Up to date",

@@ -196,7 +196,6 @@ function SkillCard({
   }, [projectId, skill.name, skill.enabled, toggleSkill]);
 
   const [confirmUninstall, setConfirmUninstall] = useState(false);
-  const handleUninstall = useCallback(() => setConfirmUninstall(true), []);
 
   return (
     <div
@@ -330,7 +329,7 @@ function SkillCard({
             {skill.source && (
               <button
                 type="button"
-                onClick={handleUninstall}
+                onClick={() => setConfirmUninstall(true)}
                 className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 shrink-0 ml-2"
               >
                 <Trash2 className="h-3 w-3" /> Uninstall

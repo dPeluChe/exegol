@@ -177,36 +177,4 @@ export function registerIpcHandlers(): void {
       return image.toPNG().toString("base64");
     },
   );
-
-  // Capture a specific element's geometry + computed styles
-  ipcMain.handle(
-    "browser:capture-element",
-    async (_event, { selector, webContentsId }: { selector: string; webContentsId?: number }) => {
-      const wv = findWebview(_event.sender, webContentsId);
-      if (!wv) return null;
-      return wv.executeJavaScript(`
-      (() => {
-        const el = document.querySelector(${JSON.stringify(selector)});
-        if (!el) return null;
-        const rect = el.getBoundingClientRect();
-        const styles = getComputedStyle(el);
-        return {
-          selector: ${JSON.stringify(selector)},
-          tagName: el.tagName.toLowerCase(),
-          text: el.textContent?.slice(0, 200) ?? "",
-          html: el.outerHTML.slice(0, 1000),
-          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-          styles: {
-            color: styles.color,
-            backgroundColor: styles.backgroundColor,
-            fontSize: styles.fontSize,
-            fontFamily: styles.fontFamily,
-            padding: styles.padding,
-            margin: styles.margin,
-          },
-        };
-      })()
-    `);
-    },
-  );
 }

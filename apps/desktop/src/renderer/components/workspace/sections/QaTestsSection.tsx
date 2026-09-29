@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { switchSection } from "../../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
+import { focusPane } from "../../../stores/agents";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../../../stores/workspace";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -204,24 +205,24 @@ export function QaTestsSection() {
     }
     // Pick the pane to run in: the focused browser, else one in the active tab, else any.
     // Only the focused pane listened, so Run did nothing with a terminal focused
-    const ws = useWorkspaceStore.getState();
+    const { focusedPaneId } = useWorkspaceStore.getState();
     const pw = getProjectState();
     const isBrowser = (id: string | null | undefined) => !!id && pw.panes[id]?.type === "browser";
-    const activeTab = pw.tabs.find((t) => t.id === pw.activeTabId);
-    const target = isBrowser(ws.focusedPaneId)
-      ? ws.focusedPaneId
-      : (activeTab && collectPaneIds(activeTab.layout).find(isBrowser)) ||
-        Object.keys(pw.panes).find(isBrowser);
-    if (!target) {
+    const tabs = [...pw.tabs].sort((x) => (x.id === pw.activeTabId ? -1 : 0));
+    let target: { tabId: string; paneId: string } | null = null;
+    for (const tab of tabs) {
+      const ids = collectPaneIds(tab.layout).filter(isBrowser);
+      const paneId = ids.find((id) => id === focusedPaneId) ?? ids[0];
+      if (paneId && (!target || paneId === focusedPaneId)) target = { tabId: tab.id, paneId };
+    }
+    if (!target || !projectId) {
       setRunError("No Browser pane open. Add one from the workspace layout, then try again.");
       return;
     }
-    const tab = pw.tabs.find((t) => collectPaneIds(t.layout).includes(target));
-    if (tab) ws.setActiveTab(tab.id);
-    ws.setFocusedPane(target);
+    focusPane(projectId, target.tabId, target.paneId);
     window.dispatchEvent(
       new CustomEvent("exegol:qa-run-test", {
-        detail: { testId: test.id, startUrl: test.startUrl, actions, paneId: target },
+        detail: { testId: test.id, startUrl: test.startUrl, actions, paneId: target.paneId },
       }),
     );
     switchSection("agents");

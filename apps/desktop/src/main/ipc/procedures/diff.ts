@@ -2,6 +2,7 @@ import { existsSync, statSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { getProject } from "../../db/queries";
 import { TimeoutError, TransientError, withRetry } from "../../lib/errors";
 import { remoteWebUrl } from "../../lib/remote-web-url";
 import { publicProcedure, router } from "../trpc";
@@ -282,7 +283,7 @@ export const diffRouter = router({
     .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      return buildGitState(cwd);
+      return buildGitState(cwd, getProject(ctx.db, input.projectId)?.defaultBranch ?? undefined);
     }),
 
   ...prProcedures,
