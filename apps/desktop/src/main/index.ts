@@ -1,4 +1,4 @@
-import { app, dialog, globalShortcut } from "electron";
+import { app, dialog, globalShortcut, shell } from "electron";
 import { seedAgentLinkCache, stopSweep } from "./agents/agent-messaging";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
@@ -143,7 +143,17 @@ process.on("unhandledRejection", (reason) => {
 });
 let stopWorkGuard: (() => void) | null = null;
 
-app.on("web-contents-created", (_event, contents) => captureConsole(contents));
+app.on("web-contents-created", (_event, contents) => {
+  captureConsole(contents);
+  // Every Exegol window (settings and floating ones too, not only main): a link must not open
+  // an Electron child window, which would hand the preload's window.api to that page
+  if (contents.getType() === "window") {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:\/\//.test(url)) shell.openExternal(url).catch(() => {});
+      return { action: "deny" };
+    });
+  }
+});
 
 app.on("render-process-gone", (_event, contents, details) => {
   // A reload or a closed window, not a crash

@@ -107,7 +107,9 @@ export function PromptsSection() {
       )}
 
       {/* Create/Edit dialog */}
+      {/* Keyed: each open starts from the prompt being edited (or empty for New) */}
       <PromptDialog
+        key={dialogOpen ? (editingPrompt?.id ?? "new") : "closed"}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         prompt={editingPrompt}
@@ -218,26 +220,9 @@ function PromptDialog({
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
 
-  const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
-  const [category, setCategory] = useState<PromptCategory>("custom");
-
-  // Reset form when prompt changes
-  const handleOpenChange = useCallback(
-    (isOpen: boolean) => {
-      if (isOpen && prompt) {
-        setTitle(prompt.title);
-        setContent(prompt.content);
-        setCategory(prompt.category);
-      } else if (isOpen) {
-        setTitle("");
-        setContent("");
-        setCategory("custom");
-      }
-      onOpenChange(isOpen);
-    },
-    [prompt, onOpenChange],
-  );
+  const [title, setTitle] = useState(prompt?.title ?? "");
+  const [content, setContent] = useState(prompt?.content ?? "");
+  const [category, setCategory] = useState<PromptCategory>(prompt?.category ?? "custom");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -252,7 +237,7 @@ function PromptDialog({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={handleOpenChange}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-bg-secondary p-6 shadow-2xl">

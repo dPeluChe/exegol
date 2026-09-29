@@ -200,9 +200,12 @@ contextBridge.exposeInMainWorld("api", {
   reportError: (source: string, message: string, stack: string) =>
     safe.send("log:renderer-error", source, message, stack),
   browser: {
-    executeJs: (code: string) => safe.invoke("browser:execute-js", { code }),
-    captureScreenshot: () => safe.invoke("browser:capture-screenshot"),
-    captureElement: (selector: string) => safe.invoke("browser:capture-element", { selector }),
+    executeJs: (code: string, webContentsId?: number) =>
+      safe.invoke("browser:execute-js", { code, webContentsId }),
+    captureScreenshot: (webContentsId?: number) =>
+      safe.invoke("browser:capture-screenshot", { webContentsId }),
+    captureElement: (selector: string, webContentsId?: number) =>
+      safe.invoke("browser:capture-element", { selector, webContentsId }),
   },
   // T120: Settings as a separate BrowserWindow
   settings: {

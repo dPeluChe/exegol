@@ -30,6 +30,22 @@
    - Main process: sync `emulator.snapshot()` per scrollback flush, `appendFileSync` per log line,
      sync napi `getDiff`/`getWorktreeDiff` on polled paths, sync log scan in `tokens.scan`
    - `FloatingBrowser` polls `agents.list` every 5s (shared key makes it win over 30s)
+5. **Audit leftovers (2026-09-28), not release blockers**:
+   - Git: Unstaged shows HEAD vs working tree (staged files appear twice); a file with staged and
+     unstaged changes lists only under Staged; renamed files pass `old -> new` as the path; Undo is
+     offered for `worktree_create` oplog entries the backend refuses; failed stage/unstage/create/
+     delete show no error
+   - Tokens: costs are fixed at import from a hardcoded price table (the Pricing editor changes
+     only one table); budgets cannot be deleted from the UI (`budgets.delete` unused)
+   - Settings: the global hotkey saves per keystroke (a half-typed accelerator unregisters it);
+     a custom CLI cannot be renamed or given a command; CLI changes do not broadcast to the main
+     window (30s stale); shortcut lists miss Cmd+T/W/J, Cmd+Shift+N, Cmd+/, Ctrl+Tab and show the
+     configurable focus hotkey as fixed; the Cmd+/ overlay shows Cmd+[ ] for Cmd+Shift+[ ]
+   - Watching: a card waiting for input cannot be collapsed. QA: saving a test does not refresh
+     the list. Onboarding: creating a project in step 3 skips the Done step. Tasks: auto-detect
+     never retries once the project loads; `.gitkeep` overwrite; GitHub issue cards drag to nothing
+   - Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
+     stale; Parallel Runs promote has no error; `agentClis` settings field unused
 4. **Status for a CLI typed in a terminal**: `detectShellClis` recognizes it (icon only). Next:
    run the status parser for that shell while a CLI is detected, so running / waiting and Needs
    attention work too (no hooks: it was not launched by Exegol)

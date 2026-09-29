@@ -1,9 +1,10 @@
 import type { NotificationEvent } from "@exegol/shared";
 import { DEFAULT_SETTINGS, muteChannelForEvent } from "@exegol/shared";
-import { BrowserWindow, Notification } from "electron";
+import { Notification } from "electron";
 import type Database from "libsql";
 import { getAppSettings } from "../../db/queries/settings";
 import { logger } from "../../lib/logger";
+import { mainAppWindow } from "../../lib/main-app-window";
 import type { NotificationChannel } from "../bus";
 
 // ─── Settings cache (avoid a DB hit on every event) ──────────────────────
@@ -71,7 +72,7 @@ export const desktopChannel: NotificationChannel = {
       });
 
       notification.on("click", () => {
-        const win = BrowserWindow.getAllWindows()[0];
+        const win = mainAppWindow();
         if (!win) return;
         win.show();
         win.focus();

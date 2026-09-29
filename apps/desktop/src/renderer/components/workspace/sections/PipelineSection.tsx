@@ -24,6 +24,7 @@ import {
   useStartPipelineRun,
 } from "../../../hooks/use-trpc-pipeline";
 import { trpcInvoke } from "../../../lib/trpc-client";
+import { ConfirmDialog } from "../../common/ConfirmDialog";
 
 import { PipelineRunView } from "./pipeline/PipelineRunView";
 import { PipelineTemplateEditor } from "./pipeline/PipelineTemplateEditor";
@@ -61,6 +62,7 @@ export function PipelineSection() {
   const [view, setView] = useState<View>({ type: "list" });
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [useWorktree, setUseWorktree] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null);
   const [task, setTask] = useState("");
   const trimmedTask = task.trim();
   const canRun = !!selectedTemplateId && !!trimmedTask;
@@ -84,11 +86,12 @@ export function PipelineSection() {
     return <PipelineRunView runId={view.runId} onClose={() => setView({ type: "list" })} />;
   }
 
-  const handleStartRun = async () => {
+  // `worktree` passed in: "Run without worktree" set the state and ran with the stale value
+  const handleStartRun = async (worktree = useWorktree) => {
     if (!projectId || !canRun) return;
 
     // Check git sync before creating worktree
-    if (useWorktree) {
+    if (worktree) {
       try {
         const sync = await trpcInvoke<{
           clean: boolean;
@@ -109,7 +112,7 @@ export function PipelineSection() {
         templateId: selectedTemplateId,
         projectId,
         task: trimmedTask,
-        useWorktree,
+        useWorktree: worktree,
       },
       {
         onSuccess: (run) => {
@@ -121,6 +124,20 @@ export function PipelineSection() {
 
   return (
     <div className="flex h-full flex-col">
+      <ConfirmDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+        title={`Delete pipeline "${pendingDelete?.name ?? ""}"?`}
+        description="The template is deleted; past runs stay in the history."
+        confirmLabel="Delete"
+        variant="destructive"
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          deleteTemplate.mutate(pendingDelete.id);
+          // Run stayed enabled for the deleted template
+          if (selectedTemplateId === pendingDelete.id) setSelectedTemplateId(null);
+        }}
+      />
       {/* Start Run Bar */}
       <div className="border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
@@ -152,7 +169,7 @@ export function PipelineSection() {
           </label>
           <button
             type="button"
-            onClick={handleStartRun}
+            onClick={() => handleStartRun()}
             disabled={!canRun || startRun.isPending}
             className={cn(
               "flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] font-medium shrink-0",
@@ -180,7 +197,7 @@ export function PipelineSection() {
               onClick={() => {
                 setGitWarning(null);
                 setUseWorktree(false);
-                handleStartRun();
+                handleStartRun(false);
               }}
               className="shrink-0 rounded px-2 py-0.5 text-[9px] text-text-muted hover:bg-white/10"
             >
@@ -288,7 +305,7 @@ export function PipelineSection() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => deleteTemplate.mutate(t.id)}
+                  onClick={() => setPendingDelete(t)}
                   className="hidden shrink-0 text-text-muted hover:text-red-400 group-hover:block"
                 >
                   <Trash2 className="h-3 w-3" />

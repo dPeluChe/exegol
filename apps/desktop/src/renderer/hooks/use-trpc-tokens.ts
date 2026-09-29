@@ -10,11 +10,12 @@ import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
 // ─── Token Usage ─────────────────────────────────────────────────────────────
 
-export function useTokenUsageSummary(agentId?: string, projectId?: string) {
+/** `days`: the window the numbers cover (1 = the last 24h, the status bar's) */
+export function useTokenUsageSummary(agentId?: string, projectId?: string, days = 1) {
   return useQuery({
-    queryKey: ["tokenUsage", agentId ?? projectId ?? "all"],
+    queryKey: ["tokenUsage", agentId ?? projectId ?? "all", days],
     queryFn: () => {
-      const input: { agentId?: string; projectId?: string } = {};
+      const input: { agentId?: string; projectId?: string; days?: number } = { days };
       if (agentId) input.agentId = agentId;
       else if (projectId) input.projectId = projectId;
       return trpcInvoke<TokenUsageSummary>(

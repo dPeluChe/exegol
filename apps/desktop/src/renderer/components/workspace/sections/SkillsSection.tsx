@@ -19,6 +19,7 @@ import { useCallback, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { useProject } from "../../../hooks/use-trpc";
 import { useSkills, useToggleSkill, useUninstallSkill } from "../../../hooks/use-trpc-skills";
+import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { EmptyState } from "../../common/EmptyState";
 import { SkillImportDialog } from "./SkillImportDialog";
 import { SkillInstallModal } from "./SkillInstallModal";
@@ -128,6 +129,7 @@ export function SkillsSection() {
                 key={skill.name}
                 skill={skill}
                 projectId={projectId}
+                projectPath={project?.path ?? null}
                 expanded={expandedSkill === skill.name}
                 onToggleExpand={() => toggleExpand(skill.name)}
               />
@@ -169,11 +171,13 @@ function FilterButton({
 function SkillCard({
   skill,
   projectId,
+  projectPath,
   expanded,
   onToggleExpand,
 }: {
   skill: SkillWithState;
   projectId: string | null;
+  projectPath: string | null;
   expanded: boolean;
   onToggleExpand: () => void;
 }) {
@@ -191,9 +195,8 @@ function SkillCard({
     });
   }, [projectId, skill.name, skill.enabled, toggleSkill]);
 
-  const handleUninstall = useCallback(() => {
-    uninstall.mutate({ skillName: skill.name, scope: skill.scope });
-  }, [skill.name, skill.scope, uninstall]);
+  const [confirmUninstall, setConfirmUninstall] = useState(false);
+  const handleUninstall = useCallback(() => setConfirmUninstall(true), []);
 
   return (
     <div
@@ -336,6 +339,25 @@ function SkillCard({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmUninstall}
+        onOpenChange={setConfirmUninstall}
+        title={`Uninstall ${skill.name}?`}
+        description={
+          skill.scope === "project"
+            ? "Its folder is deleted from this project's skills."
+            : "Its folder is deleted from your global skills, for every project."
+        }
+        confirmLabel="Uninstall"
+        variant="destructive"
+        onConfirm={() =>
+          uninstall.mutate({
+            skillName: skill.name,
+            scope: skill.scope,
+            projectPath: skill.scope === "project" ? (projectPath ?? undefined) : undefined,
+          })
+        }
+      />
     </div>
   );
 }

@@ -18,6 +18,14 @@ interface UseBrowserQaParams {
   setUrlInput: (v: string) => void;
   setCurrentUrl: (v: string) => void;
   updatePane: (id: string, updates: { url: string }) => void;
+  webviewRef: React.RefObject<HTMLElement | null>;
+}
+
+/** This pane's webview: with two browser panes the window's first one answered */
+function webviewIdOf(ref: React.RefObject<HTMLElement | null>): number | undefined {
+  return (
+    ref.current as unknown as { getWebContentsId?: () => number } | null
+  )?.getWebContentsId?.();
 }
 
 export function useBrowserQa({
@@ -28,6 +36,7 @@ export function useBrowserQa({
   setUrlInput,
   setCurrentUrl,
   updatePane,
+  webviewRef,
 }: UseBrowserQaParams) {
   const queryClient = useQueryClient();
 
@@ -57,14 +66,17 @@ export function useBrowserQa({
   }, []);
 
   // T102: Safe executeJs wrapper — catches CSP blocks and webview errors
-  const safeExecJs = useCallback(async (code: string): Promise<unknown> => {
-    try {
-      return (await window.api.browser?.executeJs(code)) ?? null;
-    } catch (err) {
-      console.warn("[BrowserPane] executeJs failed:", err);
-      return null;
-    }
-  }, []);
+  const safeExecJs = useCallback(
+    async (code: string): Promise<unknown> => {
+      try {
+        return (await window.api.browser?.executeJs(code, webviewIdOf(webviewRef))) ?? null;
+      } catch (err) {
+        console.warn("[BrowserPane] executeJs failed:", err);
+        return null;
+      }
+    },
+    [webviewRef],
+  );
 
   // T102: Toggle Design Mode — inject/remove selection overlay in webview
   const toggleDesignMode = useCallback(async () => {
@@ -191,7 +203,7 @@ export function useBrowserQa({
         };
         const captureScreenshot = async () => {
           try {
-            return (await window.api.browser?.captureScreenshot()) ?? null;
+            return (await window.api.browser?.captureScreenshot(webviewIdOf(webviewRef))) ?? null;
           } catch {
             return null;
           }
@@ -236,7 +248,7 @@ export function useBrowserQa({
         setReplayStep(-1);
       }
     },
-    [qaRecording, replaying, safeExecJs, stopOnFail, savedTestId, queryClient],
+    [qaRecording, replaying, safeExecJs, stopOnFail, savedTestId, queryClient, webviewRef],
   );
 
   const cancelReplay = useCallback(() => {
@@ -247,10 +259,10 @@ export function useBrowserQa({
   // Only the focused pane responds — prevents multiple panes from running simultaneously
   useEffect(() => {
     const handler = async (e: Event) => {
-      const { testId, startUrl, actions } = (e as CustomEvent).detail ?? {};
+      const { testId, startUrl, actions, paneId: target } = (e as CustomEvent).detail ?? {};
       if (!testId || !actions) return;
-      const focusedId = useWorkspaceStore.getState().focusedPaneId;
-      if (focusedId !== paneId) return;
+      // The section names the pane; the focused one answers an event without a target
+      if ((target ?? useWorkspaceStore.getState().focusedPaneId) !== paneId) return;
       setUrlInput(startUrl);
       setCurrentUrl(startUrl);
       updatePane(paneInternalId, { url: startUrl });

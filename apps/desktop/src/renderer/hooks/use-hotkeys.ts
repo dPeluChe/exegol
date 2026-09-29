@@ -182,7 +182,7 @@ export function useHotkeys() {
 }
 
 /** Stop agents in terminal panes, then close the focused pane/tab */
-function cleanupAndCloseFocusedPane(): void {
+export function cleanupAndCloseFocusedPane(): void {
   const ws = useWorkspaceStore.getState();
   const pw = getProjectState();
   const { focusedPaneId } = ws;

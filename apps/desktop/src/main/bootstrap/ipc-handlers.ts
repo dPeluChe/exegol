@@ -145,32 +145,46 @@ export function registerIpcHandlers(): void {
 
   // ── T102: Design Mode + QA — browser pane IPC ──────────────────────
 
-  /** Find the first <webview> webContents hosted by the sender window. */
-  const findWebview = (sender: Electron.WebContents) =>
-    webContents
-      .getAllWebContents()
-      .find((wc) => wc.getType() === "webview" && wc.hostWebContents === sender);
+  /** The pane's own webview (by id, and only one hosted by the sender window); without an id,
+   *  the window's first. The first-only lookup hit the wrong page with two browser panes */
+  const findWebview = (sender: Electron.WebContents, id?: number) => {
+    const isOurs = (wc: Electron.WebContents | undefined) =>
+      !!wc && wc.getType() === "webview" && wc.hostWebContents === sender;
+    if (id !== undefined) {
+      const wc = webContents.fromId(id);
+      return isOurs(wc) ? wc : undefined;
+    }
+    return webContents.getAllWebContents().find(isOurs);
+  };
 
   // Inject JS into the webview and return the result
-  ipcMain.handle("browser:execute-js", async (_event, { code }: { code: string }) => {
-    const wv = findWebview(_event.sender);
-    if (!wv) return null;
-    return wv.executeJavaScript(code);
-  });
+  ipcMain.handle(
+    "browser:execute-js",
+    async (_event, { code, webContentsId }: { code: string; webContentsId?: number }) => {
+      const wv = findWebview(_event.sender, webContentsId);
+      if (!wv) return null;
+      return wv.executeJavaScript(code);
+    },
+  );
 
   // Capture the webview as a base64 PNG screenshot
-  ipcMain.handle("browser:capture-screenshot", async (_event) => {
-    const wv = findWebview(_event.sender);
-    if (!wv) return null;
-    const image = await wv.capturePage();
-    return image.toPNG().toString("base64");
-  });
+  ipcMain.handle(
+    "browser:capture-screenshot",
+    async (_event, args?: { webContentsId?: number }) => {
+      const wv = findWebview(_event.sender, args?.webContentsId);
+      if (!wv) return null;
+      const image = await wv.capturePage();
+      return image.toPNG().toString("base64");
+    },
+  );
 
   // Capture a specific element's geometry + computed styles
-  ipcMain.handle("browser:capture-element", async (_event, { selector }: { selector: string }) => {
-    const wv = findWebview(_event.sender);
-    if (!wv) return null;
-    return wv.executeJavaScript(`
+  ipcMain.handle(
+    "browser:capture-element",
+    async (_event, { selector, webContentsId }: { selector: string; webContentsId?: number }) => {
+      const wv = findWebview(_event.sender, webContentsId);
+      if (!wv) return null;
+      return wv.executeJavaScript(`
       (() => {
         const el = document.querySelector(${JSON.stringify(selector)});
         if (!el) return null;
@@ -193,5 +207,6 @@ export function registerIpcHandlers(): void {
         };
       })()
     `);
-  });
+    },
+  );
 }

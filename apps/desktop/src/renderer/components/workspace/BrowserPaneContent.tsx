@@ -90,6 +90,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     handleReplay,
     cancelReplay,
   } = useBrowserQa({
+    webviewRef,
     paneId,
     paneInternalId: pane.id,
     projectId,

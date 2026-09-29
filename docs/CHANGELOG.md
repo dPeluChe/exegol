@@ -34,6 +34,14 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launcher: Terminal, Files and Git act on the selected folder chip (they always opened the project root); Browser stays under the agents
 
 ### Fixed
+- Links in Settings and floating windows open in your browser instead of an app window
+- Uninstalling a project skill no longer removes the global one of the same name, and asks first
+- With two browser panes, QA replay, Design Mode and screenshots act on the right page
+- Project sections (Tasks, Knowledge, Pipelines) no longer carry state into the next project
+- Pipelines "Run without worktree" works; deleting a pipeline asks first; editing a prompt shows it
+- File search works in a worktree; Smart Git no longer offers "Create PR" on main
+- Command palette reaches agents in any project and closing a pane stops its agent, like Cmd+W
+- Token summary cards follow the chosen range; QA "Run" works without focusing the browser first
 - Resources: Disk read the read-only system volume (2%) instead of your data; each metric now says what it is of and how much is Exegol vs the agents
 - Resume from the Dashboard now updates a pane in another project (it kept showing the old session)
 - A session lost before its history was saved (system restart) now offers Resume instead of a dead "No history available"

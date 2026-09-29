@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
-import { BrowserWindow, shell } from "electron";
+import { BrowserWindow } from "electron";
 import windowStateKeeper from "electron-window-state";
 import { registerMainWindow } from "../windows/floating";
 import { registerMainWindowForSettings } from "../windows/settings";
@@ -57,11 +57,6 @@ export function createWindow(): void {
     registerMainWindow(mainWindow);
     registerMainWindowForSettings(mainWindow);
   }
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url);
-    return { action: "deny" };
-  });
 
   // T155.6: deliver a deep link that arrived before (or during) load
   mainWindow.webContents.on("did-finish-load", () => {
