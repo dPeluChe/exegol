@@ -12,7 +12,7 @@ vi.mock("node:os", async (importOriginal) => ({
 import { droidHistory } from "./droid";
 
 describe("droidHistory", () => {
-  const REPO = "/Users/me/_code_/labs_irma";
+  const REPO = "/Users/me/_code_/my_repo";
 
   beforeEach(() => {
     home.dir = mkdtempSync(join(tmpdir(), "exegol-droid-"));
@@ -21,7 +21,7 @@ describe("droidHistory", () => {
   // droid replaces ONLY `/`, unlike Claude Code which also replaces `_`.
   // Assuming the two matched found nothing at all.
   it("slugs slashes but keeps underscores", async () => {
-    const dir = join(home.dir, ".factory", "sessions", "-Users-me-_code_-labs_irma");
+    const dir = join(home.dir, ".factory", "sessions", "-Users-me-_code_-my_repo");
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, "abc.jsonl"),

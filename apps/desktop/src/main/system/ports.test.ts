@@ -4,7 +4,7 @@ import { parseLsofListenLine } from "./ports";
 describe("parseLsofListenLine", () => {
   it("reads the port from a real row, whose last column is (LISTEN)", () => {
     const row =
-      "node      40030 peluche   33u  IPv6 0xa77812cde9ec7db4      0t0  TCP [::1]:5173 (LISTEN)";
+      "node      40030 me        33u  IPv6 0xa77812cde9ec7db4      0t0  TCP [::1]:5173 (LISTEN)";
     expect(parseLsofListenLine(row)).toEqual({ port: 5173, pid: 40030, process: "node" });
   });
 

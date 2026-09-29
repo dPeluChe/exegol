@@ -224,4 +224,4 @@ exegol/
 
 ## License
 
-Private — not open source yet.
+[MIT](LICENSE)

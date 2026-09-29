@@ -416,7 +416,7 @@ Las pruebas base produjeron avisos del entorno inicialmente restringido y del co
 
 ## Repos actualizados y fuentes
 
-Raíz obtenida de `spark config`: `/Users/peluche/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com`.
+Raíz obtenida de `spark config`: `~/<repos>/github.com`.
 
 | Repo | Antes | Después | Fecha del commit final |
 |---|---|---|---|

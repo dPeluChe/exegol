@@ -79,7 +79,7 @@ const config: Configuration = {
     target: "default",
     hardenedRuntime: true,
     gatekeeperAssess: false,
-    // Notarized when a notarytool keychain profile is given (APPLE_KEYCHAIN_PROFILE=exegol-notary,
+    // Notarized when a notarytool keychain profile is given (APPLE_KEYCHAIN_PROFILE=<profile>,
     // see docs/GUIDES/RELEASE.md). Without it macOS refuses the downloaded DMG ("could not verify")
     notarize: !!process.env.APPLE_KEYCHAIN_PROFILE,
     entitlements: "src/resources/build/entitlements.mac.plist",

@@ -1328,8 +1328,8 @@ location (local path vs ssh://host). Key files to study:
 
 ## Wave 2 Backlog — Competitive Review 2026-07
 
-> Source analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`. Repos studied live in
-> `~/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/`.
+> Source analysis: `docs/RESEARCH/COMPETITIVE_REVIEW_2026_07.md`. Repos studied were cloned locally
+> (not part of this repo).
 
 
 ---
@@ -1497,7 +1497,7 @@ location (local path vs ssh://host). Key files to study:
 > NATIVE Exegol feature: background fleet-watch over registered repos, surfacing what
 > Antonio has NOT seen/reviewed (attention tracking), consumed by the UI and by external
 > Claude sessions via the existing MCP layer. Deferred until Wave 2.6 (hardening) closes.
-> Salvage source: `_code_/_archive_/labs-cli-proman`.
+> Salvage source: the archived `cli-proman` project (maintainer's machine).
 > IDs renumbered 2026-09-22 (were T156/T157/T158/T160, which collided with the dashboard,
 > messaging, memory-habit and alias tasks): T186, T187, T188, T189. T159 unchanged.
 > Runtime conflict to settle before building: T153 wants a `llama-server` sidecar, T159 an
@@ -1507,8 +1507,7 @@ location (local path vs ssh://host). Key files to study:
 **Why**: kills the manual "¿qué no he visto?" scan across active repos; useful with zero LLM.
 **Scope**: port cli-proman collector commands (`status`, `git-status`, `wip`, `blocked`,
 `review`, `next`...) as deterministic per-repo collectors → facts JSON; scheduler
-(interval/on-wake) over registered repos (start: henri ×2, walter ×2, skysset,
-dpeluche.dev); store in SQLite with per-item seen/unseen marks; raw digest view in UI.
+(interval/on-wake) over registered repos (start: the maintainer's active repos); store in SQLite with per-item seen/unseen marks; raw digest view in UI.
 Owl is read-only toward repos — writes only to its own store.
 
 ### T187 — Owl Phase 2: Small-model synthesis via InferenceProvider `P2` (depends: T186, T122)
@@ -1532,7 +1531,7 @@ view, not the runtime. Definition: `docs/ARCHITECTURE/COUNCIL_BASE.md`.
 **Definition**: `docs/ARCHITECTURE/COUNCIL_BASE.md`. Absorbs the standalone "council MCP"
 project — one server, not two. NOT branded "rubber duck": cross-family review is one preset.
 **Why**: (a) relay-by-hand between session agents was friction #1 of the jul-2026
-conversation audit (henri front↔backend, walter client↔cloud); (b) "define prompt +
+conversation audit (frontend↔backend, client↔cloud repo pairs); (b) "define prompt +
 structure, get result" executions are what live sessions don't cover.
 **Scope**:
 - Structured executions: spawn CLIs non-interactively (`claude -p`, `codex exec`, gemini)
