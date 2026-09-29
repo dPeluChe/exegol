@@ -136,8 +136,14 @@ export function setupTerminalSession(
         return false;
       }
       if (e.type !== "keydown") return true;
-      if (e.key === "Backspace" && (e.ctrlKey || e.metaKey)) {
+      if (e.key === "Backspace" && (e.ctrlKey || e.metaKey || e.altKey)) {
         window.api.terminal.write(deps.agentId, "\x17");
+        return false;
+      }
+      // Option+←/→ → word back/forward (ESC b / ESC f). xterm sent CSI 1;3D, which zsh has no
+      // binding for, so a plain shell printed "D"
+      if (e.altKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        window.api.terminal.write(deps.agentId, e.key === "ArrowLeft" ? "\x1bb" : "\x1bf");
         return false;
       }
       // Cmd+←/→ → Ctrl+A/Ctrl+E (line home/end, the macOS muscle memory)
