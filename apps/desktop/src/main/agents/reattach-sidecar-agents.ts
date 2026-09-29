@@ -6,6 +6,7 @@ import { logger } from "../lib/logger";
 import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
+import { expectReattach, settleReattach } from "../terminal/reattach-gate";
 import { createOutputProcessor } from "./agent-output-processor";
 import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
 import { cleanupWorktree, hydrateTrackedWorktree, type WorktreeRecord } from "./agent-worktree-ops";
@@ -64,8 +65,15 @@ export async function reattachSidecarAgents(
   const sidecarSet = new Set(sidecarSessionIds);
   const updateResumeCommand = db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?");
 
+  // Each pane waits for its own session only; sessions go one by one, so the previous one is
+  // settled when the next starts (every exit path of an iteration is covered)
+  expectReattach(stale.map((r) => r.id as string).filter((id) => sidecarSet.has(id)));
+  let previous: string | null = null;
+
   for (const row of stale) {
     const agentId = row.id as string;
+    if (previous) settleReattach(previous);
+    previous = agentId;
     const cliType = row.cli_type as AgentCliType;
     const projectId = row.project_id as string;
     const isShell = cliType === "shell";
@@ -211,6 +219,7 @@ export async function reattachSidecarAgents(
     }
   }
 
+  if (previous) settleReattach(previous);
   logger.info(
     `[Reattach] Done — alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size}`,
   );

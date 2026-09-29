@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- After an update or restart, each terminal appears as soon as its own session is back instead of waiting for all of them
+
 ## [0.5.6] — 2026-09-29 — Linux packages
 
 ### Added

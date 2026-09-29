@@ -6,6 +6,7 @@ import { markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
+import { settleAllReattach } from "../terminal/reattach-gate";
 
 // Background: stale data cleanup (not needed before first paint)
 export function cleanupStaleData(): void {
@@ -212,6 +213,7 @@ export async function runStartupRecovery(): Promise<void> {
   } catch (err) {
     logger.error("[Startup] Agent recovery failed (non-fatal):", err);
   } finally {
+    settleAllReattach();
     markRecoveryDone();
   }
 }
