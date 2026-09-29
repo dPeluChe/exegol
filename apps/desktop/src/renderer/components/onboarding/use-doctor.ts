@@ -11,6 +11,10 @@ export interface DoctorCheck {
   status: DoctorStatus;
   detail: string;
   actionUrl?: string;
+  /** Agent CLIs: the vendor's install command (shown to copy when missing) */
+  installCommand?: string;
+  /** Agent CLIs: the vendor's update command (shown to copy when installed) */
+  updateCommand?: string;
   /** Optional for backward compat with cached reports; UI defaults to "system". */
   category?: DoctorCategory;
 }

@@ -1,5 +1,5 @@
 import { exec, execSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
@@ -290,6 +290,14 @@ export function warmShellPath(): void {
       process.env.PATH = resolvedPath;
     }
   });
+}
+
+/** Whether `command` resolves to a file on the login shell's PATH */
+export function commandOnPath(command: string): boolean {
+  if (command.includes("/")) return existsSync(command);
+  return _getFullPath()
+    .split(":")
+    .some((dir) => dir && existsSync(join(dir, command)));
 }
 
 // Adopted into process.env: main's own execs (gh, git, lsof) otherwise get launchd's PATH from Finder

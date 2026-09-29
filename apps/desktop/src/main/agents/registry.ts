@@ -335,6 +335,9 @@ const PROVIDER_OVERRIDES_KEY = "provider_overrides";
 
 let instance: AgentProviderRegistry | null = null;
 
+/** Newer binary names a CLI moved to: Kilo Code 1.0 ships `kilo`, older installs `kilocode` */
+export const COMMAND_ALIASES: Record<string, string[]> = { kilocode: ["kilo"] };
+
 export function getProviderRegistry(): AgentProviderRegistry {
   if (!instance) {
     instance = new AgentProviderRegistry();

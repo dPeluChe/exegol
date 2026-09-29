@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Copy, RefreshCw, XCircle } from "lucide-react";
 import { useState } from "react";
 import { FilterChip } from "../common/FilterChip";
 import type { DoctorCategory, DoctorCheck, DoctorStatus } from "./use-doctor";
@@ -160,6 +160,34 @@ export function DoctorChecklist({
   );
 }
 
+/** A vendor command to paste in a terminal, one click to copy */
+function CopyCommand({ label, command }: { label: string; command: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        navigator.clipboard
+          .writeText(command)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => {})
+      }
+      className="mt-1 flex w-full min-w-0 items-center gap-1.5 rounded bg-bg-primary px-2 py-1 text-left font-mono text-[10px] text-text-secondary hover:text-text-primary"
+      title={`${label}: click to copy`}
+    >
+      {copied ? (
+        <Check className="h-3 w-3 shrink-0 text-success" />
+      ) : (
+        <Copy className="h-3 w-3 shrink-0 text-text-muted" />
+      )}
+      <span className="min-w-0 truncate">{command}</span>
+    </button>
+  );
+}
+
 function CheckRow({ check, muted }: { check: DoctorCheck; muted?: boolean }) {
   const Icon = STATUS_ICON[check.status];
   return (
@@ -170,6 +198,13 @@ function CheckRow({ check, muted }: { check: DoctorCheck; muted?: boolean }) {
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-text-primary">{check.label}</div>
         <div className="text-[11px] text-text-muted">{check.detail}</div>
+        {check.installCommand && <CopyCommand label="Install" command={check.installCommand} />}
+        {check.updateCommand && (
+          <details className="mt-0.5 text-[10px] text-text-muted">
+            <summary className="cursor-pointer hover:text-text-secondary">Update command</summary>
+            <CopyCommand label="Update" command={check.updateCommand} />
+          </details>
+        )}
       </div>
       {check.actionUrl && (
         <button
@@ -177,7 +212,8 @@ function CheckRow({ check, muted }: { check: DoctorCheck; muted?: boolean }) {
           onClick={() => window.open(check.actionUrl, "_blank")}
           className="shrink-0 text-[11px] text-accent hover:underline"
         >
-          Install
+          {/* With a command to copy the link is the docs; alone it is where to get it */}
+          {check.installCommand ? "Docs" : "Install"}
         </button>
       )}
     </div>

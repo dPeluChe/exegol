@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Doctor and setup wizard: each agent CLI shows its installed version and the vendor's install or update command to copy; Kilo Code's new `kilo` binary is found and launched
+
 ### Fixed
 - First-run setup: the wizard fits the window and scrolls, shows which step you are on, and folds the CLIs you have not installed into one optional line
 - Quitting asks first whenever an agent session is open, not only while one is working, so an automatic macOS logout no longer closes Exegol unattended
