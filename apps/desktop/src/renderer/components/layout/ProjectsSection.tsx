@@ -8,11 +8,12 @@ import {
   useProjects,
   useSetProjectGroup,
 } from "../../hooks/use-trpc";
-import { useProjectShortcuts } from "../../lib/live-tabs";
+import { shortcutLabel, useProjectShortcuts } from "../../lib/live-tabs";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { AgentState } from "../../stores/agents";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
+import type { ShortcutDigit } from "../../stores/shortcuts";
 import { GROUP_COLORS } from "./GroupIconColorPicker";
 import { ProjectGroupHeader } from "./ProjectGroupHeader";
 import { ProjectItem } from "./ProjectItem";
@@ -38,7 +39,7 @@ interface ProjectListSectionProps {
   expandedIds: Set<string>;
   agentsById: Record<string, AgentState>;
   /** Cmd+n that jumps to the project's live tab (lib/live-tabs) */
-  shortcuts: Map<string, string>;
+  shortcuts: Map<string, ShortcutDigit>;
   draggedProjectIdRef: React.MutableRefObject<string | null>;
   onSelect: (id: string) => void;
   onToggle: (id: string) => void;
@@ -104,7 +105,7 @@ function ProjectListSection({
             // not the project tree (verify 2026-08-11: 4 shown, 2 real).
             (a) => a.projectId === project.id && LIVE_STATUSES.has(a.status),
           )}
-          shortcut={shortcuts.get(project.id)}
+          shortcut={shortcutLabel(shortcuts.get(project.id)) ?? undefined}
           index={index}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}

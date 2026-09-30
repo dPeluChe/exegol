@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Edit project: a keyboard shortcut (Cmd+2..9 or Cmd+0) the project keeps; the other live tabs fill the free numbers, and tabs whose sessions are all pinned (already on the Dashboard, Cmd+1) go last. Cmd+0 is the ninth slot; Reset Zoom moves to Cmd+Shift+0
 - Sidebar Projects: a project shows the Cmd+n that jumps to its live tab, as its Agents group does
 - Keyboard navigation puts the cursor where it lands: Cmd+2..9, Cmd+Option+1..9 and Cmd+Shift+[ ] focus the active pane's terminal, ready to type; Ctrl+Tab / Ctrl+Shift+Tab (or Cmd+] / Cmd+[) move to the next or previous pane of the tab
 - Terminal pane menu: Clear Terminal wipes the screen and scrollback and sends Ctrl+L, so the shell or CLI redraws clean

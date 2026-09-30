@@ -204,7 +204,7 @@ exegol/
 | `Cmd+Shift+]` / `Cmd+Shift+[` | Next / Previous workspace tab |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous pane of the tab |
 | `Cmd+1` | Dashboard |
-| `Cmd+2-9` | Live tab groups, in the order shown |
+| `Cmd+2-9`, `Cmd+0` | Live tab groups: numbers set in Edit project first, then the sidebar's order, pinned sessions last |
 | `Cmd+Option+1-9` | Workspace tab of the current project by position |
 | `Cmd+]` / `Cmd+[` | Next / previous pane (same as Ctrl+Tab) |
 | `Cmd+J` | Jump to next attention item |

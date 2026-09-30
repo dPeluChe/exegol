@@ -44,8 +44,9 @@ export const SHORTCUTS: Shortcut[] = [
   {
     id: "live-tab-n",
     label: "Live Tab N",
-    description: "Tabs with live sessions, in the sidebar's order (drag to reorder)",
-    keys: "Cmd+2-9",
+    description:
+      "Tabs with live sessions: a number set in Edit project first, then the sidebar's order, pinned sessions last",
+    keys: "Cmd+2-9, Cmd+0",
     category: "navigation",
   },
   {

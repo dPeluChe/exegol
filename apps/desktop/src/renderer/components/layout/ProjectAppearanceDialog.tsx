@@ -3,7 +3,9 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState } from "react";
+import { useProjects } from "../../hooks/use-trpc";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../../stores/shortcuts";
 import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
 
 /**
@@ -74,6 +76,8 @@ export function ProjectAppearanceDialog({
             />
           </label>
 
+          <ShortcutPicker projectId={project.id} />
+
           <ProjectIconPicker
             found={found}
             isLoading={isLoading}
@@ -104,5 +108,41 @@ export function ProjectAppearanceDialog({
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+/** The Cmd+digit this project keeps (lib/live-tabs): the others fill the numbers left */
+function ShortcutPicker({ projectId }: { projectId: string }) {
+  const assigned = useShortcutStore((s) => s.assigned);
+  const assign = useShortcutStore((s) => s.assign);
+  const { data: projects = [] } = useProjects();
+  const nameOf = new Map(projects.map((p) => [p.id, p.name]));
+  const holder = new Map(Object.entries(assigned).map(([id, d]) => [d, id]));
+  const current = assigned[projectId] ?? "";
+
+  return (
+    <label className="mb-3 block">
+      <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+        Keyboard shortcut
+      </span>
+      <select
+        value={current}
+        onChange={(e) => assign(projectId, (e.target.value || null) as ShortcutDigit | null)}
+        className="w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
+      >
+        <option value="">Automatic (next free number while it has a live tab)</option>
+        {SHORTCUT_DIGITS.map((d) => {
+          const owner = holder.get(d);
+          return (
+            <option key={d} value={d}>
+              {`⌘${d}`}
+              {owner && owner !== projectId
+                ? ` (now ${nameOf.get(owner) ?? "another project"})`
+                : ""}
+            </option>
+          );
+        })}
+      </select>
+    </label>
   );
 }

@@ -14,9 +14,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePointerReorder } from "../../hooks/use-pointer-reorder";
 import { useProject, useProjects } from "../../hooks/use-trpc";
 import {
-  groupShortcut,
   type LiveTabGroup,
   reorderKeys,
+  shortcutLabel,
+  useGroupShortcuts,
   useLiveTabGroups,
 } from "../../lib/live-tabs";
 import {
@@ -120,6 +121,7 @@ export function AttentionSection() {
   // Grouped by workspace tab (layout), in the user's order: the same list Cmd+2..9 walks.
   // A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
+  const groupShortcuts = useGroupShortcuts();
   const setOrder = useAppStore((s) => s.setLiveTabOrder);
   const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();
@@ -228,11 +230,11 @@ export function AttentionSection() {
 
       {view === "agents" && (
         <div className="space-y-1.5">
-          {groups.map((group, index) => (
+          {groups.map((group) => (
             <TabAgentGroup
               key={group.key}
               group={group}
-              shortcut={groupShortcut(index)}
+              shortcut={shortcutLabel(groupShortcuts.get(group.key))}
               agents={group.agentIds.map((id) => agents[id]).filter((a): a is AgentState => !!a)}
               onNavigate={navigateToAgent}
               reorderProps={reorder.itemProps(group.key)}

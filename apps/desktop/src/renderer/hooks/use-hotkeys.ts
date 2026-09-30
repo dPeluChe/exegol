@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { getLiveTabGroups } from "../lib/live-tabs";
+import { groupForDigit } from "../lib/live-tabs";
 import { cyclePane, focusActivePane } from "../lib/pane-focus";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -131,17 +131,17 @@ export function useHotkeys() {
       }
 
       // e.code: with Option held, e.key is "¡", "™"...
-      const digit = /^Digit([1-9])$/.exec(e.code)?.[1];
+      const digit = /^Digit([0-9])$/.exec(e.code)?.[1];
 
-      // Cmd+1: Dashboard; Cmd+2-9: the live tab groups, in the sidebar's order
+      // Cmd+1: Dashboard; Cmd+2-9, 0: the live tab groups (numbers given in Edit project first,
+      // then the sidebar's order, pinned ones last: lib/live-tabs)
       if (digit && !e.altKey && !e.shiftKey) {
         e.preventDefault();
-        const n = Number(digit);
-        if (n === 1) {
+        if (digit === "1") {
           useAppStore.getState().openDashboard();
           return;
         }
-        const group = getLiveTabGroups()[n - 2];
+        const group = groupForDigit(digit);
         const first = group?.agentIds[0];
         if (group && first) {
           jumpToAgent(first, group.projectId);
@@ -152,7 +152,7 @@ export function useHotkeys() {
       }
 
       // Cmd+Option+1-9: workspace tab of the current project by position
-      if (digit && e.altKey) {
+      if (digit && digit !== "0" && e.altKey) {
         e.preventDefault();
         const ws = useWorkspaceStore.getState();
         const index = Number(digit) - 1;
