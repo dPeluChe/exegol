@@ -38,7 +38,11 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const { scrollAtTop, scrollAtBottom, hasNewOutput, handleScrollPosition } =
     useTerminalScrollState();
   const terminalRef = useRef<TerminalInstanceHandle>(null);
-  const { sendTargets, showSendTo, setShowSendTo, handleSendTo } = useSendTo(agentId, terminalRef);
+  const { sendGroups, showSendTo, setShowSendTo, handleSendTo, onSelectionChange } = useSendTo(
+    agentId,
+    storeAgent?.projectId ?? activeProjectId ?? undefined,
+    terminalRef,
+  );
   const { viewMode, setViewMode, liveSnapshot, toggleLiveView } = useLiveViewMode(terminalRef);
   const stopAgent = useStopAgent();
   const resumeAgent = useResumeAgent();
@@ -91,7 +95,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       scrollAtTop={scrollAtTop}
       scrollAtBottom={scrollAtBottom}
       hasNewOutput={hasNewOutput}
-      sendTargets={sendTargets}
+      sendGroups={sendGroups}
       showSendTo={showSendTo}
       setShowSendTo={setShowSendTo}
       onSendTo={handleSendTo}
@@ -111,6 +115,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
         terminalRef={terminalRef}
         onScrollPosition={handleScrollPosition}
         floatingButtons={floatingButtons}
+        onSelectionChange={onSelectionChange}
       />
     );
   }
@@ -182,6 +187,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                 onScrollPosition={handleScrollPosition}
                 onOpenFileLink={handleOpenFileLink}
                 onOpenUrlInPane={openBesideInBrowser}
+                onSelectionChange={onSelectionChange}
               />
               {floatingButtons}
             </>

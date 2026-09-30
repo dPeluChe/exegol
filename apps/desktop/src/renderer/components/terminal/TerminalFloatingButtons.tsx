@@ -1,7 +1,9 @@
 import { cn } from "@exegol/ui";
 import { ArrowDownToLine, ArrowUpToLine, Send } from "lucide-react";
 import type { RefObject } from "react";
+import { AgentIcon } from "../common/AgentIcon";
 import type { TerminalInstanceHandle } from "./TerminalInstance";
+import type { SendTarget } from "./use-terminal-panel-actions";
 
 interface TerminalFloatingButtonsProps {
   terminalRef: RefObject<TerminalInstanceHandle | null>;
@@ -9,10 +11,11 @@ interface TerminalFloatingButtonsProps {
   scrollAtBottom: boolean;
   /** T155: output landed while scrolled up — pulse the scroll-down button */
   hasNewOutput?: boolean;
-  sendTargets: Array<{ id: string; cliType: string; taskDescription: string }>;
+  /** Live agents by project; empty while nothing is selected (the button hides) */
+  sendGroups: Array<{ projectId: string; projectName: string; targets: SendTarget[] }>;
   showSendTo: boolean;
   setShowSendTo: (v: boolean) => void;
-  onSendTo: (targetId: string) => void;
+  onSendTo: (target: SendTarget) => void;
 }
 
 export function TerminalFloatingButtons({
@@ -20,39 +23,50 @@ export function TerminalFloatingButtons({
   scrollAtTop,
   scrollAtBottom,
   hasNewOutput = false,
-  sendTargets,
+  sendGroups,
   showSendTo,
   setShowSendTo,
   onSendTo,
 }: TerminalFloatingButtonsProps) {
   return (
     <div className="absolute right-6 bottom-3 z-10 flex flex-col items-end gap-1.5">
-      {showSendTo && sendTargets.length > 0 && (
+      {showSendTo && sendGroups.length > 0 && (
         <div
-          className="mb-1 rounded-lg border p-1 shadow-xl"
+          className="mb-1 max-h-72 overflow-y-auto rounded-lg border p-1 shadow-xl"
           style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
         >
           <p className="px-2 py-1 text-[9px] font-medium uppercase tracking-wider text-text-muted">
-            Send selection to
+            Paste selection into
           </p>
-          {sendTargets.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => onSendTo(a.id)}
-              className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-text-secondary hover:bg-white/10"
+          {sendGroups.map((group) => (
+            <div
+              key={group.projectId}
+              className="mt-1 border-t border-border/60 pt-1 first:mt-0 first:border-t-0 first:pt-0"
             >
-              <span className="font-medium text-accent">{a.cliType}</span>
-              <span className="truncate text-text-muted">
-                {a.taskDescription?.slice(0, 40) || a.id}
-              </span>
-            </button>
+              <p className="px-2 py-0.5 text-[9px] font-semibold text-text-secondary">
+                {group.projectName}
+              </p>
+              {group.targets.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onSendTo(t)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-text-secondary hover:bg-white/10"
+                >
+                  <AgentIcon provider={t.cliType} size={12} />
+                  <span className="font-medium text-text-primary">{t.name}</span>
+                  {t.name !== t.cliType && (
+                    <span className="truncate text-text-muted">{t.cliType}</span>
+                  )}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}
 
       <div className="flex items-center gap-1">
-        {sendTargets.length > 0 && (
+        {sendGroups.length > 0 && (
           <button
             type="button"
             onClick={() => setShowSendTo(!showSendTo)}
@@ -62,7 +76,7 @@ export function TerminalFloatingButtons({
                 ? "border-accent/40 bg-accent/10 text-accent"
                 : "border-border bg-bg-secondary/90 text-text-muted hover:text-text-primary",
             )}
-            title="Send selected text to another agent"
+            title="Paste the selected text into another agent (it is not sent: add context there)"
           >
             <Send className="h-3 w-3" />
             <span>Send to</span>

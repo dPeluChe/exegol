@@ -54,6 +54,7 @@ export function useXterm({
   onReady,
   onScrollPosition,
   onOpenFileLink,
+  onSelectionChange,
   onOpenUrlInPane,
 }: UseXtermArgs) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -109,6 +110,7 @@ export function useXterm({
     onScrollPosition,
     onOpenFileLink,
     onOpenUrlInPane,
+    onSelectionChange,
   });
 
   useEffect(() => {
@@ -153,6 +155,9 @@ export function useXterm({
         : undefined,
       onOpenUrlInPane: live.onOpenUrlInPane
         ? (...args) => latest.current.onOpenUrlInPane?.(...args)
+        : undefined,
+      onSelectionChange: live.onSelectionChange
+        ? (...args) => latest.current.onSelectionChange?.(...args)
         : undefined,
       setPaneCwd,
       setPaneLastExit,

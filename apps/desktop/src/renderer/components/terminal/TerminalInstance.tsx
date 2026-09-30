@@ -35,6 +35,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     onScrollPosition,
     onOpenFileLink,
     onOpenUrlInPane,
+    onSelectionChange,
     paneId: paneIdProp,
   }: TerminalInstanceProps,
   ref: ForwardedRef<TerminalInstanceHandle>,
@@ -59,6 +60,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
     onScrollPosition,
     onOpenFileLink,
     onOpenUrlInPane,
+    onSelectionChange,
   });
   useTerminalHandle(ref, terminalRef, fitAddonRef, serializeAddonRef);
   const { isDragOver, handleDragOver, handleDragLeave, handleDrop } = useTerminalFileDrop(
