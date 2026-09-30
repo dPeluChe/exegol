@@ -441,7 +441,7 @@ function AttentionCard({
   return (
     <div
       className={cn(
-        "group flex items-center rounded-lg border transition-colors",
+        "group relative flex items-center rounded-lg border transition-colors",
         item.read ? "border-border/50 opacity-60" : config.bgClass,
         "hover:opacity-100",
       )}
@@ -457,24 +457,28 @@ function AttentionCard({
         {/* Provider icon */}
         <AgentIcon provider={item.cliType} size={14} />
 
-        {/* Content */}
+        {/* Row 1: who, what it waits for, since when. Row 2: its project (a wide chip beside
+            the name pushed the card past the sidebar) */}
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] font-medium text-text-primary">{name}</span>
-            {project && <ProjectChip project={project} className="py-0 text-[9px]" />}
+          <div className="flex min-w-0 items-center gap-1">
+            <span className="truncate text-[10px] font-medium text-text-primary">{name}</span>
             {item.pinned && <Pin className="h-2.5 w-2.5 shrink-0 text-amber-400" />}
             {!item.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+            <span className="ml-auto flex min-w-0 items-center gap-1 text-[9px] text-text-muted">
+              <LevelIcon className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{item.reason}</span>
+              <span className="shrink-0">{timeAgo(item.timestamp)}</span>
+            </span>
           </div>
-          <div className="flex items-center gap-1.5 text-[9px] text-text-muted">
-            <LevelIcon className="h-2.5 w-2.5 shrink-0" />
-            <span className="truncate">{item.reason}</span>
-            <span className="shrink-0">{timeAgo(item.timestamp)}</span>
-          </div>
+          {project && (
+            <ProjectChip project={project} className="mt-0.5 w-fit max-w-full py-0 text-[9px]" />
+          )}
         </div>
       </button>
 
       {/* Actions (hover) */}
-      <div className="flex shrink-0 items-center gap-0.5 py-1.5 pr-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+      {/* Over the card on hover: hidden, they no longer take the text's width */}
+      <div className="absolute top-1 right-1 flex items-center gap-0.5 rounded bg-bg-secondary/95 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         {!item.read && (
           <button
             type="button"

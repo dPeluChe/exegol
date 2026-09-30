@@ -19,7 +19,7 @@ export function ProjectChip({ project, className }: { project: ProjectMeta; clas
         className={cn("h-1.5 w-1.5 rounded-full", !project.color && "bg-accent")}
         style={project.color ? { backgroundColor: project.color } : undefined}
       />
-      <span className="max-w-[120px] truncate">{project.name}</span>
+      <span className="min-w-0 max-w-[120px] truncate">{project.name}</span>
     </span>
   );
 }

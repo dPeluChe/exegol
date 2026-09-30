@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Sidebar Projects: a project shows the Cmd+n that jumps to its live tab, as its Agents group does
 - Keyboard navigation puts the cursor where it lands: Cmd+2..9, Cmd+Option+1..9 and Cmd+Shift+[ ] focus the active pane's terminal, ready to type; Ctrl+Tab / Ctrl+Shift+Tab (or Cmd+] / Cmd+[) move to the next or previous pane of the tab
 - Terminal pane menu: Clear Terminal wipes the screen and scrollback and sends Ctrl+L, so the shell or CLI redraws clean
 
@@ -18,6 +19,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Sidebar Agents: a switch between the live agents and Needs attention (its count turns amber with something unread); the list shows every live agent again, the ones waiting on you marked, and the pick is remembered
 
 ### Fixed
+- Sidebar Needs attention cards no longer overflow: name, reason and time on the first row, the project on the second, and the hover actions float over the card instead of taking its width
 - Watching: a pinned session is a plain mirror again (0.5.8 sized the session to the card, and switching between the card and its pane left Claude's lines overlapped); fitting the session to the card is opt-in per card
 - Terminal "Send to" shows only while text is selected, lists live agents only (no shells) grouped by project with their session names, and pastes the selection into that agent without submitting it (a multi-line selection is one paste), then takes you there
 

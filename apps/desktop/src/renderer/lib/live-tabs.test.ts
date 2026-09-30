@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeLiveTabGroups, groupShortcut, reorderKeys } from "./live-tabs";
+import { computeLiveTabGroups, groupShortcut, projectShortcuts, reorderKeys } from "./live-tabs";
 
 const pane = (paneId: string) => ({ type: "pane" as const, paneId });
 const pw = (tabs: { id: string; label: string; panes: Record<string, string> }[]) =>
@@ -68,5 +68,19 @@ describe("reorderKeys", () => {
   });
   it("dropping on a group above moves it up", () => {
     expect(reorderKeys(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("projectShortcuts", () => {
+  it("gives each project the shortcut of its first live group; past Cmd+9 there is none", () => {
+    const groups = ["a", "b", "a", "c", "d", "e", "f", "g", "h"].map((projectId) => ({
+      projectId,
+    }));
+    const map = projectShortcuts(groups);
+    expect(map.get("a")).toBe("⌘2");
+    expect(map.get("b")).toBe("⌘3");
+    // Eight shortcuts (⌘2..⌘9): the 8th group (g) is ⌘9, the 9th (h) has none
+    expect(map.get("g")).toBe("⌘9");
+    expect(map.get("h")).toBeUndefined();
   });
 });
