@@ -136,8 +136,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - [x] Exegol MCP — **VERIFIED 2026-08-11**: shim framing bug found+fixed; claude shows
   `exegol · connected · 3 tools`; live memory_search (empty-correct) → 3× memory_save
   (ids+categories) → retrieval ✅. Pending only: read-mode denial (spawn a read-mode agent,
-  memory_save must be refused). Follow-up still open: MCP HOST StdioTransport may have the
-  same LSP-framing bug the shim had (external stdio servers likely can't connect).
+  memory_save must be refused). **MCP HOST** (Exegol connecting to external servers: `mcp/host.ts`,
+  `registry.ts`, the `mcp.*` connect/tools procedures), kept on purpose (2026-09-29), not usable:
+  it never had a UI and nothing connects it; stdio frames with `Content-Length` (MCP stdio is
+  newline JSON, the shim's old bug), no `notifications/initialized` after `initialize`, protocol
+  pinned to 2024-11-05, no tests. `spawn-context` pastes `buildToolContext()` into agent prompts:
+  empty today, but harmful if a server were connected (agents cannot call tools outside their own
+  MCP config). Rebuild on `@modelcontextprotocol/sdk` when there is a real consumer (e.g. a
+  pipeline step calling a tool without an agent).
   (`memory_list`, the AND→OR recall retry and opencode MCP config shipped: 2608.md, T163.)
 - Polish note (verify session): shell/agent exit card duplicates the scrollback tail
   visible right below it — slim the AgentStopReason card (keep actions, drop/collapse tail)
@@ -411,12 +417,19 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 1. **Scheduler has no UI** since 274e611 (SchedulerSection deleted); the sidebar Schedulers section
    was removed in the 2026-09-22 PR. Create/edit/toggle/run UI missing; hooks in
    `renderer/hooks/use-trpc-scheduler.ts` unused.
-2. **Ollama project indexing has no start button**: `indexer.startIndexing/search/projectStats` have
-   no renderer caller; the Settings section describes a feature the user cannot run.
+2. **Semantic code search (indexer), kept on purpose, not usable yet** (validated 2026-09-29):
+   no UI and nothing triggers `indexer.startIndexing`, so `file_index`/`file_chunks` are empty for
+   everyone; only the `exegol search` CLI reads them. Before exposing it (UI, an MCP `code_search`
+   tool for agents, or both): chunks are 500 lines (likely over the embedding model's context under
+   Ollama defaults: truncated vectors, unverified); `semanticSearch` loads every vector of the
+   project per query; its header promises FTS/RRF fusion the code does not do; `indexProject`,
+   `semanticSearch`, `hybridSearch` have no tests; indexing runs on the main process. Value vs
+   grep must be shown first (agents already grep). The FTS index is separate and alive (memory
+   recall); its `search.*` router has no caller (only memories are indexed)
 3. **Parallel runs**: `parallel-run:changed` broadcast is in neither the capabilities IPC list nor
    preload (UI polls every 10s); `agents.cancelParallelRun` has no UI.
 4. **Dead surface** (P2): `agent:signal` / `agent:turn-boundary` broadcasts have no subscriber;
-   tables `sessions`, `port_registry`, `host_metrics` unused; `messages.*` and `queue.*` have no UI;
+   tables `sessions`, `port_registry`, `host_metrics` unused; `queue.*` has no UI;
    preload `browser.captureElement` unused. Wire or delete (feeds T144).
 5. **LLM tier-3 score persists (w3_009) but nothing displays it**: show it in Scoring/History or stop
    the paid Haiku call.

@@ -239,6 +239,15 @@ export type AgentProvider = {
 export const AGENT_MESSAGE_TYPES = ["text", "handoff", "status", "request", "result"] as const;
 export type AgentMessageType = (typeof AGENT_MESSAGE_TYPES)[number];
 
+/** `queued` and `delivered` are transport; `consumed` is the receiver's own turn boundary.
+ *  Only the terminal three are final. */
+export type MessageDeliveryState =
+  | "queued"
+  | "delivered"
+  | "consumed"
+  | "cancelled"
+  | "undeliverable";
+
 export type AgentMessage = {
   id: string;
   fromAgentId: string | null;
@@ -246,7 +255,9 @@ export type AgentMessage = {
   type: AgentMessageType;
   content: string;
   createdAt: number;
+  /** The receiver pulled it (messages_check) */
   readAt: number | null;
+  deliveryState: MessageDeliveryState | null;
 };
 
 // ─── Task Queue ─────────────────────────────────────────────────────────────

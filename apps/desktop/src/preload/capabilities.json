@@ -213,11 +213,7 @@
     ],
     "messages": [
       "conversation",
-      "list",
-      "markAllRead",
-      "markRead",
-      "send",
-      "unreadCount"
+      "list"
     ],
     "queue": [
       "add",
