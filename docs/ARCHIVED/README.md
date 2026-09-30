@@ -6,7 +6,8 @@
 
 | Item | Archived | Why |
 |------|----------|-----|
-| `FEATURES_V0.1.md` | 2026-04 | v0.1 feature roadmap — superseded by `PROJECT_DEFINITION/FEATURES.md` and the board |
+| `FEATURES_V0.1.md` | 2026-04 | v0.1 feature roadmap, superseded by the v0.4 status table |
+| `FEATURES_V0.4.md` | 2026-09 | v0.4.4 per-feature status table (was `PROJECT_DEFINITION/FEATURES.md`), superseded by `GUIDES/FEATURES.md` |
 | `UI_RESTRUCTURE.md` | 2026-07 | March 2026 UI restructure plan — shipped (3-tab workspace); code is source of truth |
 | `TASK_TODO_V2.md` | 2026-03 | V2 board (19 tasks, 5 agent clusters) — all shipped; see `TASK_COMPLETED/2603.md` |
 | `AGENT_PROMPTS/` | 2026-07 | Wave 1 worktree agent prompts (wt1–wt5 + validation) — waves merged |

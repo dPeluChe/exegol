@@ -33,23 +33,23 @@ No single tool combines:
 | [COMPETITORS.md](./COMPETITORS.md) | Competitive matrix with verified data |
 | [STACK.md](./STACK.md) | Technology stack decisions with justifications and current versions |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | Module architecture — updated to show implemented vs planned |
-| [FEATURES.md](./FEATURES.md) | Feature roadmap with per-feature implementation status |
+| [../GUIDES/FEATURES.md](../GUIDES/FEATURES.md) | What the app does today, by area |
 | [DESIGN_PATTERNS.md](./DESIGN_PATTERNS.md) | Key architectural patterns adopted from research |
 | [../TASK_COMPLETED/2603.md](../TASK_COMPLETED/2603.md) | Work log — March 2026 |
 
-## Current Implementation Status (updated 2026-07)
+## Current Implementation Status (updated 2026-09)
 
-v0.4.x — Waves 1 and 2 shipped. Per-feature detail: [FEATURES.md](./FEATURES.md);
+v0.5.9, released for macOS and Linux. Per-feature detail: [../GUIDES/FEATURES.md](../GUIDES/FEATURES.md);
 release-level detail: [../CHANGELOG.md](../CHANGELOG.md); live architecture: root `CLAUDE.md`.
 
-**Shipped**: 11-provider registry, worktree isolation + race mode, PTY sidecar (survives
+**Shipped**: 14-provider registry, worktree isolation + race mode, PTY sidecar (survives
 reload/crash), multi-agent pipelines with evaluator gates + loop-back, oplog v2 (per-turn
 git-tree undo), persistent memory (salience v2 + hybrid RRF search), skills (progressive
 disclosure), MCP host + Exegol MCP server (agents query memory), deterministic status via
 OSC-777 hooks, notifications + attention inbox, cost dashboard + budgets, scoring,
 knowledge node, onboarding wizard + doctor.
 
-**Active wave**: Wave 2.6 — hardening & verification (see [../TASK_TODO.md](../TASK_TODO.md)).
+**Next**: the queue at the top of [../TASK_TODO.md](../TASK_TODO.md).
 
 <details>
 <summary>Original status snapshot (March 2026)</summary>

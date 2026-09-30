@@ -23,7 +23,8 @@ React health: CI runs react-doctor@0.9.14 on the PR's changes; errors fail; fix 
 - Lint, typecheck and tests all pass, with no warnings.
 - Docs updated in the same change: remove the task from `docs/TASK_TODO.md` (pending work only),
   add a dated entry to `docs/TASK_COMPLETED/YYMM.md` (what and why), one user-facing line in
-  `docs/CHANGELOG.md` `[Unreleased]`.
+  `docs/CHANGELOG.md` `[Unreleased]`; a new feature or shortcut also goes in
+  `docs/GUIDES/FEATURES.md` or `KEYBOARD_SHORTCUTS.md`.
 - One task per branch and PR.
 
 ## Hard rules
