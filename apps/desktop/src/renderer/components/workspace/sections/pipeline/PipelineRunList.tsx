@@ -64,6 +64,7 @@ export function PipelineRunList({
                 <button
                   type="button"
                   onClick={() => cancelRun.mutate(r.id)}
+                  aria-label="Cancel run"
                   className="text-text-muted hover:text-red-400"
                 >
                   <XCircle className="h-3 w-3" />
@@ -73,6 +74,7 @@ export function PipelineRunList({
                 <button
                   type="button"
                   onClick={() => deleteRun.mutate(r.id)}
+                  aria-label="Delete run"
                   className="text-text-muted hover:text-red-400"
                 >
                   <Trash2 className="h-3 w-3" />

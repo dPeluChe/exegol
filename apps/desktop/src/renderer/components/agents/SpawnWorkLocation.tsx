@@ -1,7 +1,7 @@
 import type { SpawnPreview } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Copy, GitBranch, Layers } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { SpawnChip } from "./SpawnOptions";
@@ -166,6 +166,8 @@ function WorktreeBranchFields({
       trpcInvoke<{ current: string; branches: string[] }>("diff.listBranches", { projectId }),
     staleTime: 30_000,
   });
+  const baseId = useId();
+  const branchId = useId();
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -173,8 +175,11 @@ function WorktreeBranchFields({
           never stated, so an agent silently inherited whatever the
           main checkout was on (T177). */}
       <div className="flex items-center gap-2">
-        <span className="w-10 shrink-0 text-[10px] text-text-muted">from</span>
+        <label htmlFor={baseId} className="w-10 shrink-0 text-[10px] text-text-muted">
+          from
+        </label>
         <select
+          id={baseId}
           value={baseBranch || branchInfo?.current || ""}
           onChange={(e) => onBaseBranch(e.target.value)}
           className="flex-1 rounded border border-border bg-bg-secondary px-2 py-1 text-[11px] text-text-primary outline-none focus:border-accent/50"
@@ -188,8 +193,11 @@ function WorktreeBranchFields({
         </select>
       </div>
       <div className="flex items-center gap-2">
-        <span className="w-10 shrink-0 text-[10px] text-text-muted">new</span>
+        <label htmlFor={branchId} className="w-10 shrink-0 text-[10px] text-text-muted">
+          new
+        </label>
         <input
+          id={branchId}
           type="text"
           value={shownBranch}
           onChange={(e) => onBranch(e.target.value)}

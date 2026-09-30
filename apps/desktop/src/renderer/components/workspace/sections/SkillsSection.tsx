@@ -207,6 +207,8 @@ function SkillCard({
         <button
           type="button"
           onClick={onToggleExpand}
+          aria-label={expanded ? "Collapse" : "Expand"}
+          aria-expanded={expanded}
           className="flex h-5 w-5 shrink-0 items-center justify-center text-text-muted"
         >
           {expanded ? (
@@ -234,6 +236,7 @@ function SkillCard({
         </div>
 
         <SkillEnableToggle
+          name={skill.name}
           enabled={skill.enabled}
           available={skill.available}
           onToggle={handleToggle}
@@ -296,10 +299,12 @@ function SkillBadges({ skill }: { skill: SkillWithState }) {
 }
 
 function SkillEnableToggle({
+  name,
   enabled,
   available,
   onToggle,
 }: {
+  name: string;
   enabled: boolean;
   available: boolean;
   onToggle: () => void;
@@ -309,6 +314,8 @@ function SkillEnableToggle({
       type="button"
       onClick={onToggle}
       disabled={!available}
+      aria-label={`Enable ${name}`}
+      aria-pressed={enabled && available}
       className={cn(
         "flex h-6 w-10 shrink-0 items-center rounded-full px-0.5 transition-colors",
         enabled && available ? "bg-accent" : "bg-bg-tertiary",

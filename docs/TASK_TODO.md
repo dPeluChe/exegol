@@ -47,15 +47,15 @@
    read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
-9. **React health score (react-doctor), keep raising it**: 54 → 66 so far (#204 Bugs, #205
-   Security/Performance, #209 Maintainability). Goal 90+. Measure with
+9. **React health score (react-doctor), keep raising it**: 54 → 69 so far (#204 Bugs, #205
+   Security/Performance, #209 Maintainability, Accessibility 88 → 2). Goal 90+. Measure with
    `cd apps/desktop && npx -y react-doctor@latest . --yes --score`; the full list with `--json`.
    Rule: fix the root cause, never a disable, ignore or config entry to lift the number; a
    finding that is wrong for this app stays listed and is noted in the PR (the score counts it).
-   - Next: **Accessibility (89)**: icon-only buttons without a label (`control-has-associated-label`),
-     inputs labelled only by a placeholder, nested interactive elements (a button inside a
-     clickable row), `role="button"` without keyboard handling, `autoFocus`
-   - Known and kept (not bugs here): sequential loops that must stay so (queue spawns, reattach
+   - Remaining (29): the known-and-kept list below, plus Performance/Bugs/Security leftovers to
+     re-read one by one; the score no longer moves much per finding, so each needs a real reason
+   - Known and kept (not bugs here): two `autoFocus` on editors the user just opened (rename,
+     diff comment), sequential loops that must stay so (queue spawns, reattach
      order, Ollama indexer, auto-resume, the concurrency helper), Monaco already lazy, the PDF
      iframe without `sandbox` (Chromium blocks its viewer), Doctor only shows install commands,
      index keys where the position is the identity, two mutations with no cached data

@@ -45,6 +45,7 @@ export function CommentInput({ onSubmit, onCancel }: CommentInputProps) {
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Add a comment..."
+          aria-label="Line comment"
           rows={2}
           className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
           // biome-ignore lint/a11y/noAutofocus: user explicitly clicked to add comment

@@ -508,22 +508,24 @@ function AgentCard({
   const [peekOpen, setPeekOpen] = useState(false);
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: nested interactive children (peek button/input) prevent <button>
     <div
       className={cn(
-        "group flex flex-col rounded-xl border p-3 transition-all",
+        "group relative flex flex-col rounded-xl border p-3 transition-all",
         // Ended sessions stay quiet: a wall of red cards drowned the live ones (the icon keeps the state)
         canPeek ? config.bg : "border-border bg-bg-secondary/40",
         "cursor-pointer hover:shadow-lg hover:shadow-black/10",
       )}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && !peekOpen) onClick();
-      }}
-      role="button"
-      tabIndex={0}
     >
-      <div className="flex items-start gap-3">
+      {/* Covers the card so a click anywhere opens it; the card's own controls sit above it as siblings */}
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Open ${agent.alias ?? agent.cliType}`}
+        className="absolute inset-0 rounded-xl"
+      />
+      {/* Clicks fall through to the button; controls and titled badges (tooltips) still take the pointer.
+          The alias pencil shows on card hover because its own hover target is now pass-through. */}
+      <div className="pointer-events-none relative flex items-start gap-3 group-hover:[&_.group\/alias_button]:inline-block [&_[title]]:pointer-events-auto [&_button]:pointer-events-auto [&_input]:pointer-events-auto">
         {/* Left: icon + spinner */}
         <div className="flex flex-col items-center gap-1.5 pt-0.5">
           <AgentIcon provider={agent.cliType} size={28} />
@@ -619,10 +621,7 @@ function PeekControls({
       <WatchToggle agentId={agentId} className="text-[10px]" />
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onTogglePeek();
-        }}
+        onClick={onTogglePeek}
         className="ml-auto flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary"
         title="Peek at the terminal and reply inline"
       >
@@ -639,10 +638,7 @@ function EndedSessionActions({ agent, onArchive }: { agent: AgentState; onArchiv
       <ResumeButton agent={agent} className="ml-auto" />
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onArchive();
-        }}
+        onClick={onArchive}
         className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
         title="Archive — keeps the session, removes the card"
       >
@@ -666,9 +662,7 @@ function PeekPanel({ agent }: { agent: AgentState }) {
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: click shield so the card doesn't navigate
-    // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation-only handler, not an action
-    <div className="mt-2 border-t border-border pt-2" onClick={(e) => e.stopPropagation()}>
+    <div className="relative mt-2 border-t border-border pt-2">
       <div className="h-52 overflow-hidden rounded-md border border-border bg-black/40 p-1">
         <TerminalInstance
           key={`peek-${agent.id}`}
@@ -689,12 +683,14 @@ function PeekPanel({ agent }: { agent: AgentState }) {
             }
           }}
           placeholder="Reply without leaving the dashboard…"
+          aria-label="Reply to agent"
           className="h-7 flex-1 rounded-md border border-border bg-bg-primary px-2 text-[11px] text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
         />
         <button
           type="button"
           onClick={send}
           disabled={!reply.trim()}
+          aria-label="Send reply"
           className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-text-muted hover:bg-white/5 hover:text-text-primary disabled:opacity-40"
         >
           <Send className="h-3 w-3" />

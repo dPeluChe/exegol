@@ -27,6 +27,7 @@ export function PipelineTemplateList({
         <button
           type="button"
           onClick={() => onEdit()}
+          aria-label="New template"
           className="rounded p-0.5 text-text-muted hover:bg-white/5 hover:text-text-primary"
         >
           <Plus className="h-3.5 w-3.5" />
@@ -57,6 +58,7 @@ export function PipelineTemplateList({
             <button
               type="button"
               onClick={() => onDelete(t)}
+              aria-label={`Delete template ${t.name}`}
               className="hidden shrink-0 text-text-muted hover:text-red-400 group-hover:block"
             >
               <Trash2 className="h-3 w-3" />

@@ -39,6 +39,7 @@ export function AddTaskInline({
           if (e.key === "Escape") onCancel();
         }}
         placeholder="Task description #tag"
+        aria-label="New task"
         className="flex-1 bg-transparent text-[10px] text-text-primary outline-none placeholder:text-text-muted"
       />
       <button

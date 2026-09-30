@@ -3,7 +3,7 @@ import { Badge, Button, cn } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Brain, Plus, Search, Trash2, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   useCreateMemory,
@@ -97,6 +97,7 @@ export function MemorySection() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search..."
+              aria-label="Search memories"
               className="h-7 w-40 rounded border border-border bg-bg-tertiary pl-7 pr-2 text-[11px] text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </div>
@@ -190,6 +191,7 @@ function MemoryCard({ memory }: { memory: MemoryEntry }) {
       <button
         type="button"
         onClick={() => setConfirmDelete(true)}
+        aria-label="Delete memory"
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted opacity-0 transition-[opacity,color] hover:text-error group-hover:opacity-100"
       >
         <Trash2 className="h-3 w-3" />
@@ -220,6 +222,7 @@ function CreateMemoryDialog({
   projectId: string | null;
 }) {
   const createMemory = useCreateMemory();
+  const fieldId = useId();
   const [content, setContent] = useState("");
   const [category, setCategory] = useState("convention");
 
@@ -255,6 +258,7 @@ function CreateMemoryDialog({
             <Dialog.Close asChild>
               <button
                 type="button"
+                aria-label="Close"
                 className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10"
               >
                 <X className="h-4 w-4" />
@@ -264,8 +268,14 @@ function CreateMemoryDialog({
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-text-secondary">Category</div>
+              <label
+                htmlFor={`${fieldId}-category`}
+                className="block text-xs font-medium text-text-secondary"
+              >
+                Category
+              </label>
               <select
+                id={`${fieldId}-category`}
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-border bg-bg-tertiary px-3 py-1 text-sm text-text-primary transition-colors focus:outline-none focus:ring-1"
@@ -280,8 +290,14 @@ function CreateMemoryDialog({
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-text-secondary">Content</div>
+              <label
+                htmlFor={`${fieldId}-content`}
+                className="block text-xs font-medium text-text-secondary"
+              >
+                Content
+              </label>
               <textarea
+                id={`${fieldId}-content`}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="What should agents remember about this project?"

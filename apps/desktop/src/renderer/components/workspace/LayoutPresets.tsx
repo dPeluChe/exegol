@@ -239,6 +239,7 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
                 }}
                 onBlur={handleConfirmSave}
                 placeholder="Layout name"
+                aria-label="Layout name"
                 className="h-5 flex-1 bg-transparent text-[11px] text-text-primary outline-none placeholder:text-text-muted/60"
               />
             </div>

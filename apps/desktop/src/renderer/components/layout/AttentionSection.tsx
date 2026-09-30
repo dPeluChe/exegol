@@ -374,19 +374,14 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
   const isWaiting = agent.status === "waiting_input" && hasUnreadAttention;
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: nested structure prevents button usage
-    <div
+    <button
+      type="button"
       className={cn(
-        "flex items-center gap-1.5 rounded px-1.5 py-1 text-[10px] transition-colors",
+        "flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px] transition-colors",
         "cursor-pointer hover:bg-white/5",
         isWaiting && "bg-amber-500/5",
       )}
       onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") onClick();
-      }}
-      role="button"
-      tabIndex={0}
       title={agent.taskDescription}
     >
       {/* Attention warning / idle dot / busy spinner */}
@@ -414,7 +409,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
 
       {/* Elapsed time */}
       <span className="shrink-0 text-[9px] text-text-muted">{elapsed(agent.startedAt)}</span>
-    </div>
+    </button>
   );
 }
 
@@ -440,43 +435,42 @@ function AttentionCard({
   const LevelIcon = config.icon;
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: can't use <button> — contains nested <button> children for pin/dismiss
     <div
       className={cn(
-        "group flex items-center gap-2 rounded-lg border px-2 py-1.5 transition-colors",
+        "group flex items-center rounded-lg border transition-colors",
         item.read ? "border-border/50 opacity-60" : config.bgClass,
-        "cursor-pointer hover:opacity-100",
+        "hover:opacity-100",
       )}
-      onClick={onNavigate}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") onNavigate();
-      }}
-      role="button"
-      tabIndex={0}
     >
-      {/* Level dot */}
-      <div className={cn("h-2 w-2 shrink-0 rounded-full", config.dotClass)} />
+      <button
+        type="button"
+        onClick={onNavigate}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 py-1.5 pr-2 pl-2 text-left"
+      >
+        {/* Level dot */}
+        <div className={cn("h-2 w-2 shrink-0 rounded-full", config.dotClass)} />
 
-      {/* Provider icon */}
-      <AgentIcon provider={item.cliType} size={14} />
+        {/* Provider icon */}
+        <AgentIcon provider={item.cliType} size={14} />
 
-      {/* Content */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1">
-          <span className="text-[10px] font-medium text-text-primary">{name}</span>
-          {project && <ProjectChip project={project} className="py-0 text-[9px]" />}
-          {item.pinned && <Pin className="h-2.5 w-2.5 shrink-0 text-amber-400" />}
-          {!item.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-medium text-text-primary">{name}</span>
+            {project && <ProjectChip project={project} className="py-0 text-[9px]" />}
+            {item.pinned && <Pin className="h-2.5 w-2.5 shrink-0 text-amber-400" />}
+            {!item.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+          </div>
+          <div className="flex items-center gap-1.5 text-[9px] text-text-muted">
+            <LevelIcon className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{item.reason}</span>
+            <span className="shrink-0">{timeAgo(item.timestamp)}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5 text-[9px] text-text-muted">
-          <LevelIcon className="h-2.5 w-2.5 shrink-0" />
-          <span className="truncate">{item.reason}</span>
-          <span className="shrink-0">{timeAgo(item.timestamp)}</span>
-        </div>
-      </div>
+      </button>
 
       {/* Actions (hover) */}
-      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="flex shrink-0 items-center gap-0.5 py-1.5 pr-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         {!item.read && (
           <button
             type="button"
@@ -486,6 +480,7 @@ function AttentionCard({
             }}
             className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
             title="Mark as read"
+            aria-label="Mark as read"
           >
             <Eye className="h-3 w-3" />
           </button>
@@ -498,6 +493,7 @@ function AttentionCard({
           }}
           className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
           title={item.pinned ? "Unpin" : "Pin"}
+          aria-label={item.pinned ? "Unpin" : "Pin"}
         >
           {item.pinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
         </button>
@@ -509,6 +505,7 @@ function AttentionCard({
           }}
           className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-red-400/80 hover:text-white"
           title="Dismiss"
+          aria-label="Dismiss"
         >
           <X className="h-3 w-3" />
         </button>

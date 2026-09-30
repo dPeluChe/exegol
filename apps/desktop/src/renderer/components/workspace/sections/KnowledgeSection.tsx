@@ -96,6 +96,7 @@ export function KnowledgeSection() {
             </Button>
           </div>
           <textarea
+            aria-label="PROJECT.md brief"
             value={briefDraft}
             onChange={(e) => {
               setBriefDraft(e.target.value);

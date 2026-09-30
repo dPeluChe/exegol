@@ -49,6 +49,7 @@ export function ConfirmDialog({
             <Dialog.Close asChild>
               <button
                 type="button"
+                aria-label="Close"
                 className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
                 style={{ color: "var(--text-muted)" }}
               >

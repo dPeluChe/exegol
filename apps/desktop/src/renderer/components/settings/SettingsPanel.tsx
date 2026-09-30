@@ -88,6 +88,7 @@ export function SettingsPanel({ initialTab, onClose }: SettingsPanelProps) {
         <button
           type="button"
           onClick={onClose}
+          aria-label="Back"
           className="titlebar-no-drag flex h-7 w-7 items-center justify-center rounded text-text-muted hover:bg-white/5"
         >
           <ArrowLeft className="h-4 w-4" />

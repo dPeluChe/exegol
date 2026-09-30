@@ -34,11 +34,13 @@ export function EvaluatorStepFields({
         value={step.label}
         onChange={(e) => onLabelChange(e.target.value)}
         placeholder="Label"
+        aria-label={`Step ${stepIndex + 1} label`}
         className="w-full rounded border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted/50 focus:border-accent focus:outline-none"
       />
       <textarea
         value={evaluator.acceptanceCriteria}
         onChange={(e) => onChange({ ...evaluator, acceptanceCriteria: e.target.value })}
+        aria-label={`Step ${stepIndex + 1} acceptance criteria`}
         placeholder="Acceptance criteria — what does 'done' look like for this diff?"
         className="w-full rounded border border-border bg-bg-primary px-2 py-1.5 text-[10px] text-text-primary placeholder:text-text-muted/40 focus:border-accent focus:outline-none"
         rows={2}

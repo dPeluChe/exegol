@@ -61,30 +61,7 @@ export function TerminalToolbar({
     // Badges live on the LEFT — the pane's hover actions (float/split/close)
     // occupy the right edge and were covering them (verify session 2026-08-11).
     <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
-      {agent && agent.cliType !== "shell" && (
-        <>
-          <SessionAlias agent={agent} textClassName="text-[10px]" />
-          <WatchToggle agentId={agent.id} className="py-0 text-[9px]" />
-          {LIVE_STATUSES.has(agent.status) && (
-            <QuietControls agent={agent} className="py-0 text-[9px]" />
-          )}
-          {agent.launchedInShell && agent.status === "idle" && (
-            <button
-              type="button"
-              onClick={() =>
-                trpcMutate("agents.continueInShell", { id: agent.id }).catch((err) =>
-                  console.error("[Terminal] Continue in shell failed:", err),
-                )
-              }
-              className="flex shrink-0 items-center gap-1 text-[9px] text-accent hover:text-text-primary"
-              title="Its CLI exited to the shell prompt: start it again here, continuing the last conversation"
-            >
-              <Play className="h-2.5 w-2.5" />
-              Continue
-            </button>
-          )}
-        </>
-      )}
+      {agent && agent.cliType !== "shell" && <SessionControls agent={agent} />}
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {branchName && (
         <span
@@ -343,5 +320,34 @@ export function LiveStartOverlay({
         </>
       )}
     </div>
+  );
+}
+
+/** The session's own controls: its name, Watch, Mute/Suspend while live, and Continue once a
+ *  CLI typed in the terminal exited back to the shell prompt */
+function SessionControls({ agent }: { agent: QuietAgent }) {
+  return (
+    <>
+      <SessionAlias agent={agent} textClassName="text-[10px]" />
+      <WatchToggle agentId={agent.id} className="py-0 text-[9px]" />
+      {LIVE_STATUSES.has(agent.status) && (
+        <QuietControls agent={agent} className="py-0 text-[9px]" />
+      )}
+      {agent.launchedInShell && agent.status === "idle" && (
+        <button
+          type="button"
+          onClick={() =>
+            trpcMutate("agents.continueInShell", { id: agent.id }).catch((err) =>
+              console.error("[Terminal] Continue in shell failed:", err),
+            )
+          }
+          className="flex shrink-0 items-center gap-1 text-[9px] text-accent hover:text-text-primary"
+          title="Its CLI exited to the shell prompt: start it again here, continuing the last conversation"
+        >
+          <Play className="h-2.5 w-2.5" />
+          Continue
+        </button>
+      )}
+    </>
   );
 }

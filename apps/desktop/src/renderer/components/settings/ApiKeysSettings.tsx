@@ -87,6 +87,7 @@ function ProviderRow({
               setEditing(false);
               setValue("");
             }}
+            aria-label="Cancel"
             className="p-1 text-text-muted hover:text-text-secondary"
           >
             <X className="h-3.5 w-3.5" />
@@ -113,6 +114,7 @@ function ProviderRow({
                 type="button"
                 onClick={handleDelete}
                 disabled={deleteKey.isPending}
+                aria-label="Delete key"
                 className="p-1 text-text-muted hover:text-error"
               >
                 <Trash2 className="h-3.5 w-3.5" />
