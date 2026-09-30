@@ -5,6 +5,7 @@ import {
   ClipboardPaste,
   Columns,
   Equal,
+  Eraser,
   Globe,
   MoveRight,
   Pencil,
@@ -12,7 +13,6 @@ import {
   RefreshCw,
   Rows,
   Trash2,
-  X,
 } from "lucide-react";
 import { useContextMenu } from "../../hooks/use-context-menu";
 import type { PaneType } from "../../stores/workspace";
@@ -31,7 +31,6 @@ interface PaneContextMenuProps {
   onFloat?: () => void;
   onCopy?: () => void;
   onPaste?: () => void;
-  onClear?: () => void;
   onScrollTop?: () => void;
   onScrollBottom?: () => void;
   children: React.ReactNode;
@@ -80,14 +79,8 @@ function clipboardSection({ onCopy, onPaste }: MenuActions): MenuItem[] {
   ]);
 }
 
-function terminalActionsSection({
-  agentId,
-  onClear,
-  onScrollTop,
-  onScrollBottom,
-}: MenuActions): MenuItem[] {
+function terminalActionsSection({ agentId, onScrollTop, onScrollBottom }: MenuActions): MenuItem[] {
   const items = present([
-    onClear && { label: "Clear Terminal", icon: X, shortcut: "⌘K", action: onClear },
     onScrollTop && { label: "Scroll to Top", icon: ArrowUpToLine, action: onScrollTop },
     onScrollBottom && { label: "Scroll to Bottom", icon: ArrowDownToLine, action: onScrollBottom },
   ]);
@@ -101,6 +94,12 @@ function terminalActionsSection({
       icon: Pencil,
       action: () =>
         window.dispatchEvent(new CustomEvent("exegol:rename-session", { detail: { agentId } })),
+    });
+    items.push({
+      label: "Clear Terminal",
+      icon: Eraser,
+      action: () =>
+        window.dispatchEvent(new CustomEvent("exegol:clear-terminal", { detail: { agentId } })),
     });
     items.push({
       label: "Refresh Terminal",

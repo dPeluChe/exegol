@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Terminal pane menu: Clear Terminal wipes the screen and scrollback and sends Ctrl+L, so the shell or CLI redraws clean
+
 ### Changed
 - Sidebar Agents: a switch between the live agents and Needs attention (its count turns amber with something unread); the list shows every live agent again, the ones waiting on you marked, and the pick is remembered
 
