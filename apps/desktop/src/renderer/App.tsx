@@ -33,6 +33,10 @@ const ProjectList = lazy(() =>
 const CommandPalette = lazy(() =>
   import("./components/CommandPalette").then((m) => ({ default: m.CommandPalette })),
 );
+// WelcomeTour: once after onboarding, or when reopened from the command palette.
+const WelcomeTour = lazy(() =>
+  import("./components/onboarding/WelcomeTour").then((m) => ({ default: m.WelcomeTour })),
+);
 // OnboardingWizard: only rendered for first-run users with zero projects (T148).
 const OnboardingWizard = lazy(() =>
   import("./components/onboarding/OnboardingWizard").then((m) => ({
@@ -129,6 +133,9 @@ export default function App() {
         </Suspense>
         <Suspense fallback={null}>
           <OnboardingWizard />
+        </Suspense>
+        <Suspense fallback={null}>
+          <WelcomeTour />
         </Suspense>
       </div>
     </TooltipProvider>

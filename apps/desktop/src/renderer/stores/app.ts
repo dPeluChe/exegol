@@ -37,6 +37,10 @@ interface AppStore {
   /** T148: first-run onboarding wizard completed (or skipped) */
   onboardingComplete: boolean;
   setOnboardingComplete: (complete: boolean) => void;
+
+  /** Welcome tour shown after onboarding: seen or skipped */
+  welcomeTourSeen: boolean;
+  setWelcomeTourSeen: (seen: boolean) => void;
 }
 
 export const useAppStore = create<AppStore>()(
@@ -70,10 +74,13 @@ export const useAppStore = create<AppStore>()(
 
       onboardingComplete: false,
       setOnboardingComplete: (complete) => set({ onboardingComplete: complete }),
+
+      welcomeTourSeen: false,
+      setWelcomeTourSeen: (seen) => set({ welcomeTourSeen: seen }),
     }),
     {
       name: "exegol-app-state",
-      version: 2,
+      version: 3,
       // T120: dropped 'settings' from ActiveView. Coerce stale persisted
       // value so upgrading users don't rehydrate into a sidebarless state.
       migrate: (persisted, fromVersion) => {
@@ -82,10 +89,14 @@ export const useAppStore = create<AppStore>()(
           activeView?: string;
           activeProjectId?: string | null;
           sidebarCollapsed?: boolean;
+          onboardingComplete?: boolean;
+          welcomeTourSeen?: boolean;
         };
         if (fromVersion < 2 && state.activeView === "settings") {
           state.activeView = state.activeProjectId ? "workspace" : "projects";
         }
+        // Users who finished onboarding before the tour existed are not new: skip it
+        if (fromVersion < 3 && state.onboardingComplete) state.welcomeTourSeen = true;
         return state as unknown as AppStore;
       },
       partialize: (state) => ({
@@ -93,6 +104,7 @@ export const useAppStore = create<AppStore>()(
         activeView: state.activeView,
         sidebarCollapsed: state.sidebarCollapsed,
         onboardingComplete: state.onboardingComplete,
+        welcomeTourSeen: state.welcomeTourSeen,
         liveTabOrder: state.liveTabOrder,
         sidebarProjectsHeight: state.sidebarProjectsHeight,
         sidebarAgentsView: state.sidebarAgentsView,
