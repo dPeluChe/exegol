@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { LoadingSpinner } from "./components/common";
 import { FloatingBrowser } from "./FloatingBrowser";
 import { useTheme } from "./hooks/use-theme";
+import { useWindowCloseKeys } from "./hooks/use-window-close-keys";
 
 // Lazy — only the terminal case needs xterm.js, no reason to pull it for browser floats
 const TerminalInstance = lazy(() =>
@@ -37,8 +38,11 @@ function parseParams(): FloatingParams | null {
 }
 
 /** Top-level component for a floating pane window (minimal chrome + content). */
+const closeFloating = () => window.api.floating.selfClose();
+
 export function FloatingPaneRoot() {
   useTheme();
+  useWindowCloseKeys(closeFloating);
   const params = parseParams();
 
   if (!params) {
@@ -67,7 +71,6 @@ export function FloatingPaneRoot() {
 }
 
 function FloatingTitleBar({ title, type }: { title: string; type: "terminal" | "browser" }) {
-  const close = () => window.api.floating.selfClose();
   const toggleDevTools = () => window.api.floating.selfToggleDevTools();
   return (
     <div
@@ -91,7 +94,7 @@ function FloatingTitleBar({ title, type }: { title: string; type: "terminal" | "
         )}
         <button
           type="button"
-          onClick={close}
+          onClick={closeFloating}
           className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-red-400/80 hover:text-white"
           title="Close floating pane"
         >

@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Linux (and Windows): Ctrl+Shift+C copies the terminal selection
+- Esc closes the Settings window and a floating (Picture-in-Picture) window, unless a field, menu or dialog has the key; a floating terminal with the cursor in it keeps Esc for the CLI. Off macOS, Ctrl+Shift+W closes them too
 
 ### Fixed
 - The pane menu no longer shows a shortcut for Equalize Splits (it had none)

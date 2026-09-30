@@ -2,6 +2,7 @@ import { TooltipProvider } from "@exegol/ui";
 import { useEffect, useState } from "react";
 import { SettingsPanel, type SettingsTab } from "./components/settings/SettingsPanel";
 import { useTheme } from "./hooks/use-theme";
+import { useWindowCloseKeys } from "./hooks/use-window-close-keys";
 
 const VALID_TABS: SettingsTab[] = [
   "general",
@@ -25,8 +26,11 @@ function parseTab(): SettingsTab | undefined {
  * incoming tab becomes the new initial state — without locking in-window tab
  * clicks (see review finding #1).
  */
+const closeSettings = () => window.api.settings.selfClose();
+
 export function SettingsRoot() {
   useTheme();
+  useWindowCloseKeys(closeSettings);
   const [tab, setTab] = useState<SettingsTab | undefined>(() => parseTab());
 
   useEffect(() => {
@@ -38,11 +42,7 @@ export function SettingsRoot() {
   return (
     <TooltipProvider delayDuration={300}>
       <div className="flex h-screen w-screen flex-col bg-bg-primary">
-        <SettingsPanel
-          key={tab ?? "default"}
-          initialTab={tab}
-          onClose={() => window.api.settings.selfClose()}
-        />
+        <SettingsPanel key={tab ?? "default"} initialTab={tab} onClose={closeSettings} />
       </div>
     </TooltipProvider>
   );
