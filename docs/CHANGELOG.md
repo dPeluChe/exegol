@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Sidebar: Projects sits at the bottom, above the reference sections, and its height is yours: drag the line above it (double-click fits it to its projects again); Agents fills the rest
 
 ### Fixed
+- Terminal Files: a file opens over the terminal instead of in a new tab, Esc closes it (then the panel) before the CLI sees it, and the panel shows one Files header
 - Sidebar: dragging an Agents group now reorders it (and Cmd+2..9 with it); grab it from anywhere, a click still jumps to it
 
 ## [0.5.7] — 2026-09-29 — Terminals that become agents, tabs with session names

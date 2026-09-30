@@ -9,7 +9,7 @@ import { useAgentStore } from "../../stores/agents";
 import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
-import { FilesPeek } from "./FilesPeek";
+import { FilesPeek, PeekFileOverlay } from "./FilesPeek";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { type ScrollbackAgent, TerminalScrollback } from "./TerminalScrollback";
@@ -129,7 +129,18 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   // Live terminal — show loading overlay until first data arrives
   return (
-    <div className="relative flex h-full flex-col">
+    // Capture phase: with Files or a peeked file open, Esc closes it before the CLI sees it;
+    // with both closed Esc reaches the terminal as always (a dialog handles its own)
+    <div
+      className="relative flex h-full flex-col"
+      onKeyDownCapture={(e) => {
+        if (e.key !== "Escape" || document.querySelector('[role="dialog"]')) return;
+        if (filesPeek.escape()) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+    >
       {!hasData && (
         <LiveStartOverlay
           cliType={agent?.cliType}
@@ -175,11 +186,19 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               {floatingButtons}
             </>
           )}
+          {filesPeek.peekFile && (
+            <PeekFileOverlay
+              path={filesPeek.peekFile}
+              onClose={filesPeek.closeFile}
+              onDirtyChange={filesPeek.setFileDirty}
+            />
+          )}
         </div>
         {filesPeek.filesOpen && filesPeek.peekProject && (
           <FilesPeek
             projectId={filesPeek.peekProject.id}
             rootPath={filesPeek.peekProject.path}
+            onOpenFile={filesPeek.openFile}
             onClose={filesPeek.closeFiles}
           />
         )}

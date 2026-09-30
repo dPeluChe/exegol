@@ -1,49 +1,74 @@
-import { X } from "lucide-react";
-import { openFileInWorkspace } from "../../stores/agents";
+import { useState } from "react";
+import { useFileContent } from "../../hooks/use-trpc";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import { FileExplorer } from "../workspace/FileExplorer";
+import { FilePreview } from "../workspace/FilePreview";
 
 /**
  * The project's files beside a terminal, for a quick look or a drag into it (a file dropped on
- * the terminal types its path), closed again with X or Esc. A click opens the file in the
- * workspace's Files pane.
+ * the terminal types its path). A click shows the file over the terminal (PeekFileOverlay),
+ * never a new tab; X or Esc closes.
  */
 export function FilesPeek({
   projectId,
   rootPath,
+  onOpenFile,
   onClose,
 }: {
   projectId: string;
   rootPath: string;
+  onOpenFile: (path: string) => void;
   onClose: () => void;
 }) {
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: Esc closes the panel from inside it
-    <div
-      className="flex w-72 shrink-0 flex-col border-l border-border bg-bg-secondary"
-      onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
-      }}
-    >
-      <div className="flex h-7 shrink-0 items-center justify-between border-b border-border px-2">
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Files
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Close (Esc)"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1">
-        <FileExplorer
-          rootPath={rootPath}
-          projectId={projectId}
-          onOpenFile={(file) => openFileInWorkspace(projectId, file)}
-        />
-      </div>
+    <div className="flex w-72 shrink-0 flex-col border-l border-border bg-bg-secondary">
+      <FileExplorer
+        rootPath={rootPath}
+        projectId={projectId}
+        onOpenFile={onOpenFile}
+        onClose={onClose}
+      />
+    </div>
+  );
+}
+
+/** The file picked in the peek, over the terminal's space; the terminal stays mounted below */
+export function PeekFileOverlay({
+  path,
+  onClose,
+  onDirtyChange,
+}: {
+  path: string;
+  onClose: () => void;
+  /** The panel's Esc leaves unsaved edits alone */
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const { data, error } = useFileContent(path);
+  const [dirty, setDirty] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
+  return (
+    <div className="absolute inset-0 z-10 flex bg-bg-primary" data-peek-file>
+      <FilePreview
+        key={path}
+        path={path}
+        file={data}
+        error={error}
+        onClose={requestClose}
+        onDirtyChange={(d) => {
+          setDirty(d);
+          onDirtyChange(d);
+        }}
+      />
+      <ConfirmDialog
+        open={confirmClose}
+        onOpenChange={setConfirmClose}
+        title="Discard unsaved changes?"
+        description="The edits to this file are not saved."
+        confirmLabel="Discard"
+        variant="destructive"
+        onConfirm={onClose}
+      />
     </div>
   );
 }
