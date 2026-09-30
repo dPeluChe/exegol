@@ -9,6 +9,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Sidebar: drag the line between Agents and Projects to resize them (double-click resets)
+
+### Fixed
+- Sidebar: dragging an Agents group now reorders it (and Cmd+2..9 with it); grab it from anywhere, a click still jumps to it
+
 ## [0.5.7] — 2026-09-29 — Terminals that become agents, tabs with session names
 
 ### Added

@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePointerReorder } from "../../hooks/use-pointer-reorder";
 import { useProject, useProjects } from "../../hooks/use-trpc";
 import {
   groupShortcut,
@@ -139,19 +140,16 @@ export function AttentionSection() {
   );
 
   const hasRunning = groups.length > 0 || byProject.size > 0;
-  const [dragKey, setDragKey] = useState<string | null>(null);
-  const dropOn = (target: string) => {
-    if (!dragKey) return;
-    // Dropped on the group below it goes after it (inserting before put it back where it was)
+  // Dropped on the group below it goes after it (inserting before put it back where it was)
+  const reorder = usePointerReorder((drag, target) =>
     setOrder(
       reorderKeys(
         groups.map((g) => g.key),
-        dragKey,
+        drag,
         target,
       ),
-    );
-    setDragKey(null);
-  };
+    ),
+  );
   // The tab on screen stands out, and blinks when a Cmd+n jump lands on it
   const activeProjectId = useAppStore((s) =>
     s.activeView === "workspace" ? s.activeProjectId : null,
@@ -229,12 +227,11 @@ export function AttentionSection() {
                 .map((id) => agents[id])
                 .filter((a): a is AgentState => !!a && !rawItems[a.id])}
               onNavigate={navigateToAgent}
-              dragging={dragKey === group.key}
+              reorderProps={reorder.itemProps(group.key)}
+              dragging={reorder.draggingKey === group.key}
+              dropTarget={!!reorder.draggingKey && reorder.overKey === group.key}
               active={group.projectId === activeProjectId && group.tabId === activeTabByProject}
               flashing={flashKey === group.key}
-              onDragStart={() => setDragKey(group.key)}
-              onDragEnd={() => setDragKey(null)}
-              onDrop={() => dropOn(group.key)}
             />
           ))}
           {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
@@ -258,12 +255,11 @@ function TabAgentGroup({
   shortcut,
   agents,
   onNavigate,
+  reorderProps,
   dragging,
+  dropTarget,
   active,
   flashing,
-  onDragStart,
-  onDragEnd,
-  onDrop,
 }: {
   group: LiveTabGroup;
   active: boolean;
@@ -272,38 +268,26 @@ function TabAgentGroup({
   /** Its sessions minus those already listed under Needs attention */
   agents: AgentState[];
   onNavigate: (agentId: string, projectId: string) => void;
+  /** Press anywhere on the group and move to reorder it (Cmd+2..9 follow this order) */
+  reorderProps: ReturnType<ReturnType<typeof usePointerReorder>["itemProps"]>;
   dragging: boolean;
-  onDragStart: () => void;
-  onDragEnd: () => void;
-  onDrop: () => void;
+  dropTarget: boolean;
 }) {
   const { data: project } = useProject(group.projectId);
   const first = group.agentIds[0];
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: drop target for reordering groups
     <div
+      {...reorderProps}
       className={cn(
-        "rounded-lg border bg-bg-tertiary/30 p-1.5 transition-colors",
+        "select-none rounded-lg border bg-bg-tertiary/30 p-1.5 transition-colors",
         active ? "border-accent/60" : "border-border/50",
         flashing && "animate-flash-once",
         dragging && "opacity-50",
+        dropTarget && "border-accent ring-1 ring-accent/40",
       )}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        onDrop();
-      }}
     >
       <button
         type="button"
-        draggable
-        onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = "move";
-          // Some Chromium builds start no drag without data
-          e.dataTransfer.setData("text/plain", group.key);
-          onDragStart();
-        }}
-        onDragEnd={onDragEnd}
         onClick={() => first && onNavigate(first, group.projectId)}
         className="mb-1 flex w-full min-w-0 cursor-grab items-center gap-1.5 px-0.5 text-left active:cursor-grabbing"
         title="Go to this tab; drag to reorder"

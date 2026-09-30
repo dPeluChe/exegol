@@ -47,8 +47,6 @@
    read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
-8. **Sidebar**: the Projects section cannot be resized to a smaller height; drag to reorder in the
-   Agents section above it does nothing
 9. **React health score (react-doctor), keep raising it**: 54 → 66 so far (#204 Bugs, #205
    Security/Performance, #209 Maintainability). Goal 90+. Measure with
    `cd apps/desktop && npx -y react-doctor@latest . --yes --score`; the full list with `--json`.
