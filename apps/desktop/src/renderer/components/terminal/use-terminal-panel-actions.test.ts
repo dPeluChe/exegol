@@ -1,14 +1,19 @@
+import type { AgentStatus } from "@exegol/shared";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../hooks/use-trpc", () => ({ useProject: vi.fn(), useProjects: vi.fn() }));
 vi.mock("../../stores/agents", () => ({ jumpToAgent: vi.fn(), useAgentStore: vi.fn() }));
 const { groupSendTargets } = await import("./use-terminal-panel-actions");
 
-const agent = (id: string, projectId: string, extra: Record<string, unknown> = {}) => ({
+const agent = (
+  id: string,
+  projectId: string,
+  extra: { cliType?: string; status?: AgentStatus; alias?: string | null } = {},
+) => ({
   id,
   projectId,
   cliType: "claude-code",
-  status: "running",
+  status: "running" as AgentStatus,
   alias: null,
   ...extra,
 });

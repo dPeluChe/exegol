@@ -46,7 +46,7 @@
    read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
-9. **React health score (react-doctor), keep raising it**: 54 → 69 so far (#204 Bugs, #205
+9. **React health score (react-doctor), keep raising it**: 54 → 70 so far (#204 Bugs, #205
    Security/Performance, #209 Maintainability, Accessibility 88 → 2). Score 70; 22 findings left,
    all in the known-and-kept list (TASK_COMPLETED/2609.md). Goal 90+. Measure with
    `cd apps/desktop && npx -y react-doctor@0.9.14 . --yes --score`; the full list with `--json`.
@@ -104,7 +104,15 @@ dependency/library audit
   Details: `docs/TASK_COMPLETED/2605.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
-### Verify live (2026-09-29, not checked in the app)
+### Verify live (2026-09-29/30, not checked in the app)
+- Send to: only with a selection, agents only by project, paste without Enter, cursor lands there
+- Sidebar Agents / Needs attention switch; attention card in two rows; project Cmd+n badge
+- Watching pins as plain mirrors (fit opt-in per card)
+- Keyboard focus after Cmd+n / Cmd+Option+n; Ctrl+Tab and Cmd+] / Cmd+[ from inside a terminal
+- Trackpad scroll in Claude (and a mouse wheel at normal speed)
+- Shortcut slots from Edit project, Cmd+0, Reset Zoom on Cmd+Shift+0
+- Welcome tour (new user only), context menus near the window edges, Agents drop line, pane grip
+- Browser design/QA reports to live agents; Clear Terminal
 - Shell → agent promotion (a CLI typed in a terminal) + Continue
 - Accessibility structural changes: tab drag/rename (incl. the drop area now spread over the
   tab's controls), sidebar rows, dashboard card clicks

@@ -140,7 +140,9 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 - **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
 - **Crash recovery**: `session.listInfo` RPC returns `{ id, alive, exitCode, signal }` — only ALIVE ids go to `reattachSidecarAgents()`, dead ones (in the sidecar's 60s grace period) fall through to `recoverStaleAgents()` and get marked as "crashed" with scrollback preserved (v0.3.0 fix: previously dead sessions were stuck as "running" with no PTY)
-- **Dashboard watch list** (T194): pinned sessions (global, `stores/watch.ts`) render as interactive `TerminalInstance mirror` views: full-height cards, `columns` (1-3) per row, collapsed ones as vertical strips in their row, drag to reorder, max `MAX_OPEN_MIRRORS` (6) open, wheel scrolls the page unless the mirror is focused. A−/A+ and "fit session to card" (`cardFont`): the card then sizes the PTY like a pane (still input-filtered); the last view shown owns the size (pane reclaims on the workspace refit, card on mount). A mirror never resizes the PTY (renders at `terminal:get-size`, follows `terminal:resized`, fits its font to both dimensions with a terminating rule) and strips terminal query replies from its input (`mirror-input.ts`) so the owning pane stays the only responder.
+- **Dashboard watch list** (T194): pinned sessions (global, `stores/watch.ts`) render as interactive `TerminalInstance mirror` views (plain mirrors by default; fit is opt-in per card, watch persist v1 reset old `cardFont`): full-height cards, `columns` (1-3) per row, collapsed ones as vertical strips in their row, drag to reorder, max `MAX_OPEN_MIRRORS` (6) open, wheel scrolls the page unless the mirror is focused. A−/A+ and "fit session to card" (`cardFont`): the card then sizes the PTY like a pane (still input-filtered); the last view shown owns the size (pane reclaims on the workspace refit, card on mount). A mirror never resizes the PTY (renders at `terminal:get-size`, follows `terminal:resized`, fits its font to both dimensions with a terminating rule) and strips terminal query replies from its input (`mirror-input.ts`) so the owning pane stays the only responder.
+- **Shortcuts**: Cmd+1 Dashboard; Cmd+2..9, 0 go to live tab groups via `assignGroupShortcuts` (`lib/live-tabs.ts`): numbers set in Edit project (`stores/shortcuts.ts`, freed on project delete) first, all-pinned groups last. Reset Zoom is Cmd+Shift+0. Ctrl+Tab and Cmd+] / Cmd+[ cycle panes (`lib/pane-focus.ts`, the terminal key handler lets Ctrl+Tab through); navigation ends in `focusActivePane()`. Overlay list: `lib/shortcuts.ts`
+- **Context menus**: position through `useFittedMenu` (`lib/fit-menu.ts`), measured before paint, flipped up/left near the window edges
 - **Terminal sizing** (T194): panes use the addon's floored fit in a `min-h-0` box, skip unmeasured fits, and coalesce PTY resizes (80ms); main drops same-size resizes, keeps a size sent before reattach (`PtyHost.pendingSizes`), stores each agent's last grid (`agents.pty_cols/pty_rows`) so reattach rebuilds the model at it, and `terminal:redraw` repaints a TUI by jiggling the PTY without telling mirrors (kick: alt-screen only, once per session). Visibility is tracked per view (`windowId:viewId`); a view's first report skips the RIS repaint.
 - **Release notes**: `system/release-notes.ts` reads the public GitHub releases (cached 10 min, silent offline); `updates` router: `notes` (running → found version, skipped ones included), `whatsNew` once after an install (`lastSeenVersion` setting; a fresh install shows nothing), `markSeen`. The update button opens them by itself only after a manual check
 - **Bug reports** (T196): title-bar bug button → `diagnostics` router (`system/diagnostics.ts`). Collected once per dialog and shown for review (the issue is public): versions, Doctor, agent counts, this session's log, previous sessions' warnings/errors, `sidecar.log`. Exegol's own log lines never carry prompts or agent output (spawns log `commandShape`, status lines drop the step); `redact()` handles third-party text: keys/tokens, URLs, emails, IPs, and paths made generic. Files via `gh issue create` or a prefilled issue URL + clipboard. Main crashes, renderer errors (`log:renderer-error`, deduped and capped) and child-process deaths all go through `logger`.
@@ -204,7 +206,7 @@ apps/desktop/src/
                     auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
                     work-guard, diagnostics, project-icons
     ide/            opener (vscode, cursor, zed, windsurf, custom)
-    windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router)
+    windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)
   renderer/
     components/
       workspace/    WorkspaceView, WorkspaceTabs (3 main: Agents, Project, Monitor + sub-tabs; Dashboard is its own view), WorkspacePane (5 types),
@@ -215,22 +217,24 @@ apps/desktop/src/
                     YOLO/Active toggles), TerminalSettings (bundled fonts, per-card preview,
                     family chain badges, promote-on-click), ApiKeysSettings
       terminal/     TerminalPanel (live/read-only/crashed, snapshot probe on reattach),
-                    TerminalInstance (xterm.js + WebGL + Serialize), use-xterm owns the xterm
+                    TerminalInstance (xterm.js + WebGL + Serialize), tui-wheel (trackpad boost for TUIs), use-xterm owns the xterm
                     lifecycle (WebGL and the dormant pipe follow the live session)
       common/       AgentIcon (glob *.{svg,png}, dark/light), EmptyState, StatusDot, ConfirmDialog
       agents/       AgentLauncher (portal dropdown from registry)
-      onboarding/   OnboardingWizard (T148 first-run: CLI detect + keys + doctor)
+      onboarding/   OnboardingWizard (T148 first-run: CLI detect + keys + doctor), WelcomeTour
       layout/       Sidebar (+ SidebarRail, SidebarHeader, SidebarFooter), ProjectsSection, AttentionSection,
                     TitleBar (AttentionQueue, BugReportDialog, UpdateButton), StatusBar, TabsOverview
     FloatingPaneRoot.tsx  (T84 — top-level renderer for floating PiP windows)
     SettingsRoot.tsx      (T120 — top-level renderer for the standalone settings window)
-    hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
+    hooks/          use-hotkeys, use-fitted-menu, use-theme, use-trpc, use-auto-select-project,
                     use-floating-pane-sync (unmark panes when floating window closes),
                     use-settings-sync (T120 — invalidate ['settings'] on cross-window broadcast),
                     use-latest, use-pointer-reorder, use-context-menu
-    stores/         app, agents (push events, shell auto-cleanup), terminals,
+    stores/         app, agents (push events, shell auto-cleanup), terminals, watch, shortcuts,
+                    toasts, notification-prefs,
                     workspace (5 pane types, recovery, custom layouts, floatingPanes)
-    lib/            layout-presets (pure transformation helpers), trpc-client,
+    lib/            layout-presets (pure transformation helpers), trpc-client, live-tabs,
+                    pane-focus, fit-menu, shortcuts, agent-input,
                     dispatch-refit, semantic-colors, access-modes, open-in-browser,
                     pointer-reorder, release-notes
     assets/

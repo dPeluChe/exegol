@@ -1,10 +1,10 @@
-import { RUNNING_STATUSES } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useLatest } from "../../hooks/use-latest";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
+import { isPasteTarget } from "../../lib/agent-input";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
@@ -52,11 +52,7 @@ function usePaneUrl(pane: Pane, autoPort: number | undefined) {
 function useRunningProjectAgents(projectId: string | null) {
   const allAgents = useAgentStore((s) => s.agents);
   return useMemo(
-    () =>
-      // Send targets for design and QA reports: agents only (a shell would run the text)
-      Object.values(allAgents).filter(
-        (a) => a.projectId === projectId && a.cliType !== "shell" && RUNNING_STATUSES.has(a.status),
-      ),
+    () => Object.values(allAgents).filter((a) => a.projectId === projectId && isPasteTarget(a)),
     [allAgents, projectId],
   );
 }

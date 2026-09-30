@@ -43,6 +43,24 @@ interface AppStore {
   setWelcomeTourSeen: (seen: boolean) => void;
 }
 
+/** v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour */
+export function migrateAppStore(persisted: unknown, fromVersion: number): AppStore {
+  if (!persisted || typeof persisted !== "object") return persisted as AppStore;
+  const state = persisted as {
+    activeView?: string;
+    activeProjectId?: string | null;
+    sidebarCollapsed?: boolean;
+    onboardingComplete?: boolean;
+    welcomeTourSeen?: boolean;
+  };
+  if (fromVersion < 2 && state.activeView === "settings") {
+    state.activeView = state.activeProjectId ? "workspace" : "projects";
+  }
+  // Users who finished onboarding before the tour existed are not new: skip it
+  if (fromVersion < 3 && state.onboardingComplete) state.welcomeTourSeen = true;
+  return state as unknown as AppStore;
+}
+
 export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
@@ -81,24 +99,7 @@ export const useAppStore = create<AppStore>()(
     {
       name: "exegol-app-state",
       version: 3,
-      // T120: dropped 'settings' from ActiveView. Coerce stale persisted
-      // value so upgrading users don't rehydrate into a sidebarless state.
-      migrate: (persisted, fromVersion) => {
-        if (!persisted || typeof persisted !== "object") return persisted as AppStore;
-        const state = persisted as {
-          activeView?: string;
-          activeProjectId?: string | null;
-          sidebarCollapsed?: boolean;
-          onboardingComplete?: boolean;
-          welcomeTourSeen?: boolean;
-        };
-        if (fromVersion < 2 && state.activeView === "settings") {
-          state.activeView = state.activeProjectId ? "workspace" : "projects";
-        }
-        // Users who finished onboarding before the tour existed are not new: skip it
-        if (fromVersion < 3 && state.onboardingComplete) state.welcomeTourSeen = true;
-        return state as unknown as AppStore;
-      },
+      migrate: migrateAppStore,
       partialize: (state) => ({
         activeProjectId: state.activeProjectId,
         activeView: state.activeView,

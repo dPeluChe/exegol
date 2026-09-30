@@ -103,8 +103,8 @@ export function setupTerminalSession(
   if (deps.mirror) {
     // Several mirrors fill the dashboard: a wheel over one must scroll the page,
     // not trap it in that terminal's history. Clicked (focused) = it's yours.
-    terminal.attachCustomWheelEventHandler(() => {
-      tuneWheelSensitivity(terminal);
+    terminal.attachCustomWheelEventHandler((e) => {
+      tuneWheelSensitivity(terminal, e);
       return !!terminal.element?.contains(document.activeElement);
     });
   } else if (deps.cliType && deps.cliType !== "shell") {
@@ -112,16 +112,16 @@ export function setupTerminalSession(
     // ↑/↓ from xterm, and ↑ in an empty prompt recalls the last message: drop only that case.
     // This handler runs before mouse reporting, so a TUI that tracks the mouse (and scrolls
     // with it) must pass. Shells keep it all: vim and less scroll with the arrows
-    terminal.attachCustomWheelEventHandler(() => {
-      tuneWheelSensitivity(terminal);
+    terminal.attachCustomWheelEventHandler((e) => {
+      tuneWheelSensitivity(terminal, e);
       return (
         terminal.buffer.active.type !== "alternate" || terminal.modes.mouseTrackingMode !== "none"
       );
     });
   } else {
     // Shells: vim or less with the mouse on get the same trackpad fix
-    terminal.attachCustomWheelEventHandler(() => {
-      tuneWheelSensitivity(terminal);
+    terminal.attachCustomWheelEventHandler((e) => {
+      tuneWheelSensitivity(terminal, e);
       return true;
     });
   }
@@ -155,6 +155,9 @@ export function setupTerminalSession(
         }
         return false;
       }
+      // Ctrl+Tab cycles panes (use-hotkeys): xterm would send Tab, and Ctrl+Shift+Tab Shift+Tab,
+      // which flips Claude's permission mode
+      if (e.ctrlKey && e.key === "Tab") return false;
       if (e.type !== "keydown") return true;
       if (e.key === "Backspace" && (e.ctrlKey || e.metaKey || e.altKey)) {
         window.api.terminal.write(deps.agentId, "\x17");

@@ -1,6 +1,8 @@
-import { type RefObject, useCallback, useRef, useState } from "react";
+import type { AgentStatus } from "@exegol/shared";
+import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
 import { useProject, useProjects } from "../../hooks/use-trpc";
-import { pasteToAgent } from "../../lib/agent-input";
+import { isPasteTarget, pasteToAgent } from "../../lib/agent-input";
+import { focusActivePane } from "../../lib/pane-focus";
 import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import type { TerminalInstanceHandle } from "./terminal-types";
 import { useTerminalUrlDetector } from "./use-terminal-url-detector";
@@ -82,19 +84,14 @@ export function groupSendTargets(
     alias?: string | null;
     cliType: string;
     projectId: string;
-    status: string;
+    status: AgentStatus;
   }>,
   selfId: string,
   projectNames: Map<string, string>,
   currentProjectId: string | undefined,
 ) {
   const targets: SendTarget[] = agents
-    .filter(
-      (a) =>
-        a.id !== selfId &&
-        a.cliType !== "shell" &&
-        (a.status === "running" || a.status === "waiting_input"),
-    )
+    .filter((a) => a.id !== selfId && isPasteTarget(a))
     .map((a) => ({
       id: a.id,
       name: a.alias ?? a.cliType,
@@ -125,11 +122,18 @@ export function useSendTo(
   const allAgents = useAgentStore((s) => s.agents);
   const { data: projects = [] } = useProjects();
 
-  const groups = groupSendTargets(
-    Object.values(allAgents),
-    agentId,
-    new Map(projects.map((p) => [p.id, p.name])),
-    projectId,
+  // Only built while text is selected: every agent push would redo it for every panel
+  const groups = useMemo(
+    () =>
+      hasSelection
+        ? groupSendTargets(
+            Object.values(allAgents),
+            agentId,
+            new Map(projects.map((p) => [p.id, p.name])),
+            projectId,
+          )
+        : [],
+    [hasSelection, allAgents, agentId, projects, projectId],
   );
 
   const handleSendTo = useCallback(
@@ -139,6 +143,7 @@ export function useSendTo(
       pasteToAgent(target.id, text);
       setShowSendTo(false);
       jumpToAgent(target.id, target.projectId);
+      focusActivePane();
     },
     [terminalRef],
   );
@@ -149,7 +154,7 @@ export function useSendTo(
   }, []);
 
   return {
-    sendGroups: hasSelection ? groups : [],
+    sendGroups: groups,
     showSendTo,
     setShowSendTo,
     handleSendTo,

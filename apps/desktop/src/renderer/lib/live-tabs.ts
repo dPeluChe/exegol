@@ -50,7 +50,7 @@ export function computeLiveTabGroups(
     .map(({ g }) => g);
 }
 
-export function getLiveTabGroups(): LiveTabGroup[] {
+function getLiveTabGroups(): LiveTabGroup[] {
   return computeLiveTabGroups(
     useWorkspaceStore.getState().projectWorkspaces,
     useAgentStore.getState().agents,
@@ -113,8 +113,7 @@ export function projectShortcuts(
   return byProject;
 }
 
-export function useGroupShortcuts(): Map<string, ShortcutDigit> {
-  const groups = useLiveTabGroups();
+export function useGroupShortcuts(groups: LiveTabGroup[]): Map<string, ShortcutDigit> {
   const assigned = useShortcutStore((s) => s.assigned);
   const watched = useWatchStore((s) => s.watched);
   return useMemo(
@@ -125,7 +124,7 @@ export function useGroupShortcuts(): Map<string, ShortcutDigit> {
 
 export function useProjectShortcuts(): Map<string, ShortcutDigit> {
   const groups = useLiveTabGroups();
-  const byGroup = useGroupShortcuts();
+  const byGroup = useGroupShortcuts(groups);
   return useMemo(() => projectShortcuts(groups, byGroup), [groups, byGroup]);
 }
 

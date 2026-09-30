@@ -11,6 +11,7 @@ import type {
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
+import { useShortcutStore } from "../stores/shortcuts";
 
 // ─── Domain re-exports (barrel) ─────────────────────────────────────────────
 
@@ -61,7 +62,9 @@ export function useDeleteProject() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => trpcMutate<void>("projects.delete", { id }),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
+      // A removed project's Cmd+n would stay reserved and dead
+      useShortcutStore.getState().assign(id, null);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });
