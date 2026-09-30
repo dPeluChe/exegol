@@ -17,6 +17,37 @@ bun run rebuild:native   # core-rust + node-pty for Electron
 bun run dev              # full pipeline; bun run dev:ui skips Rust (JS fallback, faster)
 ```
 
+Faster loops: `bun run dev:ui` (skips Rust), `bun run kill:dev` for a stuck dev window,
+`bun run dev:fresh` after changing the PTY sidecar. Logs: `~/.exegol/logs/` (the sidecar writes
+`sidecar.log` there).
+
+## Where to start
+
+**Get to know the app first.** Run it, add a project, open a shell and an agent, split a pane,
+pin a session to the Dashboard. The welcome tour (command palette → Show welcome tour), the
+feature list in [docs/GUIDES/FEATURES.md](docs/GUIDES/FEATURES.md) and `Cmd+/` cover the rest.
+
+**Pick something from the board**, [docs/TASK_TODO.md](docs/TASK_TODO.md):
+
+| Section | What it is | Good for |
+|---------|------------|----------|
+| Verify live | Recent changes nobody has checked in the running app | A first contribution: try each one, report or fix what breaks |
+| Priority Order | The next tasks, in order | Small to medium fixes |
+| Active Backlog (T-numbers) | Larger features with a design | Ask in an issue before starting one |
+
+**Find the code.** Architecture and conventions are in [CLAUDE.md](CLAUDE.md); the usual entry
+points:
+
+| You want to change | Look in |
+|--------------------|---------|
+| Something you see in the UI | `apps/desktop/src/renderer/components/` (by area: `layout/`, `workspace/`, `terminal/`, `settings/`) |
+| Data from the main process | a tRPC procedure in `apps/desktop/src/main/ipc/procedures/`, its hook in `renderer/hooks/use-trpc*.ts`, and an entry in `preload/capabilities.json` |
+| The database | a migration in your group's `main/db/migration-sets/` file and a query module in `main/db/queries/` |
+| How an agent CLI starts or is detected | `main/agents/registry.ts` (providers), `manager.ts`, `spawn-env.ts` |
+| Terminal behavior | `renderer/components/terminal/` (xterm) and `main/terminal/` (PTY, sidecar) |
+| Keyboard shortcuts | `renderer/hooks/use-hotkeys.ts`, `renderer/lib/shortcuts.ts` and [KEYBOARD_SHORTCUTS.md](docs/GUIDES/KEYBOARD_SHORTCUTS.md) |
+| Native parsing, git, search | `packages/core-rust/` |
+
 ## The loop: one task, one PR
 
 1. **Pick or file a task** in [docs/TASK_TODO.md](docs/TASK_TODO.md). Work that is not there
@@ -41,6 +72,8 @@ bun run dev              # full pipeline; bun run dev:ui skips Rust (JS fallback
    - `docs/TASK_TODO.md`: remove what you finished (it holds pending work only)
    - `docs/TASK_COMPLETED/YYMM.md`: a dated entry, what changed and *why*, newest first
    - `docs/CHANGELOG.md` `[Unreleased]`: one line per user-visible change (Added / Changed / Fixed)
+   - A new or changed feature or shortcut: `docs/GUIDES/FEATURES.md` / `KEYBOARD_SHORTCUTS.md`,
+     and the README highlights if it is one of them
 6. **Open the PR** with the template, then squash-merge. Commit messages follow
    conventional commits (`fix(terminal): …`).
 

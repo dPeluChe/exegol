@@ -1,29 +1,49 @@
 # Exegol
 
-Desktop app for orchestrating AI coding agents. Run Claude Code, Codex, Gemini CLI, Aider — or any CLI agent — in parallel with full visibility, structured planning, and intelligent context management.
+Desktop app for running AI coding agents side by side. Claude Code, Codex, Gemini, Aider or any
+CLI agent, each in its own terminal, with live status, one place to see who needs you, and the
+tools to hand work between them.
 
 ![Electron](https://img.shields.io/badge/Electron-41-47848F?logo=electron&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)
 ![Rust](https://img.shields.io/badge/Rust-napi--rs-DEA584?logo=rust&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)
-![License](https://img.shields.io/badge/License-Private-red)
+![License](https://img.shields.io/badge/License-MIT-green)
 
 ## What is Exegol?
 
-Current AI coding tools force you into one of two extremes: **terminal-only** (powerful but invisible) or **locked platforms** (feature-rich but ecosystem-bound). Exegol bridges both — an agent-agnostic command center where you manage, monitor, and orchestrate any CLI coding agent from a single interface.
+AI coding tools tend to be either terminal-only (powerful, but you lose track of five sessions in
+five windows) or closed platforms tied to one vendor. Exegol is the command center in between:
+you keep the CLIs you already use and get one window to launch, watch and coordinate them.
 
-**Key ideas:**
-- **Any agent** — Claude Code, Codex, Gemini, Aider, Goose, Amp, Kiro, Factory Droid, Devin, Antigravity, or your custom CLI. 14 built-in providers.
-- **Parallel execution** — Run multiple agents simultaneously, each in its own terminal with live status.
-- **Project-centric** — Organize agents, tasks, and resources per project with git worktree isolation.
-- **Pipelines** — Sequential multi-agent orchestration with loop/review cycles and shared worktrees.
-- **QA automation** — Record browser interactions and replay them as automated test suites.
+> **The name.** Exegol is the hidden Sith world in the Unknown Regions of Star Wars (*The Rise of
+> Skywalker*): the citadel where the Sith Eternal plotted in secret and assembled the Final Order
+> fleet. Here it is the place where you plan the attack, deploy your agents and keep the whole
+> fleet under control.
 
-## Screenshots
+## Highlights
 
-> Coming soon — the app is in active development.
+- **Any agent**: 14 built-in CLIs plus your own; each runs in a real terminal.
+- **Many at once**: tabs and split panes per project, a Dashboard across projects, and pinned
+  sessions you watch live side by side.
+- **Know who needs you**: live status, a Needs attention list, notifications with the pending
+  question, `Cmd+J` to the next one.
+- **Sessions that survive**: agents keep running through a reload, a crash or an update.
+- **Coordination**: send text from one agent to another, shared memory, messages and file claims
+  between agents, and pipelines that chain agents with review loops.
+- **Around the code**: browser pane with design mode and QA recording, git diff and a smart
+  commit/push/PR button, undo for agent changes.
 
-## Quick Start
+All features: [docs/GUIDES/FEATURES.md](docs/GUIDES/FEATURES.md) ·
+Keyboard shortcuts: [docs/GUIDES/KEYBOARD_SHORTCUTS.md](docs/GUIDES/KEYBOARD_SHORTCUTS.md)
+
+## Install
+
+Download the latest release from
+[GitHub Releases](https://github.com/dPeluChe/exegol/releases/latest): a notarized DMG for macOS
+(Apple Silicon), an AppImage or `.deb` for Linux. The app updates itself from there.
+
+## Run from source
 
 ### Prerequisites
 
@@ -49,7 +69,8 @@ bun run rebuild:native
 bun run dev
 ```
 
-The app opens as a desktop window. Add a project (any git repo), then launch an agent.
+The app opens as a desktop window. Add a project (any folder or git repo), then launch an agent.
+Lint, tests and the PR loop: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Build and install (macOS)
 
@@ -58,22 +79,13 @@ bun run build:rust       # native module, bundled into the app
 bun run package:mac      # electron-vite build + electron-builder
 ```
 
-Output: `apps/desktop/dist/Exegol-<version>-<arch>.dmg`. Open it and drag Exegol to Applications. With `APPLE_KEYCHAIN_PROFILE` set the app is signed and notarized; without it the build is unsigned and first launch needs right-click → Open. Linux AppImage and `.deb` are built by CI (`.github/workflows/linux.yml`) for each published release. Installed apps update themselves from GitHub releases. `bun run build` alone only compiles to `apps/desktop/out/`. Full guide: [`docs/GUIDES/RELEASE.md`](docs/GUIDES/RELEASE.md).
+Output: `apps/desktop/dist/<version>/Exegol-<version>-<arch>.dmg`. Without `APPLE_KEYCHAIN_PROFILE` the build is not notarized, and macOS asks you to allow it (System Settings → Privacy & Security → Open Anyway). Linux packages come from CI. Release steps: [docs/GUIDES/RELEASE.md](docs/GUIDES/RELEASE.md).
 
-### Lint, Typecheck & Tests
+## Contributing
 
-```bash
-bun run lint
-bun run typecheck
-bun run test && bun run test:shared
-```
-
-### Rust (native module)
-
-```bash
-cd packages/core-rust
-cargo check && cargo test && cargo clippy
-```
+Start with [CONTRIBUTING.md](CONTRIBUTING.md): setup, where to find work, the one-task-one-PR loop
+and the rules that are easy to miss. AI agents working in this repo follow
+[AGENTS.md](AGENTS.md).
 
 ## Tech Stack
 
@@ -115,108 +127,12 @@ exegol/
     └── ARCHIVED/           # Obsolete docs (historical context)
 ```
 
-## Features
-
-### Workspace
-
-- **Dashboard** — its own view (Cmd+1): cross-project fleet plus Watching, pinned sessions as live interactive cards; each agent card shows its message thread with the other agents (delivered or read)
-- **Multi-pane tabbed workspace** — 3 main tabs (Agents, Project, Monitor), each with split support (Cmd+D / Cmd+Shift+D)
-- **6 layout presets** — Single, Split Horizontal, Split Vertical, Three Columns, Bottom Terminal (70/30), 2×2 Grid; custom saved layouts with per-slot type/url/filePath
-- **5 pane types** — Terminal (agent or plain shell), Browser (Electron webview), Files (FileExplorer + Monaco), Git (diff + oplog), Empty (agent selector grid)
-- **Picture-in-Picture** — Any terminal or browser pane detaches into a frameless always-on-top window (T84)
-- **Command Palette** — Cmd+K fuzzy search + `!<cmd>` bang commands that spawn a one-shot shell agent
-
-### Agents
-
-- **14 built-in providers** — Claude Code, Codex CLI, Gemini CLI, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal (shell); fully configurable via Settings
-- **PTY Sidecar** — Standalone detached Node.js process (`~/.exegol/pty-sidecar.sock`) survives window reload and app crashes; 8MB ring buffer per session for instant reconnect
-- **Live status parsing** — Rust `AgentOutputStream` strips ANSI and detects status/step from output (zero-alloc case-insensitive matching)
-- **Activity classification** — `busy | idle | neutral` derived from status on every push event; pulsing dot in tab chrome
-- **Access modes** — `read | write | plan` per agent or pipeline step; system instruction injected at spawn; badge in terminal toolbar
-- **Session resume** — Claude session ID + resume command captured from output; 3-tier resume priority (resume_command → claude_session_id → static flag)
-- **Crash recovery** — On restart, alive PTY sessions reattach; dead sessions marked "crashed" with scrollback preserved
-- **Terminal ↔ Chat view** — Toggle between raw terminal output and a structured chat view for any agent (live or stopped)
-- **Shell to agent**: a CLI typed in a terminal becomes that agent in place
-
-### Browser & QA
-
-- **Browser pane** — Electron webview with URL bar, back/forward/reload, and agent interaction hooks
-- **Design Mode** — Click any element to capture selector + styles + HTML for agent stdin
-- **QA Record** — Captures clicks, inputs, keypresses, and navigation as a replayable test suite
-- **QA Replay** — Drives steps sequentially with `scrollIntoView` before click, interactive ancestor resolution, `assert` action support, per-step alert/console error collection, and concurrent screenshot capture
-- **QA Tests section** — Project sub-tab listing saved tests with expand/run/delete and per-run step results
-
-### Git & Code
-
-- **Smart Git Button** — 11 context-aware states (conflicts, commit, push, create PR, merge PR, install gh, etc.); AI commit message generation via Claude Haiku
-- **Diff viewer** — Real git diff with unstaged/staged toggle, unified/split views, inline line comments (T69)
-- **Oplog** — Agent operation log with undo capability
-- **Git worktree isolation** — Each agent gets its own branch via Rust git2; metadata persisted and auto-cleaned on agent exit
-
-### Project
-
-- **Multi-agent pipelines** — Sequential orchestration in shared worktrees; loop/review cycles with `loopBackTo` + max iterations guard; explicit state machine (T78)
-- **Skills** — 5 built-in personas + per-project custom skills; injected into agent context at spawn
-- **Memory system** — memories agents save through the Exegol MCP server; salience v2 (reinforce/supersede/decay); hybrid FTS5 + Ollama recall; persisted per project
-- **Prompts** — Reusable templates per project with category filters, pin, copy
-- **Scheduler** — Cron-based task scheduling (croner), dependency-aware engine; backend only, no UI yet (T185.1)
-- **Lifecycle scripts** — `.exegol/lifecycle.yaml` per repo: `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks
-- **Semantic search** — Ollama embeddings + cosine similarity over project file chunks (T68/T100); not exposed yet
-
-### Monitor
-
-- **Dashboard** (own view, Cmd+1) — Live cross-project cards with uptime, token usage (k tokens + cost), status dot, provider icon
-- **Attention Center** — Inbox for agent events needing review (critical/action_needed/info); click to navigate to pane
-- **Token usage** — Claude Code JSONL log parser; cost breakdown by model
-- **Resource monitor** — CPU, RAM, Disk with background collector (10s interval)
-
-### Settings & Infrastructure
-
-- **Settings window** — Lives in its own `BrowserWindow` (T120): tweak themes / API keys / fonts while still watching agent output. `Cmd+,` and the macOS `Preferences…` menu item both open or focus it. Cross-window cache sync via `settings:broadcast-changed` so changes are immediate.
-- **API key management** — `safeStorage` encryption with session-level cache; providers: Anthropic, OpenAI, Google, etc.
-- **Terminal fonts** — 3 bundled Nerd Fonts (MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono); per-card live preview
-- **Themes** — Light / Dark / Dark-black (OLED) / System
-- **Capability allowlist** — Every IPC channel and tRPC procedure is gated by a declarative JSON allowlist (T119). See [`docs/ARCHITECTURE/CAPABILITIES.md`](docs/ARCHITECTURE/CAPABILITIES.md).
-- **Hardened path / command guards** — `assertSafePath` rejects bidi Trojan Source chars, NTFS ADS, and sensitive paths (`.env*`, `.ssh/`, `.aws/credentials`, GPG/keychains); `inspectCommand` refuses fork bombs, `rm -rf /`, `dd of=/dev/disk*`, `curl|sh` (T117).
-- **Tight CSP** — Explicit `connect-src 'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'` (T118).
-- **Window state persistence** — Width / height / position survive restarts via `electron-window-state` (T121).
-- **Structured errors** — `ExegolError → TransientError / PermanentError / TimeoutError` with `withRetry()` helper (T80)
-- **DB row validation** — Zod schemas for all 14 row types with graceful degradation on parse failure (T77)
-- **DI context** — All 5 tRPC singletons injected via context (no module-level globals) (T81)
-- **Updates** — title-bar button checks GitHub releases, downloads and restarts into the new version, and shows what's new (release notes)
-- **Welcome tour** — after the first-run setup, a skippable tour of the main features (reopen it from the command palette)
-- **Bug reports** — title-bar bug button collects redacted diagnostics for review before filing a public issue
-- **Work guard** — keeps the Mac awake while agents run and asks before quitting with sessions open
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Cmd+K` / `Cmd+Shift+P` | Command Palette |
-| `Cmd+B` | Toggle sidebar |
-| `Cmd+,` | Open Settings window |
-| `Cmd+N` | New Agent |
-| `Cmd+.` | Stop focused agent |
-| `Cmd+T` | New workspace tab |
-| `Cmd+Shift+N` | Parallel spawn |
-| `Cmd+W` | Close focused pane / tab |
-| `Cmd+D` | Split pane horizontal |
-| `Cmd+Shift+D` | Split pane vertical |
-| `Cmd+Shift+]` / `Cmd+Shift+[` | Next / Previous workspace tab |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous pane of the tab |
-| `Cmd+1` | Dashboard |
-| `Cmd+2-9`, `Cmd+0` | Live tab groups: numbers set in Edit project first, then the sidebar's order, pinned sessions last |
-| `Cmd+Option+1-9` | Workspace tab of the current project by position |
-| `Cmd+]` / `Cmd+[` | Next / previous pane (same as Ctrl+Tab) |
-| `Cmd+Shift+0` | Reset zoom (Cmd+0 is a live tab slot) |
-| `Cmd+J` | Jump to next attention item |
-| `Cmd+/` | Keyboard shortcuts overlay |
-| `Cmd+Shift+E` | Bring Exegol to front (global, configurable in Settings) |
-
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [Features](docs/GUIDES/FEATURES.md) | Everything the app does, by area |
+| [Keyboard shortcuts](docs/GUIDES/KEYBOARD_SHORTCUTS.md) | App and terminal shortcuts |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, the one-task-one-PR loop, rules that are easy to miss |
 | [AGENTS.md](AGENTS.md) | Rules for AI coding agents working in this repo |
 | [CLAUDE.md](CLAUDE.md) | Architecture reference and dev commands |

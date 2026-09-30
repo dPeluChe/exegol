@@ -432,7 +432,7 @@ Raíz obtenida de `spark config`: `~/<repos>/github.com`.
 
 El repo local de Herdr conserva su ruta histórica; la página pública consultada redirige a `herdrdev/herdr`. Las referencias de implementación de este informe apuntan a commits concretos para que la próxima revisión no confunda el estado de septiembre con el de agosto.
 
-Fuentes internas principales: [backlog](../TASK_TODO.md), [features](../PROJECT_DEFINITION/FEATURES.md), [release](../GUIDES/RELEASE.md), [benchmarks](BENCHMARKS.md), [auditoría de julio](CODE_HEALTH_AUDIT_2026_07.md), [competencia de julio](COMPETITIVE_REVIEW_2026_07.md), [actualización de agosto](COMPETITIVE_UPDATE_2026_08.md), [CocoIndex](COCOINDEX_2026_08.md), [Engram](ENGRAM_2026_08.md), [Council](../ARCHITECTURE/COUNCIL_BASE.md) y [Owl](../ARCHITECTURE/OWL_FLEET_WATCH.md).
+Fuentes internas principales: [backlog](../TASK_TODO.md), [features](../ARCHIVED/FEATURES_V0.4.md), [release](../GUIDES/RELEASE.md), [benchmarks](BENCHMARKS.md), [auditoría de julio](CODE_HEALTH_AUDIT_2026_07.md), [competencia de julio](COMPETITIVE_REVIEW_2026_07.md), [actualización de agosto](COMPETITIVE_UPDATE_2026_08.md), [CocoIndex](COCOINDEX_2026_08.md), [Engram](ENGRAM_2026_08.md), [Council](../ARCHITECTURE/COUNCIL_BASE.md) y [Owl](../ARCHITECTURE/OWL_FLEET_WATCH.md).
 
 [superset]: https://github.com/superset-sh/superset
 [superset-flow]: https://github.com/superset-sh/superset/blob/42bd65b92c7c7e30187160af8c3fca49b0f7556a/packages/pty-daemon/test/flow-control.test.ts

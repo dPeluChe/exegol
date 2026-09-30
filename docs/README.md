@@ -1,6 +1,6 @@
 # Exegol — Documentation
 
-> Documentation index and writing guidelines. Updated 2026-09-29 (contributor docs review).
+> Documentation index and writing guidelines. Updated 2026-09-30 (README split: features and shortcuts moved to GUIDES/).
 
 ## Structure
 
@@ -11,7 +11,7 @@
 | `CHANGELOG.md` | Release-oriented history (what a user cares about per version) |
 | `ARCHITECTURE/` | Technical architecture and capability docs |
 | `PROJECT_DEFINITION/` | Vision, problem statement, stack decisions, feature roadmap (living set, created 2026-03) |
-| `GUIDES/` | How-to docs: release & distribution, pipeline evidence in CI |
+| `GUIDES/` | Features, keyboard shortcuts, release & distribution, pipeline evidence in CI |
 | `RESEARCH/` | Analyses that feed the board: competitive reviews, stack reviews, audits, benchmarks |
 | `AGENT_PROMPTS/` | Briefs handed to agents working in worktrees |
 | `ARCHIVED/` | Obsolete docs kept for historical context (see `ARCHIVED/README.md`) |
@@ -27,6 +27,8 @@
 | [RESEARCH/CODE_HEALTH_AUDIT_2026_07.md](./RESEARCH/CODE_HEALTH_AUDIT_2026_07.md) | Code audit feeding Wave 2.6 (T149–T152) |
 | [RESEARCH/COMPETITIVE_REVIEW_2026_07.md](./RESEARCH/COMPETITIVE_REVIEW_2026_07.md) | Market analysis behind the moat thesis (Pipelines → Evidence → Undo → Scoring) |
 | [RESEARCH/BENCHMARKS.md](./RESEARCH/BENCHMARKS.md) | Performance baselines tracked over time |
+| [GUIDES/FEATURES.md](./GUIDES/FEATURES.md) | Everything the app does, by area (the README keeps the highlights) |
+| [GUIDES/KEYBOARD_SHORTCUTS.md](./GUIDES/KEYBOARD_SHORTCUTS.md) | App and terminal shortcuts |
 | [GUIDES/RELEASE.md](./GUIDES/RELEASE.md) | Release & distribution guide |
 | [PROJECT_DEFINITION/README.md](./PROJECT_DEFINITION/README.md) | Vision + problem statement + document map |
 
