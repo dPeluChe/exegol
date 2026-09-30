@@ -28,3 +28,24 @@ jobs:
       - run: bun run test:shared
       - run: cargo test --locked --manifest-path packages/core-rust/Cargo.toml
       - run: bun run build
+  react-doctor:
+    # React health of what the PR changes: errors fail it, new warnings are listed in the log to
+    # fix or justify (a finding kept on purpose re-appears when its lines move, so warnings
+    # cannot block without pushing people to inline disables)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - run: >-
+          npx -y react-doctor@0.9.14 . --yes --scope changed
+          --base origin/${{ github.base_ref }} --blocking error
+          --no-supply-chain --no-telemetry

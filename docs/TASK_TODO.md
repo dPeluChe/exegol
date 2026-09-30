@@ -59,7 +59,6 @@
      order, Ollama indexer, auto-resume, the concurrency helper), Monaco already lazy, the PDF
      iframe without `sandbox` (Chromium blocks its viewer), Doctor only shows install commands,
      index keys where the position is the identity, two mutations with no cached data
-   - Then: `react-doctor --scope changed` in CI so a PR cannot add findings
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.

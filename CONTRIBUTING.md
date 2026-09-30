@@ -34,6 +34,9 @@ bun run dev              # full pipeline; bun run dev:ui skips Rust (JS fallback
    Format with the pinned version only: `npx -y @biomejs/biome@2.4.7 check --write apps/ packages/shared/src`
    (an unpinned `npx biome` pulls the latest and reformats everything).
    One test file: `cd apps/desktop && npx vitest run src/path/to/file.test.ts`.
+   React health: CI runs react-doctor on what your PR changes (errors fail it, new warnings show
+   in the log). Locally: `cd apps/desktop && npx -y react-doctor@0.9.14 . --scope changed --base main`.
+   Fix the cause; never add a disable or ignore to make a finding go away.
 5. **Update the docs in the same PR**:
    - `docs/TASK_TODO.md`: remove what you finished (it holds pending work only)
    - `docs/TASK_COMPLETED/YYMM.md`: a dated entry, what changed and *why*, newest first
