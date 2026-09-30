@@ -108,8 +108,9 @@ dependency/library audit
 - **Linux keys** (built on macOS, needs a Linux run): Ctrl+Shift+N/T/W/D/B/J/K/P with the cursor
   in a terminal; Ctrl+Shift+1..0 and Ctrl+Shift+Alt+1..9; Ctrl+Shift+C / Ctrl+Shift+V in a
   terminal (V relies on Chromium's own paste); Ctrl+C/D/W still reach the shell; labels in the
-  tour, shortcuts list and menus say Ctrl+Shift. Settings and floating windows have no
-  Ctrl+Shift+W (no menu on Linux)
+  tour, shortcuts list and menus say Ctrl+Shift
+- Esc closes Settings and floating windows (not while a field, select or dialog has it, not from
+  a focused floating terminal); Ctrl+Shift+W on Linux
 - Send to: only with a selection, agents only by project, paste without Enter, cursor lands there
 - Sidebar Agents / Needs attention switch; attention card in two rows; project Cmd+n badge
 - Watching pins as plain mirrors (fit opt-in per card)
