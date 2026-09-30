@@ -1,17 +1,19 @@
 import { create } from "zustand";
 
-/** Sessions to restart onto a newer CLI as soon as they are free (not mid-turn) */
+/** true: once the turn ends; "now": even mid-turn; "update": once a newer CLI is installed (an
+ *  update running in a tab) and the turn ends */
+export type RestartWhen = true | "now" | "update";
+
+/** Sessions to restart onto a newer CLI (Suspend + Resume keeps model, YOLO, mode and name) */
 interface CliRestartStore {
-  /** true: wait for the turn to end; "now": restart even mid-turn */
-  pending: Record<string, true | "now">;
-  request: (agentId: string, now?: boolean) => void;
+  pending: Record<string, RestartWhen>;
+  request: (agentId: string, when?: RestartWhen) => void;
   cancel: (agentId: string) => void;
 }
 
 export const useCliRestartStore = create<CliRestartStore>()((set) => ({
   pending: {},
-  request: (agentId, now) =>
-    set((s) => ({ pending: { ...s.pending, [agentId]: now ? "now" : true } })),
+  request: (agentId, when = true) => set((s) => ({ pending: { ...s.pending, [agentId]: when } })),
   cancel: (agentId) =>
     set((s) => {
       const { [agentId]: _, ...pending } = s.pending;

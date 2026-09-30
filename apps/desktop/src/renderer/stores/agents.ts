@@ -271,7 +271,7 @@ export function findAgentPane(
 }
 
 /** Bring a project's workspace on screen from anywhere, the Dashboard included */
-function showProject(projectId: string): void {
+export function showProject(projectId: string): void {
   if (useAppStore.getState().activeProjectId !== projectId) {
     useAppStore.getState().setActiveProject(projectId);
   }

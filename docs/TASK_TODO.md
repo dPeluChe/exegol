@@ -109,6 +109,9 @@ dependency/library audit
   Update opens a tab with the command; resume lands in the same pane for each CLI. Known limit:
   CLIs without a stored resume id fall back to "continue last in this folder" (codex, opencode,
   kilo, devin, agy...), which picks another session if two of the same CLI share the folder
+- Startup CLI updates notice: shows once after load, Later remembers the versions, Update and
+  restart waits for the install (15s checks) and then for each turn; a failed update leaves
+  those sessions queued ("Restarts after the update", click to cancel)
 - Launcher: model field per CLI (claude sonnet/opus/haiku, a typed id for the rest), name field
 - **Linux keys** (built on macOS, needs a Linux run): Ctrl+Shift+N/T/W/D/B/J/K/P with the cursor
   in a terminal; Ctrl+Shift+1..0 and Ctrl+Shift+Alt+1..9; Ctrl+Shift+C / Ctrl+Shift+V in a
