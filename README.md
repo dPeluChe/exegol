@@ -206,6 +206,7 @@ exegol/
 | `Cmd+1` | Dashboard |
 | `Cmd+2-9` | Live tab groups, in the order shown |
 | `Cmd+Option+1-9` | Workspace tab of the current project by position |
+| `Cmd+]` / `Cmd+[` | Next / previous pane of the tab |
 | `Cmd+J` | Jump to next attention item |
 | `Cmd+/` | Keyboard shortcuts overlay |
 | `Cmd+Shift+E` | Bring Exegol to front (global, configurable in Settings) |

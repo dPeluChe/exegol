@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { getLiveTabGroups } from "../lib/live-tabs";
+import { cyclePane, focusActivePane } from "../lib/pane-focus";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
@@ -143,6 +144,7 @@ export function useHotkeys() {
         const first = group?.agentIds[0];
         if (group && first) {
           jumpToAgent(first, group.projectId);
+          focusActivePane();
           window.dispatchEvent(new CustomEvent("exegol:live-tab-flash", { detail: group.key }));
         }
         return;
@@ -159,7 +161,16 @@ export function useHotkeys() {
           if (useAppStore.getState().activeView !== "workspace") {
             setActiveView("workspace");
           }
+          focusActivePane();
         }
+        return;
+      }
+
+      // Cmd+] / Cmd+[: next or previous pane of this tab (plain Tab belongs to the terminal:
+      // shell completion, Claude). e.code: the bracket keys move on other layouts
+      if (!e.shiftKey && !e.altKey && (e.code === "BracketRight" || e.code === "BracketLeft")) {
+        e.preventDefault();
+        cyclePane(e.code === "BracketRight" ? "next" : "prev");
         return;
       }
     };
@@ -239,5 +250,8 @@ function navigateWorkspaceTab(direction: "next" | "prev"): void {
       ? (currentIndex + 1) % tabs.length
       : (currentIndex - 1 + tabs.length) % tabs.length;
   const nextTab = tabs[nextIndex];
-  if (nextTab) setActiveTab(nextTab.id);
+  if (nextTab) {
+    setActiveTab(nextTab.id);
+    focusActivePane();
+  }
 }
