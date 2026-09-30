@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 export const MAX_OPEN_MIRRORS = 6;
 const MIN_CARD_FONT = 8;
 const MAX_CARD_FONT = 22;
-/** A pinned session opens sized to its card at this font: readable side by side */
+/** Where A−/A+ and "fit session to card" start from */
 export const DEFAULT_CARD_FONT = 13;
 
 interface WatchStore {
@@ -38,6 +38,13 @@ const omit = (fonts: Record<string, number>, id: string) => {
 const swap = (list: string[], oldId: string, newId: string) =>
   list.map((id) => (id === oldId ? newId : id));
 
+/** 0.5.8 pinned every session sized to its card; that was the default, not a choice */
+export function migrateWatchStore(persisted: unknown, version: number) {
+  return version < 1 && persisted && typeof persisted === "object"
+    ? { ...(persisted as object), cardFont: {} }
+    : persisted;
+}
+
 export const useWatchStore = create<WatchStore>()(
   persist(
     (set) => ({
@@ -53,9 +60,10 @@ export const useWatchStore = create<WatchStore>()(
                 cardFont: omit(s.cardFont, agentId),
               }
             : {
+                // A plain mirror: sizing the session to the card changes the PTY's width, and
+                // Claude's inline redraw then overlaps lines each time the view switches
                 watched: [...s.watched, agentId],
                 open: pushOpen(s.open, agentId),
-                cardFont: { ...s.cardFont, [agentId]: s.cardFont[agentId] ?? DEFAULT_CARD_FONT },
               },
         ),
       toggleOpen: (agentId) =>
@@ -91,6 +99,10 @@ export const useWatchStore = create<WatchStore>()(
           return { watched: rest };
         }),
     }),
-    { name: "exegol-watch" },
+    {
+      name: "exegol-watch",
+      version: 1,
+      migrate: migrateWatchStore,
+    },
   ),
 );

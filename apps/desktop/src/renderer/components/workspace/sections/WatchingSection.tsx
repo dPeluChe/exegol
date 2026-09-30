@@ -349,7 +349,7 @@ function CardSizeControls({ agentId }: { agentId: string }) {
         title={
           sizing
             ? "Stop sizing the session here: show the pane's layout, scaled to fit"
-            : "Fit the session to this card: readable text; its pane takes the size back when shown"
+            : "Fit the session to this card: readable text, but it changes the session's width, and a CLI that redraws in place (Claude) can leave overlapped lines when you switch between the card and its pane"
         }
       >
         {sizing ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
