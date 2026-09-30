@@ -72,15 +72,8 @@ export const SHORTCUTS: Shortcut[] = [
   {
     id: "next-pane",
     label: "Next / Previous Pane",
-    description: "Move the cursor to the next pane of this tab, or back with [",
-    keys: "Cmd+] / Cmd+[",
-    category: "navigation",
-  },
-  {
-    id: "cycle-tabs",
-    label: "Cycle Tabs",
-    description: "Forward, or backward with Shift",
-    keys: "Ctrl+Tab / Ctrl+Shift+Tab",
+    description: "Move the cursor to the next pane of this tab, or back (Shift, or [)",
+    keys: "Ctrl+Tab / Ctrl+Shift+Tab (or Cmd+] / Cmd+[)",
     category: "navigation",
   },
   {

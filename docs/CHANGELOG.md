@@ -10,10 +10,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Keyboard navigation puts the cursor where it lands: Cmd+2..9, Cmd+Option+1..9, Ctrl+Tab and Cmd+Shift+[ ] focus the active pane's terminal, ready to type; Cmd+] / Cmd+[ move to the next or previous pane of the tab
+- Keyboard navigation puts the cursor where it lands: Cmd+2..9, Cmd+Option+1..9 and Cmd+Shift+[ ] focus the active pane's terminal, ready to type; Ctrl+Tab / Ctrl+Shift+Tab (or Cmd+] / Cmd+[) move to the next or previous pane of the tab
 - Terminal pane menu: Clear Terminal wipes the screen and scrollback and sends Ctrl+L, so the shell or CLI redraws clean
 
 ### Changed
+- Ctrl+Tab moves between the panes of a tab instead of cycling tabs (tabs: Cmd+Shift+[ ])
 - Sidebar Agents: a switch between the live agents and Needs attention (its count turns amber with something unread); the list shows every live agent again, the ones waiting on you marked, and the pick is remembered
 
 ### Fixed
