@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.7] — 2026-09-29 — Terminals that become agents, tabs with session names
+
 ### Added
 - A CLI started by hand in a terminal (any agent CLI) turns that terminal into the agent: its name, rename, status, attention, Watching and Dashboard; when the CLI exits the terminal stays at its prompt with a Continue button
 - A session pinned to Watching opens sized to its card at font 13 (A−/A+ adjust it)
@@ -22,6 +24,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Agent terminals scroll with the wheel again in fullscreen TUIs that handle the mouse (0.5.6 blocked it along with the ↑/↓ it meant to stop)
 - Edit project: an image found in the project and a built-in icon/color exclude each other; picking one clears the other's selection
+- Changing the terminal font no longer leaves visible terminals on the slow renderer until they are hidden and shown again
+- Resources and Tokens showed `\u00b7` instead of a dot
 
 ## [0.5.6] — 2026-09-29 — Linux packages
 
