@@ -291,6 +291,19 @@ export function useXterm({
     return () => window.removeEventListener("exegol:kick-terminal", handleKick);
   }, [agentId, mirror, readOnly, handleResize]);
 
+  // Pane menu "Clear Terminal": drop what this view holds (screen + scrollback), then Ctrl+L so
+  // the shell or TUI draws a clean screen, as typing it would
+  useEffect(() => {
+    const handleClear = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
+      if (detail?.agentId !== agentId || mirror) return;
+      terminalRef.current?.clear();
+      if (!readOnly) window.api.terminal.write(agentId, "\x0c");
+    };
+    window.addEventListener("exegol:clear-terminal", handleClear);
+    return () => window.removeEventListener("exegol:clear-terminal", handleClear);
+  }, [agentId, mirror, readOnly]);
+
   useEffect(() => {
     const handleWindowResize = () => handleResize();
     // Also how a pane takes its size back from a card that was sizing the
