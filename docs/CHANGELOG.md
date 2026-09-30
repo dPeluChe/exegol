@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.9] — 2026-09-30 — Keyboard navigation, shortcut slots, welcome tour
+
 ### Added
 - Welcome tour for new users after the first-run setup: what Exegol does, projects and agents, layouts, terminals, supervising, git, help; skippable, reopen it from the command palette
 - Edit project: a keyboard shortcut (Cmd+2..9 or Cmd+0) the project keeps; the other live tabs fill the free numbers, and tabs whose sessions are all pinned (already on the Dashboard, Cmd+1) go last. Cmd+0 is the ninth slot. Removing a project frees its number
