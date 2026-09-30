@@ -12,6 +12,7 @@ import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
 import { registerTerminalLinkProviders } from "./terminal-links";
 import type { TerminalInstanceProps } from "./terminal-types";
+import { tuneWheelSensitivity } from "./tui-wheel";
 
 interface TerminalSessionDeps {
   agentId: string;
@@ -102,18 +103,27 @@ export function setupTerminalSession(
   if (deps.mirror) {
     // Several mirrors fill the dashboard: a wheel over one must scroll the page,
     // not trap it in that terminal's history. Clicked (focused) = it's yours.
-    terminal.attachCustomWheelEventHandler(
-      () => !!terminal.element?.contains(document.activeElement),
-    );
+    terminal.attachCustomWheelEventHandler(() => {
+      tuneWheelSensitivity(terminal);
+      return !!terminal.element?.contains(document.activeElement);
+    });
   } else if (deps.cliType && deps.cliType !== "shell") {
     // An agent TUI in the alternate screen that did not ask for mouse events gets the wheel as
     // ↑/↓ from xterm, and ↑ in an empty prompt recalls the last message: drop only that case.
     // This handler runs before mouse reporting, so a TUI that tracks the mouse (and scrolls
     // with it) must pass. Shells keep it all: vim and less scroll with the arrows
-    terminal.attachCustomWheelEventHandler(
-      () =>
-        terminal.buffer.active.type !== "alternate" || terminal.modes.mouseTrackingMode !== "none",
-    );
+    terminal.attachCustomWheelEventHandler(() => {
+      tuneWheelSensitivity(terminal);
+      return (
+        terminal.buffer.active.type !== "alternate" || terminal.modes.mouseTrackingMode !== "none"
+      );
+    });
+  } else {
+    // Shells: vim or less with the mouse on get the same trackpad fix
+    terminal.attachCustomWheelEventHandler(() => {
+      tuneWheelSensitivity(terminal);
+      return true;
+    });
   }
 
   const dormantPipe = createDormantPipe(terminal, true);
