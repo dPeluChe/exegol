@@ -10,7 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Sidebar: drag the line between Agents and Projects to resize them (double-click resets)
+- Sidebar: Projects sits at the bottom, above the reference sections, and its height is yours: drag the line above it (double-click fits it to its projects again); Agents fills the rest
 
 ### Fixed
 - Sidebar: dragging an Agents group now reorders it (and Cmd+2..9 with it); grab it from anywhere, a click still jumps to it

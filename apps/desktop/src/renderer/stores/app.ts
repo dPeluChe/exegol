@@ -22,9 +22,9 @@ interface AppStore {
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
 
-  /** Height of the sidebar's Agents section dragged by the user (null = sized to content) */
-  sidebarAgentsHeight: number | null;
-  setSidebarAgentsHeight: (height: number | null) => void;
+  /** Height of the sidebar's Projects section dragged by the user (null = sized to content) */
+  sidebarProjectsHeight: number | null;
+  setSidebarProjectsHeight: (height: number | null) => void;
 
   /** Sidebar order of the live tab groups (Cmd+2..9), by `projectId:tabId` */
   liveTabOrder: string[];
@@ -55,8 +55,8 @@ export const useAppStore = create<AppStore>()(
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 
-      sidebarAgentsHeight: null,
-      setSidebarAgentsHeight: (height) => set({ sidebarAgentsHeight: height }),
+      sidebarProjectsHeight: null,
+      setSidebarProjectsHeight: (height) => set({ sidebarProjectsHeight: height }),
 
       liveTabOrder: [],
       setLiveTabOrder: (order) => set({ liveTabOrder: order }),
@@ -87,7 +87,7 @@ export const useAppStore = create<AppStore>()(
         sidebarCollapsed: state.sidebarCollapsed,
         onboardingComplete: state.onboardingComplete,
         liveTabOrder: state.liveTabOrder,
-        sidebarAgentsHeight: state.sidebarAgentsHeight,
+        sidebarProjectsHeight: state.sidebarProjectsHeight,
       }),
     },
   ),
