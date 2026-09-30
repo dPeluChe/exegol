@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import {
   openInIde,
   type PortInfo,
@@ -154,6 +155,7 @@ export function ProjectItem({
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuStyle = useFittedMenu(menuRef, contextMenu);
 
   const { data: settings } = useSettings();
   const deleteProject = useDeleteProject();
@@ -290,7 +292,7 @@ export function ProjectItem({
         <div
           ref={menuRef}
           className="fixed z-50 min-w-[160px] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={menuStyle}
         >
           <button
             type="button"

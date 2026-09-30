@@ -2,6 +2,7 @@ import type { ProjectGroup } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, PaintBucket, Pencil, Ungroup } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import {
   useDeleteProjectGroup,
   useRenameProjectGroup,
@@ -41,6 +42,7 @@ export function ProjectGroupHeader({
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuStyle = useFittedMenu(menuRef, contextMenu);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [disbandArmed, setDisbandArmed] = useState(false);
 
@@ -165,7 +167,7 @@ export function ProjectGroupHeader({
         <div
           ref={menuRef}
           className="fixed z-50 min-w-[170px] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={menuStyle}
         >
           <button
             type="button"

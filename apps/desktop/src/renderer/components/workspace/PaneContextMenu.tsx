@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useContextMenu } from "../../hooks/use-context-menu";
+import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import type { PaneType } from "../../stores/workspace";
 
 interface PaneContextMenuProps {
@@ -158,6 +159,7 @@ function buildMenuSections(actions: MenuActions): MenuSection[] {
 
 export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) {
   const { contextMenu: menu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
+  const menuStyle = useFittedMenu(menuRef, menu);
   const sections = buildMenuSections(actions);
 
   return (
@@ -170,8 +172,7 @@ export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) 
           ref={menuRef}
           className="fixed z-50 min-w-[200px] rounded-lg border py-1 shadow-2xl"
           style={{
-            left: menu.x,
-            top: menu.y,
+            ...menuStyle,
             background: "var(--bg-secondary)",
             borderColor: "var(--border)",
           }}
