@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useState } from "react";
+import { type RefObject, useCallback, useRef, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { useAgentStore } from "../../stores/agents";
 import type { TerminalInstanceHandle } from "./terminal-types";
@@ -24,12 +24,44 @@ export function useLocalhostPreview(
 /** Files beside the terminal for a quick look or a drag in, without touching the layout */
 export function useFilesPeek(projectId: string | undefined) {
   const [filesOpen, setFilesOpen] = useState(false);
+  /** A file picked in the panel, shown over the terminal */
+  const [peekFile, setPeekFile] = useState<string | null>(null);
+  const fileDirtyRef = useRef(false);
   const { data: peekProject } = useProject(filesOpen ? (projectId ?? null) : null);
+  const closeFile = () => {
+    fileDirtyRef.current = false;
+    setPeekFile(null);
+  };
   return {
     filesOpen,
     toggleFiles: () => setFilesOpen((v) => !v),
-    closeFiles: () => setFilesOpen(false),
+    closeFiles: () => {
+      setFilesOpen(false);
+      if (!fileDirtyRef.current) setPeekFile(null);
+    },
     peekProject,
+    peekFile,
+    openFile: (path: string) => {
+      fileDirtyRef.current = false;
+      setPeekFile(path);
+    },
+    closeFile,
+    setFileDirty: (dirty: boolean) => {
+      fileDirtyRef.current = dirty;
+    },
+    /** Esc while the panel or a file is open: the file first, then the panel. False = not ours */
+    escape: (): boolean => {
+      if (peekFile) {
+        // Unsaved edits stay: the file's own close asks first
+        if (!fileDirtyRef.current) closeFile();
+        return true;
+      }
+      if (filesOpen) {
+        setFilesOpen(false);
+        return true;
+      }
+      return false;
+    },
   };
 }
 

@@ -15,6 +15,7 @@ import {
   Pencil,
   RefreshCw,
   Trash2,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
@@ -192,6 +193,8 @@ interface FileExplorerProps {
   onOpenFile?: (path: string) => void;
   /** Enables the search box (project root + subrepos) */
   projectId?: string;
+  /** Shown beside a terminal: an X in the header closes the panel */
+  onClose?: () => void;
 }
 
 interface InlineCreateState {
@@ -199,7 +202,13 @@ interface InlineCreateState {
   type: "file" | "folder";
 }
 
-export function FileExplorer({ rootPath, initialFile, onOpenFile, projectId }: FileExplorerProps) {
+export function FileExplorer({
+  rootPath,
+  initialFile,
+  onOpenFile,
+  projectId,
+  onClose,
+}: FileExplorerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(initialFile ?? null);
   // The initial file's folders start open so it is visible in the tree
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
@@ -351,8 +360,8 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile, projectId }: F
           selectedFile ? "w-[200px]" : "flex-1",
         )}
       >
-        <div className="flex h-7 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+        <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-bg-secondary px-3">
+          <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
             Files
           </span>
           <button
@@ -363,6 +372,17 @@ export function FileExplorer({ rootPath, initialFile, onOpenFile, projectId }: F
           >
             <RefreshCw className="h-2.5 w-2.5" />
           </button>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
+              title="Close (Esc)"
+              aria-label="Close files"
+            >
+              <X className="h-2.5 w-2.5" />
+            </button>
+          )}
         </div>
         {treeView}
       </div>
