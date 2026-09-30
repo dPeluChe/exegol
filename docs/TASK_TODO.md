@@ -105,6 +105,9 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- Terminal repaint after a hidden tab: leave a working Claude pane in another tab for a minute,
+  come back: no overlapped lines (console shows "Output overflowed while hidden" when it
+  resynced). Cmd+V of a screenshot into Claude pastes its path
 - CLI updates: Restart to update after `claude update` (waits for the turn, Now, cancel);
   Update opens a tab with the command; resume lands in the same pane for each CLI. Known limit:
   CLIs without a stored resume id fall back to "continue last in this folder" (codex, opencode,

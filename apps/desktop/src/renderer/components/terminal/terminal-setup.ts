@@ -127,7 +127,12 @@ export function setupTerminalSession(
     });
   }
 
-  const dormantPipe = createDormantPipe(terminal, true);
+  const live = !deps.readOnly || !!deps.liveFeed;
+  const dormantPipe = createDormantPipe(
+    terminal,
+    true,
+    live ? () => window.api.terminal.getSnapshot(deps.agentId) : undefined,
+  );
   if (deps.initialContent) terminal.write(deps.initialContent);
 
   const disposables: Array<{ dispose: () => void }> = [];
@@ -198,15 +203,20 @@ export function setupTerminalSession(
       return true;
     });
 
+    // Capture phase: xterm's own paste handler on its textarea stops the event, so a bubbling
+    // listener here never saw Cmd+V with an image (Ctrl+V worked: Claude reads the clipboard)
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items || ![...items].some((item) => item.type.startsWith("image/"))) return;
       e.preventDefault();
+      e.stopPropagation();
       const filePath = await window.api.terminal.saveClipboardImage();
       if (filePath) window.api.terminal.write(deps.agentId, filePath);
     };
-    container.addEventListener("paste", handlePaste);
-    disposables.push({ dispose: () => container.removeEventListener("paste", handlePaste) });
+    container.addEventListener("paste", handlePaste, true);
+    disposables.push({
+      dispose: () => container.removeEventListener("paste", handlePaste, true),
+    });
 
     disposables.push(
       terminal.onData((data) => {
