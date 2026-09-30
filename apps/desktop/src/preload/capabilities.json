@@ -32,6 +32,7 @@
       "list",
       "listActive",
       "listEnabledProviders",
+      "listModels",
       "listParallelRuns",
       "listProviders",
       "listResumable",

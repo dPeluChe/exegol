@@ -79,6 +79,7 @@ export const agentRowSchema = z.object({
   suspended_at: optNum,
   launched_in_shell: optNum,
   cli_version: optStr,
+  model: optStr,
 });
 
 export const worktreeRowSchema = z.object({

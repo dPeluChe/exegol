@@ -1,10 +1,11 @@
-import { type Agent, type AgentCreate, MODEL_FLAGS, YOLO_FLAGS } from "@exegol/shared";
+import { type Agent, type AgentCreate, YOLO_FLAGS } from "@exegol/shared";
 import type Database from "libsql";
 import {
   activateAgent,
   getAgent,
   insertActivity,
   setAgentCliVersion,
+  setAgentModel,
   setAgentYolo,
   stopAgent,
 } from "../db/queries";
@@ -22,6 +23,7 @@ import {
 } from "./agent-session-callbacks";
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { applyLaunchModel } from "./launch-model";
 import { attachOutputPipeline } from "./output-pipeline";
 import { runPreflight } from "./preflight";
 import {
@@ -125,8 +127,14 @@ export class AgentManager {
         .then((v) => v && setAgentCliVersion(db, agent.id, v))
         .catch(() => {});
     }
-    const modelFlag = MODEL_FLAGS[agent.cliType];
-    if (modelFlag && config.model) cliConfig.args = [...cliConfig.args, modelFlag, config.model];
+    // Like YOLO, a resume or re-launch keeps the model the session was launched with
+    const model =
+      config.model ??
+      (config.resumeFromAgentId ? getAgent(db, config.resumeFromAgentId)?.model : undefined);
+    if (model) {
+      Object.assign(cliConfig, applyLaunchModel(cliConfig, agent.cliType, model, agent.id));
+      setAgentModel(db, agent.id, model);
+    }
 
     const project = db
       .prepare("SELECT path, name FROM projects WHERE id = ?")

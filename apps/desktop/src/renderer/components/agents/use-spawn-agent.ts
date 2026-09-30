@@ -1,4 +1,4 @@
-import { type Agent, type AgentCliType, MODEL_FLAGS } from "@exegol/shared";
+import { type Agent, type AgentCliType, MODEL_LAUNCH } from "@exegol/shared";
 import { useCallback, useState } from "react";
 import { switchSection } from "../../lib/switch-section";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -32,7 +32,7 @@ function spawnInput(projectId: string, c: SpawnForm) {
     skillNames: c.selectedSkills.size > 0 ? Array.from(c.selectedSkills) : undefined,
     yolo: c.yoloFlag && c.yolo !== null ? c.yolo : undefined,
     baseBranch: c.useWorktree && c.baseBranch ? c.baseBranch : undefined,
-    model: MODEL_FLAGS[c.providerId] && c.model.trim() ? c.model.trim() : undefined,
+    model: MODEL_LAUNCH[c.providerId] && c.model.trim() ? c.model.trim() : undefined,
     name: c.name.trim() || undefined,
     ...resumeInput(c),
   };
