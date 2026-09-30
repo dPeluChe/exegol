@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Updates show what's new: the release notes of every version since yours, with their dates, from the update button (opens by itself after Check for updates), and once after installing
 - Sidebar: Projects sits at the bottom, above the reference sections, and its height is yours: drag the line above it (double-click fits it to its projects again); Agents fills the rest
 
 ### Fixed

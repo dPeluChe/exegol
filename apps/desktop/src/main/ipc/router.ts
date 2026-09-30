@@ -31,6 +31,7 @@ import { settingsRouter } from "./procedures/settings";
 import { skillInstallerRouter } from "./procedures/skill-installer";
 import { skillsRouter } from "./procedures/skills";
 import { tokenUsageRouter } from "./procedures/token-usage";
+import { updatesRouter } from "./procedures/updates";
 import { router } from "./trpc";
 
 export const appRouter = router({
@@ -67,6 +68,7 @@ export const appRouter = router({
   budgets: budgetsRouter,
   history: historyRouter,
   projectGroups: projectGroupsRouter,
+  updates: updatesRouter,
 });
 
 export type AppRouter = typeof appRouter;
