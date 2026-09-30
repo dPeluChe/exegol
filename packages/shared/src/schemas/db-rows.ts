@@ -78,6 +78,7 @@ export const agentRowSchema = z.object({
   muted: optNum,
   suspended_at: optNum,
   launched_in_shell: optNum,
+  cli_version: optStr,
 });
 
 export const worktreeRowSchema = z.object({

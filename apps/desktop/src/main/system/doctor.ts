@@ -12,6 +12,7 @@ import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
 import { getApiKey } from "../security/keystore";
+import { CLI_SETUP, findAllOnPath, readBinaryVersion } from "./cli-versions";
 
 const execAsync = promisify(exec);
 
@@ -26,98 +27,12 @@ const shellEnv = () => ({ ...process.env, PATH: _getFullPath() });
 
 export type { DoctorCategory, DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
 
-// ─── Install and update per CLI (vendor docs, verified 2026-09-29) ─────────
-
-/** The vendor's recommended macOS install, its update command and docs. Re-verify when a CLI
- *  changes how it ships: sources in docs/TASK_COMPLETED/2609.md (2026-09-29 entry) */
-const CLI_SETUP: Partial<
-  Record<string, { install: string; update?: string; docs: string; deprecated?: string }>
-> = {
-  "claude-code": {
-    install: "curl -fsSL https://claude.ai/install.sh | bash",
-    update: "claude update",
-    docs: "https://code.claude.com/docs/en/setup",
-  },
-  codex: {
-    install: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
-    update: "codex update",
-    docs: "https://github.com/openai/codex",
-  },
-  gemini: {
-    install: "npm install -g @google/gemini-cli",
-    update: "gemini update",
-    docs: "https://geminicli.com/docs/get-started/installation/",
-    deprecated: "Replaced upstream by Antigravity CLI (agy) on 2026-06-18",
-  },
-  // The install script also upgrades (no update command)
-  agy: {
-    install: "curl -fsSL https://antigravity.google/cli/install.sh | bash",
-    docs: "https://antigravity.google/docs/cli/install/",
-  },
-  devin: {
-    install: "curl -fsSL https://cli.devin.ai/install.sh | bash",
-    update: "devin update",
-    docs: "https://docs.devin.ai/cli",
-  },
-  aider: {
-    install: "python -m pip install aider-install && aider-install",
-    update: "aider --upgrade",
-    docs: "https://aider.chat/docs/install.html",
-  },
-  goose: {
-    install:
-      "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | bash",
-    update: "goose update",
-    docs: "https://goose-docs.ai/docs/getting-started/installation/",
-  },
-  opencode: {
-    install: "curl -fsSL https://opencode.ai/install | bash",
-    update: "opencode upgrade",
-    docs: "https://opencode.ai/docs/",
-  },
-  amp: {
-    install: "curl -fsSL https://ampcode.com/install.sh | bash",
-    update: "amp update",
-    docs: "https://ampcode.com/docs/cli",
-  },
-  kiro: {
-    install: "curl -fsSL https://cli.kiro.dev/install | bash",
-    update: "kiro-cli update",
-    docs: "https://kiro.dev/docs/cli/installation/",
-  },
-  kilocode: {
-    install: "npm install -g @kilocode/cli",
-    update: "kilo upgrade",
-    docs: "https://kilo.ai/docs/code-with-ai/platforms/cli",
-  },
-  crush: {
-    install: "brew install charmbracelet/tap/crush",
-    update: "brew upgrade charmbracelet/tap/crush",
-    docs: "https://github.com/charmbracelet/crush",
-  },
-  "factory-droid": {
-    install: "curl -fsSL https://app.factory.ai/cli | sh",
-    update: "droid update",
-    docs: "https://docs.factory.ai/droid-cli/quickstart",
-  },
-};
-
 // ─── Individual checks ──────────────────────────────────────────────────────
 
 function checkCommandAvailable(command: string): Promise<boolean> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which "${command}"`;
   return new Promise((resolve) =>
     exec(cmd, { env: shellEnv(), timeout: 3_000 }, (err) => resolve(!err)),
-  );
-}
-
-/** All PATH hits for a command (`which -a` / `where` both list every match). */
-function findAllOnPath(command: string): Promise<string[]> {
-  const cmd = process.platform === "win32" ? `where "${command}"` : `which -a "${command}"`;
-  return new Promise((resolve) =>
-    exec(cmd, { env: shellEnv(), timeout: 3_000 }, (err, stdout) =>
-      resolve(err ? [] : [...new Set(stdout.trim().split("\n").filter(Boolean))]),
-    ),
   );
 }
 
@@ -128,34 +43,6 @@ async function checkGitVersion(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-/** Best-effort `--version` of a binary, cached until the file changes (an update replaces it):
- *  every Doctor run started one process per installed CLI */
-const versionCache = new Map<string, { mtimeMs: number; version: string | null }>();
-
-async function readBinaryVersion(binPath: string): Promise<string | null> {
-  let mtimeMs = 0;
-  try {
-    mtimeMs = statSync(binPath).mtimeMs;
-  } catch {
-    return null;
-  }
-  const hit = versionCache.get(binPath);
-  if (hit && hit.mtimeMs === mtimeMs) return hit.version;
-  const version = await runVersion(binPath);
-  versionCache.set(binPath, { mtimeMs, version });
-  return version;
-}
-
-function runVersion(binPath: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    exec(`"${binPath}" --version`, { env: shellEnv(), timeout: 3_000 }, (err, stdout) => {
-      if (err) return resolve(null);
-      const m = stdout.trim().match(/\d+\.\d+[.\w-]*/);
-      resolve(m ? m[0] : null);
-    });
-  });
 }
 
 function checkPtySidecar(): DoctorCheck {

@@ -13,6 +13,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Linux (and Windows): the app's shortcuts use Ctrl+Shift instead of Ctrl, so they work with the cursor in a terminal (Ctrl+letter stays with the shell: Ctrl+C, Ctrl+D, Ctrl+W); macOS Shift/Option variants are Ctrl+Shift+Alt. Every label (welcome tour, shortcuts list, menus, tooltips, badges) shows the keys of your platform instead of Cmd
 
 ### Added
+- CLI updates per session: when a newer version of an agent's CLI is installed (Claude, Gemini and Droid update themselves), its terminal toolbar offers **Restart to update**: the CLI restarts on the new version and the conversation resumes in the same pane, after the current turn if it is working (or Now). When a newer release is out but not installed (Claude Code, Codex, Gemini, OpenCode, Amp, Kilo Code, Crush, Aider), **Update** runs the CLI's update command in a new tab where you can answer its prompts
 - Launch Agent: pick the model (for the CLIs that take one at launch: Claude Code, Codex, Gemini, Antigravity, Devin, Aider, OpenCode, Kilo Code; suggestions for Claude, any id can be typed) and give the session a name (empty keeps the codename; resuming a session keeps its name unless you type one)
 - Linux (and Windows): Ctrl+Shift+C copies the terminal selection
 - Esc closes the Settings window and a floating (Picture-in-Picture) window, unless a field, menu or dialog has the key; a floating terminal with the cursor in it keeps Esc for the CLI. Off macOS, Ctrl+Shift+W closes them too

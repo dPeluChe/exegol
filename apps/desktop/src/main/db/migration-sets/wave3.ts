@@ -150,4 +150,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_014_launched_in_shell",
     sql: "ALTER TABLE agents ADD COLUMN launched_in_shell INTEGER NOT NULL DEFAULT 0;",
   },
+  {
+    // The CLI version a session started with: a newer binary on disk means "restart to update"
+    id: "w3_015_agent_cli_version",
+    sql: "ALTER TABLE agents ADD COLUMN cli_version TEXT;",
+  },
 ];
