@@ -5,6 +5,7 @@ import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../stores
 import { useWatchStore } from "../stores/watch";
 import { collectPaneIds, useWorkspaceStore } from "../stores/workspace";
 import type { ProjectWorkspace } from "../stores/workspace/types";
+import { chordBadge } from "./keymap";
 
 const LIVE_STATUSES_UI = new Set(["running", "spawning", "waiting_input"]);
 
@@ -140,7 +141,8 @@ export function groupForDigit(digit: string): LiveTabGroup | undefined {
 }
 
 /** How a digit reads next to its group or project */
-export const shortcutLabel = (digit: ShortcutDigit | undefined) => (digit ? `⌘${digit}` : null);
+export const shortcutLabel = (digit: ShortcutDigit | undefined) =>
+  digit ? chordBadge(digit) : null;
 
 /** Drop `drag` on `target`: below it when moving down, above it when moving up */
 export function reorderKeys(all: string[], drag: string, target: string): string[] {

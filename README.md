@@ -38,6 +38,7 @@ you keep the CLIs you already use and get one window to launch, watch and coordi
 
 All features: [docs/GUIDES/FEATURES.md](docs/GUIDES/FEATURES.md) ·
 Keyboard shortcuts: [docs/GUIDES/KEYBOARD_SHORTCUTS.md](docs/GUIDES/KEYBOARD_SHORTCUTS.md)
+(keys here are macOS; on Linux and Windows `Cmd` is `Ctrl+Shift`)
 
 ## Install
 

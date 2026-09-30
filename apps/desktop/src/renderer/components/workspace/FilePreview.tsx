@@ -1,6 +1,7 @@
 import { ExternalLink, FolderSearch, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type FileContent, useWriteFile } from "../../hooks/use-trpc";
+import { editKeys } from "../../lib/keymap";
 import { trpcMutate } from "../../lib/trpc-client";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "./sections/resource-format";
@@ -190,7 +191,7 @@ function FilePreviewToolbar({
             onClick={onSave}
             disabled={saving}
             className="shrink-0 rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent hover:bg-accent/30 disabled:opacity-50"
-            title="Save (Cmd+S)"
+            title={`Save (${editKeys("Cmd+S")})`}
           >
             {saving ? "Saving..." : "Save"}
           </button>

@@ -3,6 +3,7 @@ import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { editKeys } from "../../lib/keymap";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AccessModePicker, ProviderPicker, SkillPicker } from "./SpawnOptions";
 import { SpawnSessionPicker } from "./SpawnSessionPicker";
@@ -212,7 +213,7 @@ function LaunchButton({
       )}
     >
       {spawning ? "Launching..." : "Launch"}
-      <span className="ml-1 text-[9px] opacity-60">Cmd+Enter</span>
+      <span className="ml-1 text-[9px] opacity-60">{editKeys("Cmd+Enter")}</span>
     </button>
   );
 }

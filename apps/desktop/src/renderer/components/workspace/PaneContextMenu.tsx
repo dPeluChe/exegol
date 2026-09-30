@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useContextMenu } from "../../hooks/use-context-menu";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
+import { appKeys } from "../../lib/keymap";
 import type { PaneType } from "../../stores/workspace";
 
 interface PaneContextMenuProps {
@@ -63,7 +64,9 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
     >
       <item.icon className="h-3.5 w-3.5 shrink-0" />
       <span className="flex-1 text-left">{item.label}</span>
-      {item.shortcut && <span className="text-[10px] text-text-muted">{item.shortcut}</span>}
+      {item.shortcut && (
+        <span className="text-[10px] text-text-muted">{appKeys(item.shortcut)}</span>
+      )}
     </button>
   );
 }
@@ -131,7 +134,7 @@ function splitSection({
     ...(onFloat ? [{ label: "Float to Window", icon: PictureInPicture2, action: onFloat }] : []),
     ...(isSplitPane
       ? [
-          { label: "Equalize Splits", icon: Equal, shortcut: "⌘⇧0", action: onEqualize },
+          { label: "Equalize Splits", icon: Equal, action: onEqualize },
           { label: "Move to New Tab", icon: MoveRight, action: onExtractToTab },
         ]
       : []),

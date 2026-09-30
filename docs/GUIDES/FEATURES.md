@@ -3,6 +3,8 @@
 Everything Exegol does today, grouped by area. The README lists the highlights; what changed in
 each version is in [CHANGELOG.md](../CHANGELOG.md), pending work in [TASK_TODO.md](../TASK_TODO.md).
 How it is built: [CLAUDE.md](../../CLAUDE.md).
+Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
+[KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md)).
 
 ## Workspace
 

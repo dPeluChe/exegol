@@ -1,6 +1,7 @@
 import { cn, Separator } from "@exegol/ui";
 import { Activity, Cuboid, LayoutDashboard, Plus } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
+import { chordBadge } from "../../lib/keymap";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { AttentionSection } from "./AttentionSection";
@@ -59,7 +60,7 @@ export function Sidebar() {
             attentionCount === 0 && "ml-auto",
           )}
         >
-          ⌘1
+          {chordBadge("1")}
         </kbd>
       </button>
 

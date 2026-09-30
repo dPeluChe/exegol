@@ -42,6 +42,7 @@ lanzarlos, vigilarlos y coordinarlos.
 
 Todas las funciones: [docs/GUIDES/FEATURES.md](docs/GUIDES/FEATURES.md) ·
 Atajos de teclado: [docs/GUIDES/KEYBOARD_SHORTCUTS.md](docs/GUIDES/KEYBOARD_SHORTCUTS.md)
+(las teclas aquí son de macOS; en Linux y Windows `Cmd` es `Ctrl+Shift`)
 
 ## Instalar
 

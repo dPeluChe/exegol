@@ -14,7 +14,9 @@ import {
   Sun,
 } from "lucide-react";
 import { useState } from "react";
+import { appKeys, IS_MAC } from "../../lib/keymap";
 import { openInBrowser } from "../../lib/open-in-browser";
+import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 
@@ -103,27 +105,29 @@ function HotkeyRecorder({ onRecord }: { onRecord: (accelerator: string) => void 
 }
 
 function KeyCombo({ combo }: { combo: string }) {
-  // Parse "CommandOrControl+Shift+E" into visual keys
-  const parts = combo.split("+").map((part) => {
-    switch (part.toLowerCase()) {
-      case "commandorcontrol":
-      case "command":
-      case "cmd":
-        return "⌘";
-      case "control":
-      case "ctrl":
-        return "⌃";
-      case "shift":
-        return "⇧";
-      case "alt":
-      case "option":
-        return "⌥";
-      case "meta":
-        return "⌘";
-      default:
-        return part.toUpperCase();
-    }
-  });
+  // Parse "CommandOrControl+Shift+E" into visual keys (glyphs on macOS, words elsewhere)
+  const parts = !IS_MAC
+    ? displayAccelerator(combo).split("+")
+    : combo.split("+").map((part) => {
+        switch (part.toLowerCase()) {
+          case "commandorcontrol":
+          case "command":
+          case "cmd":
+            return "⌘";
+          case "control":
+          case "ctrl":
+            return "⌃";
+          case "shift":
+            return "⇧";
+          case "alt":
+          case "option":
+            return "⌥";
+          case "meta":
+            return "⌘";
+          default:
+            return part.toUpperCase();
+        }
+      });
 
   return (
     <div className="flex items-center gap-0.5">
@@ -308,7 +312,8 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       <OllamaStatusSection settings={settings} onChange={onChange} />
 
       <p className="text-[10px] text-text-muted">
-        Every keyboard shortcut is in the Shortcuts tab (or press Cmd+/ in the workspace).
+        Every keyboard shortcut is in the Shortcuts tab (or press {appKeys("Cmd+/")} in the
+        workspace).
       </p>
     </div>
   );

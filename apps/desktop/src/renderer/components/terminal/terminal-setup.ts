@@ -2,6 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
+import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
@@ -178,10 +179,21 @@ export function setupTerminalSession(
         window.api.terminal.write(deps.agentId, "\x05");
         return false;
       }
-      // Cmd+↓ → jump to newest output
-      if (e.metaKey && e.key === "ArrowDown") {
+      const chord = appChord(e);
+      // Cmd+↓ (Ctrl+Shift+↓ off macOS) → jump to newest output
+      if (chord && chordKey(e) === "ArrowDown") {
         terminal.scrollToBottom();
         return false;
+      }
+      if (chord && !IS_MAC) {
+        // Linux/Windows have no Edit menu: Ctrl+Shift+C copies, as in other terminals
+        // (Ctrl+Shift+V is Chromium's own paste)
+        if (chordKey(e) === "c" && terminal.hasSelection()) {
+          navigator.clipboard.writeText(terminal.getSelection());
+          return false;
+        }
+        // Every other Ctrl+Shift(+Alt) chord is an app shortcut: xterm would send Alt ones as ESC
+        if (chordKey(e) !== "v") return false;
       }
       return true;
     });

@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { ArrowDownToLine, ArrowUpToLine, Send } from "lucide-react";
 import type { RefObject } from "react";
+import { appKeys } from "../../lib/keymap";
 import { AgentIcon } from "../common/AgentIcon";
 import type { TerminalInstanceHandle } from "./TerminalInstance";
 import type { SendTarget } from "./use-terminal-panel-actions";
@@ -103,7 +104,7 @@ export function TerminalFloatingButtons({
                 ? "animate-pulse border-amber-500/50 bg-amber-500/15 text-amber-400"
                 : "border-border bg-bg-secondary/90 text-text-muted hover:text-text-primary",
             )}
-            title={hasNewOutput ? "New output below (⌘↓)" : "Scroll to bottom (⌘↓)"}
+            title={`${hasNewOutput ? "New output below" : "Scroll to bottom"} (${appKeys("⌘↓")})`}
           >
             <ArrowDownToLine className="h-3.5 w-3.5" />
           </button>
