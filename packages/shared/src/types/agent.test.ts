@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyActivity, deriveIsolationMode, MODEL_ID_PATTERN } from "./agent";
+import { classifyActivity, deriveIsolationMode, isNewerVersion, MODEL_ID_PATTERN } from "./agent";
 
 // ─── classifyActivity ─────────────────────────────────────────────────────
 
@@ -123,5 +123,16 @@ describe("MODEL_ID_PATTERN", () => {
     for (const bad of ["opus; rm -rf ~", "$(id)", "a b", "opus[1m]", "`x`", ""]) {
       expect(MODEL_ID_PATTERN.test(bad)).toBe(false);
     }
+  });
+});
+
+describe("isNewerVersion", () => {
+  it("compares the numbers CLIs print", () => {
+    expect(isNewerVersion("2.1.290", "2.1.286")).toBe(true);
+    expect(isNewerVersion("2.1.286", "2.1.286")).toBe(false);
+    expect(isNewerVersion("0.159.2", "0.155.10")).toBe(true);
+    expect(isNewerVersion("0.0.1769000000-gabc", "0.0.1768000000-gdef")).toBe(true);
+    expect(isNewerVersion("3000.11.3 (a1b2)", "3000.12.0")).toBe(false);
+    expect(isNewerVersion(null, "1.0.0")).toBe(false);
   });
 });

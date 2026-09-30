@@ -105,6 +105,11 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- CLI updates: Restart to update after `claude update` (waits for the turn, Now, cancel);
+  Update opens a tab with the command; resume lands in the same pane for each CLI. Known limit:
+  CLIs without a stored resume id fall back to "continue last in this folder" (codex, opencode,
+  kilo, devin, agy...), which picks another session if two of the same CLI share the folder
+- Launcher: model field per CLI (claude sonnet/opus/haiku, a typed id for the rest), name field
 - **Linux keys** (built on macOS, needs a Linux run): Ctrl+Shift+N/T/W/D/B/J/K/P with the cursor
   in a terminal; Ctrl+Shift+1..0 and Ctrl+Shift+Alt+1..9; Ctrl+Shift+C / Ctrl+Shift+V in a
   terminal (V relies on Chromium's own paste); Ctrl+C/D/W still reach the shell; labels in the

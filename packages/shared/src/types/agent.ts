@@ -126,6 +126,35 @@ export const MODEL_SUGGESTIONS: Record<string, string[]> = {
 /** Goes into the shell command unquoted: model ids only (letters, digits, . _ - : / @) */
 export const MODEL_ID_PATTERN = /^[\w.:/@-]{1,100}$/;
 
+/** A CLI's installed version against its newest release (Doctor's cliUpdates) */
+export interface CliUpdateStatus {
+  cliType: string;
+  installed: string | null;
+  latest: string | null;
+  updateAvailable: boolean;
+  updateCommand: string | null;
+}
+
+function versionParts(v: string | null | undefined): number[] | null {
+  const m = v?.match(/\d+(?:\.\d+)*/);
+  return m ? m[0].split(".").map(Number) : null;
+}
+
+/** a > b, comparing the numbers CLIs print: 2.1.286, 0.0.1768123456-gabc, 3000.11.3 */
+export function isNewerVersion(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const pa = versionParts(a);
+  const pb = versionParts(b);
+  if (!pa || !pb) return false;
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d > 0;
+  }
+  return false;
+}
+
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 
@@ -185,6 +214,8 @@ export type Agent = {
   suspendedAt?: number | null;
   /** Started by hand in a plain terminal: the CLI can exit back to the shell prompt */
   launchedInShell?: boolean;
+  /** The CLI's version when this session started (null: unknown, or a shell) */
+  cliVersion?: string | null;
 };
 
 export type AgentCreate = {

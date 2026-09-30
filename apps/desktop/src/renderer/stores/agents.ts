@@ -151,6 +151,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     muted: agent.muted ?? false,
     suspended: agent.suspendedAt != null,
     launchedInShell: agent.launchedInShell ?? false,
+    cliVersion: agent.cliVersion ?? null,
     ...overrides,
   };
 }
@@ -182,6 +183,8 @@ export interface AgentState {
   suspended?: boolean;
   /** Typed in a plain terminal: its CLI can exit back to the shell prompt (Continue) */
   launchedInShell?: boolean;
+  /** The CLI version the session started with (a newer install means restart to update) */
+  cliVersion?: string | null;
 }
 
 interface AgentStore {
@@ -420,6 +423,7 @@ export const useAgentStore = create<AgentStore>()(
                 suspended: dbAgent.suspendedAt != null,
                 cliType: dbAgent.cliType as AgentCliType,
                 launchedInShell: dbAgent.launchedInShell ?? existing.launchedInShell ?? false,
+                cliVersion: dbAgent.cliVersion ?? existing.cliVersion ?? null,
               };
             } else {
               added++;
@@ -442,6 +446,7 @@ export const useAgentStore = create<AgentStore>()(
                 muted: dbAgent.muted ?? false,
                 suspended: dbAgent.suspendedAt != null,
                 launchedInShell: dbAgent.launchedInShell ?? false,
+                cliVersion: dbAgent.cliVersion ?? null,
               };
             }
           }

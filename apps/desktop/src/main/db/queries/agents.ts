@@ -74,6 +74,10 @@ export function setAgentYolo(db: Database.Database, id: string, yolo: boolean): 
   db.prepare("UPDATE agents SET yolo = ? WHERE id = ?").run(yolo ? 1 : 0, id);
 }
 
+export function setAgentCliVersion(db: Database.Database, id: string, version: string): void {
+  db.prepare("UPDATE agents SET cli_version = ? WHERE id = ?").run(version, id);
+}
+
 export function setAgentAlias(db: Database.Database, id: string, alias: string | null): void {
   db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(alias, id);
 }

@@ -105,6 +105,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     muted: r.muted === 1,
     suspendedAt: r.suspended_at ?? null,
     launchedInShell: r.launched_in_shell === 1,
+    cliVersion: r.cli_version ?? null,
   };
 }
 

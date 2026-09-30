@@ -1,4 +1,3 @@
-import type { AgentCliType } from "@exegol/shared";
 import { Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
@@ -20,11 +19,11 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cleanupAndCloseFocusedPane } from "../hooks/use-hotkeys";
 import { appKeys } from "../lib/keymap";
-import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
+import { runCommandInNewTab } from "../lib/spawn-shell";
+import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
-import { useTerminalStore } from "../stores/terminals";
-import { getProjectState, useWorkspaceStore } from "../stores/workspace";
+import { useWorkspaceStore } from "../stores/workspace";
 
 // ─── Types ────────���─────────────────────────────────────────────────────────
 
@@ -280,54 +279,7 @@ export function CommandPalette() {
       if (!projectId) return;
       close();
       try {
-        // Spawn a one-shot shell agent with the command as task description
-        // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-        const agent = await trpcMutate<any>("agents.spawn", {
-          projectId,
-          cliType: "shell" as AgentCliType,
-          taskDescription: `! ${cmd}`,
-        });
-        // Add to store + create terminal
-        useAgentStore.getState().addAgent({
-          id: agent.id,
-          projectId,
-          cliType: agent.cliType,
-          status: agent.status,
-          currentStep: null,
-          taskDescription: `! ${cmd}`,
-          branchName: null,
-          alias: agent.alias ?? null,
-          tokenUsage: { input: 0, output: 0, cost: 0 },
-          startedAt: agent.startedAt,
-          accessMode: agent.accessMode ?? null,
-          claudeSessionId: null,
-          activityLevel: "busy",
-        });
-        useTerminalStore.getState().createTerminal(agent.id);
-        // Create a new tab with the terminal
-        const tabId = useWorkspaceStore.getState().addTab(`! ${cmd.slice(0, 30)}`);
-        const tab = getProjectState().tabs.find((t) => t.id === tabId);
-        if (tab) {
-          const { findFirstPaneId } = await import("../stores/workspace");
-          const paneId = findFirstPaneId(tab.layout);
-          if (paneId) {
-            useWorkspaceStore.getState().updatePane(paneId, {
-              type: "terminal",
-              agentId: agent.id,
-            });
-          }
-        }
-        // Wait for shell prompt (first PTY output = shell ready), then inject.
-        // 2s fallback for shells that don't emit a prompt quickly.
-        let injected = false;
-        const inject = () => {
-          if (injected) return;
-          injected = true;
-          unsub();
-          window.api.terminal.write(agent.id, `${cmd}\n`);
-        };
-        const unsub = window.api.terminal.onData(agent.id, inject);
-        setTimeout(inject, 2000);
+        await runCommandInNewTab(projectId, cmd);
       } catch (err) {
         console.error("[BangCommand] Failed:", err);
       }

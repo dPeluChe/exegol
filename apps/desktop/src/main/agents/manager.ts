@@ -1,10 +1,18 @@
 import { type Agent, type AgentCreate, MODEL_FLAGS, YOLO_FLAGS } from "@exegol/shared";
 import type Database from "libsql";
-import { activateAgent, getAgent, insertActivity, setAgentYolo, stopAgent } from "../db/queries";
+import {
+  activateAgent,
+  getAgent,
+  insertActivity,
+  setAgentCliVersion,
+  setAgentYolo,
+  stopAgent,
+} from "../db/queries";
 import { hasLocalSession } from "../history";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
+import { installedCliVersion } from "../system/cli-versions";
 import { getPtyHost } from "../terminal/pty-host";
 import type { OutputProcessor } from "./agent-output-processor";
 import {
@@ -110,6 +118,12 @@ export class AgentManager {
       if (yolo && !has) cliConfig.args = [...cliConfig.args, yoloFlag];
       else if (!yolo && has) cliConfig.args = cliConfig.args.filter((a) => a !== yoloFlag);
       setAgentYolo(db, agent.id, yolo);
+    }
+    // The version this session runs: a newer one on disk later means "restart to update"
+    if (agent.cliType !== "shell") {
+      void installedCliVersion(agent.cliType)
+        .then((v) => v && setAgentCliVersion(db, agent.id, v))
+        .catch(() => {});
     }
     const modelFlag = MODEL_FLAGS[agent.cliType];
     if (modelFlag && config.model) cliConfig.args = [...cliConfig.args, modelFlag, config.model];

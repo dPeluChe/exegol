@@ -97,7 +97,7 @@ and the rules that are easy to miss. AI agents working in this repo follow
 | Desktop | Electron 41 |
 | Frontend | React 18, TailwindCSS 4, Zustand 5, Monaco Editor |
 | IPC | tRPC 11 (over Electron IPC, not HTTP) |
-| Database | libSQL (SQLite fork by Turso), 53 migrations (36 base + wave sets), 34 tables |
+| Database | libSQL (SQLite fork by Turso), 54 migrations (36 base + wave sets), 34 tables |
 | Terminal | xterm.js 6 + WebGL renderer, node-pty, PTY sidecar |
 | Native | Rust via napi-rs (ANSI stripping, status parsing, git2 worktree ops, fuzzy/grep search) |
 | Build | electron-vite 5, Turborepo, Bun, Biome 2.4 |

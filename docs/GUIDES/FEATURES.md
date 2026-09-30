@@ -39,6 +39,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Launch options**: model (for CLIs with a model flag) and session name in the launcher.
 - **Access modes**: read, write or plan per agent or pipeline step, shown as a badge.
 - **Resume**: Claude sessions resume with their session id after a restart.
+- **CLI updates**: a session offers Restart to update when its CLI has a newer install, and
+  Update when a newer release is out; the conversation resumes on the new version.
 - **Terminal or chat view**: switch any agent between the raw terminal and a readable chat.
 - **Agent tools (MCP)**: every agent gets an Exegol MCP server: shared memory, project knowledge,
   messages between agents, and file claims so two agents do not edit the same paths.
