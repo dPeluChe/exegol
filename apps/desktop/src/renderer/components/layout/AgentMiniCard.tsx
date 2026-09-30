@@ -3,6 +3,7 @@ import { BellOff, Moon, Pause, Trash2 } from "lucide-react";
 import { useCallback } from "react";
 import { useContextMenu } from "../../hooks/use-context-menu";
 import { useDeleteAgent } from "../../hooks/use-delete-agent";
+import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { formatTimeAgo } from "../../lib/format";
 import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { setAgentMuted, suspendAgent } from "../../lib/session-quiet";
@@ -40,6 +41,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
   const deleteAgent = useDeleteAgent();
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
   const { contextMenu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
+  const menuStyle = useFittedMenu(menuRef, contextMenu);
 
   const handleRemove = useCallback(async () => {
     closeContextMenu();
@@ -78,7 +80,7 @@ export function AgentMiniCard({ agent }: { agent: AgentState }) {
         <div
           ref={menuRef}
           className="fixed z-50 min-w-[140px] rounded-md border border-border bg-bg-secondary py-1 shadow-lg"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
+          style={menuStyle}
         >
           {isActive && agent.cliType !== "shell" && (
             <QuietMenuItems agent={agent} onDone={closeContextMenu} />

@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -107,13 +108,13 @@ function FileContextMenu({
     onClose();
   }, [menu, onClose, onRequestDelete]);
 
+  const menuStyle = useFittedMenu(menuRef, menu);
   return (
     <div
       ref={menuRef}
       className="fixed z-50 min-w-[140px] rounded-md border py-1 shadow-xl"
       style={{
-        left: menu.x,
-        top: menu.y,
+        ...menuStyle,
         background: "var(--bg-secondary)",
         borderColor: "var(--border)",
       }}
