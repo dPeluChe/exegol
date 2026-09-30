@@ -113,7 +113,7 @@ export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   // T167: a session without a name shows up as its provider ("opencode"), so
   // two of the same CLI are indistinguishable in the UI and un-addressable by
   // agent_send. Shells are excluded — they're not messaging participants.
-  const alias = data.cliType === "shell" ? null : pickAgentCodename(db);
+  const alias = data.cliType === "shell" ? null : data.name || pickAgentCodename(db);
   const task = resolveTaskLabel(data.cliType, data.taskDescription);
 
   db.prepare(

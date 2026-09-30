@@ -1,4 +1,4 @@
-import { type Agent, type AgentCreate, YOLO_FLAGS } from "@exegol/shared";
+import { type Agent, type AgentCreate, MODEL_FLAGS, YOLO_FLAGS } from "@exegol/shared";
 import type Database from "libsql";
 import { activateAgent, getAgent, insertActivity, setAgentYolo, stopAgent } from "../db/queries";
 import { hasLocalSession } from "../history";
@@ -111,6 +111,8 @@ export class AgentManager {
       else if (!yolo && has) cliConfig.args = cliConfig.args.filter((a) => a !== yoloFlag);
       setAgentYolo(db, agent.id, yolo);
     }
+    const modelFlag = MODEL_FLAGS[agent.cliType];
+    if (modelFlag && config.model) cliConfig.args = [...cliConfig.args, modelFlag, config.model];
 
     const project = db
       .prepare("SELECT path, name FROM projects WHERE id = ?")

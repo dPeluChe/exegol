@@ -1,11 +1,11 @@
-import type { AgentAccessMode, AgentProvider } from "@exegol/shared";
+import { type AgentAccessMode, type AgentProvider, MODEL_ID_PATTERN } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { editKeys } from "../../lib/keymap";
 import { trpcInvoke } from "../../lib/trpc-client";
-import { AccessModePicker, ProviderPicker, SkillPicker } from "./SpawnOptions";
+import { AccessModePicker, ModelAndName, ProviderPicker, SkillPicker } from "./SpawnOptions";
 import { SpawnSessionPicker } from "./SpawnSessionPicker";
 import { SpawnWorkLocation } from "./SpawnWorkLocation";
 import { useSpawnAgent } from "./use-spawn-agent";
@@ -62,7 +62,8 @@ export function SpawnAgentModal({
     textareaRef.current?.focus();
   }, []);
 
-  const canLaunch = !!form.providerId && !spawning;
+  const modelOk = !form.model.trim() || MODEL_ID_PATTERN.test(form.model.trim());
+  const canLaunch = !!form.providerId && modelOk && !spawning;
 
   const handleSpawn = () => {
     if (canLaunch) spawn(form);
@@ -103,6 +104,13 @@ export function SpawnAgentModal({
             providers={enabledProviders}
             selectedId={form.providerId}
             onChoose={form.chooseProvider}
+          />
+          <ModelAndName
+            providerId={form.providerId}
+            model={form.model}
+            onModel={form.setModel}
+            name={form.name}
+            onName={form.setName}
           />
           <SpawnSessionPicker
             projectId={projectId}

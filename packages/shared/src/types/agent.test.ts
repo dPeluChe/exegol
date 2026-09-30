@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyActivity, deriveIsolationMode } from "./agent";
+import { classifyActivity, deriveIsolationMode, MODEL_ID_PATTERN } from "./agent";
 
 // ─── classifyActivity ─────────────────────────────────────────────────────
 
@@ -112,5 +112,16 @@ describe("deriveIsolationMode", () => {
     expect(deriveIsolationMode({ isolationMode: "project-root", worktreeId: "wt-1" })).toBe(
       "project-root",
     );
+  });
+});
+
+describe("MODEL_ID_PATTERN", () => {
+  it("takes model ids, never shell syntax (it goes into the command unquoted)", () => {
+    for (const ok of ["sonnet", "claude-sonnet-4-5", "openai/gpt-5.1", "anthropic:opus@2"]) {
+      expect(MODEL_ID_PATTERN.test(ok)).toBe(true);
+    }
+    for (const bad of ["opus; rm -rf ~", "$(id)", "a b", "opus[1m]", "`x`", ""]) {
+      expect(MODEL_ID_PATTERN.test(bad)).toBe(false);
+    }
   });
 });

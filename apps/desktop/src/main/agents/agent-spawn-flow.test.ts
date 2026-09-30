@@ -259,6 +259,32 @@ describe("buildPtyInvocation", () => {
     expect(flag.args[1]).toContain("claude --continue --dangerously-skip-permissions");
   });
 
+  it("a name from the launcher is the session's alias, even when resuming a named one", () => {
+    const [named] = makeAgent("claude-code", { name: "reviewer" });
+    expect(named.alias).toBe("reviewer");
+
+    const [old] = makeAgent("claude-code");
+    db.prepare(
+      "UPDATE agents SET alias = 'paco', resume_command = 'claude --resume x' WHERE id = ?",
+    ).run(old.id);
+    const [kept, keptConfig] = makeAgent("claude-code", {
+      resumeSession: true,
+      resumeFromAgentId: old.id,
+    });
+    buildPtyInvocation(db, kept, keptConfig, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
+    const alias = (id: string) =>
+      (db.prepare("SELECT alias FROM agents WHERE id = ?").get(id) as { alias: string }).alias;
+    expect(alias(kept.id)).toBe("paco");
+
+    const [renamed, renamedConfig] = makeAgent("claude-code", {
+      resumeSession: true,
+      resumeFromAgentId: old.id,
+      name: "fixer",
+    });
+    buildPtyInvocation(db, renamed, renamedConfig, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
+    expect(alias(renamed.id)).toBe("fixer");
+  });
+
   it("falls back to the provider resumeFlag when nothing is stored", () => {
     const [agent, config] = makeAgent("claude-code", { resumeSession: true });
     const inv = buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, cliConfig, "/tmp/p1");

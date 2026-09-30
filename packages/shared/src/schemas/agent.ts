@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { AGENT_ACCESS_MODES, AGENT_CLI_TYPES, AGENT_STATUSES } from "../types/agent";
+import {
+  AGENT_ACCESS_MODES,
+  AGENT_CLI_TYPES,
+  AGENT_STATUSES,
+  MODEL_ID_PATTERN,
+} from "../types/agent";
 
 export const agentCliTypeSchema = z.enum(AGENT_CLI_TYPES);
 export const agentStatusSchema = z.enum(AGENT_STATUSES);
@@ -47,6 +52,10 @@ export const agentCreateSchema = z.object({
   yolo: z.boolean().optional(),
   /** T177: branch/ref the worktree is cut from. Undefined means the repo's HEAD. */
   baseBranch: z.string().optional(),
+  /** Model for this launch, passed with the provider's MODEL_FLAGS entry */
+  model: z.string().regex(MODEL_ID_PATTERN).optional(),
+  /** The session's name (alias); empty picks a codename */
+  name: z.string().trim().max(40).optional(),
 });
 
 export type AgentSchema = z.infer<typeof agentSchema>;
