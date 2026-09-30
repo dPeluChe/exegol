@@ -10,6 +10,8 @@ interface SidebarSectionProps {
   action?: React.ReactNode;
   /** Sizing while open: "cap" = up to a share of the sidebar, "fill" = the rest; both scroll inside */
   size?: "cap" | "fill";
+  /** A "cap" section the user resized: this height instead of the share */
+  height?: number | null;
   children: React.ReactNode;
 }
 
@@ -30,6 +32,7 @@ export function SidebarSection({
   count,
   action,
   size,
+  height,
   children,
 }: SidebarSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
@@ -38,10 +41,13 @@ export function SidebarSection({
   // pushed Projects (and its "+") out of view behind a long agent list
   return (
     <div
+      style={open && size === "cap" && height ? { height } : undefined}
       className={cn(
         "flex min-h-0 flex-col py-1",
         !open && "shrink-0",
-        open && size === "cap" && "max-h-[45%] shrink-0",
+        open &&
+          size === "cap" &&
+          (height ? "max-h-[calc(100%-4rem)] shrink-0" : "max-h-[45%] shrink-0"),
         open && size === "fill" && "flex-1",
         open && !size && "shrink-0",
       )}

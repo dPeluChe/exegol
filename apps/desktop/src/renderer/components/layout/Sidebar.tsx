@@ -9,6 +9,9 @@ import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarSection } from "./SidebarSection";
 
+/** Enough for the section header and one row */
+const MIN_AGENTS_HEIGHT = 56;
+
 export function Sidebar() {
   const { data: projects } = useProjects();
   const projectCount = projects?.length ?? 0;
@@ -21,6 +24,7 @@ export function Sidebar() {
         (a) => a.status === "running" || a.status === "spawning" || a.status === "waiting_input",
       ).length,
   );
+  const agentsHeight = useAppStore((s) => s.sidebarAgentsHeight);
   const agentBadge =
     attentionCount > 0 ? attentionCount : runningCount > 0 ? runningCount : undefined;
 
@@ -69,11 +73,12 @@ export function Sidebar() {
           defaultOpen={true}
           count={agentBadge}
           size="cap"
+          height={agentsHeight}
         >
           <AttentionSection />
         </SidebarSection>
 
-        <Separator className="mx-3 shrink-0 bg-border" />
+        <SectionResizeHandle />
 
         <SidebarSection
           title="Projects"
@@ -100,5 +105,52 @@ export function Sidebar() {
 
       <SidebarFooter />
     </div>
+  );
+}
+
+/** Drag between Agents and Projects: Agents takes the height, Projects the rest. Double-click
+ *  (or Enter) goes back to Agents sized to its content; arrow keys nudge it */
+function SectionResizeHandle() {
+  const setHeight = useAppStore((s) => s.setSidebarAgentsHeight);
+  const agentsBox = (el: HTMLElement) => el.previousElementSibling?.getBoundingClientRect().height;
+  const clamp = (h: number) => Math.max(MIN_AGENTS_HEIGHT, Math.round(h));
+
+  const startResize = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const startHeight = agentsBox(e.currentTarget);
+    if (startHeight === undefined || e.button !== 0) return;
+    const startY = e.clientY;
+    const move = (ev: PointerEvent) => setHeight(clamp(startHeight + ev.clientY - startY));
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    const current = agentsBox(e.currentTarget);
+    if (current === undefined) return;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      setHeight(clamp(current + (e.key === "ArrowDown" ? 16 : -16)));
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      aria-label="Resize Agents and Projects"
+      title="Drag (or arrow keys) to resize; double-click or Enter to size Agents to its content"
+      onPointerDown={startResize}
+      onKeyDown={onKeyDown}
+      onDoubleClick={() => setHeight(null)}
+      onClick={(e) => {
+        // Enter or Space on the focused handle; a mouse click is a drag start, not a reset
+        if (e.detail === 0) setHeight(null);
+      }}
+      className="group mx-3 flex h-2 shrink-0 cursor-row-resize items-center focus-visible:outline-none"
+    >
+      <span className="h-px w-full bg-border transition-colors group-hover:bg-accent/60 group-focus-visible:bg-accent" />
+    </button>
   );
 }
