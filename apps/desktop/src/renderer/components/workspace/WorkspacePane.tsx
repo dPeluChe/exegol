@@ -157,113 +157,117 @@ function PaneToolbar({
   }, [tabId, paneId, extractPaneToNewTab]);
 
   return (
-    <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded bg-bg-secondary/80 opacity-0 transition-opacity group-hover/pane:opacity-100">
+    <>
       {isSplitPane && (
+        // The grip sits on the pane's left edge, apart from the action icons on the right and
+        // clear of the terminal toolbar's badges along the top
         // biome-ignore lint/a11y/noStaticElementInteractions: drag handle for pane extraction
         <div
           draggable
           onDragStart={handleDragStart}
-          className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-accent hover:bg-accent/15 active:cursor-grabbing"
-          title="Drag to tab bar to extract"
+          className="absolute top-1/2 left-0.5 z-10 flex h-10 w-4 -translate-y-1/2 cursor-grab items-center justify-center rounded bg-bg-secondary/80 text-accent opacity-0 transition-opacity hover:bg-accent/15 active:cursor-grabbing group-hover/pane:opacity-100"
+          title="Drag to another pane's edge to move it, or to the tab bar to extract it"
         >
-          <GripVertical className="h-3 w-3" />
+          <GripVertical className="h-3.5 w-3.5" />
         </div>
       )}
-      {showIdeButton && projectId && (
-        <button
-          type="button"
-          onClick={handleOpenInIde}
-          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Open in IDE"
-        >
-          <Code2 className="h-3 w-3" />
-        </button>
-      )}
-      {isSplitPane && (
-        <button
-          type="button"
-          onClick={handleExtractToTab}
-          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Pop out to new tab"
-        >
-          <ArrowUpRight className="h-3 w-3" />
-        </button>
-      )}
-      {showFloatButton && (
-        <button
-          type="button"
-          onClick={handleFloat}
-          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Float to separate window"
-        >
-          <PictureInPicture2 className="h-3 w-3" />
-        </button>
-      )}
-      {companion && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: closes the side menu when the pointer leaves it
-        <div className="relative" onMouseLeave={() => setAddOpen(false)}>
+      <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded bg-bg-secondary/80 opacity-0 transition-opacity group-hover/pane:opacity-100">
+        {showIdeButton && projectId && (
           <button
             type="button"
-            onClick={() => setAddOpen((v) => !v)}
-            className={cn(
-              "flex h-5 w-5 items-center justify-center rounded hover:bg-white/10 hover:text-text-primary",
-              addOpen ? "bg-white/10 text-text-primary" : "text-text-muted",
-            )}
-            title={companion === "browser" ? "Add a browser beside" : "Add a terminal beside"}
+            onClick={handleOpenInIde}
+            className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Open in IDE"
           >
-            {companion === "browser" ? (
-              <Globe className="h-3 w-3" />
-            ) : (
-              <TerminalSquare className="h-3 w-3" />
-            )}
+            <Code2 className="h-3 w-3" />
           </button>
-          {addOpen && (
-            <div className="absolute right-0 top-6 z-20 w-28 rounded-md border border-border bg-bg-secondary py-1 shadow-lg">
-              {(
-                [
-                  ["horizontal", Columns, "To the right"],
-                  ["vertical", Rows, "Below"],
-                ] as const
-              ).map(([dir, Icon, label]) => (
-                <button
-                  key={dir}
-                  type="button"
-                  onClick={() => addCompanion(dir)}
-                  className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] text-text-secondary hover:bg-white/10"
-                >
-                  <Icon className="h-3 w-3" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={() => splitPane(tabId, paneId, "horizontal", "empty")}
-        className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
-        title="Split horizontal"
-      >
-        <Columns className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        onClick={() => splitPane(tabId, paneId, "vertical", "empty")}
-        className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
-        title="Split vertical"
-      >
-        <Rows className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        onClick={handleClosePane}
-        className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-red-400/80 hover:text-white"
-        title="Close pane"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </div>
+        )}
+        {isSplitPane && (
+          <button
+            type="button"
+            onClick={handleExtractToTab}
+            className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Pop out to new tab"
+          >
+            <ArrowUpRight className="h-3 w-3" />
+          </button>
+        )}
+        {showFloatButton && (
+          <button
+            type="button"
+            onClick={handleFloat}
+            className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Float to separate window"
+          >
+            <PictureInPicture2 className="h-3 w-3" />
+          </button>
+        )}
+        {companion && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: closes the side menu when the pointer leaves it
+          <div className="relative" onMouseLeave={() => setAddOpen(false)}>
+            <button
+              type="button"
+              onClick={() => setAddOpen((v) => !v)}
+              className={cn(
+                "flex h-5 w-5 items-center justify-center rounded hover:bg-white/10 hover:text-text-primary",
+                addOpen ? "bg-white/10 text-text-primary" : "text-text-muted",
+              )}
+              title={companion === "browser" ? "Add a browser beside" : "Add a terminal beside"}
+            >
+              {companion === "browser" ? (
+                <Globe className="h-3 w-3" />
+              ) : (
+                <TerminalSquare className="h-3 w-3" />
+              )}
+            </button>
+            {addOpen && (
+              <div className="absolute right-0 top-6 z-20 w-28 rounded-md border border-border bg-bg-secondary py-1 shadow-lg">
+                {(
+                  [
+                    ["horizontal", Columns, "To the right"],
+                    ["vertical", Rows, "Below"],
+                  ] as const
+                ).map(([dir, Icon, label]) => (
+                  <button
+                    key={dir}
+                    type="button"
+                    onClick={() => addCompanion(dir)}
+                    className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] text-text-secondary hover:bg-white/10"
+                  >
+                    <Icon className="h-3 w-3" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => splitPane(tabId, paneId, "horizontal", "empty")}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+          title="Split horizontal"
+        >
+          <Columns className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={() => splitPane(tabId, paneId, "vertical", "empty")}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+          title="Split vertical"
+        >
+          <Rows className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          onClick={handleClosePane}
+          className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-red-400/80 hover:text-white"
+          title="Close pane"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    </>
   );
 }
 
