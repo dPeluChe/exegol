@@ -151,6 +151,13 @@ export function AttentionSection() {
       ),
     ),
   );
+  // The same rule reorderKeys applies: dropped on a group below lands after it, above lands before
+  const dropSideFor = (key: string): "before" | "after" | null => {
+    const { draggingKey, overKey } = reorder;
+    if (!draggingKey || overKey !== key || draggingKey === key) return null;
+    const keys = groups.map((g) => g.key);
+    return keys.indexOf(draggingKey) < keys.indexOf(key) ? "after" : "before";
+  };
   // The tab on screen stands out, and blinks when a Cmd+n jump lands on it
   const activeProjectId = useAppStore((s) =>
     s.activeView === "workspace" ? s.activeProjectId : null,
@@ -239,7 +246,7 @@ export function AttentionSection() {
               onNavigate={navigateToAgent}
               reorderProps={reorder.itemProps(group.key)}
               dragging={reorder.draggingKey === group.key}
-              dropTarget={!!reorder.draggingKey && reorder.overKey === group.key}
+              dropSide={dropSideFor(group.key)}
               active={group.projectId === activeProjectId && group.tabId === activeTabByProject}
               flashing={flashKey === group.key}
             />
@@ -267,7 +274,7 @@ function TabAgentGroup({
   onNavigate,
   reorderProps,
   dragging,
-  dropTarget,
+  dropSide,
   active,
   flashing,
 }: {
@@ -281,7 +288,8 @@ function TabAgentGroup({
   /** Press anywhere on the group and move to reorder it (Cmd+2..9 follow this order) */
   reorderProps: ReturnType<ReturnType<typeof usePointerReorder>["itemProps"]>;
   dragging: boolean;
-  dropTarget: boolean;
+  /** Where the dragged group lands: a line above this one (moving up) or below (moving down) */
+  dropSide: "before" | "after" | null;
 }) {
   const { data: project } = useProject(group.projectId);
   const first = group.agentIds[0];
@@ -289,13 +297,22 @@ function TabAgentGroup({
     <div
       {...reorderProps}
       className={cn(
-        "select-none rounded-lg border bg-bg-tertiary/30 p-1.5 transition-colors",
+        "relative select-none rounded-lg border bg-bg-tertiary/30 p-1.5 transition-colors",
         active ? "border-accent/60" : "border-border/50",
         flashing && "animate-flash-once",
         dragging && "opacity-50",
-        dropTarget && "border-accent ring-1 ring-accent/40",
+        dropSide && "border-accent/60",
       )}
     >
+      {dropSide && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "pointer-events-none absolute inset-x-1 h-0.5 rounded-full bg-accent",
+            dropSide === "before" ? "-top-1" : "-bottom-1",
+          )}
+        />
+      )}
       <button
         type="button"
         onClick={() => first && onNavigate(first, group.projectId)}
