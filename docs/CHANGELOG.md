@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Sidebar Agents: a switch between the live agents and Needs attention (its count turns amber with something unread); the list shows every live agent again, the ones waiting on you marked, and the pick is remembered
+
 ### Fixed
 - Terminal "Send to" shows only while text is selected, lists live agents only (no shells) grouped by project with their session names, and pastes the selection into that agent without submitting it (a multi-line selection is one paste), then takes you there
 

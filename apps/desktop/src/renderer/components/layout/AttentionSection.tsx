@@ -32,6 +32,7 @@ import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
+import { SegmentedTabs } from "../common/SegmentedTabs";
 
 // ─── Level config ────────────────────────────────────────────────────────
 
@@ -113,11 +114,9 @@ export function AttentionSection() {
     return () => clearInterval(id);
   }, []);
 
-  // Group active agents by project. One already listed under Needs Attention
-  // is not repeated below it: same session, two rows, two different names.
-  const activeAgents = Object.values(agents).filter(
-    (a) => ACTIVE_STATUSES.has(a.status) && !rawItems[a.id],
-  );
+  // Every live agent, one waiting on you included: its row carries the amber mark, and the
+  // attention list is a separate view (the switch), so nothing shows twice
+  const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
   // Grouped by workspace tab (layout), in the user's order: the same list Cmd+2..9 walks.
   // A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
@@ -172,26 +171,37 @@ export function AttentionSection() {
     };
   }, []);
   const hasAttention = attentionItems.length > 0;
+  const pickedView = useAppStore((s) => s.sidebarAgentsView);
+  const setPickedView = useAppStore((s) => s.setSidebarAgentsView);
   const hasRead = attentionItems.some((i) => i.read && !i.pinned);
 
   if (!hasRunning && !hasAttention) {
     return <p className="py-2 text-center text-[9px] italic text-text-muted">No agents active</p>;
   }
+  // Both have something: the user's pick. Only one does: that one, whatever was picked
+  const showSwitch = hasRunning && hasAttention;
+  const view = showSwitch ? pickedView : hasAttention ? "attention" : "agents";
 
   return (
     <div className="space-y-2">
-      {/* Attention FIRST (verify round 3, user request): sessions that need
-          you float above the passive running list. */}
-      {hasAttention && (
+      {showSwitch && (
+        <SegmentedTabs
+          compact
+          active={view}
+          onChange={setPickedView}
+          tabs={[
+            { id: "agents", label: "Agents", count: activeAgents.length },
+            {
+              id: "attention",
+              label: "Needs attention",
+              count: attentionItems.length,
+              alert: attentionItems.some((i) => !i.read),
+            },
+          ]}
+        />
+      )}
+      {view === "attention" && (
         <div className="space-y-1">
-          {hasRunning && (
-            <div className="flex items-center gap-2 px-0.5 pt-1">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400/80">
-                Needs Attention
-              </span>
-              <div className="h-px flex-1 bg-border/50" />
-            </div>
-          )}
           {attentionItems.map((item) => (
             <AttentionCard
               key={item.agentId}
@@ -216,16 +226,14 @@ export function AttentionSection() {
         </div>
       )}
 
-      {hasRunning && (
+      {view === "agents" && (
         <div className="space-y-1.5">
           {groups.map((group, index) => (
             <TabAgentGroup
               key={group.key}
               group={group}
               shortcut={groupShortcut(index)}
-              agents={group.agentIds
-                .map((id) => agents[id])
-                .filter((a): a is AgentState => !!a && !rawItems[a.id])}
+              agents={group.agentIds.map((id) => agents[id]).filter((a): a is AgentState => !!a)}
               onNavigate={navigateToAgent}
               reorderProps={reorder.itemProps(group.key)}
               dragging={reorder.draggingKey === group.key}
@@ -265,7 +273,7 @@ function TabAgentGroup({
   active: boolean;
   flashing: boolean;
   shortcut: string | null;
-  /** Its sessions minus those already listed under Needs attention */
+  /** Its live sessions */
   agents: AgentState[];
   onNavigate: (agentId: string, projectId: string) => void;
   /** Press anywhere on the group and move to reorder it (Cmd+2..9 follow this order) */
@@ -307,19 +315,15 @@ function TabAgentGroup({
           </kbd>
         )}
       </button>
-      {agents.length > 0 ? (
-        <div className="space-y-0.5">
-          {agents.map((agent) => (
-            <RunningAgentRow
-              key={agent.id}
-              agent={agent}
-              onClick={() => onNavigate(agent.id, agent.projectId)}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="px-0.5 text-[9px] text-text-muted">Waiting on you, see Needs attention</p>
-      )}
+      <div className="space-y-0.5">
+        {agents.map((agent) => (
+          <RunningAgentRow
+            key={agent.id}
+            agent={agent}
+            onClick={() => onNavigate(agent.id, agent.projectId)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
