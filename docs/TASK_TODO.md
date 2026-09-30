@@ -988,6 +988,8 @@ files a team may legitimately version — the warning goes to the human instead.
   so fixing it requires a `SIDECAR_VERSION` bump — every live PTY dies on the next launch.
   Fold it into the next change that has to bump anyway. Unexport the sidecar's unused types
   (knip: `EvictableSession`, `PendingState`, `AppendResult`) in the same bump.
+  Also add a `session.clear` RPC: the pane menu's Clear Terminal only empties the view, so a
+  reattach after an app restart replays the cleared history from the ring buffer.
 - **`buffer.indexOf("\n")` rescans from 0 on every chunk** in `createNdjsonBuffer`: a 7 MB
   tool result arriving in 64 KB chunks scans ~110× up to 7 MB. The cap bounds each scan but
   not the quadratic; a `searchFrom` offset carried across calls makes it linear.
