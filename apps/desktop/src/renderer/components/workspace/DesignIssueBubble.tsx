@@ -1,6 +1,7 @@
+import { submitToAgent } from "../../lib/agent-input";
 import { buildDesignIssue, type CapturedElement } from "../../lib/design-capture";
+import { useToastStore } from "../../stores/toasts";
 import { type AgentRef, IssueBubble } from "../common/IssueBubble";
-import { sendToAgent } from "./send-to-agent";
 
 /** T102: Design Mode — floating issue reporter for the captured element; every exit clears it */
 export function DesignIssueBubble({
@@ -24,11 +25,12 @@ export function DesignIssueBubble({
       onMessageChange={onMessageChange}
       agents={agents}
       onSend={(agentId) => {
-        sendToAgent(agentId, buildDesignIssue(element, message));
+        submitToAgent(agentId, buildDesignIssue(element, message));
         onClear();
       }}
       onCopy={() => {
         navigator.clipboard.writeText(buildDesignIssue(element, message));
+        useToastStore.getState().addToast({ type: "success", title: "Design report copied" });
         onClear();
       }}
       onDismiss={onClear}

@@ -10,7 +10,7 @@ import { useQaReplay } from "./components/workspace/use-qa-replay";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
 import { trpcInvoke } from "./lib/trpc-client";
 
-/** Running agents for the project (used for send-to-agent). This window has no agent store */
+/** Live agents of the project, the targets for design and QA reports. This window has no agent store */
 function useRunningAgentsQuery(projectId: string | undefined) {
   const { data: projectAgents } = useQuery({
     queryKey: ["agents", projectId],
@@ -20,7 +20,9 @@ function useRunningAgentsQuery(projectId: string | undefined) {
     staleTime: 3_000,
   });
   return useMemo(
-    () => (projectAgents ?? []).filter((a) => RUNNING_STATUSES.has(a.status)),
+    // Agents only: a shell would run the report as commands
+    () =>
+      (projectAgents ?? []).filter((a) => a.cliType !== "shell" && RUNNING_STATUSES.has(a.status)),
     [projectAgents],
   );
 }

@@ -1,9 +1,11 @@
-import { Send } from "lucide-react";
+import { Copy, Send } from "lucide-react";
 import type { CapturedElement } from "../../lib/design-capture";
 
 export interface AgentRef {
   id: string;
   cliType: string;
+  /** The session's name ("lupus"): several Claude sessions look alike by CLI */
+  alias?: string | null;
 }
 
 interface IssueBubbleProps {
@@ -88,16 +90,18 @@ export function IssueBubble({
               type="button"
               onClick={() => onSend(a.id)}
               className="flex items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-[9px] text-blue-300 hover:bg-blue-500/20"
+              title={`Send to ${a.alias ?? a.cliType} (${a.cliType})`}
             >
-              <Send className="h-2.5 w-2.5" /> {a.cliType}
+              <Send className="h-2.5 w-2.5" /> {a.alias ?? a.cliType}
             </button>
           ))}
           <button
             type="button"
             onClick={onCopy}
-            className="rounded px-2 py-1 text-[9px] text-text-muted hover:bg-white/5"
+            className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-1 text-[9px] text-text-secondary hover:bg-white/5 hover:text-text-primary"
+            title="Copy the report to paste it anywhere"
           >
-            Copy
+            <Copy className="h-2.5 w-2.5" /> Copy
           </button>
         </div>
       </div>

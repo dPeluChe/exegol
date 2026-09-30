@@ -1,14 +1,15 @@
 import { Loader2, Play, Save, Send } from "lucide-react";
+import { submitToAgent } from "../../lib/agent-input";
 import {
   exportToPlaywright,
   formatRecordingForAgent,
   type QaRecording,
 } from "../../lib/qa-recorder";
-import { sendToAgent } from "./send-to-agent";
 
 interface RunningAgent {
   id: string;
   cliType: string;
+  alias?: string | null;
 }
 
 interface BrowserQaRecordingBarProps {
@@ -83,11 +84,11 @@ export function BrowserQaRecordingBar({
               <button
                 key={a.id}
                 type="button"
-                onClick={() => sendToAgent(a.id, formatRecordingForAgent(qaRecording))}
+                onClick={() => submitToAgent(a.id, formatRecordingForAgent(qaRecording))}
                 className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] text-red-300 hover:bg-red-500/10"
-                title={`Send to ${a.cliType}`}
+                title={`Send to ${a.alias ?? a.cliType} (${a.cliType})`}
               >
-                <Send className="h-2.5 w-2.5" /> {a.cliType}
+                <Send className="h-2.5 w-2.5" /> {a.alias ?? a.cliType}
               </button>
             ))
           ) : (
