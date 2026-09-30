@@ -291,6 +291,17 @@ export function useXterm({
     return () => window.removeEventListener("exegol:kick-terminal", handleKick);
   }, [agentId, mirror, readOnly, handleResize]);
 
+  // Keyboard navigation (lib/pane-focus) hands this pane the cursor
+  useEffect(() => {
+    if (mirror || readOnly) return;
+    const handleFocus = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { paneId?: string } | undefined;
+      if (paneId && detail?.paneId === paneId) terminalRef.current?.focus();
+    };
+    window.addEventListener("exegol:focus-pane", handleFocus);
+    return () => window.removeEventListener("exegol:focus-pane", handleFocus);
+  }, [paneId, mirror, readOnly]);
+
   // Pane menu "Clear Terminal": drop what this view holds (screen + scrollback), then Ctrl+L so
   // the shell or TUI draws a clean screen, as typing it would
   useEffect(() => {

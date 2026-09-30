@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Keyboard navigation puts the cursor where it lands: Cmd+2..9, Cmd+Option+1..9, Ctrl+Tab and Cmd+Shift+[ ] focus the active pane's terminal, ready to type; Cmd+] / Cmd+[ move to the next or previous pane of the tab
 - Terminal pane menu: Clear Terminal wipes the screen and scrollback and sends Ctrl+L, so the shell or CLI redraws clean
 
 ### Changed
