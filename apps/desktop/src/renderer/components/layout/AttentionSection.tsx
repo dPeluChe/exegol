@@ -121,7 +121,7 @@ export function AttentionSection() {
   // Grouped by workspace tab (layout), in the user's order: the same list Cmd+2..9 walks.
   // A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
-  const groupShortcuts = useGroupShortcuts();
+  const groupShortcuts = useGroupShortcuts(groups);
   const setOrder = useAppStore((s) => s.setLiveTabOrder);
   const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();

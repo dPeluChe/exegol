@@ -29,7 +29,7 @@ export const WELCOME_TOUR_STEPS: WelcomeTourStep[] = [
       "A pane can be a terminal, a browser, files or git.",
       "Pick a layout preset from the tab bar, or save your own.",
       "Right-click a terminal or browser pane to float it to its own window.",
-      "Ctrl+Tab moves between the panes of a tab.",
+      "Ctrl+Tab (or Cmd+] / Cmd+[) moves between the panes of a tab.",
     ],
   },
   {

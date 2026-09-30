@@ -1,4 +1,4 @@
-import { type Agent, RUNNING_STATUSES } from "@exegol/shared";
+import type { Agent } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Bug, Crosshair, RotateCw } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -8,6 +8,7 @@ import { DesignIssueBubble } from "./components/workspace/DesignIssueBubble";
 import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
+import { isPasteTarget } from "./lib/agent-input";
 import { trpcInvoke } from "./lib/trpc-client";
 
 /** Live agents of the project, the targets for design and QA reports. This window has no agent store */
@@ -19,12 +20,7 @@ function useRunningAgentsQuery(projectId: string | undefined) {
     refetchInterval: 5_000,
     staleTime: 3_000,
   });
-  return useMemo(
-    // Agents only: a shell would run the report as commands
-    () =>
-      (projectAgents ?? []).filter((a) => a.cliType !== "shell" && RUNNING_STATUSES.has(a.status)),
-    [projectAgents],
-  );
+  return useMemo(() => (projectAgents ?? []).filter(isPasteTarget), [projectAgents]);
 }
 
 export function FloatingBrowser({ url, projectId }: { url: string; projectId?: string }) {

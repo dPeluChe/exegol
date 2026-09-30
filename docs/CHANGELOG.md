@@ -11,21 +11,22 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Welcome tour for new users after the first-run setup: what Exegol does, projects and agents, layouts, terminals, supervising, git, help; skippable, reopen it from the command palette
-- Edit project: a keyboard shortcut (Cmd+2..9 or Cmd+0) the project keeps; the other live tabs fill the free numbers, and tabs whose sessions are all pinned (already on the Dashboard, Cmd+1) go last. Cmd+0 is the ninth slot; Reset Zoom moves to Cmd+Shift+0
+- Edit project: a keyboard shortcut (Cmd+2..9 or Cmd+0) the project keeps; the other live tabs fill the free numbers, and tabs whose sessions are all pinned (already on the Dashboard, Cmd+1) go last. Cmd+0 is the ninth slot. Removing a project frees its number
 - Sidebar Projects: a project shows the Cmd+n that jumps to its live tab, as its Agents group does
-- Keyboard navigation puts the cursor where it lands: Cmd+2..9, Cmd+Option+1..9 and Cmd+Shift+[ ] focus the active pane's terminal, ready to type; Ctrl+Tab / Ctrl+Shift+Tab (or Cmd+] / Cmd+[) move to the next or previous pane of the tab
-- Terminal pane menu: Clear Terminal wipes the screen and scrollback and sends Ctrl+L, so the shell or CLI redraws clean
+- Keyboard navigation puts the cursor where it lands: Cmd+2..9, Cmd+Option+1..9 and Cmd+Shift+[ ] focus the active pane's terminal, ready to type (Send to as well); Cmd+] / Cmd+[ move to the next or previous pane of the tab
+- Terminal pane menu: Clear Terminal wipes the screen and scrollback and sends Ctrl+L, so the shell or CLI redraws clean (the history comes back after a reattach until the next PTY sidecar update)
 
 ### Changed
 - A split pane's drag handle sits on its left edge on hover, apart from the action icons on the right
-- Ctrl+Tab moves between the panes of a tab instead of cycling tabs (tabs: Cmd+Shift+[ ])
+- Ctrl+Tab / Ctrl+Shift+Tab move between the panes of a tab instead of cycling tabs (tabs: Cmd+Shift+[ ]), also from inside a terminal (it no longer types a Tab or flips Claude's mode)
+- Reset Zoom moves to Cmd+Shift+0 (Cmd+0 is a live tab slot)
 - Sidebar Agents: a switch between the live agents and Needs attention (its count turns amber with something unread); the list shows every live agent again, the ones waiting on you marked, and the pick is remembered
 
 ### Fixed
 - Browser design mode and QA recording: send only to live agents (no shells), by session name, as one paste that is submitted; Copy is a visible button and confirms with a toast
 - Sidebar Agents: dragging a group shows a line where it will land (above or below the group under the cursor)
 - Right-click menus (panes, files, projects, groups, agents) open upward or to the left when there is no room below or to the right, instead of falling off the window
-- Trackpad scrolling in fullscreen TUIs (Claude) no longer needs repeated swipes: xterm's trackpad damping is undone while the TUI tracks the mouse; the terminal's own scrollback keeps its speed
+- Trackpad scrolling in fullscreen TUIs (Claude) no longer needs repeated swipes: xterm's trackpad damping is undone while the TUI tracks the mouse; a mouse wheel and the terminal's own scrollback keep their speed
 - Sidebar Needs attention cards no longer overflow: name, reason and time on the first row, the project on the second, and the hover actions float over the card instead of taking its width
 - Watching: a pinned session is a plain mirror again (0.5.8 sized the session to the card, and switching between the card and its pane left Claude's lines overlapped); fitting the session to the card is opt-in per card
 - Terminal "Send to" shows only while text is selected, lists live agents only (no shells) grouped by project with their session names, and pastes the selection into that agent without submitting it (a multi-line selection is one paste), then takes you there

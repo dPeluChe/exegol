@@ -30,6 +30,7 @@ const STEP_COUNT = STEPS.length;
 export function OnboardingWizard() {
   const onboardingComplete = useAppStore((s) => s.onboardingComplete);
   const setOnboardingComplete = useAppStore((s) => s.setOnboardingComplete);
+  const setWelcomeTourSeen = useAppStore((s) => s.setWelcomeTourSeen);
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const [step, setStep] = useState(0);
 
@@ -38,12 +39,19 @@ export function OnboardingWizard() {
   const hasExistingProjects = step === 0 && (projects?.length ?? 0) > 0;
 
   // Upgrading users who already have projects never saw this wizard and
-  // shouldn't be interrupted by it — silently mark onboarding as done.
+  // shouldn't be interrupted by it (nor by the welcome tour): silently mark both as done
   useEffect(() => {
     if (!projectsLoading && hasExistingProjects && !onboardingComplete) {
       setOnboardingComplete(true);
+      setWelcomeTourSeen(true);
     }
-  }, [projectsLoading, hasExistingProjects, onboardingComplete, setOnboardingComplete]);
+  }, [
+    projectsLoading,
+    hasExistingProjects,
+    onboardingComplete,
+    setOnboardingComplete,
+    setWelcomeTourSeen,
+  ]);
 
   if (onboardingComplete || projectsLoading || hasExistingProjects) return null;
 
