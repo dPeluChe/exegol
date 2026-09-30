@@ -73,7 +73,7 @@ points:
    - `docs/TASK_COMPLETED/YYMM.md`: a dated entry, what changed and *why*, newest first
    - `docs/CHANGELOG.md` `[Unreleased]`: one line per user-visible change (Added / Changed / Fixed)
    - A new or changed feature or shortcut: `docs/GUIDES/FEATURES.md` / `KEYBOARD_SHORTCUTS.md`,
-     and the README highlights if it is one of them
+     and the README highlights if it is one of them (`README.md` and `README.es.md`)
 6. **Open the PR** with the template, then squash-merge. Commit messages follow
    conventional commits (`fix(terminal): …`).
 

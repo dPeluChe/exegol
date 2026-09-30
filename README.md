@@ -1,5 +1,7 @@
 # Exegol
 
+**English** · [Español](README.es.md)
+
 Desktop app for running AI coding agents side by side. Claude Code, Codex, Gemini, Aider or any
 CLI agent, each in its own terminal, with live status, one place to see who needs you, and the
 tools to hand work between them.
