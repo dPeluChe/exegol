@@ -184,6 +184,7 @@ exegol/
 - **DB row validation** — Zod schemas for all 14 row types with graceful degradation on parse failure (T77)
 - **DI context** — All 5 tRPC singletons injected via context (no module-level globals) (T81)
 - **Updates** — title-bar button checks GitHub releases, downloads and restarts into the new version, and shows what's new (release notes)
+- **Welcome tour** — after the first-run setup, a skippable tour of the main features (reopen it from the command palette)
 - **Bug reports** — title-bar bug button collects redacted diagnostics for review before filing a public issue
 - **Work guard** — keeps the Mac awake while agents run and asks before quitting with sessions open
 

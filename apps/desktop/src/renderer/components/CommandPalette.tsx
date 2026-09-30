@@ -3,6 +3,7 @@ import { Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import {
   Bot,
+  Compass,
   Cuboid,
   Keyboard,
   Layout,
@@ -81,6 +82,13 @@ function useCommands(close: () => void): Command[] {
         icon: PanelLeft,
         shortcut: "⌘B",
         action: run(() => useAppStore.getState().toggleSidebar()),
+      },
+      {
+        id: "nav:welcome-tour",
+        label: "Show welcome tour",
+        category: "navigation",
+        icon: Compass,
+        action: run(() => useAppStore.getState().setWelcomeTourSeen(false)),
       },
 
       // Workspace
