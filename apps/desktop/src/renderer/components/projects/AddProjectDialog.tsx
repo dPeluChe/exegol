@@ -117,6 +117,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
             <Dialog.Close asChild>
               <button
                 type="button"
+                aria-label="Close"
                 className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10"
               >
                 <X className="h-4 w-4" />

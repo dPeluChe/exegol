@@ -59,6 +59,7 @@ export function TaskDetailModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close task"
             className="text-text-muted hover:text-text-primary"
           >
             ✕

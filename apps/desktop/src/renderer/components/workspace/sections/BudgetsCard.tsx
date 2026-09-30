@@ -55,6 +55,7 @@ function BudgetRow({ projectId, period }: { projectId: string; period: BudgetPer
         <div className="mt-2 space-y-2">
           <div className="flex gap-2">
             <select
+              aria-label="Limit unit"
               value={limitType}
               onChange={(e) => setLimitType(e.target.value as BudgetLimitType)}
               className="rounded-md border border-[var(--border)] bg-[var(--bg-tertiary)] px-2 py-1 text-xs text-[var(--text-primary)]"

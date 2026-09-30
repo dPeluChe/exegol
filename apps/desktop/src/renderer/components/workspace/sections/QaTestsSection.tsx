@@ -264,6 +264,7 @@ export function QaTestsSection() {
           <button
             type="button"
             onClick={() => setRunError(null)}
+            aria-label="Dismiss error"
             className="text-[9px] text-text-muted hover:text-text-primary"
           >
             ✕

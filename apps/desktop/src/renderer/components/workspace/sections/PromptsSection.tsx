@@ -2,7 +2,7 @@ import type { Prompt, PromptCategory } from "@exegol/shared";
 import { Badge, Button, cn, ScrollArea } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Copy, FileText, Pin, Plus, Rocket, Trash2, X } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import {
   useCreatePrompt,
@@ -153,6 +153,8 @@ function PromptCard({ prompt, onEdit }: { prompt: Prompt; onEdit: () => void }) 
           <button
             type="button"
             onClick={() => togglePin.mutate(prompt.id)}
+            aria-label="Pin prompt"
+            aria-pressed={prompt.pinned}
             className={cn(
               "flex h-5 w-5 items-center justify-center rounded transition-colors",
               prompt.pinned ? "text-accent" : "text-text-muted hover:text-text-secondary",
@@ -185,6 +187,7 @@ function PromptCard({ prompt, onEdit }: { prompt: Prompt; onEdit: () => void }) 
         <button
           type="button"
           onClick={() => setConfirmDelete(true)}
+          aria-label="Delete prompt"
           className="ml-auto flex h-6 w-6 items-center justify-center rounded text-text-muted opacity-0 transition-[opacity,color] hover:text-error group-hover:opacity-100"
         >
           <Trash2 className="h-3 w-3" />
@@ -220,6 +223,7 @@ function PromptDialog({
   const createPrompt = useCreatePrompt();
   const updatePrompt = useUpdatePrompt();
 
+  const fieldId = useId();
   const [title, setTitle] = useState(prompt?.title ?? "");
   const [content, setContent] = useState(prompt?.content ?? "");
   const [category, setCategory] = useState<PromptCategory>(prompt?.category ?? "custom");
@@ -248,6 +252,7 @@ function PromptDialog({
             <Dialog.Close asChild>
               <button
                 type="button"
+                aria-label="Close"
                 className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10"
               >
                 <X className="h-4 w-4" />
@@ -257,8 +262,14 @@ function PromptDialog({
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-text-secondary">Title</div>
+              <label
+                htmlFor={`${fieldId}-title`}
+                className="block text-xs font-medium text-text-secondary"
+              >
+                Title
+              </label>
               <input
+                id={`${fieldId}-title`}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Prompt title..."
@@ -267,8 +278,14 @@ function PromptDialog({
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-text-secondary">Content</div>
+              <label
+                htmlFor={`${fieldId}-content`}
+                className="block text-xs font-medium text-text-secondary"
+              >
+                Content
+              </label>
               <textarea
+                id={`${fieldId}-content`}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Write your prompt..."
@@ -279,8 +296,14 @@ function PromptDialog({
             </div>
 
             <div className="space-y-1.5">
-              <div className="text-xs font-medium text-text-secondary">Category</div>
+              <label
+                htmlFor={`${fieldId}-category`}
+                className="block text-xs font-medium text-text-secondary"
+              >
+                Category
+              </label>
               <select
+                id={`${fieldId}-category`}
                 value={category}
                 onChange={(e) => setCategory(e.target.value as PromptCategory)}
                 className="flex h-9 w-full rounded-md border border-border bg-bg-tertiary px-3 py-1 text-sm text-text-primary transition-colors focus:outline-none focus:ring-1"

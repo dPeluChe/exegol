@@ -57,22 +57,15 @@ export function WorkspaceTabItem({
   handleTabDrop,
   handleTabDragEnd,
 }: WorkspaceTabItemProps) {
+  // Every control is a drop target so the whole tab accepts a reorder drop, as the old wrapper did.
+  const dropTarget = {
+    onDragOver: (e: DragEvent) => handleTabDragOver(e, tab.id),
+    onDragLeave: handleTabDragLeave,
+    onDrop: (e: DragEvent) => handleTabDrop(e, tab.id),
+  };
+
   return (
-    // biome-ignore lint/a11y/useSemanticElements: contains close button — can't nest buttons
     <div
-      role="button"
-      tabIndex={0}
-      draggable={!isEditing}
-      onDragStart={(e) => handleTabDragStart(e, tab.id)}
-      onDragOver={(e) => handleTabDragOver(e, tab.id)}
-      onDragLeave={handleTabDragLeave}
-      onDrop={(e) => handleTabDrop(e, tab.id)}
-      onDragEnd={handleTabDragEnd}
-      onClick={() => setActiveTab(tab.id)}
-      onDoubleClick={() => startEditing(tab.id, tab.label)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") setActiveTab(tab.id);
-      }}
       className={cn(
         "group relative flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] font-medium transition-colors",
         "hover:bg-white/5 cursor-pointer",
@@ -87,16 +80,25 @@ export function WorkspaceTabItem({
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onBlur={finishEditing}
+          {...dropTarget}
           onKeyDown={(e) => {
             if (e.key === "Enter") finishEditing();
             if (e.key === "Escape") setEditingTabId(null);
             e.stopPropagation();
           }}
-          onClick={(e) => e.stopPropagation()}
           className="w-24 bg-transparent text-[11px] text-text-primary outline-none"
         />
       ) : (
-        <>
+        <button
+          type="button"
+          onClick={() => setActiveTab(tab.id)}
+          onDoubleClick={() => startEditing(tab.id, tab.label)}
+          draggable
+          onDragStart={(e) => handleTabDragStart(e, tab.id)}
+          onDragEnd={handleTabDragEnd}
+          {...dropTarget}
+          className="-mr-1.5 -ml-2.5 flex cursor-pointer items-center gap-1.5 self-stretch pr-1.5 pl-2.5"
+        >
           {agentCliType ? (
             <AgentIcon provider={agentCliType} size={12} />
           ) : (
@@ -118,7 +120,7 @@ export function WorkspaceTabItem({
               />
             )
           )}
-        </>
+        </button>
       )}
       <button
         type="button"
@@ -126,12 +128,14 @@ export function WorkspaceTabItem({
           e.stopPropagation();
           handleCloseTab(tab.id);
         }}
+        {...dropTarget}
         className={cn(
           "ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded",
-          "opacity-0 transition-opacity group-hover:opacity-100",
+          "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
           "hover:bg-white/10",
         )}
         title="Close tab"
+        aria-label="Close tab"
       >
         <X className="h-2.5 w-2.5" />
       </button>

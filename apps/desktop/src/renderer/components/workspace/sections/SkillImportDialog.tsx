@@ -82,6 +82,7 @@ export function SkillImportDialog({ onClose }: { onClose: () => void }) {
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="text-text-muted hover:text-text-primary"
           >
             <X className="h-4 w-4" />
@@ -197,6 +198,7 @@ function AgentGroup({
           type="checkbox"
           checked={allSelected && importable.length > 0}
           onChange={() => onToggleAgent(candidate)}
+          aria-label={`Select all ${candidate.agent} skills`}
           className="accent-accent h-3.5 w-3.5"
         />
         <span className="text-xs font-medium text-text-primary capitalize">{candidate.agent}</span>

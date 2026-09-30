@@ -48,6 +48,7 @@ export function TaskCard({
         <button
           type="button"
           onClick={onToggle}
+          aria-label={task.completed ? "Mark task incomplete" : "Mark task complete"}
           className={cn(
             "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
             task.completed

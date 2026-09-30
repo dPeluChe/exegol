@@ -213,6 +213,7 @@ export function BrowserAddressBar({
         }}
         className="flex-1 bg-transparent text-[11px] text-text-primary outline-none placeholder:text-text-muted"
         placeholder="http://localhost:3000"
+        aria-label="URL"
       />
       <button
         type="button"

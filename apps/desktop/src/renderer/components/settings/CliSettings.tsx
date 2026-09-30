@@ -127,6 +127,7 @@ function ReorderArrows({
         type="button"
         onClick={onMoveUp}
         disabled={!onMoveUp}
+        aria-label="Move up"
         className={cn(
           "flex h-4 w-4 items-center justify-center rounded",
           onMoveUp ? "text-text-muted hover:bg-white/10 hover:text-text-primary" : "invisible",
@@ -138,6 +139,7 @@ function ReorderArrows({
         type="button"
         onClick={onMoveDown}
         disabled={!onMoveDown}
+        aria-label="Move down"
         className={cn(
           "flex h-4 w-4 items-center justify-center rounded",
           onMoveDown ? "text-text-muted hover:bg-white/10 hover:text-text-primary" : "invisible",

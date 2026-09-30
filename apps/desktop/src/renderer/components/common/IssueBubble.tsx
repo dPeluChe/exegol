@@ -66,6 +66,7 @@ export function IssueBubble({
           <button
             type="button"
             onClick={onDismiss}
+            aria-label="Dismiss"
             className="text-[10px] leading-none text-text-muted hover:text-text-primary"
           >
             ×
@@ -76,6 +77,7 @@ export function IssueBubble({
           value={message}
           onChange={(e) => onMessageChange(e.target.value)}
           placeholder="Describe what needs to change (optional)..."
+          aria-label="What needs to change"
           className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-primary placeholder:text-text-muted/50 focus:border-blue-500/50 focus:outline-none"
           rows={2}
         />

@@ -81,6 +81,10 @@ export function ProjectGroupHeader({
     setEditing(false);
   }, [editName, group.id, group.name, renameGroup]);
 
+  const count = (
+    <span className="shrink-0 text-[9px] tabular-nums text-text-muted">{projectCount}</span>
+  );
+
   return (
     <div className="mb-0.5">
       {/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for cross-group drag */}
@@ -89,6 +93,12 @@ export function ProjectGroupHeader({
         onDragEnter={onDragEnter}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
+        onContextMenu={handleContextMenu}
+        className={cn(
+          "flex w-full items-center rounded-md text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted transition-colors hover:bg-white/5",
+          isDropTarget && "bg-accent/10 ring-1 ring-accent/50",
+        )}
+        style={group.background ? { backgroundColor: group.background } : undefined}
       >
         <button
           type="button"
@@ -98,12 +108,10 @@ export function ProjectGroupHeader({
             setEditName(group.name);
             setEditing(true);
           }}
-          onContextMenu={handleContextMenu}
           className={cn(
-            "flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted transition-colors hover:bg-white/5",
-            isDropTarget && "bg-accent/10 ring-1 ring-accent/50",
+            "flex items-center gap-1.5 py-1 pl-2 text-left uppercase",
+            editing ? "shrink-0 pr-1.5" : "min-w-0 flex-1 pr-2",
           )}
-          style={group.background ? { backgroundColor: group.background } : undefined}
         >
           {group.collapsed ? (
             <ChevronRight className="h-3 w-3 shrink-0" />
@@ -115,26 +123,30 @@ export function ProjectGroupHeader({
             style={{ backgroundColor: group.color ?? "#6B7280" }}
           />
           <Icon className="h-3 w-3 shrink-0" style={{ color: group.color ?? undefined }} />
-          {editing ? (
-            <input
-              ref={inputRef}
-              type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitRename();
-                if (e.key === "Escape") setEditing(false);
-                e.stopPropagation();
-              }}
-              onBlur={submitRename}
-              onClick={(e) => e.stopPropagation()}
-              className="w-0 min-w-0 flex-1 rounded bg-bg-tertiary px-1 py-0 text-[11px] normal-case text-text-primary outline-none ring-1 ring-accent/50"
-            />
-          ) : (
-            <span className="min-w-0 flex-1 truncate normal-case">{group.name}</span>
+          {!editing && (
+            <>
+              <span className="min-w-0 flex-1 truncate normal-case">{group.name}</span>
+              {count}
+            </>
           )}
-          <span className="shrink-0 text-[9px] tabular-nums text-text-muted">{projectCount}</span>
         </button>
+        {editing && (
+          <input
+            ref={inputRef}
+            type="text"
+            aria-label="Group name"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submitRename();
+              if (e.key === "Escape") setEditing(false);
+              e.stopPropagation();
+            }}
+            onBlur={submitRename}
+            className="w-0 min-w-0 flex-1 rounded bg-bg-tertiary px-1 py-0 text-[11px] normal-case text-text-primary outline-none ring-1 ring-accent/50"
+          />
+        )}
+        {editing && <span className="flex shrink-0 py-1 pr-2 pl-1.5">{count}</span>}
       </div>
 
       {pickerOpen && (

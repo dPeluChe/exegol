@@ -15,16 +15,6 @@ interface SidebarSectionProps {
   children: React.ReactNode;
 }
 
-function ActionWrapper({ children }: { children: React.ReactNode }) {
-  return (
-    // biome-ignore lint/a11y/useKeyWithClickEvents: stopPropagation wrapper, not interactive itself
-    // biome-ignore lint/a11y/noStaticElementInteractions: stopPropagation wrapper
-    <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-      {children}
-    </span>
-  );
-}
-
 export function SidebarSection({
   title,
   icon: Icon,
@@ -42,26 +32,59 @@ export function SidebarSection({
   return (
     <div
       style={open && size === "cap" && height ? { height } : undefined}
-      className={cn(
-        "flex min-h-0 flex-col py-1",
-        !open && "shrink-0",
-        open &&
-          size === "cap" &&
-          (height ? "max-h-[calc(100%-4rem)] shrink-0" : "max-h-[45%] shrink-0"),
-        open && size === "fill" && "flex-1",
-        open && !size && "shrink-0",
-      )}
+      className={cn("flex min-h-0 flex-col py-1", sectionSizing(open, size, height))}
     >
-      {/* Header — div instead of button because action slot contains buttons (no nesting) */}
-      {/* biome-ignore lint/a11y/useSemanticElements: button nesting — action slot contains buttons */}
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={() => setOpen(!open)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") setOpen(!open);
-        }}
-        className="flex w-full shrink-0 cursor-pointer items-center gap-1 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary"
+      <SectionHeader
+        title={title}
+        icon={Icon}
+        count={count}
+        action={action}
+        open={open}
+        onToggle={() => setOpen(!open)}
+      />
+
+      {/* Content — collapsible */}
+      {/* No size: a bottom section; a % cap means nothing inside an auto-height footer */}
+      {open && (
+        <div
+          className={cn("sidebar-scroll min-h-0 overflow-y-auto px-3 pt-1", !size && "max-h-56")}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** How an open section takes the sidebar's height; a closed one keeps just its header */
+function sectionSizing(open: boolean, size: SidebarSectionProps["size"], height?: number | null) {
+  if (!open || !size) return "shrink-0";
+  if (size === "fill") return "flex-1";
+  return height ? "max-h-[calc(100%-4rem)] shrink-0" : "max-h-[45%] shrink-0";
+}
+
+/** The action is a sibling of the toggle so its buttons never nest */
+function SectionHeader({
+  title,
+  icon: Icon,
+  count,
+  action,
+  open,
+  onToggle,
+}: Pick<SidebarSectionProps, "title" | "icon" | "count" | "action"> & {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex w-full shrink-0 items-stretch text-[10px] font-semibold uppercase tracking-wider text-text-muted transition-colors hover:text-text-secondary">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={cn(
+          "flex min-w-0 flex-1 cursor-pointer items-center gap-1 py-1 pl-3 text-left uppercase",
+          !action && "pr-3",
+        )}
       >
         {open ? (
           <ChevronDown className="h-2.5 w-2.5 shrink-0" />
@@ -75,18 +98,8 @@ export function SidebarSection({
             {count}
           </span>
         )}
-        {action && <ActionWrapper>{action}</ActionWrapper>}
-      </div>
-
-      {/* Content — collapsible */}
-      {/* No size: a bottom section; a % cap means nothing inside an auto-height footer */}
-      {open && (
-        <div
-          className={cn("sidebar-scroll min-h-0 overflow-y-auto px-3 pt-1", !size && "max-h-56")}
-        >
-          {children}
-        </div>
-      )}
+      </button>
+      {action && <span className="flex shrink-0 items-center py-1 pr-3 pl-1">{action}</span>}
     </div>
   );
 }

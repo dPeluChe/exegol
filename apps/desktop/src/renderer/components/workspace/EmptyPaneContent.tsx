@@ -177,6 +177,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search agents..."
+          aria-label="Search agents"
           className="mb-2 w-full max-w-sm rounded-lg border border-border bg-bg-secondary px-3 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
         />
       )}

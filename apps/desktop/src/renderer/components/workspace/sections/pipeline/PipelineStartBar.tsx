@@ -30,6 +30,7 @@ export function PipelineStartBar({
         <select
           value={selectedTemplateId ?? ""}
           onChange={(e) => setSelectedTemplateId(e.target.value || null)}
+          aria-label="Pipeline template"
           className="flex-1 rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary focus:border-accent focus:outline-none"
         >
           <option value="">Select pipeline...</option>
@@ -69,6 +70,7 @@ export function PipelineStartBar({
       <textarea
         value={task}
         onChange={(e) => setTask(e.target.value)}
+        aria-label="Pipeline task"
         placeholder="What should this pipeline do? (becomes {{task}} in every step)"
         rows={2}
         className="mt-2 w-full resize-y rounded-lg border border-border bg-bg-secondary px-2 py-1.5 text-[11px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"

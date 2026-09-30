@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Sidebar: Projects sits at the bottom, above the reference sections, and its height is yours: drag the line above it (double-click fits it to its projects again); Agents fills the rest
 
 ### Fixed
+- Accessibility: every icon-only button and unlabeled field has a name for screen readers, tabs, sidebar rows, toasts and dashboard cards are real buttons (keyboard works, no button inside a button), and a tab's close button shows on keyboard focus
 - Terminal Files: a file opens over the terminal instead of in a new tab, Esc closes it (then the panel) before the CLI sees it, and the panel shows one Files header
 - Sidebar: dragging an Agents group now reorders it (and Cmd+2..9 with it); grab it from anywhere, a click still jumps to it
 

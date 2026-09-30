@@ -135,6 +135,7 @@ export function BrowserQaRecordingBar({
             value={testName}
             onChange={(e) => onSetTestName(e.target.value)}
             placeholder="Test name..."
+            aria-label="Test name"
             className="flex-1 rounded border border-border bg-bg-secondary px-2 py-0.5 text-[10px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
             onKeyDown={(e) => {
               if (e.key === "Enter") onSaveTest();

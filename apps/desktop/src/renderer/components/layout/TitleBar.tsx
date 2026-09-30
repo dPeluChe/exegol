@@ -53,6 +53,7 @@ export function TitleBar() {
           <button
             type="button"
             onClick={() => window.api.windowControls.minimize()}
+            aria-label="Minimize"
             className="flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-white/10"
           >
             <Minus className="h-3.5 w-3.5 text-text-secondary" />
@@ -60,6 +61,7 @@ export function TitleBar() {
           <button
             type="button"
             onClick={() => window.api.windowControls.maximize()}
+            aria-label="Maximize"
             className="flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-white/10"
           >
             <Square className="h-3 w-3 text-text-secondary" />
@@ -67,6 +69,7 @@ export function TitleBar() {
           <button
             type="button"
             onClick={() => window.api.windowControls.close()}
+            aria-label="Close"
             className="flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-red-500/80"
           >
             <X className="h-3.5 w-3.5 text-text-secondary" />

@@ -151,6 +151,7 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close run"
             className="text-text-muted hover:text-text-primary"
           >
             <X className="h-4 w-4" />

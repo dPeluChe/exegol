@@ -190,6 +190,25 @@ export function ProjectItem({
     setEditing(false);
   }, [editName, project.id, project.name, onRename]);
 
+  const counts = (
+    <>
+      {pausedCount > 0 && (
+        <span
+          className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-white/5 px-1 text-[10px] text-text-muted"
+          title={`${pausedCount} suspended session${pausedCount === 1 ? "" : "s"}`}
+        >
+          <Pause className="h-2.5 w-2.5" />
+          {pausedCount > 1 && pausedCount}
+        </span>
+      )}
+      {runningCount > 0 && (
+        <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-accent/20 px-1 text-[10px] text-accent">
+          {runningCount}
+        </span>
+      )}
+    </>
+  );
+
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: draggable project item
     <section
@@ -199,74 +218,65 @@ export function ProjectItem({
       onDrop={() => onDrop(index)}
       className="cursor-grab active:cursor-grabbing"
     >
-      <button
-        type="button"
-        onClick={onSelect}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          setEditName(project.name);
-          setEditing(true);
-        }}
-        onContextMenu={handleContextMenu}
+      <div
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+          "flex w-full items-center rounded-md text-left text-xs transition-colors",
           isSelected ? "bg-white/10 text-text-primary" : "text-text-secondary hover:bg-white/5",
         )}
       >
-        <span
-          role="none"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggle();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.stopPropagation();
-              e.preventDefault();
-              onToggle();
-            }
-          }}
-          className="shrink-0"
+        <button
+          type="button"
+          onClick={onToggle}
+          onContextMenu={handleContextMenu}
+          aria-label={isExpanded ? "Collapse project" : "Expand project"}
+          aria-expanded={isExpanded}
+          className="shrink-0 py-1.5 pl-2"
         >
           {isExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        </span>
-
-        <ProjectAvatar project={project} />
-
-        {editing ? (
-          <input
-            ref={inputRef}
-            type="text"
-            value={editName}
-            onChange={(e) => setEditName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") submitRename();
-              if (e.key === "Escape") setEditing(false);
-              e.stopPropagation();
-            }}
-            onBlur={submitRename}
-            onClick={(e) => e.stopPropagation()}
-            className="w-0 min-w-0 flex-1 rounded bg-bg-tertiary px-1 py-0 text-xs text-text-primary outline-none ring-1 ring-accent/50"
-          />
-        ) : (
-          <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
+        </button>
+        <button
+          type="button"
+          onClick={onSelect}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            setEditName(project.name);
+            setEditing(true);
+          }}
+          onContextMenu={handleContextMenu}
+          className={cn(
+            "flex items-center gap-2 py-1.5 pl-2 text-left",
+            editing ? "shrink-0 pr-2" : "min-w-0 flex-1 pr-2",
+          )}
+        >
+          <ProjectAvatar project={project} />
+          {!editing && (
+            <>
+              <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
+              {counts}
+            </>
+          )}
+        </button>
+        {editing && (
+          <>
+            <input
+              ref={inputRef}
+              type="text"
+              aria-label="Project name"
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitRename();
+                if (e.key === "Escape") setEditing(false);
+                e.stopPropagation();
+              }}
+              onBlur={submitRename}
+              onContextMenu={handleContextMenu}
+              className="w-0 min-w-0 flex-1 rounded bg-bg-tertiary px-1 py-0 text-xs text-text-primary outline-none ring-1 ring-accent/50"
+            />
+            <span className="flex shrink-0 items-center gap-2 py-1.5 pr-2 pl-2">{counts}</span>
+          </>
         )}
-
-        {pausedCount > 0 && (
-          <span
-            className="flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-white/5 px-1 text-[10px] text-text-muted"
-            title={`${pausedCount} suspended session${pausedCount === 1 ? "" : "s"}`}
-          >
-            <Pause className="h-2.5 w-2.5" />
-            {pausedCount > 1 && pausedCount}
-          </span>
-        )}
-        {runningCount > 0 && (
-          <span className="flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-accent/20 px-1 text-[10px] text-accent">
-            {runningCount}
-          </span>
-        )}
-      </button>
+      </div>
 
       {contextMenu && (
         <div

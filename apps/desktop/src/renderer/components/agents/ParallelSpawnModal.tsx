@@ -156,6 +156,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
           >
             <X className="h-4 w-4" />

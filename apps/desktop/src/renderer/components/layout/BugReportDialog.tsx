@@ -79,6 +79,7 @@ function BugReportDialog() {
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="What were you doing, what did you expect, what happened instead?"
+          aria-label="Bug description"
           rows={4}
           className="w-full resize-y rounded-lg border border-border bg-bg-primary px-2 py-1.5 text-[12px] text-text-primary placeholder:text-text-muted focus:border-accent focus:outline-none"
         />
