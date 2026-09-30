@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.8] — 2026-09-29 — What's new on update, agent message threads, accessibility
+
 ### Added
 - Dashboard: an agent card shows its messages with the other agents (who, what, and whether it was delivered or read)
 - Updates show what's new: the release notes of every version since yours, with their dates, from the update button (opens by itself after Check for updates), and once after installing
