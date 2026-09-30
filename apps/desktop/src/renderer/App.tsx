@@ -4,6 +4,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { LoadingSpinner } from "./components/common";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
+import { CliUpdatesNotice } from "./components/layout/CliUpdatesNotice";
 import { WhatsNewAfterUpdate } from "./components/layout/ReleaseNotesDialog";
 import { Sidebar } from "./components/layout/Sidebar";
 import { SidebarRail } from "./components/layout/SidebarRail";
@@ -96,6 +97,7 @@ export default function App() {
       <div className="flex h-screen w-screen flex-col bg-bg-primary">
         <TitleBar />
         <WhatsNewAfterUpdate />
+        <CliUpdatesNotice />
         <UpdateBanner />
 
         <div className="flex-1 overflow-hidden">
