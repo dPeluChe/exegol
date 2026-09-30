@@ -152,11 +152,13 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 - **Exegol MCP server** (T145): Unix socket (`~/.exegol/mcp-server.sock`, chmod 600) + stdio shim written into the agent's `.mcp.json`. Identity = per-agent token (`EXEGOL_MCP_TOKEN`) minted at spawn, revoked on exit; server derives accessMode from DB per call — client claims never trusted. 13 tools (`exegol-protocol.ts`): memory_search, memory_list, memory_save, knowledge_get, agents_list, agent_send, message_status, message_cancel, messages_check, claim_paths, release_paths, list_claims, agent_link. Shells skip.
 - **Memory salience v2** (T126): `similarity × log(reinforcement+1) × exp(-0.693·days/30)`; re-observed facts reinforce, contradictions supersede (transactional, deindexed); recall = hybrid FTS5+Ollama RRF (T125) with one-time backfill + LIKE fallback.
 - **Ring-buffer eviction** (T143): global cap with LRU eviction of idle sessions to disk — `RingBuffer.release()` actually frees the 8MB allocation; `reloadIfEvicted` regrows on next write.
+- **Agent messages**: `messages` router is read-only (`list`, `conversation`); the Dashboard card shows each agent's thread with `delivery_state`; only the Exegol MCP tools send
+- **Sidebar**: live tab groups reorder with pointer events (`usePointerReorder`); Projects sits at the bottom with its height persisted as `sidebarProjectsHeight`
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Shell → agent** (`agents/shell-promotion.ts`): a CLI typed in a plain terminal (any provider) promotes that same row in place: `cli_type` → the provider, `launched_in_shell = 1`, codename alias, output pipeline attached (parser, no hooks). CLI exits → `idle` at the prompt, still the agent (reattached and swept like a live one); toolbar Continue writes the provider's resume command into that shell. One `ps` every 3s while a terminal session is live
 - **Auto-save**: Settings tabs save independently (General/Terminal auto-save on change, CLIs save per field)
 - **Startup instrumentation**: `[Startup] dbInit`, `criticalPath`, `windowCreated`, `firstPaint` log lines (single-log guarded); `[Reattach]` + `[Recovery]` per-agent decisions for diagnosing recovery issues
-- **Bundle splits**: workspace sections, xterm+addons, SettingsRoot, ProjectList, CommandPalette, FloatingPaneRoot are all lazy chunks — initial `index.js` ~1,026 KB
+- **Bundle splits**: workspace sections, xterm+addons, SettingsRoot, ProjectList, CommandPalette, FloatingPaneRoot are all lazy chunks — initial `index.js` ~812 KB (measured 2026-09-29)
 - **Bundled Nerd Fonts**: 3 fonts (MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono) shipped inside the renderer assets, loaded via `@font-face` in `styles/fonts.css`, lazy-fetched from disk only when referenced
 
 ### Rust native module (`packages/core-rust`)
@@ -186,19 +188,21 @@ apps/desktop/src/
     hooks/          project-hooks
     pipeline/       executor, context, state-machine (T78), evaluator +
                     evaluator-step-handler (T88v2), evidence (T130), oplog-snapshots (T129)
-    mcp/            host (stdio/HTTP), registry, exegol-server + exegol-protocol +
+    mcp/            host + registry (kept, unused, no UI: see TASK_TODO MCP HOST), exegol-server + exegol-protocol +
                     exegol-tools + the MCP shim and claim-guard bins (T145 agent runtime API)
-    memory/         extractor (ANSI-stripped, observeMemory), store (hybrid RRF recall),
+    memory/         extractor (not wired on exit, T193.8), store (hybrid RRF recall),
                     salience (T126 decay/reinforce/supersede)
     knowledge/      brief, digest, staleness, managed-block, memory-bridge, context (T140)
     notifications/  bus + channels/desktop (T124)
     lifecycle/      loader (T91: .exegol/lifecycle.yaml parser + runner)
-    lib/            logger, errors (T80: ExegolError hierarchy + withRetry)
+    lib/            logger, errors (T80: ExegolError hierarchy + withRetry), parse-json
+                    (`parseJson(text, schema)`), concurrency (`mapWithConcurrency`)
     skills/         loader, discovery, defaults (5 personas)
     scheduler/      engine (cron + dependency-aware)
     security/       keystore (safeStorage)
     system/         resources (metrics + threshold alerts), ports (lsof + config), doctor (T148),
-                    auto-updater, tray, cli-installer, scripts
+                    auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
+                    work-guard, diagnostics, project-icons
     ide/            opener (vscode, cursor, zed, windsurf, custom)
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router)
   renderer/
@@ -206,12 +210,13 @@ apps/desktop/src/
       workspace/    WorkspaceView, WorkspaceTabs (3 main: Agents, Project, Monitor + sub-tabs; Dashboard is its own view), WorkspacePane (5 types),
                     WorkspaceTabBar (quick launch + LayoutPresets dropdown), WorkspaceLayout,
                     GitPane (with SmartGitAction), LayoutPresets, SmartGitAction,
-                    PaneContextMenu, sections/ (29 section components + pipeline/, tasks/), diff/
+                    PaneContextMenu, sections/ (30 section components + pipeline/, tasks/), diff/
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,
                     YOLO/Active toggles), TerminalSettings (bundled fonts, per-card preview,
                     family chain badges, promote-on-click), ApiKeysSettings
       terminal/     TerminalPanel (live/read-only/crashed, snapshot probe on reattach),
-                    TerminalInstance (xterm.js + WebGL + Serialize)
+                    TerminalInstance (xterm.js + WebGL + Serialize), use-xterm owns the xterm
+                    lifecycle (WebGL and the dormant pipe follow the live session)
       common/       AgentIcon (glob *.{svg,png}, dark/light), EmptyState, StatusDot, ConfirmDialog
       agents/       AgentLauncher (portal dropdown from registry)
       onboarding/   OnboardingWizard (T148 first-run: CLI detect + keys + doctor)
@@ -221,11 +226,13 @@ apps/desktop/src/
     SettingsRoot.tsx      (T120 — top-level renderer for the standalone settings window)
     hooks/          use-hotkeys, use-theme, use-trpc, use-auto-select-project,
                     use-floating-pane-sync (unmark panes when floating window closes),
-                    use-settings-sync (T120 — invalidate ['settings'] on cross-window broadcast)
+                    use-settings-sync (T120 — invalidate ['settings'] on cross-window broadcast),
+                    use-latest, use-pointer-reorder, use-context-menu
     stores/         app, agents (push events, shell auto-cleanup), terminals,
                     workspace (5 pane types, recovery, custom layouts, floatingPanes)
     lib/            layout-presets (pure transformation helpers), trpc-client,
-                    dispatch-refit, semantic-colors
+                    dispatch-refit, semantic-colors, access-modes, open-in-browser,
+                    pointer-reorder, release-notes
     assets/
       fonts/        MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono (~6.8 MB, bundled)
       icons/        27 SVG/PNG + 1 JPG icons (agents, IDEs, providers)

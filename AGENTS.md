@@ -16,6 +16,8 @@ cd apps/desktop && npx vitest run src/path/file.test.ts   # one test file
 npx -y @biomejs/biome@2.4.7 check --write apps/ packages/shared/src   # format (pinned only)
 ```
 
+React health: CI runs react-doctor@0.9.14 on the PR's changes; errors fail; fix the cause, no disables.
+
 ## Before you finish a change
 
 - Lint, typecheck and tests all pass, with no warnings.
