@@ -275,7 +275,8 @@ export function buildPtyInvocation(
       // agent_send targets die on every restart (paco lost his name, 2026-08-12).
       // Overwrites the codename createAgent just assigned: continuing a session
       // must keep the name others already address it by.
-      if (row?.alias && sourceAgentId !== agent.id) {
+      // A name typed in the launcher wins over the old one
+      if (row?.alias && sourceAgentId !== agent.id && !config.name) {
         db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(row.alias, agent.id);
       }
       // The old row is deleted after a resume: keep the id on the new one, or a

@@ -102,6 +102,30 @@ export const YOLO_FLAGS: Record<string, string> = {
   goose: "--no-confirm",
 };
 
+/**
+ * Per-launch model: the flag each CLI takes (from its --help, 2026-09-30). CLIs without one at
+ * launch (amp has modes, crush and droid read their config, goose only on `run`) are left out,
+ * and the launcher shows no model field for them.
+ */
+export const MODEL_FLAGS: Record<string, string> = {
+  "claude-code": "--model",
+  codex: "--model",
+  gemini: "-m",
+  agy: "--model",
+  devin: "--model",
+  aider: "--model",
+  opencode: "-m",
+  kilocode: "-m",
+};
+
+/** Suggestions in the launcher; any other id the CLI accepts can be typed */
+export const MODEL_SUGGESTIONS: Record<string, string[]> = {
+  "claude-code": ["sonnet", "opus", "haiku"],
+};
+
+/** Goes into the shell command unquoted: model ids only (letters, digits, . _ - : / @) */
+export const MODEL_ID_PATTERN = /^[\w.:/@-]{1,100}$/;
+
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 
@@ -185,6 +209,10 @@ export type AgentCreate = {
   yolo?: boolean;
   /** T177: branch/ref the worktree is cut from; undefined means the repo's HEAD. */
   baseBranch?: string;
+  /** Model for this launch (MODEL_FLAGS); undefined keeps the CLI's default */
+  model?: string;
+  /** Session name (alias); undefined picks a codename, or keeps the resumed session's */
+  name?: string;
 };
 
 // ─── Provider Registry ──────────────────────────────────────────────────────

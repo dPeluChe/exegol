@@ -36,6 +36,7 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Shell to agent**: type a CLI in a plain terminal and that terminal becomes the agent (name,
   status, Dashboard); when the CLI exits, Continue resumes it.
 - **Send to**: select text in one terminal and paste it into another live agent.
+- **Launch options**: model (for CLIs with a model flag) and session name in the launcher.
 - **Access modes**: read, write or plan per agent or pipeline step, shown as a badge.
 - **Resume**: Claude sessions resume with their session id after a restart.
 - **Terminal or chat view**: switch any agent between the raw terminal and a readable chat.

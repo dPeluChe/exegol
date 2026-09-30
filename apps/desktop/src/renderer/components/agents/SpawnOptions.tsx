@@ -1,4 +1,10 @@
-import type { AgentAccessMode, AgentProvider } from "@exegol/shared";
+import {
+  type AgentAccessMode,
+  type AgentProvider,
+  MODEL_FLAGS,
+  MODEL_ID_PATTERN,
+  MODEL_SUGGESTIONS,
+} from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
@@ -170,6 +176,67 @@ export function SkillPicker({
             {s.name}
           </SpawnChip>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const INPUT_CLASS =
+  "w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50";
+
+/** Optional model (for CLIs that take one at launch) and session name; empty keeps the
+ *  CLI's default model and a codename */
+export function ModelAndName({
+  providerId,
+  model,
+  onModel,
+  name,
+  onName,
+}: {
+  providerId: string;
+  model: string;
+  onModel: (model: string) => void;
+  name: string;
+  onName: (name: string) => void;
+}) {
+  const modelFlag = MODEL_FLAGS[providerId];
+  const suggestions = MODEL_SUGGESTIONS[providerId] ?? [];
+  const invalid = model.trim() !== "" && !MODEL_ID_PATTERN.test(model.trim());
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {modelFlag && (
+        <div className="flex flex-col gap-1.5">
+          <label className="text-[11px] font-medium text-text-muted" htmlFor="spawn-model">
+            Model <span className="font-mono text-[10px]">{modelFlag}</span>
+          </label>
+          <input
+            id="spawn-model"
+            list="spawn-model-options"
+            value={model}
+            onChange={(e) => onModel(e.target.value)}
+            placeholder="CLI default"
+            aria-invalid={invalid}
+            className={cn(INPUT_CLASS, invalid && "border-red-500/60")}
+          />
+          <datalist id="spawn-model-options">
+            {suggestions.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </div>
+      )}
+      <div className={cn("flex flex-col gap-1.5", !modelFlag && "col-span-2")}>
+        <label className="text-[11px] font-medium text-text-muted" htmlFor="spawn-name">
+          Name <span className="text-text-muted">(optional)</span>
+        </label>
+        <input
+          id="spawn-name"
+          value={name}
+          maxLength={40}
+          onChange={(e) => onName(e.target.value)}
+          placeholder="A codename if empty"
+          className={INPUT_CLASS}
+        />
       </div>
     </div>
   );

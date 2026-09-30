@@ -71,6 +71,8 @@ export function useSpawnForm({
   const [baseBranch, setBaseBranch] = useState("");
   // Claude's own sessions in this folder, by /rename name: --continue only reaches the latest
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
+  const [model, setModel] = useState("");
+  const [name, setName] = useState("");
 
   // None picked yet: the first enabled provider
   const providerId = pickedProviderId || enabledProviders[0]?.id || "";
@@ -85,6 +87,8 @@ export function useSpawnForm({
       current === "last" || (current && current.cliType !== id) ? null : current,
     );
     setLocalSessionId(null);
+    // A model id belongs to one CLI
+    setModel("");
   };
 
   const chooseSession = (choice: SessionChoice) => {
@@ -140,6 +144,10 @@ export function useSpawnForm({
     chooseLocalSession,
     yolo,
     setYolo,
+    model,
+    setModel,
+    name,
+    setName,
   };
 }
 
