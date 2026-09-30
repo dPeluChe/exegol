@@ -14,10 +14,11 @@ export function useHotkeys() {
   useEffect(() => {
     const isMac = window.api.app.getPlatform() === "darwin";
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Tab / Ctrl+Shift+Tab: cycle workspace tabs (works without Cmd)
+      // Ctrl+Tab / Ctrl+Shift+Tab: next or previous pane of the tab (plain Tab stays with the
+      // terminal; tabs cycle with Cmd+Shift+[ ])
       if (e.ctrlKey && e.key === "Tab") {
         e.preventDefault();
-        navigateWorkspaceTab(e.shiftKey ? "prev" : "next");
+        cyclePane(e.shiftKey ? "prev" : "next");
         return;
       }
 
