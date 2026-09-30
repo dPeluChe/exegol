@@ -10,16 +10,14 @@
  * line).
  */
 
-export type CommandRefusalReason =
+type CommandRefusalReason =
   | "fork-bomb"
   | "rm-rf-root"
   | "dd-of-disk"
   | "curl-pipe-sh"
   | "bidi-chars";
 
-export type CommandRefusal =
-  | { ok: true }
-  | { ok: false; reason: CommandRefusalReason; matched: string };
+type CommandRefusal = { ok: true } | { ok: false; reason: CommandRefusalReason; matched: string };
 
 // Bidi formatting chars (Trojan Source). Same range as path-guard.
 const BIDI_CHAR_RE = /[‪-‮⁦-⁩‎‏؜]/u;

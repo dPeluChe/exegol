@@ -47,5 +47,3 @@ export function SettingsRoot() {
     </TooltipProvider>
   );
 }
-
-export default SettingsRoot;

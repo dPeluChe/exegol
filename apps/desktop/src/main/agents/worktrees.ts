@@ -6,7 +6,7 @@ import { coreRust } from "./spawn-env";
 
 type RootKind = "worktrees" | "pipelines";
 
-export interface ManagedWorktreeInfo {
+interface ManagedWorktreeInfo {
   branchName: string;
   requestedBranchName: string;
   worktreeName: string;

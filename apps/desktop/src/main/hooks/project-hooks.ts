@@ -9,7 +9,7 @@ import { inspectCommand } from "../security/command-guard";
 
 const HOOK_TIMEOUT_MS = 120_000; // 2 minutes
 
-export interface ProjectHooks {
+interface ProjectHooks {
   setup?: string; // Runs after worktree creation
   archive?: string; // Runs before worktree deletion
 }

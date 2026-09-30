@@ -1,7 +1,7 @@
 /** Past this a press is a drag, not a click */
 const THRESHOLD_PX = 4;
 
-export interface ReorderGesture {
+interface ReorderGesture {
   key: string;
   startX: number;
   startY: number;

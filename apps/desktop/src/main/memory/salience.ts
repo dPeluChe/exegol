@@ -60,7 +60,7 @@ const DUPLICATE_THRESHOLD = 0.8;
  */
 const CONTRADICTION_THRESHOLD = 0.5;
 
-export type ObservationDecision =
+type ObservationDecision =
   | { action: "reinforce"; matchId: string }
   | { action: "supersede"; matchId: string }
   | { action: "create" };

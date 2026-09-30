@@ -3,7 +3,7 @@ import { getContext } from "tokenlens";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 
 export type ModelPrice = { input: number; output: number };
-export type ModelCatalog = Record<string, ModelPrice>;
+type ModelCatalog = Record<string, ModelPrice>;
 
 export function useModelCatalog() {
   return useQuery({

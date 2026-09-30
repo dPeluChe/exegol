@@ -8,5 +8,8 @@
   "types": "./src/index.ts",
   "dependencies": {
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.2"
   }
 }

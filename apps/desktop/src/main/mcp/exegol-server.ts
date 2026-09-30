@@ -331,9 +331,9 @@ function resolveContext(
 // > Activity). Backend-log lines are opt-in (`mcpVerboseLogging`) so a chatty
 // fleet doesn't drown the app log.
 
-export type McpActivityKind = "connect" | "disconnect" | "call" | "error";
+type McpActivityKind = "connect" | "disconnect" | "call" | "error";
 
-export interface McpActivityEntry {
+interface McpActivityEntry {
   at: number;
   kind: McpActivityKind;
   tool?: string;

@@ -160,10 +160,6 @@ function ensureAgentSymlink(configDir: string, skillsSubdir: string): void {
   }
 }
 
-// ─── Validation ─────────────────────────────────────────────────────────────
-
-export type SymlinkStatus = "ok" | "missing" | "broken" | "has-files";
-
 // ─── Cleanup stale symlinks ─────────────────────────────────────────────────
 
 /**

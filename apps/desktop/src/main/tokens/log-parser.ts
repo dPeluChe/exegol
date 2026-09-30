@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface ParsedTokenEntry {
+interface ParsedTokenEntry {
   provider: string;
   model: string;
   inputTokens: number;

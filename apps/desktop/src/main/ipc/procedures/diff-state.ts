@@ -1,6 +1,6 @@
 import { detectGhCli, execFileAsync } from "./diff-helpers";
 
-export interface GitState {
+interface GitState {
   branch: string;
   hasUpstream: boolean;
   ahead: number;

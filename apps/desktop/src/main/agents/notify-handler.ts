@@ -26,7 +26,7 @@ export interface AgentEvent {
   payload?: Record<string, unknown>;
 }
 
-export type EventCallback = (event: AgentEvent) => void;
+type EventCallback = (event: AgentEvent) => void;
 
 // ─── Event log persistence ──────────────────────────────────────────────────
 

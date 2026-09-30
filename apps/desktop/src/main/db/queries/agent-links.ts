@@ -4,7 +4,7 @@ import { nanoid } from "./helpers";
 export const AGENT_LINK_ROLES = ["notify", "reviewer", "feedback"] as const;
 export type AgentLinkRole = (typeof AGENT_LINK_ROLES)[number];
 
-export interface AgentLink {
+interface AgentLink {
   id: string;
   fromAgentId: string;
   toAgentId: string;

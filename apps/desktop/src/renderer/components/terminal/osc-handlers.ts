@@ -7,7 +7,7 @@ import type { IMarker, Terminal } from "@xterm/xterm";
  * shell's OSC 7 through our PTY. Only OSC 7 issued between commands by our
  * local shell hook is trusted.
  */
-export interface ShellIntegrationState {
+interface ShellIntegrationState {
   inCommand: boolean;
 }
 
@@ -15,7 +15,7 @@ export function createShellIntegrationState(): ShellIntegrationState {
   return { inCommand: false };
 }
 
-export interface OscHandlerDeps {
+interface OscHandlerDeps {
   setCwd: (cwd: string) => void;
   setLastExit: (code: number | null) => void;
   /** Current theme colors, read at ANSWER time so a theme switch mid-session is
@@ -23,7 +23,7 @@ export interface OscHandlerDeps {
   getColors?: () => TerminalColors;
 }
 
-export interface TerminalColors {
+interface TerminalColors {
   foreground: string;
   background: string;
   cursor: string;

@@ -32,10 +32,6 @@ export interface ResizePayload {
   rows: number;
 }
 
-export interface SpawnedPayload {
-  pid: number;
-}
-
 export interface ExitPayload {
   exitCode: number;
   signal?: number;

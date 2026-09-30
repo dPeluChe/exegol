@@ -7,7 +7,7 @@ import { open } from "node:fs/promises";
  */
 const HEAD_BYTES = 64 * 1024;
 
-export interface FileHead {
+interface FileHead {
   /** First `HEAD_BYTES` as UTF-8. The final line is usually truncated — callers
    *  parse line by line and tolerate the tail failing. */
   head: string;

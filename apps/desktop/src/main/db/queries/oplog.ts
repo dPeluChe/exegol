@@ -6,7 +6,7 @@ export type { OplogEntry, OplogOperation };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface OplogEntryCreate {
+interface OplogEntryCreate {
   agentId: string;
   projectId: string;
   operation: OplogOperation;

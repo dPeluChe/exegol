@@ -32,7 +32,7 @@ export interface AgentContext {
 
 // ─── Push event types ────────────────────────────────────────────────────
 
-export interface AgentStatusEvent {
+interface AgentStatusEvent {
   agentId: string;
   projectId: string;
   status: AgentStatus;

@@ -83,11 +83,7 @@ export async function isPathAllowed(filePath: string, allowedBases: string[]): P
  * Reasons a path can be refused by {@link assertSafePath}. Exhaustive so callers
  * can switch over them.
  */
-export type PathGuardReason =
-  | "bidi-chars"
-  | "ads-suffix"
-  | "sensitive-path"
-  | "outside-allowed-bases";
+type PathGuardReason = "bidi-chars" | "ads-suffix" | "sensitive-path" | "outside-allowed-bases";
 
 export class PathGuardError extends Error {
   readonly reason: PathGuardReason;

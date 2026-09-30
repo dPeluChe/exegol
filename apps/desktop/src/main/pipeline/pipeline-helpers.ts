@@ -27,7 +27,7 @@ export function now(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-export interface GitSyncStatus {
+interface GitSyncStatus {
   clean: boolean;
   uncommittedChanges: boolean;
   unpushedCommits: number;

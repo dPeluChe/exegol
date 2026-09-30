@@ -4,7 +4,7 @@ import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
 
 const execFileAsync = promisify(execFile);
 
-export interface ProcRow {
+interface ProcRow {
   pid: number;
   ppid: number;
   args: string;

@@ -70,7 +70,7 @@ export interface SidecarSessionMemory {
   evicted: boolean;
 }
 
-export interface SidecarMemoryReport {
+interface SidecarMemoryReport {
   sessions: SidecarSessionMemory[];
   totalCapacityBytes: number;
   globalCapBytes: number;

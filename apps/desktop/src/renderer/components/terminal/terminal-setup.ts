@@ -13,7 +13,7 @@ import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
 import { registerTerminalLinkProviders } from "./terminal-links";
 import type { TerminalInstanceProps } from "./terminal-types";
 
-export interface TerminalSessionDeps {
+interface TerminalSessionDeps {
   agentId: string;
   paneId?: string;
   cliType?: string;

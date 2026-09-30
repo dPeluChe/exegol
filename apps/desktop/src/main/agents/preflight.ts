@@ -5,12 +5,12 @@ import type { AgentCliType } from "@exegol/shared";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface PreflightIssue {
+interface PreflightIssue {
   code: string;
   message: string;
 }
 
-export interface PreflightResult {
+interface PreflightResult {
   ok: boolean;
   /** Blocking — spawn should not proceed */
   errors: PreflightIssue[];
@@ -45,7 +45,7 @@ async function checkGitRepo(projectPath: string): Promise<boolean> {
 
 // ─── Main entry ───────────────────────────────────────────────────────────────
 
-export interface PreflightOptions {
+interface PreflightOptions {
   cliType: AgentCliType;
   command: string;
   projectPath: string;

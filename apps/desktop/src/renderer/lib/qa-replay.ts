@@ -34,13 +34,13 @@ export interface QaReplayResult {
   totalDurationMs: number;
 }
 
-export interface QaReplayCallbacks {
+interface QaReplayCallbacks {
   onStepStart?: (index: number, action: QaAction) => void;
   onStepComplete?: (result: QaStepResult) => void;
   onComplete?: (result: QaReplayResult) => void;
 }
 
-export interface QaReplayOptions {
+interface QaReplayOptions {
   /** Stop executing further steps on the first failure. Default: false. */
   stopOnFail?: boolean;
 }

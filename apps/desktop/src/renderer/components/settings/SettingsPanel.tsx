@@ -55,7 +55,7 @@ const TAB_CONTENT: Record<SettingsTab, (props: TabContentProps) => ReactNode> = 
   doctor: () => <DoctorSettings />,
 };
 
-export interface SettingsPanelProps {
+interface SettingsPanelProps {
   /** Initial tab selection (used by the standalone settings window for deep-links). */
   initialTab?: SettingsTab;
   /** Called when the back/close button is pressed. Required — there is no in-app embed. */

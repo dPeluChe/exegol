@@ -182,14 +182,14 @@ export function getDailyTrend(
 
 // ─── T147: Per-pipeline-run cost (backend only — no T130 evidence UI yet) ──
 
-export interface PipelineRunStepCost {
+interface PipelineRunStepCost {
   stepIndex: number;
   agentId: string | null;
   cost: number;
   tokens: number;
 }
 
-export interface PipelineRunCost {
+interface PipelineRunCost {
   totalCost: number;
   totalTokens: number;
   perStep: PipelineRunStepCost[];

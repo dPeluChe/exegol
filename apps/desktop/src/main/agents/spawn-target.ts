@@ -31,7 +31,7 @@ export function findReusableWorktree(
   return listWorktrees(db, projectId).find((w) => w.branchName === branchName) ?? null;
 }
 
-export interface SpawnTarget {
+interface SpawnTarget {
   cwd: string;
   branchName: string | null;
   /** True when an existing worktree answers for this branch. */

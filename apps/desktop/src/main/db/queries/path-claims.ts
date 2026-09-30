@@ -17,7 +17,7 @@ import { LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "./helpers";
 
-export interface PathClaim {
+interface PathClaim {
   id: string;
   agentId: string;
   projectId: string;
@@ -25,7 +25,7 @@ export interface PathClaim {
   note: string | null;
 }
 
-export interface ClaimConflict {
+interface ClaimConflict {
   path: string;
   heldBy: string;
   heldByName: string | null;

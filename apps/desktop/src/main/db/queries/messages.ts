@@ -137,7 +137,7 @@ export type MessageDeliveryState =
   | "cancelled"
   | "undeliverable";
 
-export interface MessageDelivery {
+interface MessageDelivery {
   fromAgentId: string | null;
   toAgentId: string | null;
   state: MessageDeliveryState | null;

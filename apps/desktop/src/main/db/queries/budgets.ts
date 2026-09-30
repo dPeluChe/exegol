@@ -33,7 +33,7 @@ export function getBudget(
   return row ? mapBudgetRow(row) : null;
 }
 
-export interface UpsertBudgetInput {
+interface UpsertBudgetInput {
   projectId: string;
   period: BudgetPeriod;
   limitType: BudgetLimitType;
@@ -101,7 +101,7 @@ function periodWindow(period: BudgetPeriod): { since: number; periodKey: string 
   };
 }
 
-export interface BudgetUsage {
+interface BudgetUsage {
   tokens: number;
   costUsd: number;
   since: number;

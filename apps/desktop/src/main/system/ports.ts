@@ -6,20 +6,20 @@ import { AsyncLruCache } from "../lib/lru-cache";
 
 const execFileAsync = promisify(execFile);
 
-export interface DetectedPort {
+interface DetectedPort {
   port: number;
   pid: number;
   process: string;
   source: "runtime";
 }
 
-export interface ConfiguredPort {
+interface ConfiguredPort {
   port: number;
   source: "config";
   file: string;
 }
 
-export type PortInfo = DetectedPort | ConfiguredPort;
+type PortInfo = DetectedPort | ConfiguredPort;
 
 // Every sidebar project row and the dev-server list poll ports on their own: without a
 // short cache N rows ran the same lsof scans N times per tick
@@ -27,7 +27,7 @@ const SCAN_TTL_MS = 3_000;
 const cwdScans = new AsyncLruCache<string, Map<number, string>>(4, SCAN_TTL_MS);
 const listenerScans = new AsyncLruCache<string, TcpListener[]>(4, SCAN_TTL_MS);
 
-export interface TcpListener {
+interface TcpListener {
   port: number;
   pid: number;
   process: string;

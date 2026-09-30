@@ -22,12 +22,8 @@ export function isTrpcPathAllowed(path: string): boolean {
 }
 
 export class CapabilityDeniedError extends Error {
-  readonly kind: "trpc" | "ipc";
-  readonly target: string;
   constructor(kind: "trpc" | "ipc", target: string) {
     super(`Capability denied: ${kind === "trpc" ? target : `ipc:${target}`}`);
     this.name = "CapabilityDeniedError";
-    this.kind = kind;
-    this.target = target;
   }
 }

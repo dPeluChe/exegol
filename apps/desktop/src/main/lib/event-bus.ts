@@ -8,7 +8,7 @@
  * calls scattered across the codebase, centralizing the broadcast mechanism.
  */
 
-export interface EventBusTransport {
+interface EventBusTransport {
   /** Send an event to all connected clients */
   broadcast(channel: string, ...args: unknown[]): void;
 }

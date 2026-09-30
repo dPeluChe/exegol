@@ -20,7 +20,7 @@ import { generateEmbeddingsBatch, type OllamaConfig } from "./ollama-client";
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB — skip very large files
 
-export interface IndexingProgress {
+interface IndexingProgress {
   projectId: string;
   totalFiles: number;
   indexedFiles: number;

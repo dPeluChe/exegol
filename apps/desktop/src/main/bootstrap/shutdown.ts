@@ -25,7 +25,7 @@ import { app } from "electron";
 import { logger } from "../lib/logger";
 import { allowQuit } from "../system/work-guard";
 
-export interface TeardownStep {
+interface TeardownStep {
   name: string;
   run: () => void;
 }

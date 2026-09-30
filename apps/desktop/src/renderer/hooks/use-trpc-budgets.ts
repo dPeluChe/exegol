@@ -11,7 +11,7 @@ export function useBudgetStatus(projectId: string | null, period: BudgetPeriod) 
   });
 }
 
-export interface UpsertBudgetInput {
+interface UpsertBudgetInput {
   projectId: string;
   period: BudgetPeriod;
   limitType: BudgetLimitType;

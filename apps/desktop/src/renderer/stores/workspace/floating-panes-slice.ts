@@ -1,6 +1,6 @@
 import type { WorkspaceSliceCreator, WorkspaceStore } from "./types";
 
-export type FloatingPanesSlice = Pick<
+type FloatingPanesSlice = Pick<
   WorkspaceStore,
   "floatingPanes" | "markPaneFloating" | "unmarkPaneFloating"
 >;

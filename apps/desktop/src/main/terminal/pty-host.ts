@@ -1,7 +1,7 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
-import { HeadlessEmulator, type SessionSnapshot } from "./headless-emulator";
+import { HeadlessEmulator } from "./headless-emulator";
 import {
   encodeFrame,
   encodeJson,
@@ -331,25 +331,12 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
-  /** Full session snapshot for reattach protocol (modes + rehydrate sequences + CWD) */
-  getSessionSnapshot(id: string): SessionSnapshot | null {
-    return this.sessions.get(id)?.emulator.sessionSnapshot() ?? null;
-  }
-
-  getCwd(id: string): string | null {
-    return this.sessions.get(id)?.emulator.cwd ?? null;
-  }
-
   isAlive(id: string): boolean {
     return this.sessions.get(id)?.alive ?? false;
   }
 
   getPid(id: string): number | null {
     return this.sessions.get(id)?.pid ?? null;
-  }
-
-  hasSession(id: string): boolean {
-    return this.sessions.has(id);
   }
 
   /** Resolve when the session is cleaned up (exit), or after timeoutMs as a fallback. */

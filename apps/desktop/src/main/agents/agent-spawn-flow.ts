@@ -36,7 +36,7 @@ import {
 import { findReusableWorktree, requestedBranchFor } from "./spawn-target";
 import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
 
-export interface PtyInvocation {
+interface PtyInvocation {
   shell: string;
   args: string[];
   env: Record<string, string>;

@@ -8,7 +8,7 @@ export type { SearchEntityType, SearchResult };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface IndexEntry {
+interface IndexEntry {
   title: string;
   body: string;
   entityType: SearchEntityType;
@@ -234,7 +234,7 @@ async function rankByEmbeddingSimilarity(
   return scored.map((s, i) => ({ entityId: s.entityId, rank: i }));
 }
 
-export interface HybridSearchOptions {
+interface HybridSearchOptions {
   projectId?: string;
   entityType?: SearchEntityType;
   limit?: number;

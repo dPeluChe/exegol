@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { BrowserWindow, ipcMain, webContents } from "electron";
 
-export interface FloatingPaneConfig {
+interface FloatingPaneConfig {
   /** Stable id used by the renderer workspace store */
   paneId: string;
   /** Content kind */

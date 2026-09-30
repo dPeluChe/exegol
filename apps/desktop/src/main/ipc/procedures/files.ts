@@ -91,7 +91,7 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-export interface DirectoryEntry {
+interface DirectoryEntry {
   name: string;
   path: string;
   isDirectory: boolean;

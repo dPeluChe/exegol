@@ -15,7 +15,7 @@ const execFileAsync = promisify(execFile);
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 
-export interface SystemMetrics {
+interface SystemMetrics {
   cpu: {
     usage: number;
     cores: number;
@@ -38,7 +38,7 @@ export interface SystemMetrics {
   usage: ProcessUsage | null;
 }
 
-export interface ProcessUsage {
+interface ProcessUsage {
   /** Share of the whole machine (all cores), like `cpu.usage` */
   exegolCpu: number;
   exegolMemory: number;
@@ -47,7 +47,7 @@ export interface ProcessUsage {
   agentProcesses: number;
 }
 
-export interface ProjectMetrics {
+interface ProjectMetrics {
   projectId: string;
   projectName: string;
   projectPath: string;

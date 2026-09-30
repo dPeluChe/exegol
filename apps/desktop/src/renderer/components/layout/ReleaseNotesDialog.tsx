@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { parseReleaseNotes } from "../../lib/release-notes";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 
-export interface ReleaseNote {
+interface ReleaseNote {
   version: string;
   date: string | null;
   body: string;

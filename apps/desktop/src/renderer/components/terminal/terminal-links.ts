@@ -99,7 +99,7 @@ function toLink(
   };
 }
 
-export interface TerminalLinkHandlers {
+interface TerminalLinkHandlers {
   onOpenFile?: (path: string, line?: number) => void;
   onOpenUrlInPane?: (url: string) => void;
 }

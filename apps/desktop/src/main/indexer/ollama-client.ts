@@ -15,7 +15,7 @@ export interface OllamaConfig {
   model: string;
 }
 
-export interface OllamaStatus {
+interface OllamaStatus {
   available: boolean;
   modelInstalled: boolean;
   version?: string;

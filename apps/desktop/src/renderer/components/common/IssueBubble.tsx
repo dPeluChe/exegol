@@ -6,7 +6,7 @@ export interface AgentRef {
   cliType: string;
 }
 
-export interface IssueBubbleProps {
+interface IssueBubbleProps {
   element: CapturedElement;
   message: string;
   onMessageChange: (v: string) => void;
