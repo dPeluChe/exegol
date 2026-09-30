@@ -71,7 +71,7 @@ const SELECTOR_TIMEOUT_MS = 5000;
  *
  * Monkey-patches `console.error` to capture errors during replay.
  */
-export const QA_REPLAY_INJECTION_SCRIPT = `(function() {
+const QA_REPLAY_INJECTION_SCRIPT = `(function() {
   "use strict";
   if (window.__exegolQaReplayClick) return; // already injected
 

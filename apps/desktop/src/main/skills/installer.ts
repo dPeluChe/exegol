@@ -153,7 +153,7 @@ export function uninstallSkill(
 
 // ─── Repo parsing ───────────────────────────────────────────────────────────
 
-export function parseRepoIdentifier(input: string): { owner: string; repo: string } | null {
+function parseRepoIdentifier(input: string): { owner: string; repo: string } | null {
   // Accept "owner/repo" or "https://github.com/owner/repo"
   const cleaned = input
     .replace(/^https?:\/\/github\.com\//, "")

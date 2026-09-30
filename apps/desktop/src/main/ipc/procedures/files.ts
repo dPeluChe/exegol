@@ -42,7 +42,7 @@ const IGNORED_NAMES = new Set([
   "Thumbs.db",
 ]);
 
-export const FILE_CHANGED_ON_DISK = "The file changed on disk since editing began";
+const FILE_CHANGED_ON_DISK = "The file changed on disk since editing began";
 
 /** Shown as an image or PDF instead of text */
 const PREVIEW_MIME: Record<string, string> = {

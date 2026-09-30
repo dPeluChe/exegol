@@ -7,7 +7,7 @@ export function listProjectGroups(db: Database.Database): ProjectGroup[] {
   return (rows as Record<string, unknown>[]).map(mapProjectGroupRow);
 }
 
-export function getProjectGroup(db: Database.Database, id: string): ProjectGroup | null {
+function getProjectGroup(db: Database.Database, id: string): ProjectGroup | null {
   const row = db.prepare("SELECT * FROM project_groups WHERE id = ?").get(id);
   return row ? mapProjectGroupRow(row as Record<string, unknown>) : null;
 }

@@ -18,7 +18,7 @@ export interface ProjectHooks {
  * Parse exegol.yaml from a project root directory.
  * Supports simple YAML: `setup: "command"` and `archive: "command"`.
  */
-export function parseProjectHooks(projectPath: string): ProjectHooks | null {
+function parseProjectHooks(projectPath: string): ProjectHooks | null {
   const yamlPath = join(projectPath, "exegol.yaml");
   if (!existsSync(yamlPath)) return null;
 
@@ -48,7 +48,7 @@ export function parseProjectHooks(projectPath: string): ProjectHooks | null {
  * Execute a hook script in the context of a worktree.
  * Non-blocking, returns a promise. Logs output/errors.
  */
-export function runHook(
+function runHook(
   script: string,
   opts: {
     cwd: string;

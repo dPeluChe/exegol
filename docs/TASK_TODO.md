@@ -48,7 +48,7 @@
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
 9. **React health score (react-doctor), keep raising it**: 54 → 69 so far (#204 Bugs, #205
-   Security/Performance, #209 Maintainability, Accessibility 88 → 2). Goal 90+. Measure with
+   Security/Performance, #209 Maintainability, Accessibility 88 → 2); 70 after the leftovers pass. Goal 90+. Measure with
    `cd apps/desktop && npx -y react-doctor@latest . --yes --score`; the full list with `--json`.
    Rule: fix the root cause, never a disable, ignore or config entry to lift the number; a
    finding that is wrong for this app stays listed and is noted in the PR (the score counts it).

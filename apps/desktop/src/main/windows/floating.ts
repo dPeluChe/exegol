@@ -68,7 +68,7 @@ function buildUrl(config: FloatingPaneConfig): string {
   return `file://${join(__dirname, "../renderer/index.html")}?${query}`;
 }
 
-export function openFloatingPane(config: FloatingPaneConfig): void {
+function openFloatingPane(config: FloatingPaneConfig): void {
   // If already floating, focus it instead of opening a duplicate
   const existing = floatingWindows.get(config.paneId);
   if (existing && !existing.isDestroyed()) {
@@ -109,7 +109,7 @@ export function openFloatingPane(config: FloatingPaneConfig): void {
   floatingWindows.set(config.paneId, win);
 }
 
-export function closeFloatingPane(paneId: string): void {
+function closeFloatingPane(paneId: string): void {
   const win = floatingWindows.get(paneId);
   if (win && !win.isDestroyed()) {
     win.close();

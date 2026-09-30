@@ -7,7 +7,6 @@ type Capabilities = {
 };
 
 const caps = capabilities as unknown as Capabilities;
-const ipcSet = new Set(caps.ipc);
 
 export function isTrpcPathAllowed(path: string): boolean {
   if (typeof path !== "string" || path.length === 0) return false;
@@ -20,10 +19,6 @@ export function isTrpcPathAllowed(path: string): boolean {
   if (!allow) return false;
   if (allow === "*") return true;
   return allow.includes(procedure);
-}
-
-export function isIpcChannelAllowed(channel: string): boolean {
-  return ipcSet.has(channel);
 }
 
 export class CapabilityDeniedError extends Error {

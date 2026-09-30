@@ -16,7 +16,7 @@ import { getApiKey } from "../security/keystore";
 
 // captureGitDiff resolves these literal placeholders instead of empty string —
 // they must never reach the paid summary call or render as a "diff".
-export function isRealDiff(diff: string): boolean {
+function isRealDiff(diff: string): boolean {
   const trimmed = diff.trim();
   return trimmed.startsWith("diff --git ");
 }

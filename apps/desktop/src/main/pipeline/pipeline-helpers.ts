@@ -2,9 +2,6 @@ import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import type { PipelineStatusEvent } from "@exegol/shared";
 import { stripAnsi } from "../agents/status-parser";
-
-export { YOLO_FLAGS } from "@exegol/shared";
-
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { broadcast } from "../lib/event-bus";
 

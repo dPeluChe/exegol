@@ -49,15 +49,6 @@ export function useSetProjectGroupCollapsed() {
   });
 }
 
-export function useReorderProjectGroups() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (orderedIds: string[]) =>
-      trpcMutate<{ success: boolean }>("projectGroups.reorder", { orderedIds }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projectGroups"] }),
-  });
-}
-
 /** Disband: deletes the group, member projects fall back to root. */
 export function useDeleteProjectGroup() {
   const queryClient = useQueryClient();

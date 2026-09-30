@@ -78,4 +78,4 @@ export const scrollbackRouter = router({
     }),
 });
 
-export { getScrollbackDir, getScrollbackPath };
+export { getScrollbackPath };

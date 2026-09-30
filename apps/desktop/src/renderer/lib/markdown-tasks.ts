@@ -274,23 +274,6 @@ export function moveTask(content: string, taskLine: number, targetColumn: TaskCo
   return lines.join("\n");
 }
 
-/** Assign an agent to a task by adding @agent-name */
-export function assignAgent(content: string, taskLine: number, agentId: string): string {
-  const lines = content.split("\n");
-  const line = lines[taskLine];
-  if (!line) return content;
-
-  // Remove existing @agent if present
-  let updated = line
-    .replace(AGENT_REGEX, "")
-    .replace(/\s{2,}/g, " ")
-    .trimEnd();
-  // Append new agent
-  updated = `${updated} @${agentId}`;
-  lines[taskLine] = updated;
-  return lines.join("\n");
-}
-
 /** Add a new task to a specific column */
 export function addTask(
   content: string,

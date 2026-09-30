@@ -20,7 +20,7 @@ export function listSkillStates(db: Database.Database, projectId: string): Skill
   return (rows as Record<string, unknown>[]).map(mapSkillStateRow);
 }
 
-export function getSkillState(
+function getSkillState(
   db: Database.Database,
   projectId: string,
   skillName: string,

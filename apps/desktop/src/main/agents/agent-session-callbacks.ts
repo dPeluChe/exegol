@@ -68,7 +68,7 @@ export interface SessionMaps {
  *  are skipped so the same lifecycle signal is never applied twice. */
 const oscDeliveredAgents = new Set<string>();
 
-export function applyAgentSignals(
+function applyAgentSignals(
   db: Database.Database,
   agent: AgentContext,
   maps: SessionMaps,

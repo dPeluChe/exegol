@@ -18,10 +18,6 @@ import type { StepHandlerDeps } from "./pipeline-step-handler";
 // each other would otherwise loop forever, burning N×2 judge calls per hop.
 const shipHops = new Map<string, number>();
 
-export function clearEvaluatorHops(runId: string): void {
-  shipHops.delete(runId);
-}
-
 export async function handleEvaluatorStep(
   deps: StepHandlerDeps,
   db: Database.Database,

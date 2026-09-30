@@ -321,7 +321,7 @@ async function detectRunActions(projectPath: string): Promise<DetectedScript[]> 
 const SCRIPTS_TTL_MS = 60_000;
 const scriptsCache = new Map<string, { at: number; scripts: DetectedScript[] }>();
 
-export async function detectProjectScripts(projectPath: string): Promise<DetectedScript[]> {
+async function detectProjectScripts(projectPath: string): Promise<DetectedScript[]> {
   const cached = scriptsCache.get(projectPath);
   if (cached && Date.now() - cached.at < SCRIPTS_TTL_MS) return cached.scripts;
 

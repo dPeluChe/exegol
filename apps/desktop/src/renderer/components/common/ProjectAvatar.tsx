@@ -5,7 +5,7 @@ import { Cuboid } from "lucide-react";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { GROUP_ICONS } from "../layout/GroupIconColorPicker";
 
-export function useProjectIconImage(project: Pick<Project, "id" | "iconImage">) {
+function useProjectIconImage(project: Pick<Project, "id" | "iconImage">) {
   return useQuery({
     queryKey: ["projects", "iconImage", project.id, project.iconImage],
     queryFn: () => trpcInvoke<string | null>("projects.iconImage", { id: project.id }),

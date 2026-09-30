@@ -30,10 +30,6 @@ export function getProjectSkillsDir(projectPath: string): string {
   return join(projectPath, ".agents", "skills");
 }
 
-export function getLegacySkillsDir(): string {
-  return LEGACY_DIR;
-}
-
 /** Legacy project path — used as read-only fallback for one release cycle. */
 export function getLegacyProjectSkillsDir(projectPath: string): string {
   return join(projectPath, ".exegol", "skills");
@@ -166,34 +162,7 @@ function ensureAgentSymlink(configDir: string, skillsSubdir: string): void {
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 
-export function isSetupComplete(): boolean {
-  return existsSync(SETUP_MARKER);
-}
-
 export type SymlinkStatus = "ok" | "missing" | "broken" | "has-files";
-
-export function validateSymlinks(): { agent: string; dir: string; status: SymlinkStatus }[] {
-  const results: { agent: string; dir: string; status: SymlinkStatus }[] = [];
-
-  for (const { configDir, skillsSubdir } of AGENT_SKILL_DIRS) {
-    if (!existsSync(configDir)) continue;
-
-    const skillsDir = join(configDir, skillsSubdir);
-    const agent = configDir.split("/").pop() ?? configDir;
-
-    if (!existsSync(skillsDir)) {
-      results.push({ agent, dir: skillsDir, status: "missing" });
-    } else if (isSymlinkTo(skillsDir, CANONICAL_DIR)) {
-      results.push({ agent, dir: skillsDir, status: "ok" });
-    } else if (lstatSync(skillsDir).isSymbolicLink()) {
-      results.push({ agent, dir: skillsDir, status: "broken" });
-    } else {
-      results.push({ agent, dir: skillsDir, status: "has-files" });
-    }
-  }
-
-  return results;
-}
 
 // ─── Cleanup stale symlinks ─────────────────────────────────────────────────
 

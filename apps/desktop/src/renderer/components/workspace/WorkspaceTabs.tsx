@@ -58,7 +58,7 @@ const MONITOR_SUBS: { id: MonitorSubTab; label: string }[] = [
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-export function getMainTab(section: WorkspaceSection): MainTab {
+function getMainTab(section: WorkspaceSection): MainTab {
   if (section === "agents") return "agents";
   if (
     section === "tasks" ||
@@ -74,7 +74,7 @@ export function getMainTab(section: WorkspaceSection): MainTab {
   return "monitor";
 }
 
-export function getDefaultSubTab(tab: MainTab): WorkspaceSection {
+function getDefaultSubTab(tab: MainTab): WorkspaceSection {
   if (tab === "agents") return "agents";
   if (tab === "project") return "tasks";
   return "resources-tokens";

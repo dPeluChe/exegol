@@ -25,7 +25,7 @@ export function isPathInside(base: string, target: string): boolean {
  * identical apart from the `await` — they had already drifted on how they took
  * the segment, which is the failure this note is here to prevent.
  */
-export async function realpathSafe(p: string): Promise<string> {
+async function realpathSafe(p: string): Promise<string> {
   const abs = resolve(p);
   let current = abs;
   const missing: string[] = [];

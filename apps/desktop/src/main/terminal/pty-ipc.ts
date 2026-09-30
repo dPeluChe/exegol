@@ -1,8 +1,8 @@
 // Binary framing protocol for PTY subprocess IPC.
 // Header: type (u8) + payload length (u32 LE) = 5 bytes total.
 
-export const HEADER_SIZE = 5;
-export const MAX_FRAME_SIZE = 64 * 1024 * 1024; // 64MB
+const HEADER_SIZE = 5;
+const MAX_FRAME_SIZE = 64 * 1024 * 1024; // 64MB
 
 // Main -> Subprocess
 export const FRAME_SPAWN = 0;

@@ -27,7 +27,7 @@ export function computeSalience(
 
 // ─── Text similarity (shared dedup/contradiction heuristic) ─────────────────
 
-export function normalizeForDedup(content: string): string {
+function normalizeForDedup(content: string): string {
   return content.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
@@ -48,7 +48,7 @@ export function textSimilarity(a: string, b: string): number {
 // ─── Observation classification (reinforce / supersede / create) ───────────
 
 /** Same fact re-stated: reinforce the existing row instead of duplicating it. */
-export const DUPLICATE_THRESHOLD = 0.8;
+const DUPLICATE_THRESHOLD = 0.8;
 /**
  * Related but different content in the same category — likely an update to
  * (or contradiction of) an existing fact: supersede rather than duplicate.
@@ -58,7 +58,7 @@ export const DUPLICATE_THRESHOLD = 0.8;
  * score ~0.4 and must NOT supersede — a false supersession silently removes a
  * valid fact from recall. Prefer a duplicate (visible, recoverable) over that.
  */
-export const CONTRADICTION_THRESHOLD = 0.5;
+const CONTRADICTION_THRESHOLD = 0.5;
 
 export type ObservationDecision =
   | { action: "reinforce"; matchId: string }

@@ -184,7 +184,7 @@ apps/desktop/src/
     indexer/        project indexer (Ollama embeddings), chunker
     tokens/         log-parser (CLI token logs)
     hooks/          project-hooks
-    pipeline/       executor, context, defaults, state-machine (T78), evaluator +
+    pipeline/       executor, context, state-machine (T78), evaluator +
                     evaluator-step-handler (T88v2), evidence (T130), oplog-snapshots (T129)
     mcp/            host (stdio/HTTP), registry, exegol-server + exegol-protocol +
                     exegol-tools + the MCP shim and claim-guard bins (T145 agent runtime API)

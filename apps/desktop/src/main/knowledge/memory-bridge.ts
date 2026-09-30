@@ -74,7 +74,7 @@ export function syncMemoryBridge(
   return content;
 }
 
-export function readMemoryBridge(projectPath: string): string | null {
+function readMemoryBridge(projectPath: string): string | null {
   const path = getMemoryBridgePath(projectPath);
   if (!existsSync(path)) return null;
   try {

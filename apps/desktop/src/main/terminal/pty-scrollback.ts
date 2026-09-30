@@ -12,7 +12,7 @@ export function scheduleScrollbackFlush(session: Session): void {
   }, SCROLLBACK_THROTTLE_MS);
 }
 
-export async function flushScrollbackAsync(session: Session): Promise<void> {
+async function flushScrollbackAsync(session: Session): Promise<void> {
   if (!session.scrollbackPath) return;
   const snapshot = session.emulator.snapshot();
   if (!snapshot) return;

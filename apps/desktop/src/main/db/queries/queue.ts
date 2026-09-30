@@ -147,7 +147,3 @@ export function unblockDependents(db: Database.Database, completedTaskId: string
     "UPDATE task_queue SET status = 'queued' WHERE depends_on = ? AND status = 'blocked'",
   ).run(completedTaskId);
 }
-
-export function updateQueueTaskPriority(db: Database.Database, id: string, priority: number): void {
-  db.prepare("UPDATE task_queue SET priority = ? WHERE id = ?").run(priority, id);
-}

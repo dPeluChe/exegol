@@ -44,11 +44,11 @@ const lifecycleConfigCache = new Map<string, LifecycleConfig | null>();
 
 const setupRanThisSession = new Set<string>();
 
-export function hasRunSetup(projectPath: string): boolean {
+function hasRunSetup(projectPath: string): boolean {
   return setupRanThisSession.has(projectPath);
 }
 
-export function markSetupRan(projectPath: string): void {
+function markSetupRan(projectPath: string): void {
   setupRanThisSession.add(projectPath);
 }
 
