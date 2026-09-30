@@ -6,7 +6,7 @@ import { coreRust } from "./spawn-env";
 
 type RootKind = "worktrees" | "pipelines";
 
-export interface ManagedWorktreeInfo {
+interface ManagedWorktreeInfo {
   branchName: string;
   requestedBranchName: string;
   worktreeName: string;
@@ -25,7 +25,7 @@ export function getWorktreeName(branchName: string): string {
 /** Where this project's worktrees live. Outside the repo on purpose: next to
  *  the checkout they would need gitignore entries in every repo, and a stray
  *  one would look like project content. */
-export function worktreeRootFor(projectName: string, rootKind: RootKind = "worktrees"): string {
+function worktreeRootFor(projectName: string, rootKind: RootKind = "worktrees"): string {
   return join(homedir(), ".exegol", rootKind, slugifyProjectName(projectName));
 }
 

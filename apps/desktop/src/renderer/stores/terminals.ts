@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export interface TerminalState {
+interface TerminalState {
   agentId: string;
   /** Whether the xterm instance has been mounted and connected */
   ready: boolean;

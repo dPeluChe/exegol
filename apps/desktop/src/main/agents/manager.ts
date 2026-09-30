@@ -32,8 +32,6 @@ import {
   resolveCommand,
 } from "./spawn-env";
 
-export type { AgentStatusEvent } from "./spawn-env";
-
 // ─── AgentManager Singleton ───────────────────────────────────────────────
 
 let instance: AgentManager | null = null;

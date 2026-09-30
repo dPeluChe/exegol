@@ -18,7 +18,7 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
   return <div className="block text-xs font-medium text-text-secondary">{children}</div>;
 }
 
-export interface TerminalSettingsProps {
+interface TerminalSettingsProps {
   settings: Pick<Settings, "terminalFontSize" | "terminalFontFamily">;
   onChange: (updates: Partial<Settings>) => void;
 }

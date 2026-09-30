@@ -3,7 +3,6 @@ import type {
   AgentScoreRow,
   OplogEntry,
   OplogSnapshot,
-  RustFileDiff,
   ScoringStats,
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,14 +10,6 @@ import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { toastError } from "../stores/toasts";
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
-
-export function useAgentScore(agentId: string | null) {
-  return useQuery({
-    queryKey: ["scoring", "agent", agentId],
-    queryFn: () => trpcInvoke<AgentScoreRow | null>("scoring.getScore", { agentId }),
-    enabled: !!agentId,
-  });
-}
 
 export function useProjectScores(projectId: string | null) {
   return useQuery({
@@ -101,14 +92,6 @@ export function useReviewSummary(
   });
 }
 
-export function useStructuredDiff(projectId: string | null, staged: boolean) {
-  return useQuery({
-    queryKey: ["diff", "structured", projectId, staged],
-    queryFn: () => trpcInvoke<RustFileDiff[]>("diff.structuredDiff", { projectId, staged }),
-    enabled: !!projectId,
-  });
-}
-
 // ─── Oplog ──────────────────────────────────────────────────────────────────
 
 export function useProjectOplog(projectId: string | null, limit = 100) {
@@ -117,14 +100,6 @@ export function useProjectOplog(projectId: string | null, limit = 100) {
     queryFn: () => trpcInvoke<OplogEntry[]>("oplog.listProject", { projectId, limit }),
     enabled: !!projectId,
     refetchInterval: 30_000,
-  });
-}
-
-export function useAgentOplog(agentId: string | null) {
-  return useQuery({
-    queryKey: ["oplog", "agent", agentId],
-    queryFn: () => trpcInvoke<OplogEntry[]>("oplog.listAgent", { agentId }),
-    enabled: !!agentId,
   });
 }
 

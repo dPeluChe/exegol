@@ -4,7 +4,7 @@ import { useAppStore } from "../stores/app";
 import { collectPaneIds, useWorkspaceStore } from "../stores/workspace";
 import type { ProjectWorkspace } from "../stores/workspace/types";
 
-export const LIVE_STATUSES_UI = new Set(["running", "spawning", "waiting_input"]);
+const LIVE_STATUSES_UI = new Set(["running", "spawning", "waiting_input"]);
 
 /** A workspace tab (layout) with live sessions: what Cmd+2..9 jumps to */
 export interface LiveTabGroup {

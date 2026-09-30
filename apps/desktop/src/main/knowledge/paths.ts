@@ -7,7 +7,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export function getKnowledgeDir(projectPath: string): string {
+function getKnowledgeDir(projectPath: string): string {
   return join(projectPath, ".exegol", "knowledge");
 }
 

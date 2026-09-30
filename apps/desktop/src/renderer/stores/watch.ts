@@ -3,8 +3,8 @@ import { persist } from "zustand/middleware";
 
 /** Each open mirror is a live xterm fed every byte of its session; a few is plenty. */
 export const MAX_OPEN_MIRRORS = 6;
-export const MIN_CARD_FONT = 8;
-export const MAX_CARD_FONT = 22;
+const MIN_CARD_FONT = 8;
+const MAX_CARD_FONT = 22;
 /** A pinned session opens sized to its card at this font: readable side by side */
 export const DEFAULT_CARD_FONT = 13;
 

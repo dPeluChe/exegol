@@ -49,7 +49,6 @@ vi.mock("../terminal/pty-host", () => ({
   getPtyHost: () => ({ isAlive: (id: string) => mocks.alive.has(id), kill: vi.fn() }),
 }));
 vi.mock("./pipeline-helpers", () => ({
-  YOLO_FLAGS: {},
   broadcastPipelineStatus: vi.fn(),
   captureGitDiff: vi.fn(async () => ""),
   captureTree: vi.fn(async () => "tree"),

@@ -7,7 +7,7 @@
 
 export const FILE_DRAG_MIME = "application/x-exegol-file";
 
-export interface FileDragItem {
+interface FileDragItem {
   /** project- or repo-relative path (preferred: becomes an @mention) */
   relPath?: string;
   absPath?: string;

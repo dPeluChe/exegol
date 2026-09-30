@@ -81,7 +81,7 @@ Floating windows (PiP):
 ### `pipeline/`
 - `executor.ts` — singleton; `startRun()` → `advanceStep()` → `onAgentComplete` callback loop
 - `context.ts` — prompt builder (`{{task}}`, `{{diff}}`, `{{previousOutput}}` interpolation)
-- `defaults.ts` — built-in pipeline presets
+- built-in pipeline presets: `PIPELINE_PRESETS` in `packages/shared/src/types/pipeline.ts`
 - `state-machine.ts` — `PIPELINE_TRANSITIONS` map; `canTransition()` / `assertTransition()` guards
 
 ### `mcp/`

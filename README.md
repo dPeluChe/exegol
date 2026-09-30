@@ -119,7 +119,7 @@ exegol/
 
 ### Workspace
 
-- **Dashboard** — its own view (Cmd+1): cross-project fleet plus Watching, pinned sessions as live interactive cards
+- **Dashboard** — its own view (Cmd+1): cross-project fleet plus Watching, pinned sessions as live interactive cards; each agent card shows its message thread with the other agents (delivered or read)
 - **Multi-pane tabbed workspace** — 3 main tabs (Agents, Project, Monitor), each with split support (Cmd+D / Cmd+Shift+D)
 - **6 layout presets** — Single, Split Horizontal, Split Vertical, Three Columns, Bottom Terminal (70/30), 2×2 Grid; custom saved layouts with per-slot type/url/filePath
 - **5 pane types** — Terminal (agent or plain shell), Browser (Electron webview), Files (FileExplorer + Monaco), Git (diff + oplog), Empty (agent selector grid)
@@ -136,6 +136,7 @@ exegol/
 - **Session resume** — Claude session ID + resume command captured from output; 3-tier resume priority (resume_command → claude_session_id → static flag)
 - **Crash recovery** — On restart, alive PTY sessions reattach; dead sessions marked "crashed" with scrollback preserved
 - **Terminal ↔ Chat view** — Toggle between raw terminal output and a structured chat view for any agent (live or stopped)
+- **Shell to agent**: a CLI typed in a terminal becomes that agent in place
 
 ### Browser & QA
 
@@ -155,13 +156,12 @@ exegol/
 ### Project
 
 - **Multi-agent pipelines** — Sequential orchestration in shared worktrees; loop/review cycles with `loopBackTo` + max iterations guard; explicit state machine (T78)
-- **MCP Host** — stdio + HTTP transports; auto-reconnect with exponential backoff (2s→32s, 5 attempts)
 - **Skills** — 5 built-in personas + per-project custom skills; injected into agent context at spawn
-- **Memory system** — ANSI-stripped extraction from scrollback; salience v2 (reinforce/supersede/decay); hybrid FTS5 + Ollama recall; persisted per project
+- **Memory system** — memories agents save through the Exegol MCP server; salience v2 (reinforce/supersede/decay); hybrid FTS5 + Ollama recall; persisted per project
 - **Prompts** — Reusable templates per project with category filters, pin, copy
-- **Scheduler** — Cron-based task scheduling (croner), visual CronBuilder, dependency-aware engine
+- **Scheduler** — Cron-based task scheduling (croner), dependency-aware engine; backend only, no UI yet (T185.1)
 - **Lifecycle scripts** — `.exegol/lifecycle.yaml` per repo: `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks
-- **Semantic search** — Ollama embeddings + cosine similarity over project file chunks (T68/T100)
+- **Semantic search** — Ollama embeddings + cosine similarity over project file chunks (T68/T100); not exposed yet
 
 ### Monitor
 
@@ -183,7 +183,7 @@ exegol/
 - **Structured errors** — `ExegolError → TransientError / PermanentError / TimeoutError` with `withRetry()` helper (T80)
 - **DB row validation** — Zod schemas for all 14 row types with graceful degradation on parse failure (T77)
 - **DI context** — All 5 tRPC singletons injected via context (no module-level globals) (T81)
-- **Updates** — title-bar button checks GitHub releases, downloads and restarts into the new version
+- **Updates** — title-bar button checks GitHub releases, downloads and restarts into the new version, and shows what's new (release notes)
 - **Bug reports** — title-bar bug button collects redacted diagnostics for review before filing a public issue
 - **Work guard** — keeps the Mac awake while agents run and asks before quitting with sessions open
 

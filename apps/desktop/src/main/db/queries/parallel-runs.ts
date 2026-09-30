@@ -90,19 +90,9 @@ export function updateParallelRunStatus(
   );
 }
 
-export function promoteParallelRunAgent(
-  db: Database.Database,
-  runId: string,
-  agentId: string,
-): void {
-  db.prepare(
-    "UPDATE parallel_runs SET promoted_agent_id = ?, status = 'completed' WHERE id = ?",
-  ).run(agentId, runId);
-}
-
 // ─── T107: Comparator enrichment ─────────────────────────────────────────
 
-export interface ParallelRunColumn {
+interface ParallelRunColumn {
   agent: Agent;
   worktreePath: string | null;
   diffStat: { filesChanged: number; insertions: number; deletions: number } | null;
@@ -112,7 +102,7 @@ export interface ParallelRunColumn {
   lastLines: string[];
 }
 
-export interface ParallelRunDetails {
+interface ParallelRunDetails {
   run: ParallelRun;
   columns: ParallelRunColumn[];
 }

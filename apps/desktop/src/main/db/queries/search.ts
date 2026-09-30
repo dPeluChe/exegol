@@ -8,7 +8,7 @@ export type { SearchEntityType, SearchResult };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface IndexEntry {
+interface IndexEntry {
   title: string;
   body: string;
   entityType: SearchEntityType;
@@ -97,7 +97,7 @@ export function removeFromIndex(db: Database.Database, entityId: string): void {
 }
 
 /** Check if an entity is already indexed. */
-export function isIndexed(db: Database.Database, entityId: string): boolean {
+function isIndexed(db: Database.Database, entityId: string): boolean {
   const row = db.prepare("SELECT 1 FROM search_index WHERE entity_id = ? LIMIT 1").get(entityId);
   return row !== undefined;
 }
@@ -107,7 +107,7 @@ export function isIndexed(db: Database.Database, entityId: string): boolean {
  * Column weights (title=4.0, body=1.0) — qmd's hybridQuery weights title/body/path
  * as (4.0, 1.0, 1.5); our index has no `path` column so it's dropped.
  */
-export function search(
+function search(
   db: Database.Database,
   query: string,
   opts?: {
@@ -234,7 +234,7 @@ async function rankByEmbeddingSimilarity(
   return scored.map((s, i) => ({ entityId: s.entityId, rank: i }));
 }
 
-export interface HybridSearchOptions {
+interface HybridSearchOptions {
   projectId?: string;
   entityType?: SearchEntityType;
   limit?: number;
@@ -333,24 +333,6 @@ export function indexScrollback(
   }
 
   return indexEntries(db, entries);
-}
-
-/** Index a prompt into the search index. */
-export function indexPrompt(
-  db: Database.Database,
-  promptId: string,
-  projectId: string,
-  title: string,
-  content: string,
-): void {
-  removeFromIndex(db, `prompt:${promptId}`);
-  indexEntry(db, {
-    title,
-    body: content,
-    entityType: "prompt",
-    entityId: `prompt:${promptId}`,
-    projectId,
-  });
 }
 
 /** Rebuild the entire search index from current DB state (single transaction). */

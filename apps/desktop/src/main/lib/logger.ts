@@ -92,6 +92,3 @@ export const logger = {
     if (isDev) safePrint(console.log, "[DEBUG]", ...args);
   },
 };
-
-/** Path to today's log file */
-export const LOG_FILE_PATH = logFile;

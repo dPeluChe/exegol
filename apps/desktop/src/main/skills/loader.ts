@@ -95,7 +95,7 @@ export function loadSkillFromFile(filePath: string, scope: "global" | "project")
   }
 }
 
-export function parseSkillContent(
+function parseSkillContent(
   raw: string,
   filePath: string,
   scope: "global" | "project",

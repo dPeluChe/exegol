@@ -13,7 +13,7 @@ import { cosineSimilarity } from "@exegol/shared";
 import type Database from "libsql";
 import { generateEmbedding, type OllamaConfig } from "./ollama-client";
 
-export interface SearchResult {
+interface SearchResult {
   filePath: string;
   startLine: number;
   endLine: number;

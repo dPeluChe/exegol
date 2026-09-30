@@ -137,7 +137,7 @@ function KeyCombo({ combo }: { combo: string }) {
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export interface GeneralSettingsProps {
+interface GeneralSettingsProps {
   settings: Settings;
   onChange: (updates: Partial<Settings>) => void;
 }

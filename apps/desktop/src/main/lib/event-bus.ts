@@ -8,9 +8,7 @@
  * calls scattered across the codebase, centralizing the broadcast mechanism.
  */
 
-import { EventEmitter } from "node:events";
-
-export interface EventBusTransport {
+interface EventBusTransport {
   /** Send an event to all connected clients */
   broadcast(channel: string, ...args: unknown[]): void;
 }
@@ -35,43 +33,18 @@ class ElectronTransport implements EventBusTransport {
   }
 }
 
-/**
- * EventEmitter transport: for daemon mode or testing.
- * Clients subscribe directly to the emitter.
- */
-class EmitterTransport extends EventEmitter implements EventBusTransport {
-  broadcast(channel: string, ...args: unknown[]): void {
-    this.emit(channel, ...args);
-  }
-}
-
 // ─── Singleton ──────────────────────────────────────────────────────────────
 
 let transport: EventBusTransport | null = null;
 
 /**
- * Get the global event bus transport.
- * Defaults to ElectronTransport; call `setEventBusTransport()` to override.
+ * Get the global event bus transport (ElectronTransport).
  */
-export function getEventBus(): EventBusTransport {
+function getEventBus(): EventBusTransport {
   if (!transport) {
     transport = new ElectronTransport();
   }
   return transport;
-}
-
-/**
- * Override the global transport (e.g., for daemon mode with WebSocket).
- */
-export function setEventBusTransport(t: EventBusTransport): void {
-  transport = t;
-}
-
-/**
- * Create an EventEmitter-based transport (for daemon mode or testing).
- */
-export function createEmitterTransport(): EmitterTransport {
-  return new EmitterTransport();
 }
 
 /**

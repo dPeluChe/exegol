@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 50;
 
-export interface CodeChunk {
+interface CodeChunk {
   content: string;
   startLine: number;
   endLine: number;

@@ -2,7 +2,6 @@ import type {
   AgentCostRow,
   DailyTrendRow,
   ModelBreakdownRow,
-  TokenUsage,
   TokenUsageSummary,
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,15 +24,6 @@ export function useTokenUsageSummary(agentId?: string, projectId?: string, days 
     },
     refetchInterval: 30_000,
     staleTime: 10_000,
-  });
-}
-
-export function useTokenHistory(projectId: string | null) {
-  return useQuery({
-    queryKey: ["tokenUsage", "history", projectId],
-    queryFn: () => trpcInvoke<TokenUsage[]>("tokenUsage.history", { projectId, days: 30 }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
   });
 }
 

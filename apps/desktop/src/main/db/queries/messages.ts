@@ -1,4 +1,4 @@
-import type { AgentMessage, AgentMessageType } from "@exegol/shared";
+import type { AgentMessage, AgentMessageType, MessageDeliveryState } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "./helpers";
 
@@ -13,6 +13,7 @@ function mapMessageRow(row: Record<string, unknown>): AgentMessage {
     content: row.content as string,
     createdAt: row.created_at as number,
     readAt: (row.read_at as number) ?? null,
+    deliveryState: (row.delivery_state as MessageDeliveryState) ?? null,
   };
 }
 
@@ -59,6 +60,7 @@ export function listMessages(
   filters: {
     agentId?: string;
     type?: AgentMessageType;
+    /** Not yet pulled by the receiver (messages_check marks them read) */
     unreadOnly?: boolean;
   },
   limit = 100,
@@ -106,38 +108,18 @@ export function listMessagesBetween(
   return (rows as Record<string, unknown>[]).map(mapMessageRow);
 }
 
-export function markMessageRead(db: Database.Database, id: string): void {
-  db.prepare("UPDATE messages SET read_at = unixepoch() WHERE id = ? AND read_at IS NULL").run(id);
-}
-
-export function markAllRead(db: Database.Database, agentId: string): void {
-  db.prepare(
-    "UPDATE messages SET read_at = unixepoch() WHERE to_agent_id = ? AND read_at IS NULL",
-  ).run(agentId);
-}
-
-export function countUnread(db: Database.Database, agentId: string): number {
-  const row = db
-    .prepare("SELECT COUNT(*) as count FROM messages WHERE to_agent_id = ? AND read_at IS NULL")
-    .get(agentId) as { count: number };
-  return row.count;
-}
-
 // ─── Delivery state (T170.1) ─────────────────────────────────────────────────
 //
 // This used to be a Map, so it died with the process: after a restart every
 // `message_status` answered "unknown" and a retry re-delivered.
 
-/** `queued` and `delivered` are transport; `consumed` is the receiver's own
- *  turn boundary. Only the terminal three are final. */
-export type MessageDeliveryState =
-  | "queued"
-  | "delivered"
-  | "consumed"
-  | "cancelled"
-  | "undeliverable";
+export function markMessageRead(db: Database.Database, id: string): void {
+  db.prepare("UPDATE messages SET read_at = unixepoch() WHERE id = ? AND read_at IS NULL").run(id);
+}
 
-export interface MessageDelivery {
+export type { MessageDeliveryState };
+
+interface MessageDelivery {
   fromAgentId: string | null;
   toAgentId: string | null;
   state: MessageDeliveryState | null;

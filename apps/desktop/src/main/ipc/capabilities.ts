@@ -7,7 +7,6 @@ type Capabilities = {
 };
 
 const caps = capabilities as unknown as Capabilities;
-const ipcSet = new Set(caps.ipc);
 
 export function isTrpcPathAllowed(path: string): boolean {
   if (typeof path !== "string" || path.length === 0) return false;
@@ -22,17 +21,9 @@ export function isTrpcPathAllowed(path: string): boolean {
   return allow.includes(procedure);
 }
 
-export function isIpcChannelAllowed(channel: string): boolean {
-  return ipcSet.has(channel);
-}
-
 export class CapabilityDeniedError extends Error {
-  readonly kind: "trpc" | "ipc";
-  readonly target: string;
   constructor(kind: "trpc" | "ipc", target: string) {
     super(`Capability denied: ${kind === "trpc" ? target : `ipc:${target}`}`);
     this.name = "CapabilityDeniedError";
-    this.kind = kind;
-    this.target = target;
   }
 }

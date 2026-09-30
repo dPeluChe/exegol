@@ -25,7 +25,7 @@ export function isPathInside(base: string, target: string): boolean {
  * identical apart from the `await` — they had already drifted on how they took
  * the segment, which is the failure this note is here to prevent.
  */
-export async function realpathSafe(p: string): Promise<string> {
+async function realpathSafe(p: string): Promise<string> {
   const abs = resolve(p);
   let current = abs;
   const missing: string[] = [];
@@ -83,11 +83,7 @@ export async function isPathAllowed(filePath: string, allowedBases: string[]): P
  * Reasons a path can be refused by {@link assertSafePath}. Exhaustive so callers
  * can switch over them.
  */
-export type PathGuardReason =
-  | "bidi-chars"
-  | "ads-suffix"
-  | "sensitive-path"
-  | "outside-allowed-bases";
+type PathGuardReason = "bidi-chars" | "ads-suffix" | "sensitive-path" | "outside-allowed-bases";
 
 export class PathGuardError extends Error {
   readonly reason: PathGuardReason;

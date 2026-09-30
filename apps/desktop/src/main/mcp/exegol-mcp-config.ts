@@ -152,7 +152,7 @@ function readMcpJson(path: string): McpJsonFile | null {
  * Write/update the "exegol" MCP server entry in `<cwd>/.mcp.json`.
  * Called for every non-shell agent spawn (shells skip this entirely).
  */
-export function writeAgentMcpConfig(
+function writeAgentMcpConfig(
   cwd: string,
   shimPath: string,
   token: string,

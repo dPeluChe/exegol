@@ -56,7 +56,7 @@ export function isPermanent(err: unknown): boolean {
 
 // ─── Retry Helper ──────────────────────────────────────────────────────────
 
-export interface RetryOptions {
+interface RetryOptions {
   /** Maximum number of retries (default: 3) */
   maxRetries?: number;
   /** Base delay in ms for exponential backoff (default: 1000) */

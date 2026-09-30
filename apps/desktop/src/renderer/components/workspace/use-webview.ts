@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 
-export type WebviewRef = React.RefObject<HTMLElement | null>;
+type WebviewRef = React.RefObject<HTMLElement | null>;
 
 export type LoadError = { code: number; desc: string };
 

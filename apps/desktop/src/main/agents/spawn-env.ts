@@ -32,7 +32,7 @@ export interface AgentContext {
 
 // ─── Push event types ────────────────────────────────────────────────────
 
-export interface AgentStatusEvent {
+interface AgentStatusEvent {
   agentId: string;
   projectId: string;
   status: AgentStatus;
@@ -247,7 +247,7 @@ try {
 
 // ─── PTY constants ──────────────────────────────────────────────────────
 
-export const SHELL_PATH_TIMEOUT_MS = 5_000;
+const SHELL_PATH_TIMEOUT_MS = 5_000;
 export const DEFAULT_PTY_COLS = 120;
 export const DEFAULT_PTY_ROWS = 30;
 
@@ -270,7 +270,7 @@ export function loginShell(): string {
 
 const shellPathCommand = () => `${loginShell()} -ilc 'echo $PATH'`;
 
-export function getShellPath(): string {
+function getShellPath(): string {
   try {
     const result = execSync(shellPathCommand(), {
       encoding: "utf-8",
@@ -312,7 +312,7 @@ export function warmShellPath(): void {
 }
 
 /** Whether `command` resolves to a file on the login shell's PATH */
-export function commandOnPath(command: string): boolean {
+function commandOnPath(command: string): boolean {
   if (command.includes("/")) return existsSync(command);
   return _getFullPath()
     .split(":")

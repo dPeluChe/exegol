@@ -24,5 +24,3 @@ export const PRIORITY_BADGE_COLORS: Record<string, string> = {
   medium: "bg-yellow-500/10 text-yellow-400",
   low: "bg-blue-500/10 text-blue-400",
 };
-
-export const CORE_COLUMNS: TaskColumn[] = ["backlog", "todo", "in-progress", "validated", "done"];

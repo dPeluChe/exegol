@@ -7,7 +7,7 @@ import { inspectCommand } from "../security/command-guard";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface DetectedScript {
+interface DetectedScript {
   name: string;
   command: string;
   source: string;
@@ -321,7 +321,7 @@ async function detectRunActions(projectPath: string): Promise<DetectedScript[]> 
 const SCRIPTS_TTL_MS = 60_000;
 const scriptsCache = new Map<string, { at: number; scripts: DetectedScript[] }>();
 
-export async function detectProjectScripts(projectPath: string): Promise<DetectedScript[]> {
+async function detectProjectScripts(projectPath: string): Promise<DetectedScript[]> {
   const cached = scriptsCache.get(projectPath);
   if (cached && Date.now() - cached.at < SCRIPTS_TTL_MS) return cached.scripts;
 
@@ -344,7 +344,7 @@ export async function detectProjectScripts(projectPath: string): Promise<Detecte
 
 // ─── Run targets (T197: per-folder launcher) ───────────────────────────────
 
-export interface RunTarget {
+interface RunTarget {
   /** Folder relative to the project ("" for the project root) */
   rel: string;
   path: string;

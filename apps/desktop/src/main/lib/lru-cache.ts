@@ -48,9 +48,4 @@ export class AsyncLruCache<K, V> {
     for (const k of this.cache.keys()) if (predicate(k)) this.cache.delete(k);
     for (const k of this.inflight.keys()) if (predicate(k)) this.inflight.delete(k);
   }
-
-  clear(): void {
-    this.cache.clear();
-    this.inflight.clear();
-  }
 }

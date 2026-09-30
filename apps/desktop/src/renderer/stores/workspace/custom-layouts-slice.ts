@@ -9,7 +9,7 @@ import {
 import { collectPaneIds, getPw, setPw } from "./helpers";
 import type { Pane, WorkspaceSliceCreator, WorkspaceStore } from "./types";
 
-export type CustomLayoutsSlice = Pick<
+type CustomLayoutsSlice = Pick<
   WorkspaceStore,
   | "customLayouts"
   | "applyLayoutPreset"

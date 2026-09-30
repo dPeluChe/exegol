@@ -15,7 +15,7 @@ export interface OllamaConfig {
   model: string;
 }
 
-export interface OllamaStatus {
+interface OllamaStatus {
   available: boolean;
   modelInstalled: boolean;
   version?: string;
@@ -116,7 +116,8 @@ export async function generateEmbeddingsBatch(
       return texts.map(() => null);
     }
     const data = (await res.json()) as { embeddings?: number[][] };
-    if (!data.embeddings) return texts.map(() => null);
+    // One vector per input, in order: anything else cannot be matched back to its chunk
+    if (data.embeddings?.length !== texts.length) return texts.map(() => null);
     return data.embeddings;
   } catch (err) {
     logger.warn(`[Indexer] Ollama batch error: ${err}`);

@@ -9,17 +9,18 @@
  * chunking via core-rust for significantly better retrieval quality.
  */
 
+import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type Database from "libsql";
 import { nanoid } from "nanoid";
 import { logger } from "../lib/logger";
 import { chunkFileContent, computeFileHash, detectLanguage, shouldExclude } from "./chunker";
-import { generateEmbedding, type OllamaConfig } from "./ollama-client";
+import { generateEmbeddingsBatch, type OllamaConfig } from "./ollama-client";
 
 const MAX_FILE_SIZE = 1024 * 1024; // 1MB — skip very large files
 
-export interface IndexingProgress {
+interface IndexingProgress {
   projectId: string;
   totalFiles: number;
   indexedFiles: number;
@@ -31,31 +32,32 @@ export interface IndexingProgress {
 type ProgressCallback = (progress: IndexingProgress) => void;
 
 /** Walk a directory recursively, yielding relative file paths (async to avoid blocking main) */
-async function walkDir(rootPath: string, excludePatterns: string[]): Promise<string[]> {
+export async function walkDir(rootPath: string, excludePatterns: string[]): Promise<string[]> {
   const files: string[] = [];
 
   async function walk(dir: string): Promise<void> {
-    let entries: string[];
+    let entries: Dirent[];
     try {
-      entries = await readdir(dir);
+      entries = await readdir(dir, { withFileTypes: true });
     } catch {
       return; // permission denied or similar
     }
     for (const entry of entries) {
-      const fullPath = join(dir, entry);
+      const fullPath = join(dir, entry.name);
       const relPath = relative(rootPath, fullPath);
 
       if (shouldExclude(relPath, excludePatterns)) continue;
 
-      try {
-        const s = await stat(fullPath);
-        if (s.isDirectory()) {
-          await walk(fullPath);
-        } else if (s.isFile() && s.size <= MAX_FILE_SIZE) {
-          files.push(relPath);
+      // The entry already says what it is: stat only files, for their size. Symlinks are not
+      // followed (a link to a parent looped the walk, a linked folder was indexed twice)
+      if (entry.isDirectory()) {
+        await walk(fullPath);
+      } else if (entry.isFile()) {
+        try {
+          if ((await stat(fullPath)).size <= MAX_FILE_SIZE) files.push(relPath);
+        } catch {
+          // skip unreadable files
         }
-      } catch {
-        // skip unreadable files
       }
     }
   }
@@ -149,9 +151,15 @@ export async function indexProject(
       // Upsert file record
       upsertFileStmt.run(fileId, projectId, filePath, hash, language, chunks.length, now);
 
-      // Generate embeddings + insert chunks
-      for (const chunk of chunks) {
-        const embedding = await generateEmbedding(chunk.content, ollamaConfig);
+      // One Ollama request per file, not per chunk
+      const embeddings = chunks.length
+        ? await generateEmbeddingsBatch(
+            chunks.map((c) => c.content),
+            ollamaConfig,
+          )
+        : [];
+      chunks.forEach((chunk, i) => {
+        const embedding = embeddings[i];
         const embeddingBlob = embedding ? Buffer.from(new Float32Array(embedding).buffer) : null;
         insertChunkStmt.run(
           nanoid(),
@@ -162,7 +170,7 @@ export async function indexProject(
           chunk.endLine,
           chunk.chunkType,
         );
-      }
+      });
 
       progress.indexedFiles++;
       // Report progress every 10 files

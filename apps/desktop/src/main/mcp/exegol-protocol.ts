@@ -164,7 +164,7 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "list_claims",
 ]);
 
-export interface ExegolToolDef {
+interface ExegolToolDef {
   name: ExegolToolName;
   description: string;
   inputSchema: Record<string, unknown>;

@@ -29,55 +29,6 @@ export interface CapturedElement {
   screenshotBase64?: string;
 }
 
-// ─── CSS Selector Generator ────────────────────────────────────────────────
-
-/**
- * Build a unique CSS selector for the given element.
- * Strategy: use #id if present, otherwise build a chain of
- * tagName:nth-of-type(n) up to 4 ancestor levels.
- */
-export function getCssSelector(el: Element): string {
-  if (el.id) return `#${CSS.escape(el.id)}`;
-
-  const parts: string[] = [];
-  let current: Element | null = el;
-  const MAX_DEPTH = 4;
-
-  for (let depth = 0; current && depth < MAX_DEPTH; depth++) {
-    // If we hit an element with an id, anchor there and stop
-    if (depth > 0 && current.id) {
-      parts.unshift(`#${CSS.escape(current.id)}`);
-      break;
-    }
-
-    const tag = current.tagName.toLowerCase();
-    const parent: Element | null = current.parentElement;
-
-    if (parent) {
-      const currentTag = current.tagName;
-      const siblings = Array.from(parent.children).filter((c: Element) => c.tagName === currentTag);
-      if (siblings.length > 1) {
-        const index = siblings.indexOf(current) + 1;
-        parts.unshift(`${tag}:nth-of-type(${index})`);
-      } else {
-        // Add class names for specificity when there's only one of the tag type
-        const classes = Array.from(current.classList)
-          .filter((c) => /^[a-zA-Z_-]/.test(c))
-          .slice(0, 2)
-          .map((c) => `.${CSS.escape(c)}`)
-          .join("");
-        parts.unshift(`${tag}${classes}`);
-      }
-    } else {
-      parts.unshift(tag);
-    }
-
-    current = parent;
-  }
-
-  return parts.join(" > ");
-}
-
 // ─── Context Formatter ─────────────────────────────────────────────────────
 
 /**

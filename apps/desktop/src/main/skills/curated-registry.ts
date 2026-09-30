@@ -1,6 +1,6 @@
 import type { SkillRegistryEntry, SkillTrust } from "@exegol/shared";
 
-export const CURATED_REGISTRY: SkillRegistryEntry[] = [
+const CURATED_REGISTRY: SkillRegistryEntry[] = [
   {
     name: "Vercel AI Skills",
     repo: "vercel-labs/agent-skills",

@@ -90,21 +90,6 @@ export function createQaTestRun(
   };
 }
 
-export function updateQaTestRun(
-  db: Database.Database,
-  runId: string,
-  data: {
-    status: QaTestStatus;
-    stepResults: string;
-    consoleErrors: string;
-    durationMs: number;
-  },
-): void {
-  db.prepare(
-    `UPDATE qa_test_runs SET status = ?, step_results = ?, console_errors = ?, duration_ms = ? WHERE id = ?`,
-  ).run(data.status, data.stepResults, data.consoleErrors, data.durationMs, runId);
-}
-
 export function getLatestTestRun(db: Database.Database, testId: string): QaTestRun | null {
   const row = db
     .prepare("SELECT * FROM qa_test_runs WHERE test_id = ? ORDER BY created_at DESC LIMIT 1")

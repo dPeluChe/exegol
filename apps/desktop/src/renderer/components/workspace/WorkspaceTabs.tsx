@@ -6,7 +6,7 @@ import { BarChart3, Cpu, FolderKanban, type LucideIcon } from "lucide-react";
 // The cross-project Dashboard is its own view (sidebar button, activeView
 // "dashboard"), not a tab here: as a tab it sat inside whichever project was
 // selected, which read as "this project's dashboard" (Antonio 2026-09-23).
-export type MainTab = "agents" | "project" | "monitor";
+type MainTab = "agents" | "project" | "monitor";
 
 const MAIN_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
   { id: "agents", label: "Agents", icon: Cpu },
@@ -16,7 +16,7 @@ const MAIN_TABS: { id: MainTab; label: string; icon: LucideIcon }[] = [
 
 // ─── Sub-tabs per main tab ──────────────────────────────────────────────────
 
-export type ProjectSubTab =
+type ProjectSubTab =
   | "tasks"
   | "history"
   | "prompts-skills"
@@ -25,7 +25,7 @@ export type ProjectSubTab =
   | "pipelines"
   | "parallel-runs"
   | "qa-tests";
-export type MonitorSubTab = "resources-tokens" | "scoring";
+type MonitorSubTab = "resources-tokens" | "scoring";
 
 export type WorkspaceSection =
   | "agents"
@@ -58,7 +58,7 @@ const MONITOR_SUBS: { id: MonitorSubTab; label: string }[] = [
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-export function getMainTab(section: WorkspaceSection): MainTab {
+function getMainTab(section: WorkspaceSection): MainTab {
   if (section === "agents") return "agents";
   if (
     section === "tasks" ||
@@ -74,7 +74,7 @@ export function getMainTab(section: WorkspaceSection): MainTab {
   return "monitor";
 }
 
-export function getDefaultSubTab(tab: MainTab): WorkspaceSection {
+function getDefaultSubTab(tab: MainTab): WorkspaceSection {
   if (tab === "agents") return "agents";
   if (tab === "project") return "tasks";
   return "resources-tokens";

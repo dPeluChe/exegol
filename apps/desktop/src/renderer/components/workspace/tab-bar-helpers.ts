@@ -11,7 +11,7 @@ export const ACTIVITY_DOT_CLASS: Partial<Record<AgentActivityLevel, string>> = {
 
 // ─── Tab auto-naming helpers ────────────────────────────────────────────────
 
-export const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   terminal: Terminal,
   browser: Globe,
   files: FolderTree,

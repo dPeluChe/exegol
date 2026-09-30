@@ -8,7 +8,7 @@ import { attachOutputPipeline, detachOutputPipeline } from "./output-pipeline";
 import { broadcastAgentStatus } from "./spawn-env";
 
 /** A terminal session the watcher looks at: a plain shell, or one already promoted */
-export interface TerminalSession {
+interface TerminalSession {
   id: string;
   pid: number;
   projectId: string;
@@ -17,7 +17,7 @@ export interface TerminalSession {
   launchedInShell: boolean;
 }
 
-export type ShellTransition =
+type ShellTransition =
   /** A CLI runs below the shell: the session becomes that agent (or switches to it) */
   | { id: string; kind: "promote"; cliType: AgentCliType }
   /** The CLI exited: back at the prompt, still the same agent */

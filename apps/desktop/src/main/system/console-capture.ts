@@ -17,7 +17,7 @@ const LEVELS: Record<string | number, Level> = {
 };
 
 /** One DevTools console line, shaped like the app log so `compactLog` folds repeats */
-export function recordConsole(
+function recordConsole(
   window: string,
   level: Level,
   message: string,

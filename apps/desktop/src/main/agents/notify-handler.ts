@@ -26,39 +26,9 @@ export interface AgentEvent {
   payload?: Record<string, unknown>;
 }
 
-export type EventCallback = (event: AgentEvent) => void;
+type EventCallback = (event: AgentEvent) => void;
 
 // ─── Event log persistence ──────────────────────────────────────────────────
-
-export function logAgentEvent(db: Database.Database, event: AgentEvent): void {
-  try {
-    db.prepare(
-      "INSERT INTO agent_events (agent_id, type, payload, created_at) VALUES (?, ?, ?, ?)",
-    ).run(event.agentId, event.type, JSON.stringify(event.payload ?? {}), event.ts);
-  } catch {
-    // Non-fatal: event logging is best-effort
-  }
-}
-
-export function getAgentEvents(db: Database.Database, agentId: string, limit = 50): AgentEvent[] {
-  const rows = db
-    .prepare(
-      "SELECT type, agent_id, payload, created_at FROM agent_events WHERE agent_id = ? ORDER BY created_at DESC LIMIT ?",
-    )
-    .all(agentId, limit) as Array<{
-    type: string;
-    agent_id: string;
-    payload: string;
-    created_at: number;
-  }>;
-
-  return rows.map((r) => ({
-    type: r.type as AgentEventType,
-    agentId: r.agent_id,
-    ts: r.created_at,
-    payload: JSON.parse(r.payload || "{}"),
-  }));
-}
 
 /** Delete events older than 30 days. Call periodically or on startup. */
 export function cleanupOldEvents(db: Database.Database): number {

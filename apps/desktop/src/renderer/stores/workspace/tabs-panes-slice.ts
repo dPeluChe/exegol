@@ -19,7 +19,7 @@ import type {
   WorkspaceTab,
 } from "./types";
 
-export type TabsPanesSlice = Pick<
+type TabsPanesSlice = Pick<
   WorkspaceStore,
   | "projectWorkspaces"
   | "_activeProjectId"

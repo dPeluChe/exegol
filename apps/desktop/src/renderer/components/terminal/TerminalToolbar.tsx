@@ -180,7 +180,7 @@ const ISOLATION_LABEL: Record<
   },
 };
 
-export function IsolationModeBadge({
+function IsolationModeBadge({
   mode,
   branchName,
 }: {

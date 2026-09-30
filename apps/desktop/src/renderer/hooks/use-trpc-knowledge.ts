@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
-export interface KnowledgeSnapshot {
+interface KnowledgeSnapshot {
   initialized: boolean;
   brief: string | null;
   digest: string | null;

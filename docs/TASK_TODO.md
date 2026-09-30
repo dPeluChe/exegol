@@ -13,15 +13,14 @@
 
 ## Priority Order
 
-### 0.5.3 queue (2026-09-25): ACTIVE
-> Reported while using 0.5.2. Done so far is in TASK_COMPLETED/2609.md (files viewer, launcher
-> folder actions, sidebar layout + rail, project appearance, port status, files search + editing).
+### Queue after 0.5.7 (2026-09-29)
 
 1. **Verify opencode across app quit** (P1 #2 below).
 2. **Search follow-ups** (from the #151 simplify pass): `fsSearch`/`fsGrep` are sync napi calls
    run per folder on the main process (fine at 3-10ms per repo, a freeze on a 30-repo workspace);
    make them `AsyncTask` and give the Rust walker a nested-`.git` scope instead of the per-folder
-   loop. Unsaved edits are lost on rename of the open file or pane close (keep drafts in a store).
+   loop. Unsaved edits are lost on rename of the open file (keep drafts in a store; the peek and
+   the Files viewer already ask before closing unsaved edits, #215).
 3. **Performance follow-ups** (0.5.3 audit, not done in the perf pass):
    - `diff.gitState` every 15s per GitPane spawns 4 git + `gh pr view` (network): poll the PR on
      its own 2-5 min interval and invalidate after push/commit; `diff.status` repeats its git status
@@ -48,18 +47,18 @@
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
 9. **React health score (react-doctor), keep raising it**: 54 → 69 so far (#204 Bugs, #205
-   Security/Performance, #209 Maintainability, Accessibility 88 → 2). Goal 90+. Measure with
-   `cd apps/desktop && npx -y react-doctor@latest . --yes --score`; the full list with `--json`.
+   Security/Performance, #209 Maintainability, Accessibility 88 → 2). Score 70; 22 findings left,
+   all in the known-and-kept list (TASK_COMPLETED/2609.md). Goal 90+. Measure with
+   `cd apps/desktop && npx -y react-doctor@0.9.14 . --yes --score`; the full list with `--json`.
+   CI job on PRs (changed scope): errors block, warnings are listed. Known limitation: a kept
+   finding re-appears as new when its lines move.
    Rule: fix the root cause, never a disable, ignore or config entry to lift the number; a
    finding that is wrong for this app stays listed and is noted in the PR (the score counts it).
-   - Remaining (29): the known-and-kept list below, plus Performance/Bugs/Security leftovers to
-     re-read one by one; the score no longer moves much per finding, so each needs a real reason
    - Known and kept (not bugs here): two `autoFocus` on editors the user just opened (rename,
      diff comment), sequential loops that must stay so (queue spawns, reattach
      order, Ollama indexer, auto-resume, the concurrency helper), Monaco already lazy, the PDF
      iframe without `sandbox` (Chromium blocks its viewer), Doctor only shows install commands,
      index keys where the position is the identity, two mutations with no cached data
-   - Then: `react-doctor --scope changed` in CI so a PR cannot add findings
 
 
 > Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.
@@ -67,11 +66,12 @@
 
 **P0**
 1. **Installable build**: DONE. 0.5.0 installed; v0.5.1 published on GitHub releases
-   (2026-09-24); 0.5.2 built from main. Still open: both manual-verification checklists below on
-   the packaged app, and T195 (notarized + universal build) before sharing more widely.
+   (2026-09-24); 0.5.7 published: notarized since 0.5.4, Linux packages from CI since 0.5.6.
+   Still open: both manual-verification checklists below on the packaged app, and T195
+   (universal build) before sharing more widely.
 
 **P1**
-2. opencode TUI dies across app quit: VERIFY on 0.5.2 (reported 2026-08-11, before the two
+2. opencode TUI dies across app quit: VERIFY on 0.5.7 (reported 2026-08-11, before the two
    likely causes changed on 2026-08-12: interactive CLIs now `exec` (no wrapper shell left behind)
    and the MCP shim reconnects instead of exiting when the app quits). Launch opencode, quit
    Exegol, reopen: the session should still be alive. If it dies, `exegol.log` says how
@@ -82,10 +82,6 @@
 6. T185.11: scheduler timeout records two results and frees capacity early; T185.1 scheduler UI
 7. T185.6 / T185.7 / T185.9: main-process freezes (token scan, idle serialize, worktree status)
 8. T182.8: History pagination
-
-**Wave 2.6 status (2026-07-06 → 2026-08-11)**: T149-T152 shipped (`TASK_COMPLETED/2608.md`).
-Open exit criteria: both manual checklists below, and cut **v0.5.0** (T156 dashboard landed;
-T142 postponed by Antonio 2026-08-11).
 
 **P2 — Post-launch bets (next round):** T153 Awareness Engine · T133 remote channel (Telegram;
 remote continuity is the most visible gap vs Omnara / Claude web / Codex Remote) · T132 automations
@@ -107,6 +103,16 @@ dependency/library audit
 - **Wave 1 — Stack Optimizations (Terax review, 2026-05)**: quick wins + WT1-WT5 + T120 settings window.
   Details: `docs/TASK_COMPLETED/2605.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
+
+### Verify live (2026-09-29, not checked in the app)
+- Shell → agent promotion (a CLI typed in a terminal) + Continue
+- Accessibility structural changes: tab drag/rename (incl. the drop area now spread over the
+  tab's controls), sidebar rows, dashboard card clicks
+- WebGL back after a terminal font change
+- Projects height handle in the sidebar
+- What's new dialog after a real update
+- Files peek: Esc order (unsaved-edit prompt before closing)
+- Dashboard message thread on the agent card
 
 ### Manual verification pending (post-merge) `added: 2026-05-22`
 Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended before broad release:
@@ -137,8 +143,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - [x] Exegol MCP — **VERIFIED 2026-08-11**: shim framing bug found+fixed; claude shows
   `exegol · connected · 3 tools`; live memory_search (empty-correct) → 3× memory_save
   (ids+categories) → retrieval ✅. Pending only: read-mode denial (spawn a read-mode agent,
-  memory_save must be refused). Follow-up still open: MCP HOST StdioTransport may have the
-  same LSP-framing bug the shim had (external stdio servers likely can't connect).
+  memory_save must be refused). **MCP HOST** (Exegol connecting to external servers: `mcp/host.ts`,
+  `registry.ts`, the `mcp.*` connect/tools procedures), kept on purpose (2026-09-29), not usable:
+  it never had a UI and nothing connects it; stdio frames with `Content-Length` (MCP stdio is
+  newline JSON, the shim's old bug), no `notifications/initialized` after `initialize`, protocol
+  pinned to 2024-11-05, no tests. `spawn-context` pastes `buildToolContext()` into agent prompts:
+  empty today, but harmful if a server were connected (agents cannot call tools outside their own
+  MCP config). Rebuild on `@modelcontextprotocol/sdk` when there is a real consumer (e.g. a
+  pipeline step calling a tool without an agent).
   (`memory_list`, the AND→OR recall retry and opencode MCP config shipped: 2608.md, T163.)
 - Polish note (verify session): shell/agent exit card duplicates the scrollback tail
   visible right below it — slim the AgentStopReason card (keep actions, drop/collapse tail)
@@ -148,7 +160,7 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 - Race promote & clean: dirty loser prompts; live-agent loser refuses cleanup
 - Onboarding wizard on fresh profile: CLIs detected (packaged build especially — PATH fix)
 - Monitor → Resources: eviction actually drops RSS; budget alert fires once per period
-- **🐛 FOUND 2026-08-11 (verify on 0.5.2, see P1 #2): opencode TUI child dies across app quit** — the
+- **🐛 FOUND 2026-08-11 (verify on 0.5.7, see P1 #2): opencode TUI child dies across app quit** — the
   wrapper shell survives in the sidecar (reattach OK, prompt shows `took 18m48s`) but the
   opencode process exits, printing its `Continue: opencode -s ses_…` message; typing then
   goes to the stale shell over a dead TUI screen. claude-code survives the identical flow.
@@ -402,6 +414,8 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 - Per-session token identity: moved to T173.
 - **SessionAlias window-listener → store**: `renamingAgentId` field in the workspace/agents store instead of N window listeners.
 - **mapLinkRow → zod** (agentLinkRowSchema) to match every other table's validated mapping.
+- **AgentDashboard card pass-through CSS** depends on SessionAlias's internal `group/alias`
+  button class: give SessionAlias a prop instead.
 
 ---
 
@@ -412,20 +426,27 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 1. **Scheduler has no UI** since 274e611 (SchedulerSection deleted); the sidebar Schedulers section
    was removed in the 2026-09-22 PR. Create/edit/toggle/run UI missing; hooks in
    `renderer/hooks/use-trpc-scheduler.ts` unused.
-2. **Ollama project indexing has no start button**: `indexer.startIndexing/search/projectStats` have
-   no renderer caller; the Settings section describes a feature the user cannot run.
+2. **Semantic code search (indexer), kept on purpose, not usable yet** (validated 2026-09-29):
+   no UI and nothing triggers `indexer.startIndexing`, so `file_index`/`file_chunks` are empty for
+   everyone; only the `exegol search` CLI reads them. Before exposing it (UI, an MCP `code_search`
+   tool for agents, or both): chunks are 500 lines (likely over the embedding model's context under
+   Ollama defaults: truncated vectors, unverified); `semanticSearch` loads every vector of the
+   project per query; its header promises FTS/RRF fusion the code does not do; `indexProject`,
+   `semanticSearch`, `hybridSearch` have no tests; indexing runs on the main process. Value vs
+   grep must be shown first (agents already grep). The FTS index is separate and alive (memory
+   recall); its `search.*` router has no caller (only memories are indexed)
 3. **Parallel runs**: `parallel-run:changed` broadcast is in neither the capabilities IPC list nor
    preload (UI polls every 10s); `agents.cancelParallelRun` has no UI.
 4. **Dead surface** (P2): `agent:signal` / `agent:turn-boundary` broadcasts have no subscriber;
-   tables `sessions`, `port_registry`, `host_metrics` unused; `messages.*` and `queue.*` have no UI;
-   preload `browser.captureElement` unused. Wire or delete (feeds T144).
+   tables `sessions`, `port_registry`, `host_metrics` unused; `queue.*` has no UI. Wire or
+   delete (feeds T144).
 5. **LLM tier-3 score persists (w3_009) but nothing displays it**: show it in Scoring/History or stop
    the paid Haiku call.
 
 **Main-process stalls**
 6. **Tokens tab Scan** (`tokens/log-parser.ts`) is sync `readFileSync` + `JSON.parse` over
    `~/.claude/projects`: 2.1s freeze at ~1GB. Move to a worker_thread or stream with mtime skip.
-7. **Headless xterm serialize on main** (`headless-emulator.ts:83`), 25-40ms per 5000 lines: runs on
+7. **Headless xterm serialize on main** (`headless-emulator.ts:69`), 25-40ms per 5000 lines: runs on
    every 5s scrollback flush per agent even when idle (add a dirty flag), and twice per pane mount
    (`use-terminal-lifecycle.ts` fetches a full snapshot to test non-empty, `terminal-setup.ts`
    fetches again; the lifecycle hook's `markData` is unused and could be wired).
@@ -448,8 +469,8 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     (#4, #5): `indexProject` stores the file hash before the vector, so a `null` embedding is never
     retried; the cache compares content hash only, and `cosineSimilarity` truncates to the shorter
     dimension. Persist model id, dimension and chunker version per index generation. Before T153.
-13. **Indexer follows symlinks out of the repo** (#6): `project-indexer.ts:51` uses `stat`, no
-    real-path containment, no `.gitignore`. Git-aware enumeration, skip external symlinks.
+13. **Indexer ignores `.gitignore`** (#6): `walkDir` (`project-indexer.ts`) only applies its own
+    exclude list. Symlinks are no longer followed (fe7e264). Use git-aware enumeration.
 14. **Sidecar memory pressure** (#9): `pendingBytes` counts UTF-16 units, not bytes; ring eviction
     only touches idle sessions (33 active rings = 264 MiB > 256 MiB target); `broadcast`
     (`pty-sidecar-entry.ts:65`) ignores `client.write`'s return, so a slow client grows the socket
@@ -472,24 +493,12 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
-### T195 — Distribution: notarized universal build + GitHub release `added: 2026-09-24`
-**Priority**: P1, ship with 0.5.1 | **Effort**: M
+### T195 — Distribution: universal build `added: 2026-09-24`
+**Priority**: P2 | **Effort**: M
 
-First share failed (2026-09-24): the 0.5.0 DMG sent over Slack would not open on a teammate's Mac.
-Expected from the points below (quarantine + no notarization, and arm64 only if that Mac is
-Intel). Next build goes out as a GitHub release download, notarized; downloading from GitHub alone
-would hit the same wall.
-
-Signing works (Developer ID, local keychain) but the DMG is not notarized, so any downloaded copy
-(browser, Slack, Mail, AirDrop: all set the quarantine flag; a GitHub release does not avoid it)
-hits Gatekeeper, and on macOS 15 only System Settings > Privacy & Security > "Open Anyway" gets
-past it. It is also arm64 only.
-1. Notarization: `notarize: true` in `electron-builder.ts`, credentials from env only (Apple ID +
-   app-specific password + team NQHHJ85736, or an App Store Connect API key .p8 for CI).
+Notarization (since 0.5.4) and GitHub releases are done. The build is still arm64 only.
 2. Universal build (Intel + Apple Silicon): core-rust for `x86_64-apple-darwin` too, the
    `@libsql/darwin-x64` binary (not installed today), node-pty x64; `target: universal` or two DMGs.
-3. GitHub release: DMG + zip + `latest-mac.yml` (zip and yml feed the auto-updater, which already
-   points at dPeluChe/exegol releases), via `gh release create` or CI with secrets.
 4. Validate on someone else's Intel and Apple Silicon Mac: downloaded DMG opens with no warning;
    auto-update goes from one release to the next.
 5. Build note: after `bun install --frozen-lockfile` electron-vite's nested esbuild binary went
@@ -499,8 +508,6 @@ past it. It is also arm64 only.
 **Priority**: P1 unless noted | **Source**: 2026-09-22 pre-build audit. Fixed items are in `TASK_COMPLETED/2609.md`.
 
 **Distribution**
-1. Not notarized (`notarize: false`); a CI build without the Developer ID cert is ad-hoc signed, so
-   Squirrel updates fail. Local builds sign with the keychain identity.
 2. `process.execPath` is written into hooks, `.mcp.json` and CLI configs: launching from the DMG
    volume or a translocated path breaks them once the app moves. Install to /Applications first;
    long term, rewrite those paths at startup when execPath changed.
@@ -509,7 +516,8 @@ past it. It is also arm64 only.
    `rebuild:native` builds `build/Release/spawn-helper`. chmod in an afterPack hook.
 5. Dev and packaged share `~/.exegol` sidecar socket and pid (same SIDECAR_VERSION reuses each
    other's sidecar). P2.
-6. `@exegol/core-rust` undeclared in `apps/desktop`; `vitest` undeclared in `packages/shared`. P2.
+6. `@exegol/core-rust` undeclared in `apps/desktop` (knip flags it; it ships by relative path via
+   extraResources). P2.
 
 **Agents**
 8. Memory extraction on exit is dead (`extractAndStoreMemories` only via `memory.extract`, never
@@ -521,7 +529,7 @@ past it. It is also arm64 only.
 12. `{{diff}}` (up to 16 MiB) goes into argv; over ~1MB the spawn fails. Pass via file (T183.11).
 13. Without core-rust (`dev:ui`) runs silently use the project root.
 14. Resume/Export pipeline mutations and Git stage/unstage have no onError; renamed or quoted
-    paths break staging; Create PR is offered on main.
+    paths break staging.
 15. Pipeline snapshot restore runs on `project.path`; Rust refuses the cross-worktree restore (safe,
     now visible as a toast). Pass the run's worktree path.
 
@@ -962,6 +970,9 @@ Wanted: an agent can escalate through the channel; the user approves once from E
 **signed by Exegol**, never relayed by the requesting agent. Pairs with T169's ownership
 question — who may act on which files while several agents coordinate.
 
+A human → agent send from the Dashboard thread needs a sender Exegol verifies (the removed
+`messages.send` accepted any sender and never delivered).
+
 ---
 
 ### T166 — MCP shim architecture (deferred from the 2026-08-12 shim review) `added: 2026-08-12`
@@ -975,7 +986,8 @@ files a team may legitimately version — the warning goes to the human instead.
   client now share `createNdjsonBuffer` (cap + multibyte decoder); the sidecar's own reader
   is still hand-rolled and unbounded. Deferred only because it is bundled into the sidecar,
   so fixing it requires a `SIDECAR_VERSION` bump — every live PTY dies on the next launch.
-  Fold it into the next change that has to bump anyway.
+  Fold it into the next change that has to bump anyway. Unexport the sidecar's unused types
+  (knip: `EvictableSession`, `PendingState`, `AppendResult`) in the same bump.
 - **`buffer.indexOf("\n")` rescans from 0 on every chunk** in `createNdjsonBuffer`: a 7 MB
   tool result arriving in 64 KB chunks scans ~110× up to 7 MB. The cap bounds each scan but
   not the quadratic; a `searchFrom` offset carried across calls makes it linear.
@@ -1378,12 +1390,14 @@ location (local path vs ssh://host). Key files to study:
 **Scope**
 - Upgrade pass: Electron 41 → current stable, React 18 → 19 (evaluate: emdash ships 19), xterm/addons, node-pty rebuild chain, Biome, TS
 - `spark audit` + `bun pm ls` review: prune unused deps, dedupe, license check pre-open-source
-- **knip config** (`knip.json` with electron-vite entries: main/index, preload, renderer, pty-sidecar-entry, workspaces): raw run 2026-07 flagged 42 exports + deps but produced false positives on `export *` barrels (e.g. `listProjects` flagged while used) — needs tuned config before pruning; then delete verified-dead exports
+- **knip**: pruned 2026-09-29 (unused exports 66 → 5, knip findings 90 → 8). No knip config is committed: decide between committing it with a `bun run knip` script, or dropping it.
 - Bundle budget: initial chunk ≤ 1MB enforced in CI (fonts already lazy — verify), track in BENCHMARKS.md
 - Rust: `cargo update` + clippy pedantic re-run; napi + memchr versions
 - Baseline 2026-07 was 0 files >450 LOC. 2026-09-22: 8 files >500 LOC (`SpawnAgentModal.tsx` 689, `exegol-server.ts` 626, `AgentDashboard.tsx` 612, `migrations.ts` 590, `procedures/agents.ts` 570, `FileExplorer.tsx` 514, `WorkspacePane.tsx` 507, `exegol-mcp-config.ts` 506)
 - Dead surface inventory 2026-09-22: see T185.4
-- **Orphaned tRPC procedures inventory** (defined in routers, renderer never calls — review with product before deleting; some are planned-feature stubs): `projects.open`, `agents.getStatus/updateStatus/getParallelRun/cancelParallelRun/preflight`, `settings.updateModelCatalog`, `resources.portConflicts`, `apikeys.test`, `scheduler.get`, `scrollback.exists`, `skills.getEnabledForSpawn`, `mcp.callTool`, `memory.updateRelevance/getContext/extract`, `messages.conversation/markAllRead/unreadCount`, `queue.get/updateStatus`, `qa-tests.get`, `fs-search.fuzzyFind/grep`, `indexer.projectStats/startIndexing/search`
+- **Orphaned tRPC procedures** (in `preload/capabilities.json`, no caller in `apps/desktop/src`, scan 2026-09-29):
+  - Decided: `scheduler.*` (T185.1, no UI, kept until decided); `indexer.*` and `search.*` (T185.2, kept on purpose); `mcp.*` host procedures (MCP HOST note, kept on purpose); `queue.*` (T185.4); `budgets.list/delete`; `memory.extract` (T193.8); `messages.conversation` (kept, read-only)
+  - Undecided, wire or delete one by one: `projects.open`, `agents.getStatus/updateStatus/getParallelRun/cancelParallelRun/preflight` (cancel: T185.3), `tokenUsage.history/pipelineRunCost`, `apiKeys.test`, `diff.structuredDiff`, `scrollback.exists`, `oplog.listAgent`, `skills.getContent/getEnabledForSpawn`, `skillInstaller.lockFile`, `memory.getContext/updateRelevance`, `qaTests.get`, `fsSearch.fuzzyFind/grep`, `projectGroups.reorder`
 - ~~Recovery half-wiring~~ resolved 2026-07: `invalidatePane`/`getRecoveryToken`/`RecoveryToken` removed (`invalidReason` stays — set via `updatePane`, rendered in WorkspacePane); unused deps removed (`@radix-ui/react-dialog` in desktop+ui, `react-dropdown-menu` + `lucide-react` in ui)
 
 ---

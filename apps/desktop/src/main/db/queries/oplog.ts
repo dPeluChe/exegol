@@ -6,7 +6,7 @@ export type { OplogEntry, OplogOperation };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface OplogEntryCreate {
+interface OplogEntryCreate {
   agentId: string;
   projectId: string;
   operation: OplogOperation;
@@ -54,7 +54,7 @@ export function createOplogEntry(db: Database.Database, data: OplogEntryCreate):
   return getOplogEntry(db, id)!;
 }
 
-export function getOplogEntry(db: Database.Database, id: string): OplogEntry | null {
+function getOplogEntry(db: Database.Database, id: string): OplogEntry | null {
   const row = db.prepare("SELECT * FROM oplog WHERE id = ?").get(id);
   return row ? mapOplogRow(row as Record<string, unknown>) : null;
 }

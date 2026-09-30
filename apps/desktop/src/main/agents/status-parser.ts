@@ -71,12 +71,6 @@ export class OscNotifyScanner {
     if (!agentId || !event) return null;
     return { agentId, event };
   }
-
-  reset(): void {
-    this.matchPos = 0;
-    this.capturing = false;
-    this.payload = "";
-  }
 }
 
 type LineUpdate = { status?: AgentStatus; currentStep?: string } | null;

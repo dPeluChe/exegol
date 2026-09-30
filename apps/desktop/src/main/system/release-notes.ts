@@ -3,7 +3,7 @@ import { gt, lte, valid } from "semver";
 import { logger } from "../lib/logger";
 import { EXEGOL_REPO_SLUG } from "../lib/repo";
 
-export interface ReleaseNote {
+interface ReleaseNote {
   version: string;
   /** ISO date the release was published */
   date: string | null;

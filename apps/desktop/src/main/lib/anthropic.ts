@@ -1,12 +1,12 @@
 import { PermanentError, TimeoutError, TransientError, withRetry } from "./errors";
 
-export interface AnthropicMessageResult {
+interface AnthropicMessageResult {
   text: string;
   inputTokens: number;
   outputTokens: number;
 }
 
-export interface AnthropicCallOptions {
+interface AnthropicCallOptions {
   apiKey: string;
   model: string;
   maxTokens: number;

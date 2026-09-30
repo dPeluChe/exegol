@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface ParsedTokenEntry {
+interface ParsedTokenEntry {
   provider: string;
   model: string;
   inputTokens: number;
@@ -47,7 +47,7 @@ function estimateCost(model: string, inputTokens: number, outputTokens: number):
 
 // ─── Claude Code JSONL Parser ───────────────────────────────────────────────
 
-export function parseClaudeCodeLogs(sinceTimestamp: number): ParsedTokenEntry[] {
+function parseClaudeCodeLogs(sinceTimestamp: number): ParsedTokenEntry[] {
   const claudeDir = join(homedir(), ".claude", "projects");
   return parseJsonlDirectory(claudeDir, sinceTimestamp, "anthropic", extractClaudeTokenUsage);
 }
@@ -101,7 +101,7 @@ function extractClaudeTokenUsage(
  * payload.info.total_token_usage.{input_tokens, output_tokens, cached_input_tokens}
  * Model/provider comes from session_meta entry.
  */
-export function parseCodexLogs(sinceTimestamp: number): ParsedTokenEntry[] {
+function parseCodexLogs(sinceTimestamp: number): ParsedTokenEntry[] {
   const sessionsDir = join(homedir(), ".codex", "sessions");
   const entries: ParsedTokenEntry[] = [];
 
@@ -225,7 +225,7 @@ function parseCodexSessionFile(filePath: string, since: number): ParsedTokenEntr
  * Aider logs cost/token info in markdown comments like:
  * > Tokens: 12.3k sent, 1.2k received. Cost: $0.04
  */
-export function parseAiderLogs(sinceTimestamp: number): ParsedTokenEntry[] {
+function parseAiderLogs(sinceTimestamp: number): ParsedTokenEntry[] {
   const entries: ParsedTokenEntry[] = [];
   const home = homedir();
 

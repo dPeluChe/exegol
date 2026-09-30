@@ -12,7 +12,7 @@ import { app } from "electron";
 
 const CLI_NAME = "exegol";
 
-export function getCliScriptPath(): string {
+function getCliScriptPath(): string {
   // Packaged: shipped via electron-builder extraResources → Resources/bin/.
   // Dev: the script lives in the repo at apps/desktop/resources/bin/.
   return app.isPackaged

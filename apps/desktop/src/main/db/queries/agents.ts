@@ -12,7 +12,7 @@ import { resolveTaskLabel } from "../../agents/task-label";
 import { logger } from "../../lib/logger";
 import { mapAgentRow, nanoid } from "./helpers";
 
-export type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
+type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
 
 /** T156: every non-terminal agent across ALL projects, with project name +
  *  group color — the renderer store only knows projects opened this session. */
@@ -178,7 +178,7 @@ export function activateAgent(db: Database.Database, agentId: string, pid: numbe
 // Recent Sessions
 // ---------------------------------------------------------------------------
 
-export interface RecentSessionRow {
+interface RecentSessionRow {
   id: string;
   taskDescription: string;
   cliType: string;

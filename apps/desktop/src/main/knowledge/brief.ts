@@ -9,11 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { logger } from "../lib/logger";
 import { ensureKnowledgeDir, getProjectBriefPath } from "./paths";
 
-export const PROJECT_BRIEF_SECTIONS = [
-  "What it does",
-  "Where it's going",
-  "Key decisions",
-] as const;
+const PROJECT_BRIEF_SECTIONS = ["What it does", "Where it's going", "Key decisions"] as const;
 
 function defaultBriefTemplate(): string {
   return PROJECT_BRIEF_SECTIONS.map((s) => `## ${s}\n\n_Not yet filled in._\n`).join("\n");

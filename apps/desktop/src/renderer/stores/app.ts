@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
-export type ActiveView = "projects" | "workspace" | "dashboard";
+type ActiveView = "projects" | "workspace" | "dashboard";
 
 interface AppStore {
   /** Current main view */

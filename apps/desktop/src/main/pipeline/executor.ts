@@ -35,7 +35,7 @@ import {
 import { cleanupPipelineWorktree } from "./pipeline-worktree";
 import { assertTransition } from "./state-machine";
 
-export { checkGitSync, type GitSyncStatus } from "./pipeline-helpers";
+export { checkGitSync } from "./pipeline-helpers";
 
 // ─── Singleton ─────────────────────────────────────────────────────────────
 

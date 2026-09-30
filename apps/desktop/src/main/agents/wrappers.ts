@@ -203,10 +203,6 @@ function mergeCodexHooks(): void {
   }
 }
 
-export function getNotifyScriptPath(): string {
-  return NOTIFY_SCRIPT;
-}
-
 export function getEventsDir(): string {
   return EVENTS_DIR;
 }

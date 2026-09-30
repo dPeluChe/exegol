@@ -12,6 +12,7 @@ import {
   Clock,
   Coins,
   Cpu,
+  MessagesSquare,
   Plus,
   Send,
   Square,
@@ -34,6 +35,7 @@ import { QuietBadge } from "../../common/QuietControls";
 import { SessionAlias } from "../../common/SessionAlias";
 import { WatchToggle } from "../../common/WatchToggle";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
+import { AgentMessagesPanel, useAgentMessages } from "./AgentMessages";
 import { WatchingSection } from "./WatchingSection";
 import { WorktreesCard } from "./WorktreesCard";
 
@@ -506,6 +508,8 @@ function AgentCard({
   const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
   const canPeek = LIVE_STATUSES.has(agent.status);
   const [peekOpen, setPeekOpen] = useState(false);
+  const [messagesOpen, setMessagesOpen] = useState(false);
+  const { data: messages = [] } = useAgentMessages(agent.id);
 
   return (
     <div
@@ -552,6 +556,13 @@ function AgentCard({
                 {agent.branchName}
               </span>
             )}
+            {messages.length > 0 && (
+              <MessagesToggle
+                count={messages.length}
+                open={messagesOpen}
+                onToggle={() => setMessagesOpen((v) => !v)}
+              />
+            )}
             {canPeek && (
               <PeekControls
                 agentId={agent.id}
@@ -565,7 +576,37 @@ function AgentCard({
       </div>
 
       {peekOpen && <PeekPanel agent={agent} />}
+      {messagesOpen && messages.length > 0 && (
+        <AgentMessagesPanel agentId={agent.id} messages={messages} />
+      )}
     </div>
+  );
+}
+
+/** What this agent said to the others and they to it (agent_send), with delivery state */
+function MessagesToggle({
+  count,
+  open,
+  onToggle,
+}: {
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className={cn(
+        "flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] hover:bg-white/10 hover:text-text-primary",
+        open ? "text-accent" : "text-text-muted",
+      )}
+      title="Messages between this agent and the others"
+    >
+      <MessagesSquare className="h-3 w-3" />
+      {count}
+    </button>
   );
 }
 

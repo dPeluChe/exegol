@@ -1,7 +1,6 @@
 import type {
   ImportCandidate,
   SkillInstallResult,
-  SkillLockFile,
   SkillRegistryEntry,
   SkillWithState,
 } from "@exegol/shared";
@@ -24,14 +23,6 @@ export function useToggleSkill() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
-  });
-}
-
-export function useSkillContent(projectPath: string | null, skillName: string | null) {
-  return useQuery({
-    queryKey: ["skill", "content", skillName],
-    queryFn: () => trpcInvoke<string | null>("skills.getContent", { projectPath, skillName }),
-    enabled: !!skillName,
   });
 }
 
@@ -87,12 +78,5 @@ export function useImportSkills() {
       queryClient.invalidateQueries({ queryKey: ["skills"] });
       queryClient.invalidateQueries({ queryKey: ["skillInstaller"] });
     },
-  });
-}
-
-export function useSkillLockFile(scope: "global" | "project", projectPath?: string) {
-  return useQuery({
-    queryKey: ["skillInstaller", "lockFile", scope, projectPath],
-    queryFn: () => trpcInvoke<SkillLockFile>("skillInstaller.lockFile", { scope, projectPath }),
   });
 }

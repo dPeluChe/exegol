@@ -11,7 +11,7 @@ import {
 } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 
-export interface ProjectContextValue {
+interface ProjectContextValue {
   project: Project | null;
   projectId: string | null;
   isLoading: boolean;

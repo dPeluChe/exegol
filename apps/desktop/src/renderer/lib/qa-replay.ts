@@ -34,13 +34,13 @@ export interface QaReplayResult {
   totalDurationMs: number;
 }
 
-export interface QaReplayCallbacks {
+interface QaReplayCallbacks {
   onStepStart?: (index: number, action: QaAction) => void;
   onStepComplete?: (result: QaStepResult) => void;
   onComplete?: (result: QaReplayResult) => void;
 }
 
-export interface QaReplayOptions {
+interface QaReplayOptions {
   /** Stop executing further steps on the first failure. Default: false. */
   stopOnFail?: boolean;
 }
@@ -71,7 +71,7 @@ const SELECTOR_TIMEOUT_MS = 5000;
  *
  * Monkey-patches `console.error` to capture errors during replay.
  */
-export const QA_REPLAY_INJECTION_SCRIPT = `(function() {
+const QA_REPLAY_INJECTION_SCRIPT = `(function() {
   "use strict";
   if (window.__exegolQaReplayClick) return; // already injected
 

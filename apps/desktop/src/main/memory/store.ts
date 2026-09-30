@@ -90,7 +90,7 @@ export function listMemories(
   return (rows as Record<string, unknown>[]).map(mapMemoryRow);
 }
 
-export function createMemory(db: Database.Database, data: MemoryCreate): MemoryEntry {
+function createMemory(db: Database.Database, data: MemoryCreate): MemoryEntry {
   const id = nanoid();
   const now = Math.floor(Date.now() / 1000);
   const score = data.relevanceScore ?? 0.5;
@@ -158,7 +158,7 @@ export function updateMemoryRelevance(
 // ─── Reinforcement + supersession (T126) ────────────────────────────────────
 
 /** The same fact was re-observed: bump reinforcement_count, never duplicate. */
-export function reinforceMemory(db: Database.Database, id: string): void {
+function reinforceMemory(db: Database.Database, id: string): void {
   const now = Math.floor(Date.now() / 1000);
   db.prepare(
     `UPDATE memories SET reinforcement_count = reinforcement_count + 1, last_reinforced_at = ?
@@ -167,11 +167,7 @@ export function reinforceMemory(db: Database.Database, id: string): void {
 }
 
 /** A contradicting/updated fact: insert the new row, mark the old one superseded. Never overwrites. */
-export function supersedeMemory(
-  db: Database.Database,
-  oldId: string,
-  data: MemoryCreate,
-): MemoryEntry {
+function supersedeMemory(db: Database.Database, oldId: string, data: MemoryCreate): MemoryEntry {
   // Transactional: a crash between INSERT and UPDATE must not leave both
   // rows active (duplicate near-identical facts injected into agents).
   const run = db.transaction(() => {

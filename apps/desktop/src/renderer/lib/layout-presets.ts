@@ -24,9 +24,9 @@ export type LayoutPresetId =
   | "two-by-two";
 
 /** Slot type hints — undefined means "reuse existing or fallback to empty". */
-export type SlotType = PaneType | undefined;
+type SlotType = PaneType | undefined;
 
-export interface LayoutPreset {
+interface LayoutPreset {
   id: LayoutPresetId;
   label: string;
   description: string;
@@ -169,7 +169,7 @@ export function getLayoutPreset(id: LayoutPresetId): LayoutPreset | undefined {
  * - `newPanes`: panes that must be created in the store
  * - `terminalsToSpawn`: subset of newPanes that need a shell agent spawned
  */
-export interface LayoutTransformation {
+interface LayoutTransformation {
   layout: LayoutNode;
   newPanes: Pane[];
   terminalsToSpawn: string[];

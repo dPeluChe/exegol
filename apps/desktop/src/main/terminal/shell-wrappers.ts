@@ -25,14 +25,6 @@ export const SHELL_READY_MARKER = "\x1b]777;exegol-shell-ready\x07";
 /** Shells that support our readiness marker */
 const SHELLS_WITH_MARKER = new Set(["zsh", "bash", "fish"]);
 
-export function getZshWrapperDir(): string {
-  return ZSH_DIR;
-}
-
-export function getBashRcfile(): string {
-  return join(BASH_DIR, "rcfile");
-}
-
 /** T112: ZDOTDIR pointing at the OSC 7 + OSC 133 shell-integration scripts. */
 export function getShellIntegrationZdotdir(): string {
   return SHELL_INTEGRATION_DIR;

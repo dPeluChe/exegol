@@ -1,17 +1,15 @@
 // Server-side headless terminal emulator (T36 + session reattach).
 // Runs in main process via @xterm/headless — no DOM required.
-// Tracks terminal state, modes, CWD for snapshot generation and session reattach.
+// Tracks terminal state and modes for snapshot generation and session reattach.
 
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/headless";
-
-const ESC = "\x1b";
 
 /** T143: cap the serialized ANSI snapshot size (reattach + disk scrollback flush). */
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024; // 2MB
 
 /** Terminal mode state for reattach protocol */
-export interface TerminalModes {
+interface TerminalModes {
   applicationCursorKeys: boolean; // DECCKM (1)
   originMode: boolean; // DECOM (6)
   autoWrap: boolean; // DECAWM (7)
@@ -23,16 +21,6 @@ export interface TerminalModes {
   focusReporting: boolean; // (1004)
   bracketedPaste: boolean; // (2004)
   alternateScreen: boolean; // (1049)
-}
-
-/** Full snapshot for session reattach */
-export interface SessionSnapshot {
-  snapshotAnsi: string;
-  rehydrateSequences: string;
-  cwd: string | null;
-  modes: TerminalModes;
-  cols: number;
-  rows: number;
 }
 
 const DEFAULT_MODES: TerminalModes = {
@@ -52,7 +40,6 @@ const DEFAULT_MODES: TerminalModes = {
 export class HeadlessEmulator {
   private terminal: Terminal;
   private serializer: SerializeAddon;
-  private _cwd: string | null = null;
   private _modes: TerminalModes = { ...DEFAULT_MODES };
 
   constructor(cols: number, rows: number, scrollback = 5000) {
@@ -63,7 +50,6 @@ export class HeadlessEmulator {
 
   /** Feed raw terminal data */
   write(data: string): void {
-    this.parseOsc7(data);
     this.parseDecModes(data);
     this.terminal.write(data);
   }
@@ -92,20 +78,6 @@ export class HeadlessEmulator {
     }
   }
 
-  /** Generate full session snapshot for reattach protocol */
-  sessionSnapshot(): SessionSnapshot | null {
-    const snapshotAnsi = this.snapshot();
-    if (!snapshotAnsi) return null;
-    return {
-      snapshotAnsi,
-      rehydrateSequences: this.generateRehydrateSequences(),
-      cwd: this._cwd,
-      modes: { ...this._modes },
-      cols: this.terminal.cols,
-      rows: this.terminal.rows,
-    };
-  }
-
   get size(): { cols: number; rows: number } {
     return { cols: this.terminal.cols, rows: this.terminal.rows };
   }
@@ -114,51 +86,8 @@ export class HeadlessEmulator {
     this.terminal.resize(cols, rows);
   }
 
-  get cwd(): string | null {
-    return this._cwd;
-  }
-
-  get modes(): TerminalModes {
-    return { ...this._modes };
-  }
-
   dispose(): void {
     this.terminal.dispose();
-  }
-
-  /** Generate escape sequences to restore current mode state on reattach */
-  private generateRehydrateSequences(): string {
-    const seqs: string[] = [];
-    const m = this._modes;
-    const add = (num: number, on: boolean, defaultOn: boolean) => {
-      if (on !== defaultOn) seqs.push(`${ESC}[?${num}${on ? "h" : "l"}`);
-    };
-    add(1, m.applicationCursorKeys, false);
-    add(6, m.originMode, false);
-    add(7, m.autoWrap, true);
-    add(25, m.cursorVisible, true);
-    add(1000, m.mouseTrackingNormal, false);
-    add(1002, m.mouseTrackingButtonEvent, false);
-    add(1003, m.mouseTrackingAnyEvent, false);
-    add(1006, m.mouseSgr, false);
-    add(1004, m.focusReporting, false);
-    add(2004, m.bracketedPaste, false);
-    // 1049 is emitted by snapshot() itself, which is the only place that
-    // knows whether the serialized body came from the alt buffer.
-    return seqs.join("");
-  }
-
-  /** Parse OSC-7 escape sequences for CWD tracking */
-  private parseOsc7(data: string): void {
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI escape sequence matching (ESC, BEL)
-    const match = data.match(/\x1b\]7;file:\/\/[^/]*([^\x07\x1b]+)/);
-    if (match?.[1]) {
-      try {
-        this._cwd = decodeURIComponent(match[1]);
-      } catch {
-        /* invalid encoding */
-      }
-    }
   }
 
   /** Track DECSET/DECRST mode changes from terminal output */

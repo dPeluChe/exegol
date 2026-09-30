@@ -4,7 +4,7 @@
  */
 export type ShortcutCategory = "navigation" | "agents" | "terminal";
 
-export interface Shortcut {
+interface Shortcut {
   id: string;
   label: string;
   description: string;

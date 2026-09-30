@@ -1,4 +1,4 @@
-export interface NotesSection {
+interface NotesSection {
   /** "Added", "Fixed"... null for lines before the first heading */
   title: string | null;
   items: string[];

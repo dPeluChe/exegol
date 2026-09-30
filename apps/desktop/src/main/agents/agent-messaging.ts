@@ -46,12 +46,7 @@ export {
   seedAgentLinkCache,
 } from "./agent-links";
 // Re-exported so every existing import site keeps working after the split.
-export {
-  checkAgentMessages,
-  isEchoingInjection,
-  sanitizeAgentMessage,
-} from "./agent-message-injection";
-export type { MessageDeliveryState } from "./agent-message-state";
+export { checkAgentMessages, isEchoingInjection } from "./agent-message-injection";
 
 const MAX_QUEUE_PER_TARGET = 10;
 // An assignment brief has to carry scope, rules AND validation criteria — at
