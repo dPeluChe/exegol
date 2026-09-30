@@ -22,6 +22,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Sidebar Agents: a switch between the live agents and Needs attention (its count turns amber with something unread); the list shows every live agent again, the ones waiting on you marked, and the pick is remembered
 
 ### Fixed
+- Browser design mode and QA recording: send only to live agents (no shells), by session name, as one paste that is submitted; Copy is a visible button and confirms with a toast
 - Sidebar Agents: dragging a group shows a line where it will land (above or below the group under the cursor)
 - Right-click menus (panes, files, projects, groups, agents) open upward or to the left when there is no room below or to the right, instead of falling off the window
 - Trackpad scrolling in fullscreen TUIs (Claude) no longer needs repeated swipes: xterm's trackpad damping is undone while the TUI tracks the mouse; the terminal's own scrollback keeps its speed
