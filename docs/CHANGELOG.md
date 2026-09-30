@@ -9,6 +9,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Linux (and Windows): the app's shortcuts use Ctrl+Shift instead of Ctrl, so they work with the cursor in a terminal (Ctrl+letter stays with the shell: Ctrl+C, Ctrl+D, Ctrl+W); macOS Shift/Option variants are Ctrl+Shift+Alt. Every label (welcome tour, shortcuts list, menus, tooltips, badges) shows the keys of your platform instead of Cmd
+
+### Added
+- Linux (and Windows): Ctrl+Shift+C copies the terminal selection
+
+### Fixed
+- The pane menu no longer shows a shortcut for Equalize Splits (it had none)
+
 ## [0.5.9] — 2026-09-30 — Keyboard navigation, shortcut slots, welcome tour
 
 ### Added

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useSettings } from "../../hooks/use-trpc";
+import { IS_MAC } from "../../lib/keymap";
 import { displayAccelerator, SHORTCUTS, type ShortcutCategory } from "../../lib/shortcuts";
 import { type SegmentedTab, SegmentedTabs } from "../common/SegmentedTabs";
 
@@ -70,7 +71,11 @@ export function KeyboardShortcuts() {
         ))}
       </div>
 
-      <p className="text-[10px] text-text-muted">Uses Cmd on macOS, Ctrl on Windows and Linux.</p>
+      <p className="text-[10px] text-text-muted">
+        {IS_MAC
+          ? "On Linux and Windows, Cmd is Ctrl+Shift (and Cmd+Shift or Cmd+Option is Ctrl+Shift+Alt)."
+          : "Ctrl+Shift, not Ctrl: Ctrl alone stays with the terminal (Ctrl+C, Ctrl+D, Ctrl+W)."}
+      </p>
     </div>
   );
 }

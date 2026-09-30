@@ -1,9 +1,12 @@
+import { appKeys, editKeys } from "../../lib/keymap";
+
 export interface WelcomeTourStep {
   title: string;
   bullets: string[];
 }
 
-export const WELCOME_TOUR_STEPS: WelcomeTourStep[] = [
+/** Written with macOS keys; WELCOME_TOUR_STEPS shows them for the running platform */
+const MAC_STEPS: WelcomeTourStep[] = [
   {
     title: "Welcome to Exegol",
     bullets: [
@@ -71,3 +74,8 @@ export const WELCOME_TOUR_STEPS: WelcomeTourStep[] = [
     ],
   },
 ];
+
+export const WELCOME_TOUR_STEPS: WelcomeTourStep[] = MAC_STEPS.map((step) => ({
+  ...step,
+  bullets: step.bullets.map((b) => (b.includes("Cmd+click") ? editKeys(b) : appKeys(b))),
+}));

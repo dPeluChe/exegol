@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cleanupAndCloseFocusedPane } from "../hooks/use-hotkeys";
+import { appKeys } from "../lib/keymap";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -460,7 +461,7 @@ export function CommandPalette() {
                               color: "var(--text-muted)",
                             }}
                           >
-                            {cmd.shortcut}
+                            {appKeys(cmd.shortcut)}
                           </kbd>
                         )}
                       </button>
@@ -479,7 +480,7 @@ export function CommandPalette() {
             <span>↑↓ navigate · ↵ select · esc close</span>
             <div className="flex items-center gap-1">
               <Keyboard className="h-3 w-3" />
-              <span>⌘K</span>
+              <span>{appKeys("⌘K")}</span>
             </div>
           </div>
         </Dialog.Content>

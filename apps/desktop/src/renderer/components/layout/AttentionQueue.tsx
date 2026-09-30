@@ -3,6 +3,7 @@ import { cn } from "@exegol/ui";
 import { AlertCircle, AlertTriangle, Bell, CheckCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
+import { appKeys } from "../../lib/keymap";
 import {
   type AttentionItem,
   type AttentionLevel,
@@ -72,7 +73,7 @@ export function AttentionQueue() {
           "flex h-7 items-center gap-1 rounded px-2 text-xs transition-colors hover:bg-white/10",
           unreadCount > 0 ? "text-amber-400" : "text-text-secondary",
         )}
-        title="Agents needing attention (Cmd+J to jump to next)"
+        title={`Agents needing attention (${appKeys("Cmd+J")} to jump to next)`}
       >
         <Bell className="h-3.5 w-3.5" />
         {unreadCount > 0 && <span className="font-medium">{unreadCount}</span>}

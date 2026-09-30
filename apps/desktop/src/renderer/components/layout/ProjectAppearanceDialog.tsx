@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { useProjects } from "../../hooks/use-trpc";
+import { chordBadge } from "../../lib/keymap";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../../stores/shortcuts";
 import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
@@ -135,7 +136,7 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
           const owner = holder.get(d);
           return (
             <option key={d} value={d}>
-              {`⌘${d}`}
+              {chordBadge(d)}
               {owner && owner !== projectId
                 ? ` (now ${nameOf.get(owner) ?? "another project"})`
                 : ""}

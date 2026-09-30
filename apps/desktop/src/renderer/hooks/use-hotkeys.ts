@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { groupForDigit } from "../lib/live-tabs";
 import { cyclePane, focusActivePane } from "../lib/pane-focus";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
@@ -12,7 +13,6 @@ export function useHotkeys() {
 
   // Rule 4: external system sync — global keyboard event listener
   useEffect(() => {
-    const isMac = window.api.app.getPlatform() === "darwin";
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ctrl+Tab / Ctrl+Shift+Tab: next or previous pane of the tab (plain Tab stays with the
       // terminal; tabs cycle with Cmd+Shift+[ ])
@@ -22,43 +22,42 @@ export function useHotkeys() {
         return;
       }
 
-      // Platform-aware modifier: Cmd on macOS, Ctrl elsewhere. Using ctrlKey
-      // on macOS would hijack native text-editing shortcuts (Ctrl+W = delete
-      // word backward, Ctrl+A = start of line, etc).
-      const mod = isMac ? e.metaKey : e.ctrlKey;
-
-      if (!mod) return;
+      // Cmd on macOS, Ctrl+Shift elsewhere (lib/keymap): Ctrl alone belongs to the terminal.
+      // Below, "Cmd" and "Shift" read as that chord and its variant
+      const chord = appChord(e);
+      if (!chord) return;
+      const key = chordKey(e);
 
       // Cmd+B: Toggle sidebar
-      if (e.key === "b") {
+      if (key === "b") {
         e.preventDefault();
         toggleSidebar();
         return;
       }
 
       // Cmd+T: New workspace tab
-      if (e.key === "t") {
+      if (key === "t") {
         e.preventDefault();
         useWorkspaceStore.getState().addTab();
         return;
       }
 
       // Cmd+W: Close focused pane (or tab if last pane) + stop terminal agents
-      if (e.key === "w") {
+      if (key === "w") {
         e.preventDefault();
         cleanupAndCloseFocusedPane();
         return;
       }
 
       // Cmd+,: Open Settings (separate BrowserWindow, T120)
-      if (e.key === ",") {
+      if (key === ",") {
         e.preventDefault();
         window.api.settings.open();
         return;
       }
 
-      // Cmd+K or Cmd+Shift+P: Toggle Command Palette
-      if (e.key === "k" || (e.shiftKey && e.key.toLowerCase() === "p")) {
+      // Cmd+K or Cmd+Shift+P: Toggle Command Palette (Ctrl+Shift+P too, where the chord is Ctrl+Shift)
+      if (key === "k" || (key === "p" && (chord.shift || !IS_MAC))) {
         e.preventDefault();
         const app = useAppStore.getState();
         app.setCommandPaletteOpen(!app.commandPaletteOpen);
@@ -66,35 +65,35 @@ export function useHotkeys() {
       }
 
       // Cmd+Shift+D: Split vertical
-      if (e.shiftKey && e.key.toLowerCase() === "d") {
+      if (chord.shift && key === "d") {
         e.preventDefault();
         useWorkspaceStore.getState().splitFocusedPane("vertical");
         return;
       }
 
       // Cmd+D: Split horizontal
-      if (e.key === "d") {
+      if (key === "d") {
         e.preventDefault();
         useWorkspaceStore.getState().splitFocusedPane("horizontal");
         return;
       }
 
       // Cmd+Shift+N: Parallel spawn dialog (T65)
-      if (e.shiftKey && e.key.toLowerCase() === "n") {
+      if (chord.shift && key === "n") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("exegol:spawn-parallel"));
         return;
       }
 
       // Cmd+N: New Agent (open spawn dialog)
-      if (e.key === "n") {
+      if (key === "n") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
         return;
       }
 
       // Cmd+.: Stop focused agent
-      if (e.key === ".") {
+      if (key === ".") {
         e.preventDefault();
         useAgentStore.getState().stopFocusedAgent();
         return;
@@ -103,39 +102,38 @@ export function useHotkeys() {
       // ── Workspace tab navigation (T42) ────────────────────────────────
 
       // Cmd+Shift+]: Next workspace tab
-      if (e.shiftKey && e.key === "]") {
+      if (chord.shift && key === "]") {
         e.preventDefault();
         navigateWorkspaceTab("next");
         return;
       }
 
       // Cmd+Shift+[: Previous workspace tab
-      if (e.shiftKey && e.key === "[") {
+      if (chord.shift && key === "[") {
         e.preventDefault();
         navigateWorkspaceTab("prev");
         return;
       }
 
       // Cmd+J: Jump to the next agent needing attention (T141)
-      if (e.key === "j") {
+      if (key === "j") {
         e.preventDefault();
         jumpToNextAttention();
         return;
       }
 
       // Cmd+/ (Cmd+?): Show keyboard shortcuts overlay
-      if (e.key === "/") {
+      if (key === "/") {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("exegol:show-shortcuts"));
         return;
       }
 
-      // e.code: with Option held, e.key is "¡", "™"...
-      const digit = /^Digit([0-9])$/.exec(e.code)?.[1];
+      const digit = /^[0-9]$/.test(key) ? key : undefined;
 
       // Cmd+1: Dashboard; Cmd+2-9, 0: the live tab groups (numbers given in Edit project first,
       // then the sidebar's order, pinned ones last: lib/live-tabs)
-      if (digit && !e.altKey && !e.shiftKey) {
+      if (digit && !chord.alt && !chord.shift) {
         e.preventDefault();
         if (digit === "1") {
           useAppStore.getState().openDashboard();
@@ -152,7 +150,7 @@ export function useHotkeys() {
       }
 
       // Cmd+Option+1-9: workspace tab of the current project by position
-      if (digit && digit !== "0" && e.altKey) {
+      if (digit && digit !== "0" && chord.alt) {
         e.preventDefault();
         const ws = useWorkspaceStore.getState();
         const index = Number(digit) - 1;
@@ -168,10 +166,10 @@ export function useHotkeys() {
       }
 
       // Cmd+] / Cmd+[: next or previous pane of this tab (plain Tab belongs to the terminal:
-      // shell completion, Claude). e.code: the bracket keys move on other layouts
-      if (!e.shiftKey && !e.altKey && (e.code === "BracketRight" || e.code === "BracketLeft")) {
+      // shell completion, Claude). chordKey reads e.code: the bracket keys move on other layouts
+      if (!chord.shift && (key === "]" || key === "[")) {
         e.preventDefault();
-        cyclePane(e.code === "BracketRight" ? "next" : "prev");
+        cyclePane(key === "]" ? "next" : "prev");
         return;
       }
     };

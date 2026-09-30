@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Layers } from "lucide-react";
 import { useState } from "react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
+import { appKeys } from "../../../lib/keymap";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { EmptyState } from "../../common/EmptyState";
 import { ParallelRunComparator } from "./ParallelRunComparator";
@@ -32,7 +33,7 @@ export function ParallelRunsSection() {
       <EmptyState
         icon={<Layers className="h-6 w-6 text-text-muted" />}
         title="No parallel runs yet"
-        description="Cmd+Shift+N to launch agents in parallel and pick a winner."
+        description={`${appKeys("Cmd+Shift+N")} to launch agents in parallel and pick a winner.`}
         className="h-full"
       />
     );

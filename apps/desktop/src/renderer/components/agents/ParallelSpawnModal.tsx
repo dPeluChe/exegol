@@ -3,6 +3,7 @@ import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { editKeys } from "../../lib/keymap";
 import { switchSection } from "../../lib/switch-section";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -260,7 +261,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
               {spawning
                 ? "Launching..."
                 : `Launch ${selectedCliTypes.size} Agent${selectedCliTypes.size !== 1 ? "s" : ""}`}
-              <span className="ml-1 text-[9px] opacity-60">Cmd+Enter</span>
+              <span className="ml-1 text-[9px] opacity-60">{editKeys("Cmd+Enter")}</span>
             </button>
           </div>
         </div>

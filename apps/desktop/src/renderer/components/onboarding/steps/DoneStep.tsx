@@ -1,7 +1,8 @@
 import { Button } from "@exegol/ui";
 import { CheckCircle2 } from "lucide-react";
+import { appKeys } from "../../../lib/keymap";
 
-/** The few worth knowing on day one; the rest are behind ⌘/ */
+/** The few worth knowing on day one (macOS notation, shown per platform); the rest are behind ⌘/ */
 const DONE_SHORTCUTS = [
   ["⌘N", "New agent"],
   ["⌘1", "Dashboard"],
@@ -27,7 +28,7 @@ export function DoneStep({ onFinish }: DoneStepProps) {
         {DONE_SHORTCUTS.map(([keys, label]) => (
           <div key={keys} className="contents">
             <kbd className="justify-self-end rounded border border-border px-1.5 font-mono text-text-secondary">
-              {keys}
+              {appKeys(keys)}
             </kbd>
             <span className="text-text-muted">{label}</span>
           </div>

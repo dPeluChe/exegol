@@ -2,6 +2,7 @@ import type { DiffComment } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Check, MessageSquare, Trash2, Undo2 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { editKeys } from "../../../../lib/keymap";
 
 // ─── Comment input ──────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export function CommentInput({ onSubmit, onCancel }: CommentInputProps) {
           >
             Cancel
           </button>
-          <span className="ml-auto text-[9px] text-text-muted">Cmd+Enter</span>
+          <span className="ml-auto text-[9px] text-text-muted">{editKeys("Cmd+Enter")}</span>
         </div>
       </div>
     </div>

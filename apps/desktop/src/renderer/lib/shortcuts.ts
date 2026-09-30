@@ -1,3 +1,4 @@
+import { appKeys, IS_MAC } from "./keymap";
 /**
  * Every in-app shortcut, one list for Settings > Shortcuts and the Cmd+/ overlay (the three
  * copies had drifted from what use-hotkeys.ts does). Keep in step with hooks/use-hotkeys.ts.
@@ -8,11 +9,14 @@ interface Shortcut {
   id: string;
   label: string;
   description: string;
+  /** macOS notation; SHORTCUTS renders it for the running platform (lib/keymap) */
   keys: string;
+  /** Linux/Windows keys when the Cmd → Ctrl+Shift rule does not say it best */
+  otherKeys?: string;
   category: ShortcutCategory;
 }
 
-export const SHORTCUTS: Shortcut[] = [
+const MAC_SHORTCUTS: Shortcut[] = [
   {
     id: "toggle-sidebar",
     label: "Toggle Sidebar",
@@ -32,6 +36,7 @@ export const SHORTCUTS: Shortcut[] = [
     label: "Command Palette",
     description: "Search commands, projects and agents",
     keys: "Cmd+K / Cmd+Shift+P",
+    otherKeys: "Ctrl+Shift+K / Ctrl+Shift+P",
     category: "navigation",
   },
   {
@@ -142,10 +147,17 @@ export const SHORTCUTS: Shortcut[] = [
   },
 ];
 
-/** "CommandOrControl+Shift+E" as the lists write keys */
+export const SHORTCUTS: Shortcut[] = MAC_SHORTCUTS.map((s) => ({
+  ...s,
+  keys: IS_MAC ? s.keys : (s.otherKeys ?? appKeys(s.keys)),
+}));
+
+/** "CommandOrControl+Shift+E" as the lists write keys. An Electron accelerator, so plain Ctrl
+ *  off macOS (not the app's Ctrl+Shift) */
 export function displayAccelerator(accelerator: string): string {
   return accelerator
-    .replace(/CommandOrControl|Command|Cmd/g, "Cmd")
+    .replace(/CommandOrControl/g, IS_MAC ? "Cmd" : "Ctrl")
+    .replace(/Command|Cmd/g, "Cmd")
     .replace(/Control/g, "Ctrl")
     .replace(/Option/g, "Alt");
 }
