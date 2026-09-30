@@ -159,19 +159,30 @@ function PaneToolbar({
   return (
     <>
       {isSplitPane && (
-        // The grip sits on the pane's left edge, apart from the action icons on the right and
-        // clear of the terminal toolbar's badges along the top
+        // The grip sits on the pane's left edge, outlined in the accent so it reads as a handle;
+        // the action bar keeps a second one for whoever looks there first
         // biome-ignore lint/a11y/noStaticElementInteractions: drag handle for pane extraction
         <div
           draggable
           onDragStart={handleDragStart}
-          className="absolute top-1/2 left-0.5 z-10 flex h-10 w-4 -translate-y-1/2 cursor-grab items-center justify-center rounded bg-bg-secondary/80 text-accent opacity-0 transition-opacity hover:bg-accent/15 active:cursor-grabbing group-hover/pane:opacity-100"
+          className="absolute top-1/2 left-0.5 z-10 flex h-10 w-4 -translate-y-1/2 cursor-grab items-center justify-center rounded border border-accent bg-bg-secondary/90 text-accent opacity-0 transition-opacity hover:bg-accent/15 active:cursor-grabbing group-hover/pane:opacity-100"
           title="Drag to another pane's edge to move it, or to the tab bar to extract it"
         >
           <GripVertical className="h-3.5 w-3.5" />
         </div>
       )}
       <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded bg-bg-secondary/80 opacity-0 transition-opacity group-hover/pane:opacity-100">
+        {isSplitPane && (
+          // biome-ignore lint/a11y/noStaticElementInteractions: drag handle for pane extraction
+          <div
+            draggable
+            onDragStart={handleDragStart}
+            className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-accent hover:bg-accent/15 active:cursor-grabbing"
+            title="Drag to another pane's edge to move it, or to the tab bar to extract it"
+          >
+            <GripVertical className="h-3 w-3" />
+          </div>
+        )}
         {showIdeButton && projectId && (
           <button
             type="button"

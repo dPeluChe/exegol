@@ -18,6 +18,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - The pane menu no longer shows a shortcut for Equalize Splits (it had none)
+- A split pane's drag handle is easier to spot: outlined in the accent color on the left edge, and back in the pane's hover icons at the top as well
 
 ## [0.5.9] — 2026-09-30 — Keyboard navigation, shortcut slots, welcome tour
 
