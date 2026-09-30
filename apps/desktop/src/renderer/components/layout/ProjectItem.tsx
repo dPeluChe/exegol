@@ -118,6 +118,8 @@ interface ProjectItemProps {
   onToggle: () => void;
   onRename: (id: string, name: string) => void;
   agents: AgentState[];
+  /** Cmd+n to its live tab, as the Agents group shows it */
+  shortcut?: string;
   /** Drag-and-drop index */
   index: number;
   onDragStart: (index: number) => void;
@@ -133,6 +135,7 @@ export function ProjectItem({
   onToggle,
   onRename,
   agents,
+  shortcut,
   index,
   onDragStart,
   onDragOver,
@@ -253,6 +256,11 @@ export function ProjectItem({
             <>
               <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
               {counts}
+              {shortcut && (
+                <kbd className="shrink-0 rounded border border-border px-1 font-mono text-[9px] font-normal text-text-muted">
+                  {shortcut}
+                </kbd>
+              )}
             </>
           )}
         </button>

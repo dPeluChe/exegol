@@ -8,6 +8,7 @@ import {
   useProjects,
   useSetProjectGroup,
 } from "../../hooks/use-trpc";
+import { useProjectShortcuts } from "../../lib/live-tabs";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { AgentState } from "../../stores/agents";
 import { useAgentStore } from "../../stores/agents";
@@ -36,6 +37,8 @@ interface ProjectListSectionProps {
   activeProjectId: string | null;
   expandedIds: Set<string>;
   agentsById: Record<string, AgentState>;
+  /** Cmd+n that jumps to the project's live tab (lib/live-tabs) */
+  shortcuts: Map<string, string>;
   draggedProjectIdRef: React.MutableRefObject<string | null>;
   onSelect: (id: string) => void;
   onToggle: (id: string) => void;
@@ -49,6 +52,7 @@ function ProjectListSection({
   activeProjectId,
   expandedIds,
   agentsById,
+  shortcuts,
   draggedProjectIdRef,
   onSelect,
   onToggle,
@@ -100,6 +104,7 @@ function ProjectListSection({
             // not the project tree (verify 2026-08-11: 4 shown, 2 real).
             (a) => a.projectId === project.id && LIVE_STATUSES.has(a.status),
           )}
+          shortcut={shortcuts.get(project.id)}
           index={index}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
@@ -116,6 +121,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const setActiveProject = useAppStore((s) => s.setActiveProject);
   const agents = useAgentStore((s) => s.agents);
+  const shortcuts = useProjectShortcuts();
   const queryClient = useQueryClient();
   const setProjectGroup = useSetProjectGroup();
   const createGroup = useCreateProjectGroup();
@@ -180,6 +186,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
           activeProjectId={activeProjectId}
           expandedIds={expandedIds}
           agentsById={agents}
+          shortcuts={shortcuts}
           draggedProjectIdRef={draggedProjectIdRef}
           onSelect={setActiveProject}
           onToggle={toggleProject}
@@ -240,6 +247,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
                 activeProjectId={activeProjectId}
                 expandedIds={expandedIds}
                 agentsById={agents}
+                shortcuts={shortcuts}
                 draggedProjectIdRef={draggedProjectIdRef}
                 onSelect={setActiveProject}
                 onToggle={toggleProject}
@@ -272,6 +280,7 @@ export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSection
           activeProjectId={activeProjectId}
           expandedIds={expandedIds}
           agentsById={agents}
+          shortcuts={shortcuts}
           draggedProjectIdRef={draggedProjectIdRef}
           onSelect={setActiveProject}
           onToggle={toggleProject}

@@ -66,6 +66,21 @@ export function useLiveTabGroups(): LiveTabGroup[] {
   );
 }
 
+/** Each project's shortcut: the one of its first live tab group in the sidebar's order */
+export function projectShortcuts(groups: Pick<LiveTabGroup, "projectId">[]): Map<string, string> {
+  const byProject = new Map<string, string>();
+  groups.forEach((g, i) => {
+    const key = groupShortcut(i);
+    if (key && !byProject.has(g.projectId)) byProject.set(g.projectId, key);
+  });
+  return byProject;
+}
+
+export function useProjectShortcuts(): Map<string, string> {
+  const groups = useLiveTabGroups();
+  return useMemo(() => projectShortcuts(groups), [groups]);
+}
+
 /** Cmd+1 is the Dashboard, so a group at index i answers to Cmd+(i+2), up to Cmd+9 */
 export function groupShortcut(index: number): string | null {
   return index <= 7 ? `⌘${index + 2}` : null;
