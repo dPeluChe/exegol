@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useFileContent } from "../../hooks/use-trpc";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { FileExplorer } from "../workspace/FileExplorer";
@@ -44,9 +44,10 @@ export function PeekFileOverlay({
   onDirtyChange: (dirty: boolean) => void;
 }) {
   const { data, error } = useFileContent(path);
-  const [dirty, setDirty] = useState(false);
+  // Only read when closing: a ref, so each keystroke's dirty report does not re-render
+  const dirtyRef = useRef(false);
   const [confirmClose, setConfirmClose] = useState(false);
-  const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
+  const requestClose = () => (dirtyRef.current ? setConfirmClose(true) : onClose());
   return (
     <div className="absolute inset-0 z-10 flex bg-bg-primary" data-peek-file>
       <FilePreview
@@ -56,7 +57,7 @@ export function PeekFileOverlay({
         error={error}
         onClose={requestClose}
         onDirtyChange={(d) => {
-          setDirty(d);
+          dirtyRef.current = d;
           onDirtyChange(d);
         }}
       />

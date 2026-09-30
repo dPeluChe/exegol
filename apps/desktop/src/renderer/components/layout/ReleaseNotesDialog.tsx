@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { parseReleaseNotes } from "../../lib/release-notes";
@@ -142,9 +142,14 @@ export function WhatsNewAfterUpdate() {
     queryFn: () => trpcInvoke<{ version: string; notes: ReleaseNote[] } | null>("updates.whatsNew"),
     staleTime: Number.POSITIVE_INFINITY,
   });
-  const markSeen = useMutation({ mutationFn: () => trpcMutate("updates.markSeen") });
+  const queryClient = useQueryClient();
+  const markSeen = useMutation({
+    mutationFn: () => trpcMutate("updates.markSeen"),
+    // Seen: the cached answer is now "nothing new", which closes the dialog
+    onSuccess: () => queryClient.setQueryData(["updates", "whatsNew"], null),
+  });
   // No notes (offline): nothing to show, and it is asked again on the next launch
-  const open = !!data && data.notes.length > 0 && !markSeen.isSuccess;
+  const open = !!data && data.notes.length > 0;
   return (
     <ReleaseNotesDialog
       open={open}
