@@ -102,7 +102,8 @@ export function installAppMenu(): void {
         { role: "forceReload" },
         { role: "toggleDevTools" },
         { type: "separator" },
-        { role: "resetZoom" },
+        // Cmd+0 is the ninth live tab (Cmd+2..9, 0); Reset Zoom moves to Cmd+Shift+0
+        { role: "resetZoom", accelerator: "CmdOrCtrl+Shift+0" },
         { role: "zoomIn" },
         { role: "zoomOut" },
         { type: "separator" },

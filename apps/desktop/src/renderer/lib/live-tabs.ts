@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { type AgentState, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
+import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../stores/shortcuts";
+import { useWatchStore } from "../stores/watch";
 import { collectPaneIds, useWorkspaceStore } from "../stores/workspace";
 import type { ProjectWorkspace } from "../stores/workspace/types";
 
@@ -66,25 +68,80 @@ export function useLiveTabGroups(): LiveTabGroup[] {
   );
 }
 
-/** Each project's shortcut: the one of its first live tab group in the sidebar's order */
-export function projectShortcuts(groups: Pick<LiveTabGroup, "projectId">[]): Map<string, string> {
-  const byProject = new Map<string, string>();
-  groups.forEach((g, i) => {
-    const key = groupShortcut(i);
-    if (key && !byProject.has(g.projectId)) byProject.set(g.projectId, key);
+/**
+ * The digit each live tab group answers to (Cmd+digit). A number the user gave a project goes to
+ * its first live group and stays reserved while the project is idle. The others fill the free
+ * numbers in the sidebar's order, groups whose every session is pinned last (the Dashboard,
+ * Cmd+1, already reaches them). Past the ninth, a group has none.
+ */
+export function assignGroupShortcuts(
+  groups: LiveTabGroup[],
+  assigned: Record<string, ShortcutDigit>,
+  pinned: ReadonlySet<string>,
+): Map<string, ShortcutDigit> {
+  const byGroup = new Map<string, ShortcutDigit>();
+  const served = new Set<string>();
+  for (const g of groups) {
+    const digit = assigned[g.projectId];
+    if (digit && !served.has(g.projectId)) {
+      byGroup.set(g.key, digit);
+      served.add(g.projectId);
+    }
+  }
+  const rest = groups.filter((g) => !byGroup.has(g.key));
+  const allPinned = (g: LiveTabGroup) => g.agentIds.every((id) => pinned.has(id));
+  const ordered = [...rest.filter((g) => !allPinned(g)), ...rest.filter(allPinned)];
+  const reserved = new Set(Object.values(assigned));
+  const free = SHORTCUT_DIGITS.filter((d) => !reserved.has(d));
+  ordered.forEach((g, i) => {
+    const digit = free[i];
+    if (digit) byGroup.set(g.key, digit);
   });
+  return byGroup;
+}
+
+/** Each project's shortcut: the one of its first live group that has one */
+export function projectShortcuts(
+  groups: LiveTabGroup[],
+  byGroup: Map<string, ShortcutDigit>,
+): Map<string, ShortcutDigit> {
+  const byProject = new Map<string, ShortcutDigit>();
+  for (const g of groups) {
+    const digit = byGroup.get(g.key);
+    if (digit && !byProject.has(g.projectId)) byProject.set(g.projectId, digit);
+  }
   return byProject;
 }
 
-export function useProjectShortcuts(): Map<string, string> {
+export function useGroupShortcuts(): Map<string, ShortcutDigit> {
   const groups = useLiveTabGroups();
-  return useMemo(() => projectShortcuts(groups), [groups]);
+  const assigned = useShortcutStore((s) => s.assigned);
+  const watched = useWatchStore((s) => s.watched);
+  return useMemo(
+    () => assignGroupShortcuts(groups, assigned, new Set(watched)),
+    [groups, assigned, watched],
+  );
 }
 
-/** Cmd+1 is the Dashboard, so a group at index i answers to Cmd+(i+2), up to Cmd+9 */
-export function groupShortcut(index: number): string | null {
-  return index <= 7 ? `⌘${index + 2}` : null;
+export function useProjectShortcuts(): Map<string, ShortcutDigit> {
+  const groups = useLiveTabGroups();
+  const byGroup = useGroupShortcuts();
+  return useMemo(() => projectShortcuts(groups, byGroup), [groups, byGroup]);
 }
+
+/** The live group Cmd+digit jumps to (for the hotkey, outside React) */
+export function groupForDigit(digit: string): LiveTabGroup | undefined {
+  const groups = getLiveTabGroups();
+  const byGroup = assignGroupShortcuts(
+    groups,
+    useShortcutStore.getState().assigned,
+    new Set(useWatchStore.getState().watched),
+  );
+  return groups.find((g) => byGroup.get(g.key) === digit);
+}
+
+/** How a digit reads next to its group or project */
+export const shortcutLabel = (digit: ShortcutDigit | undefined) => (digit ? `⌘${digit}` : null);
 
 /** Drop `drag` on `target`: below it when moving down, above it when moving up */
 export function reorderKeys(all: string[], drag: string, target: string): string[] {

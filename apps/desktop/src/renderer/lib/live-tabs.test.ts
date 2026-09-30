@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { computeLiveTabGroups, groupShortcut, projectShortcuts, reorderKeys } from "./live-tabs";
+import {
+  assignGroupShortcuts,
+  computeLiveTabGroups,
+  type LiveTabGroup,
+  projectShortcuts,
+  reorderKeys,
+} from "./live-tabs";
 
 const pane = (paneId: string) => ({ type: "pane" as const, paneId });
 const pw = (tabs: { id: string; label: string; panes: Record<string, string> }[]) =>
@@ -55,10 +61,6 @@ describe("computeLiveTabGroups", () => {
       "wed:t1",
     ]);
   });
-
-  it("Cmd+1 is the Dashboard: the first group is ⌘2, the eighth ⌘9, then none", () => {
-    expect([groupShortcut(0), groupShortcut(7), groupShortcut(8)]).toEqual(["⌘2", "⌘9", null]);
-  });
 });
 
 describe("reorderKeys", () => {
@@ -71,16 +73,66 @@ describe("reorderKeys", () => {
   });
 });
 
+const group = (key: string, projectId: string, agentIds = [`${key}-agent`]): LiveTabGroup => ({
+  key,
+  projectId,
+  tabId: key,
+  tabLabel: key,
+  agentIds,
+});
+
+describe("assignGroupShortcuts", () => {
+  it("numbers 2..9 then 0 in the sidebar's order; the tenth group has none", () => {
+    const groups = "abcdefghij".split("").map((k) => group(k, k));
+    const map = assignGroupShortcuts(groups, {}, new Set());
+    expect(groups.map((g) => map.get(g.key) ?? null)).toEqual([
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "0",
+      null,
+    ]);
+  });
+
+  it("groups whose every session is pinned go last (Cmd+1 already reaches them)", () => {
+    const groups = [group("pinned", "p1"), group("free", "p2")];
+    const map = assignGroupShortcuts(groups, {}, new Set(["pinned-agent"]));
+    expect([map.get("free"), map.get("pinned")]).toEqual(["2", "3"]);
+  });
+
+  it("a mixed group (one pinned session, one not) keeps its place", () => {
+    const groups = [group("mixed", "p1", ["x", "y"]), group("other", "p2")];
+    const map = assignGroupShortcuts(groups, {}, new Set(["x"]));
+    expect([map.get("mixed"), map.get("other")]).toEqual(["2", "3"]);
+  });
+
+  it("a number given in Edit project stays, even pinned; the rest fill around it", () => {
+    const groups = [group("a", "pa"), group("b", "pb"), group("c", "pc")];
+    const map = assignGroupShortcuts(groups, { pc: "2", pb: "8" }, new Set(["b-agent"]));
+    expect([map.get("a"), map.get("b"), map.get("c")]).toEqual(["3", "8", "2"]);
+  });
+
+  it("an assigned number stays reserved while its project is idle", () => {
+    const map = assignGroupShortcuts([group("a", "pa")], { idle: "2" }, new Set());
+    expect(map.get("a")).toBe("3");
+  });
+
+  it("only a project's first live tab takes its number; its other tabs fill free ones", () => {
+    const groups = [group("t1", "p1"), group("t2", "p1")];
+    const map = assignGroupShortcuts(groups, { p1: "5" }, new Set());
+    expect([map.get("t1"), map.get("t2")]).toEqual(["5", "2"]);
+  });
+});
+
 describe("projectShortcuts", () => {
-  it("gives each project the shortcut of its first live group; past Cmd+9 there is none", () => {
-    const groups = ["a", "b", "a", "c", "d", "e", "f", "g", "h"].map((projectId) => ({
-      projectId,
-    }));
-    const map = projectShortcuts(groups);
-    expect(map.get("a")).toBe("⌘2");
-    expect(map.get("b")).toBe("⌘3");
-    // Eight shortcuts (⌘2..⌘9): the 8th group (g) is ⌘9, the 9th (h) has none
-    expect(map.get("g")).toBe("⌘9");
-    expect(map.get("h")).toBeUndefined();
+  it("gives each project the digit of its first live group that has one", () => {
+    const groups = [group("a1", "a"), group("b1", "b"), group("a2", "a")];
+    const map = projectShortcuts(groups, assignGroupShortcuts(groups, {}, new Set()));
+    expect([map.get("a"), map.get("b")]).toEqual(["2", "3"]);
   });
 });
