@@ -155,4 +155,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_015_agent_cli_version",
     sql: "ALTER TABLE agents ADD COLUMN cli_version TEXT;",
   },
+  {
+    // The model a session was launched with, so a resume or a restart onto an update keeps it
+    id: "w3_016_agent_model",
+    sql: "ALTER TABLE agents ADD COLUMN model TEXT;",
+  },
 ];

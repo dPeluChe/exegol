@@ -1,16 +1,19 @@
 import {
   type AgentAccessMode,
   type AgentProvider,
-  MODEL_FLAGS,
   MODEL_ID_PATTERN,
+  MODEL_LAUNCH,
   MODEL_SUGGESTIONS,
+  type ModelLaunch,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
 import { ACCESS_MODES } from "../../lib/access-modes";
+import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 
 /** One pickable pill in the launch modal (agent, session, mode, skill, place). */
@@ -199,15 +202,22 @@ export function ModelAndName({
   name: string;
   onName: (name: string) => void;
 }) {
-  const modelFlag = MODEL_FLAGS[providerId];
-  const suggestions = MODEL_SUGGESTIONS[providerId] ?? [];
+  const launch = MODEL_LAUNCH[providerId];
+  const { data: listed = [] } = useQuery({
+    queryKey: ["cliModels", providerId],
+    queryFn: () => trpcInvoke<string[]>("agents.listModels", { cliType: providerId }),
+    enabled: !!launch,
+    staleTime: 10 * 60 * 1000,
+  });
+  const suggestions = [...new Set([...(MODEL_SUGGESTIONS[providerId] ?? []), ...listed])];
   const invalid = model.trim() !== "" && !MODEL_ID_PATTERN.test(model.trim());
   return (
     <div className="grid grid-cols-2 gap-3">
-      {modelFlag && (
+      {launch && (
         <div className="flex flex-col gap-1.5">
           <label className="text-[11px] font-medium text-text-muted" htmlFor="spawn-model">
-            Model <span className="font-mono text-[10px]">{modelFlag}</span>
+            {providerId === "amp" ? "Mode" : "Model"}{" "}
+            <span className="font-mono text-[10px]">{launchHint(launch)}</span>
           </label>
           <input
             id="spawn-model"
@@ -225,7 +235,7 @@ export function ModelAndName({
           </datalist>
         </div>
       )}
-      <div className={cn("flex flex-col gap-1.5", !modelFlag && "col-span-2")}>
+      <div className={cn("flex flex-col gap-1.5", !launch && "col-span-2")}>
         <label className="text-[11px] font-medium text-text-muted" htmlFor="spawn-name">
           Name <span className="text-text-muted">(optional)</span>
         </label>
@@ -240,4 +250,10 @@ export function ModelAndName({
       </div>
     </div>
   );
+}
+
+function launchHint(launch: ModelLaunch): string {
+  if ("flag" in launch) return launch.flag;
+  if ("env" in launch) return launch.env;
+  return "--settings";
 }

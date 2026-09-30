@@ -103,24 +103,31 @@ export const YOLO_FLAGS: Record<string, string> = {
 };
 
 /**
- * Per-launch model: the flag each CLI takes (from its --help, 2026-09-30). CLIs without one at
- * launch (amp has modes, crush and droid read their config, goose only on `run`) are left out,
- * and the launcher shows no model field for them.
+ * How each CLI takes a model for one session (--help and vendor docs, 2026-09-30): a flag; an
+ * environment variable (goose); or droid's `--settings` file, merged for that process only.
+ * amp picks its model through a mode. crush and kiro have no per-session model (their config
+ * file is global), so the launcher shows no field for them.
  */
-export const MODEL_FLAGS: Record<string, string> = {
-  "claude-code": "--model",
-  codex: "--model",
-  gemini: "-m",
-  agy: "--model",
-  devin: "--model",
-  aider: "--model",
-  opencode: "-m",
-  kilocode: "-m",
+export type ModelLaunch = { flag: string } | { env: string } | { settingsFile: true };
+
+export const MODEL_LAUNCH: Record<string, ModelLaunch> = {
+  "claude-code": { flag: "--model" },
+  codex: { flag: "--model" },
+  gemini: { flag: "-m" },
+  agy: { flag: "--model" },
+  devin: { flag: "--model" },
+  aider: { flag: "--model" },
+  opencode: { flag: "-m" },
+  kilocode: { flag: "-m" },
+  amp: { flag: "-m" },
+  goose: { env: "GOOSE_MODEL" },
+  "factory-droid": { settingsFile: true },
 };
 
-/** Suggestions in the launcher; any other id the CLI accepts can be typed */
+/** Suggestions shipped with the app; CLIs that can list theirs add them (agents.listModels) */
 export const MODEL_SUGGESTIONS: Record<string, string[]> = {
   "claude-code": ["sonnet", "opus", "haiku"],
+  amp: ["smart", "rush", "free"],
 };
 
 /** Goes into the shell command unquoted: model ids only (letters, digits, . _ - : / @) */
@@ -216,6 +223,8 @@ export type Agent = {
   launchedInShell?: boolean;
   /** The CLI's version when this session started (null: unknown, or a shell) */
   cliVersion?: string | null;
+  /** The model it was launched with (null: the CLI's default) */
+  model?: string | null;
 };
 
 export type AgentCreate = {

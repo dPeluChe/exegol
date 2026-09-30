@@ -52,7 +52,7 @@ export const agentCreateSchema = z.object({
   yolo: z.boolean().optional(),
   /** T177: branch/ref the worktree is cut from. Undefined means the repo's HEAD. */
   baseBranch: z.string().optional(),
-  /** Model for this launch, passed with the provider's MODEL_FLAGS entry */
+  /** Model for this launch, passed the way MODEL_LAUNCH says for its CLI */
   model: z.string().regex(MODEL_ID_PATTERN).optional(),
   /** The session's name (alias); empty picks a codename */
   name: z.string().trim().max(40).optional(),

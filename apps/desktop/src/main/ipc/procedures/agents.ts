@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import { takeLostOnRestart, whenRecovered } from "../../agents/lost-sessions";
+import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
@@ -214,6 +215,11 @@ export const agentRouter = router({
     .mutation(({ ctx, input }) => ({ archived: archiveEndedAgents(ctx.db, input?.projectId) })),
 
   /** T160: set/clear the session alias — the agent_send addressing name. */
+  /** Models this account can use with a CLI, from the CLI's own list (empty when it has none) */
+  listModels: publicProcedure
+    .input(z.object({ cliType: z.string().regex(/^[\w-]{1,40}$/) }))
+    .query(({ input }) => listCliModels(input.cliType)),
+
   setAlias: publicProcedure
     .input(z.object({ id: z.string(), alias: z.string().trim().max(40).nullable() }))
     .mutation(({ ctx, input }) => {
