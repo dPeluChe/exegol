@@ -28,6 +28,8 @@ export interface TerminalInstanceProps {
   onOpenFileLink?: (path: string, line?: number) => void;
   /** T155: Cmd+click on a URL → open in an in-app browser pane (plain click = external). */
   onOpenUrlInPane?: (url: string) => void;
+  /** Text selected or cleared: "Send to" only shows when there is something to send */
+  onSelectionChange?: (hasSelection: boolean) => void;
 }
 
 /** TUI CLIs that break with WebGL renderer (alternate screen buffer issues) */

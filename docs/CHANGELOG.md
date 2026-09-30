@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Terminal "Send to" shows only while text is selected, lists live agents only (no shells) grouped by project with their session names, and pastes the selection into that agent without submitting it (a multi-line selection is one paste), then takes you there
+
 ## [0.5.8] — 2026-09-29 — What's new on update, agent message threads, accessibility
 
 ### Added

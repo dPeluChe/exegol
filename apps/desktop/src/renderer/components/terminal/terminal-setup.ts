@@ -34,6 +34,7 @@ interface TerminalSessionDeps {
   theme: ITerminalOptions["theme"];
   onScrollPosition: TerminalInstanceProps["onScrollPosition"];
   onOpenFileLink?: TerminalInstanceProps["onOpenFileLink"];
+  onSelectionChange?: TerminalInstanceProps["onSelectionChange"];
   onOpenUrlInPane?: TerminalInstanceProps["onOpenUrlInPane"];
   setPaneCwd: (paneId: string, cwd: string) => void;
   setPaneLastExit: (paneId: string, code: number | null) => void;
@@ -263,6 +264,11 @@ export function setupTerminalSession(
     };
     disposables.push(terminal.onScroll(() => checkScroll(false)));
     disposables.push(terminal.onWriteParsed(() => checkScroll(true)));
+  }
+
+  if (deps.onSelectionChange) {
+    const cb = deps.onSelectionChange;
+    disposables.push(terminal.onSelectionChange(() => cb(terminal.hasSelection())));
   }
 
   function dispose(): void {

@@ -33,6 +33,7 @@ interface TerminalScrollbackProps {
   terminalRef: Ref<TerminalInstanceHandle>;
   onScrollPosition: (atTop: boolean, atBottom: boolean) => void;
   floatingButtons: React.ReactNode;
+  onSelectionChange?: (hasSelection: boolean) => void;
 }
 
 /**
@@ -49,6 +50,7 @@ export function TerminalScrollback({
   terminalRef,
   onScrollPosition,
   floatingButtons,
+  onSelectionChange,
 }: TerminalScrollbackProps) {
   const [showOutput, setShowOutput] = useState(false);
   const { resume, pending, resumableCliTypes } = useResumeAgent();
@@ -114,6 +116,7 @@ export function TerminalScrollback({
                 readOnly
                 initialContent={scrollbackContent}
                 onScrollPosition={onScrollPosition}
+                onSelectionChange={onSelectionChange}
               />
               {floatingButtons}
             </>

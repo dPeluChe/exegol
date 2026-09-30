@@ -1,6 +1,7 @@
 import { type RefObject, useCallback, useRef, useState } from "react";
-import { useProject } from "../../hooks/use-trpc";
-import { useAgentStore } from "../../stores/agents";
+import { useProject, useProjects } from "../../hooks/use-trpc";
+import { pasteToAgent } from "../../lib/agent-input";
+import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import type { TerminalInstanceHandle } from "./terminal-types";
 import { useTerminalUrlDetector } from "./use-terminal-url-detector";
 
@@ -65,27 +66,95 @@ export function useFilesPeek(projectId: string | undefined) {
   };
 }
 
-/** "Send to": the selection goes to a running agent in another pane */
-export function useSendTo(agentId: string, terminalRef: TerminalHandleRef) {
-  const [showSendTo, setShowSendTo] = useState(false);
-  const allAgents = useAgentStore((s) => s.agents);
+/** A live agent that can receive a selection, with the project it belongs to */
+export interface SendTarget {
+  id: string;
+  name: string;
+  cliType: string;
+  projectId: string;
+}
 
-  /** Running agents in other panes (targets for "Send to") */
-  const sendTargets = Object.values(allAgents).filter(
-    (a) => a.id !== agentId && ["running", "waiting_input"].includes(a.status),
+/** Live agents other than `selfId`, never shells, grouped by project: this project first,
+ *  then the others by name */
+export function groupSendTargets(
+  agents: Array<{
+    id: string;
+    alias?: string | null;
+    cliType: string;
+    projectId: string;
+    status: string;
+  }>,
+  selfId: string,
+  projectNames: Map<string, string>,
+  currentProjectId: string | undefined,
+) {
+  const targets: SendTarget[] = agents
+    .filter(
+      (a) =>
+        a.id !== selfId &&
+        a.cliType !== "shell" &&
+        (a.status === "running" || a.status === "waiting_input"),
+    )
+    .map((a) => ({
+      id: a.id,
+      name: a.alias ?? a.cliType,
+      cliType: a.cliType,
+      projectId: a.projectId,
+    }));
+  const nameOf = (id: string) => projectNames.get(id) ?? id.slice(0, 8);
+  return [...new Set(targets.map((t) => t.projectId))]
+    .sort((a, b) =>
+      a === currentProjectId ? -1 : b === currentProjectId ? 1 : nameOf(a).localeCompare(nameOf(b)),
+    )
+    .map((id) => ({
+      projectId: id,
+      projectName: nameOf(id),
+      targets: targets.filter((t) => t.projectId === id),
+    }));
+}
+
+/** "Send to": the selected text goes into another live agent's input (not submitted: the user
+ *  adds context there). Only agents: pasting prose into a shell would run it line by line */
+export function useSendTo(
+  agentId: string,
+  projectId: string | undefined,
+  terminalRef: TerminalHandleRef,
+) {
+  const [showSendTo, setShowSendTo] = useState(false);
+  const [hasSelection, setHasSelection] = useState(false);
+  const allAgents = useAgentStore((s) => s.agents);
+  const { data: projects = [] } = useProjects();
+
+  const groups = groupSendTargets(
+    Object.values(allAgents),
+    agentId,
+    new Map(projects.map((p) => [p.id, p.name])),
+    projectId,
   );
 
   const handleSendTo = useCallback(
-    (targetId: string) => {
+    (target: SendTarget) => {
       const text = terminalRef.current?.getSelection();
       if (!text) return;
-      window.api.terminal.write(targetId, text);
+      pasteToAgent(target.id, text);
       setShowSendTo(false);
+      jumpToAgent(target.id, target.projectId);
     },
     [terminalRef],
   );
 
-  return { sendTargets, showSendTo, setShowSendTo, handleSendTo };
+  const onSelectionChange = useCallback((selected: boolean) => {
+    setHasSelection(selected);
+    if (!selected) setShowSendTo(false);
+  }, []);
+
+  return {
+    sendGroups: hasSelection ? groups : [],
+    showSendTo,
+    setShowSendTo,
+    handleSendTo,
+    onSelectionChange,
+  };
 }
 
 /** Terminal/Chat toggle; the live chat view reads a snapshot taken when it opens */
