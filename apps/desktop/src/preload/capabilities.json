@@ -280,6 +280,11 @@
       "status",
       "upsert"
     ],
+    "updates": [
+      "markSeen",
+      "notes",
+      "whatsNew"
+    ],
     "projectGroups": [
       "create",
       "delete",
