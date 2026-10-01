@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Launch Agent: the model is a dropdown that says what you get by default (the CLI's own setting) and lists the suggested models and the ones your account has (from the CLI); "Other" opens a field to type any id
 - Browser pane: show the page at a device size (Desktop 1440, Laptop 1280, Tablet 768, Mobile 390) from a picker in its address bar, like Chrome's device toolbar; the page lays out for that width, a smaller pane scrolls, and the pane remembers the size
 - Project layouts: right-click a project > Layouts... to save its current tab under a name (pane shapes, sizes, a browser's page, a file, and what each terminal runs: a shell, or an agent with its model, YOLO and access mode), then open it in a new tab or over the current one. Terminals and agents start again as they were. Layouts saved from the tab bar stay global, and now restart their terminals too
 

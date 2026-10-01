@@ -243,6 +243,8 @@ export function SkillPicker({
   );
 }
 
+const OTHER = "__other__";
+
 const INPUT_CLASS =
   "w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50";
 
@@ -268,30 +270,64 @@ export function ModelAndName({
     enabled: !!launch,
     staleTime: 10 * 60 * 1000,
   });
-  const suggestions = [...new Set([...(MODEL_SUGGESTIONS[providerId] ?? []), ...listed])];
+  const suggested = MODEL_SUGGESTIONS[providerId] ?? [];
+  const available = listed.filter((m) => !suggested.includes(m));
+  const known = new Set([...suggested, ...available]);
+  // A typed id stays in its own field; "Other..." opens it
+  const [custom, setCustom] = useState(false);
+  const typing = custom || (model.trim() !== "" && !known.has(model));
   const invalid = model.trim() !== "" && !MODEL_ID_PATTERN.test(model.trim());
+  const label = providerId === "amp" ? "Mode" : "Model";
   return (
     <div className="grid grid-cols-2 gap-3">
       {launch && (
         <div className="flex flex-col gap-1.5">
           <label className="text-[11px] font-medium text-text-muted" htmlFor="spawn-model">
-            {providerId === "amp" ? "Mode" : "Model"}{" "}
-            <span className="font-mono text-[10px]">{launchHint(launch)}</span>
+            {label} <span className="font-mono text-[10px]">{launchHint(launch)}</span>
           </label>
-          <input
+          <select
             id="spawn-model"
-            list="spawn-model-options"
-            value={model}
-            onChange={(e) => onModel(e.target.value)}
-            placeholder="CLI default"
-            aria-invalid={invalid}
-            className={cn(INPUT_CLASS, invalid && "border-red-500/60")}
-          />
-          <datalist id="spawn-model-options">
-            {suggestions.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
+            value={typing ? OTHER : model}
+            onChange={(e) => {
+              const v = e.target.value;
+              setCustom(v === OTHER);
+              onModel(v === OTHER ? "" : v);
+            }}
+            className={cn(INPUT_CLASS, "cursor-pointer")}
+          >
+            <option value="">Default (the CLI's own setting)</option>
+            {suggested.length > 0 && (
+              <optgroup label="Suggested">
+                {suggested.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {available.length > 0 && (
+              <optgroup label="Available to your account">
+                {available.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            <option value={OTHER}>Other (type an id)...</option>
+          </select>
+          {typing && (
+            <input
+              // biome-ignore lint/a11y/noAutofocus: opened by choosing "Other", typing is next
+              autoFocus
+              value={model}
+              onChange={(e) => onModel(e.target.value)}
+              placeholder={`${label} id, e.g. ${suggested[0] ?? available[0] ?? "model-name"}`}
+              aria-label={`${label} id`}
+              aria-invalid={invalid}
+              className={cn(INPUT_CLASS, invalid && "border-red-500/60")}
+            />
+          )}
         </div>
       )}
       <div className={cn("flex flex-col gap-1.5", !launch && "col-span-2")}>
