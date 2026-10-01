@@ -69,7 +69,7 @@ export function registerIpcHandlers(): void {
   // idle TUI (claude at its prompt) then stayed blank until touched. Wait for ITS reattach only
   ipcMain.handle("terminal:get-snapshot", async (_event, agentId: string) => {
     await whenSessionReady(agentId);
-    return getPtyHost().getSnapshot(agentId);
+    return getPtyHost().getLiveSnapshot(agentId);
   });
 
   /** T178: a view reports whether it can currently draw this agent. Returns a
@@ -92,7 +92,7 @@ export function registerIpcHandlers(): void {
       // A view's first report comes from a mount that fetched its own snapshot:
       // repainting it again would serialize and paint the screen twice
       if (!visible || !consumeMissedOutput(agentId) || fresh) return;
-      const snapshot = getPtyHost().getSnapshot(agentId);
+      const snapshot = getPtyHost().getLiveSnapshot(agentId);
       if (!snapshot) return;
       // Pushed through terminal:data rather than returned, so the repaint is
       // ORDERED with live output. Returning it raced: bytes arriving between the

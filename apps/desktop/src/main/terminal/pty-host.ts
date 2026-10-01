@@ -331,6 +331,13 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
+  /** For a live view that resets and repaints: the screen plus the modes its program set */
+  getLiveSnapshot(id: string): string | null {
+    const emulator = this.sessions.get(id)?.emulator;
+    const snapshot = emulator?.snapshot();
+    return emulator && snapshot ? snapshot + emulator.modeSequence() : null;
+  }
+
   isAlive(id: string): boolean {
     return this.sessions.get(id)?.alive ?? false;
   }

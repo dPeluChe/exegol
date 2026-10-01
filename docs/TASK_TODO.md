@@ -104,6 +104,8 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- Wheel scroll in Claude after switching projects (and after an app restart) without a resize;
+  multi-line paste stays one paste
 - **Linux (Rigo, Fedora 44 + Kubuntu 26.04)**: agents and shells start with bash 5.3; the
   AppImage shows up in the app menu after its first launch and reopens from there; Settings >
   install CLI on the AppImage survives a restart; the .deb has its icon in the KDE menu and

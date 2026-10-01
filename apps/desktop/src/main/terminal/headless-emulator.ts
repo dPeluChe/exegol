@@ -78,6 +78,31 @@ export class HeadlessEmulator {
     }
   }
 
+  /**
+   * The DEC modes the program turned on, as the sequences that turn them on again. The snapshot
+   * leaves them out (a read-only scrollback view must not track the mouse); a LIVE view written
+   * from it after a reset needs them back, or a TUI's mouse tracking (its wheel scroll), its
+   * bracketed paste and its cursor keys stayed off until a resize made it redraw
+   */
+  modeSequence(): string {
+    const m = this._modes;
+    const on = (n: number) => `\x1b[?${n}h`;
+    return [
+      m.applicationCursorKeys && on(1),
+      m.originMode && on(6),
+      !m.autoWrap && "\x1b[?7l",
+      !m.cursorVisible && "\x1b[?25l",
+      m.mouseTrackingNormal && on(1000),
+      m.mouseTrackingButtonEvent && on(1002),
+      m.mouseTrackingAnyEvent && on(1003),
+      m.mouseSgr && on(1006),
+      m.focusReporting && on(1004),
+      m.bracketedPaste && on(2004),
+    ]
+      .filter(Boolean)
+      .join("");
+  }
+
   get size(): { cols: number; rows: number } {
     return { cols: this.terminal.cols, rows: this.terminal.rows };
   }
