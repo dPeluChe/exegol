@@ -1,8 +1,9 @@
-import type { AgentCliType, ResumableSession, SpawnPreview } from "@exegol/shared";
+import type { AgentCliType, AgentProvider, ResumableSession, SpawnPreview } from "@exegol/shared";
 import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
+import { cliSetupFor } from "../../agents/cli-catalog";
 import { takeLostOnRestart, whenRecovered } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
@@ -34,30 +35,33 @@ import {
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { isPathAllowed } from "../../security/path-guard";
-import { cliSetupFor, installedProviderIds } from "../../system/cli-versions";
+import { installedProviderIds } from "../../system/cli-versions";
 import { publicProcedure, router } from "../trpc";
 
+/** Each provider marked installed (one PATH check, the one spawn uses) with how to install it on
+ *  this OS: the launcher and Settings > CLIs read the same answer */
+function withInstallInfo(providers: AgentProvider[]): AgentProvider[] {
+  const installed = installedProviderIds();
+  return providers.map((p) => {
+    const setup = cliSetupFor(p.id);
+    return {
+      ...p,
+      installed: p.id === "shell" || installed.has(p.id),
+      installCommand: setup?.install ?? null,
+      installDocs: setup?.docs ?? null,
+    };
+  });
+}
+
 export const agentRouter = router({
-  listProviders: publicProcedure.query(({ ctx }) => {
-    return ctx.providerRegistry.list();
-  }),
+  listProviders: publicProcedure.query(({ ctx }) => withInstallInfo(ctx.providerRegistry.list())),
 
   /** List only enabled providers (for launcher/modal UI — respects Settings toggles) */
-  listEnabledProviders: publicProcedure.query(({ ctx }) => {
-    const installed = installedProviderIds();
-    return ctx.providerRegistry
-      .list()
-      .filter((p) => p.enabled !== false && p.id !== "shell")
-      .map((p) => {
-        const setup = cliSetupFor(p.id);
-        return {
-          ...p,
-          installed: installed.has(p.id),
-          installCommand: setup?.install ?? null,
-          installDocs: setup?.docs ?? null,
-        };
-      });
-  }),
+  listEnabledProviders: publicProcedure.query(({ ctx }) =>
+    withInstallInfo(
+      ctx.providerRegistry.list().filter((p) => p.enabled !== false && p.id !== "shell"),
+    ),
+  ),
 
   registerProvider: publicProcedure
     .input(

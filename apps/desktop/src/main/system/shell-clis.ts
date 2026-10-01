@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { MODEL_ID_PATTERN, MODEL_LAUNCH, YOLO_FLAGS } from "@exegol/shared";
-import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
+import { providerBinaries } from "../agents/cli-catalog";
+import { getProviderRegistry } from "../agents/registry";
 
 const execFileAsync = promisify(execFile);
 
@@ -89,8 +90,6 @@ export function providerCommands(): Map<string, string> {
     getProviderRegistry()
       .list()
       .filter((p) => p.id !== "shell" && p.command && !p.command.startsWith("__"))
-      .flatMap((p) =>
-        [p.command, ...(COMMAND_ALIASES[p.command] ?? [])].map((c) => [c, p.id] as const),
-      ),
+      .flatMap((p) => providerBinaries(p.command).map((c) => [c, p.id] as const)),
   );
 }
