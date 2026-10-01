@@ -2,6 +2,7 @@ import { TooltipProvider } from "@exegol/ui";
 import { lazy, Suspense } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { LoadingSpinner } from "./components/common";
+import { CloseConfirmHost } from "./components/common/CloseConfirmHost";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
 import { CliUpdatesNotice } from "./components/layout/CliUpdatesNotice";
@@ -98,6 +99,7 @@ export default function App() {
         <TitleBar />
         <WhatsNewAfterUpdate />
         <CliUpdatesNotice />
+        <CloseConfirmHost />
         <UpdateBanner />
 
         <div className="flex-1 overflow-hidden">

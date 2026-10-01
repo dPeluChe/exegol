@@ -3,6 +3,7 @@ import { Plus, Terminal } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
+import { confirmClosePanes } from "../../lib/close-guard";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
@@ -40,37 +41,18 @@ export function WorkspaceTabBar() {
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const { projectId } = useProjectContext();
 
-  /** Close a tab — confirm first if it has running agents */
+  /** Close a tab, after asking when that ends a session, a terminal or unsaved edits */
   const handleCloseTab = useCallback(
-    (tabId: string) => {
+    async (tabId: string) => {
       const pw = getProjectState();
       const tab = pw.tabs.find((t) => t.id === tabId);
       if (tab) {
         const paneIds = collectPaneIds(tab.layout);
-        const runningAgentIds: string[] = [];
-        for (const pid of paneIds) {
-          const pane = pw.panes[pid];
-          if (pane?.type === "terminal" && pane.agentId) {
-            const agent = useAgentStore.getState().agents[pane.agentId];
-            if (agent && ["running", "spawning", "waiting_input"].includes(agent.status)) {
-              runningAgentIds.push(pane.agentId);
-            }
-          }
-        }
-        // Confirm before killing running agents
-        if (runningAgentIds.length > 0) {
-          const count = runningAgentIds.length;
-          const ok = window.confirm(
-            `This tab has ${count} running agent${count > 1 ? "s" : ""}. Close and stop ${count > 1 ? "them" : "it"}?`,
-          );
-          if (!ok) return;
-        }
+        const closing = paneIds.map((pid) => pw.panes[pid]).filter((p) => p !== undefined);
+        if (!(await confirmClosePanes(closing, useAgentStore.getState().agents))) return;
         // Stop + cleanup all terminal agents in the tab
-        for (const pid of paneIds) {
-          const pane = pw.panes[pid];
-          if (pane?.type === "terminal" && pane.agentId) {
-            deleteAgentImperative(pane.agentId);
-          }
+        for (const pane of closing) {
+          if (pane.type === "terminal" && pane.agentId) deleteAgentImperative(pane.agentId);
         }
       }
       removeTab(tabId);
