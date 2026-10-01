@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Project layouts: right-click a project > Layouts... to save its current tab under a name (pane shapes, sizes, a browser's page, a file, and what each terminal runs: a shell, or an agent with its model, YOLO and access mode), then open it in a new tab or over the current one. Terminals and agents start again as they were. Layouts saved from the tab bar stay global, and now restart their terminals too
+
 ### Changed
 - Exegol checks which agent CLIs are actually installed (on your PATH). The quick launchers (empty pane, tab bar, + menu, parallel spawn) offer only those; Launch Agent lists the rest under "Not installed", and picking one shows its install command, a button to run it in a terminal and Check again, instead of launching a pane that only says "command not found". The install and update commands follow your OS (macOS, Linux, Windows), from each vendor's docs; where an OS has no native install (Amp on Windows) it links the guide
 - Agent icons are each CLI's own mark: Codex no longer shows the OpenAI logo (it was mistaken for OpenCode), and Devin, Aider, Goose, Amp, Kiro and Antigravity show theirs instead of letters; Gemini CLI, Crush and Droid have their current marks

@@ -43,26 +43,32 @@ export const createCustomLayoutsSlice: WorkspaceSliceCreator<CustomLayoutsSlice>
     return { terminalsToSpawn };
   },
 
-  applyCustomLayout: (tabId, customId) =>
-    set((s) => {
-      const pw = getPw(s);
-      const tab = pw.tabs.find((t) => t.id === tabId);
-      const custom = s.customLayouts.find((c) => c.id === customId);
-      if (!tab || !custom) return s;
+  applyCustomLayout: (tabId, customId) => {
+    const pw = getPw(get());
+    const tab = pw.tabs.find((t) => t.id === tabId);
+    const custom = get().customLayouts.find((c) => c.id === customId);
+    if (!tab || !custom) return { spawns: [] };
 
-      const existingIds = collectPaneIds(tab.layout);
-      const { layout, newPanes } = computeCustomPresetTransformation(custom, existingIds);
+    const existingIds = collectPaneIds(tab.layout);
+    const { layout, newPanes, spawns } = computeCustomPresetTransformation(
+      custom,
+      existingIds,
+      (id) => pw.panes[id]?.type === "empty",
+    );
 
-      const panesRecord: Record<string, Pane> = { ...pw.panes };
-      for (const p of newPanes) panesRecord[p.id] = p;
+    const panesRecord: Record<string, Pane> = { ...pw.panes };
+    for (const p of newPanes) panesRecord[p.id] = p;
 
-      return setPw(s, {
+    set((s) =>
+      setPw(s, {
         tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
         panes: panesRecord,
-      });
-    }),
+      }),
+    );
+    return { spawns };
+  },
 
-  saveCustomLayout: (tabId, name) => {
+  saveCustomLayout: (tabId, name, opts) => {
     const state = get();
     const pw = getPw(state);
     const tab = pw.tabs.find((t) => t.id === tabId);
@@ -70,13 +76,14 @@ export const createCustomLayoutsSlice: WorkspaceSliceCreator<CustomLayoutsSlice>
     const trimmed = name.trim();
     if (!trimmed) return null;
 
-    const { template, slots, slotTypes } = templateFromLayout(tab.layout, pw.panes);
+    const { template, slots, slotTypes } = templateFromLayout(tab.layout, pw.panes, opts?.agentOf);
     const custom: CustomLayoutPreset = {
       id: nanoid(8),
       name: trimmed,
       template,
       slots,
       slotTypes,
+      projectId: opts?.projectId,
       createdAt: Date.now(),
     };
     set((s) => ({ customLayouts: [...s.customLayouts, custom] }));
