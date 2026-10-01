@@ -14,6 +14,7 @@ const { cliUpdateRows } = await import("./CliUpdatesNotice");
 const status = (cliType: string, installed: string, latest: string | null, cmd: string | null) => ({
   cliType,
   installed,
+  installedAt: null,
   latest,
   updateAvailable: !!latest && latest !== installed,
   updateCommand: cmd,

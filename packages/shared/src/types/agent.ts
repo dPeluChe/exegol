@@ -137,6 +137,8 @@ export const MODEL_ID_PATTERN = /^[\w.:/@-]{1,100}$/;
 export interface CliUpdateStatus {
   cliType: string;
   installed: string | null;
+  /** When the installed binary was written (ms): a session started before it runs an older one */
+  installedAt: number | null;
   latest: string | null;
   updateAvailable: boolean;
   updateCommand: string | null;
