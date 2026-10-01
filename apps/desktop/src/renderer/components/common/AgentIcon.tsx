@@ -83,6 +83,9 @@ function buildMap(): Record<string, IconDef> {
 
 const ICON_MAP = buildMap();
 
+/** Whether an id has an image (a rename of an icon file silently fell back to letters) */
+export const hasAgentIcon = (id: string) => id.toLowerCase() in ICON_MAP;
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 interface AgentIconProps {

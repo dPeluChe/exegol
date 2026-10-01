@@ -43,20 +43,21 @@ export const agentRouter = router({
   }),
 
   /** List only enabled providers (for launcher/modal UI — respects Settings toggles) */
-  listEnabledProviders: publicProcedure
-    .input(z.object({ fresh: z.boolean().optional() }).optional())
-    .query(async ({ ctx, input }) => {
-      const installed = await installedProviderIds(input?.fresh);
-      return ctx.providerRegistry
-        .list()
-        .filter((p) => p.enabled !== false && p.id !== "shell")
-        .map((p) => ({
+  listEnabledProviders: publicProcedure.query(({ ctx }) => {
+    const installed = installedProviderIds();
+    return ctx.providerRegistry
+      .list()
+      .filter((p) => p.enabled !== false && p.id !== "shell")
+      .map((p) => {
+        const setup = cliSetupFor(p.id);
+        return {
           ...p,
           installed: installed.has(p.id),
-          installCommand: cliSetupFor(p.id)?.install ?? null,
-          installDocs: cliSetupFor(p.id)?.docs ?? null,
-        }));
-    }),
+          installCommand: setup?.install ?? null,
+          installDocs: setup?.docs ?? null,
+        };
+      });
+  }),
 
   registerProvider: publicProcedure
     .input(

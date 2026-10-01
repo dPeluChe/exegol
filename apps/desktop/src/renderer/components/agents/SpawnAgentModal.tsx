@@ -1,8 +1,8 @@
 import { type AgentAccessMode, type AgentProvider, MODEL_ID_PATTERN } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
-import { isLaunchable, useEnabledProviders, useRecheckProviders } from "../../hooks/use-providers";
+import { useEffect, useRef } from "react";
+import { useEnabledProviders, useRecheckProviders } from "../../hooks/use-providers";
 import { editKeys } from "../../lib/keymap";
 import {
   AccessModePicker,
@@ -45,12 +45,8 @@ export function SpawnAgentModal({
   initialSession = null,
   initialAccessMode = "write",
 }: SpawnAgentModalProps) {
-  // Installed first: the form starts on one that can run; the rest show how to install them
-  const allProviders = useEnabledProviders();
-  const enabledProviders = useMemo(
-    () => [...allProviders.filter(isLaunchable), ...allProviders.filter((p) => !isLaunchable(p))],
-    [allProviders],
-  );
+  // All enabled ones: the picker groups those not installed and the form starts on one that is
+  const enabledProviders = useEnabledProviders();
   const form = useSpawnForm({
     projectId,
     enabledProviders,

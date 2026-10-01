@@ -1,7 +1,7 @@
 import { exec, execSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
 import type Database from "libsql";
 import { getDb } from "../db/client";
@@ -311,12 +311,15 @@ export function warmShellPath(): void {
   });
 }
 
-/** Whether `command` resolves to a file on the login shell's PATH */
-function commandOnPath(command: string): boolean {
-  if (command.includes("/")) return existsSync(command);
+/** Whether `command` resolves to a file on the login shell's PATH: a stat per PATH dir, no
+ *  process. Spawn launches what this finds, so the launcher's "installed" asks the same thing */
+export function commandOnPath(command: string): boolean {
+  if (command.includes("/") || command.includes("\\")) return existsSync(command);
+  const exts =
+    process.platform === "win32" ? ["", ...(process.env.PATHEXT ?? ".EXE;.CMD").split(";")] : [""];
   return _getFullPath()
-    .split(":")
-    .some((dir) => dir && existsSync(join(dir, command)));
+    .split(delimiter)
+    .some((dir) => dir && exts.some((ext) => existsSync(join(dir, command + ext))));
 }
 
 /** The binary to launch for a provider command: itself, or the new name it moved to (kilo) */

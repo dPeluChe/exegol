@@ -7,12 +7,12 @@ import { promisify } from "node:util";
 import type { DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
-import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
+import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
 import { getApiKey } from "../security/keystore";
-import { cliSetupFor, findAllOnPath, readBinaryVersion } from "./cli-versions";
+import { cliSetupFor, findAllOnPath, providerBinaries, readBinaryVersion } from "./cli-versions";
 
 const execAsync = promisify(exec);
 
@@ -114,7 +114,7 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
       // A renamed binary (kilocode → kilo) counts as installed under its new name
       let paths: string[] = [];
       let found = provider.command;
-      for (const cmd of [provider.command, ...(COMMAND_ALIASES[provider.command] ?? [])]) {
+      for (const cmd of providerBinaries(provider.command)) {
         paths = await findAllOnPath(cmd);
         found = cmd;
         if (paths.length > 0) break;

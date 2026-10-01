@@ -5,6 +5,7 @@ import {
   YOLO_FLAGS,
 } from "@exegol/shared";
 import { useCallback, useState } from "react";
+import { isLaunchable } from "../../hooks/use-providers";
 
 /** One 3-way choice, one state: a new session, the CLI's own last one, or a
  *  specific past session. Two booleans could represent the impossible pair. */
@@ -75,7 +76,8 @@ export function useSpawnForm({
   const [name, setName] = useState("");
 
   // None picked yet: the first enabled provider
-  const providerId = pickedProviderId || enabledProviders[0]?.id || "";
+  const providerId =
+    pickedProviderId || (enabledProviders.find(isLaunchable) ?? enabledProviders[0])?.id || "";
   const provider = enabledProviders.find((p) => p.id === providerId);
 
   // Switching provider must drop a selection that belongs to the old one —

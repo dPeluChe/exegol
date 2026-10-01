@@ -2,9 +2,9 @@ import type { AgentAccessMode, AgentProvider, ResumableSession } from "@exegol/s
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Cpu, Globe, History } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { useEnabledProviders, useLaunchableProviders } from "../../hooks/use-providers";
+import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { trpcInvoke } from "../../lib/trpc-client";
@@ -14,10 +14,6 @@ import { AgentIcon } from "../common";
 import { RunTargets } from "./RunTargets";
 
 // ─── Empty Pane (Agent Grid) ────────────────────────────────────────────────
-
-/** Stable identity while the providers query loads — a fresh [] each render
- *  invalidates every callback that depends on it. */
-const NO_PROVIDERS: AgentProvider[] = [];
 
 function relativeTime(epoch: number | null): string {
   if (!epoch) return "";
@@ -112,8 +108,9 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const { containerRef, size } = usePaneSize();
-  const providers = useLaunchableProviders();
-  const missingCount = useEnabledProviders().length - providers.length;
+  const enabled = useEnabledProviders();
+  const providers = useMemo(() => enabled.filter(isLaunchable), [enabled]);
+  const missingCount = enabled.length - providers.length;
   // T155.5: cross-provider resumable session history for this project
   const [showSessions, setShowSessions] = useState(false);
   const { data: resumableSessions } = useQuery({
@@ -122,7 +119,7 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     enabled: !!projectId,
     staleTime: 15_000,
   });
-  const cliOptions = providers ?? NO_PROVIDERS;
+  const cliOptions = providers;
   // Only offer resume for providers still enabled (e.g. gemini sessions hide once retired)
   const sessions = (resumableSessions ?? []).filter((s) =>
     cliOptions.some((c) => c.id === s.cliType),

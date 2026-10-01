@@ -3,7 +3,7 @@ import { statSync } from "node:fs";
 import { type CliUpdateStatus, isNewerVersion } from "@exegol/shared";
 import { net } from "electron";
 import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
-import { _getFullPath } from "../agents/spawn-env";
+import { _getFullPath, commandOnPath } from "../agents/spawn-env";
 import { logger } from "../lib/logger";
 
 const shellEnv = () => ({ ...process.env, PATH: _getFullPath() });
@@ -229,35 +229,27 @@ async function fetchLatest(cliType: string): Promise<string | null> {
   return version;
 }
 
-const INSTALLED_TTL_MS = 30_000;
-let installedCache: { at: number; ids: Promise<Set<string>> } | null = null;
+/** A provider's binary and the names it moved to (kilocode → kilo), in lookup order */
+export function providerBinaries(command: string): string[] {
+  return [command, ...(COMMAND_ALIASES[command] ?? [])];
+}
 
-/** Providers whose command (or a renamed binary) is on PATH. Cached 30s: every launcher list
- *  asks, and each check is a `which` per CLI. `fresh` re-checks after an install */
-export function installedProviderIds(fresh = false): Promise<Set<string>> {
-  if (!fresh && installedCache && Date.now() - installedCache.at < INSTALLED_TTL_MS) {
-    return installedCache.ids;
-  }
-  const ids = Promise.all(
+/** Providers whose binary is on PATH: the same stat-per-dir check spawn uses, so the launcher and
+ *  a launch never disagree, and cheap enough to run on every listing (no process, no cache) */
+export function installedProviderIds(): Set<string> {
+  return new Set(
     getProviderRegistry()
       .list()
-      .filter((p) => p.id !== "shell")
-      .map(async (p) => {
-        for (const cmd of [p.command, ...(COMMAND_ALIASES[p.command] ?? [])]) {
-          if ((await findAllOnPath(cmd)).length > 0) return p.id;
-        }
-        return null;
-      }),
-  ).then((found) => new Set(found.filter((id): id is string => id !== null)));
-  installedCache = { at: Date.now(), ids };
-  return ids;
+      .filter((p) => p.id !== "shell" && providerBinaries(p.command).some(commandOnPath))
+      .map((p) => p.id),
+  );
 }
 
 /** The installed version of a provider's CLI (its first PATH hit, renamed binaries included) */
 export async function installedCliVersion(cliType: string): Promise<string | null> {
   const provider = getProviderRegistry().get(cliType);
   if (!provider || cliType === "shell") return null;
-  for (const cmd of [provider.command, ...(COMMAND_ALIASES[provider.command] ?? [])]) {
+  for (const cmd of providerBinaries(provider.command)) {
     const [path] = await findAllOnPath(cmd);
     if (path) return readBinaryVersion(path);
   }

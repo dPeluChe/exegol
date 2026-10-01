@@ -1,15 +1,14 @@
-import type { AgentProvider, EvaluatorStepDef } from "@exegol/shared";
+import type { EvaluatorStepDef } from "@exegol/shared";
 import { AGENT_ACCESS_MODES, PIPELINE_STEP_ROLES, type PipelineStepDef } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { GripVertical, Plus, Scale, Trash2, X } from "lucide-react";
 import { useId, useState } from "react";
 import { useProjectContext } from "../../../../contexts/ProjectContext";
+import { useLaunchableProviders } from "../../../../hooks/use-providers";
 import {
   useCreatePipelineTemplate,
   useUpdatePipelineTemplate,
 } from "../../../../hooks/use-trpc-pipeline";
-import { trpcInvoke } from "../../../../lib/trpc-client";
 import { EvaluatorStepFields } from "./EvaluatorStepFields";
 
 function emptyStep(defaultCliType = "claude-code"): PipelineStepDef {
@@ -45,18 +44,17 @@ export function PipelineTemplateEditor({
   onClose: () => void;
 }) {
   const { projectId } = useProjectContext();
-  const { data: enabledProviders } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
-  const cliOptions = (enabledProviders ?? []).map((p) => p.id);
+  // Installed CLIs (a missing one only failed at preflight, mid-run, after the worktree existed),
+  // plus any a saved step already names so its select keeps showing it
+  const launchable = useLaunchableProviders();
   const [name, setName] = useState(existingName ?? "");
   const [description, setDescription] = useState(existingDescription ?? "");
   // Each row keeps its own key, so removing a middle step never shifts another's inputs
   const [steps, setSteps] = useState<EditorStep[]>(() =>
     (existingSteps ?? [emptyStep(), emptyStep()]).map(withKey),
   );
+
+  const cliOptions = [...new Set([...launchable.map((p) => p.id), ...steps.map((s) => s.cliType)])];
 
   const fieldId = useId();
 

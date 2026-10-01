@@ -10,6 +10,7 @@ import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { isLaunchable } from "../../hooks/use-providers";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
 import { ACCESS_MODES } from "../../lib/access-modes";
@@ -17,6 +18,7 @@ import { openInBrowser } from "../../lib/open-in-browser";
 import { runCommandInNewTab } from "../../lib/spawn-shell";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
+import { CopyCommand } from "../common/CopyCommand";
 
 /** One pickable pill in the launch modal (agent, session, mode, skill, place). */
 export function SpawnChip({
@@ -59,8 +61,8 @@ export function ProviderPicker({
   selectedId: string;
   onChoose: (id: string) => void;
 }) {
-  const installed = providers.filter((p) => p.installed !== false);
-  const missing = providers.filter((p) => p.installed === false);
+  const installed = providers.filter(isLaunchable);
+  const missing = providers.filter((p) => !isLaunchable(p));
   const chip = (p: AgentProvider, dim: boolean) => (
     <SpawnChip
       key={p.id}
@@ -87,6 +89,8 @@ export function ProviderPicker({
   );
 }
 
+const HINT_BUTTON = "rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5";
+
 /** A CLI that is not on PATH: launching it would only print "command not found" in the pane */
 export function InstallHint({
   provider,
@@ -105,13 +109,13 @@ export function InstallHint({
         (no <code className="font-mono">{provider.command}</code> on your PATH). Install it first
         {cmd ? ":" : ", then check again."}
       </span>
-      {cmd && <code className="select-all break-all font-mono text-[10px]">{cmd}</code>}
+      {cmd && <CopyCommand label="Install" command={cmd} />}
       <div className="flex gap-2">
         {cmd && (
           <button
             type="button"
             onClick={() => runCommandInNewTab(projectId, cmd).catch(() => {})}
-            className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5"
+            className={HINT_BUTTON}
           >
             Install in a terminal
           </button>
@@ -120,16 +124,12 @@ export function InstallHint({
           <button
             type="button"
             onClick={() => openInBrowser(provider.installDocs ?? "")}
-            className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5"
+            className={HINT_BUTTON}
           >
             Install guide
           </button>
         )}
-        <button
-          type="button"
-          onClick={onRecheck}
-          className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5"
-        >
+        <button type="button" onClick={onRecheck} className={HINT_BUTTON}>
           Check again
         </button>
       </div>

@@ -16,7 +16,7 @@ export function useEnabledProviders(): AgentProvider[] {
   return data ?? NONE;
 }
 
-/** Installed first, so quick launchers never offer a CLI that is not on this machine */
+/** Quick launchers offer only CLIs that are on this machine */
 export const isLaunchable = (p: AgentProvider) => p.installed !== false;
 
 export function useLaunchableProviders(): AgentProvider[] {
@@ -27,10 +27,5 @@ export function useLaunchableProviders(): AgentProvider[] {
 /** Check PATH again now (after installing a CLI in a terminal) */
 export function useRecheckProviders(): () => Promise<void> {
   const queryClient = useQueryClient();
-  return useCallback(async () => {
-    const fresh = await trpcInvoke<AgentProvider[]>("agents.listEnabledProviders", {
-      fresh: true,
-    });
-    queryClient.setQueryData(KEY, fresh);
-  }, [queryClient]);
+  return useCallback(() => queryClient.invalidateQueries({ queryKey: KEY }), [queryClient]);
 }
