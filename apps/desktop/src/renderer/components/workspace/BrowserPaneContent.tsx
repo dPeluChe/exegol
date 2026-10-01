@@ -1,3 +1,4 @@
+import { cn } from "@exegol/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -5,6 +6,7 @@ import { useProjectContext } from "../../contexts/ProjectContext";
 import { useLatest } from "../../hooks/use-latest";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
 import { isPasteTarget } from "../../lib/agent-input";
+import { viewportSize } from "../../lib/browser-viewports";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
@@ -20,17 +22,30 @@ import { type LoadError, useWebviewControls, useWebviewNavState } from "./use-we
 
 // ─── Browser Pane ──────────────────────────────────────────────────────────
 
-/** The pane's URL: the saved one wins; until there is one, follow the project's dev server */
+/** The pane's URL: the saved one wins; until there is one, follow the project's dev server.
+ *  `pane.url` follows every navigation (a project switch remounts the pane and it reopened the
+ *  start page), while the webview's `src` only changes when the user goes somewhere: setting it
+ *  to the page it is already on would load it again */
 function usePaneUrl(pane: Pane, autoPort: number | undefined) {
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const currentUrl = pane.url ?? `http://localhost:${autoPort ?? 3000}`;
+  const [mountUrl] = useState(pane.url);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const src = chosen ?? mountUrl ?? currentUrl;
   // What the user is typing; null shows the page's URL
   const [draft, setDraft] = useState<string | null>(null);
   const urlInput = draft ?? currentUrl;
   const goTo = useCallback(
     (url: string) => {
       setDraft(null);
+      setChosen(url);
       updatePane(pane.id, { url });
+    },
+    [pane.id, updatePane],
+  );
+  const rememberPage = useCallback(
+    (url: string) => {
+      if (/^https?:\/\//.test(url)) updatePane(pane.id, { url });
     },
     [pane.id, updatePane],
   );
@@ -46,7 +61,17 @@ function usePaneUrl(pane: Pane, autoPort: number | undefined) {
     goTo(url);
   }, [urlInput, goTo]);
   const navigateToPort = useCallback((port: number) => goTo(`http://localhost:${port}`), [goTo]);
-  return { currentUrl, urlInput, setDraft, goTo, keepAutoUrl, navigate, navigateToPort };
+  return {
+    src,
+    currentUrl,
+    urlInput,
+    setDraft,
+    goTo,
+    rememberPage,
+    keepAutoUrl,
+    navigate,
+    navigateToPort,
+  };
 }
 
 function useRunningProjectAgents(projectId: string | null) {
@@ -65,17 +90,29 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   );
   const setPreferred = useSetPreferredPort();
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
-  const { currentUrl, urlInput, setDraft, goTo, keepAutoUrl, navigate, navigateToPort } =
-    usePaneUrl(pane, autoPort);
+  const {
+    src,
+    currentUrl,
+    urlInput,
+    setDraft,
+    goTo,
+    rememberPage,
+    keepAutoUrl,
+    navigate,
+    navigateToPort,
+  } = usePaneUrl(pane, autoPort);
   const webviewRef = useRef<HTMLElement | null>(null);
   const { canGoBack, canGoForward, loadError } = useWebviewNavState(
     webviewRef,
     currentUrl,
     keepAutoUrl,
+    rememberPage,
   );
   const { handleBack, handleForward, handleReload, handleOpenDevTools } =
     useWebviewControls(webviewRef);
   const [pendingStop, setPendingStop] = useState<PortInfo | null>(null);
+  const device = viewportSize(pane.viewport);
+  const updatePane = useWorkspaceStore((s) => s.updatePane);
   // The page could not reach this port: its chip turns red until a load succeeds
   const deadPort = loadError ? Number(currentUrl.match(/:(\d+)/)?.[1]) || null : null;
   const [issueMessage, setIssueMessage] = useState("");
@@ -117,20 +154,35 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         onNavigateToPort={navigateToPort}
         deadPort={deadPort}
         onStopPort={setPendingStop}
+        viewport={pane.viewport}
+        onViewport={(viewport) => updatePane(pane.id, { viewport })}
         onSetPreferredPort={(port) => {
           if (projectId) setPreferred.mutate({ projectId, port });
         }}
       />
       {/* Webview with focus capture overlay when not active */}
       <div className="relative flex-1">
-        <webview
-          // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
-          ref={webviewRef as React.Ref<any>}
-          src={currentUrl}
-          className="h-full w-full"
-          /* @ts-expect-error Electron webview attributes */
-          allowpopups="true"
-        />
+        {/* A device size centers the page at that size; a smaller pane scrolls to it */}
+        <div
+          className={cn(
+            "h-full w-full",
+            device && "flex items-start justify-center overflow-auto bg-bg-tertiary p-3",
+          )}
+        >
+          <div
+            className={cn("h-full w-full", device && "shrink-0 border border-border shadow-lg")}
+            style={device ?? undefined}
+          >
+            <webview
+              // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
+              ref={webviewRef as React.Ref<any>}
+              src={src}
+              className="h-full w-full"
+              /* @ts-expect-error Electron webview attributes */
+              allowpopups="true"
+            />
+          </div>
+        </div>
         <StopServerDialog pendingStop={pendingStop} onDone={() => setPendingStop(null)} />
         {loadError && (
           <LoadErrorOverlay

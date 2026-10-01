@@ -1,4 +1,5 @@
 import type { StateCreator } from "zustand";
+import type { ViewportId } from "../../lib/browser-viewports";
 import type {
   CustomLayoutPreset,
   CustomLayoutSlot,
@@ -20,6 +21,8 @@ export interface Pane {
   openFile?: string;
   /** Bumped on every open: reopening the file after closing its preview must remount */
   openFileAt?: number;
+  /** Browser pane: the size the page is shown at (device toolbar); absent fits the pane */
+  viewport?: ViewportId;
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }

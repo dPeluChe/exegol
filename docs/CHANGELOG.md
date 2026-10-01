@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Browser pane: show the page at a device size (Desktop 1440, Laptop 1280, Tablet 768, Mobile 390) from a picker in its address bar, like Chrome's device toolbar; the page lays out for that width, a smaller pane scrolls, and the pane remembers the size
 - Project layouts: right-click a project > Layouts... to save its current tab under a name (pane shapes, sizes, a browser's page, a file, and what each terminal runs: a shell, or an agent with its model, YOLO and access mode), then open it in a new tab or over the current one. Terminals and agents start again as they were. Layouts saved from the tab bar stay global, and now restart their terminals too
 
 ### Changed
@@ -17,6 +18,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Agent icons are each CLI's own mark: Codex no longer shows the OpenAI logo (it was mistaken for OpenCode), and Devin, Aider, Goose, Amp, Kiro and Antigravity show theirs instead of letters; Gemini CLI, Crush and Droid have their current marks
 
 ### Fixed
+- Browser pane: switching projects (or anything that reopens the pane) took it back to its start page; it keeps the page you navigated to
 - A terminal shown again (switching project or tab, or after restarting the app) lost its CLI's modes: the mouse wheel did not scroll Claude, and paste and cursor keys could misbehave, until a window resize. Its screen is now restored together with the modes the CLI had turned on
 - Restart sessions (CLI updates) started the session twice: the two processes fought over one conversation, one died, and the pane could land on the dead one, so nothing seemed to happen. A session now resumes once whoever asks (restart, pane, Dashboard card), and a toast says when the restart starts or fails
 

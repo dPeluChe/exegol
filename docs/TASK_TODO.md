@@ -117,6 +117,9 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- Browser: navigate in a pane, switch project and back: same page, no extra reload; device
+  sizes (media queries apply, a narrow pane scrolls; design mode and QA recording still click
+  the right element at a device size)
 - Project layouts: save tennis's tab (browser + 2 terminals + an agent), New tab rebuilds it
   with sizes, shells and the agent (same model/YOLO); Apply here keeps panes that show something
 - Installed CLIs: on a machine with few CLIs (Rigo's Linux), quick launchers show only those;
