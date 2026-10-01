@@ -1,7 +1,13 @@
 import { AGENT_CLI_TYPES, type AgentCliType, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
+import { setAgentModel, setAgentYolo } from "../db/queries";
 import { logger } from "../lib/logger";
-import { matchShellClis, providerCommands, readProcessTable } from "../system/shell-clis";
+import {
+  launchFlagsFromArgs,
+  matchShellClis,
+  providerCommands,
+  readProcessTable,
+} from "../system/shell-clis";
 import { pickAgentCodename } from "./agent-names";
 import type { SessionMaps } from "./agent-session-callbacks";
 import { attachOutputPipeline, detachOutputPipeline } from "./output-pipeline";
@@ -76,6 +82,7 @@ function applyTransition(
   maps: SessionMaps,
   session: TerminalSession,
   step: ShellTransition,
+  cliArgs: string,
 ): void {
   const ctx = maps.contexts.get(session.id);
   if (step.kind === "promote") {
@@ -85,6 +92,11 @@ function applyTransition(
       `UPDATE agents SET cli_type = ?, launched_in_shell = 1, alias = ?, status = 'running',
        current_step = NULL WHERE id = ?`,
     ).run(step.cliType, alias, session.id);
+    // Typed with --dangerously-skip-permissions or --model: Suspend + Resume (or a restart onto
+    // an update) relaunches it from Exegol, which only knows what the row says
+    const flags = launchFlagsFromArgs(step.cliType, cliArgs);
+    setAgentYolo(db, session.id, flags.yolo);
+    if (flags.model) setAgentModel(db, session.id, flags.model);
     if (ctx) {
       ctx.cliType = step.cliType;
       ctx.launchedInShell = true;
@@ -133,13 +145,14 @@ export function startShellPromotion(db: Database.Database, maps: SessionMaps): (
     try {
       const sessions = listTerminalSessions(db);
       if (sessions.length === 0) return;
-      const found = matchShellClis(sessions, await readProcessTable(), providerCommands());
+      const args: Record<string, string> = {};
+      const found = matchShellClis(sessions, await readProcessTable(), providerCommands(), args);
       const byId = new Map(sessions.map((s) => [s.id, s]));
       for (const step of planShellTransitions(sessions, found, (id) =>
         maps.outputProcessors.has(id),
       )) {
         const session = byId.get(step.id);
-        if (session) applyTransition(db, maps, session, step);
+        if (session) applyTransition(db, maps, session, step, args[step.id] ?? "");
       }
     } catch (err) {
       logger.warn("[ShellPromotion] Tick failed:", err);
