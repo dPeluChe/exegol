@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.11] — 2026-10-01 — Linux fixes, bypass kept on resume, closed pins
+
 ### Fixed
 - Linux with bash 5.3 or newer (Fedora 42+): every agent and terminal died at once with exit code 2 (bash rejects `--rcfile` after `-i`); they start again (reported by Rigo)
 - Linux AppImage: it adds itself to the app menu (and takes exegol:// links) on launch, so it can be opened again after closing; the `exegol` CLI installed from it keeps working after a restart
