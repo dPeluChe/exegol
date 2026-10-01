@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.10] — 2026-10-01 — CLI updates, models in the launcher, Linux keys, close confirmation
+
 ### Changed
 - Linux (and Windows): the app's shortcuts use Ctrl+Shift instead of Ctrl, so they work with the cursor in a terminal (Ctrl+letter stays with the shell: Ctrl+C, Ctrl+D, Ctrl+W); macOS Shift/Option variants are Ctrl+Shift+Alt. Every label (welcome tour, shortcuts list, menus, tooltips, badges) shows the keys of your platform instead of Cmd
 
