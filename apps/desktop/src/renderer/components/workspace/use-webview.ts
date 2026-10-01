@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
+import { useLatest } from "../../hooks/use-latest";
 
 type WebviewRef = React.RefObject<HTMLElement | null>;
 
@@ -36,7 +37,10 @@ export function useWebviewNavState(
   webviewRef: WebviewRef,
   initialUrl: string,
   onFinishLoad?: React.MutableRefObject<() => void>,
+  /** Every page it lands on (links, redirects, in-page routes), to keep it across remounts */
+  onPage?: (url: string) => void,
 ) {
+  const onPageRef = useLatest(onPage);
   const [pageUrl, setPageUrl] = useState(initialUrl);
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -62,7 +66,10 @@ export function useWebviewNavState(
     };
     const onNavigate = (ev: Event) => {
       const url = (ev as unknown as { url?: string }).url;
-      if (url) setPageUrl(url);
+      if (url) {
+        setPageUrl(url);
+        onPageRef.current?.(url);
+      }
       updateHistory();
     };
     const onFailLoad = (ev: Event) => {
@@ -101,7 +108,7 @@ export function useWebviewNavState(
     return () => {
       for (const [event, fn] of listeners) webview.removeEventListener(event, fn);
     };
-  }, [queryClient, onFinishLoad, webviewRef]);
+  }, [queryClient, onFinishLoad, webviewRef, onPageRef]);
 
   return { pageUrl, loading, canGoBack, canGoForward, loadError };
 }

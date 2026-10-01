@@ -54,7 +54,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 ## Browser and QA
 
-- **Browser pane**: a webview with URL bar and navigation, next to your agents.
+- **Browser pane**: a webview with URL bar and navigation, next to your agents. It remembers
+  the page it was on, and can show it at a device size (desktop, laptop, tablet, mobile).
 - **Design mode**: click an element to send its selector, styles and HTML to an agent.
 - **QA record and replay**: record clicks, typing and navigation as a test, replay it, and see
   per-step results, console errors and screenshots in the QA Tests section.

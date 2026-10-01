@@ -9,6 +9,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Browser pane: show the page at a device size (Desktop 1440, Laptop 1280, Tablet 768, Mobile 390) from a picker in its address bar, like Chrome's device toolbar; the page lays out for that width, a smaller pane scrolls, and the pane remembers the size
+
+### Fixed
+- Browser pane: switching projects (or anything that reopens the pane) took it back to its start page; it keeps the page you navigated to
+
 ### Changed
 - Exegol checks which agent CLIs are actually installed (on your PATH). The quick launchers (empty pane, tab bar, + menu, parallel spawn) offer only those; Launch Agent lists the rest under "Not installed", and picking one shows its install command, a button to run it in a terminal and Check again, instead of launching a pane that only says "command not found". The install and update commands follow your OS (macOS, Linux, Windows), from each vendor's docs; where an OS has no native install (Amp on Windows) it links the guide
 - Agent icons are each CLI's own mark: Codex no longer shows the OpenAI logo (it was mistaken for OpenCode), and Devin, Aider, Goose, Amp, Kiro and Antigravity show theirs instead of letters; Gemini CLI, Crush and Droid have their current marks
