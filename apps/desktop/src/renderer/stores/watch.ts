@@ -15,6 +15,8 @@ interface WatchStore {
   open: string[];
   columns: 1 | 2 | 3;
   toggleWatch: (agentId: string) => void;
+  /** The session is gone (closed): drop its pin, open state and font */
+  unwatch: (agentId: string) => void;
   toggleOpen: (agentId: string) => void;
   /** Resume spawns a new agent id for the same session; the pin follows it */
   replaceAgent: (oldId: string, newId: string) => void;
@@ -65,6 +67,16 @@ export const useWatchStore = create<WatchStore>()(
                 watched: [...s.watched, agentId],
                 open: pushOpen(s.open, agentId),
               },
+        ),
+      unwatch: (agentId) =>
+        set((s) =>
+          s.watched.includes(agentId)
+            ? {
+                watched: s.watched.filter((id) => id !== agentId),
+                open: s.open.filter((id) => id !== agentId),
+                cardFont: omit(s.cardFont, agentId),
+              }
+            : s,
         ),
       toggleOpen: (agentId) =>
         set((s) => ({

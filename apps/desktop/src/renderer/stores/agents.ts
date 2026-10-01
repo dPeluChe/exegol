@@ -12,6 +12,7 @@ import { shallow } from "zustand/shallow";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
+import { useWatchStore } from "./watch";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "./workspace";
 
 // ─── Attention model (T57) ────────────────────────────────────────────────
@@ -155,6 +156,13 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     ...overrides,
   };
 }
+
+/**
+ * Sessions closed here whose stop/archive has not reached the DB yet. A sync already on its way
+ * still lists them as live and re-added them: the Dashboard pin then showed a black mirror of a
+ * dead PTY with no Resume, and the paneless sweep stopped them a second time
+ */
+const removedIds = new Set<string>();
 
 export interface AgentState {
   id: string;
@@ -378,10 +386,12 @@ export const useAgentStore = create<AgentStore>()(
           return shallow(merged, existing) ? state : { agents: { ...state.agents, [id]: merged } };
         }),
 
-      addAgent: (agent) =>
+      addAgent: (agent) => {
+        removedIds.delete(agent.id);
         set((state) => ({
           agents: { ...state.agents, [agent.id]: agent },
-        })),
+        }));
+      },
 
       markArchived: (id) =>
         set((state) => {
@@ -394,6 +404,9 @@ export const useAgentStore = create<AgentStore>()(
         // Verify round 3: a removed agent must not haunt the attention
         // inbox forever (persisted items lingered for closed tabs).
         get().dismissAttention(id);
+        removedIds.add(id);
+        // A closed session leaves Watching too ("session gone" strips were left behind)
+        useWatchStore.getState().unwatch(id);
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
@@ -408,7 +421,12 @@ export const useAgentStore = create<AgentStore>()(
           let added = 0;
           let merged = 0;
 
+          const listed = new Set(dbAgents.map((a) => a.id));
+          // Gone from the DB's list too (archived or deleted): the close has landed
+          for (const id of removedIds) if (!listed.has(id)) removedIds.delete(id);
+
           for (const dbAgent of dbAgents) {
+            if (removedIds.has(dbAgent.id)) continue;
             const existing = updated[dbAgent.id];
             if (existing) {
               merged++;
