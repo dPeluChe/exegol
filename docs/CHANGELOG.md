@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Sessions started before 0.5.10 never offered Restart to update after their CLI updated (their version was not recorded); they are now compared by when the CLI was installed
 
 ### Changed
+- Floating browser: same address bar as the pane (type a URL, open in your browser, DevTools, the size picker), with Sizes next to it
 - Terminal toolbar: Restart is always there (the CLI starts again and resumes the conversation, with the same model, YOLO and mode); the repo link shows only the GitHub icon
 - What's new: when an update brings several versions, the newest is open and the earlier ones are folded (with how many changes each has); click one to read it
 - Terminal sessions restart once after this update (the terminal host process is replaced)
