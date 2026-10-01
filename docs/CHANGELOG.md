@@ -20,6 +20,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - Browser pane: switching projects (or anything that reopens the pane) took it back to its start page; it keeps the page you navigated to, also after floating it. A page change no longer takes the cursor from the pane you are typing in, and a new pane no longer reloads on every route change
+- Cmd+V with an image in a Claude Code terminal attaches it the way Ctrl+V does ("[Image #N]") instead of typing a temporary file path; other CLIs still get the file path
 - A terminal shown again (switching project or tab, or after restarting the app) lost its CLI's modes: the mouse wheel did not scroll Claude, and paste and cursor keys could misbehave, until a window resize. Its screen is now restored together with the modes the CLI had turned on
 - Restart sessions (CLI updates) started the session twice: the two processes fought over one conversation, one died, and the pane could land on the dead one, so nothing seemed to happen. A session now resumes once whoever asks (restart, pane, Dashboard card), and a toast says when the restart starts or fails
 
