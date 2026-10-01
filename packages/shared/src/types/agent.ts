@@ -304,8 +304,10 @@ export type AgentProvider = {
   enabled: boolean;
   /** Set by agents.listEnabledProviders: its command is on PATH (launchable) */
   installed?: boolean;
-  /** How to install it, when not installed (the vendor's recommended command) */
+  /** How to install it on this OS, when not installed (the vendor's recommended command) */
   installCommand?: string | null;
+  /** The vendor's install guide (the only way when this OS has no command, e.g. amp on Windows) */
+  installDocs?: string | null;
 };
 
 // ─── Messages ───────────────────────────────────────────────────────────────

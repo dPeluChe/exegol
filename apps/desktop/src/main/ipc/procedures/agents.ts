@@ -34,7 +34,7 @@ import {
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { isPathAllowed } from "../../security/path-guard";
-import { CLI_SETUP, installedProviderIds } from "../../system/cli-versions";
+import { cliSetupFor, installedProviderIds } from "../../system/cli-versions";
 import { publicProcedure, router } from "../trpc";
 
 export const agentRouter = router({
@@ -53,7 +53,8 @@ export const agentRouter = router({
         .map((p) => ({
           ...p,
           installed: installed.has(p.id),
-          installCommand: CLI_SETUP[p.id]?.install ?? null,
+          installCommand: cliSetupFor(p.id)?.install ?? null,
+          installDocs: cliSetupFor(p.id)?.docs ?? null,
         }));
     }),
 

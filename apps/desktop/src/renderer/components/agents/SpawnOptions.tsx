@@ -13,6 +13,7 @@ import { type ReactNode, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
 import { ACCESS_MODES } from "../../lib/access-modes";
+import { openInBrowser } from "../../lib/open-in-browser";
 import { runCommandInNewTab } from "../../lib/spawn-shell";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
@@ -113,6 +114,15 @@ export function InstallHint({
             className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5"
           >
             Install in a terminal
+          </button>
+        )}
+        {provider.installDocs && (
+          <button
+            type="button"
+            onClick={() => openInBrowser(provider.installDocs ?? "")}
+            className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5"
+          >
+            Install guide
           </button>
         )}
         <button

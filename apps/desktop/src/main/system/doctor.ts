@@ -12,7 +12,7 @@ import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
 import { getApiKey } from "../security/keystore";
-import { CLI_SETUP, findAllOnPath, readBinaryVersion } from "./cli-versions";
+import { cliSetupFor, findAllOnPath, readBinaryVersion } from "./cli-versions";
 
 const execAsync = promisify(exec);
 
@@ -138,7 +138,7 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
       } else {
         detail = `'${provider.command}' not found on PATH`;
       }
-      const setup = CLI_SETUP[provider.id];
+      const setup = cliSetupFor(provider.id);
       if (setup?.deprecated) detail = `${detail} · ${setup.deprecated}`;
       return {
         id: `cli:${provider.id}`,
@@ -146,8 +146,8 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
         status: installed ? (duplicated ? "warn" : "ok") : "warn",
         detail,
         actionUrl: installed ? undefined : setup?.docs,
-        installCommand: installed ? undefined : setup?.install,
-        updateCommand: installed ? (setup?.update ?? setup?.install) : undefined,
+        installCommand: installed ? undefined : (setup?.install ?? undefined),
+        updateCommand: installed ? (setup?.update ?? undefined) : undefined,
         category: "agents",
       } satisfies DoctorCheck;
     }),
