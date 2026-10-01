@@ -2,7 +2,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { useLatest } from "../../hooks/use-latest";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
 import { isPasteTarget } from "../../lib/agent-input";
 import { isHttpUrl, toHttpUrl } from "../../lib/browser-viewports";
@@ -14,7 +13,7 @@ import { ConfirmDialog } from "../common/ConfirmDialog";
 import { BrowserAddressBar } from "./BrowserAddressBar";
 import { BrowserQaRecordingBar } from "./BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./BrowserReplayResultBar";
-import { DeviceFrame } from "./BrowserViewport";
+import { DeviceFrame, PageView } from "./BrowserViewport";
 import { DesignIssueBubble } from "./DesignIssueBubble";
 import { useBrowserQa } from "./use-browser-qa";
 import { useDevServerPorts } from "./use-dev-server-ports";
@@ -31,7 +30,6 @@ function usePaneUrl(pane: Pane, autoPort: number | undefined) {
   const autoUrl = `http://localhost:${autoPort ?? 3000}`;
   const currentUrl = pane.url ?? autoUrl;
   const [src, setSrc] = useState<string | null>(pane.url ?? null);
-  const autoRef = useLatest(autoUrl);
   // What the user is typing; null shows the page's URL
   const [draft, setDraft] = useState<string | null>(null);
   const urlInput = draft ?? currentUrl;
@@ -49,7 +47,7 @@ function usePaneUrl(pane: Pane, autoPort: number | undefined) {
     (url: string) => {
       if (!isHttpUrl(url)) return;
       // The first page that loads pins the dev-server URL: a server started later won't move it
-      setSrc((cur) => cur ?? autoRef.current);
+      if (src === null) setSrc(autoUrl);
       if (pending.current) clearTimeout(pending.current.timer);
       pending.current = {
         url,
@@ -59,7 +57,7 @@ function usePaneUrl(pane: Pane, autoPort: number | undefined) {
         }, 400),
       };
     },
-    [pane.id, setPaneUrl, autoRef],
+    [pane.id, setPaneUrl, src, autoUrl],
   );
   // Unmounting (the reason this exists) must not drop the last page
   useEffect(
@@ -113,6 +111,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     useWebviewControls(webviewRef);
   const [pendingStop, setPendingStop] = useState<PortInfo | null>(null);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
+  // A size saved by a dev build before sizes were objects ("mobile") is ignored
+  const viewport = typeof pane.viewport === "object" ? pane.viewport : undefined;
   // The page could not reach this port: its chip turns red until a load succeeds
   const deadPort = loadError ? Number(currentUrl.match(/:(\d+)/)?.[1]) || null : null;
   const [issueMessage, setIssueMessage] = useState("");
@@ -154,7 +154,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         onNavigateToPort={navigateToPort}
         deadPort={deadPort}
         onStopPort={setPendingStop}
-        viewport={pane.viewport}
+        viewport={viewport}
         onViewport={(viewport) => updatePane(pane.id, { viewport })}
         onSetPreferredPort={(port) => {
           if (projectId) setPreferred.mutate({ projectId, port });
@@ -162,15 +162,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       />
       {/* Webview with focus capture overlay when not active */}
       <div className="relative flex-1">
-        <DeviceFrame size={pane.viewport}>
-          <webview
-            // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
-            ref={webviewRef as React.Ref<any>}
-            src={src}
-            className="h-full w-full"
-            /* @ts-expect-error Electron webview attributes */
-            allowpopups="true"
-          />
+        <DeviceFrame size={viewport}>
+          <PageView ref={webviewRef} src={src} />
         </DeviceFrame>
         <StopServerDialog pendingStop={pendingStop} onDone={() => setPendingStop(null)} />
         {loadError && (

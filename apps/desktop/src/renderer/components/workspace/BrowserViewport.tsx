@@ -1,6 +1,6 @@
 import { cn } from "@exegol/ui";
 import { Check, X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { forwardRef, type ReactNode, useState } from "react";
 import { type PageSize, PRESET_SIZES, parseSize, sizeKey } from "../../lib/browser-viewports";
 import { useBrowserSizesStore } from "../../stores/browser-sizes";
 
@@ -21,8 +21,9 @@ export function ViewportSelect({
   onChange: (size: PageSize | undefined) => void;
 }) {
   const custom = useBrowserSizesStore((s) => s.custom);
+  const all = useAllSizes();
   const [adding, setAdding] = useState(false);
-  const byKey = new Map([...PRESET_SIZES, ...custom].map((s) => [sizeKey(s), s]));
+  const byKey = new Map(all.map((s) => [sizeKey(s), s]));
   if (adding) {
     return (
       <AddSizeForm
@@ -35,7 +36,7 @@ export function ViewportSelect({
   }
   const isCustom = !!value && custom.some((c) => sizeKey(c) === sizeKey(value));
   return (
-    <span className="flex items-center gap-0.5">
+    <>
       <select
         value={value ? sizeKey(value) : ""}
         onChange={(e) => {
@@ -80,7 +81,7 @@ export function ViewportSelect({
           <X className="h-3 w-3" />
         </button>
       )}
-    </span>
+    </>
   );
 }
 
@@ -144,24 +145,28 @@ function AddSizeForm({ onDone }: { onDone: (size: PageSize | null) => void }) {
 }
 
 /** The page's box: the whole area, or a device-sized frame centered in it (scrolls when the area
- *  is smaller). Same tree either way, so switching size never remounts the webview inside */
+ *  is smaller). `inline`: one of several side by side (the floating window's Sizes). The tree is
+ *  the same in every case, so switching never remounts the webview inside (a remount reloads it
+ *  and leaves its listeners on the old element) */
 export function DeviceFrame({
   size,
   caption,
+  inline = false,
   children,
 }: {
   size: PageSize | undefined;
   caption?: ReactNode;
+  inline?: boolean;
   children: ReactNode;
 }) {
   return (
     <div
       className={cn(
-        "h-full w-full",
-        size && "flex flex-col items-center overflow-auto bg-bg-tertiary p-3",
+        inline ? "flex shrink-0 flex-col gap-1" : "h-full w-full",
+        size && !inline && "flex flex-col items-center overflow-auto bg-bg-tertiary p-3",
       )}
     >
-      {size && caption}
+      {caption && <span className="text-[10px] text-text-muted">{caption}</span>}
       <div
         className={cn("h-full w-full", size && "shrink-0 border border-border shadow-lg")}
         style={size ? { width: size.width, height: size.height } : undefined}
@@ -171,3 +176,16 @@ export function DeviceFrame({
     </div>
   );
 }
+
+/** Electron's <webview> as the browser panes use it (popups allowed) */
+export const PageView = forwardRef<HTMLElement, { src: string }>(function PageView({ src }, ref) {
+  return (
+    <webview
+      // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
+      ref={ref as React.Ref<any>}
+      src={src}
+      className="h-full w-full"
+      {...({ allowpopups: "true" } as Record<string, string>)}
+    />
+  );
+});

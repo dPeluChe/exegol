@@ -41,6 +41,9 @@ export function useWebviewNavState(
 ) {
   const onPageRef = useLatest(onPage);
   const [pageUrl, setPageUrl] = useState(initialUrl);
+  // Only full navigations: what another view of the same page should load (an in-page route
+  // change would make it reload the whole page)
+  const [documentUrl, setDocumentUrl] = useState(initialUrl);
   const [loading, setLoading] = useState(true);
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
@@ -63,13 +66,18 @@ export function useWebviewNavState(
         /* webview not ready */
       }
     };
-    const onNavigate = (ev: Event) => {
+    const onPage = (ev: Event) => {
       const url = (ev as unknown as { url?: string }).url;
       if (url) {
         setPageUrl(url);
         onPageRef.current?.(url);
       }
       updateHistory();
+    };
+    const onNavigate = (ev: Event) => {
+      const url = (ev as unknown as { url?: string }).url;
+      if (url) setDocumentUrl(url);
+      onPage(ev);
     };
     const onFailLoad = (ev: Event) => {
       const e = ev as unknown as {
@@ -91,13 +99,10 @@ export function useWebviewNavState(
       setLoading(false);
       updateHistory();
     };
-    const onFinishLoadEvent = () => {
-      updateHistory();
-    };
     const listeners: [string, (ev: Event) => void][] = [
       ["did-navigate", onNavigate],
-      ["did-navigate-in-page", onNavigate],
-      ["did-finish-load", onFinishLoadEvent],
+      ["did-navigate-in-page", onPage],
+      ["did-finish-load", updateHistory],
       ["did-fail-load", onFailLoad],
       ["did-start-loading", onStartLoading],
       ["did-stop-loading", onStopLoading],
@@ -108,5 +113,5 @@ export function useWebviewNavState(
     };
   }, [queryClient, webviewRef, onPageRef]);
 
-  return { pageUrl, loading, canGoBack, canGoForward, loadError };
+  return { pageUrl, documentUrl, loading, canGoBack, canGoForward, loadError };
 }

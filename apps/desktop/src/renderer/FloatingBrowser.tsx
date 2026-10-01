@@ -1,16 +1,24 @@
 import type { Agent } from "@exegol/shared";
+import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Bug, Columns3, Crosshair, RotateCw } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FilterChip } from "./components/common/FilterChip";
 import { BrowserQaRecordingBar } from "./components/workspace/BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./components/workspace/BrowserReplayResultBar";
-import { DeviceFrame, useAllSizes, ViewportSelect } from "./components/workspace/BrowserViewport";
+import {
+  DeviceFrame,
+  PageView,
+  useAllSizes,
+  ViewportSelect,
+} from "./components/workspace/BrowserViewport";
 import { DesignIssueBubble } from "./components/workspace/DesignIssueBubble";
+import { webviewIdOf } from "./components/workspace/use-browser-qa";
 import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
 import { isPasteTarget } from "./lib/agent-input";
-import { compareSizes, type PageSize, sizeKey } from "./lib/browser-viewports";
+import { compareSizes, type PageSize, parseSize, sizeKey } from "./lib/browser-viewports";
 import { trpcInvoke } from "./lib/trpc-client";
 
 /** Live agents of the project, the targets for design and QA reports. This window has no agent store */
@@ -28,30 +36,40 @@ function useRunningAgentsQuery(projectId: string | undefined) {
 export function FloatingBrowser({
   url,
   projectId,
-  initialSize,
+  initialSizeKey,
 }: {
   url: string;
   projectId?: string;
-  initialSize?: PageSize;
+  /** "WxH" of the pane's size: matched to the named size (a preset or yours) when there is one */
+  initialSizeKey?: string;
 }) {
   const webviewRef = useRef<HTMLElement | null>(null);
   const {
     pageUrl: currentUrl,
+    documentUrl,
     loading,
     canGoBack,
     canGoForward,
     // Its pane docks back on this page, not the one it floated from
   } = useWebviewNavState(webviewRef, url, window.api.floating.reportPage);
-  const [size, setSize] = useState(initialSize);
+  const allSizes = useAllSizes();
+  const [size, setSize] = useState(() =>
+    initialSizeKey
+      ? (allSizes.find((s) => sizeKey(s) === initialSizeKey) ??
+        parseSize(initialSizeKey) ??
+        undefined)
+      : undefined,
+  );
   // Several sizes side by side: the first leads (toolbar, design, QA), the others follow its page
   const [compare, setCompare] = useState<PageSize[] | null>(null);
   const { handleBack, handleForward, handleReload } = useWebviewControls(webviewRef);
   const [issueMessage, setIssueMessage] = useState("");
   const runningAgents = useRunningAgentsQuery(projectId);
 
+  // The leading webview by id: with several sizes open, "the window's webview" is ambiguous
   const safeExecJs = useCallback(async (code: string): Promise<unknown> => {
     try {
-      return (await window.api.browser?.executeJs(code)) ?? null;
+      return (await window.api.browser?.executeJs(code, webviewIdOf(webviewRef))) ?? null;
     } catch {
       return null;
     }
@@ -92,40 +110,32 @@ export function FloatingBrowser({
 
       {/* Webview + floating bubble */}
       <div className="relative flex-1 overflow-hidden bg-white">
-        {compare ? (
-          <div className="flex h-full items-start gap-3 overflow-auto bg-bg-tertiary p-3">
-            {compare.map((s, i) => (
-              <div key={sizeKey(s)} className="flex shrink-0 flex-col gap-1">
-                <span className="text-[10px] text-text-muted">
-                  {s.label} {s.width}×{s.height}
-                  {i === 0 && " · leads"}
-                </span>
-                <div
-                  className="border border-border bg-white shadow-lg"
-                  style={{ width: s.width, height: s.height }}
-                >
-                  <webview
-                    // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
-                    ref={(i === 0 ? webviewRef : undefined) as React.Ref<any>}
-                    src={i === 0 ? url : currentUrl}
-                    className="h-full w-full"
-                    {...({ allowpopups: "true" } as Record<string, string>)}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <DeviceFrame size={size}>
-            <webview
-              // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
-              ref={webviewRef as React.Ref<any>}
-              src={url}
-              className="h-full w-full"
-              {...({ allowpopups: "true" } as Record<string, string>)}
-            />
-          </DeviceFrame>
-        )}
+        {/* One tree with or without Sizes: the leading webview keeps its key and never remounts */}
+        <div
+          className={cn(
+            "h-full",
+            compare && "flex items-start gap-3 overflow-auto bg-bg-tertiary p-3",
+          )}
+        >
+          {(compare ?? [size]).map((s, i) => (
+            <DeviceFrame
+              key={i === 0 ? "leader" : sizeKey(s as PageSize)}
+              size={s}
+              inline={!!compare}
+              caption={
+                compare && s
+                  ? `${s.label} ${s.width}×${s.height}${i === 0 ? " · leads" : ""}`
+                  : undefined
+              }
+            >
+              {i === 0 ? (
+                <PageView ref={webviewRef} src={url} />
+              ) : (
+                <FollowerView url={documentUrl} />
+              )}
+            </DeviceFrame>
+          ))}
+        </div>
 
         {modes.capturedElement && (
           <DesignIssueBubble
@@ -245,8 +255,7 @@ function FloatingToolbar({
       <button
         type="button"
         onClick={onToggleDesignMode}
-        disabled={comparing}
-        className={`flex disabled:opacity-30 h-5 w-5 items-center justify-center rounded transition-colors ${
+        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
           designMode
             ? "bg-blue-500/20 text-blue-400"
             : "text-text-muted hover:bg-white/10 hover:text-text-primary"
@@ -259,8 +268,7 @@ function FloatingToolbar({
       <button
         type="button"
         onClick={onToggleQaMode}
-        disabled={comparing}
-        className={`flex disabled:opacity-30 h-5 w-5 items-center justify-center rounded transition-colors ${
+        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
           qaMode
             ? "bg-red-500/20 text-red-400"
             : "text-text-muted hover:bg-white/10 hover:text-text-primary"
@@ -282,7 +290,9 @@ function FloatingToolbar({
   );
 }
 
-/** Which sizes the comparison shows (at least one) */
+/** Which sizes the comparison shows: at least one, at most four (each is a whole page renderer) */
+const MAX_COMPARE = 4;
+
 function SizeChips({
   selected,
   onChange,
@@ -298,21 +308,37 @@ function SizeChips({
         const key = sizeKey(s);
         const active = on.has(key);
         return (
-          <button
+          <FilterChip
             key={key}
-            type="button"
-            disabled={active && selected.length === 1}
+            active={active}
+            disabled={active ? selected.length === 1 : selected.length >= MAX_COMPARE}
             onClick={() =>
               onChange(active ? selected.filter((x) => sizeKey(x) !== key) : [...selected, s])
             }
-            className={`rounded border px-1.5 py-0.5 text-[10px] ${
-              active ? "border-accent/50 bg-accent/10 text-accent" : "border-border text-text-muted"
-            }`}
           >
             {s.label} {s.width}
-          </button>
+          </FilterChip>
         );
       })}
     </div>
   );
+}
+
+/** Another size of the same page: it loads the leader's page on full navigations only (following
+ *  every in-page route would reload it each time) */
+function FollowerView({ url }: { url: string }) {
+  const ref = useRef<HTMLElement | null>(null);
+  const [src] = useState(url);
+  useEffect(() => {
+    const wv = ref.current as unknown as {
+      getURL?: () => string;
+      loadURL?: (u: string) => void;
+    } | null;
+    try {
+      if (wv?.getURL && wv.getURL() !== url) wv.loadURL?.(url);
+    } catch {
+      /* not attached yet: its src covers the first load */
+    }
+  }, [url]);
+  return <PageView ref={ref} src={src} />;
 }

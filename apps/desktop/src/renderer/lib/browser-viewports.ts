@@ -39,7 +39,7 @@ export function toHttpUrl(input: string): string {
 
 /** What "Sizes" opens with: the size shown now first, then desktop, tablet and mobile */
 export function compareSizes(current: PageSize | undefined): PageSize[] {
-  const defaults = PRESET_SIZES.filter((s) => s.label !== "Laptop");
+  const defaults = PRESET_SIZES.filter((s) => s.width !== 1280);
   if (!current) return defaults;
   return [current, ...defaults.filter((s) => sizeKey(s) !== sizeKey(current))];
 }
