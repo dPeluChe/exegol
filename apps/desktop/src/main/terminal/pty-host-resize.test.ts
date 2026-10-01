@@ -53,12 +53,14 @@ describe("PtyHost resize", () => {
 });
 
 describe("PtyHost clear", () => {
-  it("forgets the history in the model and asks the sidecar to drop its ring", async () => {
+  it("forgets the history in the model and the sidecar ring, then sends Ctrl+L", async () => {
     const clear = vi.fn(async () => {});
+    const write = vi.fn(async () => {});
     const client = {
       ...(fakeSidecar().client as object),
       snapshot: async () => "old history\r\n",
       clear,
+      write,
     } as unknown as SidecarClient;
     const host = new PtyHost();
     host.connectToSidecar(client);
@@ -67,6 +69,7 @@ describe("PtyHost clear", () => {
     expect(host.getSnapshot("c")).toContain("old history");
     host.clear("c");
     expect(clear).toHaveBeenCalledWith("c");
+    expect(write).toHaveBeenCalledWith("c", "\x0c");
     expect(host.getSnapshot("c")).not.toContain("old history");
   });
 });

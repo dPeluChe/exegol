@@ -18,27 +18,38 @@ interface AppendResult extends PendingState {
   overflowed: boolean;
 }
 
-/** The last `max` UTF-8 bytes of `data`, starting on a character boundary. */
-function utf8Tail(data: string, max: number): string {
-  const buf = Buffer.from(data, "utf-8");
-  let start = buf.length - max;
+const OVERFLOW_NOTICE_BYTES = Buffer.byteLength(OVERFLOW_NOTICE, "utf-8");
+
+/** The last `max` bytes of UTF-8 `buf`, starting on a character boundary. */
+export function utf8Tail(buf: Buffer, max: number): Buffer {
+  let start = Math.max(0, buf.length - max);
   while (start < buf.length && ((buf[start] as number) & 0xc0) === 0x80) start++;
-  return buf.subarray(start).toString("utf-8");
+  return buf.subarray(start);
 }
 
-/** Pure: returns the next PendingState after appending `data`. Counted in UTF-8 bytes. */
-export function appendPending(state: PendingState, data: string): AppendResult {
-  if (data.length === 0) {
+/** Pure: returns the next PendingState after appending `data` (`bytes`: its UTF-8 length). */
+export function appendPending(
+  state: PendingState,
+  data: string,
+  bytes = Buffer.byteLength(data, "utf-8"),
+): AppendResult {
+  if (bytes === 0) {
     return { pending: state.pending, pendingBytes: state.pendingBytes, overflowed: false };
   }
-  const bytes = Buffer.byteLength(data, "utf-8");
   if (bytes >= MAX_PENDING_BYTES) {
-    const next = OVERFLOW_NOTICE + utf8Tail(data, MAX_PENDING_BYTES);
-    return { pending: next, pendingBytes: Buffer.byteLength(next, "utf-8"), overflowed: true };
+    const tail = utf8Tail(Buffer.from(data, "utf-8"), MAX_PENDING_BYTES);
+    return {
+      pending: OVERFLOW_NOTICE + tail.toString("utf-8"),
+      pendingBytes: OVERFLOW_NOTICE_BYTES + tail.length,
+      overflowed: true,
+    };
   }
   if (state.pendingBytes + bytes > MAX_PENDING_BYTES) {
-    const next = OVERFLOW_NOTICE + data;
-    return { pending: next, pendingBytes: Buffer.byteLength(next, "utf-8"), overflowed: true };
+    return {
+      pending: OVERFLOW_NOTICE + data,
+      pendingBytes: OVERFLOW_NOTICE_BYTES + bytes,
+      overflowed: true,
+    };
   }
   return {
     pending: state.pending + data,
@@ -47,33 +58,41 @@ export function appendPending(state: PendingState, data: string): AppendResult {
   };
 }
 
-/** A client this far behind is not reading: past it, its socket queue would grow without bound. */
-export const MAX_CLIENT_BACKLOG_BYTES = 64 * 1024 * 1024;
-
-interface BroadcastClient {
-  readonly writableLength: number;
+interface OutputClient {
   write(data: string): boolean;
-  destroy(): void;
+  once(event: "drain", listener: () => void): unknown;
 }
 
-/** Write `msg` to every client; a client whose unread backlog is over the cap is dropped. */
-export function broadcastTo<C extends BroadcastClient>(
-  clients: Set<C>,
-  msg: string,
-  onDrop: (backlogBytes: number) => void,
-  maxBacklog = MAX_CLIENT_BACKLOG_BYTES,
-): void {
-  for (const client of clients) {
-    if (client.writableLength > maxBacklog) {
-      clients.delete(client);
-      onDrop(client.writableLength);
-      client.destroy();
-      continue;
+/**
+ * Flow control for the sidecar's clients: while one has a full socket queue, the PTYs pause
+ * (the CLI blocks on its own writes) instead of the queue growing without bound.
+ */
+export class OutputGate<C extends OutputClient> {
+  private readonly stuck = new Set<C>();
+
+  constructor(private readonly onPausedChange: (paused: boolean) => void) {}
+
+  get paused(): boolean {
+    return this.stuck.size > 0;
+  }
+
+  send(clients: Iterable<C>, msg: string): void {
+    for (const client of clients) {
+      let ok = true;
+      try {
+        ok = client.write(msg);
+      } catch {
+        /* dead client: its close releases it */
+      }
+      if (ok || this.stuck.has(client)) continue;
+      this.stuck.add(client);
+      if (this.stuck.size === 1) this.onPausedChange(true);
+      client.once("drain", () => this.release(client));
     }
-    try {
-      client.write(msg);
-    } catch {
-      /* dead client */
-    }
+  }
+
+  /** On drain, close or error */
+  release(client: C): void {
+    if (this.stuck.delete(client) && this.stuck.size === 0) this.onPausedChange(false);
   }
 }

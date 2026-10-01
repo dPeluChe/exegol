@@ -3,7 +3,7 @@
 
 import { connect, type Socket } from "node:net";
 import { logger } from "../lib/logger";
-import { createNdjsonBuffer } from "../mcp/exegol-protocol";
+import { createNdjsonBuffer } from "../lib/ndjson";
 import {
   type JsonRpcMessage,
   type JsonRpcResponse,

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DA1_REPLY, da1Replies, stripTerminalQueries } from "./pty-sidecar-queries";
+import { da1Replies, stripTerminalQueries } from "./pty-sidecar-queries";
+
+const DA1_REPLY = "\x1b[?1;2c";
 
 describe("da1Replies (T184.2)", () => {
   it("answers ESC[c and ESC[0c, once per query", () => {

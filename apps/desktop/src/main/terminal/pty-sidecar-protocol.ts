@@ -12,7 +12,7 @@ export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
 /**
  * BUMP THIS whenever you change code the sidecar bundles (pty-sidecar-entry,
  * pty-sidecar-eviction, pty-sidecar-flusher, pty-sidecar-queries, this file,
- * ring-buffer, createNdjsonBuffer in mcp/exegol-protocol). The
+ * ring-buffer, lib/ndjson). The
  * sidecar is detached so it outlives both an app restart AND an app update —
  * on a version mismatch, discovery shuts the old one down and spawns a fresh
  * one. Forget the bump and the fix silently never loads: that is a released

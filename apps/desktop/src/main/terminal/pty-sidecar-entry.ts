@@ -6,14 +6,14 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import * as pty from "node-pty";
-import { createNdjsonBuffer } from "../mcp/exegol-protocol";
+import { createNdjsonBuffer } from "../lib/ndjson";
 import {
   clearHistory,
   computeMemoryInfo,
   evictIfOverCap,
   reloadIfEvicted,
 } from "./pty-sidecar-eviction";
-import { appendPending, broadcastTo, FLUSH_INTERVAL_MS } from "./pty-sidecar-flusher";
+import { appendPending, FLUSH_INTERVAL_MS, OutputGate } from "./pty-sidecar-flusher";
 import {
   EXEGOL_DIR,
   GLOBAL_RING_BUFFER_CAP_BYTES,
@@ -66,14 +66,20 @@ setInterval(() => evictIfOverCap(sessions.values()), RING_BUFFER_EVICTION_SWEEP_
 
 // ─── Client management ──────────────────────────────────────────────────
 
+const output = new OutputGate<Socket>((paused) => {
+  for (const s of sessions.values()) {
+    if (!s.alive) continue;
+    if (paused) s.pty.pause();
+    else s.pty.resume();
+  }
+});
+
 function broadcast(msg: string): void {
-  broadcastTo(clients, msg, (backlog) => {
-    process.stderr.write(`[Sidecar] Dropped a client ${backlog} bytes behind on output\n`);
-  });
+  output.send(clients, msg);
 }
 
-function applyAppend(s: SidecarSession, data: string): void {
-  const result = appendPending(s, data);
+function applyAppend(s: SidecarSession, data: string, bytes: number): void {
+  const result = appendPending(s, data, bytes);
   s.pending = result.pending;
   s.pendingBytes = result.pendingBytes;
 }
@@ -156,6 +162,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           evictedPath: null,
         };
         sessions.set(p.id, session);
+        if (output.paused) proc.pause();
 
         proc.onData((data: string) => {
           reloadIfEvicted(session);
@@ -167,7 +174,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
             const reply = da1Replies(data);
             if (reply) proc.write(reply);
           }
-          applyAppend(session, data);
+          applyAppend(session, data, buf.length);
           scheduleFlush(session);
         });
 
@@ -342,15 +349,13 @@ const server = createServer((client: Socket) => {
   );
   client.on("data", feed);
 
-  client.on("close", () => {
+  const drop = () => {
     clients.delete(client);
+    output.release(client);
     resetIdleTimer();
-  });
-
-  client.on("error", () => {
-    clients.delete(client);
-    resetIdleTimer();
-  });
+  };
+  client.on("close", drop);
+  client.on("error", drop);
 });
 
 // ─── Startup ────────────────────────────────────────────────────────────

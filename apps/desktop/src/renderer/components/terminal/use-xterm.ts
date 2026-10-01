@@ -303,7 +303,7 @@ export function useXterm({
   }, [paneId, mirror, readOnly]);
 
   // Pane menu "Clear Terminal": drop what this view holds (screen + scrollback) and the session's
-  // history in main and the sidecar, then Ctrl+L so the shell or TUI draws a clean screen
+  // history in main and the sidecar (main then sends Ctrl+L)
   useEffect(() => {
     const handleClear = (e: Event) => {
       const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
@@ -311,7 +311,6 @@ export function useXterm({
       terminalRef.current?.clear();
       if (readOnly) return;
       window.api.terminal.clear(agentId);
-      window.api.terminal.write(agentId, "\x0c");
     };
     window.addEventListener("exegol:clear-terminal", handleClear);
     return () => window.removeEventListener("exegol:clear-terminal", handleClear);

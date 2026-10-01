@@ -60,7 +60,7 @@ export function clearHistory(s: EvictableSession): void {
       /* disk error: the old history stays, as before this clear */
     }
   }
-  s.ringBuffer.clear(true);
+  s.ringBuffer.clear();
 }
 
 function evictToDisk(s: EvictableSession): void {

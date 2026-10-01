@@ -290,13 +290,15 @@ export class PtyHost {
     }, 60);
   }
 
-  /** Clear Terminal: forget the history here and in the sidecar, so no reattach replays it */
+  /** Clear Terminal: forget the history here and in the sidecar (no reattach replays it), then
+   *  Ctrl+L so the shell or TUI draws a clean screen */
   clear(id: string): void {
     const s = this.sessions.get(id);
     if (!s) return;
     s.emulator.clear();
     scheduleScrollbackFlush(s);
     if (s.mode === "sidecar") this.sidecarClient?.clear(id).catch(() => {});
+    this.write(id, "\x0c");
   }
 
   private resizePty(s: Session, cols: number, rows: number): void {

@@ -3,11 +3,10 @@
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching escape sequences
 const DA1_QUERY = /\x1b\[0?c/g;
 /** What xterm.js answers, so a session reads the same with or without a view attached. */
-export const DA1_REPLY = "\x1b[?1;2c";
+const DA1_REPLY = "\x1b[?1;2c";
 
 /** DA1 replies owed for this output. Only for a detached session: an attached xterm answers itself. */
 export function da1Replies(data: string): string {
-  if (!data.includes("\x1b[")) return "";
   return DA1_REPLY.repeat(data.match(DA1_QUERY)?.length ?? 0);
 }
 

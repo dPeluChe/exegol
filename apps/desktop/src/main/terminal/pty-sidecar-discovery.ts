@@ -149,7 +149,6 @@ async function waitForExit(pid: number): Promise<void> {
     await new Promise((r) => setTimeout(r, EXIT_POLL_MS));
   }
   // Still alive: escalate rather than race it for the socket.
-  if (!(await isOurSidecar(pid))) return;
   try {
     process.kill(pid, "SIGKILL");
   } catch {
@@ -171,10 +170,10 @@ export async function ensureSidecar(): Promise<SidecarClient> {
     if (await isOurSidecar(pidFile.pid)) {
       try {
         process.kill(pidFile.pid, "SIGTERM");
-        await waitForExit(pidFile.pid);
       } catch {
         /* already gone */
       }
+      await waitForExit(pidFile.pid);
     } else {
       logger.warn("[PtySidecar] Pid file names a process that is not our sidecar; not killing it");
     }

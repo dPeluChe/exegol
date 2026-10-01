@@ -641,6 +641,14 @@ and are recorded as refuted at the end.
    OSC 10/11/12 colour queries are never answered from the sidecar (T183.1 answers them in the
    renderer only). Needs main to tell the sidecar which sessions have a live view.
 
+Left from the simplify of that batch (judged out of its scope):
+- Reattach replay: `pty-host.ts` reattach hands the sidecar's raw snapshot to the renderer; the
+  other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
+  there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)
+- Clear Terminal does not reach Dashboard mirror cards (they keep the old screen until a refit)
+- Pid identity by `ps` command match; a stored identity (pid file token + process start time)
+  would avoid the fork
+
 **Spawn and lifecycle (pullfrog).**
 
 5. **beforeAgent (rest)**: the terminal now says the hook failed and the agent starts anyway
