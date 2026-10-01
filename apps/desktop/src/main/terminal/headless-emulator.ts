@@ -111,6 +111,11 @@ export class HeadlessEmulator {
     this.terminal.resize(cols, rows);
   }
 
+  /** Clear Terminal: drop the scrollback and screen, as the view's xterm does */
+  clear(): void {
+    this.terminal.clear();
+  }
+
   dispose(): void {
     this.terminal.dispose();
   }

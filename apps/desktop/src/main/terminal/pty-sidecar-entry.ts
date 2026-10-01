@@ -6,8 +6,14 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import * as pty from "node-pty";
-import { computeMemoryInfo, evictIfOverCap, reloadIfEvicted } from "./pty-sidecar-eviction";
-import { appendPending, FLUSH_INTERVAL_MS } from "./pty-sidecar-flusher";
+import { createNdjsonBuffer } from "../mcp/exegol-protocol";
+import {
+  clearHistory,
+  computeMemoryInfo,
+  evictIfOverCap,
+  reloadIfEvicted,
+} from "./pty-sidecar-eviction";
+import { appendPending, broadcastTo, FLUSH_INTERVAL_MS } from "./pty-sidecar-flusher";
 import {
   EXEGOL_DIR,
   GLOBAL_RING_BUFFER_CAP_BYTES,
@@ -27,6 +33,7 @@ import {
   SIDECAR_SOCK_PATH,
   SIDECAR_VERSION,
 } from "./pty-sidecar-protocol";
+import { da1Replies, stripTerminalQueries } from "./pty-sidecar-queries";
 import { RingBuffer } from "./ring-buffer";
 
 // ─── Session state ──────────────────────────────────────────────────────
@@ -60,13 +67,9 @@ setInterval(() => evictIfOverCap(sessions.values()), RING_BUFFER_EVICTION_SWEEP_
 // ─── Client management ──────────────────────────────────────────────────
 
 function broadcast(msg: string): void {
-  for (const client of clients) {
-    try {
-      client.write(msg);
-    } catch {
-      /* dead client */
-    }
-  }
+  broadcastTo(clients, msg, (backlog) => {
+    process.stderr.write(`[Sidecar] Dropped a client ${backlog} bytes behind on output\n`);
+  });
 }
 
 function applyAppend(s: SidecarSession, data: string): void {
@@ -159,6 +162,11 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           const buf = Buffer.from(data, "utf-8");
           ringBuffer.write(buf);
           session.lastActivityAt = Date.now();
+          // Nobody attached to answer: fish waits ~10s for its DA1 reply otherwise
+          if (clients.size === 0) {
+            const reply = da1Replies(data);
+            if (reply) proc.write(reply);
+          }
           applyAppend(session, data);
           scheduleFlush(session);
         });
@@ -245,8 +253,16 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
         const { id } = req.params as SessionIdParams;
         const s = sessions.get(id);
         if (s) reloadIfEvicted(s);
-        const data = s ? s.ringBuffer.snapshot().toString("utf-8") : null;
+        const data = s ? stripTerminalQueries(s.ringBuffer.snapshot().toString("utf-8")) : null;
         client.write(makeResponse(req.id, { data }));
+        break;
+      }
+
+      case "session.clear": {
+        const { id } = req.params as SessionIdParams;
+        const s = sessions.get(id);
+        if (s) clearHistory(s);
+        client.write(makeResponse(req.id, { ok: true }));
         break;
       }
 
@@ -317,28 +333,14 @@ const server = createServer((client: Socket) => {
   clients.add(client);
   resetIdleTimer();
 
-  let buffer = "";
-
-  client.on("data", (chunk: Buffer) => {
-    buffer += chunk.toString("utf-8");
-    // Process newline-delimited JSON-RPC messages
-    for (;;) {
-      const newlineIdx = buffer.indexOf("\n");
-      if (newlineIdx === -1) break;
-      const line = buffer.slice(0, newlineIdx);
-      buffer = buffer.slice(newlineIdx + 1);
-      if (!line.trim()) continue;
-      try {
-        const msg = JSON.parse(line) as JsonRpcMessage;
-        if ("id" in msg && "method" in msg) {
-          handleRequest(msg as JsonRpcRequest, client);
-        }
-        // Responses from client (not expected) — ignore
-      } catch {
-        // Malformed JSON — skip
-      }
-    }
-  });
+  const feed = createNdjsonBuffer<JsonRpcMessage>(
+    (msg) => {
+      // Responses from the client are not expected; ignore them
+      if ("id" in msg && "method" in msg) handleRequest(msg as JsonRpcRequest, client);
+    },
+    () => process.stderr.write("[Sidecar] Client sent an oversized frame, discarding\n"),
+  );
+  client.on("data", feed);
 
   client.on("close", () => {
     clients.delete(client);

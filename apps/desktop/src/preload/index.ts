@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("terminal:set-visible", id, visible, viewId, fresh),
     /** Make the CLI repaint at its current size (no resize seen by mirrors) */
     redraw: (id: string) => safe.send("terminal:redraw", id),
+    /** Forget the session's history in main and the sidecar (Clear Terminal) */
+    clear: (id: string) => safe.send("terminal:clear", id),
     /** The PTY's current grid (T194 mirrors), null when the session is gone */
     getSize: (id: string): Promise<{ cols: number; rows: number } | null> =>
       safe.invoke("terminal:get-size", id),

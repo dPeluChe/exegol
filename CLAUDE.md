@@ -31,7 +31,7 @@ bun run rebuild:native   # Rust + rebuild node-pty for Electron
 # on a mismatch, discovery shuts the old sidecar down and spawns a fresh one.
 # So after changing anything the sidecar bundles — pty-sidecar-entry.ts,
 # pty-sidecar-eviction.ts, pty-sidecar-flusher.ts, pty-sidecar-protocol.ts,
-# ring-buffer.ts — BUMP SIDECAR_VERSION. Skip it and the fix never loads, for
+# pty-sidecar-queries.ts, ring-buffer.ts, createNdjsonBuffer — BUMP SIDECAR_VERSION. Skip it and the fix never loads, for
 # released users as well as in dev.
 #
 # `dev:fresh` is only the manual escape hatch for when you don't want to bump

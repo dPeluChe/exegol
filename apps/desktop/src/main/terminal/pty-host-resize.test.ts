@@ -51,3 +51,22 @@ describe("PtyHost resize", () => {
     expect(resize).toHaveBeenLastCalledWith("b", 100, 40);
   });
 });
+
+describe("PtyHost clear", () => {
+  it("forgets the history in the model and asks the sidecar to drop its ring", async () => {
+    const clear = vi.fn(async () => {});
+    const client = {
+      ...(fakeSidecar().client as object),
+      snapshot: async () => "old history\r\n",
+      clear,
+    } as unknown as SidecarClient;
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    await host.reattachSession("c", { cols: 80, rows: 24 }, callbacks);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(host.getSnapshot("c")).toContain("old history");
+    host.clear("c");
+    expect(clear).toHaveBeenCalledWith("c");
+    expect(host.getSnapshot("c")).not.toContain("old history");
+  });
+});

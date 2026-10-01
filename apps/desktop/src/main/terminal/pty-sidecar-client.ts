@@ -145,6 +145,11 @@ export class SidecarClient {
     return result.data;
   }
 
+  /** Forget the session's ring buffer, so a later reattach does not replay it */
+  async clear(id: string): Promise<void> {
+    await this.call("session.clear", { id });
+  }
+
   async listSessions(): Promise<string[]> {
     const result = (await this.call("session.list")) as SessionListResult;
     return result.sessions;

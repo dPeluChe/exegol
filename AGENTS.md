@@ -29,7 +29,8 @@ React health: CI runs react-doctor@0.9.14 on the PR's changes; errors fail; fix 
 
 ## Hard rules
 
-- Changing `apps/desktop/src/main/terminal/pty-sidecar-*.ts` or `ring-buffer.ts` → bump
+- Changing `apps/desktop/src/main/terminal/pty-sidecar-*.ts`, `ring-buffer.ts` or
+  `createNdjsonBuffer` (`mcp/exegol-protocol.ts`) → bump
   `SIDECAR_VERSION` in `pty-sidecar-protocol.ts`.
 - New tRPC procedure or IPC channel → add it to `apps/desktop/src/preload/capabilities.json`.
 - Migrations only in your own `db/migration-sets/<group>.ts`; never edit shipped ones.

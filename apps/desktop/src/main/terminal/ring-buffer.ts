@@ -119,8 +119,9 @@ export class RingBuffer {
     return this.buf.length;
   }
 
-  clear(): void {
-    this.altScreen = false;
+  /** `keepScreenMode`: a cleared TUI is still on the alternate screen, and its replay must say so. */
+  clear(keepScreenMode = false): void {
+    if (!keepScreenMode) this.altScreen = false;
     this.carryLen = 0;
     this.head = 0;
     this.filled = false;

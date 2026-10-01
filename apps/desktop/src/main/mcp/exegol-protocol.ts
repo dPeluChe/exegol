@@ -68,6 +68,9 @@ export function createNdjsonBuffer<T>(
   // message would fail to parse (tool results carry user prose — acentos).
   const decoder = new StringDecoder("utf-8");
   let buffer = "";
+  // What was already scanned holds no newline: a big frame in 64 KB chunks
+  // would otherwise be rescanned from 0 on every chunk (quadratic)
+  let searchFrom = 0;
   let overflowed = false;
   return (chunk) => {
     buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
@@ -76,15 +79,17 @@ export function createNdjsonBuffer<T>(
       // us a fresh frame boundary — resuming mid-message would parse garbage.
       const resumeAt = buffer.lastIndexOf("\n");
       buffer = resumeAt === -1 ? "" : buffer.slice(resumeAt + 1);
+      searchFrom = 0;
       if (!overflowed) {
         overflowed = true;
         onOverflow?.();
       }
     }
-    let newlineIdx = buffer.indexOf("\n");
+    let start = 0;
+    let newlineIdx = buffer.indexOf("\n", searchFrom);
     while (newlineIdx !== -1) {
-      const line = buffer.slice(0, newlineIdx);
-      buffer = buffer.slice(newlineIdx + 1);
+      const line = buffer.slice(start, newlineIdx);
+      start = newlineIdx + 1;
       // A newline IS the framing recovering — independent of whether this
       // particular line parses, or of what the handler does with it.
       overflowed = false;
@@ -95,8 +100,10 @@ export function createNdjsonBuffer<T>(
           // Malformed line — drop it, don't crash the connection.
         }
       }
-      newlineIdx = buffer.indexOf("\n");
+      newlineIdx = buffer.indexOf("\n", start);
     }
+    if (start > 0) buffer = buffer.slice(start);
+    searchFrom = buffer.length;
   };
 }
 

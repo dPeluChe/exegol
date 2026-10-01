@@ -15,7 +15,7 @@ import {
 } from "./pty-sidecar-protocol";
 import type { RingBuffer } from "./ring-buffer";
 
-export interface EvictableSession {
+interface EvictableSession {
   id: string;
   ringBuffer: RingBuffer;
   pendingBytes: number;
@@ -48,6 +48,19 @@ export function reloadIfEvicted(s: EvictableSession): void {
     }
     s.evictedPath = null;
   }
+}
+
+/** Clear Terminal: forget the history, in memory or on disk, keeping the screen mode. */
+export function clearHistory(s: EvictableSession): void {
+  if (s.evictedPath) {
+    try {
+      // Empty, not deleted: the buffer stays released and reloads as nothing
+      writeFileSync(s.evictedPath, "");
+    } catch {
+      /* disk error: the old history stays, as before this clear */
+    }
+  }
+  s.ringBuffer.clear(true);
 }
 
 function evictToDisk(s: EvictableSession): void {

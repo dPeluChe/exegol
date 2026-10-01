@@ -11,6 +11,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - What's new: when an update brings several versions, the newest is open and the earlier ones are folded (with how many changes each has); click one to read it
+- Terminal sessions restart once after this update (the terminal host process is replaced)
+
+### Fixed
+- Clear Terminal also forgets the session's history, so reopening the app no longer brings the cleared output back
+- Reopening the app no longer makes a terminal answer old questions the shell asked (cursor position, colours, device attributes) into the session
+- A shell that asks for the terminal's device attributes while the app is closed (fish does) gets an answer instead of waiting ~10s
+- Terminal output with accents, emoji or other non-ASCII text no longer trips the output buffer limit early, and a stalled connection can no longer make the terminal host grow memory without bound
+- Large messages to the terminal host are read in linear time and with a size limit
+- Starting the app never stops an unrelated process that happens to reuse the old terminal host's process id
 
 ## [0.5.12] — 2026-10-01 — Installed CLIs and their icons, project layouts, browser sizes
 

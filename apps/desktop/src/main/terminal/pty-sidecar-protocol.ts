@@ -11,7 +11,8 @@ export const SIDECAR_SOCK_PATH = join(EXEGOL_DIR, "pty-sidecar.sock");
 export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
 /**
  * BUMP THIS whenever you change code the sidecar bundles (pty-sidecar-entry,
- * pty-sidecar-eviction, pty-sidecar-flusher, this file, ring-buffer). The
+ * pty-sidecar-eviction, pty-sidecar-flusher, pty-sidecar-queries, this file,
+ * ring-buffer, createNdjsonBuffer in mcp/exegol-protocol). The
  * sidecar is detached so it outlives both an app restart AND an app update —
  * on a version mismatch, discovery shuts the old one down and spawns a fresh
  * one. Forget the bump and the fix silently never loads: that is a released
@@ -19,8 +20,10 @@ export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
  *
  * 1.3.0 — snapshots carry the alternate-screen mode (2026-08-13)
  * 1.4.0 — cleanup() only removes files this process owns (2026-08-13)
+ * 1.5.0 — session.clear, bounded framing, client backpressure, DA1 while detached,
+ *         replay without terminal queries (2026-10-01)
  */
-export const SIDECAR_VERSION = "1.4.0";
+export const SIDECAR_VERSION = "1.5.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 
