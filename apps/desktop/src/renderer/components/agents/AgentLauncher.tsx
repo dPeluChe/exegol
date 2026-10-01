@@ -1,21 +1,10 @@
 import type { AgentProvider } from "@exegol/shared";
-import { useQuery } from "@tanstack/react-query";
 import { FileCode, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { trpcInvoke } from "../../lib/trpc-client";
+import { useLaunchableProviders } from "../../hooks/use-providers";
 import { AgentIcon } from "../common/AgentIcon";
 import { SpawnAgentModal } from "./SpawnAgentModal";
-
-// ─── Provider hook ───────────────────────────────────────────────────────────
-
-function useEnabledProviders() {
-  return useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
-}
 
 // ─── Agent Launcher ─────────────────────────────────────────────────────────
 
@@ -28,7 +17,7 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const [modalProvider, setModalProvider] = useState<AgentProvider | undefined>(undefined);
   const btnRef = useRef<HTMLButtonElement>(null);
-  const { data: providers } = useEnabledProviders();
+  const providers = useLaunchableProviders();
 
   // Calculate menu position from button ref
   const rect = btnRef.current?.getBoundingClientRect();

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Cpu, Globe, History } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useEnabledProviders, useLaunchableProviders } from "../../hooks/use-providers";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { trpcInvoke } from "../../lib/trpc-client";
@@ -111,11 +112,8 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const { containerRef, size } = usePaneSize();
-  const { data: providers } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
+  const providers = useLaunchableProviders();
+  const missingCount = useEnabledProviders().length - providers.length;
   // T155.5: cross-provider resumable session history for this project
   const [showSessions, setShowSessions] = useState(false);
   const { data: resumableSessions } = useQuery({
@@ -183,6 +181,20 @@ export function EmptyPane({ paneId }: { paneId: string }) {
       )}
 
       <AgentGrid options={filteredOptions} layout={layout} onLaunch={handleLaunchAgent} />
+      {!isMini && missingCount > 0 && (
+        <p className="text-[10px] text-text-muted">
+          {cliOptions.length === 0
+            ? "No agent CLI is installed on this machine yet: "
+            : `${missingCount} more not installed: `}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("exegol:spawn-agent"))}
+            className="underline hover:text-text-secondary"
+          >
+            see how to install them
+          </button>
+        </p>
+      )}
 
       {sessions.length > 0 && (
         <RecentSessions

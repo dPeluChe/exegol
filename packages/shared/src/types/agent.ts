@@ -302,6 +302,10 @@ export type AgentProvider = {
   isBuiltin: boolean;
   /** Whether this provider is shown in the launcher (default: true) */
   enabled: boolean;
+  /** Set by agents.listEnabledProviders: its command is on PATH (launchable) */
+  installed?: boolean;
+  /** How to install it, when not installed (the vendor's recommended command) */
+  installCommand?: string | null;
 };
 
 // ─── Messages ───────────────────────────────────────────────────────────────

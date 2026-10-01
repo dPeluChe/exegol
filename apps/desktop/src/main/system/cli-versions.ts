@@ -164,6 +164,30 @@ async function fetchLatest(cliType: string): Promise<string | null> {
   return version;
 }
 
+const INSTALLED_TTL_MS = 30_000;
+let installedCache: { at: number; ids: Promise<Set<string>> } | null = null;
+
+/** Providers whose command (or a renamed binary) is on PATH. Cached 30s: every launcher list
+ *  asks, and each check is a `which` per CLI. `fresh` re-checks after an install */
+export function installedProviderIds(fresh = false): Promise<Set<string>> {
+  if (!fresh && installedCache && Date.now() - installedCache.at < INSTALLED_TTL_MS) {
+    return installedCache.ids;
+  }
+  const ids = Promise.all(
+    getProviderRegistry()
+      .list()
+      .filter((p) => p.id !== "shell")
+      .map(async (p) => {
+        for (const cmd of [p.command, ...(COMMAND_ALIASES[p.command] ?? [])]) {
+          if ((await findAllOnPath(cmd)).length > 0) return p.id;
+        }
+        return null;
+      }),
+  ).then((found) => new Set(found.filter((id): id is string => id !== null)));
+  installedCache = { at: Date.now(), ids };
+  return ids;
+}
+
 /** The installed version of a provider's CLI (its first PATH hit, renamed binaries included) */
 export async function installedCliVersion(cliType: string): Promise<string | null> {
   const provider = getProviderRegistry().get(cliType);

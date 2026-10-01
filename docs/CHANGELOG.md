@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Exegol checks which agent CLIs are actually installed (on your PATH). The quick launchers (empty pane, tab bar, + menu, parallel spawn) offer only those; Launch Agent lists the rest under "Not installed", and picking one shows its install command, a button to run it in a terminal and Check again, instead of launching a pane that only says "command not found"
+
 ### Fixed
 - A terminal shown again (switching project or tab, or after restarting the app) lost its CLI's modes: the mouse wheel did not scroll Claude, and paste and cursor keys could misbehave, until a window resize. Its screen is now restored together with the modes the CLI had turned on
 - Restart sessions (CLI updates) started the session twice: the two processes fought over one conversation, one died, and the pane could land on the dead one, so nothing seemed to happen. A session now resumes once whoever asks (restart, pane, Dashboard card), and a toast says when the restart starts or fails

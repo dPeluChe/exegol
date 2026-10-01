@@ -13,6 +13,7 @@ import { type ReactNode, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
 import { ACCESS_MODES } from "../../lib/access-modes";
+import { runCommandInNewTab } from "../../lib/spawn-shell";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 
@@ -57,27 +58,75 @@ export function ProviderPicker({
   selectedId: string;
   onChoose: (id: string) => void;
 }) {
+  const installed = providers.filter((p) => p.installed !== false);
+  const missing = providers.filter((p) => p.installed === false);
+  const chip = (p: AgentProvider, dim: boolean) => (
+    <SpawnChip
+      key={p.id}
+      selected={selectedId === p.id}
+      onClick={() => onChoose(p.id)}
+      title={dim ? `${p.name} is not installed on this machine` : undefined}
+      className={cn("flex items-center gap-1.5", dim && "opacity-50")}
+    >
+      <AgentIcon provider={p.id} size={16} fallback={p.icon} fallbackColor={p.color} />
+      {p.name}
+    </SpawnChip>
+  );
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium text-text-muted">Agent</span>
-      <div className="flex flex-wrap gap-1.5">
-        {providers.map((p) => (
-          <SpawnChip
-            key={p.id}
-            selected={selectedId === p.id}
-            onClick={() => onChoose(p.id)}
-            className="flex items-center gap-1.5"
+      <div className="flex flex-wrap gap-1.5">{installed.map((p) => chip(p, false))}</div>
+      {missing.length > 0 && (
+        <>
+          <span className="mt-1 text-[10px] text-text-muted">Not installed</span>
+          <div className="flex flex-wrap gap-1.5">{missing.map((p) => chip(p, true))}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A CLI that is not on PATH: launching it would only print "command not found" in the pane */
+export function InstallHint({
+  provider,
+  projectId,
+  onRecheck,
+}: {
+  provider: AgentProvider;
+  projectId: string;
+  onRecheck: () => void;
+}) {
+  const cmd = provider.installCommand;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-text-secondary">
+      <span>
+        <span className="font-medium text-text-primary">{provider.name}</span> is not installed here
+        (no <code className="font-mono">{provider.command}</code> on your PATH). Install it first
+        {cmd ? ":" : ", then check again."}
+      </span>
+      {cmd && <code className="select-all break-all font-mono text-[10px]">{cmd}</code>}
+      <div className="flex gap-2">
+        {cmd && (
+          <button
+            type="button"
+            onClick={() => runCommandInNewTab(projectId, cmd).catch(() => {})}
+            className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5"
           >
-            <AgentIcon provider={p.id} size={16} fallback={p.icon} fallbackColor={p.color} />
-            {p.name}
-          </SpawnChip>
-        ))}
+            Install in a terminal
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onRecheck}
+          className="rounded border border-border px-2 py-0.5 text-[10px] hover:bg-white/5"
+        >
+          Check again
+        </button>
       </div>
     </div>
   );
 }
 
-/** Access mode (T58), plus the CLI's own YOLO flag when it has one. */
 export function AccessModePicker({
   accessMode,
   onAccessMode,
