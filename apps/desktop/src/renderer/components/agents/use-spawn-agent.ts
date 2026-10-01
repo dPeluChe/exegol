@@ -4,6 +4,7 @@ import { switchSection } from "../../lib/switch-section";
 import { trpcMutate } from "../../lib/trpc-client";
 import { toAgentState, useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { useWatchStore } from "../../stores/watch";
 import {
   findFirstPaneId,
   getFocusedOrFirstPaneId,
@@ -36,6 +37,17 @@ function spawnInput(projectId: string, c: SpawnForm) {
     name: c.name.trim() || undefined,
     ...resumeInput(c),
   };
+}
+
+/** The Exegol session a resume continues: a past session picked by id, or Claude's own session
+ *  picked by name (matched by its session id) */
+export function resumedAgentId(form: Pick<SpawnForm, "session" | "localSessionId">): string | null {
+  if (form.session && form.session !== "last") return form.session.agentId;
+  if (!form.localSessionId) return null;
+  const match = Object.values(useAgentStore.getState().agents).find(
+    (a) => a.claudeSessionId === form.localSessionId,
+  );
+  return match?.id ?? null;
 }
 
 // T95: Reuse focused empty pane, otherwise create a new tab
@@ -87,6 +99,9 @@ export function useSpawnAgent({
           }),
         );
         createTerminal(agent.id);
+        // A pinned session resumed from here keeps its Dashboard card (and its font)
+        const replaced = resumedAgentId(form);
+        if (replaced) useWatchStore.getState().replaceAgent(replaced, agent.id);
         setFocusedAgent(agent.id);
         // Switch to Agents section
         switchSection("agents");

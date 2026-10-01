@@ -80,6 +80,7 @@ export const agentRowSchema = z.object({
   launched_in_shell: optNum,
   cli_version: optStr,
   model: optStr,
+  claude_session_id: optStr,
 });
 
 export const worktreeRowSchema = z.object({
