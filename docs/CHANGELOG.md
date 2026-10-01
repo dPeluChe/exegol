@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- What's new: when an update brings several versions, the newest is open and the earlier ones are folded (with how many changes each has); click one to read it
+
 ## [0.5.12] — 2026-10-01 — Installed CLIs and their icons, project layouts, browser sizes
 
 ### Added

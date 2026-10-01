@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { parseReleaseNotes } from "../../lib/release-notes";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
@@ -42,37 +42,47 @@ function formatDate(iso: string | null): string | null {
     : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** Newest first: the newest open, the ones before it folded (a user who skipped versions sees
+ *  them all, but the latest is what they came for) */
 function NotesList({ notes }: { notes: ReleaseNote[] }) {
   return (
-    <div className="space-y-4">
-      {notes.map((note) => (
-        <section key={note.version}>
-          <h3 className="mb-1 flex items-baseline gap-2 text-xs font-semibold text-text-primary">
-            v{note.version}
-            {formatDate(note.date) && (
-              <span className="text-[10px] font-normal text-text-muted">
-                {formatDate(note.date)}
-              </span>
-            )}
-          </h3>
-          {parseReleaseNotes(note.body).map((section) => (
-            <div key={section.title ?? "intro"} className="mb-2">
-              {section.title && (
-                <p className="mb-0.5 text-[10px] uppercase tracking-wider text-text-muted">
-                  {section.title}
-                </p>
+    <div className="space-y-3">
+      {notes.map((note, i) => {
+        const sections = parseReleaseNotes(note.body);
+        const count = sections.reduce((n, s) => n + s.items.length, 0);
+        return (
+          <details key={note.version} open={i === 0} className="group">
+            <summary className="mb-1 flex cursor-pointer list-none items-baseline gap-2 text-xs font-semibold text-text-primary">
+              <ChevronRight className="h-3 w-3 shrink-0 self-center text-text-muted transition-transform group-open:rotate-90" />
+              v{note.version}
+              {formatDate(note.date) && (
+                <span className="text-[10px] font-normal text-text-muted">
+                  {formatDate(note.date)}
+                </span>
               )}
-              <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-text-secondary">
-                {section.items.map((item) => (
-                  <li key={item}>
-                    <NoteText text={item} />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </section>
-      ))}
+              <span className="text-[10px] font-normal text-text-muted group-open:hidden">
+                {count} {count === 1 ? "change" : "changes"}
+              </span>
+            </summary>
+            {sections.map((section) => (
+              <div key={section.title ?? "intro"} className="mb-2 pl-5">
+                {section.title && (
+                  <p className="mb-0.5 text-[10px] uppercase tracking-wider text-text-muted">
+                    {section.title}
+                  </p>
+                )}
+                <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-text-secondary">
+                  {section.items.map((item) => (
+                    <li key={item}>
+                      <NoteText text={item} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </details>
+        );
+      })}
     </div>
   );
 }
