@@ -3,6 +3,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
+import { useAgentStore } from "../../stores/agents";
 import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
@@ -14,6 +15,10 @@ import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
 import { registerTerminalLinkProviders } from "./terminal-links";
 import type { TerminalInstanceProps } from "./terminal-types";
 import { tuneWheelSensitivity } from "./tui-wheel";
+
+/** CLIs that attach a clipboard image on their own paste key (Ctrl+V), as Claude Code does */
+const CLIPBOARD_IMAGE_CLIS = new Set(["claude-code"]);
+const CTRL_V = "\x16";
 
 interface TerminalSessionDeps {
   agentId: string;
@@ -204,12 +209,19 @@ export function setupTerminalSession(
     });
 
     // Capture phase: xterm's own paste handler on its textarea stops the event, so a bubbling
-    // listener here never saw Cmd+V with an image (Ctrl+V worked: Claude reads the clipboard)
+    // listener here never saw Cmd+V with an image. A CLI that reads the clipboard itself gets its
+    // own paste key (Claude attaches "[Image #N]"); the others get the image saved to a file and
+    // its path typed in. The cliType is read now: a terminal can have become Claude since setup
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items || ![...items].some((item) => item.type.startsWith("image/"))) return;
       e.preventDefault();
       e.stopPropagation();
+      const cliType = useAgentStore.getState().agents[deps.agentId]?.cliType ?? deps.cliType;
+      if (cliType && CLIPBOARD_IMAGE_CLIS.has(cliType)) {
+        window.api.terminal.write(deps.agentId, CTRL_V);
+        return;
+      }
       const filePath = await window.api.terminal.saveClipboardImage();
       if (filePath) window.api.terminal.write(deps.agentId, filePath);
     };
