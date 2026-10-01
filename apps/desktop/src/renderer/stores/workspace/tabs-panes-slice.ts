@@ -36,6 +36,7 @@ type TabsPanesSlice = Pick<
   | "movePaneBeside"
   | "splitPane"
   | "updatePane"
+  | "setPaneUrl"
   | "setFocusedPane"
   | "extractPaneToNewTab"
   | "closeFocusedPane"
@@ -270,6 +271,18 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
         }),
         focusedPaneId: paneId,
       };
+    }),
+
+  setPaneUrl: (paneId, url) =>
+    set((s) => {
+      for (const [projectId, pw] of Object.entries(s.projectWorkspaces)) {
+        const pane = pw.panes[paneId];
+        if (!pane) continue;
+        if (pane.url === url) return s;
+        const panes = { ...pw.panes, [paneId]: { ...pane, url } };
+        return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
+      }
+      return s;
     }),
 
   setFocusedPane: (paneId) => set({ focusedPaneId: paneId }),

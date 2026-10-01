@@ -18,7 +18,7 @@ interface UseBrowserQaParams {
 }
 
 /** This pane's webview: with two browser panes the window's first one answered */
-function webviewIdOf(ref: React.RefObject<HTMLElement | null>): number | undefined {
+export function webviewIdOf(ref: React.RefObject<HTMLElement | null>): number | undefined {
   return (
     ref.current as unknown as { getWebContentsId?: () => number } | null
   )?.getWebContentsId?.();

@@ -1,12 +1,10 @@
-import { cn } from "@exegol/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { useLatest } from "../../hooks/use-latest";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
 import { isPasteTarget } from "../../lib/agent-input";
-import { viewportSize } from "../../lib/browser-viewports";
+import { isHttpUrl, toHttpUrl } from "../../lib/browser-viewports";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
@@ -15,6 +13,7 @@ import { ConfirmDialog } from "../common/ConfirmDialog";
 import { BrowserAddressBar } from "./BrowserAddressBar";
 import { BrowserQaRecordingBar } from "./BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./BrowserReplayResultBar";
+import { DeviceFrame, PageView } from "./BrowserViewport";
 import { DesignIssueBubble } from "./DesignIssueBubble";
 import { useBrowserQa } from "./use-browser-qa";
 import { useDevServerPorts } from "./use-dev-server-ports";
@@ -23,52 +22,62 @@ import { type LoadError, useWebviewControls, useWebviewNavState } from "./use-we
 // ─── Browser Pane ──────────────────────────────────────────────────────────
 
 /** The pane's URL: the saved one wins; until there is one, follow the project's dev server.
- *  `pane.url` follows every navigation (a project switch remounts the pane and it reopened the
- *  start page), while the webview's `src` only changes when the user goes somewhere: setting it
- *  to the page it is already on would load it again */
+ *  `pane.url` follows every page it lands on, so a remount (project switch) reopens it there.
+ *  The webview's `src` is only what the user chose (or what it opened with): it never takes
+ *  `pane.url` back, because setting it to the page it is on loads that page again */
 function usePaneUrl(pane: Pane, autoPort: number | undefined) {
-  const updatePane = useWorkspaceStore((s) => s.updatePane);
-  const currentUrl = pane.url ?? `http://localhost:${autoPort ?? 3000}`;
-  const [mountUrl] = useState(pane.url);
-  const [chosen, setChosen] = useState<string | null>(null);
-  const src = chosen ?? mountUrl ?? currentUrl;
+  const setPaneUrl = useWorkspaceStore((s) => s.setPaneUrl);
+  const autoUrl = `http://localhost:${autoPort ?? 3000}`;
+  const currentUrl = pane.url ?? autoUrl;
+  const [src, setSrc] = useState<string | null>(pane.url ?? null);
   // What the user is typing; null shows the page's URL
   const [draft, setDraft] = useState<string | null>(null);
   const urlInput = draft ?? currentUrl;
   const goTo = useCallback(
     (url: string) => {
       setDraft(null);
-      setChosen(url);
-      updatePane(pane.id, { url });
+      setSrc(url);
+      setPaneUrl(pane.id, url);
     },
-    [pane.id, updatePane],
+    [pane.id, setPaneUrl],
   );
+  // Debounced: an app changing routes often would re-save the whole workspace each time
+  const pending = useRef<{ url: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const rememberPage = useCallback(
     (url: string) => {
-      if (/^https?:\/\//.test(url)) updatePane(pane.id, { url });
+      if (!isHttpUrl(url)) return;
+      // The first page that loads pins the dev-server URL: a server started later won't move it
+      if (src === null) setSrc(autoUrl);
+      if (pending.current) clearTimeout(pending.current.timer);
+      pending.current = {
+        url,
+        timer: setTimeout(() => {
+          pending.current = null;
+          setPaneUrl(pane.id, url);
+        }, 400),
+      };
     },
-    [pane.id, updatePane],
+    [pane.id, setPaneUrl, src, autoUrl],
   );
-  // The first page that loads keeps its URL, so a server started later does not move it
-  const keepAutoUrl = useLatest(() => {
-    if (!pane.url) updatePane(pane.id, { url: currentUrl });
-  });
-  const navigate = useCallback(() => {
-    let url = urlInput.trim();
-    if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
-      url = `http://${url}`;
-    }
-    goTo(url);
-  }, [urlInput, goTo]);
+  // Unmounting (the reason this exists) must not drop the last page
+  useEffect(
+    () => () => {
+      const last = pending.current;
+      if (!last) return;
+      clearTimeout(last.timer);
+      useWorkspaceStore.getState().setPaneUrl(pane.id, last.url);
+    },
+    [pane.id],
+  );
+  const navigate = useCallback(() => goTo(toHttpUrl(urlInput)), [urlInput, goTo]);
   const navigateToPort = useCallback((port: number) => goTo(`http://localhost:${port}`), [goTo]);
   return {
-    src,
+    src: src ?? autoUrl,
     currentUrl,
     urlInput,
     setDraft,
     goTo,
     rememberPage,
-    keepAutoUrl,
     navigate,
     navigateToPort,
   };
@@ -90,29 +99,20 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   );
   const setPreferred = useSetPreferredPort();
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
-  const {
-    src,
-    currentUrl,
-    urlInput,
-    setDraft,
-    goTo,
-    rememberPage,
-    keepAutoUrl,
-    navigate,
-    navigateToPort,
-  } = usePaneUrl(pane, autoPort);
+  const { src, currentUrl, urlInput, setDraft, goTo, rememberPage, navigate, navigateToPort } =
+    usePaneUrl(pane, autoPort);
   const webviewRef = useRef<HTMLElement | null>(null);
   const { canGoBack, canGoForward, loadError } = useWebviewNavState(
     webviewRef,
     currentUrl,
-    keepAutoUrl,
     rememberPage,
   );
   const { handleBack, handleForward, handleReload, handleOpenDevTools } =
     useWebviewControls(webviewRef);
   const [pendingStop, setPendingStop] = useState<PortInfo | null>(null);
-  const device = viewportSize(pane.viewport);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
+  // A size saved by a dev build before sizes were objects ("mobile") is ignored
+  const viewport = typeof pane.viewport === "object" ? pane.viewport : undefined;
   // The page could not reach this port: its chip turns red until a load succeeds
   const deadPort = loadError ? Number(currentUrl.match(/:(\d+)/)?.[1]) || null : null;
   const [issueMessage, setIssueMessage] = useState("");
@@ -154,7 +154,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         onNavigateToPort={navigateToPort}
         deadPort={deadPort}
         onStopPort={setPendingStop}
-        viewport={pane.viewport}
+        viewport={viewport}
         onViewport={(viewport) => updatePane(pane.id, { viewport })}
         onSetPreferredPort={(port) => {
           if (projectId) setPreferred.mutate({ projectId, port });
@@ -162,27 +162,9 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       />
       {/* Webview with focus capture overlay when not active */}
       <div className="relative flex-1">
-        {/* A device size centers the page at that size; a smaller pane scrolls to it */}
-        <div
-          className={cn(
-            "h-full w-full",
-            device && "flex items-start justify-center overflow-auto bg-bg-tertiary p-3",
-          )}
-        >
-          <div
-            className={cn("h-full w-full", device && "shrink-0 border border-border shadow-lg")}
-            style={device ?? undefined}
-          >
-            <webview
-              // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
-              ref={webviewRef as React.Ref<any>}
-              src={src}
-              className="h-full w-full"
-              /* @ts-expect-error Electron webview attributes */
-              allowpopups="true"
-            />
-          </div>
-        </div>
+        <DeviceFrame size={viewport}>
+          <PageView ref={webviewRef} src={src} />
+        </DeviceFrame>
         <StopServerDialog pendingStop={pendingStop} onDone={() => setPendingStop(null)} />
         {loadError && (
           <LoadErrorOverlay

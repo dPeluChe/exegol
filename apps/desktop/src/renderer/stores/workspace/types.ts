@@ -1,5 +1,5 @@
 import type { StateCreator } from "zustand";
-import type { ViewportId } from "../../lib/browser-viewports";
+import type { PageSize } from "../../lib/browser-viewports";
 import type {
   CustomLayoutPreset,
   CustomLayoutSlot,
@@ -22,7 +22,7 @@ export interface Pane {
   /** Bumped on every open: reopening the file after closing its preview must remount */
   openFileAt?: number;
   /** Browser pane: the size the page is shown at (device toolbar); absent fits the pane */
-  viewport?: ViewportId;
+  viewport?: PageSize;
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }
@@ -100,6 +100,9 @@ export interface WorkspaceStore {
     config?: { agentId?: string; url?: string; id?: string },
   ) => void;
   updatePane: (paneId: string, updates: Partial<Pane>) => void;
+  /** The page a browser pane is on: any project's pane, without taking focus (a redirect in a
+   *  background pane moved the cursor), and nothing when it did not change */
+  setPaneUrl: (paneId: string, url: string) => void;
   setFocusedPane: (paneId: string | null) => void;
 
   extractPaneToNewTab: (sourceTabId: string, paneId: string) => void;

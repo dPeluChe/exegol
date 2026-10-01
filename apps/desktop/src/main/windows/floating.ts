@@ -24,11 +24,15 @@ interface FloatingPaneConfig {
   url?: string;
   /** For browser: project id used to look up running agents for send-to-agent */
   projectId?: string;
+  /** For browser: the device size the pane showed the page at, "1440x900" */
+  viewport?: string;
 }
 
 const floatingWindows = new Map<string, BrowserWindow>();
-/** Pending "floating:closed" notifications buffered until renderer attaches listener. */
-const pendingClosedEvents = new Set<string>();
+/** Pending "floating:closed" notifications buffered until renderer attaches listener, with the
+ *  page a floating browser was last on (the pane goes back to it, not to where it floated from) */
+const pendingClosedEvents = new Map<string, string | undefined>();
+const lastPages = new Map<string, string>();
 let mainWindowRef: BrowserWindow | null = null;
 
 export function registerMainWindow(win: BrowserWindow): void {
@@ -37,18 +41,20 @@ export function registerMainWindow(win: BrowserWindow): void {
   // workspace store can clean up after a previous crash or reload.
   win.webContents.on("did-finish-load", () => {
     if (pendingClosedEvents.size === 0) return;
-    for (const paneId of pendingClosedEvents) {
-      win.webContents.send("floating:closed", paneId);
+    for (const [paneId, page] of pendingClosedEvents) {
+      win.webContents.send("floating:closed", paneId, page);
     }
     pendingClosedEvents.clear();
   });
 }
 
 function notifyMainWindowClosed(paneId: string): void {
+  const page = lastPages.get(paneId);
+  lastPages.delete(paneId);
   if (mainWindowRef && !mainWindowRef.isDestroyed()) {
-    mainWindowRef.webContents.send("floating:closed", paneId);
+    mainWindowRef.webContents.send("floating:closed", paneId, page);
   } else {
-    pendingClosedEvents.add(paneId);
+    pendingClosedEvents.set(paneId, page);
   }
 }
 
@@ -61,6 +67,7 @@ function buildUrl(config: FloatingPaneConfig): string {
   if (config.agentId) params.set("floatingAgentId", config.agentId);
   if (config.url) params.set("floatingUrl", config.url);
   if (config.projectId) params.set("floatingProjectId", config.projectId);
+  if (config.viewport) params.set("floatingViewport", config.viewport);
   const query = params.toString();
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     return `${process.env.ELECTRON_RENDERER_URL}?${query}`;
@@ -129,6 +136,13 @@ export function registerFloatingIpcHandlers(): void {
   });
   ipcMain.handle("floating:close", (_event, paneId: string) => {
     closeFloatingPane(paneId);
+  });
+  // A floating browser reports the page it is on; its pane reopens there when it docks back
+  ipcMain.on("floating:page", (event, url: unknown) => {
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) return;
+    for (const [paneId, win] of floatingWindows) {
+      if (!win.isDestroyed() && win.webContents === event.sender) lastPages.set(paneId, url);
+    }
   });
   // Window controls for floating windows (they're frameless)
   ipcMain.on("floating:self-close", (event) => {

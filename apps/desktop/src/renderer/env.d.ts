@@ -97,11 +97,13 @@ interface Window {
         agentId?: string;
         url?: string;
         projectId?: string;
+        viewport?: string;
       }) => Promise<void>;
       close: (paneId: string) => Promise<void>;
       selfClose: () => void;
       selfToggleDevTools: () => void;
-      onClosed: (callback: (paneId: string) => void) => () => void;
+      reportPage: (url: string) => void;
+      onClosed: (callback: (paneId: string, page?: string) => void) => () => void;
     };
     // T120: Settings as a separate BrowserWindow
     settings: {

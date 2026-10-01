@@ -20,6 +20,8 @@ interface FloatingParams {
   agentId?: string;
   url?: string;
   projectId?: string;
+  /** The device size its pane showed the page at, "WxH" */
+  viewport?: string;
 }
 
 function parseParams(): FloatingParams | null {
@@ -34,6 +36,7 @@ function parseParams(): FloatingParams | null {
     agentId: p.get("floatingAgentId") ?? undefined,
     url: p.get("floatingUrl") ?? undefined,
     projectId: p.get("floatingProjectId") ?? undefined,
+    viewport: p.get("floatingViewport") ?? undefined,
   };
 }
 
@@ -63,7 +66,11 @@ export function FloatingPaneRoot() {
           </Suspense>
         )}
         {params.type === "browser" && params.url && (
-          <FloatingBrowser url={params.url} projectId={params.projectId} />
+          <FloatingBrowser
+            url={params.url}
+            projectId={params.projectId}
+            initialSizeKey={params.viewport}
+          />
         )}
       </div>
     </div>
