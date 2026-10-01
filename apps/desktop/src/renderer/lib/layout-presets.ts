@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type { LayoutNode, Pane, PaneType } from "../stores/workspace";
+import type { ViewportId } from "./browser-viewports";
 
 /**
  * Canonical workspace layout presets.
@@ -44,10 +45,18 @@ export interface CustomLayoutSlot {
   type: PaneType;
   url?: string;
   filePath?: string;
-  // agentId is intentionally NOT saved: agents are session-specific, and
-  // a recreated terminal slot should show the launcher so the user picks
-  // a fresh agent.
+  /** A browser's device size */
+  viewport?: ViewportId;
+  /** A terminal's program: "shell", or the agent CLI with its launch choices. The session itself
+   *  (agentId) is not saved: applying the layout starts a fresh one */
+  cliType?: string;
+  model?: string | null;
+  yolo?: boolean | null;
+  accessMode?: string | null;
 }
+
+/** What a terminal pane runs, for capturing it into a layout slot */
+export type SlotAgent = Pick<CustomLayoutSlot, "cliType" | "model" | "yolo" | "accessMode">;
 
 /** User-saved layout snapshot. Template uses indexed slot placeholders. */
 export interface CustomLayoutPreset {
@@ -58,6 +67,8 @@ export interface CustomLayoutPreset {
   slots: number;
   /** Per-slot metadata in slot-index order. Added in T85 follow-up. */
   slotTypes?: CustomLayoutSlot[];
+  /** Saved from a project's menu: listed there. Absent: a global layout (tab bar menu) */
+  projectId?: string;
   createdAt: number;
 }
 
@@ -244,6 +255,7 @@ const SLOT_PREFIX = "__slot_";
 export function templateFromLayout(
   layout: LayoutNode,
   sourcePanes: Record<string, Pane>,
+  agentOf: (agentId: string) => SlotAgent | undefined = () => undefined,
 ): {
   template: LayoutNode;
   slots: number;
@@ -258,6 +270,8 @@ export function templateFromLayout(
         type: original?.type ?? "empty",
         url: original?.url,
         filePath: original?.filePath,
+        ...(original?.viewport ? { viewport: original.viewport } : {}),
+        ...(original?.type === "terminal" && original.agentId ? agentOf(original.agentId) : {}),
       });
       const placeholder = `${SLOT_PREFIX}${slotCounter}__`;
       slotCounter++;
@@ -276,25 +290,37 @@ export function templateFromLayout(
  * (with the saved url/filePath metadata) so applying a template on a
  * fresh tab recreates the original shape instead of showing empty panes.
  */
+/** The pane a slot recreates. A terminal starts empty: its shell or agent is spawned into it
+ *  (`spawns`), a terminal pane with no session would only show "not found" */
+function slotPane(id: string, hint: CustomLayoutSlot | undefined): Pane {
+  if (!hint || hint.type === "terminal") return { id, type: "empty" };
+  return { id, type: hint.type, url: hint.url, filePath: hint.filePath, viewport: hint.viewport };
+}
+
 export function computeCustomPresetTransformation(
   custom: CustomLayoutPreset,
   existingPaneIds: string[],
-): LayoutTransformation {
+  /** Existing panes that are empty take their slot's type too (a new tab's blank pane) */
+  isEmpty: (paneId: string) => boolean = () => false,
+): LayoutTransformation & { spawns: { paneId: string; slot: CustomLayoutSlot }[] } {
   const newPanes: Pane[] = [];
+  const spawns: { paneId: string; slot: CustomLayoutSlot }[] = [];
+  const take = (paneId: string, slot: CustomLayoutSlot | undefined) => {
+    if (slot?.type === "terminal" && slot.cliType) spawns.push({ paneId, slot });
+  };
+  existingPaneIds.slice(0, custom.slots).forEach((id, i) => {
+    const hint = custom.slotTypes?.[i];
+    if (!isEmpty(id) || !hint || hint.type === "empty") return;
+    newPanes.push(slotPane(id, hint));
+    take(id, hint);
+  });
   const paddedIds: string[] = [...existingPaneIds];
   while (paddedIds.length < custom.slots) {
-    const slotIndex = paddedIds.length;
-    const hint = custom.slotTypes?.[slotIndex];
-    // Recreate the original pane type when available; fall back to empty
-    // for pre-migration custom layouts that didn't capture slot metadata.
-    const pane: Pane = {
-      id: nanoid(8),
-      type: hint?.type ?? "empty",
-      url: hint?.url,
-      filePath: hint?.filePath,
-    };
+    const hint = custom.slotTypes?.[paddedIds.length];
+    const pane = slotPane(nanoid(8), hint);
     newPanes.push(pane);
     paddedIds.push(pane.id);
+    take(pane.id, hint);
   }
 
   const fill = (node: LayoutNode): LayoutNode => {
@@ -346,5 +372,5 @@ export function computeCustomPresetTransformation(
     }
   }
 
-  return { layout, newPanes, terminalsToSpawn: [] };
+  return { layout, newPanes, terminalsToSpawn: [], spawns };
 }

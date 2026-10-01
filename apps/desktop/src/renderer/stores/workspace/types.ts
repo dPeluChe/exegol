@@ -1,6 +1,11 @@
 import type { StateCreator } from "zustand";
 import type { ViewportId } from "../../lib/browser-viewports";
-import type { CustomLayoutPreset, LayoutPresetId } from "../../lib/layout-presets";
+import type {
+  CustomLayoutPreset,
+  CustomLayoutSlot,
+  LayoutPresetId,
+  SlotAgent,
+} from "../../lib/layout-presets";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -115,9 +120,17 @@ export interface WorkspaceStore {
    */
   applyLayoutPreset: (tabId: string, presetId: LayoutPresetId) => { terminalsToSpawn: string[] };
   /** Apply a user-saved custom layout template to a tab */
-  applyCustomLayout: (tabId: string, customId: string) => void;
+  /** Returns the terminal panes to fill: a shell or an agent per slot (lib/spawn-shell) */
+  applyCustomLayout: (
+    tabId: string,
+    customId: string,
+  ) => { spawns: { paneId: string; slot: CustomLayoutSlot }[] };
   /** Save the current tab layout as a named custom preset */
-  saveCustomLayout: (tabId: string, name: string) => string | null;
+  saveCustomLayout: (
+    tabId: string,
+    name: string,
+    opts?: { projectId?: string; agentOf?: (agentId: string) => SlotAgent | undefined },
+  ) => string | null;
   /** Delete a user-saved custom preset */
   deleteCustomLayout: (customId: string) => void;
   /** Mark a pane as currently shown in a floating window */

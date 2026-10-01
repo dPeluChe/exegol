@@ -120,6 +120,8 @@ dependency/library audit
 - Browser: navigate in a pane, switch project and back: same page, no extra reload; device
   sizes (media queries apply, a narrow pane scrolls; design mode and QA recording still click
   the right element at a device size)
+- Project layouts: save tennis's tab (browser + 2 terminals + an agent), New tab rebuilds it
+  with sizes, shells and the agent (same model/YOLO); Apply here keeps panes that show something
 - Installed CLIs: on a machine with few CLIs (Rigo's Linux), quick launchers show only those;
   Launch Agent's "Not installed" group, Install in a terminal, Check again after installing
 - Wheel scroll in Claude after switching projects (and after an app restart) without a resize;
