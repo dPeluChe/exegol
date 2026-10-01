@@ -6,6 +6,7 @@ import { runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
 import { type AgentState, findAgentPane, showProject, useAgentStore } from "../stores/agents";
 import { useCliRestartStore } from "../stores/cli-restarts";
+import { toastError, useToastStore } from "../stores/toasts";
 import { useResumeAgent } from "./use-resume-agent";
 
 const CHECK_MS = 10 * 60 * 1000;
@@ -75,10 +76,16 @@ export function useCliRestarts(): void {
       if (busy(agent) && when !== "now") continue;
       useCliRestartStore.getState().cancel(id);
       const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
+      // Said out loud: it happens away from the click (after the turn), or nothing seemed to
+      useToastStore.getState().addToast({
+        type: "info",
+        title: `Restarting ${agent.alias ?? agent.cliType} on the new version`,
+        agentId: agent.id,
+      });
       void (async () => {
         if (LIVE_STATUSES.has(agent.status)) await suspendAgent(agent.id);
         await resume(agent, pane);
-      })().catch((err) => console.error("[CliRestart] Restart failed:", err));
+      })().catch(toastError(`${agent.alias ?? agent.cliType} did not restart`));
     }
   }, [pending, agents, statuses, resume]);
 }

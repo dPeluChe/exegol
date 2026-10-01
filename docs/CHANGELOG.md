@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Restart sessions (CLI updates) started the session twice: the two processes fought over one conversation, one died, and the pane could land on the dead one, so nothing seemed to happen. A session now resumes once whoever asks (restart, pane, Dashboard card), and a toast says when the restart starts or fails
+
 ## [0.5.11] — 2026-10-01 — Linux fixes, bypass kept on resume, closed pins
 
 ### Fixed

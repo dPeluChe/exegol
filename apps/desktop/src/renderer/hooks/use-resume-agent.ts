@@ -33,6 +33,24 @@ function setPaneAgent(projectId: string, paneId: string, agentId: string): void 
   });
 }
 
+/** Sessions being resumed now, and ones already resumed (their row is gone), across every
+ *  caller: pane, card, restart onto an update */
+const resuming = new Set<string>();
+const resumed = new Set<string>();
+
+/** Run `fn` once per session: two resumes of one Claude session started two processes on it
+ *  (seen in a log, 20ms apart); one died and the pane could end up on the dead one */
+export async function onceAtATime(id: string, fn: () => Promise<void>): Promise<void> {
+  if (resuming.has(id) || resumed.has(id)) return;
+  resuming.add(id);
+  try {
+    await fn();
+    resumed.add(id);
+  } finally {
+    resuming.delete(id);
+  }
+}
+
 export type ResumeSource = Pick<
   Agent,
   "id" | "projectId" | "cliType" | "taskDescription" | "branchName"
@@ -48,30 +66,31 @@ export function useResumeAgent() {
   const resumableCliTypes = useResumableCliTypes();
 
   const resume = useCallback(
-    async (agent: ResumeSource, paneId?: string) => {
-      const canResume = resumableCliTypes.has(agent.cliType);
-      const newAgent = await spawnAgent.mutateAsync({
-        projectId: agent.projectId,
-        cliType: agent.cliType,
-        taskDescription: agent.taskDescription,
-        useWorktree: !!agent.branchName,
-        branchName: agent.branchName ?? undefined,
-        accessMode: agent.accessMode ?? undefined,
-        resumeSession: canResume,
-        // Always the source: a re-launch (no resume) still inherits its YOLO choice
-        resumeFromAgentId: agent.id,
-      });
-      if (!newAgent?.id) return;
+    (agent: ResumeSource, paneId?: string) =>
+      onceAtATime(agent.id, async () => {
+        const canResume = resumableCliTypes.has(agent.cliType);
+        const newAgent = await spawnAgent.mutateAsync({
+          projectId: agent.projectId,
+          cliType: agent.cliType,
+          taskDescription: agent.taskDescription,
+          useWorktree: !!agent.branchName,
+          branchName: agent.branchName ?? undefined,
+          accessMode: agent.accessMode ?? undefined,
+          resumeSession: canResume,
+          // Always the source: a re-launch (no resume) still inherits its YOLO choice
+          resumeFromAgentId: agent.id,
+        });
+        if (!newAgent?.id) return;
 
-      const pane = paneId ?? findAgentPane(agent.id, agent.projectId)?.paneId;
-      useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
-      const agents = useAgentStore.getState();
-      agents.removeAgent(agent.id);
-      trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
-      agents.addAgent(toAgentState(newAgent, { activityLevel: "busy" }));
-      useTerminalStore.getState().createTerminal(newAgent.id);
-      if (pane) setPaneAgent(agent.projectId, pane, newAgent.id);
-    },
+        const pane = paneId ?? findAgentPane(agent.id, agent.projectId)?.paneId;
+        useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
+        const agents = useAgentStore.getState();
+        agents.removeAgent(agent.id);
+        trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
+        agents.addAgent(toAgentState(newAgent, { activityLevel: "busy" }));
+        useTerminalStore.getState().createTerminal(newAgent.id);
+        if (pane) setPaneAgent(agent.projectId, pane, newAgent.id);
+      }),
     [resumableCliTypes, spawnAgent],
   );
 
