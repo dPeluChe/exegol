@@ -28,6 +28,7 @@ import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
 import { ensureCanonicalPaths } from "./skills/paths";
+import { integrateAppImage } from "./system/appimage-integration";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
 import { backfillProjectIcons } from "./system/project-icons";
@@ -127,6 +128,7 @@ app.whenReady().then(async () => {
   getAgentManager().startShellPromotion(getDb());
   getPipelineExecutor().recoverOnStartup(getDb());
   initAutoUpdater(); // Deferred: check for updates after window shows
+  integrateAppImage(); // Linux AppImage: a menu entry so it can be found again
 
   // Dock click: a floating or settings window left open used to count as "a
   // window exists", so the main one never came back

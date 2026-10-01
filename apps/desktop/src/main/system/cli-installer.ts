@@ -1,4 +1,13 @@
-import { existsSync, lstatSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { app } from "electron";
@@ -32,6 +41,15 @@ function isSymlink(target: string): boolean {
   }
 }
 
+/** A copy we installed (from an AppImage): the opener's own header line */
+function isOurCopy(target: string): boolean {
+  try {
+    return readFileSync(target, "utf8").includes("# Exegol CLI opener");
+  } catch {
+    return false;
+  }
+}
+
 function targetExists(target: string): boolean {
   try {
     lstatSync(target);
@@ -52,14 +70,20 @@ export function installCli(): string {
     try {
       // Replace stale symlinks, but never delete a real user binary.
       if (targetExists(target)) {
-        if (!isSymlink(target)) {
+        if (!isSymlink(target) && !isOurCopy(target)) {
           errors.push(`${target}: exists and is not a symlink`);
           continue;
         }
         rmSync(target);
       }
       mkdirSync(dirname(target), { recursive: true });
-      symlinkSync(script, target);
+      // An AppImage's files live in a mount that is gone once it quits: a symlink into it broke
+      if (process.env.APPIMAGE) {
+        copyFileSync(script, target);
+        chmodSync(target, 0o755);
+      } else {
+        symlinkSync(script, target);
+      }
       return target;
     } catch (err) {
       errors.push(`${target}: ${err instanceof Error ? err.message : String(err)}`);
@@ -72,7 +96,7 @@ export function installCli(): string {
 export function uninstallCli(): string[] {
   const removed: string[] = [];
   for (const target of installCandidates()) {
-    if (!isSymlink(target)) continue;
+    if (!isSymlink(target) && !isOurCopy(target)) continue;
     rmSync(target);
     removed.push(target);
   }

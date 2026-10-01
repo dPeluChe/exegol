@@ -8,7 +8,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, release, tmpdir } from "node:os";
+import { homedir, type as osType, release, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { BugDiagnostics } from "@exegol/shared";
@@ -181,7 +181,7 @@ export async function collectDiagnostics(
     "",
     `- App: ${version} (${app.isPackaged ? "packaged" : "dev"})`,
     `- Electron ${process.versions.electron}, Chrome ${process.versions.chrome}, Node ${process.versions.node}`,
-    `- Darwin ${release()} (${process.platform}-${process.arch})`,
+    `- ${osType()} ${release()} (${process.platform}-${process.arch})`,
     `- Sidecar protocol ${SIDECAR_VERSION}`,
     "",
     "### Doctor",

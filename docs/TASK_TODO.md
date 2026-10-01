@@ -41,8 +41,7 @@
      never retries once the project loads; `.gitkeep` overwrite; GitHub issue cards drag to nothing
    - Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
      stale; Parallel Runs promote has no error; `agentClis` settings field unused
-7. **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): the `exegol` CLI
-   symlink points inside the AppImage mount (dies on restart: copy it to `~/.local/bin`); ports
+7. **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): ports
    read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
    covers the macOS keychain folder but not `~/.local/share/keyrings`
@@ -105,6 +104,10 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- **Linux (Rigo, Fedora 44 + Kubuntu 26.04)**: agents and shells start with bash 5.3; the
+  AppImage shows up in the app menu after its first launch and reopens from there; Settings >
+  install CLI on the AppImage survives a restart; the .deb has its icon in the KDE menu and
+  Discover shows a description, homepage and category
 - Close confirmation on Cmd+W, pane X, pane menu Close and tab close (Enter closes, Esc keeps);
   unsaved edits in a Files pane or a terminal's Files peek are named
 - Terminal repaint after a hidden tab: leave a working Claude pane in another tab for a minute,

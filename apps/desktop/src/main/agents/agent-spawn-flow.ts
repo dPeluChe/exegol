@@ -454,7 +454,9 @@ export function buildPtyInvocation(
       // Drop -l: bash silently ignores --rcfile when started as a login
       // shell. The integration script emulates login init internally
       // (sources /etc/profile + ~/.bash_profile|~/.profile + ~/.bashrc).
-      args = ["-i", "--rcfile", getShellIntegrationBashRcfile()];
+      // Long options first: bash 5.3 rejects one after -i ("--: invalid option", exit 2), which
+      // killed every shell and interactive CLI on Fedora 42+
+      args = ["--rcfile", getShellIntegrationBashRcfile(), "-i"];
     } else if (shellName === "fish") {
       // fish is in SHELLS_WITH_MARKER but had no wiring — without this the
       // ready gate only resolves via its 15s timeout, queueing early input.

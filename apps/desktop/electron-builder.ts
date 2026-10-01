@@ -125,7 +125,11 @@ const config: Configuration = {
   // Built on Linux by .github/workflows/linux.yml (native modules cannot be cross-built from a Mac).
   // AppImage runs on most distros and self-updates; the .deb installs natively on Debian/Ubuntu
   linux: {
-    icon: resolve(iconPath, "icon.png"),
+    // Without it the binary, the .desktop file and the icon took the scoped package name
+    // ("@exegoldesktop"); `exegol` itself is the CLI opener on PATH
+    executableName: "exegol-desktop",
+    // Every hicolor size: a 1024px icon alone showed no icon in KDE menus
+    icon: resolve(iconPath, "linux"),
     target: [
       { target: "AppImage", arch: ["x64"] },
       { target: "deb", arch: ["x64"] },
@@ -134,11 +138,17 @@ const config: Configuration = {
     artifactName: APPIMAGE_NAME,
     maintainer: "Antonio <antonio@iteris.tech>",
     synopsis: "Orchestrate AI coding agents",
-    // exegol:// deep links (open a folder from the CLI or a link) reach the installed app
-    mimeTypes: ["x-scheme-handler/exegol"],
+    description:
+      "Run Claude Code, Codex, Gemini or any CLI coding agent side by side, each in its own terminal, with live status and one place to see which agent needs you.",
+    // exegol:// deep links come from `protocols` above (listing them here too repeated the MIME type)
   },
   deb: {
     artifactName: DEB_NAME,
+    packageCategory: "devel",
+    // AppStream metadata: software centers (KDE Discover, GNOME Software) showed empty fields
+    fpm: [
+      `${resolve("src/resources/linux/com.exegol.desktop.metainfo.xml")}=/usr/share/metainfo/com.exegol.desktop.metainfo.xml`,
+    ],
     // safeStorage keeps API keys in the desktop keyring (libsecret); without it they fall back
     depends: ["libsecret-1-0", "libnotify4", "libxss1", "libnss3"],
   },
