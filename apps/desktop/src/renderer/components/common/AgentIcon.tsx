@@ -38,15 +38,21 @@ function buildMap(): Record<string, IconDef> {
     if (def) map[id] = def;
   };
 
-  // Agent CLIs
+  // Agent CLIs: each product's own mark (sources in docs/TASK_COMPLETED/2610.md). Codex has its
+  // own, not the OpenAI knot: next to OpenCode the two were mistaken for each other
   set("claude-code", s("claude.svg"));
   set("claude", s("claude.svg"));
-  set("codex", p("openai-light.svg", "openai-dark.svg"));
+  set("codex", p("codex-light.svg", "codex-dark.svg"));
   set("openai", p("openai-light.svg", "openai-dark.svg"));
-  set("gemini", s("gemini.svg"));
+  set("gemini", s("gemini-cli.png"));
+  set("agy", s("antigravity.svg"));
+  set("devin", p("devin-light.svg", "devin-dark.svg"));
+  set("aider", s("aider.png"));
+  set("goose", s("goose.svg"));
+  set("amp", s("amp.svg"));
+  set("kiro", s("kiro.svg"));
   set("crush", s("crush.png"));
-  set("factory-droid", s("factory-droid.jpg"));
-  // aider, goose: no official SVG yet — use text fallback
+  set("factory-droid", s("factory-droid.svg"));
   set("opencode", p("opencode-light.svg", "opencode-dark.svg"));
   set("windsurf", p("windsurf-light.svg", "windsurf-dark.svg"));
   set("kilocode", p("kilocode-light.svg", "kilocode-dark.svg"));
