@@ -146,7 +146,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     tokenUsage: { input: 0, output: 0, cost: 0 },
     startedAt: agent.startedAt,
     accessMode: agent.accessMode ?? null,
-    claudeSessionId: null,
+    claudeSessionId: agent.claudeSessionId ?? null,
     activityLevel: classifyActivity(agent.status, agent.currentStep),
     muted: agent.muted ?? false,
     suspended: agent.suspendedAt != null,
@@ -424,6 +424,7 @@ export const useAgentStore = create<AgentStore>()(
                 cliType: dbAgent.cliType as AgentCliType,
                 launchedInShell: dbAgent.launchedInShell ?? existing.launchedInShell ?? false,
                 cliVersion: dbAgent.cliVersion ?? existing.cliVersion ?? null,
+                claudeSessionId: existing.claudeSessionId ?? dbAgent.claudeSessionId ?? null,
               };
             } else {
               added++;
@@ -441,7 +442,7 @@ export const useAgentStore = create<AgentStore>()(
                 tokenUsage: { input: 0, output: 0, cost: 0 },
                 startedAt: dbAgent.startedAt,
                 accessMode: dbAgent.accessMode ?? null,
-                claudeSessionId: null,
+                claudeSessionId: dbAgent.claudeSessionId ?? null,
                 activityLevel: classifyActivity(dbStatus, dbAgent.currentStep),
                 muted: dbAgent.muted ?? false,
                 suspended: dbAgent.suspendedAt != null,

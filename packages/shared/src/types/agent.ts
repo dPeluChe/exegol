@@ -225,6 +225,8 @@ export type Agent = {
   cliVersion?: string | null;
   /** The model it was launched with (null: the CLI's default) */
   model?: string | null;
+  /** Claude Code's own session id, once known (resume, and finding a resumed session's pin) */
+  claudeSessionId?: string | null;
 };
 
 export type AgentCreate = {

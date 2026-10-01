@@ -21,6 +21,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Esc closes the Settings window and a floating (Picture-in-Picture) window, unless a field, menu or dialog has the key; a floating terminal with the cursor in it keeps Esc for the CLI. Off macOS, Ctrl+Shift+W closes them too
 
 ### Fixed
+- Watching: a pinned session resumed from Launch Agent (a past session, or a Claude session picked by name) keeps its Dashboard card, font included, instead of leaving the card on the ended session
 - A terminal that was hidden (another tab) while its CLI kept drawing, like Claude's spinner, came back with lines drawn over each other and no spacing until a resize: it now redraws from the session's real screen
 - Cmd+V with an image in the clipboard pastes it into the terminal again (Claude gets its file path); it only worked from pinned cards, and Ctrl+V only because Claude reads the clipboard itself
 - The pane menu no longer shows a shortcut for Equalize Splits (it had none)
