@@ -1,11 +1,16 @@
 import { type AgentAccessMode, type AgentProvider, MODEL_ID_PATTERN } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { useEnabledProviders, useRecheckProviders } from "../../hooks/use-providers";
 import { editKeys } from "../../lib/keymap";
-import { trpcInvoke } from "../../lib/trpc-client";
-import { AccessModePicker, ModelAndName, ProviderPicker, SkillPicker } from "./SpawnOptions";
+import {
+  AccessModePicker,
+  InstallHint,
+  ModelAndName,
+  ProviderPicker,
+  SkillPicker,
+} from "./SpawnOptions";
 import { SpawnSessionPicker } from "./SpawnSessionPicker";
 import { SpawnWorkLocation } from "./SpawnWorkLocation";
 import { useSpawnAgent } from "./use-spawn-agent";
@@ -40,11 +45,8 @@ export function SpawnAgentModal({
   initialSession = null,
   initialAccessMode = "write",
 }: SpawnAgentModalProps) {
-  const { data: enabledProviders = [] } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
+  // All enabled ones: the picker groups those not installed and the form starts on one that is
+  const enabledProviders = useEnabledProviders();
   const form = useSpawnForm({
     projectId,
     enabledProviders,
@@ -55,6 +57,7 @@ export function SpawnAgentModal({
     initialAccessMode,
   });
   const { spawning, spawn } = useSpawnAgent({ projectId, targetPaneId, onClose });
+  const recheck = useRecheckProviders();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus textarea on mount
@@ -63,7 +66,8 @@ export function SpawnAgentModal({
   }, []);
 
   const modelOk = !form.model.trim() || MODEL_ID_PATTERN.test(form.model.trim());
-  const canLaunch = !!form.providerId && modelOk && !spawning;
+  const notInstalled = form.provider?.installed === false;
+  const canLaunch = !!form.providerId && modelOk && !notInstalled && !spawning;
 
   const handleSpawn = () => {
     if (canLaunch) spawn(form);
@@ -105,6 +109,9 @@ export function SpawnAgentModal({
             selectedId={form.providerId}
             onChoose={form.chooseProvider}
           />
+          {notInstalled && form.provider && (
+            <InstallHint provider={form.provider} projectId={projectId} onRecheck={recheck} />
+          )}
           <ModelAndName
             providerId={form.providerId}
             model={form.model}

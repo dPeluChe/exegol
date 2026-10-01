@@ -1,11 +1,11 @@
-import type { AgentCliType, AgentProvider } from "@exegol/shared";
+import type { AgentCliType } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { Layers, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLaunchableProviders } from "../../hooks/use-providers";
 import { editKeys } from "../../lib/keymap";
 import { switchSection } from "../../lib/switch-section";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
@@ -27,11 +27,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
   const createTerminal = useTerminalStore((s) => s.createTerminal);
   const setFocusedAgent = useAgentStore((s) => s.setFocusedAgent);
 
-  const { data: enabledProviders = [] } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
+  const enabledProviders = useLaunchableProviders();
 
   // Focus textarea on mount
   useEffect(() => {

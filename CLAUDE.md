@@ -241,7 +241,7 @@ apps/desktop/src/
                     pointer-reorder, release-notes
     assets/
       fonts/        MesloLGS NF, FiraCode NF Mono, JetBrainsMono NF Mono (~6.8 MB, bundled)
-      icons/        27 SVG/PNG + 1 JPG icons (agents, IDEs, providers)
+      icons/        SVG/PNG marks: each agent CLI's own (light/dark pairs where single-color), IDEs, providers
     styles/         globals.css, fonts.css (@font-face for bundled fonts)
   preload/          contextBridge: trpc, terminal, dialog, push events, floating, settings (T120), menu — gated by capabilities.json allowlist
 packages/

@@ -1,9 +1,9 @@
 import type { AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { useLaunchableProviders } from "../../hooks/use-providers";
+import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import {
@@ -21,12 +21,7 @@ export function QuickLaunchBar() {
   const addTab = useWorkspaceStore((s) => s.addTab);
   const addAgent = useAgentStore((s) => s.addAgent);
   const createTerminal = useTerminalStore((s) => s.createTerminal);
-  const { data: providers } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
-  const cliAgents = providers ?? [];
+  const cliAgents = useLaunchableProviders();
 
   const handleLaunch = useCallback(
     async (cli: AgentProvider) => {

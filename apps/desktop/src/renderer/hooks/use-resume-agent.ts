@@ -1,22 +1,22 @@
-import type { Agent, AgentProvider } from "@exegol/shared";
-import { useQuery } from "@tanstack/react-query";
+import type { Agent } from "@exegol/shared";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { findAgentPane, toAgentState, useAgentStore } from "../stores/agents";
 import { useTerminalStore } from "../stores/terminals";
 import { useWatchStore } from "../stores/watch";
 import { useWorkspaceStore } from "../stores/workspace";
+import { isLaunchable, useEnabledProviders } from "./use-providers";
 import { useSpawnAgent } from "./use-trpc";
 
-/** CLI types that support session resume (from the provider registry) */
+/** CLI types that can resume a session here: the provider supports it and its CLI is installed
+ *  (resuming one that is not ended in a preflight error instead of the install hint) */
 function useResumableCliTypes(): Set<string> {
-  const { data: providers } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 60_000,
-  });
+  const providers = useEnabledProviders();
   return useMemo(
-    () => new Set((providers ?? []).filter((p) => p.capabilities?.supportsResume).map((p) => p.id)),
+    () =>
+      new Set(
+        providers.filter((p) => p.capabilities?.supportsResume && isLaunchable(p)).map((p) => p.id),
+      ),
     [providers],
   );
 }

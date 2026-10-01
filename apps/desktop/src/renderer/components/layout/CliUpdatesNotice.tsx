@@ -1,10 +1,9 @@
-import { type AgentProvider, type CliUpdateStatus, LIVE_STATUSES } from "@exegol/shared";
+import { type CliUpdateStatus, LIVE_STATUSES } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { restartNeeded, updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
-import { trpcInvoke } from "../../lib/trpc-client";
+import { useEnabledProviders } from "../../hooks/use-providers";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useCliRestartStore } from "../../stores/cli-restarts";
@@ -59,11 +58,7 @@ function readDismissed(): string | null {
 export function CliUpdatesNotice() {
   const statuses = useCliUpdates();
   const agents = useAgentStore((s) => s.agents);
-  const { data: providers = [] } = useQuery({
-    queryKey: ["enabledProviders"],
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 60_000,
-  });
+  const providers = useEnabledProviders();
   const nameOf = (cliType: string) => providers.find((p) => p.id === cliType)?.name ?? cliType;
   const rows = cliUpdateRows(statuses, Object.values(agents));
   const key = rowsKey(rows);

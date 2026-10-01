@@ -34,6 +34,7 @@ import {
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { isPathAllowed } from "../../security/path-guard";
+import { cliSetupFor, installedProviderIds } from "../../system/cli-versions";
 import { publicProcedure, router } from "../trpc";
 
 export const agentRouter = router({
@@ -43,7 +44,19 @@ export const agentRouter = router({
 
   /** List only enabled providers (for launcher/modal UI — respects Settings toggles) */
   listEnabledProviders: publicProcedure.query(({ ctx }) => {
-    return ctx.providerRegistry.list().filter((p) => p.enabled !== false && p.id !== "shell");
+    const installed = installedProviderIds();
+    return ctx.providerRegistry
+      .list()
+      .filter((p) => p.enabled !== false && p.id !== "shell")
+      .map((p) => {
+        const setup = cliSetupFor(p.id);
+        return {
+          ...p,
+          installed: installed.has(p.id),
+          installCommand: setup?.install ?? null,
+          installDocs: setup?.docs ?? null,
+        };
+      });
   }),
 
   registerProvider: publicProcedure
