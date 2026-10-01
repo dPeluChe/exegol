@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- A CLI typed by hand in a terminal with `--dangerously-skip-permissions` (or another CLI's YOLO flag) or `--model` keeps them when it is suspended and resumed, or restarted onto an update; the resume used to start it without bypass
+
 ## [0.5.10] — 2026-10-01 — CLI updates, models in the launcher, Linux keys, close confirmation
 
 ### Changed

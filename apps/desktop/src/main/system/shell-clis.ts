@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { MODEL_ID_PATTERN, MODEL_LAUNCH, YOLO_FLAGS } from "@exegol/shared";
 import { COMMAND_ALIASES, getProviderRegistry } from "../agents/registry";
 
 const execFileAsync = promisify(execFile);
@@ -24,6 +25,8 @@ export function matchShellClis(
   shells: { id: string; pid: number }[],
   rows: ProcRow[],
   commandToProvider: Map<string, string>,
+  /** Filled with the matched CLI's command line, per shell (the flags it was typed with) */
+  argsOut?: Record<string, string>,
 ): Record<string, string> {
   const children = new Map<number, ProcRow[]>();
   for (const r of rows) children.set(r.ppid, [...(children.get(r.ppid) ?? []), r]);
@@ -37,6 +40,7 @@ export function matchShellClis(
           .find(Boolean);
         if (provider) {
           found[shell.id] = provider;
+          if (argsOut) argsOut[shell.id] = r.args;
           break;
         }
       }
@@ -44,6 +48,25 @@ export function matchShellClis(
     }
   }
   return found;
+}
+
+/** The launch choices a CLI typed by hand carries, so a resume keeps them: its YOLO flag and a
+ *  model given by flag (`--model x` or `--model=x`) */
+export function launchFlagsFromArgs(
+  cliType: string,
+  args: string,
+): { yolo: boolean; model: string | null } {
+  const tokens = args.trim().split(/\s+/);
+  const yoloFlag = YOLO_FLAGS[cliType];
+  const launch = MODEL_LAUNCH[cliType];
+  let model: string | null = null;
+  if (launch && "flag" in launch) {
+    const at = tokens.indexOf(launch.flag);
+    const inline = tokens.find((t) => t.startsWith(`${launch.flag}=`));
+    const value = at >= 0 ? tokens[at + 1] : inline?.slice(launch.flag.length + 1);
+    if (value && MODEL_ID_PATTERN.test(value)) model = value;
+  }
+  return { yolo: !!yoloFlag && tokens.includes(yoloFlag), model };
 }
 
 /** Every process on the machine, one `ps` for all the terminals watched */
