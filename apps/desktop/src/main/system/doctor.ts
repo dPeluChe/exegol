@@ -7,12 +7,13 @@ import { promisify } from "node:util";
 import type { DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
+import { cliSetupFor, providerBinaries } from "../agents/cli-catalog";
 import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
 import { getApiKey } from "../security/keystore";
-import { cliSetupFor, findAllOnPath, providerBinaries, readBinaryVersion } from "./cli-versions";
+import { findAllOnPath, readBinaryVersion } from "./cli-versions";
 
 const execAsync = promisify(exec);
 

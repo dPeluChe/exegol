@@ -18,7 +18,7 @@ import {
   isAgentAwaitingApproval,
   setAgentAwaitingApproval,
 } from "./agent-messaging";
-import { COMMAND_ALIASES } from "./registry";
+import { COMMAND_ALIASES } from "./cli-catalog";
 import { scoreAgent } from "./scoring";
 
 export interface AgentContext {

@@ -15,6 +15,7 @@ import {
 import { useCallback, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
+import { CopyCommand } from "../common/CopyCommand";
 import { mutateCli } from "./mutate-cli";
 import { useProviderCard } from "./use-provider-card";
 
@@ -72,6 +73,14 @@ function ProviderCard({
           <ProviderIdentity provider={provider} onSave={card.saveIdentity} />
           {card.error && <p className="mt-1 text-[10px] text-red-400">{card.error}</p>}
           <CapabilityBadges capabilities={provider.capabilities} />
+          {provider.installed === false && (
+            <div className="mt-1.5 flex flex-col gap-1 text-[10px] text-amber-400">
+              <span>Not installed on this machine: the launchers leave it out</span>
+              {provider.installCommand && (
+                <CopyCommand label="Install" command={provider.installCommand} />
+              )}
+            </div>
+          )}
         </div>
 
         {/* Action badges: Active + Safe/YOLO + Delete — same row as name */}
