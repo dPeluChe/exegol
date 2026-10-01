@@ -211,7 +211,6 @@ function IsolationModeBadge({
 // ─── Repo web page: a pane beside the terminal, or the system browser ───────
 
 function RepoLink({ url, onOpenInPane }: { url: string; onOpenInPane?: (url: string) => void }) {
-  const host = new URL(url).hostname.replace(/^www\./, "");
   const btn =
     "flex items-center gap-1 text-[9px] text-text-muted transition-colors hover:text-text-primary";
   return (
@@ -223,8 +222,7 @@ function RepoLink({ url, onOpenInPane }: { url: string; onOpenInPane?: (url: str
           className={btn}
           title={`Open ${url} in a browser pane (its login is kept)`}
         >
-          <Github className="h-2.5 w-2.5" />
-          {host.split(".")[0]}
+          <Github className="h-3 w-3" />
         </button>
       )}
       {/* The system browser: that is where the user is signed in */}

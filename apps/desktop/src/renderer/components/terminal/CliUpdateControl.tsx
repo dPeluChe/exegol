@@ -19,7 +19,7 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
   const agent = useAgentStore((s) => s.agents[agentId]);
   const pending = useCliRestartStore((s) => s.pending[agentId]);
   const status = useCliUpdates().get(agent?.cliType ?? "");
-  if (!agent || !status) return null;
+  if (!agent) return null;
 
   if (pending) {
     return (
@@ -49,13 +49,13 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
     );
   }
 
-  if (restartNeeded(agent, status)) {
+  if (status && restartNeeded(agent, status)) {
     return (
       <button
         type="button"
         onClick={() => useCliRestartStore.getState().request(agentId)}
         className={`${chip} text-accent hover:text-text-primary`}
-        title={`${status.installed} is installed; this session runs ${agent.cliVersion}. Restart it on the new version: the conversation resumes (after the current turn if it is working)`}
+        title={`${status.installed} is installed; this session runs ${agent.cliVersion ?? "an older one"}. Restart it on the new version: the conversation resumes (after the current turn if it is working)`}
       >
         <RefreshCw className="h-2.5 w-2.5" />
         Restart to update
@@ -63,8 +63,8 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
     );
   }
 
-  const cmd = status.updateCommand;
-  if (status.updateAvailable && cmd) {
+  const cmd = status?.updateCommand;
+  if (status?.updateAvailable && cmd) {
     return (
       <button
         type="button"
@@ -81,5 +81,16 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
       </button>
     );
   }
-  return null;
+  // Always there: restart by hand (a CLI that asks to be reopened, a stuck session)
+  return (
+    <button
+      type="button"
+      onClick={() => useCliRestartStore.getState().request(agentId)}
+      className={`${chip} text-text-muted hover:text-text-primary`}
+      title="Restart this session: the CLI starts again and resumes the conversation, with the same model, YOLO and mode (after its turn if it is working)"
+    >
+      <RefreshCw className="h-2.5 w-2.5" />
+      Restart
+    </button>
+  );
 }

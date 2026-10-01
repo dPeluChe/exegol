@@ -247,26 +247,42 @@ export function installedProviderIds(): Set<string> {
 
 /** The installed version of a provider's CLI (its first PATH hit, renamed binaries included) */
 export async function installedCliVersion(cliType: string): Promise<string | null> {
+  return (await installedCli(cliType)).version;
+}
+
+/** The installed CLI's version and when its binary was written (an update rewrites it, or moves
+ *  the symlink to a new versions/ file; stat follows the link) */
+async function installedCli(
+  cliType: string,
+): Promise<{ version: string | null; installedAt: number | null }> {
   const provider = getProviderRegistry().get(cliType);
-  if (!provider || cliType === "shell") return null;
+  if (!provider || cliType === "shell") return { version: null, installedAt: null };
   for (const cmd of providerBinaries(provider.command)) {
     const [path] = await findAllOnPath(cmd);
-    if (path) return readBinaryVersion(path);
+    if (!path) continue;
+    let installedAt: number | null = null;
+    try {
+      installedAt = statSync(path).mtimeMs;
+    } catch {
+      /* raced an update: no date this time */
+    }
+    return { version: await readBinaryVersion(path), installedAt };
   }
-  return null;
+  return { version: null, installedAt: null };
 }
 
 /** Installed vs newest release for these CLIs (the ones with live sessions) */
 export async function cliUpdateStatus(cliTypes: string[]): Promise<CliUpdateStatus[]> {
   return Promise.all(
     [...new Set(cliTypes)].map(async (cliType) => {
-      const [installed, latest] = await Promise.all([
-        installedCliVersion(cliType),
+      const [{ version: installed, installedAt }, latest] = await Promise.all([
+        installedCli(cliType),
         fetchLatest(cliType),
       ]);
       return {
         cliType,
         installed,
+        installedAt,
         latest,
         updateAvailable: isNewerVersion(latest, installed),
         updateCommand: cliSetupFor(cliType)?.update ?? null,
