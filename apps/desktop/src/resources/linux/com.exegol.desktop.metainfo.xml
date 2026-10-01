@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.exegol.desktop</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Exegol</name>
+  <summary>Run AI coding agents side by side</summary>
+  <description>
+    <p>
+      Exegol runs Claude Code, Codex, Gemini, Aider or any CLI coding agent side by side, each in
+      its own terminal, with live status, one place to see which agent needs you, and tools to hand
+      work between them.
+    </p>
+    <ul>
+      <li>14 built-in agent CLIs plus your own, each in a real terminal</li>
+      <li>Tabs and split panes per project, and a dashboard across projects</li>
+      <li>Sessions that keep running through a reload, a crash or an update</li>
+      <li>Browser pane, git diff and a smart commit, push and pull request button</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">exegol-desktop.desktop</launchable>
+  <url type="homepage">https://github.com/dPeluChe/exegol</url>
+  <url type="bugtracker">https://github.com/dPeluChe/exegol/issues</url>
+  <developer id="com.exegol">
+    <name>Exegol</name>
+  </developer>
+  <categories>
+    <category>Development</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+</component>

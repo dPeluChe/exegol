@@ -10,6 +10,7 @@ import type { AgentProviderRegistry } from "./registry";
 const mocks = vi.hoisted(() => ({
   hooksPath: "/tmp/exegol-hooks/agent.json" as string | null,
   lifecycle: null as { beforeAgent?: string } | null,
+  marker: false,
   writeAgentMcpConfigFor: vi.fn(),
   writePerAgentMcpConfig: vi.fn(() => "/tmp/exegol-mcp/agent.json"),
   ensureExegolMcpServerStarted: vi.fn(),
@@ -49,7 +50,7 @@ vi.mock("../mcp/exegol-mcp-config", () => ({
   writePerAgentMcpConfig: mocks.writePerAgentMcpConfig,
 }));
 vi.mock("../terminal/shell-wrappers", () => ({
-  shellSupportsMarker: () => false,
+  shellSupportsMarker: () => mocks.marker,
   getShellIntegrationZdotdir: () => "/integration/zdotdir",
   getShellIntegrationBashRcfile: () => "/integration/bashrc",
   getFishInitCommand: () => "init-fish",
@@ -86,6 +87,7 @@ describe("buildPtyInvocation", () => {
     process.env.SHELL = "/bin/zsh";
     mocks.hooksPath = "/tmp/exegol-hooks/agent.json";
     mocks.lifecycle = null;
+    mocks.marker = false;
     mocks.writeAgentMcpConfigFor.mockClear();
     mocks.writePerAgentMcpConfig.mockClear();
     mocks.buildClaudeCodeHooksFile.mockClear();
@@ -93,6 +95,14 @@ describe("buildPtyInvocation", () => {
 
   afterEach(() => {
     process.env.SHELL = originalShell;
+  });
+
+  it("bash gets --rcfile before -i (bash 5.3 rejects a long option after -i)", () => {
+    process.env.SHELL = "/bin/bash";
+    mocks.marker = true;
+    const [agent, config] = makeAgent("shell");
+    const inv = buildPtyInvocation(db, agent, config, "/tmp/p1", registry, cliConfig, "/tmp/p1");
+    expect(inv.args).toEqual(["--rcfile", "/integration/bashrc", "-i"]);
   });
 
   it("spawns a plain shell as an interactive login shell without agent wiring", () => {

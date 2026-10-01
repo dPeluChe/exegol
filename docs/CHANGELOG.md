@@ -10,6 +10,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Linux with bash 5.3 or newer (Fedora 42+): every agent and terminal died at once with exit code 2 (bash rejects `--rcfile` after `-i`); they start again (reported by Rigo)
+- Linux AppImage: it adds itself to the app menu (and takes exegol:// links) on launch, so it can be opened again after closing; the `exegol` CLI installed from it keeps working after a restart
+- Linux .deb: the menu icon shows in every size (KDE showed none), the files are named `exegol-desktop` instead of `@exegoldesktop`, and software centers (Discover, GNOME Software) get a description, homepage and category
+- Bug reports from Linux said "Darwin" for the OS
 - Closing a session from its project left its Dashboard pin as a black terminal with no Resume (a sync already on its way brought the closed session back as live): a closed session stays closed and its pin goes away
 - A CLI typed by hand in a terminal with `--dangerously-skip-permissions` (or another CLI's YOLO flag) or `--model` keeps them when it is suspended and resumed, or restarted onto an update; the resume used to start it without bypass
 
