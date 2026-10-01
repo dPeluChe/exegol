@@ -4,6 +4,7 @@
 
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Terminal } from "@xterm/headless";
+import { utf8Tail } from "./pty-sidecar-flusher";
 
 /** T143: cap the serialized ANSI snapshot size (reattach + disk scrollback flush). */
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024; // 2MB
@@ -72,7 +73,7 @@ export class HeadlessEmulator {
       if (buf.byteLength <= MAX_SNAPSHOT_BYTES) return serialized;
       // Keep the most recent bytes — old scrollback is less useful than a
       // bounded reattach/disk-flush payload.
-      return buf.subarray(buf.byteLength - MAX_SNAPSHOT_BYTES).toString("utf-8");
+      return utf8Tail(buf, MAX_SNAPSHOT_BYTES).toString("utf-8");
     } catch {
       return null;
     }
@@ -109,6 +110,11 @@ export class HeadlessEmulator {
 
   resize(cols: number, rows: number): void {
     this.terminal.resize(cols, rows);
+  }
+
+  /** Clear Terminal: drop the scrollback and screen, as the view's xterm does */
+  clear(): void {
+    this.terminal.clear();
   }
 
   dispose(): void {

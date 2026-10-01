@@ -50,6 +50,7 @@ interface Window {
        *  is needed, arrives on terminal:data so it stays ordered. */
       setVisible: (id: string, visible: boolean, viewId: string, fresh?: boolean) => Promise<void>;
       redraw: (id: string) => void;
+      clear: (id: string) => void;
       getSize: (id: string) => Promise<{ cols: number; rows: number } | null>;
       onResized: (id: string, callback: (cols: number, rows: number) => void) => () => void;
       saveClipboardImage: () => Promise<string | null>;

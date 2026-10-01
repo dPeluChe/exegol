@@ -6,8 +6,14 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { createServer, type Socket } from "node:net";
 import { dirname } from "node:path";
 import * as pty from "node-pty";
-import { computeMemoryInfo, evictIfOverCap, reloadIfEvicted } from "./pty-sidecar-eviction";
-import { appendPending, FLUSH_INTERVAL_MS } from "./pty-sidecar-flusher";
+import { createNdjsonBuffer } from "../lib/ndjson";
+import {
+  clearHistory,
+  computeMemoryInfo,
+  evictIfOverCap,
+  reloadIfEvicted,
+} from "./pty-sidecar-eviction";
+import { appendPending, FLUSH_INTERVAL_MS, OutputGate } from "./pty-sidecar-flusher";
 import {
   EXEGOL_DIR,
   GLOBAL_RING_BUFFER_CAP_BYTES,
@@ -27,6 +33,7 @@ import {
   SIDECAR_SOCK_PATH,
   SIDECAR_VERSION,
 } from "./pty-sidecar-protocol";
+import { da1Replies, stripTerminalQueries } from "./pty-sidecar-queries";
 import { RingBuffer } from "./ring-buffer";
 
 // ─── Session state ──────────────────────────────────────────────────────
@@ -59,18 +66,20 @@ setInterval(() => evictIfOverCap(sessions.values()), RING_BUFFER_EVICTION_SWEEP_
 
 // ─── Client management ──────────────────────────────────────────────────
 
-function broadcast(msg: string): void {
-  for (const client of clients) {
-    try {
-      client.write(msg);
-    } catch {
-      /* dead client */
-    }
+const output = new OutputGate<Socket>((paused) => {
+  for (const s of sessions.values()) {
+    if (!s.alive) continue;
+    if (paused) s.pty.pause();
+    else s.pty.resume();
   }
+});
+
+function broadcast(msg: string): void {
+  output.send(clients, msg);
 }
 
-function applyAppend(s: SidecarSession, data: string): void {
-  const result = appendPending(s, data);
+function applyAppend(s: SidecarSession, data: string, bytes: number): void {
+  const result = appendPending(s, data, bytes);
   s.pending = result.pending;
   s.pendingBytes = result.pendingBytes;
 }
@@ -153,13 +162,19 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           evictedPath: null,
         };
         sessions.set(p.id, session);
+        if (output.paused) proc.pause();
 
         proc.onData((data: string) => {
           reloadIfEvicted(session);
           const buf = Buffer.from(data, "utf-8");
           ringBuffer.write(buf);
           session.lastActivityAt = Date.now();
-          applyAppend(session, data);
+          // Nobody attached to answer: fish waits ~10s for its DA1 reply otherwise
+          if (clients.size === 0) {
+            const reply = da1Replies(data);
+            if (reply) proc.write(reply);
+          }
+          applyAppend(session, data, buf.length);
           scheduleFlush(session);
         });
 
@@ -245,8 +260,16 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
         const { id } = req.params as SessionIdParams;
         const s = sessions.get(id);
         if (s) reloadIfEvicted(s);
-        const data = s ? s.ringBuffer.snapshot().toString("utf-8") : null;
+        const data = s ? stripTerminalQueries(s.ringBuffer.snapshot().toString("utf-8")) : null;
         client.write(makeResponse(req.id, { data }));
+        break;
+      }
+
+      case "session.clear": {
+        const { id } = req.params as SessionIdParams;
+        const s = sessions.get(id);
+        if (s) clearHistory(s);
+        client.write(makeResponse(req.id, { ok: true }));
         break;
       }
 
@@ -317,38 +340,22 @@ const server = createServer((client: Socket) => {
   clients.add(client);
   resetIdleTimer();
 
-  let buffer = "";
+  const feed = createNdjsonBuffer<JsonRpcMessage>(
+    (msg) => {
+      // Responses from the client are not expected; ignore them
+      if ("id" in msg && "method" in msg) handleRequest(msg as JsonRpcRequest, client);
+    },
+    () => process.stderr.write("[Sidecar] Client sent an oversized frame, discarding\n"),
+  );
+  client.on("data", feed);
 
-  client.on("data", (chunk: Buffer) => {
-    buffer += chunk.toString("utf-8");
-    // Process newline-delimited JSON-RPC messages
-    for (;;) {
-      const newlineIdx = buffer.indexOf("\n");
-      if (newlineIdx === -1) break;
-      const line = buffer.slice(0, newlineIdx);
-      buffer = buffer.slice(newlineIdx + 1);
-      if (!line.trim()) continue;
-      try {
-        const msg = JSON.parse(line) as JsonRpcMessage;
-        if ("id" in msg && "method" in msg) {
-          handleRequest(msg as JsonRpcRequest, client);
-        }
-        // Responses from client (not expected) — ignore
-      } catch {
-        // Malformed JSON — skip
-      }
-    }
-  });
-
-  client.on("close", () => {
+  const drop = () => {
     clients.delete(client);
+    output.release(client);
     resetIdleTimer();
-  });
-
-  client.on("error", () => {
-    clients.delete(client);
-    resetIdleTimer();
-  });
+  };
+  client.on("close", drop);
+  client.on("error", drop);
 });
 
 // ─── Startup ────────────────────────────────────────────────────────────

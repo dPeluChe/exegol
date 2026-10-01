@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { appendPending, MAX_PENDING_BYTES, OVERFLOW_NOTICE } from "./pty-sidecar-flusher";
+import {
+  appendPending,
+  MAX_PENDING_BYTES,
+  OutputGate,
+  OVERFLOW_NOTICE,
+} from "./pty-sidecar-flusher";
 
 describe("appendPending (T113 PTY flusher)", () => {
   it("returns the literal concatenation when below cap", () => {
@@ -49,5 +54,61 @@ describe("appendPending (T113 PTY flusher)", () => {
     expect(r.overflowed).toBe(false);
     expect(r.pending).toBe("abc");
     expect(r.pendingBytes).toBe(3);
+  });
+
+  it("counts multibyte output in UTF-8 bytes, not UTF-16 units", () => {
+    const r = appendPending({ pending: "", pendingBytes: 0 }, "ñ—🙂");
+    expect(r.pendingBytes).toBe(2 + 3 + 4);
+  });
+
+  it("overflows on bytes and keeps a tail that starts on a character", () => {
+    const data = "é".repeat(MAX_PENDING_BYTES / 2 + 1);
+    const r = appendPending({ pending: "", pendingBytes: 0 }, data);
+    expect(r.overflowed).toBe(true);
+    expect(r.pending.slice(OVERFLOW_NOTICE.length)).toBe("é".repeat(MAX_PENDING_BYTES / 2));
+  });
+});
+
+describe("OutputGate (client backpressure)", () => {
+  function fakeClient(accepts: boolean) {
+    const client = {
+      accepts,
+      written: [] as string[],
+      drain: null as null | (() => void),
+      write: (d: string) => {
+        client.written.push(d);
+        return client.accepts;
+      },
+      once: (_e: "drain", fn: () => void) => {
+        client.drain = fn;
+      },
+    };
+    return client;
+  }
+
+  it("pauses while a client's queue is full and resumes on its drain, dropping nothing", () => {
+    const changes: boolean[] = [];
+    const gate = new OutputGate<ReturnType<typeof fakeClient>>((p) => changes.push(p));
+    const slow = fakeClient(false);
+    const healthy = fakeClient(true);
+    gate.send([slow, healthy], "a");
+    gate.send([slow, healthy], "b");
+    expect(gate.paused).toBe(true);
+    expect(changes).toEqual([true]);
+    expect(slow.written).toEqual(["a", "b"]);
+    expect(healthy.written).toEqual(["a", "b"]);
+    slow.drain?.();
+    expect(gate.paused).toBe(false);
+    expect(changes).toEqual([true, false]);
+  });
+
+  it("a closed client releases the pause", () => {
+    const changes: boolean[] = [];
+    const gate = new OutputGate<ReturnType<typeof fakeClient>>((p) => changes.push(p));
+    const slow = fakeClient(false);
+    gate.send([slow], "a");
+    gate.release(slow);
+    gate.release(slow);
+    expect(changes).toEqual([true, false]);
   });
 });

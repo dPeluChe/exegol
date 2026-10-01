@@ -60,6 +60,10 @@ export function registerIpcHandlers(): void {
     getPtyHost().redraw(agentId);
   });
 
+  ipcMain.on("terminal:clear", (_event, agentId: string) => {
+    getPtyHost().clear(agentId);
+  });
+
   ipcMain.handle("terminal:get-size", (_event, agentId: string) => {
     return getPtyHost().getSize(agentId);
   });

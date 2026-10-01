@@ -13,11 +13,18 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Cmd+V with an image attaches it in every CLI that reads the clipboard itself (Codex, Gemini, Antigravity, Devin, OpenCode, Amp, Kilo Code, Crush, Droid, as Claude already did); Aider and Kiro get their /paste command typed in; Goose still gets the image's file path
 - Settings > CLIs says which CLIs are not installed on this machine, with their install command; a launch is never refused for a CLI the launcher offered (they now check the same way)
 - Sessions started before 0.5.10 never offered Restart to update after their CLI updated (their version was not recorded); they are now compared by when the CLI was installed
+- Clear Terminal also forgets the session's history, so reopening the app no longer brings the cleared output back
+- Reopening the app no longer makes a terminal answer old questions the shell asked (cursor position, colours, device attributes) into the session
+- A shell that asks for the terminal's device attributes while the app is closed (fish does) gets an answer instead of waiting ~10s
+- Terminal output with accents, emoji or other non-ASCII text no longer trips the output buffer limit early, and when the app reads output slower than the terminals write it, the terminals wait instead of the terminal host growing memory without bound
+- Large messages to the terminal host are read in linear time and with a size limit
+- Starting the app never stops an unrelated process that happens to reuse the old terminal host's process id
 
 ### Changed
 - Floating browser: same address bar as the pane (type a URL, open in your browser, DevTools, the size picker), with Sizes next to it
 - Terminal toolbar: Restart is always there (the CLI starts again and resumes the conversation, with the same model, YOLO and mode); the repo link shows only the GitHub icon
 - What's new: when an update brings several versions, the newest is open and the earlier ones are folded (with how many changes each has); click one to read it
+- Terminal sessions restart once after this update (the terminal host process is replaced)
 
 ## [0.5.12] — 2026-10-01 — Installed CLIs and their icons, project layouts, browser sizes
 

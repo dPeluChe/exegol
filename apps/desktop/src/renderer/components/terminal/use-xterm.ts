@@ -302,14 +302,15 @@ export function useXterm({
     return () => window.removeEventListener("exegol:focus-pane", handleFocus);
   }, [paneId, mirror, readOnly]);
 
-  // Pane menu "Clear Terminal": drop what this view holds (screen + scrollback), then Ctrl+L so
-  // the shell or TUI draws a clean screen, as typing it would
+  // Pane menu "Clear Terminal": drop what this view holds (screen + scrollback) and the session's
+  // history in main and the sidecar (main then sends Ctrl+L)
   useEffect(() => {
     const handleClear = (e: Event) => {
       const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
       if (detail?.agentId !== agentId || mirror) return;
       terminalRef.current?.clear();
-      if (!readOnly) window.api.terminal.write(agentId, "\x0c");
+      if (readOnly) return;
+      window.api.terminal.clear(agentId);
     };
     window.addEventListener("exegol:clear-terminal", handleClear);
     return () => window.removeEventListener("exegol:clear-terminal", handleClear);

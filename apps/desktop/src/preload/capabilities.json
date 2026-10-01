@@ -307,6 +307,7 @@
     "terminal:get-size",
     "log:renderer-error",
     "terminal:redraw",
+    "terminal:clear",
     "terminal:resized",
     "app:version",
     "menu:new-tab",

@@ -3,7 +3,7 @@
 
 import { connect, type Socket } from "node:net";
 import { logger } from "../lib/logger";
-import { createNdjsonBuffer } from "../mcp/exegol-protocol";
+import { createNdjsonBuffer } from "../lib/ndjson";
 import {
   type JsonRpcMessage,
   type JsonRpcResponse,
@@ -143,6 +143,11 @@ export class SidecarClient {
   async snapshot(id: string): Promise<string | null> {
     const result = (await this.call("session.snapshot", { id })) as SessionSnapshotResult;
     return result.data;
+  }
+
+  /** Forget the session's ring buffer, so a later reattach does not replay it */
+  async clear(id: string): Promise<void> {
+    await this.call("session.clear", { id });
   }
 
   async listSessions(): Promise<string[]> {

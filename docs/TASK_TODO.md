@@ -79,8 +79,7 @@
    likely causes changed on 2026-08-12: interactive CLIs now `exec` (no wrapper shell left behind)
    and the MCP shim reconnects instead of exiting when the app quits). Launch opencode, quit
    Exegol, reopen: the session should still be alive. If it dies, `exegol.log` says how
-3. Sidecar terminal correctness: T184.2 (unanswered DA1/colour queries), T184.3 (replay re-asks
-   queries), T184.4 (kills a pid without identity check), T185.14 (backpressure), T185.8 (reattach replay)
+3. Sidecar terminal correctness: T185.14 (rest: eviction of active rings), T185.8 (reattach replay)
 4. T181 purge UI + one retention policy (nothing is deleted any more; oplog keeps git trees)
 5. T183.2: AI features dark without an API key (Sparkles commit, scoring, evaluator)
 6. T185.11: scheduler timeout records two results and frees capacity early; T185.1 scheduler UI
@@ -519,11 +518,9 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     dimension. Persist model id, dimension and chunker version per index generation. Before T153.
 13. **Indexer ignores `.gitignore`** (#6): `walkDir` (`project-indexer.ts`) only applies its own
     exclude list. Symlinks are no longer followed (fe7e264). Use git-aware enumeration.
-14. **Sidecar memory pressure** (#9): `pendingBytes` counts UTF-16 units, not bytes; ring eviction
-    only touches idle sessions (33 active rings = 264 MiB > 256 MiB target); `broadcast`
-    (`pty-sidecar-entry.ts:65`) ignores `client.write`'s return, so a slow client grows the socket
-    queue unbounded. Test with a slow and a healthy client. Pairs with T184.2-4 (bump
-    SIDECAR_VERSION).
+14. **Sidecar memory pressure** (#9, rest): ring eviction only touches idle sessions (33 active
+    rings = 264 MiB > 256 MiB target). Byte counting and the client backlog cap shipped 2026-10-01
+    (`TASK_COMPLETED/2610.md`). Bumps SIDECAR_VERSION.
 15. **Memory salience reinforces a negation** (#7, P1 for T158/T164): `classifyObservation`
     (`salience.ts:51,61`) reinforces "Always run migrations…" with "Never run migrations…" (word
     similarity > 0.8). Auto-dedup only exact normalized matches; supersession needs an explicit
@@ -636,21 +633,21 @@ and are recorded as refuted at the end.
 (Item 1, pipeline evidence lost once the agent commits, shipped 2026-09-22 in PR #115; see
 `TASK_COMPLETED/2609.md`.)
 
-**Latent bugs in the sidecar (openchamber).** All three verified:
+**Latent bugs in the sidecar (openchamber).** Items 3-4 and the DA1 half of 2 shipped 2026-10-01
+(`fix/sidecar-batch`, see `TASK_COMPLETED/2610.md`). Left of item 2:
 
-2. **Nothing answers a terminal query while detached.** The sidecar only ever writes to its clients,
-   never back into the PTY — so with no xterm attached (the normal case for a background agent) a
-   shell's DA1/colour queries go unanswered and fish waits ~10s at startup. Their note names it
-   exactly: "the DA1 fallback prevents Fish from waiting ten seconds for a renderer that cannot
-   observe or answer its startup query." Note T183.1 answers OSC 10/11/12 in the RENDERER only, so
-   this is the other half of that fix.
-3. **The ring buffer replays query sequences.** Replay is raw ANSI, so every reattach re-asks the new
-   xterm every question the shell ever asked. They store history sanitized (DSR, CPR, DA1, Mode 2031,
-   OSC 10-12 stripped) while the live stream stays byte-identical — two paths, not one.
-4. **We kill the previous sidecar by pid without verifying identity.** `ensureSidecar` SIGTERMs then
-   SIGKILLs a live-but-unresponsive pid with no check that it is still ours; a recycled pid gets
-   killed. Theirs keeps one file per process with `{pid, ownerPid, port, binary}` and re-verifies the
-   live process before killing, only when `ppid === 1` or the owner is dead.
+2. **Queries while the app runs but no view draws the session.** The sidecar answers DA1 only while
+   no client is connected (app closed). With the app open, a hidden pane's xterm may not answer, and
+   OSC 10/11/12 colour queries are never answered from the sidecar (T183.1 answers them in the
+   renderer only). Needs main to tell the sidecar which sessions have a live view.
+
+Left from the simplify of that batch (judged out of its scope):
+- Reattach replay: `pty-host.ts` reattach hands the sidecar's raw snapshot to the renderer; the
+  other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
+  there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)
+- Clear Terminal does not reach Dashboard mirror cards (they keep the old screen until a refit)
+- Pid identity by `ps` command match; a stored identity (pid file token + process start time)
+  would avoid the fork
 
 **Spawn and lifecycle (pullfrog).**
 
@@ -1028,19 +1025,10 @@ A human → agent send from the Dashboard thread needs a sender Exegol verifies 
 
 (Input caps and the credential warning shipped 2026-08-16; see `TASK_COMPLETED/2608.md`.
 The `.gitignore` upsert bullet was DROPPED: [[T173]] settled that Exegol must not gitignore
-files a team may legitimately version — the warning goes to the human instead.)
+files a team may legitimately version — the warning goes to the human instead. The sidecar's
+own NDJSON reader, `session.clear` and the linear `createNdjsonBuffer` shipped 2026-10-01; see
+`TASK_COMPLETED/2610.md`.)
 
-- **Third NDJSON framing copy in `pty-sidecar-entry.ts`** — the server and the sidecar
-  client now share `createNdjsonBuffer` (cap + multibyte decoder); the sidecar's own reader
-  is still hand-rolled and unbounded. Deferred only because it is bundled into the sidecar,
-  so fixing it requires a `SIDECAR_VERSION` bump — every live PTY dies on the next launch.
-  Fold it into the next change that has to bump anyway. Unexport the sidecar's unused types
-  (knip: `EvictableSession`, `PendingState`, `AppendResult`) in the same bump.
-  Also add a `session.clear` RPC: the pane menu's Clear Terminal only empties the view, so a
-  reattach after an app restart replays the cleared history from the ring buffer.
-- **`buffer.indexOf("\n")` rescans from 0 on every chunk** in `createNdjsonBuffer`: a 7 MB
-  tool result arriving in 64 KB chunks scans ~110× up to 7 MB. The cap bounds each scan but
-  not the quadratic; a `searchFrom` offset carried across calls makes it linear.
 - **MCP recall is FTS-only**: `exegol-tools.ts` calls `searchMemories` without
   `ollamaConfig`, while `ipc/procedures/memory.ts` passes it — agents get worse recall than
   the UI for the same store.

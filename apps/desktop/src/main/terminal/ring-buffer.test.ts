@@ -101,10 +101,12 @@ describe("RingBuffer alternate-screen stickiness", () => {
     expect(rb.isAltScreen).toBe(true);
   });
 
-  it("forgets the mode on clear", () => {
+  it("Clear Terminal keeps the mode but drops the content", () => {
     const rb = new RingBuffer(64);
-    rb.write(Buffer.from(ALT_ON));
+    rb.write(Buffer.from(`${ALT_ON}old screen`));
     rb.clear();
-    expect(rb.isAltScreen).toBe(false);
+    expect(rb.byteLength).toBe(0);
+    rb.write(Buffer.from("new"));
+    expect(rb.snapshot().toString()).toBe(`${ALT_ON}new`);
   });
 });

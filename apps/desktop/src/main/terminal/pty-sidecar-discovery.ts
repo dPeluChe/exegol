@@ -1,6 +1,6 @@
 // Sidecar discovery: find running sidecar, or spawn a new one.
 
-import { spawn as cpSpawn } from "node:child_process";
+import { spawn as cpSpawn, execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -12,7 +12,8 @@ import {
   unlinkSync,
 } from "node:fs";
 import { join } from "node:path";
-import { LOG_DIR } from "../lib/logger";
+import { promisify } from "node:util";
+import { LOG_DIR, logger } from "../lib/logger";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
@@ -31,6 +32,21 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
+const execFileAsync = promisify(execFile);
+const SIDECAR_ENTRY = "pty-sidecar-entry";
+
+/** T184.4: a pid from the pid file may have been recycled; only kill it while it still runs our entry. */
+export async function isOurSidecar(pid: number): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync("ps", ["-p", String(pid), "-o", "command="], {
+      timeout: 3000,
+    });
+    return stdout.includes(SIDECAR_ENTRY);
+  } catch {
+    return false;
+  }
+}
+
 export function readPidFile(): PidFile | null {
   try {
     if (!existsSync(SIDECAR_PID_PATH)) return null;
@@ -42,10 +58,10 @@ export function readPidFile(): PidFile | null {
 
 function resolveSidecarPath(): string {
   // Same directory as main bundle (rollupOptions.input output)
-  const primary = join(__dirname, "pty-sidecar-entry.js");
+  const primary = join(__dirname, `${SIDECAR_ENTRY}.js`);
   if (existsSync(primary)) return primary;
   // Fallback: nested under terminal/
-  const nested = join(__dirname, "terminal", "pty-sidecar-entry.js");
+  const nested = join(__dirname, "terminal", `${SIDECAR_ENTRY}.js`);
   if (existsSync(nested)) return nested;
   return primary;
 }
@@ -151,11 +167,15 @@ export async function ensureSidecar(): Promise<SidecarClient> {
     // Stale sidecar — shut it down, and WAIT. Spawning a replacement while the
     // predecessor is still exiting is how the old process ended up deleting the
     // new one's socket and pid file (see cleanup() in pty-sidecar-entry).
-    try {
-      process.kill(pidFile.pid, "SIGTERM");
+    if (await isOurSidecar(pidFile.pid)) {
+      try {
+        process.kill(pidFile.pid, "SIGTERM");
+      } catch {
+        /* already gone */
+      }
       await waitForExit(pidFile.pid);
-    } catch {
-      /* already gone */
+    } else {
+      logger.warn("[PtySidecar] Pid file names a process that is not our sidecar; not killing it");
     }
   }
 

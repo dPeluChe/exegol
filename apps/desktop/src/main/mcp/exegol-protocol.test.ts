@@ -30,6 +30,17 @@ describe("createNdjsonBuffer", () => {
     expect(received).toEqual([{ n: 1 }, { n: 2 }]);
   });
 
+  it("frames a message split over many chunks next to whole ones", () => {
+    const received: unknown[] = [];
+    const feed = createNdjsonBuffer((msg) => received.push(msg));
+    const big = JSON.stringify({ body: "x".repeat(10_000) });
+    for (let i = 0; i < big.length; i += 64) feed(big.slice(i, i + 64));
+    const two = JSON.stringify({ n: 2 });
+    feed(`\n${JSON.stringify({ n: 1 })}\n${two.slice(0, 3)}`);
+    feed(`${two.slice(3)}\n`);
+    expect(received).toEqual([{ body: "x".repeat(10_000) }, { n: 1 }, { n: 2 }]);
+  });
+
   it("drops malformed lines without throwing", () => {
     const received: unknown[] = [];
     const feed = createNdjsonBuffer((msg) => received.push(msg));
