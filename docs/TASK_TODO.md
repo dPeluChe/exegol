@@ -105,6 +105,8 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- Close confirmation on Cmd+W, pane X, pane menu Close and tab close (Enter closes, Esc keeps);
+  unsaved edits in a Files pane or a terminal's Files peek are named
 - Terminal repaint after a hidden tab: leave a working Claude pane in another tab for a minute,
   come back: no overlapped lines (console shows "Output overflowed while hidden" when it
   resynced). Cmd+V of a screenshot into Claude pastes its path

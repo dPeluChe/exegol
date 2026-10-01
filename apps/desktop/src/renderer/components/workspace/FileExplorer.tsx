@@ -235,14 +235,18 @@ export function FileExplorer({
   const [revealLine, setRevealLine] = useState<number | undefined>(undefined);
   // Unsaved edits in the viewer: switching files or closing asks first
   const dirtyRef = useRef(false);
+  // Marked on the root too: closing the pane asks first (lib/close-guard)
+  const rootRef = useRef<HTMLDivElement>(null);
   const setDirty = useCallback((d: boolean) => {
     dirtyRef.current = d;
+    rootRef.current?.setAttribute("data-unsaved", String(d));
   }, []);
   const [pendingSelect, setPendingSelect] = useState<{ path: string | null; line?: number } | null>(
     null,
   );
   const applySelect = useCallback((path: string | null, line?: number) => {
     dirtyRef.current = false;
+    rootRef.current?.setAttribute("data-unsaved", "false");
     setSelectedFile(path);
     setRevealLine(line);
   }, []);
@@ -353,7 +357,7 @@ export function FileExplorer({
   );
 
   return (
-    <div className="flex h-full bg-bg-primary">
+    <div ref={rootRef} className="flex h-full bg-bg-primary">
       {/* Tree view */}
       <div
         className={cn(

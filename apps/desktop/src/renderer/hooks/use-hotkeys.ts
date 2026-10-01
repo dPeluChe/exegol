@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { confirmClosePanes } from "../lib/close-guard";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { groupForDigit } from "../lib/live-tabs";
 import { cyclePane, focusActivePane } from "../lib/pane-focus";
@@ -194,8 +195,9 @@ export function useHotkeys() {
   }, [toggleSidebar, setActiveView]);
 }
 
-/** Stop agents in terminal panes, then close the focused pane/tab */
-export function cleanupAndCloseFocusedPane(): void {
+/** Stop agents in terminal panes, then close the focused pane/tab, after asking when that ends
+ *  a session, a terminal or unsaved edits */
+export async function cleanupAndCloseFocusedPane(): Promise<void> {
   const ws = useWorkspaceStore.getState();
   const pw = getProjectState();
   const { focusedPaneId } = ws;
@@ -210,6 +212,12 @@ export function cleanupAndCloseFocusedPane(): void {
 
   // Collect panes to clean up: if last pane → all panes in tab, otherwise just the focused one
   const paneIdsToClean = isLastPane ? allPaneIds : [focusedPaneId];
+  const closing = paneIdsToClean.map((pid) => panes[pid]).filter((p) => p !== undefined);
+  if (!(await confirmClosePanes(closing, useAgentStore.getState().agents))) return;
+  // The focus may have moved while the dialog was open: close what was asked about
+  if (useWorkspaceStore.getState().focusedPaneId !== focusedPaneId) {
+    ws.setFocusedPane(focusedPaneId);
+  }
 
   for (const pid of paneIdsToClean) {
     const pane = panes[pid];

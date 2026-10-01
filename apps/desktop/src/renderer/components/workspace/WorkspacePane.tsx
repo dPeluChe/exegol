@@ -16,6 +16,7 @@ import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useStat
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
+import { confirmClosePanes } from "../../lib/close-guard";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
@@ -130,8 +131,9 @@ function PaneToolbar({
     });
   }, [projectId]);
 
-  const handleClosePane = useCallback(() => {
+  const handleClosePane = useCallback(async () => {
     const pane = panes[paneId];
+    if (pane && !(await confirmClosePanes([pane], useAgentStore.getState().agents))) return;
     // Stop the agent when closing a terminal pane
     if (pane?.type === "terminal" && pane.agentId) {
       const agentId = pane.agentId;
@@ -608,6 +610,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
   return (
     <div
       role="none"
+      data-pane-id={paneId}
       className={cn(
         "group/pane relative flex h-full flex-col",
         isFocused ? "border-2 border-accent/40" : "border-2 border-transparent",
@@ -651,7 +654,8 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
                 )
             : undefined
         }
-        onClose={() => {
+        onClose={async () => {
+          if (!(await confirmClosePanes([pane], useAgentStore.getState().agents))) return;
           if (pane.type === "terminal" && pane.agentId) {
             deleteAgentImperative(pane.agentId);
           } else {
