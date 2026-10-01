@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Closing a session from its project left its Dashboard pin as a black terminal with no Resume (a sync already on its way brought the closed session back as live): a closed session stays closed and its pin goes away
 - A CLI typed by hand in a terminal with `--dangerously-skip-permissions` (or another CLI's YOLO flag) or `--model` keeps them when it is suspended and resumed, or restarted onto an update; the resume used to start it without bypass
 
 ## [0.5.10] — 2026-10-01 — CLI updates, models in the launcher, Linux keys, close confirmation
