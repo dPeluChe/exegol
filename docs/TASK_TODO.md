@@ -117,6 +117,8 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- Project layouts: save tennis's tab (browser + 2 terminals + an agent), New tab rebuilds it
+  with sizes, shells and the agent (same model/YOLO); Apply here keeps panes that show something
 - Installed CLIs: on a machine with few CLIs (Rigo's Linux), quick launchers show only those;
   Launch Agent's "Not installed" group, Install in a terminal, Check again after installing
 - Wheel scroll in Claude after switching projects (and after an app restart) without a resize;

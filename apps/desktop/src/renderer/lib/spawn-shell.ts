@@ -2,6 +2,7 @@ import type { Agent } from "@exegol/shared";
 import { toAgentState, useAgentStore } from "../stores/agents";
 import { useTerminalStore } from "../stores/terminals";
 import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../stores/workspace";
+import type { CustomLayoutSlot, SlotAgent } from "./layout-presets";
 import { trpcMutate } from "./trpc-client";
 
 /** Start a shell in the project's folder (or `cwd` inside it) and show it in `paneId` */
@@ -49,4 +50,34 @@ export async function runCommandInNewTab(projectId: string, cmd: string): Promis
   };
   const unsub = window.api.terminal.onData(agent.id, type);
   setTimeout(type, 2000);
+}
+
+/** Fill a saved layout's terminal slots: a shell, or a fresh session of the agent CLI the slot
+ *  had, with its model, YOLO and access mode. One at a time: CLIs starting together compete */
+export async function fillLayoutSlots(
+  projectId: string,
+  spawns: { paneId: string; slot: CustomLayoutSlot }[],
+): Promise<void> {
+  for (const { paneId, slot } of spawns) {
+    if (!slot.cliType || slot.cliType === "shell") {
+      await spawnShellIntoPane(projectId, paneId);
+      continue;
+    }
+    const agent = await trpcMutate<Agent>("agents.spawn", {
+      projectId,
+      cliType: slot.cliType,
+      ...(slot.accessMode ? { accessMode: slot.accessMode } : {}),
+      ...(slot.model ? { model: slot.model } : {}),
+      ...(slot.yolo != null ? { yolo: slot.yolo } : {}),
+    });
+    useAgentStore.getState().addAgent(toAgentState(agent, { activityLevel: "busy" }));
+    useTerminalStore.getState().createTerminal(agent.id);
+    useWorkspaceStore.getState().updatePane(paneId, { type: "terminal", agentId: agent.id });
+  }
+}
+
+/** What a terminal pane runs, for saving it into a layout slot */
+export function slotAgentOf(agentId: string): SlotAgent | undefined {
+  const a = useAgentStore.getState().agents[agentId];
+  return a && { cliType: a.cliType, model: a.model, yolo: a.yolo, accessMode: a.accessMode };
 }

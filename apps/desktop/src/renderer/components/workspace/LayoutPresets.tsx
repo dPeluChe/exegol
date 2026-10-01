@@ -1,13 +1,10 @@
-import type { AgentCliType } from "@exegol/shared";
 import { LayoutGrid, Save, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { LAYOUT_PRESETS, type LayoutPresetId } from "../../lib/layout-presets";
-import { trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
-import { useTerminalStore } from "../../stores/terminals";
-import { useToastStore } from "../../stores/toasts";
+import { fillLayoutSlots, slotAgentOf, spawnShellIntoPane } from "../../lib/spawn-shell";
+import { toastError, useToastStore } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
 
 interface LayoutPresetsProps {
@@ -29,11 +26,10 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
   const applyCustomLayout = useWorkspaceStore((s) => s.applyCustomLayout);
   const saveCustomLayout = useWorkspaceStore((s) => s.saveCustomLayout);
   const deleteCustomLayout = useWorkspaceStore((s) => s.deleteCustomLayout);
-  const updatePane = useWorkspaceStore((s) => s.updatePane);
-  const customLayouts = useWorkspaceStore((s) => s.customLayouts);
+  // Global ones here; a project's own are in its menu (Layouts...)
+  const allLayouts = useWorkspaceStore((s) => s.customLayouts);
+  const customLayouts = allLayouts.filter((c) => !c.projectId);
 
-  const addAgent = useAgentStore((s) => s.addAgent);
-  const createTerminal = useTerminalStore((s) => s.createTerminal);
   const { projectId } = useProjectContext();
 
   useEffect(() => {
@@ -58,57 +54,25 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
     };
   }, [open]);
 
-  /** Spawn a shell agent and attach it to a freshly-created terminal slot pane. */
-  const spawnShellForPane = async (paneId: string) => {
-    if (!projectId) return;
-    try {
-      // biome-ignore lint/suspicious/noExplicitAny: tRPC dynamic shape
-      const agent = await trpcMutate<any>("agents.spawn", {
-        projectId,
-        cliType: "shell" as AgentCliType,
-        taskDescription: "Terminal",
-      });
-      addAgent({
-        id: agent.id,
-        projectId,
-        cliType: agent.cliType,
-        status: agent.status,
-        currentStep: agent.currentStep,
-        taskDescription: agent.taskDescription,
-        branchName: agent.branchName ?? null,
-        alias: agent.alias ?? null,
-        tokenUsage: { input: 0, output: 0, cost: 0 },
-        startedAt: agent.startedAt,
-        accessMode: agent.accessMode ?? null,
-        claudeSessionId: null,
-        activityLevel: "busy",
-      });
-      createTerminal(agent.id);
-      updatePane(paneId, { type: "terminal", agentId: agent.id });
-    } catch (err) {
-      useToastStore.getState().addToast({
-        type: "error",
-        title: "Failed to start terminal",
-        body: err instanceof Error ? err.message : String(err),
-      });
-    }
-  };
-
   const handlePickBuiltIn = async (presetId: LayoutPresetId) => {
     if (!tabId) return;
     const { terminalsToSpawn } = applyLayoutPreset(tabId, presetId);
     setOpen(false);
     // Spawn shells for preset slots marked as terminal (e.g. Bottom Terminal)
-    for (const paneId of terminalsToSpawn) {
-      spawnShellForPane(paneId);
+    if (projectId) {
+      for (const paneId of terminalsToSpawn) {
+        spawnShellIntoPane(projectId, paneId).catch(toastError("Failed to start terminal"));
+      }
     }
     requestAnimationFrame(() => dispatchRefitTerminals());
   };
 
   const handlePickCustom = (customId: string) => {
     if (!tabId) return;
-    applyCustomLayout(tabId, customId);
+    const { spawns } = applyCustomLayout(tabId, customId);
     setOpen(false);
+    if (projectId)
+      fillLayoutSlots(projectId, spawns).catch(toastError("Failed to start a terminal"));
     requestAnimationFrame(() => dispatchRefitTerminals());
   };
 
@@ -125,7 +89,7 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
       setSavingName(null);
       return;
     }
-    const id = saveCustomLayout(tabId, trimmed);
+    const id = saveCustomLayout(tabId, trimmed, { agentOf: slotAgentOf });
     if (id) {
       useToastStore.getState().addToast({ type: "success", title: `Saved layout "${trimmed}"` });
     }

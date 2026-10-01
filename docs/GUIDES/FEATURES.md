@@ -14,7 +14,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer), git, and an
   empty pane with the agent launcher.
 - **Layouts**: six presets (Single, Split Horizontal, Split Vertical, Three Columns, Bottom
-  Terminal 70/30, 2×2 Grid), your own saved layouts, and Equalize splits. Drag a pane by its left
+  Terminal 70/30, 2×2 Grid), your own saved layouts, and Equalize splits. A project keeps its
+  own named layouts (its menu > Layouts...) that start its terminals and agents again. Drag a pane by its left
   edge to move it.
 - **Picture-in-Picture**: a terminal or browser pane detaches into a small always-on-top window.
 - **Command palette** (`Cmd+K`): projects, agents, commands, and `!<cmd>` for a one-shot shell.

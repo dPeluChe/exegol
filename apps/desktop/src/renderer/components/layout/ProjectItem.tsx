@@ -9,6 +9,7 @@ import {
   GitBranch,
   Globe,
   Layers,
+  LayoutGrid,
   Palette,
   Pause,
   Pencil,
@@ -35,6 +36,7 @@ import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
 import { ProjectAppearanceDialog } from "./ProjectAppearanceDialog";
 import { ProjectFiles } from "./ProjectFiles";
+import { ProjectLayoutsDialog } from "./ProjectLayoutsDialog";
 import { TabsOverview } from "./TabsOverview";
 
 function PortBadges({ projectPath }: { projectPath: string }) {
@@ -154,6 +156,7 @@ export function ProjectItem({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [layoutsOpen, setLayoutsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuStyle = useFittedMenu(menuRef, contextMenu);
 
@@ -321,6 +324,17 @@ export function ProjectItem({
             type="button"
             onClick={() => {
               setContextMenu(null);
+              setLayoutsOpen(true);
+            }}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
+          >
+            <LayoutGrid className="h-3 w-3" />
+            Layouts...
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setContextMenu(null);
               openInIde({
                 projectId: project.id,
                 ide: settings?.defaultIde,
@@ -387,6 +401,7 @@ export function ProjectItem({
           onRename={(name) => onRename(project.id, name)}
         />
       )}
+      {layoutsOpen && <ProjectLayoutsDialog project={project} onOpenChange={setLayoutsOpen} />}
       <ConfirmDialog
         open={confirmRemove}
         onOpenChange={setConfirmRemove}
