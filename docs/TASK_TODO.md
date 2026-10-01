@@ -41,6 +41,19 @@
      never retries once the project loads; `.gitkeep` overwrite; GitHub issue cards drag to nothing
    - Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
      stale; Parallel Runs promote has no error; `agentClis` settings field unused
+8. **One CLI catalog** (from the #257 simplify, 2026-10-01): "is this CLI installed" is still
+   answered in three places: `installedProviderIds` (launcher, via spawn's `commandOnPath`),
+   Doctor's `runCliDetection` (`which -a`, it also needs every hit for duplicate installs) and
+   preflight's `checkCliAvailable` (`which`). And four tables describe a CLI: the provider
+   registry, `COMMAND_ALIASES`, `CLI_SETUP` and Doctor's checks. Merge into one catalog plus one
+   `agents.cliStatus` query (installed, version, paths, install/update per OS) that the launcher,
+   Settings > CLIs, onboarding, Doctor, CLI updates and preflight all read. Today
+   `listProviders` (Settings) has no `installed` field at all
+9. **Windows install commands, unverified**: `CLI_SETUP` has a `win` command per CLI taken from
+   each vendor's docs (2026-10-01), but Exegol ships no Windows build, so none has been run.
+   Before a Windows build: run each on Windows 11 (PowerShell vs cmd: `runCommandInNewTab`
+   types into the user's shell), confirm `commandOnPath` finds them (PATHEXT), and that Amp
+   (WSL only) shows its guide
 7. **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): ports
    read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
    on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
