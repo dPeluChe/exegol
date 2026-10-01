@@ -21,7 +21,13 @@ interface Row {
 /** One line per CLI in use: an update to install, or sessions still on an older version */
 export function cliUpdateRows(
   statuses: Map<string, CliUpdateStatus>,
-  agents: { id: string; cliType: string; status: string; cliVersion?: string | null }[],
+  agents: {
+    id: string;
+    cliType: string;
+    status: string;
+    cliVersion?: string | null;
+    startedAt?: number | null;
+  }[],
 ): Row[] {
   return [...statuses.values()]
     .map((status) => {

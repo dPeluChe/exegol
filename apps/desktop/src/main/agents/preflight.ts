@@ -1,7 +1,8 @@
-import { exec } from "node:child_process";
 import { access, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentCliType } from "@exegol/shared";
+import { providerBinaries } from "./cli-catalog";
+import { commandOnPath } from "./spawn-env";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,9 +21,10 @@ interface PreflightResult {
 
 // ─── Individual checks ────────────────────────────────────────────────────────
 
+/** The same PATH check the launcher and spawn use (renamed binaries included), so a CLI the
+ *  launcher offers is never refused here */
 function checkCliAvailable(command: string): Promise<boolean> {
-  const cmd = process.platform === "win32" ? `where "${command}"` : `which "${command}"`;
-  return new Promise((resolve) => exec(cmd, (err) => resolve(!err)));
+  return Promise.resolve(providerBinaries(command).some(commandOnPath));
 }
 
 async function checkProjectPath(projectPath: string): Promise<"ok" | "missing" | "not-dir"> {

@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({ net: { fetch: vi.fn() } }));
-vi.mock("../agents/registry", () => ({ COMMAND_ALIASES: {}, getProviderRegistry: vi.fn() }));
 vi.mock("../agents/spawn-env", () => ({ _getFullPath: () => "" }));
 vi.mock("../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn() } }));
-const { CLI_SETUP, cliSetupFor } = await import("./cli-versions");
+const { CLI_CATALOG, COMMAND_ALIASES, cliSetupFor } = await import("../agents/cli-catalog");
 
 describe("cliSetupFor", () => {
   it("picks the command for the OS", () => {
@@ -26,10 +25,17 @@ describe("cliSetupFor", () => {
   });
 
   it("every CLI has an install for macOS and Linux and a docs URL", () => {
-    for (const id of Object.keys(CLI_SETUP)) {
+    for (const id of Object.keys(CLI_CATALOG)) {
       for (const os of ["darwin", "linux"] as const)
         expect(cliSetupFor(id, os)?.install).toBeTruthy();
       expect(cliSetupFor(id)?.docs).toMatch(/^https:\/\//);
+    }
+  });
+
+  it("binary aliases are keyed by the provider's command (which equals its id there)", async () => {
+    const { BUILTIN_PROVIDERS } = await import("../agents/registry");
+    for (const id of Object.keys(COMMAND_ALIASES)) {
+      expect(BUILTIN_PROVIDERS.find((p) => p.id === id)?.command).toBe(id);
     }
   });
 });

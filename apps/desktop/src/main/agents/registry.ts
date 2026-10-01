@@ -4,7 +4,7 @@ import { logger } from "../lib/logger";
 
 // ─── Default Built-in Providers ─────────────────────────────────────────────
 
-const BUILTIN_PROVIDERS: AgentProvider[] = [
+export const BUILTIN_PROVIDERS: AgentProvider[] = [
   {
     id: "claude-code",
     name: "Claude Code",
@@ -334,9 +334,6 @@ const PROVIDER_OVERRIDES_KEY = "provider_overrides";
 // ─── Registry Singleton ─────────────────────────────────────────────────────
 
 let instance: AgentProviderRegistry | null = null;
-
-/** Newer binary names a CLI moved to: Kilo Code 1.0 ships `kilo`, older installs `kilocode` */
-export const COMMAND_ALIASES: Record<string, string[]> = { kilocode: ["kilo"] };
 
 export function getProviderRegistry(): AgentProviderRegistry {
   if (!instance) {

@@ -1,3 +1,4 @@
+import { CLIPBOARD_IMAGE } from "@exegol/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -16,8 +17,6 @@ import { registerTerminalLinkProviders } from "./terminal-links";
 import type { TerminalInstanceProps } from "./terminal-types";
 import { tuneWheelSensitivity } from "./tui-wheel";
 
-/** CLIs that attach a clipboard image on their own paste key (Ctrl+V), as Claude Code does */
-const CLIPBOARD_IMAGE_CLIS = new Set(["claude-code"]);
 const CTRL_V = "\x16";
 
 interface TerminalSessionDeps {
@@ -210,16 +209,18 @@ export function setupTerminalSession(
 
     // Capture phase: xterm's own paste handler on its textarea stops the event, so a bubbling
     // listener here never saw Cmd+V with an image. A CLI that reads the clipboard itself gets its
-    // own paste key (Claude attaches "[Image #N]"); the others get the image saved to a file and
-    // its path typed in. The cliType is read now: a terminal can have become Claude since setup
+    // own paste key or command (CLIPBOARD_IMAGE: Claude attaches "[Image #N]"); the others get the
+    // image saved to a file and its path typed in. The cliType is read now: a terminal can have
+    // become an agent since setup
     const handlePaste = async (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items || ![...items].some((item) => item.type.startsWith("image/"))) return;
       e.preventDefault();
       e.stopPropagation();
       const cliType = useAgentStore.getState().agents[deps.agentId]?.cliType ?? deps.cliType;
-      if (cliType && CLIPBOARD_IMAGE_CLIS.has(cliType)) {
-        window.api.terminal.write(deps.agentId, CTRL_V);
+      const way = cliType ? CLIPBOARD_IMAGE[cliType] : undefined;
+      if (way) {
+        window.api.terminal.write(deps.agentId, way === "ctrl-v" ? CTRL_V : "/paste");
         return;
       }
       const filePath = await window.api.terminal.saveClipboardImage();

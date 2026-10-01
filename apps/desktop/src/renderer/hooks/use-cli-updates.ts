@@ -39,9 +39,20 @@ export function useCliUpdates(): Map<string, CliUpdateStatus> {
   return useMemo(() => new Map((data ?? []).map((s) => [s.cliType, s])), [data]);
 }
 
-/** A newer CLI than the one this session started with is installed */
-export function restartNeeded(agent: Pick<AgentState, "cliVersion">, status?: CliUpdateStatus) {
-  return isNewerVersion(status?.installed, agent.cliVersion);
+/** A newer CLI than the one this session started with is installed. A session from before the
+ *  version was recorded (0.5.10) has none: it is behind when the binary was written after it
+ *  started (a minute of slack: launching right after an install is not "older") */
+export function restartNeeded(
+  agent: { cliVersion?: string | null; startedAt?: number | null },
+  status?: CliUpdateStatus,
+): boolean {
+  if (!status) return false;
+  if (agent.cliVersion) return isNewerVersion(status.installed, agent.cliVersion);
+  return (
+    !!status.installedAt &&
+    !!agent.startedAt &&
+    status.installedAt > agent.startedAt * 1000 + 60_000
+  );
 }
 
 /** Run the update commands in one visible tab and restart these sessions once the new version is
