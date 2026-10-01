@@ -124,6 +124,28 @@ export const MODEL_LAUNCH: Record<string, ModelLaunch> = {
   "factory-droid": { settingsFile: true },
 };
 
+/**
+ * How each CLI takes an image from the clipboard (each one's source or docs, 2026-10-01):
+ * "ctrl-v": it reads the clipboard itself on Ctrl+V and attaches it (Cmd+V never reaches a
+ * terminal program on macOS, so Exegol sends Ctrl+V for it); "/paste": a command that does it
+ * (typed, not sent: the user adds text and presses Enter). Absent (goose, shells): Exegol saves
+ * the image to a file and types its path
+ */
+export const CLIPBOARD_IMAGE: Record<string, "ctrl-v" | "/paste"> = {
+  "claude-code": "ctrl-v",
+  codex: "ctrl-v",
+  gemini: "ctrl-v",
+  agy: "ctrl-v",
+  devin: "ctrl-v",
+  opencode: "ctrl-v",
+  amp: "ctrl-v",
+  kilocode: "ctrl-v",
+  crush: "ctrl-v",
+  "factory-droid": "ctrl-v",
+  aider: "/paste",
+  kiro: "/paste",
+};
+
 /** Suggestions shipped with the app; CLIs that can list theirs add them (agents.listModels) */
 export const MODEL_SUGGESTIONS: Record<string, string[]> = {
   "claude-code": ["sonnet", "opus", "haiku"],

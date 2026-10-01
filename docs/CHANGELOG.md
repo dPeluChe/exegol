@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Cmd+V with an image attaches it in every CLI that reads the clipboard itself (Codex, Gemini, Antigravity, Devin, OpenCode, Amp, Kilo Code, Crush, Droid, as Claude already did); Aider and Kiro get their /paste command typed in; Goose still gets the image's file path
+- Settings > CLIs says which CLIs are not installed on this machine, with their install command; a launch is never refused for a CLI the launcher offered (they now check the same way)
 - Sessions started before 0.5.10 never offered Restart to update after their CLI updated (their version was not recorded); they are now compared by when the CLI was installed
 
 ### Changed
