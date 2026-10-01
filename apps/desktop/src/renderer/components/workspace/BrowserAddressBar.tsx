@@ -44,6 +44,8 @@ interface BrowserAddressBarProps {
   onStopPort?: (port: PortInfo) => void;
   viewport?: PageSize;
   onViewport?: (viewport: PageSize | undefined) => void;
+  /** More controls after the page size (the floating window's Sizes) */
+  extra?: React.ReactNode;
 }
 
 export function BrowserAddressBar({
@@ -72,6 +74,7 @@ export function BrowserAddressBar({
   onStopPort,
   viewport,
   onViewport,
+  extra,
 }: BrowserAddressBarProps) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-1 border-b border-border bg-bg-secondary px-2">
@@ -120,6 +123,7 @@ export function BrowserAddressBar({
         <ExternalLink className="h-3 w-3" />
       </button>
       {onViewport && <ViewportSelect value={viewport} onChange={onViewport} />}
+      {extra}
       {/* T102: Design Mode + QA Mode toggles */}
       <div className="mx-0.5 h-3.5 w-px bg-border" />
       <button

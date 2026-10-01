@@ -109,6 +109,7 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- Floating browser: type a URL in its address bar, DevTools, open in browser, Sizes still works
 - Browser sizes: Add a size, remove it; float at a size; Sizes in the floating window (the
   others follow the first's page; design/QA off while comparing); dock back on the floated page;
   an SPA's routes do not reload a new pane; typing in a terminal while a browser redirects

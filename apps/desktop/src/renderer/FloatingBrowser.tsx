@@ -1,24 +1,27 @@
 import type { Agent } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Bug, Columns3, Crosshair, RotateCw } from "lucide-react";
+import { Columns3 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilterChip } from "./components/common/FilterChip";
+import { BrowserAddressBar } from "./components/workspace/BrowserAddressBar";
 import { BrowserQaRecordingBar } from "./components/workspace/BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./components/workspace/BrowserReplayResultBar";
-import {
-  DeviceFrame,
-  PageView,
-  useAllSizes,
-  ViewportSelect,
-} from "./components/workspace/BrowserViewport";
+import { DeviceFrame, PageView, useAllSizes } from "./components/workspace/BrowserViewport";
 import { DesignIssueBubble } from "./components/workspace/DesignIssueBubble";
 import { webviewIdOf } from "./components/workspace/use-browser-qa";
 import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
+import type { PortInfo } from "./hooks/use-trpc-scheduler";
 import { isPasteTarget } from "./lib/agent-input";
-import { compareSizes, type PageSize, parseSize, sizeKey } from "./lib/browser-viewports";
+import {
+  compareSizes,
+  type PageSize,
+  parseSize,
+  sizeKey,
+  toHttpUrl,
+} from "./lib/browser-viewports";
 import { trpcInvoke } from "./lib/trpc-client";
 
 /** Live agents of the project, the targets for design and QA reports. This window has no agent store */
@@ -47,7 +50,6 @@ export function FloatingBrowser({
   const {
     pageUrl: currentUrl,
     documentUrl,
-    loading,
     canGoBack,
     canGoForward,
     // Its pane docks back on this page, not the one it floated from
@@ -64,6 +66,8 @@ export function FloatingBrowser({
   const [compare, setCompare] = useState<PageSize[] | null>(null);
   const { handleBack, handleForward, handleReload } = useWebviewControls(webviewRef);
   const [issueMessage, setIssueMessage] = useState("");
+  // What is being typed in the address bar; null shows the page's URL
+  const [draft, setDraft] = useState<string | null>(null);
   const runningAgents = useRunningAgentsQuery(projectId);
 
   // The leading webview by id: with several sizes open, "the window's webview" is ambiguous
@@ -88,23 +92,49 @@ export function FloatingBrowser({
 
   return (
     <div className="flex h-full flex-col">
-      <FloatingToolbar
+      {/* The pane's own bar: the same controls, plus Sizes; no dev-server ports here */}
+      <BrowserAddressBar
+        urlInput={draft ?? currentUrl}
         currentUrl={currentUrl}
-        loading={loading}
         canGoBack={canGoBack}
         canGoForward={canGoForward}
         designMode={modes.designMode}
         qaMode={modes.qaMode}
         qaActionCount={modes.qaActionCount}
+        uniquePorts={NO_PORTS}
+        projectId={null}
+        preferredPort={null}
+        setUrlInputValue={setDraft}
+        onFocus={() => {}}
+        onNavigate={() => {
+          const target = toHttpUrl(draft ?? currentUrl);
+          setDraft(null);
+          if (target) loadIn(webviewRef, target);
+        }}
         onBack={handleBack}
         onForward={handleForward}
         onReload={handleReload}
+        onOpenDevTools={() => window.api.floating.selfToggleDevTools()}
         onToggleDesignMode={modes.toggleDesignMode}
         onToggleQaMode={modes.toggleQaMode}
-        size={size}
-        onSize={setSize}
-        comparing={!!compare}
-        onCompare={() => setCompare((c) => (c ? null : compareSizes(size)))}
+        onNavigateToPort={() => {}}
+        onSetPreferredPort={() => {}}
+        viewport={size}
+        onViewport={compare ? undefined : setSize}
+        extra={
+          <button
+            type="button"
+            onClick={() => setCompare((c) => (c ? null : compareSizes(size)))}
+            className={cn(
+              "flex h-5 items-center gap-1 rounded px-1 text-[10px] transition-colors",
+              compare ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-white/10",
+            )}
+            title={compare ? "Back to one page" : "See the page at several sizes side by side"}
+          >
+            <Columns3 className="h-3 w-3" />
+            Sizes
+          </button>
+        }
       />
       {compare && <SizeChips selected={compare} onChange={setCompare} />}
 
@@ -174,122 +204,6 @@ export function FloatingBrowser({
   );
 }
 
-function FloatingToolbar({
-  currentUrl,
-  loading,
-  canGoBack,
-  canGoForward,
-  designMode,
-  qaMode,
-  qaActionCount,
-  onBack,
-  onForward,
-  onReload,
-  onToggleDesignMode,
-  onToggleQaMode,
-  size,
-  onSize,
-  comparing,
-  onCompare,
-}: {
-  currentUrl: string;
-  loading: boolean;
-  canGoBack: boolean;
-  canGoForward: boolean;
-  designMode: boolean;
-  qaMode: boolean;
-  qaActionCount: number;
-  onBack: () => void;
-  onForward: () => void;
-  onReload: () => void;
-  onToggleDesignMode: () => void;
-  onToggleQaMode: () => void;
-  size: PageSize | undefined;
-  onSize: (size: PageSize | undefined) => void;
-  comparing: boolean;
-  onCompare: () => void;
-}) {
-  return (
-    <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border/50 bg-bg-secondary/50 px-1.5">
-      <button
-        type="button"
-        onClick={onBack}
-        disabled={!canGoBack}
-        className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
-        title="Back"
-      >
-        <ArrowLeft className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        onClick={onForward}
-        disabled={!canGoForward}
-        className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-30"
-        title="Forward"
-      >
-        <ArrowRight className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        onClick={onReload}
-        className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
-        title="Reload"
-      >
-        <RotateCw className="h-3 w-3" />
-      </button>
-      <div className="mx-0.5 h-3.5 w-px bg-border" />
-      {!comparing && <ViewportSelect value={size} onChange={onSize} />}
-      <button
-        type="button"
-        onClick={onCompare}
-        className={`flex h-5 items-center gap-1 rounded px-1 text-[10px] transition-colors ${
-          comparing ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-white/10"
-        }`}
-        title={comparing ? "Back to one page" : "See the page at several sizes side by side"}
-      >
-        <Columns3 className="h-3 w-3" />
-        Sizes
-      </button>
-      <div className="mx-0.5 h-3.5 w-px bg-border" />
-      {/* Design mode */}
-      <button
-        type="button"
-        onClick={onToggleDesignMode}
-        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
-          designMode
-            ? "bg-blue-500/20 text-blue-400"
-            : "text-text-muted hover:bg-white/10 hover:text-text-primary"
-        }`}
-        title={designMode ? "Exit Design Mode" : "Design Mode — capture UI elements"}
-      >
-        <Crosshair className="h-3 w-3" />
-      </button>
-      {/* QA mode */}
-      <button
-        type="button"
-        onClick={onToggleQaMode}
-        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
-          qaMode
-            ? "bg-red-500/20 text-red-400"
-            : "text-text-muted hover:bg-white/10 hover:text-text-primary"
-        }`}
-        title={qaMode ? "Stop Recording" : "QA Mode — record interactions"}
-      >
-        <Bug className="h-3 w-3" />
-      </button>
-      {designMode && <span className="text-[8px] font-medium text-blue-400">DESIGN</span>}
-      {qaMode && (
-        <span className="text-[8px] font-medium tabular-nums text-red-400">
-          REC {qaActionCount > 0 ? `(${qaActionCount})` : ""}
-        </span>
-      )}
-      <div className="mx-0.5 h-3.5 w-px bg-border" />
-      {loading && <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}
-      <div className="flex-1 truncate px-1 text-[9px] text-text-muted">{currentUrl}</div>
-    </div>
-  );
-}
-
 /** Which sizes the comparison shows: at least one, at most four (each is a whole page renderer) */
 const MAX_COMPARE = 4;
 
@@ -341,4 +255,15 @@ function FollowerView({ url }: { url: string }) {
     }
   }, [url]);
   return <PageView ref={ref} src={src} />;
+}
+
+const NO_PORTS: PortInfo[] = [];
+
+/** Go somewhere in a webview that is already showing a page (its src stays as it was) */
+function loadIn(ref: React.RefObject<HTMLElement | null>, url: string) {
+  try {
+    (ref.current as unknown as { loadURL?: (u: string) => void } | null)?.loadURL?.(url);
+  } catch {
+    /* not attached yet */
+  }
 }
