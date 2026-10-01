@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import type { LayoutNode, Pane, PaneType } from "../stores/workspace";
-import type { ViewportId } from "./browser-viewports";
+import type { PageSize } from "./browser-viewports";
 
 /**
  * Canonical workspace layout presets.
@@ -46,7 +46,7 @@ export interface CustomLayoutSlot {
   url?: string;
   filePath?: string;
   /** A browser's device size */
-  viewport?: ViewportId;
+  viewport?: PageSize;
   /** A terminal's program: "shell", or the agent CLI with its launch choices. The session itself
    *  (agentId) is not saved: applying the layout starts a fresh one */
   cliType?: string;
@@ -270,7 +270,7 @@ export function templateFromLayout(
         type: original?.type ?? "empty",
         url: original?.url,
         filePath: original?.filePath,
-        ...(original?.viewport ? { viewport: original.viewport } : {}),
+        viewport: original?.viewport,
         ...(original?.type === "terminal" && original.agentId ? agentOf(original.agentId) : {}),
       });
       const placeholder = `${SLOT_PREFIX}${slotCounter}__`;

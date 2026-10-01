@@ -3,6 +3,7 @@ import { LoadingSpinner } from "./components/common";
 import { FloatingBrowser } from "./FloatingBrowser";
 import { useTheme } from "./hooks/use-theme";
 import { useWindowCloseKeys } from "./hooks/use-window-close-keys";
+import { parseSize } from "./lib/browser-viewports";
 
 // Lazy — only the terminal case needs xterm.js, no reason to pull it for browser floats
 const TerminalInstance = lazy(() =>
@@ -20,6 +21,8 @@ interface FloatingParams {
   agentId?: string;
   url?: string;
   projectId?: string;
+  /** The device size its pane showed the page at, "WxH" */
+  viewport?: string;
 }
 
 function parseParams(): FloatingParams | null {
@@ -34,6 +37,7 @@ function parseParams(): FloatingParams | null {
     agentId: p.get("floatingAgentId") ?? undefined,
     url: p.get("floatingUrl") ?? undefined,
     projectId: p.get("floatingProjectId") ?? undefined,
+    viewport: p.get("floatingViewport") ?? undefined,
   };
 }
 
@@ -63,7 +67,11 @@ export function FloatingPaneRoot() {
           </Suspense>
         )}
         {params.type === "browser" && params.url && (
-          <FloatingBrowser url={params.url} projectId={params.projectId} />
+          <FloatingBrowser
+            url={params.url}
+            projectId={params.projectId}
+            initialSize={params.viewport ? (parseSize(params.viewport) ?? undefined) : undefined}
+          />
         )}
       </div>
     </div>

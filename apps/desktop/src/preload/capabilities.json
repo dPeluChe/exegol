@@ -329,6 +329,7 @@
     "floating:close",
     "floating:self-close",
     "floating:self-devtools",
+    "floating:page",
     "floating:closed",
     "settings:open",
     "settings:self-close",

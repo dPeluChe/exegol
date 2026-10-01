@@ -16,6 +16,7 @@ import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useStat
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { deleteAgentImperative } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
+import { sizeKey } from "../../lib/browser-viewports";
 import { confirmClosePanes } from "../../lib/close-guard";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
@@ -67,6 +68,7 @@ function floatPane(
       url: pane.url,
       // The floating browser lists the project's agents from it
       projectId: projectId ?? undefined,
+      viewport: pane.viewport ? sizeKey(pane.viewport) : undefined,
     });
   }
 }

@@ -241,7 +241,10 @@ contextBridge.exposeInMainWorld("api", {
       agentId?: string;
       url?: string;
       projectId?: string;
+      viewport?: string;
     }) => safe.invoke("floating:open", config),
+    /** Floating browser: the page it is on now (kept for its pane when the window closes) */
+    reportPage: (url: string) => safe.send("floating:page", url),
     /** Close a specific floating pane window by paneId (from main window) */
     close: (paneId: string) => safe.invoke("floating:close", paneId),
     /** Close the current floating window (called from inside it) */
@@ -249,8 +252,9 @@ contextBridge.exposeInMainWorld("api", {
     /** Toggle devtools in the current floating window */
     selfToggleDevTools: () => safe.send("floating:self-devtools"),
     /** Main window: subscribe to "floating window closed" events */
-    onClosed: (callback: (paneId: string) => void) => {
-      const handler = (_e: Electron.IpcRendererEvent, paneId: string) => callback(paneId);
+    onClosed: (callback: (paneId: string, page?: string) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, paneId: string, page?: string) =>
+        callback(paneId, page);
       safe.on("floating:closed", handler as never);
       return () => {
         safe.off("floating:closed", handler as never);

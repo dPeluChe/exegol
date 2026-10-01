@@ -12,8 +12,9 @@ import {
   Square,
 } from "lucide-react";
 import type { PortInfo } from "../../hooks/use-trpc-scheduler";
-import { VIEWPORTS, type ViewportId } from "../../lib/browser-viewports";
+import type { PageSize } from "../../lib/browser-viewports";
 import { openInBrowser } from "../../lib/open-in-browser";
+import { ViewportSelect } from "./BrowserViewport";
 
 interface BrowserAddressBarProps {
   urlInput: string;
@@ -41,8 +42,8 @@ interface BrowserAddressBarProps {
   deadPort?: number | null;
   /** Stop the process listening on a detected port */
   onStopPort?: (port: PortInfo) => void;
-  viewport?: ViewportId;
-  onViewport?: (viewport: ViewportId) => void;
+  viewport?: PageSize;
+  onViewport?: (viewport: PageSize | undefined) => void;
 }
 
 export function BrowserAddressBar({
@@ -118,24 +119,7 @@ export function BrowserAddressBar({
       >
         <ExternalLink className="h-3 w-3" />
       </button>
-      {onViewport && (
-        <select
-          value={viewport ?? "fit"}
-          onChange={(e) => onViewport(e.target.value as ViewportId)}
-          aria-label="Page size"
-          title="Show the page at a device size (its responsive layout)"
-          className={cn(
-            "h-5 rounded border border-border bg-bg-secondary px-1 text-[10px] outline-none",
-            viewport && viewport !== "fit" ? "text-accent" : "text-text-muted",
-          )}
-        >
-          {VIEWPORTS.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.label}
-            </option>
-          ))}
-        </select>
-      )}
+      {onViewport && <ViewportSelect value={viewport} onChange={onViewport} />}
       {/* T102: Design Mode + QA Mode toggles */}
       <div className="mx-0.5 h-3.5 w-px bg-border" />
       <button

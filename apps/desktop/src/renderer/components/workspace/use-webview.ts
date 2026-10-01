@@ -36,7 +36,6 @@ export function useWebviewControls(webviewRef: WebviewRef) {
 export function useWebviewNavState(
   webviewRef: WebviewRef,
   initialUrl: string,
-  onFinishLoad?: React.MutableRefObject<() => void>,
   /** Every page it lands on (links, redirects, in-page routes), to keep it across remounts */
   onPage?: (url: string) => void,
 ) {
@@ -94,7 +93,6 @@ export function useWebviewNavState(
     };
     const onFinishLoadEvent = () => {
       updateHistory();
-      onFinishLoad?.current();
     };
     const listeners: [string, (ev: Event) => void][] = [
       ["did-navigate", onNavigate],
@@ -108,7 +106,7 @@ export function useWebviewNavState(
     return () => {
       for (const [event, fn] of listeners) webview.removeEventListener(event, fn);
     };
-  }, [queryClient, onFinishLoad, webviewRef, onPageRef]);
+  }, [queryClient, webviewRef, onPageRef]);
 
   return { pageUrl, loading, canGoBack, canGoForward, loadError };
 }

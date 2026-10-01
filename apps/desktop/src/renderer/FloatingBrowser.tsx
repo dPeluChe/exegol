@@ -1,14 +1,16 @@
 import type { Agent } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Bug, Crosshair, RotateCw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bug, Columns3, Crosshair, RotateCw } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { BrowserQaRecordingBar } from "./components/workspace/BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./components/workspace/BrowserReplayResultBar";
+import { DeviceFrame, useAllSizes, ViewportSelect } from "./components/workspace/BrowserViewport";
 import { DesignIssueBubble } from "./components/workspace/DesignIssueBubble";
 import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
 import { isPasteTarget } from "./lib/agent-input";
+import { compareSizes, type PageSize, sizeKey } from "./lib/browser-viewports";
 import { trpcInvoke } from "./lib/trpc-client";
 
 /** Live agents of the project, the targets for design and QA reports. This window has no agent store */
@@ -23,14 +25,26 @@ function useRunningAgentsQuery(projectId: string | undefined) {
   return useMemo(() => (projectAgents ?? []).filter(isPasteTarget), [projectAgents]);
 }
 
-export function FloatingBrowser({ url, projectId }: { url: string; projectId?: string }) {
+export function FloatingBrowser({
+  url,
+  projectId,
+  initialSize,
+}: {
+  url: string;
+  projectId?: string;
+  initialSize?: PageSize;
+}) {
   const webviewRef = useRef<HTMLElement | null>(null);
   const {
     pageUrl: currentUrl,
     loading,
     canGoBack,
     canGoForward,
-  } = useWebviewNavState(webviewRef, url);
+    // Its pane docks back on this page, not the one it floated from
+  } = useWebviewNavState(webviewRef, url, window.api.floating.reportPage);
+  const [size, setSize] = useState(initialSize);
+  // Several sizes side by side: the first leads (toolbar, design, QA), the others follow its page
+  const [compare, setCompare] = useState<PageSize[] | null>(null);
   const { handleBack, handleForward, handleReload } = useWebviewControls(webviewRef);
   const [issueMessage, setIssueMessage] = useState("");
   const runningAgents = useRunningAgentsQuery(projectId);
@@ -69,17 +83,49 @@ export function FloatingBrowser({ url, projectId }: { url: string; projectId?: s
         onReload={handleReload}
         onToggleDesignMode={modes.toggleDesignMode}
         onToggleQaMode={modes.toggleQaMode}
+        size={size}
+        onSize={setSize}
+        comparing={!!compare}
+        onCompare={() => setCompare((c) => (c ? null : compareSizes(size)))}
       />
+      {compare && <SizeChips selected={compare} onChange={setCompare} />}
 
       {/* Webview + floating bubble */}
       <div className="relative flex-1 overflow-hidden bg-white">
-        <webview
-          // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
-          ref={webviewRef as React.Ref<any>}
-          src={url}
-          className="h-full w-full"
-          {...({ allowpopups: "true" } as Record<string, string>)}
-        />
+        {compare ? (
+          <div className="flex h-full items-start gap-3 overflow-auto bg-bg-tertiary p-3">
+            {compare.map((s, i) => (
+              <div key={sizeKey(s)} className="flex shrink-0 flex-col gap-1">
+                <span className="text-[10px] text-text-muted">
+                  {s.label} {s.width}×{s.height}
+                  {i === 0 && " · leads"}
+                </span>
+                <div
+                  className="border border-border bg-white shadow-lg"
+                  style={{ width: s.width, height: s.height }}
+                >
+                  <webview
+                    // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
+                    ref={(i === 0 ? webviewRef : undefined) as React.Ref<any>}
+                    src={i === 0 ? url : currentUrl}
+                    className="h-full w-full"
+                    {...({ allowpopups: "true" } as Record<string, string>)}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <DeviceFrame size={size}>
+            <webview
+              // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
+              ref={webviewRef as React.Ref<any>}
+              src={url}
+              className="h-full w-full"
+              {...({ allowpopups: "true" } as Record<string, string>)}
+            />
+          </DeviceFrame>
+        )}
 
         {modes.capturedElement && (
           <DesignIssueBubble
@@ -131,6 +177,10 @@ function FloatingToolbar({
   onReload,
   onToggleDesignMode,
   onToggleQaMode,
+  size,
+  onSize,
+  comparing,
+  onCompare,
 }: {
   currentUrl: string;
   loading: boolean;
@@ -144,6 +194,10 @@ function FloatingToolbar({
   onReload: () => void;
   onToggleDesignMode: () => void;
   onToggleQaMode: () => void;
+  size: PageSize | undefined;
+  onSize: (size: PageSize | undefined) => void;
+  comparing: boolean;
+  onCompare: () => void;
 }) {
   return (
     <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border/50 bg-bg-secondary/50 px-1.5">
@@ -174,11 +228,25 @@ function FloatingToolbar({
         <RotateCw className="h-3 w-3" />
       </button>
       <div className="mx-0.5 h-3.5 w-px bg-border" />
+      {!comparing && <ViewportSelect value={size} onChange={onSize} />}
+      <button
+        type="button"
+        onClick={onCompare}
+        className={`flex h-5 items-center gap-1 rounded px-1 text-[10px] transition-colors ${
+          comparing ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-white/10"
+        }`}
+        title={comparing ? "Back to one page" : "See the page at several sizes side by side"}
+      >
+        <Columns3 className="h-3 w-3" />
+        Sizes
+      </button>
+      <div className="mx-0.5 h-3.5 w-px bg-border" />
       {/* Design mode */}
       <button
         type="button"
         onClick={onToggleDesignMode}
-        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+        disabled={comparing}
+        className={`flex disabled:opacity-30 h-5 w-5 items-center justify-center rounded transition-colors ${
           designMode
             ? "bg-blue-500/20 text-blue-400"
             : "text-text-muted hover:bg-white/10 hover:text-text-primary"
@@ -191,7 +259,8 @@ function FloatingToolbar({
       <button
         type="button"
         onClick={onToggleQaMode}
-        className={`flex h-5 w-5 items-center justify-center rounded transition-colors ${
+        disabled={comparing}
+        className={`flex disabled:opacity-30 h-5 w-5 items-center justify-center rounded transition-colors ${
           qaMode
             ? "bg-red-500/20 text-red-400"
             : "text-text-muted hover:bg-white/10 hover:text-text-primary"
@@ -209,6 +278,41 @@ function FloatingToolbar({
       <div className="mx-0.5 h-3.5 w-px bg-border" />
       {loading && <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />}
       <div className="flex-1 truncate px-1 text-[9px] text-text-muted">{currentUrl}</div>
+    </div>
+  );
+}
+
+/** Which sizes the comparison shows (at least one) */
+function SizeChips({
+  selected,
+  onChange,
+}: {
+  selected: PageSize[];
+  onChange: (sizes: PageSize[]) => void;
+}) {
+  const all = useAllSizes();
+  const on = new Set(selected.map(sizeKey));
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/50 bg-bg-secondary/50 px-1.5 py-1">
+      {all.map((s) => {
+        const key = sizeKey(s);
+        const active = on.has(key);
+        return (
+          <button
+            key={key}
+            type="button"
+            disabled={active && selected.length === 1}
+            onClick={() =>
+              onChange(active ? selected.filter((x) => sizeKey(x) !== key) : [...selected, s])
+            }
+            className={`rounded border px-1.5 py-0.5 text-[10px] ${
+              active ? "border-accent/50 bg-accent/10 text-accent" : "border-border text-text-muted"
+            }`}
+          >
+            {s.label} {s.width}
+          </button>
+        );
+      })}
     </div>
   );
 }

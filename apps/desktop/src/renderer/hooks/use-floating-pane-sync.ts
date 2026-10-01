@@ -9,8 +9,11 @@ import { useMountEffect } from "./use-mount-effect";
  */
 export function useFloatingPaneSync() {
   useMountEffect(() => {
-    const unsub = window.api.floating.onClosed((paneId) => {
-      useWorkspaceStore.getState().unmarkPaneFloating(paneId);
+    const unsub = window.api.floating.onClosed((paneId, page) => {
+      const ws = useWorkspaceStore.getState();
+      // A floating browser docks back on the page it was on
+      if (page) ws.setPaneUrl(paneId, page);
+      ws.unmarkPaneFloating(paneId);
     });
     return unsub;
   });
