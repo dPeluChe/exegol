@@ -113,6 +113,7 @@ export function SpawnAgentModal({
             <InstallHint provider={form.provider} projectId={projectId} onRecheck={recheck} />
           )}
           <ModelAndName
+            key={form.providerId}
             providerId={form.providerId}
             model={form.model}
             onModel={form.setModel}
