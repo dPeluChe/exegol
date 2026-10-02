@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly
+
 ### Fixed
 - Cmd+R with a browser pane focused reloads that page instead of all of Exegol (in the floating browser, its page); elsewhere it still reloads the window
 - Closing a terminal (pane, tab, Stop, a pipeline step) now also ends what it started: a dev server that ignores the hangup, a job sent to the background or a prompt plugin's worker kept running after the terminal was gone
