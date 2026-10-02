@@ -538,6 +538,32 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T198 — Projects view redesign `added: 2026-10-01`
+**Priority**: P2 | **Effort**: M | **Source**: Antonio, 2026-10-01
+
+The Projects grid (`components/projects/ProjectList.tsx`, "Select a project to start working with
+agents") shows every card with the same generic cube icon and only branch, last opened and agent
+count.
+1. Each card shows the project's own icon and colour (`common/ProjectAvatar.tsx`, as the sidebar).
+2. Livelier cards with what matters at a glance: live agents now (running / waiting for input),
+   not only the total; pinned shortcut number; group.
+3. A way out: Back / Cancel (and Esc) returns to where you were; today the only exit is picking
+   a project.
+
+### T199 — Sidebar project tree: panes as they are, a launcher that fits `added: 2026-10-01`
+**Priority**: P2 | **Effort**: S-M | **Source**: Antonio, 2026-10-01
+
+Seen on a tab opened from a project layout (browser + launcher on top, two shells below).
+1. The tab group in the project's sidebar tree lists only some panes, each by its title: the two
+   shells show their last command (`convex dev`, `dev`) though it has exited, the browser shows
+   its URL, the empty launcher pane is missing. List every pane of the tab with a type icon
+   (terminal, agent's own icon, browser, files, git, launcher) and the shell's state (command
+   running vs. at the prompt).
+2. Drop the FILES section under the project (`layout/ProjectFiles.tsx`): files are only usable
+   in a pane, the sidebar list adds nothing.
+3. The `+` launch menu next to the branch (`agents/AgentLauncher.tsx`) is cut off at the window
+   bottom: two columns of agents, or position it through `useFittedMenu` like other menus.
+
 ### T195 — Distribution: universal build `added: 2026-09-24`
 **Priority**: P2 | **Effort**: M
 
