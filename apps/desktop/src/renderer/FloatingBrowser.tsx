@@ -14,6 +14,7 @@ import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
 import type { PortInfo } from "./hooks/use-trpc-scheduler";
+import { focusAddressBar } from "./lib/address-bar";
 import { isPasteTarget } from "./lib/agent-input";
 import {
   compareSizes,
@@ -67,7 +68,11 @@ export function FloatingBrowser({
   const { handleBack, handleForward, handleReload } = useWebviewControls(webviewRef);
   // Cmd+R reloads the (leading) page, not this window
   useEffect(
-    () => window.api.onMenuAction((action) => action === "reload" && handleReload()),
+    () =>
+      window.api.onMenuAction((action) => {
+        if (action === "reload") handleReload();
+        else if (action === "focus-location") focusAddressBar();
+      }),
     [handleReload],
   );
   const [issueMessage, setIssueMessage] = useState("");

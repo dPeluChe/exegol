@@ -37,6 +37,8 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+T` | `Ctrl+Shift+T` | New workspace tab |
 | `Cmd+W` | `Ctrl+Shift+W` | Close the focused pane (the tab if it is the last) and stop its agent |
 | `Cmd+D` / `Cmd+Shift+D` | `Ctrl+Shift+D` / `Ctrl+Shift+Alt+D` | New pane to the right / below |
+| `Cmd+L` | `Ctrl+Shift+L` | Browser pane (or floating browser): select its address bar |
+| `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere on macOS Cmd+R reloads the window |
 | `Cmd+Enter` | `Ctrl+Enter` | Launch from the spawn dialogs, send a diff comment |
 
 ## Window

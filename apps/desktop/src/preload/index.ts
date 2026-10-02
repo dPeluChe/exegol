@@ -126,17 +126,22 @@ contextBridge.exposeInMainWorld("api", {
   },
   // Menu-driven actions (macOS app menu routes accelerators via IPC so the
   // renderer can close panes/tabs instead of the whole window on Cmd+W).
-  onMenuAction: (callback: (action: "new-tab" | "close-pane" | "reload") => void) => {
+  onMenuAction: (
+    callback: (action: "new-tab" | "close-pane" | "reload" | "focus-location") => void,
+  ) => {
     const onNewTab = () => callback("new-tab");
     const onClosePane = () => callback("close-pane");
     const onReload = () => callback("reload");
+    const onFocusLocation = () => callback("focus-location");
     safe.on("menu:new-tab", onNewTab as never);
     safe.on("menu:close-pane", onClosePane as never);
     safe.on("menu:reload", onReload as never);
+    safe.on("menu:focus-location", onFocusLocation as never);
     return () => {
       safe.off("menu:new-tab", onNewTab as never);
       safe.off("menu:close-pane", onClosePane as never);
       safe.off("menu:reload", onReload as never);
+      safe.off("menu:focus-location", onFocusLocation as never);
     };
   },
   // Push event subscriptions (T17: push-first status updates)

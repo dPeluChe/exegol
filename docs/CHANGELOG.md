@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows
+
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly
 
 ### Fixed

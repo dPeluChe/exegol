@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { focusAddressBar } from "../lib/address-bar";
 import { confirmClosePanes } from "../lib/close-guard";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { groupForDigit } from "../lib/live-tabs";
@@ -40,6 +41,18 @@ export function useHotkeys() {
       if (key === "t") {
         e.preventDefault();
         useWorkspaceStore.getState().addTab();
+        return;
+      }
+
+      // Cmd+L / Cmd+R on a focused browser pane: its address bar / its page (macOS gets them
+      // through the app menu, which also fires while the page itself has the focus)
+      if (key === "l" && focusBrowserAddress()) {
+        e.preventDefault();
+        return;
+      }
+      if (key === "r" && focusedBrowserPaneId()) {
+        e.preventDefault();
+        reloadFocusedBrowserOrWindow();
         return;
       }
 
@@ -187,6 +200,8 @@ export function useHotkeys() {
         cleanupAndCloseFocusedPane();
       } else if (action === "reload") {
         reloadFocusedBrowserOrWindow();
+      } else if (action === "focus-location") {
+        focusBrowserAddress();
       }
     });
 
@@ -197,12 +212,26 @@ export function useHotkeys() {
   }, [toggleSidebar, setActiveView]);
 }
 
-/** Cmd+R: the page of the browser pane on screen with focus, else the window as before */
-function reloadFocusedBrowserOrWindow(): void {
+/** The browser pane on screen with focus, if that is what has it */
+function focusedBrowserPaneId(): string | null {
   const { focusedPaneId } = useWorkspaceStore.getState();
   const pane = focusedPaneId ? getProjectState().panes[focusedPaneId] : undefined;
-  if (useAppStore.getState().activeView === "workspace" && pane?.type === "browser") {
-    window.dispatchEvent(new CustomEvent("exegol:reload-pane", { detail: { paneId: pane.id } }));
+  return useAppStore.getState().activeView === "workspace" && pane?.type === "browser"
+    ? pane.id
+    : null;
+}
+
+function focusBrowserAddress(): boolean {
+  const paneId = focusedBrowserPaneId();
+  const root = paneId && document.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`);
+  return !!root && focusAddressBar(root);
+}
+
+/** Cmd+R: the page of the browser pane on screen with focus, else the window as before */
+function reloadFocusedBrowserOrWindow(): void {
+  const paneId = focusedBrowserPaneId();
+  if (paneId) {
+    window.dispatchEvent(new CustomEvent("exegol:reload-pane", { detail: { paneId } }));
     return;
   }
   window.location.reload();
