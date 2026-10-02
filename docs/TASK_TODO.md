@@ -160,6 +160,9 @@ dependency/library audit
 - WebGL back after a terminal font change
 - Projects height handle in the sidebar
 - What's new dialog after a real update
+- Projects view (All Projects, sidebar +, Cmd+K Go to Projects): each card's icon and colour,
+  running / waiting counts move with the agents, Cmd+n badge, group chip; Back and Esc return to
+  the project or Dashboard it was opened from (Esc in the Add Project dialog only closes it)
 - Files peek: Esc order (unsaved-edit prompt before closing)
 - Dashboard message thread on the agent card
 
@@ -539,18 +542,6 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
 
 ---
-
-### T198 — Projects view redesign `added: 2026-10-01`
-**Priority**: P2 | **Effort**: M | **Source**: Antonio, 2026-10-01
-
-The Projects grid (`components/projects/ProjectList.tsx`, "Select a project to start working with
-agents") shows every card with the same generic cube icon and only branch, last opened and agent
-count.
-1. Each card shows the project's own icon and colour (`common/ProjectAvatar.tsx`, as the sidebar).
-2. Livelier cards with what matters at a glance: live agents now (running / waiting for input),
-   not only the total; pinned shortcut number; group.
-3. A way out: Back / Cancel (and Esc) returns to where you were; today the only exit is picking
-   a project.
 
 ### T195 — Distribution: universal build `added: 2026-09-24`
 **Priority**: P2 | **Effort**: M

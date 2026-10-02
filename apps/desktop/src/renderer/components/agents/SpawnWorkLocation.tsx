@@ -3,15 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Copy, GitBranch, Layers } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
+import { tailPath } from "../../lib/format";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { SpawnChip } from "./SpawnOptions";
-
-/** Last few segments — enough to recognise the repo without the modal wrapping. */
-function tailPath(path: string | undefined, segments = 3): string {
-  if (!path) return "…";
-  const parts = path.split("/").filter(Boolean);
-  return parts.length <= segments ? path : `…/${parts.slice(-segments).join("/")}`;
-}
 
 const PLACES = [
   { isolated: false, label: "Here", hint: "The project checkout, shared with others" },

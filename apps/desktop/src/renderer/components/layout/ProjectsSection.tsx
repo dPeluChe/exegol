@@ -18,10 +18,6 @@ import { GROUP_COLORS } from "./GroupIconColorPicker";
 import { ProjectGroupHeader } from "./ProjectGroupHeader";
 import { ProjectItem } from "./ProjectItem";
 
-interface ProjectsSectionProps {
-  onAddProject: () => void;
-}
-
 /** Reorder a subset of `all` in-place at their original slots. */
 function reorderWithinSection(
   all: Project[],
@@ -116,7 +112,7 @@ function ProjectListSection({
   );
 }
 
-export function ProjectsSection({ onAddProject: _onAddProject }: ProjectsSectionProps) {
+export function ProjectsSection() {
   const { data: projects } = useProjects();
   const { data: groups } = useProjectGroups();
   const activeProjectId = useAppStore((s) => s.activeProjectId);

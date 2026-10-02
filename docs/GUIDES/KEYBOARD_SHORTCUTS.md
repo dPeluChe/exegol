@@ -46,6 +46,7 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+,` | `Ctrl+Shift+,` | Settings window |
 | `Cmd+/` | `Ctrl+Shift+/` | Shortcuts overlay |
 | `Esc`, `Cmd+W` | `Esc`, `Ctrl+Shift+W` | Close the Settings or a floating window (a focused terminal keeps Esc) |
+| `Esc` | same | Leave the Projects view, back to the project or Dashboard it was opened from |
 | `Cmd+Shift+0` | none | Reset zoom (`Cmd+0` is a live tab slot) |
 | `Cmd+Shift+E` | `Ctrl+Shift+E` | Bring Exegol to the front from any app (global, configurable in Settings) |
 

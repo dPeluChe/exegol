@@ -41,3 +41,10 @@ export function formatDuration(from: number | null, to: number | null): string |
   if (mins < 60) return `${mins}m`;
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
+
+/** Last few segments: enough to recognise the repo without wrapping. */
+export function tailPath(path: string | undefined, segments = 3): string {
+  if (!path) return "…";
+  const parts = path.split("/").filter(Boolean);
+  return parts.length <= segments ? path : `…/${parts.slice(-segments).join("/")}`;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { migrateAppStore } from "./app";
+import { migrateAppStore, useAppStore } from "./app";
 
 describe("migrateAppStore", () => {
   it("v2 → v3: someone who finished onboarding does not get the welcome tour", () => {
@@ -19,5 +19,29 @@ describe("migrateAppStore", () => {
     expect(migrateAppStore({ activeView: "settings", activeProjectId: null }, 1).activeView).toBe(
       "projects",
     );
+  });
+});
+
+describe("Projects view return", () => {
+  it("opens over the workspace, keeping the project, and Back returns to that view", () => {
+    useAppStore.setState({ activeView: "dashboard", activeProjectId: "p1", projectsFrom: null });
+    useAppStore.getState().openProjects();
+    useAppStore.getState().openProjects();
+    expect(useAppStore.getState()).toMatchObject({
+      activeView: "projects",
+      activeProjectId: "p1",
+      projectsFrom: "dashboard",
+    });
+    useAppStore.getState().closeProjects();
+    expect(useAppStore.getState()).toMatchObject({ activeView: "dashboard", projectsFrom: null });
+  });
+
+  it("after a reload Back goes to the project's workspace; with no project it stays", () => {
+    useAppStore.setState({ activeView: "projects", activeProjectId: "p2", projectsFrom: null });
+    useAppStore.getState().closeProjects();
+    expect(useAppStore.getState().activeView).toBe("workspace");
+    useAppStore.setState({ activeView: "projects", activeProjectId: null, projectsFrom: null });
+    useAppStore.getState().closeProjects();
+    expect(useAppStore.getState().activeView).toBe("projects");
   });
 });

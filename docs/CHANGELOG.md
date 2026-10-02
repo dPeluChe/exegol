@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- The Projects view shows each project with its own icon and colour, what is live now (agents working, waiting for you, idle), its shortcut number and its group; the path is shortened, the full one is in the tooltip
+- The Projects view opens over your workspace and has a Back button (and Esc) that returns to the project or Dashboard you opened it from; terminals are not reloaded
 - Sidebar project tree: each tab lists every pane it holds with an icon (the launcher too); a shell is named by where it runs, says what it runs right now and pulses only then, instead of showing the command it was opened with long after it exited. The FILES list under the project is gone (files open in a Files pane)
 - The + launch menu next to the branch lists agents in two columns and stays inside the window
 

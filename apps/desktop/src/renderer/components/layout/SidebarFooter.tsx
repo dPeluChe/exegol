@@ -102,7 +102,7 @@ export function SidebarFooter() {
       <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
         <button
           type="button"
-          onClick={() => useAppStore.getState().setActiveProject(null)}
+          onClick={() => useAppStore.getState().openProjects()}
           className="flex items-center gap-1.5 text-[11px] text-text-muted transition-colors hover:text-text-secondary"
         >
           <LayoutGrid className="h-3 w-3" />

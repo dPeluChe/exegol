@@ -65,7 +65,7 @@ function useCommands(close: () => void): Command[] {
         category: "navigation",
         icon: Cuboid,
         shortcut: "⌘⇧P",
-        action: run(() => useAppStore.getState().setActiveProject(null)),
+        action: run(() => useAppStore.getState().openProjects()),
       },
       {
         id: "nav:settings",

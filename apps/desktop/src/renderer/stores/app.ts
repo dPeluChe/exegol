@@ -14,6 +14,12 @@ interface AppStore {
   activeProjectId: string | null;
   setActiveProject: (id: string | null) => void;
 
+  /** The view Projects was opened over (it keeps the project and the workspace mounted): Back /
+   *  Esc returns there; null after a reload, then Back returns to the workspace of the project */
+  projectsFrom: Exclude<ActiveView, "projects"> | null;
+  openProjects: () => void;
+  closeProjects: () => void;
+
   /** Sidebar collapse state */
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
@@ -66,13 +72,25 @@ export const useAppStore = create<AppStore>()(
     (set) => ({
       activeView: "projects",
       setActiveView: (view) => set({ activeView: view }),
-      openDashboard: () => set({ activeView: "dashboard" }),
+      openDashboard: () => set({ activeView: "dashboard", projectsFrom: null }),
 
       activeProjectId: null,
       setActiveProject: (id) =>
         set({
           activeProjectId: id,
           activeView: id ? "workspace" : "projects",
+          projectsFrom: null,
+        }),
+
+      projectsFrom: null,
+      openProjects: () =>
+        set((s) =>
+          s.activeView === "projects" ? {} : { activeView: "projects", projectsFrom: s.activeView },
+        ),
+      closeProjects: () =>
+        set((s) => {
+          const to = s.projectsFrom ?? (s.activeProjectId ? "workspace" : null);
+          return to ? { activeView: to, projectsFrom: null } : {};
         }),
 
       sidebarCollapsed: false,
