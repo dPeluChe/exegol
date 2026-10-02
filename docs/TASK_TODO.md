@@ -108,6 +108,8 @@ dependency/library audit
 - Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- Sidebar tree: a layout tab lists browser, launcher and both shells; a shell running `bun dev`
+  shows it and pulses, at the prompt it is still; the + menu fits near the bottom
 - Floating browser: type a URL in its address bar, DevTools, open in browser, Sizes still works
 - Browser sizes: Add a size, remove it; float at a size; Sizes in the floating window (the
   others follow the first's page; design/QA off while comparing); dock back on the floated page;
@@ -549,20 +551,6 @@ count.
    not only the total; pinned shortcut number; group.
 3. A way out: Back / Cancel (and Esc) returns to where you were; today the only exit is picking
    a project.
-
-### T199 — Sidebar project tree: panes as they are, a launcher that fits `added: 2026-10-01`
-**Priority**: P2 | **Effort**: S-M | **Source**: Antonio, 2026-10-01
-
-Seen on a tab opened from a project layout (browser + launcher on top, two shells below).
-1. The tab group in the project's sidebar tree lists only some panes, each by its title: the two
-   shells show their last command (`convex dev`, `dev`) though it has exited, the browser shows
-   its URL, the empty launcher pane is missing. List every pane of the tab with a type icon
-   (terminal, agent's own icon, browser, files, git, launcher) and the shell's state (command
-   running vs. at the prompt).
-2. Drop the FILES section under the project (`layout/ProjectFiles.tsx`): files are only usable
-   in a pane, the sidebar list adds nothing.
-3. The `+` launch menu next to the branch (`agents/AgentLauncher.tsx`) is cut off at the window
-   bottom: two columns of agents, or position it through `useFittedMenu` like other menus.
 
 ### T195 — Distribution: universal build `added: 2026-09-24`
 **Priority**: P2 | **Effort**: M

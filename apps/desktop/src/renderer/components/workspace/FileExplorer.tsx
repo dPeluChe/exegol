@@ -190,7 +190,7 @@ interface FileExplorerProps {
   rootPath: string;
   /** File to show when it mounts */
   initialFile?: string;
-  /** Set (the sidebar): a click hands the file over instead of opening the inline viewer */
+  /** Set (a peek): a click hands the file over instead of opening the inline viewer */
   onOpenFile?: (path: string) => void;
   /** Enables the search box (project root + subrepos) */
   projectId?: string;

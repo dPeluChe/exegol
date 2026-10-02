@@ -19,7 +19,7 @@ export async function spawnShellIntoPane(
     taskDescription,
     ...(cwd ? { cwdOverride: cwd } : {}),
   });
-  useAgentStore.getState().addAgent(toAgentState(agent, { activityLevel: "busy" }));
+  useAgentStore.getState().addAgent(toAgentState(agent));
   useTerminalStore.getState().createTerminal(agent.id);
   useWorkspaceStore.getState().updatePane(paneId, { type: "terminal", agentId: agent.id });
   return agent.id;
@@ -31,9 +31,8 @@ export async function runCommandInNewTab(projectId: string, cmd: string): Promis
   const agent = await trpcMutate<Agent>("agents.spawn", {
     projectId,
     cliType: "shell",
-    taskDescription: `! ${cmd}`,
   });
-  useAgentStore.getState().addAgent(toAgentState(agent, { activityLevel: "busy" }));
+  useAgentStore.getState().addAgent(toAgentState(agent));
   useTerminalStore.getState().createTerminal(agent.id);
   const store = useWorkspaceStore.getState();
   const tabId = store.addTab(`! ${cmd.slice(0, 30)}`);

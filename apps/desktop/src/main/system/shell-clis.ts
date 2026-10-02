@@ -9,16 +9,41 @@ const execFileAsync = promisify(execFile);
 interface ProcRow {
   pid: number;
   ppid: number;
+  /** Process group, and the foreground group of its terminal (0 without one) */
+  pgid?: number;
+  tpgid?: number;
   args: string;
 }
 
 /** Interpreters whose script (the next token) names the CLI: `node .../codex` */
 const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3"]);
 
+const base = (t: string) => t.split("/").pop() ?? "";
+
+/** The command line from the program on: `node /x/codex --y` → [`codex`, `--y`] */
+function programTokens(args: string): string[] {
+  const tokens = args.trim().split(/\s+/);
+  const rest = RUNTIMES.has(base(tokens[0] ?? "")) ? tokens.slice(1) : tokens;
+  return [base(rest[0] ?? ""), ...rest.slice(1)];
+}
+
 function cliNames(args: string): string[] {
-  const [first = "", second = ""] = args.trim().split(/\s+/);
-  const base = (t: string) => t.split("/").pop() ?? "";
-  return RUNTIMES.has(base(first)) ? [base(second)] : [base(first)];
+  return programTokens(args).slice(0, 1);
+}
+
+/** For each shell, the command its terminal runs in the foreground; null at the prompt */
+export function foregroundCommands(
+  shells: { id: string; pid: number }[],
+  rows: ProcRow[],
+): Record<string, string | null> {
+  const byPid = new Map(rows.map((r) => [r.pid, r]));
+  const out: Record<string, string | null> = {};
+  for (const shell of shells) {
+    const row = byPid.get(shell.pid);
+    const leader = row?.tpgid && row.tpgid !== row.pgid ? byPid.get(row.tpgid) : undefined;
+    out[shell.id] = leader ? programTokens(leader.args).join(" ").slice(0, 60) : null;
+  }
+  return out;
 }
 
 /** For each shell, the first CLI (by provider command) running anywhere below it */
@@ -30,7 +55,11 @@ export function matchShellClis(
   argsOut?: Record<string, string>,
 ): Record<string, string> {
   const children = new Map<number, ProcRow[]>();
-  for (const r of rows) children.set(r.ppid, [...(children.get(r.ppid) ?? []), r]);
+  for (const r of rows) {
+    const siblings = children.get(r.ppid);
+    if (siblings) siblings.push(r);
+    else children.set(r.ppid, [r]);
+  }
   const found: Record<string, string> = {};
   for (const shell of shells) {
     let level = children.get(shell.pid) ?? [];
@@ -72,14 +101,22 @@ export function launchFlagsFromArgs(
 
 /** Every process on the machine, one `ps` for all the terminals watched */
 export async function readProcessTable(): Promise<ProcRow[]> {
-  const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,args="], {
+  const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,pgid=,tpgid=,args="], {
     timeout: 5000,
     maxBuffer: 8 * 1024 * 1024,
   });
   const rows: ProcRow[] = [];
   for (const line of stdout.split("\n")) {
-    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
-    if (m) rows.push({ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] ?? "" });
+    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(.*)$/);
+    if (m) {
+      rows.push({
+        pid: Number(m[1]),
+        ppid: Number(m[2]),
+        pgid: Number(m[3]),
+        tpgid: Number(m[4]),
+        args: m[5] ?? "",
+      });
+    }
   }
   return rows;
 }
