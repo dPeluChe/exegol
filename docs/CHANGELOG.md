@@ -9,6 +9,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
+
+### Changed
+- CLI updates name every session they restart, with its project, in the notice; Restart to update and Update in a terminal's toolbar ask whether to restart only that session or all of the CLI's sessions, and list the others
+
 ### Added
 - Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows
 
