@@ -8,6 +8,7 @@ import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useCliRestartStore } from "../../stores/cli-restarts";
 import { AgentIcon } from "../common/AgentIcon";
+import { useSessionWhere } from "../terminal/CliUpdateControl";
 
 const DISMISSED_KEY = "exegol.cliUpdates.dismissed";
 
@@ -43,10 +44,11 @@ export function cliUpdateRows(
     .filter((r) => (r.status.updateAvailable && r.status.updateCommand) || r.behind.length > 0);
 }
 
-/** The versions this notice was dismissed for: it comes back only for newer ones */
-const rowsKey = (rows: Row[]) =>
+/** The versions this notice was dismissed for: it comes back only for newer ones. Not the
+ *  session count: restarting one session from its pane changed it and reopened the notice */
+export const rowsKey = (rows: Pick<Row, "status">[]) =>
   rows
-    .map((r) => `${r.status.cliType}@${r.status.latest ?? r.status.installed}:${r.behind.length}`)
+    .map((r) => `${r.status.cliType}@${r.status.latest ?? r.status.installed}`)
     .sort()
     .join(",");
 
@@ -66,6 +68,7 @@ export function CliUpdatesNotice() {
   const agents = useAgentStore((s) => s.agents);
   const providers = useEnabledProviders();
   const nameOf = (cliType: string) => providers.find((p) => p.id === cliType)?.name ?? cliType;
+  const where = useSessionWhere();
   const rows = cliUpdateRows(statuses, Object.values(agents));
   const key = rowsKey(rows);
   const [closedKey, setClosedKey] = useState<string | null>(readDismissed);
@@ -118,18 +121,31 @@ export function CliUpdatesNotice() {
           </div>
           <ul className="space-y-2">
             {rows.map((r) => (
-              <li key={r.status.cliType} className="flex items-center gap-2 text-[11px]">
-                <AgentIcon provider={r.status.cliType} size={16} />
-                <span className="font-medium text-text-primary">{nameOf(r.status.cliType)}</span>
-                <span className="text-text-muted">
-                  {r.status.updateAvailable
-                    ? `${r.status.installed ?? "?"} → ${r.status.latest}`
-                    : `${r.status.installed} installed`}
-                  {" · "}
-                  {r.behind.length > 0
-                    ? `${r.behind.length} session${r.behind.length > 1 ? "s" : ""} on an older version`
-                    : `${r.sessions.length} session${r.sessions.length > 1 ? "s" : ""}`}
-                </span>
+              <li key={r.status.cliType} className="text-[11px]">
+                <div className="flex items-center gap-2">
+                  <AgentIcon provider={r.status.cliType} size={16} />
+                  <span className="font-medium text-text-primary">{nameOf(r.status.cliType)}</span>
+                  <span className="text-text-muted">
+                    {r.status.updateAvailable
+                      ? `${r.status.installed ?? "?"} → ${r.status.latest}`
+                      : `${r.status.installed} installed`}
+                    {" · "}
+                    {r.behind.length > 0
+                      ? `${r.behind.length} session${r.behind.length > 1 ? "s" : ""} on an older version`
+                      : `${r.sessions.length} session${r.sessions.length > 1 ? "s" : ""}`}
+                  </span>
+                </div>
+                {/* Which ones, and in which project, so you know what restarts */}
+                <ul className="mt-0.5 max-h-28 space-y-px overflow-y-auto pl-6 text-[10px] text-text-muted">
+                  {(r.behind.length > 0 ? r.behind : r.sessions).map((id) => {
+                    const a = agents[id];
+                    return a ? (
+                      <li key={id} className="truncate">
+                        {where(a)}
+                      </li>
+                    ) : null;
+                  })}
+                </ul>
               </li>
             ))}
           </ul>

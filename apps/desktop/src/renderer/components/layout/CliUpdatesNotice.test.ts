@@ -9,7 +9,8 @@ vi.mock("../../hooks/use-cli-updates", async () => {
     useCliUpdates: vi.fn(),
   };
 });
-const { cliUpdateRows } = await import("./CliUpdatesNotice");
+vi.mock("../terminal/CliUpdateControl", () => ({ useSessionWhere: vi.fn() }));
+const { cliUpdateRows, rowsKey } = await import("./CliUpdatesNotice");
 
 const status = (cliType: string, installed: string, latest: string | null, cmd: string | null) => ({
   cliType,
@@ -43,5 +44,10 @@ describe("cliUpdateRows", () => {
   it("an update without a command to run is not offered", () => {
     const rows = cliUpdateRows(new Map([["agy", status("agy", "1.0", "2.0", null)]]), []);
     expect(rows).toEqual([]);
+  });
+
+  it("dismissal is per version: restarting sessions one by one does not reopen it", () => {
+    const s = status("claude-code", "2.1.290", "2.1.290", "claude update");
+    expect(rowsKey([{ status: s }])).toBe("claude-code@2.1.290");
   });
 });
