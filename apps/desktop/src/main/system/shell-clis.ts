@@ -12,6 +12,8 @@ export interface ProcRow {
   /** Process group, and the foreground group of its terminal (0 without one) */
   pgid?: number;
   tpgid?: number;
+  /** Controlling terminal (`ttys003`), "??" without one */
+  tty?: string;
   args: string;
 }
 
@@ -105,22 +107,33 @@ export function launchFlagsFromArgs(
   return { yolo: !!yoloFlag && tokens.includes(yoloFlag), model };
 }
 
-/** Every process on the machine, one `ps` for all the terminals watched */
-export async function readProcessTable(): Promise<ProcRow[]> {
-  const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,pgid=,tpgid=,args="], {
+let inFlight: Promise<ProcRow[]> | null = null;
+
+/** Every process on the machine, one `ps` for all the terminals watched. Callers at the same
+ *  time (a tab closing several terminals, the promotion poll) share one read */
+export function readProcessTable(): Promise<ProcRow[]> {
+  inFlight ??= readTable().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
+
+async function readTable(): Promise<ProcRow[]> {
+  const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,pgid=,tpgid=,tty=,args="], {
     timeout: 5000,
     maxBuffer: 8 * 1024 * 1024,
   });
   const rows: ProcRow[] = [];
   for (const line of stdout.split("\n")) {
-    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(.*)$/);
+    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(\S+)\s+(.*)$/);
     if (m) {
       rows.push({
         pid: Number(m[1]),
         ppid: Number(m[2]),
         pgid: Number(m[3]),
         tpgid: Number(m[4]),
-        args: m[5] ?? "",
+        tty: m[5],
+        args: m[6] ?? "",
       });
     }
   }

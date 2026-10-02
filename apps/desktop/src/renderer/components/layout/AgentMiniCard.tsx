@@ -1,9 +1,9 @@
 import { cn } from "@exegol/ui";
 import { BellOff, Moon, Pause, Trash2 } from "lucide-react";
-import { useCallback } from "react";
 import { useContextMenu } from "../../hooks/use-context-menu";
-import { useDeleteAgent } from "../../hooks/use-delete-agent";
+import { deleteAgent } from "../../hooks/use-delete-agent";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
+import { sessionName } from "../../lib/agent-label";
 import { formatTimeAgo } from "../../lib/format";
 import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { setAgentMuted, suspendAgent } from "../../lib/session-quiet";
@@ -22,35 +22,20 @@ export const VISIBLE_STATUSES = new Set([
   "crashed",
 ]);
 
-// The alias is the session's name; a quick launch's task is only the CLI's name
-function miniCardName(agent: AgentState): string {
-  return (
-    agent.alias ??
-    (agent.taskDescription && agent.taskDescription !== agent.cliType
-      ? agent.taskDescription.slice(0, 40)
-      : agent.cliType)
-  );
-}
-
 export function AgentMiniCard({ agent }: { agent: AgentState }) {
   const isFocused = useAgentStore((s) => s.focusedAgentId === agent.id);
   const isUnread = useAgentStore((s) => {
     const item = s.attentionItems[agent.id];
     return !!item && !item.read;
   });
-  const deleteAgent = useDeleteAgent();
   const isActive = ["running", "spawning", "waiting_input"].includes(agent.status);
   const { contextMenu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
   const menuStyle = useFittedMenu(menuRef, contextMenu);
 
-  const handleRemove = useCallback(async () => {
+  const handleRemove = () => {
     closeContextMenu();
-    try {
-      await deleteAgent(agent.id);
-    } catch (err) {
-      console.error("[AgentMiniCard] Failed to delete agent:", err);
-    }
-  }, [agent.id, deleteAgent, closeContextMenu]);
+    deleteAgent(agent.id);
+  };
 
   // Its own pane, or a new tab: never over whatever the active tab shows
   const handleNavigate = () => jumpToAgent(agent.id, agent.projectId);
@@ -112,7 +97,7 @@ function AgentMiniCardDetails({ agent, isActive }: { agent: AgentState; isActive
             agent.activityLevel === "idle" && isActive && "opacity-60",
           )}
         />
-        <span className="flex-1 truncate text-[10px] font-medium">{miniCardName(agent)}</span>
+        <span className="flex-1 truncate text-[10px] font-medium">{sessionName(agent)}</span>
         <QuietBadge agent={agent} />
         {agent.tokenUsage.cost > 0 && (
           <span className="shrink-0 text-[8px] tabular-nums text-accent">

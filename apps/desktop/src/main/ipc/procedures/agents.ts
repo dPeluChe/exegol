@@ -7,7 +7,7 @@ import { cliSetupFor } from "../../agents/cli-catalog";
 import { takeLostOnRestart, whenRecovered } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
-import { coreRust, resolveCommand } from "../../agents/spawn-env";
+import { broadcastAgentStatus, coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
 import { resolveTaskLabel } from "../../agents/task-label";
 import {
@@ -394,6 +394,15 @@ export const agentRouter = router({
     const agent = getAgent(ctx.db, input.id);
     if (agent?.cliType === "shell") {
       ctx.db.prepare("DELETE FROM agents WHERE id = ?").run(input.id);
+      // Every window drops it, not only the one that closed it
+      broadcastAgentStatus({
+        agentId: agent.id,
+        projectId: agent.projectId,
+        status: "stopped",
+        currentStep: null,
+        cliType: "shell",
+        timestamp: Date.now(),
+      });
       return { success: true, archived: false };
     }
     archiveAgent(ctx.db, input.id);

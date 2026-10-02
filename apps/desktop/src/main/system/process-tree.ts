@@ -12,6 +12,20 @@ export function descendantsOf(rootPid: number, rows: ProcRow[]): ProcRow[] {
   return out;
 }
 
+/**
+ * What a terminal runs besides its shell: everything on the shell's tty (foreground and
+ * background jobs, prompt workers reparented to launchd) and everything below the shell that
+ * left the tty. A real daemon (double fork + setsid) asked to outlive it and is not here.
+ */
+export function terminalProcesses(shellPid: number, rows: ProcRow[]): ProcRow[] {
+  const tty = rows.find((r) => r.pid === shellPid)?.tty;
+  // macOS `ttys003`, Linux `pts/3`; no terminal is "??" / "?"
+  const onTty = tty && !/^[?-]+$/.test(tty) ? rows.filter((r) => r.tty === tty) : [];
+  const byPid = new Map([...onTty, ...descendantsOf(shellPid, rows)].map((r) => [r.pid, r]));
+  byPid.delete(shellPid);
+  return [...byPid.values()];
+}
+
 const KILL_AFTER_MS = 2_000;
 
 function signal(pid: number, sig: NodeJS.Signals): void {
@@ -22,22 +36,13 @@ function signal(pid: number, sig: NodeJS.Signals): void {
   }
 }
 
-/**
- * The processes a terminal started, read while its shell still holds them. Closing the terminal
- * hangs up its shell, but a dev server that ignores SIGHUP or a job sent to the background
- * outlives it, orphaned: these get SIGTERM, then SIGKILL if still the same process 2s later.
- */
-export async function processesBelow(rootPid: number): Promise<{ terminate: () => void } | null> {
-  const tree = descendantsOf(rootPid, await readProcessTable());
-  if (tree.length === 0) return null;
-  return {
-    terminate: () => {
-      for (const p of tree) signal(p.pid, "SIGTERM");
-      setTimeout(async () => {
-        const now = new Map((await readProcessTable()).map((r) => [r.pid, r.args]));
-        // Same pid AND command line: never a pid recycled in between
-        for (const p of tree) if (now.get(p.pid) === p.args) signal(p.pid, "SIGKILL");
-      }, KILL_AFTER_MS).unref();
-    },
-  };
+/** SIGTERM, then SIGKILL to the ones still the same process (pid AND command line, never a pid
+ *  recycled in between) 2s later. The shell's hangup alone left SIGHUP-proof servers running */
+export function terminateAll(rows: ProcRow[]): void {
+  if (rows.length === 0) return;
+  for (const p of rows) signal(p.pid, "SIGTERM");
+  setTimeout(async () => {
+    const now = new Map((await readProcessTable()).map((r) => [r.pid, r.args]));
+    for (const p of rows) if (now.get(p.pid) === p.args) signal(p.pid, "SIGKILL");
+  }, KILL_AFTER_MS).unref();
 }

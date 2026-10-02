@@ -10,7 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- Closing a terminal (pane, tab, Stop) now also ends what it started: a dev server that ignores the hangup or a job sent to the background kept running after the terminal was gone
+- Closing a terminal (pane, tab, Stop, a pipeline step) now also ends what it started: a dev server that ignores the hangup, a job sent to the background or a prompt plugin's worker kept running after the terminal was gone
 - A terminal closed in a way its window did not see (its session deleted elsewhere) stayed in the sidebar as running and left a tab that loaded nothing; every window now hears that it ended. A finished shell also closes its tab when nothing else is in it, in whichever project it is, not only the one on screen
 
 ### Changed

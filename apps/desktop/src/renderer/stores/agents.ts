@@ -66,7 +66,6 @@ export function startAgentStatusPush(): void {
     if (existing) {
       const isFinalStatus = ["completed", "failed", "stopped", "crashed"].includes(event.status);
 
-      // A finished shell leaves the sidebar, and its panes in whichever project they are
       if (isFinalStatus && existing.cliType === "shell") {
         store.removeAgent(event.agentId);
         useWorkspaceStore.getState().releaseAgent(event.agentId);

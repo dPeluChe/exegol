@@ -1,6 +1,8 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { terminalProcesses, terminateAll } from "../system/process-tree";
+import { readProcessTable } from "../system/shell-clis";
 import { HeadlessEmulator } from "./headless-emulator";
 import {
   encodeFrame,
@@ -313,9 +315,21 @@ export class PtyHost {
     }
   }
 
+  /** Ends the session and what it started (`terminalProcesses`), read while the shell still holds
+   *  it: once the shell dies its children are reparented and its tty released */
   kill(id: string): void {
     const s = this.sessions.get(id);
     if (!s?.alive) return;
+    const read = s.pid ? readProcessTable().catch(() => []) : Promise.resolve([]);
+    void read.then((rows) => {
+      const started = s.pid ? terminalProcesses(s.pid, rows) : [];
+      this.killPty(s);
+      terminateAll(started);
+    });
+  }
+
+  private killPty(s: Session): void {
+    const id = s.id;
     if (s.mode === "sidecar") {
       this.sidecarClient?.kill(id).catch(() => {});
       return;

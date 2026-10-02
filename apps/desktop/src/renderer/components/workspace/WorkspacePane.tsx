@@ -14,7 +14,7 @@ import {
 import { nanoid } from "nanoid";
 import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { deleteAgentImperative } from "../../hooks/use-delete-agent";
+import { deleteAgent } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
 import { sizeKey } from "../../lib/browser-viewports";
 import { confirmClosePanes } from "../../lib/close-guard";
@@ -656,7 +656,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         onClose={async () => {
           if (!(await confirmClosePanes([pane], useAgentStore.getState().agents))) return;
           if (pane.type === "terminal" && pane.agentId) {
-            deleteAgentImperative(pane.agentId);
+            deleteAgent(pane.agentId);
           } else {
             useWorkspaceStore.getState().removePane(tabId, paneId);
           }

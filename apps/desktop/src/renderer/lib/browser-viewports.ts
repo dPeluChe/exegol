@@ -43,3 +43,14 @@ export function compareSizes(current: PageSize | undefined): PageSize[] {
   if (!current) return defaults;
   return [current, ...defaults.filter((s) => sizeKey(s) !== sizeKey(current))];
 }
+
+/** A page as a short label: host and path (`localhost:8007/app`), "" without a URL */
+export function pageLabel(url: string | undefined): string {
+  if (!url) return "";
+  try {
+    const u = new URL(url);
+    return `${u.host}${u.pathname === "/" ? "" : u.pathname}`;
+  } catch {
+    return url;
+  }
+}
