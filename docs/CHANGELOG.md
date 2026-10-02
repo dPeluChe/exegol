@@ -18,7 +18,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - A shell that asks for the terminal's device attributes while the app is closed (fish does) gets an answer instead of waiting ~10s
 - Terminal output with accents, emoji or other non-ASCII text no longer trips the output buffer limit early, and when the app reads output slower than the terminals write it, the terminals wait instead of the terminal host growing memory without bound
 - Large messages to the terminal host are read in linear time and with a size limit
-- Starting the app never stops an unrelated process that happens to reuse the old terminal host's process id
+- Starting the app never stops an unrelated process that happens to reuse the old terminal host's process id: the app no longer kills the terminal host by process id at all; a replaced terminal host exits by itself
 
 ### Changed
 - Floating browser: same address bar as the pane (type a URL, open in your browser, DevTools, the size picker), with Sizes next to it

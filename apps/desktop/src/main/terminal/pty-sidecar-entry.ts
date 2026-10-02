@@ -2,9 +2,8 @@
 // Runs with ELECTRON_RUN_AS_NODE=1, survives window reloads.
 // Manages all PTY sessions via JSON-RPC over Unix domain socket.
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
-import { dirname } from "node:path";
 import * as pty from "node-pty";
 import { createNdjsonBuffer } from "../lib/ndjson";
 import {
@@ -17,11 +16,14 @@ import { appendPending, FLUSH_INTERVAL_MS, OutputGate } from "./pty-sidecar-flus
 import {
   EXEGOL_DIR,
   GLOBAL_RING_BUFFER_CAP_BYTES,
+  holdsLease,
   type JsonRpcMessage,
   type JsonRpcRequest,
+  LEASE_CHECK_MS,
   makeNotification,
   makeResponse,
   type PidFile,
+  parsePidFile,
   RING_BUFFER_CAPACITY,
   RING_BUFFER_EVICTION_SWEEP_MS,
   type SessionCreateParams,
@@ -104,10 +106,7 @@ function scheduleFlush(s: SidecarSession): void {
 function resetIdleTimer(): void {
   if (idleTimer) clearTimeout(idleTimer);
   if (sessions.size === 0 && clients.size === 0) {
-    idleTimer = setTimeout(() => {
-      cleanup();
-      process.exit(0);
-    }, SIDECAR_IDLE_TIMEOUT_MS);
+    idleTimer = setTimeout(() => stopAndExit(0), SIDECAR_IDLE_TIMEOUT_MS);
   } else {
     idleTimer = null;
   }
@@ -303,21 +302,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
 
       case "shutdown": {
         client.write(makeResponse(req.id, { ok: true }));
-        // Kill all sessions, then exit
-        for (const [, s] of sessions) {
-          flushSession(s);
-          if (s.alive) {
-            try {
-              s.pty.kill();
-            } catch {
-              /* */
-            }
-          }
-        }
-        setTimeout(() => {
-          cleanup();
-          process.exit(0);
-        }, 500);
+        stopAndExit(500);
         break;
       }
 
@@ -360,66 +345,59 @@ const server = createServer((client: Socket) => {
 
 // ─── Startup ────────────────────────────────────────────────────────────
 
-/**
- * Remove OUR socket and pid file — never someone else's.
- *
- * A shutting-down sidecar used to unlink both unconditionally, and discovery
- * spawns the replacement without waiting for the predecessor to die. So the old
- * process, exiting a few hundred ms later, deleted the NEW sidecar's files: it
- * kept serving on an unlinked inode with no pid file, and the next launch found
- * nothing, spawned a third, and left the second alive holding the previous
- * run's PTYs. That is the "orphaned sidecar from an earlier run" (2026-08-13) —
- * the version-mismatch shutdown did take, and its exit is what broke the
- * replacement's identity.
- */
-function cleanup(): void {
+/** Discovery's identity for this sidecar; the pid file naming it is our lease (holdsLease). */
+const TOKEN = process.env.EXEGOL_SIDECAR_TOKEN ?? "";
+
+/** Inode of the socket file our listen() created. */
+let socketIno: number | null = null;
+
+/** The pid file's text; null when it is gone, undefined when it could not be read (no evidence). */
+function readPidFileText(): string | null | undefined {
   try {
-    const owner = (JSON.parse(readFileSync(SIDECAR_PID_PATH, "utf-8")) as PidFile).pid;
-    if (owner === process.pid) unlinkSync(SIDECAR_PID_PATH);
-  } catch {
-    /* no pid file, or not ours to remove */
-  }
-  // Only the process that bound the socket may unlink it; after a rebind the
-  // path belongs to whoever is listening now.
-  if (!ownsSocket) return;
-  try {
-    unlinkSync(SIDECAR_SOCK_PATH);
-  } catch {
-    /* */
+    return readFileSync(SIDECAR_PID_PATH, "utf-8");
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ENOENT" ? null : undefined;
   }
 }
 
-/** True between our own listen() and the moment we give the socket up. */
-let ownsSocket = false;
+/** Remove our pid file and socket, never a successor's (2026-08-13: an exiting predecessor
+ *  deleted the replacement's files and orphaned it). */
+function cleanup(): void {
+  try {
+    if (parsePidFile(readPidFileText())?.token === TOKEN) unlinkSync(SIDECAR_PID_PATH);
+    if (socketIno !== null && statSync(SIDECAR_SOCK_PATH).ino === socketIno) {
+      unlinkSync(SIDECAR_SOCK_PATH);
+    }
+  } catch {
+    /* already gone */
+  }
+}
 
 function start(): void {
-  // Ensure directory exists
   mkdirSync(EXEGOL_DIR, { recursive: true });
-
-  // Remove stale socket
-  if (existsSync(SIDECAR_SOCK_PATH)) {
-    try {
-      unlinkSync(SIDECAR_SOCK_PATH);
-    } catch {
-      /* */
-    }
+  try {
+    unlinkSync(SIDECAR_SOCK_PATH);
+  } catch {
+    /* no stale socket */
   }
 
-  // Ensure parent dir for socket exists
-  mkdirSync(dirname(SIDECAR_SOCK_PATH), { recursive: true });
-
   server.listen(SIDECAR_SOCK_PATH, () => {
-    ownsSocket = true;
-    // Write PID file
-    const token = process.env.EXEGOL_SIDECAR_TOKEN ?? "";
+    socketIno = statSync(SIDECAR_SOCK_PATH).ino;
     const pidFile: PidFile = {
       pid: process.pid,
-      token,
+      token: TOKEN,
       version: SIDECAR_VERSION,
       sock: SIDECAR_SOCK_PATH,
     };
     writeFileSync(SIDECAR_PID_PATH, JSON.stringify(pidFile), "utf-8");
     resetIdleTimer();
+    const lease = setInterval(() => {
+      if (holdsLease(readPidFileText(), TOKEN)) return;
+      process.stderr.write("[Sidecar] Replaced (pid file no longer names this sidecar), exiting\n");
+      clearInterval(lease);
+      stopAndExit(2000);
+    }, LEASE_CHECK_MS);
+    lease.unref();
   });
 
   server.on("error", (err) => {
@@ -431,35 +409,35 @@ function start(): void {
 
 // ─── Signal handling ────────────────────────────────────────────────────
 
-process.on("SIGTERM", () => {
-  // Flush any coalesced pending output before signalling — onExit may not
-  // fire before the 2 s SIGKILL escalation, and renderer clients may
-  // disconnect during shutdown, leaving the last <4 ms of output stranded.
-  for (const [, s] of sessions) {
+/**
+ * Kill every session and exit. Pending output is flushed first: onExit may not fire before the
+ * SIGKILL escalation, and clients may disconnect meanwhile, stranding the last <4 ms of output.
+ */
+function stopAndExit(graceMs: number): void {
+  for (const s of sessions.values()) {
     flushSession(s);
-    if (s.alive) {
+    if (!s.alive) continue;
+    try {
+      s.pty.kill();
+    } catch {
+      /* */
+    }
+  }
+  setTimeout(() => {
+    for (const s of sessions.values()) {
+      if (!s.alive) continue;
       try {
-        s.pty.kill();
+        process.kill(s.pid, "SIGKILL");
       } catch {
         /* */
       }
     }
-  }
-  setTimeout(() => {
-    // SIGKILL any remaining
-    for (const [, s] of sessions) {
-      if (s.alive) {
-        try {
-          process.kill(s.pid, "SIGKILL");
-        } catch {
-          /* */
-        }
-      }
-    }
     cleanup();
     process.exit(0);
-  }, 2000);
-});
+  }, graceMs);
+}
+
+process.on("SIGTERM", () => stopAndExit(2000));
 
 process.on("uncaughtException", (err) => {
   process.stderr.write(`[Sidecar] Uncaught: ${err.message}\n`);
