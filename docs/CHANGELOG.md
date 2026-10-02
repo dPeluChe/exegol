@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- A terminal closed in a way its window did not see (its session deleted elsewhere) stayed in the sidebar as running and left a tab that loaded nothing; every window now hears that it ended. A finished shell also closes its tab when nothing else is in it, in whichever project it is, not only the one on screen
+
 ### Changed
 - Sidebar Projects order themselves: the ones with a Cmd+n first (Cmd+2 to Cmd+0), then the others with something live, then the rest alphabetically. The arrows button next to + switches to ordering by hand (drag), as before
 - The Projects view shows each project with its own icon and colour, what is live now (agents working, waiting for you, idle), its shortcut number and its group; the path is shortened, the full one is in the tooltip

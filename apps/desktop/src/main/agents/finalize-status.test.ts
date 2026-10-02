@@ -1,7 +1,11 @@
 import Database from "libsql";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("../lib/event-bus", () => ({ broadcast: vi.fn() }));
+
 import { runMigrations } from "../db/migrations";
 import { createAgent, createProject } from "../db/queries";
+import { broadcast } from "../lib/event-bus";
 import { finalizeAgentStatus } from "./spawn-env";
 
 function setupDb(): Database.Database {
@@ -42,5 +46,15 @@ describe("finalizeAgentStatus", () => {
 
   it("still reads a non-zero exit without a Stop as failed", () => {
     expect(finalizeAgentStatus(db, agent, 1)).toBe("failed");
+  });
+
+  it("tells the windows a session ended when its row was deleted while it ran", () => {
+    db.prepare("DELETE FROM agents WHERE id = ?").run(agent.id);
+    vi.mocked(broadcast).mockClear();
+    expect(finalizeAgentStatus(db, agent, 1)).toBeNull();
+    expect(broadcast).toHaveBeenCalledWith(
+      "agent:status-changed",
+      expect.objectContaining({ agentId: agent.id, status: "stopped" }),
+    );
   });
 });

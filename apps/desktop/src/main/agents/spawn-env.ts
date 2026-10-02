@@ -389,6 +389,18 @@ export function finalizeAgentStatus(
       logger.info(
         `[Finalize] Skip ${agent.id} (${agent.cliType}) — already ${currentAgent?.status ?? "deleted"}`,
       );
+      // Deleted while its process lived: a window that did not delete it still shows it running
+      // (a shell's pane kept pointing at nothing), so tell every window it ended
+      if (!currentAgent) {
+        broadcastAgentStatus({
+          agentId: agent.id,
+          projectId: agent.projectId,
+          status: "stopped",
+          currentStep: null,
+          cliType: agent.cliType,
+          timestamp: Date.now(),
+        });
+      }
       return null;
     }
 
