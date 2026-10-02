@@ -2,6 +2,7 @@ import type { AgentProvider } from "@exegol/shared";
 import { FileCode, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { useLaunchableProviders } from "../../hooks/use-providers";
 import { AgentIcon } from "../common/AgentIcon";
 import { SpawnAgentModal } from "./SpawnAgentModal";
@@ -13,28 +14,23 @@ interface AgentLauncherProps {
 }
 
 export function AgentLauncher({ projectId }: AgentLauncherProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const [showSpawnModal, setShowSpawnModal] = useState(false);
   const [modalProvider, setModalProvider] = useState<AgentProvider | undefined>(undefined);
-  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const providers = useLaunchableProviders();
-
-  // Calculate menu position from button ref
-  const rect = btnRef.current?.getBoundingClientRect();
-  const menuStyle = rect
-    ? { top: rect.bottom + 4, left: rect.left, position: "fixed" as const }
-    : { top: 0, left: 0, position: "fixed" as const, display: "none" as const };
-
-  const displayProviders = providers;
+  const menuStyle = useFittedMenu(menuRef, anchor);
+  const menuOpen = anchor !== null;
+  const closeMenu = () => setAnchor(null);
 
   return (
     <>
       <button
-        ref={btnRef}
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          setMenuOpen(!menuOpen);
+          const rect = e.currentTarget.getBoundingClientRect();
+          setAnchor(menuOpen ? null : { x: rect.left, y: rect.bottom + 4 });
         }}
         className="flex h-5 w-5 items-center justify-center rounded text-text-muted transition-colors hover:bg-accent/20 hover:text-accent"
         title="Launch agent"
@@ -49,13 +45,14 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
             {/* Backdrop */}
             <div
               className="fixed inset-0 z-[100]"
-              onClick={() => setMenuOpen(false)}
+              onClick={closeMenu}
               onKeyDown={() => {}}
               role="none"
             />
             {/* Menu */}
             <div
-              className="z-[101] w-44 rounded-lg border border-border bg-bg-secondary p-1 shadow-2xl"
+              ref={menuRef}
+              className="fixed z-[101] w-80 rounded-lg border border-border bg-bg-secondary p-1 shadow-2xl"
               style={menuStyle}
             >
               <div className="px-2 py-1">
@@ -68,7 +65,7 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setMenuOpen(false);
+                  closeMenu();
                   setModalProvider(undefined);
                   setShowSpawnModal(true);
                 }}
@@ -78,27 +75,29 @@ export function AgentLauncher({ projectId }: AgentLauncherProps) {
                 <span className="font-semibold">New Task...</span>
               </button>
               <div className="my-1 h-px bg-border" />
-              {displayProviders.map((provider) => (
-                <button
-                  key={provider.id}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpen(false);
-                    setModalProvider(provider);
-                    setShowSpawnModal(true);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/5"
-                >
-                  <AgentIcon
-                    provider={provider.id}
-                    size={20}
-                    fallback={provider.icon}
-                    fallbackColor={provider.color}
-                  />
-                  <span className="font-medium text-text-primary">{provider.name}</span>
-                </button>
-              ))}
+              <div className="grid grid-cols-2 gap-px">
+                {providers.map((provider) => (
+                  <button
+                    key={provider.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeMenu();
+                      setModalProvider(provider);
+                      setShowSpawnModal(true);
+                    }}
+                    className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/5"
+                  >
+                    <AgentIcon
+                      provider={provider.id}
+                      size={20}
+                      fallback={provider.icon}
+                      fallbackColor={provider.color}
+                    />
+                    <span className="truncate font-medium text-text-primary">{provider.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </>,
           document.body,

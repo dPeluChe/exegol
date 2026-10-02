@@ -1,18 +1,17 @@
 import { cn } from "@exegol/ui";
-import { FolderTree, GitBranch, Globe } from "lucide-react";
-import type { ComponentType } from "react";
+import { Globe, LayoutGrid } from "lucide-react";
 import { focusPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
+import { PANE_TYPE_ICONS } from "../workspace/tab-bar-helpers";
 import { AgentMiniCard } from "./AgentMiniCard";
 
-const PANE_ICON: Record<string, ComponentType<{ className?: string }>> = {
-  browser: Globe,
-  files: FolderTree,
-  git: GitBranch,
+const PANE_LABEL: Record<string, string> = {
+  files: "Files",
+  git: "Git",
+  empty: "Launcher",
+  terminal: "Terminal",
 };
-
-const PANE_LABEL: Record<string, string> = { files: "Files", git: "Git" };
 
 function hostOf(url: string | undefined): string {
   if (!url) return "Browser";
@@ -30,12 +29,10 @@ function PaneAgentRow({ agentId }: { agentId: string }) {
   return agent ? <AgentMiniCard agent={agent} /> : null;
 }
 
-/** One row per pane, in layout order: agents as agent rows, the rest by what they show */
+/** One row per pane, in layout order: agents and shells as agent rows, the rest by what they show */
 function PaneRow({ pane, onOpen }: { pane: Pane; onOpen: () => void }) {
-  if (pane.type === "terminal")
-    return pane.agentId ? <PaneAgentRow agentId={pane.agentId} /> : null;
-  if (pane.type === "empty") return null;
-  const Icon = PANE_ICON[pane.type] ?? Globe;
+  if (pane.type === "terminal" && pane.agentId) return <PaneAgentRow agentId={pane.agentId} />;
+  const Icon = pane.type === "empty" ? LayoutGrid : (PANE_TYPE_ICONS[pane.type] ?? Globe);
   return (
     <button
       type="button"

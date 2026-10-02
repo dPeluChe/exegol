@@ -84,7 +84,6 @@ export function startAgentStatusPush(): void {
       const update: Partial<AgentState> = {
         status: newStatus,
         currentStep: event.currentStep,
-        activityLevel: classifyActivity(newStatus, event.currentStep),
       };
       if (event.claudeSessionId) update.claudeSessionId = event.claudeSessionId;
       // A CLI typed in the terminal made it that agent (or another one)
@@ -148,7 +147,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     startedAt: agent.startedAt,
     accessMode: agent.accessMode ?? null,
     claudeSessionId: agent.claudeSessionId ?? null,
-    activityLevel: classifyActivity(agent.status, agent.currentStep),
+    activityLevel: classifyActivity(agent.status, agent.currentStep, agent.cliType),
     muted: agent.muted ?? false,
     suspended: agent.suspendedAt != null,
     launchedInShell: agent.launchedInShell ?? false,
@@ -291,25 +290,6 @@ export function showProject(projectId: string): void {
   switchSection("agents");
 }
 
-/** Open a file in the active tab's Files pane, or in a new Files tab */
-export function openFileInWorkspace(projectId: string, filePath: string): void {
-  showProject(projectId);
-  const ws = useWorkspaceStore.getState();
-  const pw = getProjectState();
-  const tab = pw.tabs.find((t) => t.id === pw.activeTabId);
-  const filesPane = tab
-    ? collectPaneIds(tab.layout).find((id) => pw.panes[id]?.type === "files")
-    : undefined;
-  if (filesPane) {
-    ws.updatePane(filesPane, { openFile: filePath, openFileAt: Date.now() });
-    ws.setFocusedPane(filesPane);
-    return;
-  }
-  ws.addTab("Files");
-  const paneId = useWorkspaceStore.getState().focusedPaneId;
-  if (paneId) ws.updatePane(paneId, { type: "files", openFile: filePath, openFileAt: Date.now() });
-}
-
 /** Show a project's tab (and pane) */
 export function focusPane(projectId: string, tabId: string, paneId?: string): void {
   showProject(projectId);
@@ -384,8 +364,12 @@ export const useAgentStore = create<AgentStore>()(
           if (!existing) return state;
           // T70: Auto-recompute activityLevel when status changes
           const merged = { ...existing, ...update };
-          if (update.status && !update.activityLevel) {
-            merged.activityLevel = classifyActivity(merged.status, merged.currentStep);
+          if ((update.status || "currentStep" in update) && !update.activityLevel) {
+            merged.activityLevel = classifyActivity(
+              merged.status,
+              merged.currentStep,
+              merged.cliType,
+            );
           }
           // A new agents object re-renders every pane subscribed to the map
           return shallow(merged, existing) ? state : { agents: { ...state.agents, [id]: merged } };
@@ -468,7 +452,7 @@ export const useAgentStore = create<AgentStore>()(
                 startedAt: dbAgent.startedAt,
                 accessMode: dbAgent.accessMode ?? null,
                 claudeSessionId: dbAgent.claudeSessionId ?? null,
-                activityLevel: classifyActivity(dbStatus, dbAgent.currentStep),
+                activityLevel: classifyActivity(dbStatus, dbAgent.currentStep, dbAgent.cliType),
                 muted: dbAgent.muted ?? false,
                 suspended: dbAgent.suspendedAt != null,
                 launchedInShell: dbAgent.launchedInShell ?? false,

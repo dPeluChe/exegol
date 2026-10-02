@@ -82,10 +82,11 @@ export function RunTargets({
     setLaunching(label);
     try {
       // The root keeps the normal start folder rules (worktrees included)
+      // Named by where it runs: what it runs is its live step, gone once the command exits
       const agentId = await spawnShellIntoPane(
         projectId,
         paneId,
-        label,
+        inFolder ? (selected.rel.split("/").pop() ?? "Terminal") : "Terminal",
         inFolder ? selected.path : undefined,
       );
       if (command) window.api.terminal.write(agentId, `${command}\n`);

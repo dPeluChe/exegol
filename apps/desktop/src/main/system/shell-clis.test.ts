@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { launchFlagsFromArgs, matchShellClis } from "./shell-clis";
+import { foregroundCommands, launchFlagsFromArgs, matchShellClis } from "./shell-clis";
 
 const commands = new Map([
   ["claude", "claude-code"],
@@ -37,6 +37,27 @@ describe("matchShellClis", () => {
       { pid: 12, ppid: 11, args: "/usr/local/bin/agy" },
     ];
     expect(matchShellClis([{ id: "s", pid: 10 }], rows, commands)).toEqual({ s: "agy" });
+  });
+});
+
+describe("foregroundCommands", () => {
+  it("names what a shell runs in the foreground, and null at its prompt", () => {
+    const rows = [
+      { pid: 10, ppid: 1, pgid: 10, tpgid: 20, args: "/bin/zsh -il" },
+      { pid: 20, ppid: 10, pgid: 20, tpgid: 20, args: "/opt/homebrew/bin/node /x/bin/convex dev" },
+      { pid: 30, ppid: 1, pgid: 30, tpgid: 30, args: "/bin/zsh -il" },
+      { pid: 31, ppid: 30, pgid: 31, tpgid: 30, args: "gitstatusd" },
+    ];
+    expect(
+      foregroundCommands(
+        [
+          { id: "busy", pid: 10 },
+          { id: "prompt", pid: 30 },
+          { id: "gone", pid: 99 },
+        ],
+        rows,
+      ),
+    ).toEqual({ busy: "convex dev", prompt: null, gone: null });
   });
 });
 

@@ -35,7 +35,6 @@ import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
 import { ProjectAppearanceDialog } from "./ProjectAppearanceDialog";
-import { ProjectFiles } from "./ProjectFiles";
 import { ProjectLayoutsDialog } from "./ProjectLayoutsDialog";
 import { TabsOverview } from "./TabsOverview";
 
@@ -386,8 +385,6 @@ export function ProjectItem({
           </div>
 
           <TabsOverview projectId={project.id} />
-
-          <ProjectFiles projectId={project.id} path={project.path} />
 
           <ProjectAgentGroups project={project} agents={agents} worktrees={worktrees} />
         </div>
