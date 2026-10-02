@@ -1,6 +1,6 @@
 {
   "name": "@exegol/desktop",
-  "version": "0.5.12",
+  "version": "0.5.13",
   "description": "Desktop app for orchestrating AI coding agents",
   "author": "Antonio <antonio@iteris.tech>",
   "homepage": "https://github.com/dPeluChe/exegol",
