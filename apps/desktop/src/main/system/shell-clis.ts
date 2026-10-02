@@ -6,7 +6,7 @@ import { getProviderRegistry } from "../agents/registry";
 
 const execFileAsync = promisify(execFile);
 
-interface ProcRow {
+export interface ProcRow {
   pid: number;
   ppid: number;
   /** Process group, and the foreground group of its terminal (0 without one) */
@@ -46,6 +46,17 @@ export function foregroundCommands(
   return out;
 }
 
+/** ppid → its child processes */
+export function childrenByParent(rows: ProcRow[]): Map<number, ProcRow[]> {
+  const children = new Map<number, ProcRow[]>();
+  for (const r of rows) {
+    const siblings = children.get(r.ppid);
+    if (siblings) siblings.push(r);
+    else children.set(r.ppid, [r]);
+  }
+  return children;
+}
+
 /** For each shell, the first CLI (by provider command) running anywhere below it */
 export function matchShellClis(
   shells: { id: string; pid: number }[],
@@ -54,12 +65,7 @@ export function matchShellClis(
   /** Filled with the matched CLI's command line, per shell (the flags it was typed with) */
   argsOut?: Record<string, string>,
 ): Record<string, string> {
-  const children = new Map<number, ProcRow[]>();
-  for (const r of rows) {
-    const siblings = children.get(r.ppid);
-    if (siblings) siblings.push(r);
-    else children.set(r.ppid, [r]);
-  }
+  const children = childrenByParent(rows);
   const found: Record<string, string> = {};
   for (const shell of shells) {
     let level = children.get(shell.pid) ?? [];

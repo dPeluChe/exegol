@@ -9,6 +9,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Closing a terminal (pane, tab, Stop) now also ends what it started: a dev server that ignores the hangup or a job sent to the background kept running after the terminal was gone
+
+### Changed
+- The close confirmation names each pane and what closing it does: the agent it stops, the terminal and the command it stops (or that it sits at its prompt), the browser's site, the file with unsaved changes
+
 ### Changed
 - Sidebar Projects order themselves: the ones with a Cmd+n first (Cmd+2 to Cmd+0), then the others with something live, then the rest alphabetically. The arrows button next to + switches to ordering by hand (drag), as before
 - The Projects view shows each project with its own icon and colour, what is live now (agents working, waiting for you, idle), its shortcut number and its group; the path is shortened, the full one is in the tooltip
