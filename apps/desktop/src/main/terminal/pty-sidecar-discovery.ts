@@ -1,6 +1,6 @@
 // Sidecar discovery: find running sidecar, or spawn a new one.
 
-import { spawn as cpSpawn, execFile } from "node:child_process";
+import { spawn as cpSpawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -12,14 +12,13 @@ import {
   unlinkSync,
 } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { LOG_DIR, logger } from "../lib/logger";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
+  parsePidFile,
   SIDECAR_CONNECT_TIMEOUT_MS,
   SIDECAR_PID_PATH,
-  SIDECAR_SOCK_PATH,
   SIDECAR_VERSION,
 } from "./pty-sidecar-protocol";
 
@@ -32,25 +31,11 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
-const execFileAsync = promisify(execFile);
 const SIDECAR_ENTRY = "pty-sidecar-entry";
-
-/** T184.4: a pid from the pid file may have been recycled; only kill it while it still runs our entry. */
-export async function isOurSidecar(pid: number): Promise<boolean> {
-  try {
-    const { stdout } = await execFileAsync("ps", ["-p", String(pid), "-o", "command="], {
-      timeout: 3000,
-    });
-    return stdout.includes(SIDECAR_ENTRY);
-  } catch {
-    return false;
-  }
-}
 
 export function readPidFile(): PidFile | null {
   try {
-    if (!existsSync(SIDECAR_PID_PATH)) return null;
-    return JSON.parse(readFileSync(SIDECAR_PID_PATH, "utf-8")) as PidFile;
+    return parsePidFile(readFileSync(SIDECAR_PID_PATH, "utf-8"));
   } catch {
     return null;
   }
@@ -66,20 +51,21 @@ function resolveSidecarPath(): string {
   return primary;
 }
 
-async function tryConnect(client: SidecarClient, pidFile: PidFile): Promise<boolean> {
+/** "ready": reuse it; "retiring": another version, asked to shut down; "unreachable": no answer */
+async function tryConnect(
+  client: SidecarClient,
+  pidFile: PidFile,
+): Promise<"ready" | "retiring" | "unreachable"> {
   try {
     await client.connect(pidFile.sock);
     const ping = await client.ping();
-    if (ping.version !== SIDECAR_VERSION) {
-      // Version mismatch — shut down old sidecar
-      await client.shutdown().catch(() => {});
-      client.disconnect();
-      return false;
-    }
-    return true;
+    if (ping.version === SIDECAR_VERSION) return "ready";
+    await client.shutdown().catch(() => {});
+    client.disconnect();
+    return "retiring";
   } catch {
     client.disconnect();
-    return false;
+    return "unreachable";
   }
 }
 
@@ -115,7 +101,7 @@ function waitForPidFile(token: string, timeoutMs: number): Promise<PidFile> {
     const start = Date.now();
     const check = (): void => {
       const pidFile = readPidFile();
-      if (pidFile && pidFile.token === token && isProcessAlive(pidFile.pid)) {
+      if (pidFile?.token === token) {
         resolve(pidFile);
         return;
       }
@@ -129,76 +115,49 @@ function waitForPidFile(token: string, timeoutMs: number): Promise<PidFile> {
   });
 }
 
-/**
- * Ensure a sidecar is running and return a connected client.
- * Reuses existing sidecar if version matches, otherwise spawns a new one.
- */
-/** The sidecar gives itself ~2s to drain before exiting; allow a little more,
- *  then stop waiting — a predecessor that will not die must not block startup. */
+/** A predecessor asked to shut down exits in ~0.5s; past this, stop waiting so one that will
+ *  not die does not block startup. Drop with the wait once no sidecar before 1.6.0 is in use. */
 const EXIT_WAIT_MS = 3_000;
 const EXIT_POLL_MS = 100;
 
 async function waitForExit(pid: number): Promise<void> {
   const deadline = Date.now() + EXIT_WAIT_MS;
-  while (Date.now() < deadline) {
-    try {
-      process.kill(pid, 0);
-    } catch {
-      return; // gone
+  while (isProcessAlive(pid)) {
+    if (Date.now() > deadline) {
+      logger.warn(`[PtySidecar] Previous sidecar (pid ${pid}) did not exit; not signalling it`);
+      return;
     }
     await new Promise((r) => setTimeout(r, EXIT_POLL_MS));
   }
-  // Still alive: escalate rather than race it for the socket.
-  try {
-    process.kill(pid, "SIGKILL");
-  } catch {
-    /* */
-  }
 }
 
+/**
+ * Ensure a sidecar is running and return a connected client.
+ * Reuses existing sidecar if version matches, otherwise spawns a new one.
+ */
 export async function ensureSidecar(): Promise<SidecarClient> {
-  // Step 1: Check for existing sidecar
   const pidFile = readPidFile();
   if (pidFile && isProcessAlive(pidFile.pid)) {
     const client = new SidecarClient();
-    if (await tryConnect(client, pidFile)) {
-      return client;
-    }
-    // Stale sidecar — shut it down, and WAIT. Spawning a replacement while the
-    // predecessor is still exiting is how the old process ended up deleting the
-    // new one's socket and pid file (see cleanup() in pty-sidecar-entry).
-    if (await isOurSidecar(pidFile.pid)) {
-      try {
-        process.kill(pidFile.pid, "SIGTERM");
-      } catch {
-        /* already gone */
-      }
-      await waitForExit(pidFile.pid);
-    } else {
-      logger.warn("[PtySidecar] Pid file names a process that is not our sidecar; not killing it");
-    }
+    const state = await tryConnect(client, pidFile);
+    if (state === "ready") return client;
+    // Nothing is signalled (the pid may be recycled). Wait for one we asked to shut down:
+    // sidecars before 1.6.0 unlink the socket path on exit even after a successor bound it
+    if (state === "retiring") await waitForExit(pidFile.pid);
   }
 
-  // Clean up stale files
+  // Ends the predecessor's lease: one that did not answer exits by itself (holdsLease)
   try {
     unlinkSync(SIDECAR_PID_PATH);
   } catch {
     /* */
   }
-  try {
-    unlinkSync(SIDECAR_SOCK_PATH);
-  } catch {
-    /* */
-  }
 
-  // Step 2: Spawn new sidecar
   const token = randomBytes(16).toString("hex");
   spawnSidecar(token);
 
-  // Step 3: Wait for it to become available
   const newPidFile = await waitForPidFile(token, SIDECAR_CONNECT_TIMEOUT_MS);
 
-  // Step 4: Connect
   const client = new SidecarClient();
   await client.connect(newPidFile.sock);
   const ping = await client.ping();

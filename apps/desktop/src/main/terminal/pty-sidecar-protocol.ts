@@ -22,8 +22,9 @@ export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
  * 1.4.0 — cleanup() only removes files this process owns (2026-08-13)
  * 1.5.0 — session.clear, bounded framing, client backpressure, DA1 while detached,
  *         replay without terminal queries (2026-10-01)
+ * 1.6.0 — the pid file is a lease: a sidecar exits once it no longer names its token (2026-10-01)
  */
-export const SIDECAR_VERSION = "1.5.0";
+export const SIDECAR_VERSION = "1.6.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 
@@ -48,6 +49,29 @@ export interface PidFile {
   token: string;
   version: string;
   sock: string;
+}
+
+/** How often a sidecar checks that the pid file still names it. */
+export const LEASE_CHECK_MS = 5_000;
+
+export function parsePidFile(raw: string | null | undefined): PidFile | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as PidFile;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The pid file is the sidecar's lease: gone (`raw` null) or naming another token means discovery
+ * replaced this sidecar, and it exits by itself, so nothing ever signals a pid read from that file
+ * (it may be recycled). A failed read (undefined) or a half-written file is no evidence: held.
+ */
+export function holdsLease(raw: string | null | undefined, token: string): boolean {
+  if (raw === null) return false;
+  const file = parsePidFile(raw);
+  return !file || file.token === token;
 }
 
 // ─── JSON-RPC 2.0 ──────────────────────────────────────────────────────

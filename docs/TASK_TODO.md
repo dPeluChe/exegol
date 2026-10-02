@@ -646,8 +646,6 @@ Left from the simplify of that batch (judged out of its scope):
   other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
   there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)
 - Clear Terminal does not reach Dashboard mirror cards (they keep the old screen until a refit)
-- Pid identity by `ps` command match; a stored identity (pid file token + process start time)
-  would avoid the fork
 
 **Spawn and lifecycle (pullfrog).**
 
