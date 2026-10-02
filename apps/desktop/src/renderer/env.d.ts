@@ -59,7 +59,9 @@ interface Window {
       getVersion: () => Promise<string>;
       getPlatform: () => string;
     };
-    onMenuAction: (callback: (action: "new-tab" | "close-pane" | "reload") => void) => () => void;
+    onMenuAction: (
+      callback: (action: "new-tab" | "close-pane" | "reload" | "focus-location") => void,
+    ) => () => void;
     dialog: {
       showOpenDialog: (
         options: Record<string, unknown>,

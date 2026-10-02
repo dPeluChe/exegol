@@ -70,6 +70,13 @@ export function installAppMenu(): void {
           click: (_item, browserWindow) =>
             handleCloseAccelerator(browserWindow as BaseWindow | undefined),
         },
+        {
+          label: "Open Location",
+          accelerator: "Cmd+L",
+          // A menu accelerator also fires while a page inside a webview has the focus
+          click: (_item, browserWindow) =>
+            sendToRenderer(browserWindow as BaseWindow | undefined, "menu:focus-location"),
+        },
         { type: "separator" },
         {
           label: "Install 'exegol' CLI",

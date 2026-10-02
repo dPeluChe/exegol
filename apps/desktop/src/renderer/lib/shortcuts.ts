@@ -132,6 +132,20 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "terminal",
   },
   {
+    id: "browser-address",
+    label: "Browser: Address Bar",
+    description: "Select the focused browser pane's address (the floating browser's too)",
+    keys: "Cmd+L",
+    category: "terminal",
+  },
+  {
+    id: "browser-reload",
+    label: "Browser: Reload Page",
+    description: "Reload the focused browser pane's page; elsewhere Cmd+R reloads the window",
+    keys: "Cmd+R",
+    category: "terminal",
+  },
+  {
     id: "split-h",
     label: "Split Horizontal",
     description: "New pane to the right",
