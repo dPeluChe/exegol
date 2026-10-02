@@ -1,7 +1,7 @@
 import { LIVE_STATUSES, type Project } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsDownUp, FolderPlus } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   useCreateProjectGroup,
   useProjectGroups,
@@ -9,11 +9,13 @@ import {
   useSetProjectGroup,
 } from "../../hooks/use-trpc";
 import { shortcutLabel, useProjectShortcuts } from "../../lib/live-tabs";
+import { autoOrderProjects } from "../../lib/project-order";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { AgentState } from "../../stores/agents";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import type { ShortcutDigit } from "../../stores/shortcuts";
+import { useWatchStore } from "../../stores/watch";
 import { GROUP_COLORS } from "./GroupIconColorPicker";
 import { ProjectGroupHeader } from "./ProjectGroupHeader";
 import { ProjectItem } from "./ProjectItem";
@@ -37,6 +39,8 @@ interface ProjectListSectionProps {
   /** Cmd+n that jumps to the project's live tab (lib/live-tabs) */
   shortcuts: Map<string, ShortcutDigit>;
   draggedProjectIdRef: React.MutableRefObject<string | null>;
+  /** Manual order: a drop within the list moves the project there (auto keeps its own order) */
+  sortable: boolean;
   onSelect: (id: string) => void;
   onToggle: (id: string) => void;
   onRename: (id: string, name: string) => void;
@@ -51,6 +55,7 @@ function ProjectListSection({
   agentsById,
   shortcuts,
   draggedProjectIdRef,
+  sortable,
   onSelect,
   onToggle,
   onRename,
@@ -73,7 +78,7 @@ function ProjectListSection({
     // would make a later unrelated drop on a group header silently move this
     // project into that group.
     draggedProjectIdRef.current = null;
-    if (fromIndex === null || fromIndex === targetIndex) return;
+    if (!sortable || fromIndex === null || fromIndex === targetIndex) return;
 
     const reordered = [...list];
     const [moved] = reordered.splice(fromIndex, 1);
@@ -112,13 +117,35 @@ function ProjectListSection({
   );
 }
 
+/** Projects with something live: a running (non-shell) session or one pinned on the Dashboard */
+function useActiveProjects(agents: Record<string, AgentState>): Set<string> {
+  const watched = useWatchStore((s) => s.watched);
+  return useMemo(() => {
+    const active = new Set<string>();
+    for (const a of Object.values(agents)) {
+      if (a.cliType !== "shell" && LIVE_STATUSES.has(a.status)) active.add(a.projectId);
+    }
+    for (const id of watched) {
+      const a = agents[id];
+      if (a) active.add(a.projectId);
+    }
+    return active;
+  }, [agents, watched]);
+}
+
 export function ProjectsSection() {
-  const { data: projects } = useProjects();
+  const { data: stored } = useProjects();
   const { data: groups } = useProjectGroups();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const setActiveProject = useAppStore((s) => s.setActiveProject);
   const agents = useAgentStore((s) => s.agents);
   const shortcuts = useProjectShortcuts();
+  const active = useActiveProjects(agents);
+  const auto = useAppStore((s) => s.projectsOrder === "auto");
+  const projects = useMemo(
+    () => (stored && auto ? autoOrderProjects(stored, shortcuts, active) : stored),
+    [stored, auto, shortcuts, active],
+  );
   const queryClient = useQueryClient();
   const setProjectGroup = useSetProjectGroup();
   const createGroup = useCreateProjectGroup();
@@ -185,6 +212,7 @@ export function ProjectsSection() {
           agentsById={agents}
           shortcuts={shortcuts}
           draggedProjectIdRef={draggedProjectIdRef}
+          sortable={!auto}
           onSelect={setActiveProject}
           onToggle={toggleProject}
           onRename={handleRename}
@@ -246,6 +274,7 @@ export function ProjectsSection() {
                 agentsById={agents}
                 shortcuts={shortcuts}
                 draggedProjectIdRef={draggedProjectIdRef}
+                sortable={!auto}
                 onSelect={setActiveProject}
                 onToggle={toggleProject}
                 onRename={handleRename}
@@ -279,6 +308,7 @@ export function ProjectsSection() {
           agentsById={agents}
           shortcuts={shortcuts}
           draggedProjectIdRef={draggedProjectIdRef}
+          sortable={!auto}
           onSelect={setActiveProject}
           onToggle={toggleProject}
           onRename={handleRename}
