@@ -13,7 +13,7 @@ import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
 import { useWatchStore } from "./watch";
-import { collectPaneIds, getProjectState, useWorkspaceStore } from "./workspace";
+import { collectPaneIds, useWorkspaceStore } from "./workspace";
 
 // ─── Attention model (T57) ────────────────────────────────────────────────
 
@@ -66,17 +66,10 @@ export function startAgentStatusPush(): void {
     if (existing) {
       const isFinalStatus = ["completed", "failed", "stopped", "crashed"].includes(event.status);
 
-      // Auto-remove shell terminals when they finish (no need to keep in sidebar)
-      // Also convert their pane to empty so it doesn't show read-only scrollback
+      // A finished shell leaves the sidebar, and its panes in whichever project they are
       if (isFinalStatus && existing.cliType === "shell") {
         store.removeAgent(event.agentId);
-        // Convert any terminal pane showing this agent to empty
-        const ws = useWorkspaceStore.getState();
-        for (const [paneId, pane] of Object.entries(getProjectState().panes)) {
-          if (pane.type === "terminal" && pane.agentId === event.agentId) {
-            ws.updatePane(paneId, { type: "empty", agentId: undefined });
-          }
-        }
+        useWorkspaceStore.getState().releaseAgent(event.agentId);
         return;
       }
 

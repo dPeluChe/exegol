@@ -101,6 +101,8 @@ export interface WorkspaceStore {
   /** The page a browser pane is on: any project's pane, without taking focus (a redirect in a
    *  background pane moved the cursor), and nothing when it did not change */
   setPaneUrl: (paneId: string, url: string) => void;
+  /** A session ended or was removed: its panes in any project let go of it (releaseAgentPanes) */
+  releaseAgent: (agentId: string) => void;
   setFocusedPane: (paneId: string | null) => void;
 
   extractPaneToNewTab: (sourceTabId: string, paneId: string) => void;

@@ -1,40 +1,7 @@
 import { useCallback } from "react";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
-import {
-  collectPaneIds,
-  getProjectState,
-  layoutHasPane,
-  useWorkspaceStore,
-} from "../stores/workspace";
-
-/** Clean up panes and remove tabs that become all-empty after agent deletion */
-function cleanupAgentPanes(agentId: string): void {
-  const ws = useWorkspaceStore.getState();
-  const pw = getProjectState();
-
-  for (const [paneId, pane] of Object.entries(pw.panes)) {
-    if (pane.type === "terminal" && pane.agentId === agentId) {
-      // Find the tab that owns this pane
-      const ownerTab = pw.tabs.find((t) => layoutHasPane(t.layout, paneId));
-      if (!ownerTab) continue;
-
-      const paneIds = collectPaneIds(ownerTab.layout);
-      const isSinglePane = paneIds.length === 1;
-
-      // Check if all OTHER panes in this tab are also empty
-      const allOthersEmpty = paneIds
-        .filter((pid) => pid !== paneId)
-        .every((pid) => pw.panes[pid]?.type === "empty");
-
-      if (isSinglePane || allOthersEmpty) {
-        ws.removeTab(ownerTab.id);
-      } else {
-        ws.updatePane(paneId, { type: "empty", agentId: undefined });
-      }
-    }
-  }
-}
+import { useWorkspaceStore } from "../stores/workspace";
 
 /**
  * Hook: stop + delete + cleanup agent from store + panes.
@@ -47,7 +14,7 @@ export function useDeleteAgent() {
       trpcMutate("agents.stop", { id: agentId }).catch(() => {});
       await trpcMutate("agents.delete", { id: agentId }).catch(() => {});
       removeAgent(agentId);
-      cleanupAgentPanes(agentId);
+      useWorkspaceStore.getState().releaseAgent(agentId);
     },
     [removeAgent],
   );
@@ -58,5 +25,5 @@ export function deleteAgentImperative(agentId: string): void {
   trpcMutate("agents.stop", { id: agentId }).catch(() => {});
   trpcMutate("agents.delete", { id: agentId }).catch(() => {});
   useAgentStore.getState().removeAgent(agentId);
-  cleanupAgentPanes(agentId);
+  useWorkspaceStore.getState().releaseAgent(agentId);
 }
