@@ -98,7 +98,7 @@ export function Sidebar() {
             </button>
           }
         >
-          <ProjectsSection onAddProject={() => useAppStore.getState().openProjects()} />
+          <ProjectsSection />
         </SidebarSection>
       </div>
 

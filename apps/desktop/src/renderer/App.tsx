@@ -47,34 +47,6 @@ const OnboardingWizard = lazy(() =>
   })),
 );
 
-function MainContent() {
-  const activeView = useAppStore((s) => s.activeView);
-
-  switch (activeView) {
-    case "projects":
-      return (
-        <Suspense fallback={<LoadingSpinner className="h-full" />}>
-          <ProjectList />
-        </Suspense>
-      );
-    // Same element for both, so switching to the dashboard keeps every
-    // terminal pane mounted behind it (no remount, no snapshot repaint)
-    case "workspace":
-    case "dashboard":
-      return (
-        <ProjectProvider>
-          <WorkspaceView />
-        </ProjectProvider>
-      );
-    default:
-      return (
-        <Suspense fallback={<LoadingSpinner className="h-full" />}>
-          <ProjectList />
-        </Suspense>
-      );
-  }
-}
-
 export default function App() {
   const activeView = useAppStore((s) => s.activeView);
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
@@ -91,7 +63,9 @@ export default function App() {
   useCliRestarts();
   useFleetSync();
 
-  const showSidebar = activeView === "workspace" || activeView === "dashboard";
+  const activeProjectId = useAppStore((s) => s.activeProjectId);
+  // Projects opens over the workspace (as the Dashboard does): its panes stay mounted and sized
+  const showWorkspace = activeView !== "projects" || activeProjectId !== null;
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -102,8 +76,8 @@ export default function App() {
         <CloseConfirmHost />
         <UpdateBanner />
 
-        <div className="flex-1 overflow-hidden">
-          {showSidebar ? (
+        <div className="relative flex-1 overflow-hidden">
+          {showWorkspace && (
             <div className="flex h-full">
               {/* Collapsed = icon rail, not gone */}
               {sidebarCollapsed && <SidebarRail />}
@@ -123,12 +97,20 @@ export default function App() {
                   </>
                 )}
                 <Panel id="main" order={2} defaultSize={80}>
-                  <MainContent />
+                  {/* Same element for workspace and dashboard: switching keeps every pane mounted */}
+                  <ProjectProvider>
+                    <WorkspaceView />
+                  </ProjectProvider>
                 </Panel>
               </PanelGroup>
             </div>
-          ) : (
-            <MainContent />
+          )}
+          {activeView === "projects" && (
+            <div className={showWorkspace ? "absolute inset-0 z-20 bg-bg-primary" : "h-full"}>
+              <Suspense fallback={<LoadingSpinner className="h-full" />}>
+                <ProjectList />
+              </Suspense>
+            </div>
           )}
         </div>
 

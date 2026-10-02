@@ -4,7 +4,7 @@ import { ArrowLeft, Clock, Cuboid, GitBranch, Pause, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useProjectGroups } from "../../hooks/use-trpc-project-groups";
-import { formatTimeAgoLong } from "../../lib/format";
+import { formatTimeAgoLong, tailPath } from "../../lib/format";
 import { shortcutLabel, useProjectShortcuts } from "../../lib/live-tabs";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
@@ -21,26 +21,25 @@ interface LiveCounts {
 
 const EMPTY_COUNTS: LiveCounts = { running: 0, waiting: 0, idle: 0 };
 
+/** Live agents per project. "Waiting" is an unread attention item, as on the rail: a bare
+ *  waiting_input is only the end of a turn (T123) */
 function useLiveCounts(): Map<string, LiveCounts> {
   const agents = useAgentStore((s) => s.agents);
+  const attention = useAgentStore((s) => s.attentionItems);
   return useMemo(() => {
     const byProject = new Map<string, LiveCounts>();
     for (const a of Object.values(agents)) {
       if (!LIVE_STATUSES.has(a.status) || a.cliType === "shell") continue;
       const c = byProject.get(a.projectId) ?? { ...EMPTY_COUNTS };
-      if (a.status === "waiting_input") c.waiting++;
-      else if (!a.suspended && (a.status === "running" || a.status === "spawning")) c.running++;
+      const item = attention[a.id];
+      if (item && !item.read) c.waiting++;
+      else if (!a.suspended && a.activityLevel === "busy") c.running++;
       else c.idle++;
       byProject.set(a.projectId, c);
     }
     return byProject;
-  }, [agents]);
+  }, [agents, attention]);
 }
-
-const shortPath = (path: string) => {
-  const parts = path.split("/").filter(Boolean);
-  return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : path;
-};
 
 function LiveCount({
   status,
@@ -96,7 +95,7 @@ function ProjectCard({
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold text-text-primary">{project.name}</h3>
           <p className="truncate text-xs text-text-muted" title={project.path}>
-            {shortPath(project.path)}
+            {tailPath(project.path, 2)}
           </p>
         </div>
         {shortcut && (
@@ -110,8 +109,8 @@ function ProjectCard({
       </div>
 
       <div className="flex min-h-4 flex-wrap items-center gap-3 text-[11px]">
-        <LiveCount status="running" count={live.running} label="running" />
-        <LiveCount status="waiting_input" count={live.waiting} label="waiting for input" />
+        <LiveCount status="running" count={live.running} label="working" />
+        <LiveCount status="waiting_input" count={live.waiting} label="waiting for you" />
         {live.idle > 0 && (
           <span className="flex items-center gap-1 text-text-muted">
             <Pause className="h-3 w-3" />
@@ -142,11 +141,12 @@ export function ProjectList() {
   const { data: projects, isLoading, isError } = useProjects();
   const { data: groups } = useProjectGroups();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const projectsReturn = useAppStore((s) => s.projectsReturn);
+  const activeProjectId = useAppStore((s) => s.activeProjectId);
+  const canGoBack = useAppStore((s) => s.projectsFrom !== null || s.activeProjectId !== null);
   const closeProjects = useAppStore((s) => s.closeProjects);
   const liveCounts = useLiveCounts();
   const shortcuts = useProjectShortcuts();
-  const canGoBack = projectsReturn !== null;
+  const groupById = useMemo(() => new Map(groups?.map((g) => [g.id, g])), [groups]);
 
   // Radix dialogs preventDefault the Esc that closes them, so that one never also leaves the view
   useEffect(() => {
@@ -224,10 +224,10 @@ export function ProjectList() {
               <ProjectCard
                 key={project.id}
                 project={project}
-                group={groups?.find((g) => g.id === project.groupId)}
+                group={project.groupId ? groupById.get(project.groupId) : undefined}
                 live={liveCounts.get(project.id) ?? EMPTY_COUNTS}
                 shortcut={shortcutLabel(shortcuts.get(project.id))}
-                current={project.id === projectsReturn?.projectId}
+                current={project.id === activeProjectId}
               />
             ))}
           </div>

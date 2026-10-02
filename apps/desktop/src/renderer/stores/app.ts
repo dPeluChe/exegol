@@ -4,11 +4,6 @@ import { persist } from "zustand/middleware";
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
 type ActiveView = "projects" | "workspace" | "dashboard";
 
-interface ProjectsReturn {
-  view: Exclude<ActiveView, "projects">;
-  projectId: string | null;
-}
-
 interface AppStore {
   /** Current main view */
   activeView: ActiveView;
@@ -19,8 +14,9 @@ interface AppStore {
   activeProjectId: string | null;
   setActiveProject: (id: string | null) => void;
 
-  /** Where the Projects view was opened from: its Back / Esc goes there (null: nowhere to go) */
-  projectsReturn: ProjectsReturn | null;
+  /** The view Projects was opened over (it keeps the project and the workspace mounted): Back /
+   *  Esc returns there; null after a reload, then Back returns to the workspace of the project */
+  projectsFrom: Exclude<ActiveView, "projects"> | null;
   openProjects: () => void;
   closeProjects: () => void;
 
@@ -76,36 +72,26 @@ export const useAppStore = create<AppStore>()(
     (set) => ({
       activeView: "projects",
       setActiveView: (view) => set({ activeView: view }),
-      openDashboard: () => set({ activeView: "dashboard" }),
+      openDashboard: () => set({ activeView: "dashboard", projectsFrom: null }),
 
       activeProjectId: null,
       setActiveProject: (id) =>
         set({
           activeProjectId: id,
           activeView: id ? "workspace" : "projects",
-          projectsReturn: null,
+          projectsFrom: null,
         }),
 
-      projectsReturn: null,
+      projectsFrom: null,
       openProjects: () =>
-        set((s) => ({
-          activeProjectId: null,
-          activeView: "projects",
-          projectsReturn:
-            s.activeView === "projects"
-              ? s.projectsReturn
-              : { view: s.activeView, projectId: s.activeProjectId },
-        })),
-      closeProjects: () =>
         set((s) =>
-          s.projectsReturn
-            ? {
-                activeView: s.projectsReturn.view,
-                activeProjectId: s.projectsReturn.projectId,
-                projectsReturn: null,
-              }
-            : {},
+          s.activeView === "projects" ? {} : { activeView: "projects", projectsFrom: s.activeView },
         ),
+      closeProjects: () =>
+        set((s) => {
+          const to = s.projectsFrom ?? (s.activeProjectId ? "workspace" : null);
+          return to ? { activeView: to, projectsFrom: null } : {};
+        }),
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),

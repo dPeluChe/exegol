@@ -23,26 +23,24 @@ describe("migrateAppStore", () => {
 });
 
 describe("Projects view return", () => {
-  it("Back returns to the project and view it was opened from", () => {
-    useAppStore.setState({ activeView: "workspace", activeProjectId: "p1", projectsReturn: null });
+  it("opens over the workspace, keeping the project, and Back returns to that view", () => {
+    useAppStore.setState({ activeView: "dashboard", activeProjectId: "p1", projectsFrom: null });
     useAppStore.getState().openProjects();
-    expect(useAppStore.getState()).toMatchObject({ activeView: "projects", activeProjectId: null });
-    useAppStore.getState().closeProjects();
+    useAppStore.getState().openProjects();
     expect(useAppStore.getState()).toMatchObject({
-      activeView: "workspace",
+      activeView: "projects",
       activeProjectId: "p1",
-      projectsReturn: null,
+      projectsFrom: "dashboard",
     });
+    useAppStore.getState().closeProjects();
+    expect(useAppStore.getState()).toMatchObject({ activeView: "dashboard", projectsFrom: null });
   });
 
-  it("reopening while on Projects keeps the original return; nowhere to go is a no-op", () => {
-    useAppStore.setState({ activeView: "dashboard", activeProjectId: "p2", projectsReturn: null });
-    useAppStore.getState().openProjects();
-    useAppStore.getState().openProjects();
-    expect(useAppStore.getState().projectsReturn).toEqual({ view: "dashboard", projectId: "p2" });
-    useAppStore.getState().setActiveProject("p3");
-    expect(useAppStore.getState().projectsReturn).toBeNull();
-    useAppStore.setState({ activeView: "projects", activeProjectId: null });
+  it("after a reload Back goes to the project's workspace; with no project it stays", () => {
+    useAppStore.setState({ activeView: "projects", activeProjectId: "p2", projectsFrom: null });
+    useAppStore.getState().closeProjects();
+    expect(useAppStore.getState().activeView).toBe("workspace");
+    useAppStore.setState({ activeView: "projects", activeProjectId: null, projectsFrom: null });
     useAppStore.getState().closeProjects();
     expect(useAppStore.getState().activeView).toBe("projects");
   });
