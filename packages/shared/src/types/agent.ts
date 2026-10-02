@@ -57,14 +57,13 @@ export type AgentActivityLevel = (typeof AGENT_ACTIVITY_LEVELS)[number];
 export function classifyActivity(
   status: AgentStatus,
   currentStep?: string | null,
+  cliType?: string,
 ): AgentActivityLevel {
   switch (status) {
     case "running":
     case "spawning":
-      // If we have a step signal, it's definitely busy
-      if (currentStep && currentStep !== "") return "busy";
-      // Running but no step detected yet — still busy (just started)
-      return "busy";
+      // A shell's step is its foreground job: without one it waits at the prompt
+      return cliType === "shell" && !currentStep ? "idle" : "busy";
     case "waiting_input":
     case "paused":
       return "idle";

@@ -1,8 +1,14 @@
-import { AGENT_CLI_TYPES, type AgentCliType, LIVE_STATUSES } from "@exegol/shared";
+import {
+  AGENT_CLI_TYPES,
+  type AgentCliType,
+  type AgentStatus,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { setAgentModel, setAgentYolo } from "../db/queries";
 import { logger } from "../lib/logger";
 import {
+  foregroundCommands,
   launchFlagsFromArgs,
   matchShellClis,
   providerCommands,
@@ -19,6 +25,8 @@ interface TerminalSession {
   pid: number;
   projectId: string;
   cliType: string;
+  status: AgentStatus;
+  currentStep: string | null;
   alias: string | null;
   launchedInShell: boolean;
 }
@@ -55,7 +63,7 @@ function listTerminalSessions(db: Database.Database): TerminalSession[] {
   const statuses = [...LIVE_STATUSES];
   const rows = db
     .prepare(
-      `SELECT id, pid, project_id, cli_type, alias, launched_in_shell FROM agents
+      `SELECT id, pid, project_id, cli_type, status, current_step, alias, launched_in_shell FROM agents
        WHERE (cli_type = 'shell' OR launched_in_shell = 1) AND pid IS NOT NULL
        AND status IN (${statuses.map(() => "?").join(",")})`,
     )
@@ -64,6 +72,8 @@ function listTerminalSessions(db: Database.Database): TerminalSession[] {
     pid: number;
     project_id: string;
     cli_type: string;
+    status: AgentStatus;
+    current_step: string | null;
     alias: string | null;
     launched_in_shell: number;
   }[];
@@ -72,6 +82,8 @@ function listTerminalSessions(db: Database.Database): TerminalSession[] {
     pid: r.pid,
     projectId: r.project_id,
     cliType: r.cli_type,
+    status: r.status,
+    currentStep: r.current_step,
     alias: r.alias,
     launchedInShell: r.launched_in_shell === 1,
   }));
@@ -130,6 +142,29 @@ function applyTransition(
   });
 }
 
+/** A plain shell's foreground command as its current step (null at the prompt), on change only */
+function reportShellCommands(
+  db: Database.Database,
+  shells: TerminalSession[],
+  commands: Record<string, string | null>,
+): void {
+  const update = db.prepare("UPDATE agents SET current_step = ? WHERE id = ? AND status = ?");
+  for (const shell of shells) {
+    const command = commands[shell.id] ?? null;
+    if (command === shell.currentStep) continue;
+    // The status guard: a shell that exited during the ps call keeps its final status
+    if (update.run(command, shell.id, shell.status).changes === 0) continue;
+    broadcastAgentStatus({
+      agentId: shell.id,
+      projectId: shell.projectId,
+      status: shell.status,
+      currentStep: command,
+      cliType: "shell",
+      timestamp: Date.now(),
+    });
+  }
+}
+
 const POLL_MS = 3_000;
 
 /**
@@ -146,7 +181,10 @@ export function startShellPromotion(db: Database.Database, maps: SessionMaps): (
       const sessions = listTerminalSessions(db);
       if (sessions.length === 0) return;
       const args: Record<string, string> = {};
-      const found = matchShellClis(sessions, await readProcessTable(), providerCommands(), args);
+      const rows = await readProcessTable();
+      const found = matchShellClis(sessions, rows, providerCommands(), args);
+      const shells = sessions.filter((s) => s.cliType === "shell" && !found[s.id]);
+      reportShellCommands(db, shells, foregroundCommands(shells, rows));
       const byId = new Map(sessions.map((s) => [s.id, s]));
       for (const step of planShellTransitions(sessions, found, (id) =>
         maps.outputProcessors.has(id),

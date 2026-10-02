@@ -4,6 +4,11 @@ import { classifyActivity, deriveIsolationMode, isNewerVersion, MODEL_ID_PATTERN
 // ─── classifyActivity ─────────────────────────────────────────────────────
 
 describe("classifyActivity", () => {
+  it("a shell is busy only while a command runs in its foreground", () => {
+    expect(classifyActivity("running", "convex dev", "shell")).toBe("busy");
+    expect(classifyActivity("running", null, "shell")).toBe("idle");
+  });
+
   // ─── Busy states ──────────────────────────────────────────────────────
 
   describe("busy states", () => {

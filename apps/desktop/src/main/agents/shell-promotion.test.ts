@@ -13,6 +13,8 @@ const shell = {
   pid: 100,
   projectId: "p1",
   cliType: "shell",
+  status: "running" as const,
+  currentStep: null,
   alias: null,
   launchedInShell: false,
 };

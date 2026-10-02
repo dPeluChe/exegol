@@ -1,4 +1,5 @@
 import { cn } from "@exegol/ui";
+import { Terminal } from "lucide-react";
 import { useThemeValue } from "../../hooks/use-theme";
 
 // ─── Load all SVG icons via Vite glob (static analysis at build time) ───────
@@ -124,6 +125,12 @@ export function AgentIcon({
         className={cn("shrink-0 object-contain", className)}
         draggable={false}
       />
+    );
+  }
+
+  if (provider === "shell") {
+    return (
+      <Terminal width={size} height={size} className={cn("shrink-0 text-text-muted", className)} />
     );
   }
 

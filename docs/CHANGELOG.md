@@ -9,6 +9,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Sidebar project tree: each tab lists every pane it holds with an icon (the launcher too); a shell is named by where it runs, says what it runs right now and pulses only then, instead of showing the command it was opened with long after it exited. The FILES list under the project is gone (files open in a Files pane)
+- The + launch menu next to the branch lists agents in two columns and stays inside the window
+
 ## [0.5.13] — 2026-10-01 — Cmd+V images in every CLI, sturdier terminal host, floating browser address bar
 
 ### Fixed
