@@ -312,6 +312,7 @@
     "app:version",
     "menu:new-tab",
     "menu:close-pane",
+    "menu:reload",
     "agent:status-changed",
     "metrics:update",
     "pipeline:status-changed",

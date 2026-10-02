@@ -185,6 +185,8 @@ export function useHotkeys() {
         useWorkspaceStore.getState().addTab();
       } else if (action === "close-pane") {
         cleanupAndCloseFocusedPane();
+      } else if (action === "reload") {
+        reloadFocusedBrowserOrWindow();
       }
     });
 
@@ -193,6 +195,17 @@ export function useHotkeys() {
       unsubMenu();
     };
   }, [toggleSidebar, setActiveView]);
+}
+
+/** Cmd+R: the page of the browser pane on screen with focus, else the window as before */
+function reloadFocusedBrowserOrWindow(): void {
+  const { focusedPaneId } = useWorkspaceStore.getState();
+  const pane = focusedPaneId ? getProjectState().panes[focusedPaneId] : undefined;
+  if (useAppStore.getState().activeView === "workspace" && pane?.type === "browser") {
+    window.dispatchEvent(new CustomEvent("exegol:reload-pane", { detail: { paneId: pane.id } }));
+    return;
+  }
+  window.location.reload();
 }
 
 /** Stop agents in terminal panes, then close the focused pane/tab, after asking when that ends

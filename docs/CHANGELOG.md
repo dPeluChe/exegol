@@ -10,10 +10,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Cmd+R with a browser pane focused reloads that page instead of all of Exegol (in the floating browser, its page); elsewhere it still reloads the window
 - Closing a terminal (pane, tab, Stop, a pipeline step) now also ends what it started: a dev server that ignores the hangup, a job sent to the background or a prompt plugin's worker kept running after the terminal was gone
 - A terminal closed in a way its window did not see (its session deleted elsewhere) stayed in the sidebar as running and left a tab that loaded nothing; every window now hears that it ended. A finished shell also closes its tab when nothing else is in it, in whichever project it is, not only the one on screen
 
 ### Changed
+- Edit project > Keyboard shortcut lists who has each number now (kept by choice, or given to a project for its live tab, or free), and what this project has while on Automatic, so you know which one you take it from. The sidebar's auto order follows the change
 - The close confirmation names each pane and what closing it does: the agent it stops, the terminal and the command it stops (or that it sits at its prompt), the browser's site, the file with unsaved changes
 - Sidebar Projects order themselves: the ones with a Cmd+n first (Cmd+2 to Cmd+0), then the others with something live, then the rest alphabetically. The arrows button next to + switches to ordering by hand (drag), as before
 - The Projects view shows each project with its own icon and colour, what is live now (agents working, waiting for you, idle), its shortcut number and its group; the path is shortened, the full one is in the tooltip
