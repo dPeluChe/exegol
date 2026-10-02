@@ -106,3 +106,31 @@ export function collectPaneIds(node: LayoutNode): string[] {
   if (node.type === "pane") return [node.paneId];
   return node.children.flatMap(collectPaneIds);
 }
+
+/**
+ * A project's workspace without a session's panes: a tab left with nothing else in it closes
+ * (unless it is the project's only tab), otherwise the pane becomes a launcher. Null: not shown.
+ */
+export function releaseAgentPanes(pw: ProjectWorkspace, agentId: string): ProjectWorkspace | null {
+  const held = (pid: string) => pw.panes[pid]?.agentId === agentId;
+  if (!Object.keys(pw.panes).some(held)) return null;
+  const panes = { ...pw.panes };
+  let tabs = pw.tabs;
+  for (const tab of pw.tabs) {
+    const ids = collectPaneIds(tab.layout);
+    if (!ids.some(held)) continue;
+    const emptied = ids.every((pid) => held(pid) || pw.panes[pid]?.type === "empty");
+    if (emptied && tabs.length > 1) {
+      tabs = tabs.filter((t) => t.id !== tab.id);
+      for (const pid of ids) delete panes[pid];
+      continue;
+    }
+    for (const pid of ids.filter(held)) {
+      panes[pid] = { ...(panes[pid] as Pane), type: "empty", agentId: undefined };
+    }
+  }
+  const activeTabId = tabs.some((t) => t.id === pw.activeTabId)
+    ? pw.activeTabId
+    : (tabs[0]?.id ?? null);
+  return { ...pw, tabs, panes, activeTabId };
+}

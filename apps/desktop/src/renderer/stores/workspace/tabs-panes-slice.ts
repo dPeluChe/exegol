@@ -7,6 +7,7 @@ import {
   findFirstPaneId,
   getPw,
   layoutHasPane,
+  releaseAgentPanes,
   removeNodeByPaneId,
   setPw,
   splitNodeByPaneId,
@@ -37,6 +38,7 @@ type TabsPanesSlice = Pick<
   | "splitPane"
   | "updatePane"
   | "setPaneUrl"
+  | "releaseAgent"
   | "setFocusedPane"
   | "extractPaneToNewTab"
   | "closeFocusedPane"
@@ -283,6 +285,16 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
         return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
       }
       return s;
+    }),
+
+  releaseAgent: (agentId) =>
+    set((s) => {
+      let projectWorkspaces = s.projectWorkspaces;
+      for (const [projectId, pw] of Object.entries(s.projectWorkspaces)) {
+        const next = releaseAgentPanes(pw, agentId);
+        if (next) projectWorkspaces = { ...projectWorkspaces, [projectId]: next };
+      }
+      return projectWorkspaces === s.projectWorkspaces ? s : { projectWorkspaces };
     }),
 
   setFocusedPane: (paneId) => set({ focusedPaneId: paneId }),
