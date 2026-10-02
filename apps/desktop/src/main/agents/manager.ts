@@ -14,6 +14,7 @@ import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
 import { installedCliVersion } from "../system/cli-versions";
+import { processesBelow } from "../system/process-tree";
 import { getPtyHost } from "../terminal/pty-host";
 import type { OutputProcessor } from "./agent-output-processor";
 import {
@@ -260,7 +261,11 @@ export class AgentManager {
     const ptyHost = getPtyHost();
     if (ptyHost.isAlive(agentId)) {
       this.stopRequested.add(agentId);
+      // Read before the shell dies: its children are then reparented and no longer findable
+      const pid = getAgent(db, agentId)?.pid;
+      const below = pid ? await processesBelow(pid).catch(() => null) : null;
       ptyHost.kill(agentId);
+      below?.terminate();
       await ptyHost.waitForExit(agentId, STOP_TIMEOUT_MS);
       // onExit consumes the mark; if the exit never came, a later natural
       // exit must not be recorded as this Stop

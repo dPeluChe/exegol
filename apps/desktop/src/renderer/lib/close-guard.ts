@@ -10,52 +10,85 @@ export interface CloseSummary {
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** What closing these panes would end or lose, or null when nothing (empty panes only).
- *  `unsaved`: panes holding a file edit that is not saved */
+const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
+
+function hostOf(url: string | undefined): string {
+  if (!url) return "";
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+/** A terminal's name: its alias, the folder or task it was opened with, or its CLI */
+function sessionName(agent: AgentState): string {
+  if (agent.alias) return agent.alias;
+  if (agent.taskDescription && agent.taskDescription !== agent.cliType) {
+    return agent.taskDescription.slice(0, 40);
+  }
+  return agent.cliType === "shell" ? "Terminal" : agent.cliType;
+}
+
+/** One pane: what it is (`name`, the title for a single pane) and what closing it does */
+function describePane(
+  pane: Pane,
+  agents: Record<string, AgentState>,
+  unsaved: boolean,
+): { name: string; effect: string; resumable?: boolean } | null {
+  if (pane.type === "terminal") {
+    const agent = pane.agentId ? agents[pane.agentId] : undefined;
+    if (!agent || !LIVE_STATUSES.has(agent.status)) {
+      return { name: agent ? sessionName(agent) : "Terminal", effect: "already ended" };
+    }
+    const name = sessionName(agent);
+    if (agent.cliType !== "shell") {
+      const cli = agent.alias ? ` (${agent.cliType})` : "";
+      return { name: `${name}${cli}`, effect: "stops this session", resumable: true };
+    }
+    return {
+      name: name === "Terminal" ? "Terminal" : `Terminal ${name}`,
+      effect: agent.currentStep
+        ? `ends it and stops ${agent.currentStep}`
+        : "ends it (at its prompt)",
+    };
+  }
+  if (pane.type === "browser") {
+    const host = hostOf(pane.url);
+    return { name: host ? `Browser ${host}` : "Browser", effect: "closes the page" };
+  }
+  if (pane.type === "files") {
+    const file = pane.openFile ? ` ${baseName(pane.openFile)}` : "";
+    return {
+      name: `Files${file}`,
+      effect: unsaved ? "unsaved changes are lost" : "closes the viewer",
+    };
+  }
+  if (pane.type === "git") return { name: "Git", effect: "closes the changes view" };
+  return null;
+}
+
+/** What closing these panes would end or lose, pane by pane, or null when nothing (empty panes
+ *  only). `unsaved`: panes holding a file edit that is not saved */
 export function describeClose(
   panes: Pane[],
   agents: Record<string, AgentState>,
   unsaved: ReadonlySet<string>,
 ): CloseSummary | null {
-  const lines: string[] = [];
-  const liveAgents: string[] = [];
-  let shells = 0;
-  let browsers = 0;
-  let files = 0;
-  let other = 0;
-  for (const pane of panes) {
-    if (pane.type === "terminal") {
-      const agent = pane.agentId ? agents[pane.agentId] : undefined;
-      if (!agent || !LIVE_STATUSES.has(agent.status)) other++;
-      else if (agent.cliType === "shell") shells++;
-      else liveAgents.push(agent.alias || agent.cliType);
-    } else if (pane.type === "browser") browsers++;
-    else if (pane.type === "files") files++;
-    else if (pane.type !== "empty") other++;
-  }
-  const unsavedCount = panes.filter((p) => unsaved.has(p.id)).length;
-  if (liveAgents.length + shells + browsers + files + other === 0) return null;
-
-  if (liveAgents.length > 0) {
+  const described = panes.flatMap((p) => describePane(p, agents, unsaved.has(p.id)) ?? []);
+  const [only] = described;
+  if (!only) return null;
+  const lines = described.map((d) => `${d.name}: ${d.effect}.`);
+  const resumable = described.filter((d) => d.resumable).length;
+  if (resumable > 0) {
     lines.push(
-      `Stops ${liveAgents.join(", ")} (${liveAgents.length === 1 ? "its session can be resumed from History" : "their sessions can be resumed from History"}).`,
+      resumable === 1
+        ? "Its session can be resumed from History."
+        : "Their sessions can be resumed from History.",
     );
   }
-  if (shells > 0) lines.push(`Ends ${plural(shells, "terminal")} and whatever runs in it.`);
-  if (unsavedCount > 0)
-    lines.push(`Unsaved file changes in ${plural(unsavedCount, "pane")} are lost.`);
-  if (browsers > 0 && lines.length === 0) lines.push(`Closes ${plural(browsers, "browser pane")}.`);
-  if (lines.length === 0)
-    lines.push(
-      panes.length === 1 ? "Closes this pane." : `Closes ${plural(panes.length, "pane")}.`,
-    );
-
   const title =
-    panes.length === 1
-      ? liveAgents.length === 1
-        ? `Close ${liveAgents[0]}?`
-        : "Close this pane?"
-      : `Close ${plural(panes.length, "pane")}?`;
+    described.length === 1 ? `Close ${only.name}?` : `Close ${plural(described.length, "pane")}?`;
   return { title, lines };
 }
 
