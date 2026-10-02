@@ -32,6 +32,10 @@ interface AppStore {
   sidebarProjectsHeight: number | null;
   setSidebarProjectsHeight: (height: number | null) => void;
 
+  /** Sidebar Projects order: by Cmd+n, then live, then name; or the order dragged by hand */
+  projectsOrder: "auto" | "manual";
+  setProjectsOrder: (order: "auto" | "manual") => void;
+
   /** Sidebar Agents section: the live agents or the Needs attention list */
   sidebarAgentsView: "agents" | "attention";
   setSidebarAgentsView: (view: "agents" | "attention") => void;
@@ -102,6 +106,9 @@ export const useAppStore = create<AppStore>()(
       sidebarProjectsHeight: null,
       setSidebarProjectsHeight: (height) => set({ sidebarProjectsHeight: height }),
 
+      projectsOrder: "auto",
+      setProjectsOrder: (order) => set({ projectsOrder: order }),
+
       sidebarAgentsView: "agents",
       setSidebarAgentsView: (view) => set({ sidebarAgentsView: view }),
 
@@ -127,6 +134,7 @@ export const useAppStore = create<AppStore>()(
         liveTabOrder: state.liveTabOrder,
         sidebarProjectsHeight: state.sidebarProjectsHeight,
         sidebarAgentsView: state.sidebarAgentsView,
+        projectsOrder: state.projectsOrder,
       }),
     },
   ),

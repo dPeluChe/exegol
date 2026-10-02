@@ -110,6 +110,8 @@ dependency/library audit
 ### Verify live (2026-09-29/30, not checked in the app)
 - Sidebar tree: a layout tab lists browser, launcher and both shells; a shell running `bun dev`
   shows it and pulses, at the prompt it is still; the + menu fits near the bottom
+- Sidebar Projects auto order: Cmd+n ones first in key order, live ones next, then A-Z; the
+  toggle switches to manual and drag works again
 - Floating browser: type a URL in its address bar, DevTools, open in browser, Sizes still works
 - Browser sizes: Add a size, remove it; float at a size; Sizes in the floating window (the
   others follow the first's page; design/QA off while comparing); dock back on the floated page;

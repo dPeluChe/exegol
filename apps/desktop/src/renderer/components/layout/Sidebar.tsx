@@ -1,5 +1,5 @@
 import { cn, Separator } from "@exegol/ui";
-import { Activity, Cuboid, LayoutDashboard, Plus } from "lucide-react";
+import { Activity, ArrowDownAZ, Cuboid, GripVertical, LayoutDashboard, Plus } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
 import { useAgentStore } from "../../stores/agents";
@@ -19,6 +19,8 @@ export function Sidebar() {
   const attentionCount = useAgentStore((s) => s.unreadAttentionCount);
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const openDashboard = useAppStore((s) => s.openDashboard);
+  const projectsOrder = useAppStore((s) => s.projectsOrder);
+  const setProjectsOrder = useAppStore((s) => s.setProjectsOrder);
   const runningCount = useAgentStore(
     (s) =>
       Object.values(s.agents).filter(
@@ -88,14 +90,32 @@ export function Sidebar() {
           size="cap"
           height={projectsHeight}
           action={
-            <button
-              type="button"
-              onClick={() => useAppStore.getState().openProjects()}
-              className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
-              title="Add project"
-            >
-              <Plus className="h-2.5 w-2.5" />
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setProjectsOrder(projectsOrder === "auto" ? "manual" : "auto")}
+                className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
+                title={
+                  projectsOrder === "auto"
+                    ? "Auto order: Cmd+n first, then live, then A-Z. Click to order by hand"
+                    : "Ordered by hand (drag). Click for auto order"
+                }
+              >
+                {projectsOrder === "auto" ? (
+                  <ArrowDownAZ className="h-2.5 w-2.5" />
+                ) : (
+                  <GripVertical className="h-2.5 w-2.5" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => useAppStore.getState().openProjects()}
+                className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
+                title="Add project"
+              >
+                <Plus className="h-2.5 w-2.5" />
+              </button>
+            </>
           }
         >
           <ProjectsSection />

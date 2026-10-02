@@ -99,7 +99,9 @@ function SectionHeader({
           </span>
         )}
       </button>
-      {action && <span className="flex shrink-0 items-center py-1 pr-3 pl-1">{action}</span>}
+      {action && (
+        <span className="flex shrink-0 items-center gap-0.5 py-1 pr-3 pl-1">{action}</span>
+      )}
     </div>
   );
 }
