@@ -65,6 +65,11 @@ export function FloatingBrowser({
   // Several sizes side by side: the first leads (toolbar, design, QA), the others follow its page
   const [compare, setCompare] = useState<PageSize[] | null>(null);
   const { handleBack, handleForward, handleReload } = useWebviewControls(webviewRef);
+  // Cmd+R reloads the (leading) page, not this window
+  useEffect(
+    () => window.api.onMenuAction((action) => action === "reload" && handleReload()),
+    [handleReload],
+  );
   const [issueMessage, setIssueMessage] = useState("");
   // What is being typed in the address bar; null shows the page's URL
   const [draft, setDraft] = useState<string | null>(null);

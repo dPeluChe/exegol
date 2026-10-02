@@ -109,6 +109,14 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   );
   const { handleBack, handleForward, handleReload, handleOpenDevTools } =
     useWebviewControls(webviewRef);
+  // Cmd+R with this pane focused reloads the page, not Exegol (use-hotkeys)
+  useEffect(() => {
+    const onReload = (e: Event) => {
+      if ((e as CustomEvent<{ paneId: string }>).detail.paneId === paneId) handleReload();
+    };
+    window.addEventListener("exegol:reload-pane", onReload);
+    return () => window.removeEventListener("exegol:reload-pane", onReload);
+  }, [paneId, handleReload]);
   const [pendingStop, setPendingStop] = useState<PortInfo | null>(null);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   // A size saved by a dev build before sizes were objects ("mobile") is ignored

@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
+import { useProjectShortcuts } from "../../lib/live-tabs";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../../stores/shortcuts";
 import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
@@ -112,14 +113,25 @@ export function ProjectAppearanceDialog({
   );
 }
 
-/** The Cmd+digit this project keeps (lib/live-tabs): the others fill the numbers left */
+/** The Cmd+digit this project keeps (lib/live-tabs): the others fill the numbers left. Each
+ *  number says who has it now, kept by choice or given for a live tab, so a change is informed */
 function ShortcutPicker({ projectId }: { projectId: string }) {
   const assigned = useShortcutStore((s) => s.assigned);
   const assign = useShortcutStore((s) => s.assign);
+  const live = useProjectShortcuts();
   const { data: projects = [] } = useProjects();
   const nameOf = new Map(projects.map((p) => [p.id, p.name]));
-  const holder = new Map(Object.entries(assigned).map(([id, d]) => [d, id]));
+  const kept = new Map(Object.entries(assigned).map(([id, d]) => [d, id]));
+  const given = new Map([...live].filter(([id]) => !assigned[id]).map(([id, d]) => [d, id]));
   const current = assigned[projectId] ?? "";
+  const ownAuto = assigned[projectId] ? undefined : live.get(projectId);
+  const ownerLabel = (d: ShortcutDigit) => {
+    const keeper = kept.get(d);
+    if (keeper && keeper !== projectId) return ` · ${nameOf.get(keeper) ?? "another project"}`;
+    const auto = given.get(d);
+    if (auto && auto !== projectId) return ` · ${nameOf.get(auto) ?? "another project"} (live tab)`;
+    return keeper === projectId || auto === projectId ? " · this project" : " · free";
+  };
 
   return (
     <label className="mb-3 block">
@@ -131,18 +143,17 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
         onChange={(e) => assign(projectId, (e.target.value || null) as ShortcutDigit | null)}
         className="w-full rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
       >
-        <option value="">Automatic (next free number while it has a live tab)</option>
-        {SHORTCUT_DIGITS.map((d) => {
-          const owner = holder.get(d);
-          return (
-            <option key={d} value={d}>
-              {chordBadge(d)}
-              {owner && owner !== projectId
-                ? ` (now ${nameOf.get(owner) ?? "another project"})`
-                : ""}
-            </option>
-          );
-        })}
+        <option value="">
+          {ownAuto
+            ? `Automatic (now ${chordBadge(ownAuto)}, while it has a live tab)`
+            : "Automatic (next free number while it has a live tab)"}
+        </option>
+        {SHORTCUT_DIGITS.map((d) => (
+          <option key={d} value={d}>
+            {chordBadge(d)}
+            {ownerLabel(d)}
+          </option>
+        ))}
       </select>
     </label>
   );

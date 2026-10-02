@@ -98,7 +98,12 @@ export function installAppMenu(): void {
     {
       label: "View",
       submenu: [
-        { role: "reload" },
+        {
+          label: "Reload",
+          accelerator: "CmdOrCtrl+R",
+          click: (_item, browserWindow) =>
+            handleReloadAccelerator(browserWindow as BaseWindow | undefined),
+        },
         { role: "forceReload" },
         { role: "toggleDevTools" },
         { type: "separator" },
@@ -175,6 +180,15 @@ function sendToRenderer(win: BaseWindow | undefined, channel: string): void {
  * Cmd+W router: settings + floating windows close themselves; the main
  * window forwards to the renderer's pane-close handler.
  */
+/** Cmd+R: the renderer reloads the focused browser pane's page, or the window when none is
+ *  focused (a browser pane's reload used to reload all of Exegol). Settings has no panes */
+function handleReloadAccelerator(win: BaseWindow | undefined): void {
+  const candidate = win ?? BrowserWindow.getFocusedWindow();
+  if (!(candidate instanceof BrowserWindow) || candidate.isDestroyed()) return;
+  if (candidate.webContents.getURL().includes("settings=1")) candidate.webContents.reload();
+  else candidate.webContents.send("menu:reload");
+}
+
 function handleCloseAccelerator(win: BaseWindow | undefined): void {
   const candidate = win ?? BrowserWindow.getFocusedWindow();
   if (!candidate || candidate.isDestroyed()) return;
