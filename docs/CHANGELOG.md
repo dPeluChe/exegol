@@ -9,6 +9,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The Projects view shows each project with its own icon and colour, what is live now (agents running, waiting for input, idle), its shortcut number and its group; the path is shortened, the full one is in the tooltip
+- The Projects view has a Back button (and Esc) that returns to the project or Dashboard you opened it from
+
 ## [0.5.13] — 2026-10-01 — Cmd+V images in every CLI, sturdier terminal host, floating browser address bar
 
 ### Fixed

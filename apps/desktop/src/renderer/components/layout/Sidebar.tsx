@@ -90,7 +90,7 @@ export function Sidebar() {
           action={
             <button
               type="button"
-              onClick={() => useAppStore.getState().setActiveProject(null)}
+              onClick={() => useAppStore.getState().openProjects()}
               className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
               title="Add project"
             >
@@ -98,7 +98,7 @@ export function Sidebar() {
             </button>
           }
         >
-          <ProjectsSection onAddProject={() => useAppStore.getState().setActiveProject(null)} />
+          <ProjectsSection onAddProject={() => useAppStore.getState().openProjects()} />
         </SidebarSection>
       </div>
 

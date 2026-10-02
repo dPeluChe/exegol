@@ -108,7 +108,7 @@ export function SidebarRail() {
       </div>
       <button
         type="button"
-        onClick={() => useAppStore.getState().setActiveProject(null)}
+        onClick={() => useAppStore.getState().openProjects()}
         className={cn(railButton, "text-text-muted hover:bg-white/5 hover:text-text-secondary")}
         title="Add project"
       >

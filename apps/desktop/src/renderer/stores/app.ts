@@ -4,6 +4,11 @@ import { persist } from "zustand/middleware";
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
 type ActiveView = "projects" | "workspace" | "dashboard";
 
+interface ProjectsReturn {
+  view: Exclude<ActiveView, "projects">;
+  projectId: string | null;
+}
+
 interface AppStore {
   /** Current main view */
   activeView: ActiveView;
@@ -13,6 +18,11 @@ interface AppStore {
   /** Currently selected project */
   activeProjectId: string | null;
   setActiveProject: (id: string | null) => void;
+
+  /** Where the Projects view was opened from: its Back / Esc goes there (null: nowhere to go) */
+  projectsReturn: ProjectsReturn | null;
+  openProjects: () => void;
+  closeProjects: () => void;
 
   /** Sidebar collapse state */
   sidebarCollapsed: boolean;
@@ -73,7 +83,29 @@ export const useAppStore = create<AppStore>()(
         set({
           activeProjectId: id,
           activeView: id ? "workspace" : "projects",
+          projectsReturn: null,
         }),
+
+      projectsReturn: null,
+      openProjects: () =>
+        set((s) => ({
+          activeProjectId: null,
+          activeView: "projects",
+          projectsReturn:
+            s.activeView === "projects"
+              ? s.projectsReturn
+              : { view: s.activeView, projectId: s.activeProjectId },
+        })),
+      closeProjects: () =>
+        set((s) =>
+          s.projectsReturn
+            ? {
+                activeView: s.projectsReturn.view,
+                activeProjectId: s.projectsReturn.projectId,
+                projectsReturn: null,
+              }
+            : {},
+        ),
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
