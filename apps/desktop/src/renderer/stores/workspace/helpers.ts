@@ -129,8 +129,10 @@ export function releaseAgentPanes(pw: ProjectWorkspace, agentId: string): Projec
       panes[pid] = { ...(panes[pid] as Pane), type: "empty", agentId: undefined };
     }
   }
+  // A closed active tab hands over to its neighbour, as removeTab does
+  const at = pw.tabs.findIndex((t) => t.id === pw.activeTabId);
   const activeTabId = tabs.some((t) => t.id === pw.activeTabId)
     ? pw.activeTabId
-    : (tabs[0]?.id ?? null);
+    : (tabs[Math.min(Math.max(at, 0), tabs.length - 1)]?.id ?? null);
   return { ...pw, tabs, panes, activeTabId };
 }

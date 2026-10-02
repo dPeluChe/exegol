@@ -44,7 +44,7 @@ describe("describeClose", () => {
 
   it("browser, files and an ended session are named; unsaved edits are called out", () => {
     const b = pane("b", "browser", { url: "http://localhost:8007/app" });
-    expect(describeClose([b], agents, none)?.title).toBe("Close Browser localhost:8007?");
+    expect(describeClose([b], agents, none)?.title).toBe("Close Browser localhost:8007/app?");
     expect(describeClose([pane("t", "terminal", { agentId: "a2" })], agents, none)?.lines).toEqual([
       "old: already ended.",
     ]);

@@ -2,7 +2,7 @@ import { cn } from "@exegol/ui";
 import { Plus, Terminal } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { deleteAgentImperative } from "../../hooks/use-delete-agent";
+import { deleteAgent } from "../../hooks/use-delete-agent";
 import { confirmClosePanes } from "../../lib/close-guard";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -52,7 +52,7 @@ export function WorkspaceTabBar() {
         if (!(await confirmClosePanes(closing, useAgentStore.getState().agents))) return;
         // Stop + cleanup all terminal agents in the tab
         for (const pane of closing) {
-          if (pane.type === "terminal" && pane.agentId) deleteAgentImperative(pane.agentId);
+          if (pane.type === "terminal" && pane.agentId) deleteAgent(pane.agentId);
         }
       }
       removeTab(tabId);

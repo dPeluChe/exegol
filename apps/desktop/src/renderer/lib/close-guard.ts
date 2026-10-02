@@ -2,6 +2,8 @@ import { LIVE_STATUSES } from "@exegol/shared";
 import type { AgentState } from "../stores/agents";
 import { useCloseConfirmStore } from "../stores/close-confirm";
 import type { Pane } from "../stores/workspace";
+import { sessionName } from "./agent-label";
+import { pageLabel } from "./browser-viewports";
 
 export interface CloseSummary {
   title: string;
@@ -12,22 +14,10 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
-function hostOf(url: string | undefined): string {
-  if (!url) return "";
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
-  }
-}
-
-/** A terminal's name: its alias, the folder or task it was opened with, or its CLI */
-function sessionName(agent: AgentState): string {
-  if (agent.alias) return agent.alias;
-  if (agent.taskDescription && agent.taskDescription !== agent.cliType) {
-    return agent.taskDescription.slice(0, 40);
-  }
-  return agent.cliType === "shell" ? "Terminal" : agent.cliType;
+/** The session's name, "Terminal" for a shell with none of its own */
+function terminalName(agent: AgentState): string {
+  const name = sessionName(agent);
+  return name === "shell" ? "Terminal" : name;
 }
 
 /** One pane: what it is (`name`, the title for a single pane) and what closing it does */
@@ -39,9 +29,9 @@ function describePane(
   if (pane.type === "terminal") {
     const agent = pane.agentId ? agents[pane.agentId] : undefined;
     if (!agent || !LIVE_STATUSES.has(agent.status)) {
-      return { name: agent ? sessionName(agent) : "Terminal", effect: "already ended" };
+      return { name: agent ? terminalName(agent) : "Terminal", effect: "already ended" };
     }
-    const name = sessionName(agent);
+    const name = terminalName(agent);
     if (agent.cliType !== "shell") {
       const cli = agent.alias ? ` (${agent.cliType})` : "";
       return { name: `${name}${cli}`, effect: "stops this session", resumable: true };
@@ -54,8 +44,8 @@ function describePane(
     };
   }
   if (pane.type === "browser") {
-    const host = hostOf(pane.url);
-    return { name: host ? `Browser ${host}` : "Browser", effect: "closes the page" };
+    const page = pageLabel(pane.url);
+    return { name: page ? `Browser ${page}` : "Browser", effect: "closes the page" };
   }
   if (pane.type === "files") {
     const file = pane.openFile ? ` ${baseName(pane.openFile)}` : "";

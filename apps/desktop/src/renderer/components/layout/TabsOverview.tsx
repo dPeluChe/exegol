@@ -1,5 +1,6 @@
 import { cn } from "@exegol/ui";
 import { Globe, LayoutGrid } from "lucide-react";
+import { pageLabel } from "../../lib/browser-viewports";
 import { focusPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
@@ -12,16 +13,6 @@ const PANE_LABEL: Record<string, string> = {
   empty: "Launcher",
   terminal: "Terminal",
 };
-
-function hostOf(url: string | undefined): string {
-  if (!url) return "Browser";
-  try {
-    const u = new URL(url);
-    return `${u.host}${u.pathname === "/" ? "" : u.pathname}`;
-  } catch {
-    return url;
-  }
-}
 
 /** Selects its own agent: a status push re-renders this row, not the whole tree */
 function PaneAgentRow({ agentId }: { agentId: string }) {
@@ -41,7 +32,7 @@ function PaneRow({ pane, onOpen }: { pane: Pane; onOpen: () => void }) {
     >
       <Icon className="ml-0.5 h-3 w-3 shrink-0" />
       <span className="truncate">
-        {pane.type === "browser" ? hostOf(pane.url) : PANE_LABEL[pane.type]}
+        {pane.type === "browser" ? pageLabel(pane.url) || "Browser" : PANE_LABEL[pane.type]}
       </span>
     </button>
   );

@@ -649,6 +649,12 @@ and are recorded as refuted at the end.
    renderer only). Needs main to tell the sidecar which sessions have a live view.
 
 Left from the simplify of that batch (judged out of its scope):
+- Process cleanup on close lives in main's `PtyHost.kill`; the sidecar's lease exit and SIGTERM
+  handler still hang up only the shells. Move `terminalProcesses` + `terminateAll` into the
+  sidecar with the next `SIDECAR_VERSION` bump
+- One kill-with-escalation helper for `terminateAll` and `killDevServer` (one pid-reuse guard)
+- The renderer's DB sync only adds agents: dropping ones the DB no longer has would make the
+  store converge without relying on broadcasts
 - Reattach replay: `pty-host.ts` reattach hands the sidecar's raw snapshot to the renderer; the
   other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
   there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)

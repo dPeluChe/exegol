@@ -6,7 +6,7 @@ import { cyclePane, focusActivePane } from "../lib/pane-focus";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
-import { deleteAgentImperative } from "./use-delete-agent";
+import { deleteAgent } from "./use-delete-agent";
 
 export function useHotkeys() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -222,7 +222,7 @@ export async function cleanupAndCloseFocusedPane(): Promise<void> {
   for (const pid of paneIdsToClean) {
     const pane = panes[pid];
     if (pane?.type === "terminal" && pane.agentId) {
-      deleteAgentImperative(pane.agentId);
+      deleteAgent(pane.agentId);
     }
   }
 

@@ -40,7 +40,7 @@ describe("releaseAgentPanes", () => {
     const next = releaseAgentPanes(pw, "shell-1");
     expect(next?.tabs.map((t) => t.id)).toEqual(["main", "split"]);
     expect(next?.panes.s1).toBeUndefined();
-    expect(next?.activeTabId).toBe("main");
+    expect(next?.activeTabId).toBe("split");
   });
 
   it("turns the pane into a launcher when the tab still shows something", () => {

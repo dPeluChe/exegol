@@ -290,11 +290,22 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
   releaseAgent: (agentId) =>
     set((s) => {
       let projectWorkspaces = s.projectWorkspaces;
+      const cwd = { ...s.paneCwd };
+      const exit = { ...s.paneLastExit };
       for (const [projectId, pw] of Object.entries(s.projectWorkspaces)) {
         const next = releaseAgentPanes(pw, agentId);
-        if (next) projectWorkspaces = { ...projectWorkspaces, [projectId]: next };
+        if (!next) continue;
+        projectWorkspaces = { ...projectWorkspaces, [projectId]: next };
+        // T112: a closed tab's panes take their OSC 7/133 state with them
+        for (const pid of Object.keys(pw.panes)) {
+          if (next.panes[pid]) continue;
+          delete cwd[pid];
+          delete exit[pid];
+        }
       }
-      return projectWorkspaces === s.projectWorkspaces ? s : { projectWorkspaces };
+      return projectWorkspaces === s.projectWorkspaces
+        ? s
+        : { projectWorkspaces, paneCwd: cwd, paneLastExit: exit };
     }),
 
   setFocusedPane: (paneId) => set({ focusedPaneId: paneId }),

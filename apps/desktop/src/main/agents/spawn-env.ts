@@ -373,6 +373,17 @@ export function buildApiKeyEnv(db: Database.Database): Record<string, string> {
 
 // ─── Agent exit helpers ─────────────────────────────────────────────────
 
+function endEvent(agent: AgentContext, status: AgentStatus): AgentStatusEvent {
+  return {
+    agentId: agent.id,
+    projectId: agent.projectId,
+    status,
+    currentStep: null,
+    cliType: agent.cliType,
+    timestamp: Date.now(),
+  };
+}
+
 /**
  * Finalize agent status on process exit: update DB, broadcast, log activity.
  * Returns the final status string, or null if the agent was already terminal.
@@ -389,18 +400,8 @@ export function finalizeAgentStatus(
       logger.info(
         `[Finalize] Skip ${agent.id} (${agent.cliType}) — already ${currentAgent?.status ?? "deleted"}`,
       );
-      // Deleted while its process lived: a window that did not delete it still shows it running
-      // (a shell's pane kept pointing at nothing), so tell every window it ended
-      if (!currentAgent) {
-        broadcastAgentStatus({
-          agentId: agent.id,
-          projectId: agent.projectId,
-          status: "stopped",
-          currentStep: null,
-          cliType: agent.cliType,
-          timestamp: Date.now(),
-        });
-      }
+      // Row deleted while live (backstop: agents.delete broadcasts too)
+      if (!currentAgent) broadcastAgentStatus(endEvent(agent, "stopped"));
       return null;
     }
 
@@ -411,15 +412,7 @@ export function finalizeAgentStatus(
         : "failed";
     logger.info(`[Finalize] ${agent.id} (${agent.cliType}) → ${finalStatus} (exit=${exitCode})`);
     stopAgent(db, agent.id, finalStatus);
-    const statusEvent: AgentStatusEvent = {
-      agentId: agent.id,
-      projectId: agent.projectId,
-      status: finalStatus,
-      currentStep: null,
-      cliType: agent.cliType,
-      timestamp: Date.now(),
-    };
-    broadcastAgentStatus(statusEvent);
+    broadcastAgentStatus(endEvent(agent, finalStatus));
     // The user just pressed Stop: no desktop notification about it
     if (agent.cliType !== "shell" && !stoppedByUser && !isAgentQuiet(db, agent.id)) {
       getNotificationBus().emit({
