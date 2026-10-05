@@ -334,7 +334,7 @@ function SessionControls({ agent }: { agent: QuietAgent }) {
         <>
           <QuietControls agent={agent} className="py-0 text-[9px]" />
           <CliUpdateControl agentId={agent.id} />
-          <TurnChangesChip agent={agent} />
+          <TurnChangesChip agentId={agent.id} />
         </>
       )}
       {agent.launchedInShell && agent.status === "idle" && (

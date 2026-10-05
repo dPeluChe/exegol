@@ -160,7 +160,7 @@ export const oplogRouter = router({
 
   // ─── T200.5: an interactive agent's turns (kept in main, by agent id) ───
 
-  /** The newest turn of this agent that changed files */
+  /** The newest turn of this agent that changed files, and whether it is in a turn now */
   latestTurn: publicProcedure
     .input(z.object({ agentId: z.string() }))
     .query(({ input }) => latestTurn(input.agentId)),
@@ -176,17 +176,16 @@ export const oplogRouter = router({
       }
     }),
 
-  /** Undo turn: restore the folder to before the agent's newest turn */
+  /** Undo turn: put back the newest turn's files that nobody edited since */
   undoTurn: publicProcedure
     .input(z.object({ agentId: z.string(), turnIndex: z.number().int() }))
-    .mutation(({ ctx, input }) => {
-      const projectId = getAgent(ctx.db, input.agentId)?.projectId;
+    .mutation(async ({ input }) => {
       try {
-        return undoLatestTurn(input.agentId, input.turnIndex);
+        const result = await undoLatestTurn(input.agentId, input.turnIndex);
+        invalidateProjectDiff(result.projectId);
+        return result;
       } catch (err) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: (err as Error).message });
-      } finally {
-        if (projectId) invalidateProjectDiff(projectId);
       }
     }),
 });

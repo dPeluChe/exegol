@@ -4,7 +4,6 @@ import { FileDiff, Undo2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLatestTurn, useTurnDiff, useUndoTurn } from "../../hooks/use-trpc-scoring";
 import { ConfirmDialog } from "../common/ConfirmDialog";
-import type { QuietAgent } from "../common/QuietControls";
 import { DiffFileView } from "../workspace/sections/diff/DiffFileView";
 import { parseUnifiedDiff } from "../workspace/sections/diff/diff-parser";
 import { useExpandedDiffFiles } from "../workspace/sections/diff/use-expanded-diff-files";
@@ -21,15 +20,16 @@ function undoDescription(turn: TurnChanges): string {
   return (
     `Restores ${plural(turn.files.length, "file")} to how they were before turn ${turn.turnIndex}: ` +
     `${names.join(", ")}${more > 0 ? ` and ${more} more` : ""}. ` +
-    "Edits made since the turn ended are reverted too. Exegol commits the restored folder on " +
-    "your branch and keeps a safety snapshot in the Oplog, so this can be undone as well."
+    "A file edited since the turn ended is left as it is. Nothing is committed: a safety " +
+    "snapshot in the Oplog keeps the current state, so this can be undone as well."
   );
 }
 
 /** T200.5: "N files changed" after a turn: the turn's diff, and Undo turn */
-export function TurnChangesChip({ agent }: { agent: QuietAgent }) {
-  const { data: turn } = useLatestTurn(agent.id);
+export function TurnChangesChip({ agentId }: { agentId: string }) {
+  const { data } = useLatestTurn(agentId);
   const [open, setOpen] = useState(false);
+  const turn = data?.turn;
   if (!turn) return null;
   return (
     <>
@@ -42,13 +42,7 @@ export function TurnChangesChip({ agent }: { agent: QuietAgent }) {
         <FileDiff className="h-2.5 w-2.5" />
         {plural(turn.files.length, "file")} changed
       </button>
-      {open && (
-        <TurnDiffDialog
-          turn={turn}
-          busy={agent.status === "running"}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      {open && <TurnDiffDialog turn={turn} busy={data.inTurn} onClose={() => setOpen(false)} />}
     </>
   );
 }

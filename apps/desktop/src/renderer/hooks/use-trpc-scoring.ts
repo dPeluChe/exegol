@@ -1,15 +1,16 @@
 import type {
   Activity,
   AgentScoreRow,
+  LatestTurn,
   OplogEntry,
   OplogSnapshot,
   ScoringStats,
   TurnChanges,
+  UndoTurnResult,
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
-import { toastError } from "../stores/toasts";
-import { useMountEffect } from "./use-mount-effect";
+import { toastError, useToastStore } from "../stores/toasts";
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
@@ -142,16 +143,11 @@ export function useRestoreOplogSnapshot(projectId: string | null) {
 
 // ─── T200.5: changes of an agent's last turn ───────────────────────────────
 
+/** Refreshed by the `agent:turn-changes` push (stores/agents.ts) */
 export function useLatestTurn(agentId: string) {
-  const queryClient = useQueryClient();
-  useMountEffect(() =>
-    window.api.onTurnChanges((event) =>
-      queryClient.invalidateQueries({ queryKey: ["oplog", "turn", event.agentId] }),
-    ),
-  );
   return useQuery({
     queryKey: ["oplog", "turn", agentId],
-    queryFn: () => trpcInvoke<TurnChanges | null>("oplog.latestTurn", { agentId }),
+    queryFn: () => trpcInvoke<LatestTurn>("oplog.latestTurn", { agentId }),
   });
 }
 
@@ -169,10 +165,22 @@ export function useUndoTurn() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (turn: TurnChanges) =>
-      trpcMutate<string>("oplog.undoTurn", { agentId: turn.agentId, turnIndex: turn.turnIndex }),
-    onSuccess: () => {
+      trpcMutate<UndoTurnResult>("oplog.undoTurn", {
+        agentId: turn.agentId,
+        turnIndex: turn.turnIndex,
+      }),
+    onSuccess: ({ restored, skipped }) => {
       queryClient.invalidateQueries({ queryKey: ["oplog"] });
       queryClient.invalidateQueries({ queryKey: ["diff"] });
+      if (skipped.length === 0) return;
+      useToastStore.getState().addToast({
+        type: "warning",
+        title:
+          restored.length === 0
+            ? "Nothing undone: every file changed since the turn"
+            : `Undid ${restored.length} of ${restored.length + skipped.length} files`,
+        body: `Changed since the turn, left as they are: ${skipped.join(", ")}`,
+      });
     },
     onError: toastError("Undo turn failed"),
   });

@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -21,8 +21,15 @@ export async function git(cwd: string, args: string[], env = process.env): Promi
 export async function captureTree(cwd: string, ref?: string): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "exegol-pipeline-index-"));
   try {
-    const env = { ...process.env, GIT_INDEX_FILE: join(directory, "index") };
-    await git(cwd, ["read-tree", "HEAD"], env);
+    const index = join(directory, "index");
+    const env = { ...process.env, GIT_INDEX_FILE: index };
+    // The real index's stat cache lets `add --all` skip rehashing unchanged files
+    const realIndex = resolve(cwd, (await git(cwd, ["rev-parse", "--git-path", "index"])).trim());
+    const seeded = await copyFile(realIndex, index).then(
+      () => true,
+      () => false,
+    );
+    if (!seeded) await git(cwd, ["read-tree", "HEAD"], env);
     await git(cwd, ["add", "--all", "--", "."], env);
     const tree = (await git(cwd, ["write-tree"], env)).trim();
     if (ref) await git(cwd, ["update-ref", ref, tree]);
