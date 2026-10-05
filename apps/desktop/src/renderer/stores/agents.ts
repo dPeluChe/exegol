@@ -66,6 +66,10 @@ let pushCleanup: (() => void) | null = null;
 /** Start listening for agent status push events from main process */
 export function startAgentStatusPush(queryClient: QueryClient): void {
   if (pushCleanup) return; // Already subscribed
+  // "info": action_needed clears when the agent runs, and this message makes it run
+  const offPrWatch = window.api.onPrWatch(({ agentId, reason }) => {
+    if (reason) useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason });
+  });
   const stopTurns = window.api.onTurnChanges((event) =>
     queryClient.invalidateQueries({ queryKey: ["oplog", "turn", event.agentId] }),
   );
@@ -122,6 +126,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     }
   });
   pushCleanup = () => {
+    offPrWatch();
     stopTurns();
     stopStatus();
   };
@@ -154,6 +159,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     claudeSessionId: agent.claudeSessionId ?? null,
     activityLevel: classifyActivity(agent.status, agent.currentStep, agent.cliType),
     muted: agent.muted ?? false,
+    prWatch: agent.prWatch ?? false,
     suspended: agent.suspendedAt != null,
     launchedInShell: agent.launchedInShell ?? false,
     cliVersion: agent.cliVersion ?? null,
@@ -193,6 +199,8 @@ export interface AgentState {
   archived?: boolean;
   /** Alive but quiet: no Needs attention entry, no notifications */
   muted?: boolean;
+  /** T142: Exegol tells it about its PR's checks, reviews and conflicts */
+  prWatch?: boolean;
   /** Stopped on purpose to resume later; quiet like muted */
   suspended?: boolean;
   /** Typed in a plain terminal: its CLI can exit back to the shell prompt (Continue) */
@@ -244,7 +252,8 @@ interface AgentStore {
 
   /** Attention inbox — agents needing user attention, persisted across restarts */
   attentionItems: Record<string, AttentionItem>;
-  addAttentionItem: (agentId: string) => void;
+  /** `cause` overrides the status-derived reason (PR watch) */
+  addAttentionItem: (agentId: string, cause?: { level: AttentionLevel; reason: string }) => void;
   markAttentionRead: (agentId: string) => void;
   dismissAttention: (agentId: string) => void;
   toggleAttentionPin: (agentId: string) => void;
@@ -432,6 +441,7 @@ export const useAgentStore = create<AgentStore>()(
                 alias: dbAgent.alias ?? existing.alias ?? null,
                 currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
                 muted: dbAgent.muted ?? existing.muted ?? false,
+                prWatch: dbAgent.prWatch ?? existing.prWatch ?? false,
                 suspended: dbAgent.suspendedAt != null,
                 cliType: dbAgent.cliType as AgentCliType,
                 launchedInShell: dbAgent.launchedInShell ?? existing.launchedInShell ?? false,
@@ -459,6 +469,7 @@ export const useAgentStore = create<AgentStore>()(
                 claudeSessionId: dbAgent.claudeSessionId ?? null,
                 activityLevel: classifyActivity(dbStatus, dbAgent.currentStep, dbAgent.cliType),
                 muted: dbAgent.muted ?? false,
+                prWatch: dbAgent.prWatch ?? false,
                 suspended: dbAgent.suspendedAt != null,
                 launchedInShell: dbAgent.launchedInShell ?? false,
                 cliVersion: dbAgent.cliVersion ?? null,
@@ -499,12 +510,12 @@ export const useAgentStore = create<AgentStore>()(
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────
 
-      addAttentionItem: (agentId) =>
+      addAttentionItem: (agentId, cause) =>
         set((s) => {
           const agent = s.agents[agentId];
           // Muted and suspended sessions never ask for attention
           if (!agent || agent.muted || agent.suspended) return s;
-          const att = statusToAttention(agent.status, agent.cliType);
+          const att = cause ?? statusToAttention(agent.status, agent.cliType);
           if (!att) return s;
           const existing = s.attentionItems[agentId];
           if (

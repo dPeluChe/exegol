@@ -24,7 +24,8 @@
    T183.2 for the commit message; left: T182.3 run-command review, T183.2 background opt-in.
 4. **Performance pack 2**: T185.19 main process off the hot path.
 5. **User features, one PR each**: ~~T200.6 answer agent questions~~ (shipped, `feat/answer-prompts`),
-   T200.4 queue + steer, ~~T200.5 undo turn~~ (`feat/undo-turn`), T142 PR loop phase 1 (T200.7).
+   T200.4 queue + steer, ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR loop phase 1 (T200.7)~~:
+   shipped (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
    silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
    T185.11 scheduler timeout, T193.2 execPath.
@@ -1159,10 +1160,12 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 > Merged from T200.7, T184.8, T184.9, the `COMPETITIVE_UPDATE_2026_10.md` P2 "worktree cleanup
 > after merge" and the T174 worktree hygiene note on 2026-10-04. The PR poll itself is T185.10.
-- (T200.7) **React to PR checks, reviews and conflicts**: a `gh` poller in main; deliver at the
-  turn boundary like `agent_send`; MCP `pr_watch` (t3code `pullRequestWatch.ts`: wake cap 10, new
-  head SHA resets; agent-orchestrator `reactions.go`: dedup on content, max 3, held during a
-  permission prompt). Phase 1 of the PR loop (Priority Order #5)
+- (T200.7) **React to PR checks, reviews and conflicts**: phase 1 shipped 2026-10-04
+  (`feat/pr-watch`, `TASK_COMPLETED/2610.md`): opt-in "Watch PR" per agent, `gh` poller, boundary
+  delivery, attention. Left: MCP `pr_watch` so an agent can start its own watch
+- (T142) **The user's own PR comments are ignored**: the agent posts through the same `gh` login,
+  so PR watch skips every comment by that login. Planned heuristic: a same-login comment created
+  while the agent was idle counts as the user's
 - (T184.8) **Merge PR has no guard.** `diff-pr.ts:51-52` defaults to `--squash` +
   `--delete-branch` (strategy is now a parameter) with no base-protection check; pullfrog refuses
   a direct merge when the base is unprotected ("base branch not protected — refusing CI-ungated

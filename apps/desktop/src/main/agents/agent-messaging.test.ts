@@ -33,6 +33,7 @@ import {
   noteAgentHasLink,
   seedAgentLinkCache,
   sendAgentMessage,
+  sendSystemMessage,
   setAgentAwaitingApproval,
   stopSweep,
 } from "./agent-messaging";
@@ -127,6 +128,29 @@ describe("sendAgentMessage", () => {
 
     deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(2);
+  });
+
+  it("system notices (PR watch) wait out a permission prompt, then land at the boundary", () => {
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+    setAgentAwaitingApproval("a2", true);
+
+    const res = sendSystemMessage(db, { toAgentId: "a2", source: "PR watch", text: "CI failed" });
+    expect(res?.delivered).toBe(false);
+    expect(ptyMock.writes).toHaveLength(0);
+
+    setAgentAwaitingApproval("a2", false);
+    deliverPendingAgentMessages(db, "a2");
+    const written = ptyMock.writes[0]?.data ?? "";
+    expect(written).toContain("CI failed");
+    expect(written).toContain("Exegol notice");
+    expect(written).toContain("No reply expected");
+    expect(written).not.toContain("agent_send");
+    const row = db.prepare("SELECT from_agent_id FROM messages").get() as {
+      from_agent_id: string | null;
+    };
+    expect(row.from_agent_id).toBeNull();
+    expect(sendSystemMessage(db, { toAgentId: "nope", source: "PR watch", text: "x" })).toBeNull();
   });
 
   it("collapses an identical re-send inside the dedup window onto the original, and allows it after", () => {

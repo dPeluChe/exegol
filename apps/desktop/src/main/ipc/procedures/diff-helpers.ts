@@ -1,8 +1,7 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { TRPCError } from "@trpc/server";
 import type Database from "libsql";
 import { coreRust } from "../../agents/spawn-env";
+import { execFileAsync } from "../../integrations/github/gh";
 import { AsyncLruCache } from "../../lib/lru-cache";
 
 export { coreRust };
@@ -13,23 +12,6 @@ export { coreRust };
 export const diffCache = new AsyncLruCache<string, unknown>(6, 5_000);
 export function invalidateProjectDiff(projectId: string): void {
   diffCache.invalidateWhere((k) => k.startsWith(`${projectId}|`));
-}
-
-export const execFileAsync = promisify(execFile);
-
-// ─── gh CLI detection (cached) ─────────────────────────────────────────────
-
-let ghFound = false;
-export async function detectGhCli(): Promise<boolean> {
-  if (ghFound) return true;
-  // A miss is not cached: before the login-shell PATH lands, a Homebrew gh is invisible
-  try {
-    await execFileAsync("gh", ["--version"], { timeout: 3000 });
-    ghFound = true;
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

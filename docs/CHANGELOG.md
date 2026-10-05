@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Watch PR: a session's toolbar can watch its branch's pull request. Failing checks (with links), new review comments or requested changes, and merge conflicts are sent to the agent at its next turn and show in Needs attention, with caps so it never loops
 - Undo a turn: after a Claude Code turn that changed files, the terminal toolbar shows "N files changed". It opens what that turn changed and offers Undo turn, which asks first, lists the files, and puts back only the files that turn changed. A file edited since the turn ended is left alone and named in the result; nothing is committed on your branch, and a safety snapshot in the Oplog makes the undo itself undoable
 - Answer an agent's question without opening its pane: when it waits on a numbered prompt (Claude's "Do you want to proceed? 1. Yes / 2. Yes, always… / 3. No", Codex's approval), the Dashboard card and the attention queue show the question, what it wants to run and each option as a button. Exegol presses it only if that same question is still on screen
 - Status bar: open agents per CLI (its icon, how many, how many working; hover lists them with their project) and each CLI's plan usage, 5-hour and weekly with the time to reset, amber at 70% and red at 90%. Codex's comes from its own session logs; Claude's is read with Claude Code's login once you click "Show plan usage". The token count and platform that showed nothing useful are gone (tokens stay in Monitor)
