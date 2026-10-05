@@ -19,6 +19,7 @@
       "setGroup"
     ],
     "agents": [
+      "answerDialog",
       "archive",
       "archiveEnded",
       "cancelParallelRun",
@@ -42,10 +43,11 @@
       "recentSessions",
       "registerProvider",
       "resetProviderArgs",
+      "screenDialog",
       "setAlias",
+      "setMuted",
       "spawn",
       "spawnParallel",
-      "setMuted",
       "stop",
       "suspend",
       "swapProviders",

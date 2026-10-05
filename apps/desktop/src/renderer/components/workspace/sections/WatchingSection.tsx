@@ -12,6 +12,7 @@ import {
 import { type DragEvent, useState } from "react";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { DEFAULT_CARD_FONT, MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
+import { AgentQuestion } from "../../agents/AgentQuestion";
 import { ResumeButton } from "../../agents/ResumeButton";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
@@ -228,6 +229,10 @@ function WatchCard({
   const toggleOpen = useWatchStore((s) => s.toggleOpen);
   const toggleWatch = useWatchStore((s) => s.toggleWatch);
   const live = LIVE_STATUSES.has(agent.status);
+  const asksQuestion = useAgentStore((s) => {
+    const item = s.attentionItems[agent.id];
+    return !!item && !item.read && item.level === "action_needed";
+  });
   const cardFont = useWatchStore((s) => s.cardFont[agent.id]);
 
   return (
@@ -290,6 +295,9 @@ function WatchCard({
         </button>
       </div>
 
+      <div className="mx-2 mb-2 empty:hidden">
+        <AgentQuestion agentId={agent.id} enabled={live && asksQuestion} />
+      </div>
       {live ? (
         // Focusing the mirror keeps it open after the question is answered and
         // clears the attention badge, as reading it in its pane would.

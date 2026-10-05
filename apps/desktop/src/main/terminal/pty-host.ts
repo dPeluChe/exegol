@@ -1,4 +1,5 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
+import type { ScreenDialog } from "@exegol/shared";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { terminalProcesses, terminateAll } from "../system/process-tree";
@@ -25,6 +26,7 @@ import {
 import { scanForMarker } from "./pty-shell-ready";
 import type { SidecarClient } from "./pty-sidecar-client";
 import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
+import { readScreenDialog } from "./screen-dialog";
 
 export type { SessionCallbacks } from "./pty-session-types";
 
@@ -361,6 +363,12 @@ export class PtyHost {
     const emulator = this.sessions.get(id)?.emulator;
     const snapshot = emulator?.snapshot();
     return emulator && snapshot ? snapshot + emulator.modeSequence() : null;
+  }
+
+  /** The numbered dialog the session's screen shows now, if any */
+  screenDialog(id: string): ScreenDialog | null {
+    const lines = this.sessions.get(id)?.emulator.visibleLines();
+    return lines ? readScreenDialog(lines) : null;
   }
 
   isAlive(id: string): boolean {
