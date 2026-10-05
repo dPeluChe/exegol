@@ -49,7 +49,9 @@ vi.mock("./spawn-env", () => ({
   DEFAULT_PTY_ROWS: 24,
 }));
 
+import { logger } from "../lib/logger";
 import { getRecoveryState, whenSessionReady } from "../terminal/reattach-gate";
+import { saveActiveView } from "./active-view";
 import type { SessionMaps } from "./agent-session-callbacks";
 import { reattachSidecarAgents } from "./reattach-sidecar-agents";
 import { broadcastAgentStatus } from "./spawn-env";
@@ -164,5 +166,44 @@ describe("reattachSidecarAgents pool", () => {
     // 3 rounds of 20ms, not 9 one after another
     expect(elapsed).toBeLessThan(9 * 20);
     expect(getRecoveryState().ready).toEqual(expect.arrayContaining(ids));
+  });
+});
+
+describe("reattachSidecarAgents order", () => {
+  it("reattaches the last active tab first, then its project, then the rest", async () => {
+    pty.alive = true;
+    pty.delayMs = 0;
+    pty.order = [];
+    const db = setupDb();
+    db.exec("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)");
+    const agents: Array<[string, string]> = [
+      ["o1", "p2"],
+      ["t2", "p1"],
+      ["o2", "p2"],
+      ["p1a", "p1"],
+      ["t1", "p1"],
+    ];
+    for (const [id, project] of agents) {
+      db.prepare(
+        "INSERT INTO agents (id, cli_type, project_id, task_description, status) VALUES (?, 'shell', ?, '', 'running')",
+      ).run(id, project);
+    }
+    saveActiveView(db, { projectId: "p1", agentIds: ["t1", "gone", "t2"] });
+
+    await reattachSidecarAgents(
+      db,
+      agents.map(([id]) => id),
+      emptyMaps(),
+      new Map(),
+      1024,
+    );
+
+    expect(pty.order).toEqual(["t1", "t2", "p1a", "o1", "o2"]);
+    expect(logger.info).toHaveBeenCalledWith(
+      "[Reattach] order: 2 active-tab, 1 active-project, 2 rest",
+    );
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[Reattach\] first visible ready in \d+ms$/),
+    );
   });
 });

@@ -49,6 +49,7 @@
       "removeFollowUp",
       "resetProviderArgs",
       "screenDialog",
+      "setActiveView",
       "setAlias",
       "setMuted",
       "spawn",

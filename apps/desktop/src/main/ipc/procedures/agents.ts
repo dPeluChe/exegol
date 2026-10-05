@@ -2,6 +2,7 @@ import type { AgentCliType, AgentProvider, ResumableSession, SpawnPreview } from
 import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
@@ -216,6 +217,16 @@ export const agentRouter = router({
 
   /** Startup reattach progress; `recovery:progress` pushes each change */
   recoveryState: publicProcedure.query(() => getRecoveryState()),
+
+  /** The view on screen: the next startup reattaches its sessions first */
+  setActiveView: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string().max(128).nullable(),
+        agentIds: z.array(z.string().max(128)).max(64),
+      }),
+    )
+    .mutation(({ ctx, input }) => saveActiveView(ctx.db, input)),
 
   /** Sessions a restart took with the sidecar, to resume in their panes (handed out once) */
   takeLostOnRestart: publicProcedure.query(async ({ ctx }) =>

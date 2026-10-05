@@ -13,6 +13,7 @@ import { StatusBar } from "./components/layout/StatusBar";
 import { TitleBar } from "./components/layout/TitleBar";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
+import { useActiveViewSync } from "./hooks/use-active-view-sync";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useCliRestarts } from "./hooks/use-cli-updates";
 import { useDeepLink } from "./hooks/use-deeplink";
@@ -62,6 +63,7 @@ export default function App() {
   useAutoResumeLost();
   useCliRestarts();
   useFleetSync();
+  useActiveViewSync();
 
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   // Projects opens over the workspace (as the Dashboard does): its panes stay mounted and sized

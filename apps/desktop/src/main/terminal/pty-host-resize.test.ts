@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../lib/event-bus", () => ({ broadcast: vi.fn() }));
 
 import { broadcast } from "../lib/event-bus";
+import { HeadlessEmulator } from "./headless-emulator";
 import { PtyHost } from "./pty-host";
 import type { SidecarClient } from "./pty-sidecar-client";
 
@@ -91,5 +92,25 @@ describe("PtyHost reattach", () => {
     expect(snapshot).toBe("old screen\r\n");
     expect(onData).not.toHaveBeenCalled();
     expect(host.getSnapshot("r")).toContain("old screen");
+  });
+
+  it("resolves only once the ring is parsed, so a pane's snapshot right after is not empty", async () => {
+    const client = {
+      ...(fakeSidecar().client as object),
+      snapshot: async () => `${"history line\r\n".repeat(2000)}idle prompt> `,
+    } as unknown as SidecarClient;
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    await host.reattachSession("ready", { cols: 80, rows: 24 }, callbacks);
+    expect(host.getLiveSnapshot("ready")).toContain("idle prompt>");
+  });
+});
+
+describe("HeadlessEmulator writeParsed", () => {
+  it("a disposed emulator never leaves the reattach waiting", async () => {
+    const emulator = new HeadlessEmulator(80, 24);
+    const parsed = emulator.writeParsed("x".repeat(10_000));
+    emulator.dispose();
+    await expect(parsed).resolves.toBeUndefined();
   });
 });

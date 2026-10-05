@@ -8,6 +8,7 @@ import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-confi
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
 import { expectReattach, nextReattach, settleReattach } from "../terminal/reattach-gate";
+import { loadActiveView, orderForReattach } from "./active-view";
 import {
   appendScrollback,
   createSpawnCallbacks,
@@ -84,6 +85,17 @@ export async function reattachSidecarAgents(
     // No session in sidecar: the crash sweep marks it crashed
     if (hasSession) rows.set(agentId, row);
   }
+
+  const started = Date.now();
+  const order = orderForReattach(
+    [...rows.keys()],
+    (id) => rows.get(id)?.project_id as string | undefined,
+    loadActiveView(db),
+  );
+  const visible = new Set(order.activeTab);
+  logger.info(
+    `[Reattach] order: ${order.activeTab.length} active-tab, ${order.activeProject} active-project, ${order.rest} rest`,
+  );
 
   const reattachOne = async (agentId: string): Promise<void> => {
     const row = rows.get(agentId) as Record<string, unknown>;
@@ -214,13 +226,15 @@ export async function reattachSidecarAgents(
       logger.warn(`[Reattach] FAILED ${agentId} (${cliType}): ${err}`);
     } finally {
       settleReattach(agentId);
+      if (visible.delete(agentId) && visible.size === order.activeTab.length - 1) {
+        logger.info(`[Reattach] first visible ready in ${Date.now() - started}ms`);
+      }
     }
   };
 
   // The sidecar answers in order on one socket and each RPC's 10s timeout starts at send: 3 at
   // once overlaps the emulator replays without queueing a late session past its timeout
-  const ids = [...rows.keys()];
-  const started = Date.now();
+  const { ids } = order;
   expectReattach(ids);
   await mapWithConcurrency(ids, 3, async () => {
     const id = nextReattach();
