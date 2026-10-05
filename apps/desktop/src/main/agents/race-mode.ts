@@ -2,6 +2,7 @@ import type { LoserCleanupResult, ParallelRun } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getProject } from "../db/queries";
 import { getWorktreeByAgentId, removeWorktree } from "../db/queries/worktrees";
+import { runNative } from "../lib/concurrency";
 import { logger } from "../lib/logger";
 import { coreRust } from "./spawn-env";
 import { removeManagedWorktree } from "./worktrees";
@@ -21,12 +22,12 @@ const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped", "crashed", 
  * those back to the user as a prompt ("these have uncommitted changes,
  * delete anyway?") rather than silently discarding work.
  */
-export function cleanupLoserWorktrees(
+export async function cleanupLoserWorktrees(
   db: Database.Database,
   run: ParallelRun,
   winnerAgentId: string,
   opts: { force?: boolean } = {},
-): LoserCleanupResult[] {
+): Promise<LoserCleanupResult[]> {
   const project = getProject(db, run.projectId);
   const results: LoserCleanupResult[] = [];
 
@@ -39,7 +40,8 @@ export function cleanupLoserWorktrees(
       continue;
     }
 
-    if (!coreRust || !project) {
+    const rust = coreRust;
+    if (!rust || !project) {
       results.push({
         agentId,
         worktreePath: worktree.path,
@@ -71,7 +73,7 @@ export function cleanupLoserWorktrees(
     // decide, instead of deleting possibly-uncommitted work.
     let dirty = true;
     try {
-      dirty = coreRust.worktreeHasChanges(worktree.path);
+      dirty = await runNative(() => rust.worktreeHasChangesAsync(worktree.path));
     } catch (err) {
       logger.warn("[RaceMode] worktreeHasChanges check failed, treating as DIRTY:", err);
     }
@@ -93,7 +95,7 @@ export function cleanupLoserWorktrees(
       // the clean path respects git's own guards (worktree locks).
       removeManagedWorktree(project.path, worktreeName, worktree.path, opts.force ?? false);
       try {
-        coreRust.deleteBranch(project.path, worktree.branchName, true);
+        rust.deleteBranch(project.path, worktree.branchName, true);
       } catch (err) {
         logger.warn(`[RaceMode] Branch delete failed for '${worktree.branchName}':`, err);
       }

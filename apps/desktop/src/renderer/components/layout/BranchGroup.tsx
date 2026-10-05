@@ -4,6 +4,7 @@ import { useState } from "react";
 import { switchSection } from "../../lib/switch-section";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { AgentState } from "../../stores/agents";
+import { toastError } from "../../stores/toasts";
 import { findFirstPaneId, useWorkspaceStore } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { AgentMiniCard } from "./AgentMiniCard";
@@ -45,8 +46,8 @@ export function BranchGroup({
         force: true,
       });
       onWorktreeDeleted?.();
-    } catch {
-      /* */
+    } catch (err) {
+      toastError("Could not delete the worktree")(err);
     } finally {
       setDeleting(false);
     }

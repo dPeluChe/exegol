@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, FolderGit2, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
+import { toastError } from "../../../stores/toasts";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 
 /**
@@ -31,6 +32,7 @@ export function WorktreesCard() {
         // Dirty ones need force; the button already warned about it.
         force: wt.dirty,
       }),
+    onError: toastError("Could not delete the worktree"),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["allWorktrees"] });
       queryClient.invalidateQueries({ queryKey: ["worktrees"] });

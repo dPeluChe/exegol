@@ -151,6 +151,7 @@ fn extract_file_diffs(diff: &Diff) -> Result<Vec<FileDiff>, Error> {
 
 /// Get structured diff of changes (staged or unstaged).
 /// Returns a list of FileDiff objects with hunks and lines.
+/// `staged=false` diffs HEAD to the working tree on purpose: the parallel-run comparator relies on it.
 pub fn get_diff(repo_path: String, staged: bool) -> Result<Vec<FileDiff>, Error> {
   let repo = open_repo(&repo_path)?;
 

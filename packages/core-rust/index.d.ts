@@ -312,9 +312,6 @@ export interface SearchResult {
  */
 export declare function stripAnsi(input: string): string
 
-/** Check if a worktree (or any repo working directory) has uncommitted changes. */
-export declare function worktreeHasChanges(worktreePath: string): boolean
-
 /** r" Whether a worktree has uncommitted changes, computed off the JS thread. */
 export declare function worktreeHasChangesAsync(worktreePath: string): Promise<boolean>
 

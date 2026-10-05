@@ -266,7 +266,7 @@ export class PipelineExecutor {
       completedAt: now(),
     });
 
-    cleanupPipelineWorktree(db, run);
+    void cleanupPipelineWorktree(db, run);
 
     broadcastPipelineStatus({
       runId: run.id,
@@ -398,7 +398,7 @@ export class PipelineExecutor {
       completedAt: now(),
     });
 
-    cleanupPipelineWorktree(db, run);
+    await cleanupPipelineWorktree(db, run);
 
     broadcastPipelineStatus({
       runId,
