@@ -1,9 +1,8 @@
-import { LIVE_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { LayoutDashboard, PanelLeftOpen, Pause, Plus, Settings } from "lucide-react";
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
-import { useAgentStore } from "../../stores/agents";
+import { isLiveAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 
@@ -24,7 +23,7 @@ export function SidebarRail() {
     const live = new Map<string, number>();
     const paused = new Set<string>();
     for (const a of Object.values(agents)) {
-      if (!LIVE_STATUSES.has(a.status) || a.cliType === "shell") continue;
+      if (!isLiveAgent(a)) continue;
       if (a.suspended) paused.add(a.projectId);
       else live.set(a.projectId, (live.get(a.projectId) ?? 0) + 1);
     }

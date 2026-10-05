@@ -12,7 +12,7 @@ import { shortcutLabel, useProjectShortcuts } from "../../lib/live-tabs";
 import { autoOrderProjects } from "../../lib/project-order";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { AgentState } from "../../stores/agents";
-import { useAgentStore } from "../../stores/agents";
+import { isLiveAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import type { ShortcutDigit } from "../../stores/shortcuts";
 import { useWatchStore } from "../../stores/watch";
@@ -123,7 +123,7 @@ function useActiveProjects(agents: Record<string, AgentState>): Set<string> {
   return useMemo(() => {
     const active = new Set<string>();
     for (const a of Object.values(agents)) {
-      if (a.cliType !== "shell" && LIVE_STATUSES.has(a.status)) active.add(a.projectId);
+      if (isLiveAgent(a)) active.add(a.projectId);
     }
     for (const id of watched) {
       const a = agents[id];

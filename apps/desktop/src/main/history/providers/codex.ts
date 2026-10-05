@@ -98,7 +98,7 @@ function endOfPeriod(parts: string[]): number {
  * years and months instead of stat-ing 750 files. Levels are walked in parallel:
  * 158 day directories one round-trip at a time is latency for nothing.
  */
-async function dayDirs(root: string, since: number): Promise<string[]> {
+export async function dayDirs(root: string, since: number): Promise<string[]> {
   const years = (await subdirs(root)).filter((y) => endOfPeriod([y]) >= since);
 
   const months = await Promise.all(
