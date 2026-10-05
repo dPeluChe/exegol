@@ -16,12 +16,14 @@ export const RECOVERY_DONE: SessionRecoveryState = {
   crashed: [],
 };
 
-/** Until recovery ends, a session not reattached yet has no PTY to answer for it */
+/** A planned session not reattached yet has no PTY to answer for it; one spawned during
+ *  recovery is not in the plan and shows its normal start state */
 export function isSessionReconnecting(
   state: SessionRecoveryState | undefined,
   agentId: string,
 ): boolean {
   if (!state || state.done) return false;
+  if (state.planned && !state.planned.includes(agentId)) return false;
   return !state.ready.includes(agentId);
 }
 

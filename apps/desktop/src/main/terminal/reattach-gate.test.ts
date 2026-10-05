@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   expectReattach,
   getRecoveryState,
@@ -46,5 +46,23 @@ describe("reattach gate", () => {
 
   it("a session not being reattached answers at once", async () => {
     await expect(whenSessionReady("new-agent")).resolves.toBeUndefined();
+  });
+});
+
+describe("reattach order", () => {
+  it("sessions a pane waits on go first, before and after the plan is set", async () => {
+    vi.resetModules();
+    const gate = await import("./reattach-gate");
+    void gate.whenSessionReady("c");
+    gate.expectReattach(["a", "b", "c", "d"]);
+    void gate.whenSessionReady("d");
+    expect([gate.nextReattach(), gate.nextReattach(), gate.nextReattach()]).toEqual([
+      "c",
+      "d",
+      "a",
+    ]);
+    gate.settleAllReattach();
+    await expect(gate.whenRecovered()).resolves.toBeUndefined();
+    expect(gate.nextReattach()).toBeUndefined();
   });
 });

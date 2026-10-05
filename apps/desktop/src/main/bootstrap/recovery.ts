@@ -1,4 +1,4 @@
-import { markRecoveryDone, setLostOnRestart } from "../agents/lost-sessions";
+import { setLostOnRestart } from "../agents/lost-sessions";
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { recoverStaleAgents } from "../db/queries";
@@ -216,6 +216,5 @@ export async function runStartupRecovery(): Promise<void> {
     logger.error("[Startup] Agent recovery failed (non-fatal):", err);
   } finally {
     settleAllReattach(crashedIds);
-    markRecoveryDone();
   }
 }

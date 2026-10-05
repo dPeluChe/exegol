@@ -2,11 +2,12 @@ import type { AgentCliType } from "@exegol/shared";
 import type Database from "libsql";
 import { updateAgentStatus } from "../db/queries";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
+import { mapWithConcurrency } from "../lib/concurrency";
 import { logger } from "../lib/logger";
 import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
-import { expectReattach, settleReattach } from "../terminal/reattach-gate";
+import { expectReattach, nextReattach, settleReattach } from "../terminal/reattach-gate";
 import {
   appendScrollback,
   createSpawnCallbacks,
@@ -73,28 +74,22 @@ export async function reattachSidecarAgents(
   const sidecarSet = new Set(sidecarSessionIds);
   const updateResumeCommand = db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?");
 
-  // Each pane waits for its own session only; sessions go one by one, so the previous one is
-  // settled when the next starts (every exit path of an iteration is covered)
-  expectReattach(stale.map((r) => r.id as string).filter((id) => sidecarSet.has(id)));
-  let previous: string | null = null;
-
+  const rows = new Map<string, Record<string, unknown>>();
   for (const row of stale) {
     const agentId = row.id as string;
-    if (previous) settleReattach(previous);
-    previous = agentId;
+    const hasSession = sidecarSet.has(agentId);
+    logger.info(
+      `[Reattach] Inspecting ${agentId} (${row.cli_type}, status=${row.status}, sidecar=${hasSession ? "yes" : "NO"})`,
+    );
+    // No session in sidecar: the crash sweep marks it crashed
+    if (hasSession) rows.set(agentId, row);
+  }
+
+  const reattachOne = async (agentId: string): Promise<void> => {
+    const row = rows.get(agentId) as Record<string, unknown>;
     const cliType = row.cli_type as AgentCliType;
     const projectId = row.project_id as string;
     const isShell = cliType === "shell";
-    const hasSession = sidecarSet.has(agentId);
-
-    logger.info(
-      `[Reattach] Inspecting ${agentId} (${cliType}, status=${row.status}, sidecar=${hasSession ? "yes" : "NO"})`,
-    );
-
-    if (!hasSession) {
-      // No session in sidecar → the crash sweep will mark as crashed
-      continue;
-    }
 
     const resumePattern = getProviderRegistry().get(cliType)?.capabilities?.resumeCommandPattern;
 
@@ -147,7 +142,7 @@ export async function reattachSidecarAgents(
         logger.warn(
           `[Reattach] Dead sidecar session for ${agentId} (${cliType}) — PTY not alive after reattach, will be marked crashed`,
         );
-        continue;
+        return;
       }
 
       // T145 restart continuity: the MCP server only started on SPAWN, so a
@@ -217,12 +212,23 @@ export async function reattachSidecarAgents(
       detachOutputPipeline(maps, agentId);
       result.failedIds.add(agentId);
       logger.warn(`[Reattach] FAILED ${agentId} (${cliType}): ${err}`);
+    } finally {
+      settleReattach(agentId);
     }
-  }
+  };
 
-  if (previous) settleReattach(previous);
+  // The sidecar answers in order on one socket and each RPC's 10s timeout starts at send: 3 at
+  // once overlaps the emulator replays without queueing a late session past its timeout
+  const ids = [...rows.keys()];
+  const started = Date.now();
+  expectReattach(ids);
+  await mapWithConcurrency(ids, 3, async () => {
+    const id = nextReattach();
+    if (id) await reattachOne(id);
+  });
+
   logger.info(
-    `[Reattach] Done — alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size}`,
+    `[Reattach] done ${ids.length} in ${Date.now() - started}ms (alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size})`,
   );
   return result;
 }

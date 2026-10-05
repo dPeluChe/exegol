@@ -36,7 +36,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
 - Scheduled tasks: cron jobs never fired (an invalid timezone option threw on every schedule). A run that hangs now times out (30 minutes, or the task's own limit), its agent and what it started are stopped, and it is recorded once as timed out; a new tick never starts a second run of the same task, and a run that finds every slot busy waits in a queue that survives a restart
 - Monitor now counts Claude Code usage: Scan Logs read almost nothing from Claude's transcripts, so its cost showed near zero. Each reply counts once, cache reads and writes are priced, Claude and Codex sessions count for the project when run in its folder or one of its worktrees (others are left out), and a rescan of thousands of replies no longer stalls the window
-- Opening the app with many live sessions: a terminal whose session was still reconnecting showed "Failed to start" until it came back; it now says "Reconnecting" and fills in as soon as its own session is back
+- Opening the app with many live sessions: a terminal whose session was still reconnecting showed "Failed to start" until it came back; the app now reconnects several sessions at once, visible ones first, and a terminal says "Reconnecting" until its own session is back
 - Opening the app: the sidebar's Agents list stayed empty until every session had reconnected; it now lists them at once, each marked as reconnecting until it is back, with a "Reconnecting N sessions" note
 
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly

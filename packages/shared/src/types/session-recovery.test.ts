@@ -25,9 +25,9 @@ describe("isSessionReconnecting", () => {
     expect(isSessionReconnecting(midway, "b")).toBe(true);
   });
 
-  it("a session outside the plan waits for the crash sweep, then nothing does", () => {
-    expect(isSessionReconnecting(midway, "gone")).toBe(true);
-    expect(isSessionReconnecting(RECOVERY_DONE, "gone")).toBe(false);
+  it("a session outside the plan (spawned during recovery) is not reconnecting", () => {
+    expect(isSessionReconnecting(midway, "new")).toBe(false);
+    expect(isSessionReconnecting(RECOVERY_DONE, "a")).toBe(false);
   });
 
   it("no state yet is not a reconnect (the query has not answered)", () => {
