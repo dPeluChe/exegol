@@ -54,6 +54,42 @@ export function setAgentMuted(db: Database.Database, id: string, muted: boolean)
   db.prepare("UPDATE agents SET muted = ? WHERE id = ?").run(muted ? 1 : 0, id);
 }
 
+/** `pr_watch`: 0 = off, else the feedback cursor (ms): review comments from then on are news */
+export function setAgentPrWatch(db: Database.Database, id: string, since: number | null): void {
+  db.prepare("UPDATE agents SET pr_watch = ? WHERE id = ?").run(since ?? 0, id);
+}
+
+export function advancePrWatchCursor(db: Database.Database, id: string, since: number): void {
+  db.prepare("UPDATE agents SET pr_watch = ? WHERE id = ? AND pr_watch > 0 AND pr_watch < ?").run(
+    since,
+    id,
+    since,
+  );
+}
+
+export interface PrWatchedAgent {
+  id: string;
+  projectId: string;
+  cwd: string;
+  defaultBranch: string;
+  since: number;
+}
+
+/** Live agents that opted into PR watch, with the folder they work in */
+export function listPrWatchedAgents(db: Database.Database): PrWatchedAgent[] {
+  const statuses = [...LIVE_STATUSES];
+  return db
+    .prepare(
+      `SELECT a.id, a.project_id AS projectId, COALESCE(w.path, p.path) AS cwd,
+              p.default_branch AS defaultBranch, a.pr_watch AS since
+       FROM agents a
+       JOIN projects p ON p.id = a.project_id
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       WHERE a.pr_watch > 0 AND a.cli_type != 'shell' AND a.status IN (${statuses.map(() => "?").join(",")})`,
+    )
+    .all(...statuses) as unknown as PrWatchedAgent[];
+}
+
 export function setAgentSuspended(db: Database.Database, id: string, at: number | null): void {
   db.prepare("UPDATE agents SET suspended_at = ? WHERE id = ?").run(at, id);
 }
@@ -111,6 +147,20 @@ export function getAgent(db: Database.Database, id: string): Agent | null {
     )
     .get(id);
   return row ? mapAgentRow(row as Record<string, unknown>) : null;
+}
+
+/** The folder an agent works in: its worktree, else the project root */
+export function getAgentCwd(db: Database.Database, id: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(w.path, p.path) AS cwd
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       JOIN projects p ON p.id = a.project_id
+       WHERE a.id = ?`,
+    )
+    .get(id) as { cwd?: string } | undefined;
+  return row?.cwd ?? null;
 }
 
 export function createAgent(db: Database.Database, data: AgentCreate): Agent {

@@ -103,6 +103,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     resumeCommand: r.resume_command ?? null,
     yolo: r.yolo == null ? null : r.yolo === 1,
     muted: r.muted === 1,
+    prWatch: (r.pr_watch ?? 0) > 0,
     suspendedAt: r.suspended_at ?? null,
     launchedInShell: r.launched_in_shell === 1,
     cliVersion: r.cli_version ?? null,

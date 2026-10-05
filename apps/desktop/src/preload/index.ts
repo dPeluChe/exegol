@@ -161,11 +161,26 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:status-changed", handler as never);
     };
   },
+  /** T142: the PR watch told an agent about its PR (attention item) */
+  onPrWatch: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:pr-watch", handler as never);
+    return () => {
+      safe.off("agent:pr-watch", handler as never);
+    };
+  },
   onMetrics: (callback: (metrics: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("metrics:update", handler as never);
     return () => {
       safe.off("metrics:update", handler as never);
+    };
+  },
+  onTurnChanges: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:turn-changes", handler as never);
+    return () => {
+      safe.off("agent:turn-changes", handler as never);
     };
   },
   onPipelineStatus: (callback: (event: unknown) => void) => {

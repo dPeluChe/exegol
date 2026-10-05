@@ -160,4 +160,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_016_agent_model",
     sql: "ALTER TABLE agents ADD COLUMN model TEXT;",
   },
+  {
+    // T142 phase 1: 0 = off, else the review-feedback cursor (ms) so a restart misses nothing
+    id: "w3_017_agent_pr_watch",
+    sql: "ALTER TABLE agents ADD COLUMN pr_watch INTEGER NOT NULL DEFAULT 0;",
+  },
 ];
