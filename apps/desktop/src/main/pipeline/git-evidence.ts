@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const MAX_DIFF_BYTES = 16 * 1024 * 1024;
 
-async function git(cwd: string, args: string[], env = process.env): Promise<string> {
+export async function git(cwd: string, args: string[], env = process.env): Promise<string> {
   const { stdout } = await execFileAsync("git", args, {
     cwd,
     env,

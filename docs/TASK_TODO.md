@@ -24,8 +24,8 @@
 3. **Trust pack**: T200.1 folder pre-trust, T200.2 child env markers, T200.3 per-pane error
    boundary, T183.2 AI features via the logged-in CLI.
 4. **Performance pack 2**: T185.19 main process off the hot path.
-5. **User features, one PR each**: T200.6 answer agent questions, T200.4 queue + steer, T200.5 undo
-   turn, T142 PR loop phase 1 (T200.7).
+5. **User features, one PR each**: T200.6 answer agent questions, T200.4 queue + steer, ~~T200.5 undo
+   turn~~ (`feat/undo-turn`), T142 PR loop phase 1 (T200.7).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
    silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
    T185.11 scheduler timeout, T193.2 execPath.
@@ -456,7 +456,9 @@ Quick ones first (S):
 
 Then (S-M / M):
 4. Follow-up queue + steer.
-5. Per-turn snapshot, "changes this turn", Undo turn (extends T129).
+5. ~~Per-turn snapshot, "changes this turn", Undo turn (extends T129)~~: shipped on
+   `feat/undo-turn` (`TASK_COMPLETED/2610.md`), Claude Code hook turns only. Left: the per-file
+   history below, and turn snapshots for CLIs once they have hooks (item 9).
    > Merged from T179.2 (`added: 2026-08-13`) on 2026-10-04: **per-file local history** as a view
    > over the same snapshots. Athas keeps per-file snapshots with `reason: save | auto-save |
    > restore | manual`, content hash, size, and restore-with-diff (`local-history-api.ts`). More

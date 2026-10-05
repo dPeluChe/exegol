@@ -1,9 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
+import { latestTurn, turnDiff, undoLatestTurn } from "../../agents/turn-snapshots";
 import { createOplogEntry, getAgent, listAgentOplog, listProjectOplog } from "../../db/queries";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
+import { invalidateProjectDiff } from "./diff-helpers";
 
 // ─── Router ─────────────────────────────────────────────────────────────────
 
@@ -154,5 +156,37 @@ export const oplogRouter = router({
         newCommit: newSha.slice(0, 8),
       });
       return newSha;
+    }),
+
+  // ─── T200.5: an interactive agent's turns (kept in main, by agent id) ───
+
+  /** The newest turn of this agent that changed files */
+  latestTurn: publicProcedure
+    .input(z.object({ agentId: z.string() }))
+    .query(({ input }) => latestTurn(input.agentId)),
+
+  /** Unified diff of one turn: its start snapshot against its end */
+  turnDiff: publicProcedure
+    .input(z.object({ agentId: z.string(), turnIndex: z.number().int() }))
+    .query(async ({ input }) => {
+      try {
+        return await turnDiff(input.agentId, input.turnIndex);
+      } catch (err) {
+        throw new TRPCError({ code: "NOT_FOUND", message: (err as Error).message });
+      }
+    }),
+
+  /** Undo turn: restore the folder to before the agent's newest turn */
+  undoTurn: publicProcedure
+    .input(z.object({ agentId: z.string(), turnIndex: z.number().int() }))
+    .mutation(({ ctx, input }) => {
+      const projectId = getAgent(ctx.db, input.agentId)?.projectId;
+      try {
+        return undoLatestTurn(input.agentId, input.turnIndex);
+      } catch (err) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: (err as Error).message });
+      } finally {
+        if (projectId) invalidateProjectDiff(projectId);
+      }
     }),
 });

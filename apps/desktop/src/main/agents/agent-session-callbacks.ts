@@ -1,12 +1,13 @@
 import {
   type AgentSignalEvent,
+  type AgentSignalType,
   type AgentStatus,
   isKnownSignalType,
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type Database from "libsql";
 import { isAgentQuiet, updateAgentStatus } from "../db/queries";
-import { setAgentFinalOutput } from "../db/queries/agents";
+import { getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
@@ -37,6 +38,7 @@ import {
   scoreAndRecordOplog,
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
+import { endTurn, forgetTurns, startTurn } from "./turn-snapshots";
 
 /** Shells and full-screen TUIs: their escape sequences and status-like text read as "failed"/"waiting_input" */
 const SKIP_PARSING = new Set(["shell", "crush", "opencode", "kiro"]);
@@ -90,6 +92,7 @@ function applyAgentSignals(
       continue;
     }
     const derived = deriveStatusFromSignal(sig.event);
+    trackTurn(db, agent, maps, sig.event);
 
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
@@ -161,6 +164,26 @@ function applyAgentSignals(
         turnEnded,
       });
     }
+  }
+}
+
+/** T200.5: hook turn boundaries snapshot the agent's folder; the async git work never
+ *  holds up the output path */
+function trackTurn(
+  db: Database.Database,
+  agent: AgentContext,
+  maps: SessionMaps,
+  event: AgentSignalType,
+): void {
+  if (event === "turn_started") {
+    try {
+      const cwd = maps.initialSnapshots.get(agent.id)?.cwd ?? getAgentCwd(db, agent.id);
+      if (cwd) startTurn(agent.id, cwd);
+    } catch (err) {
+      logger.warn(`[Turns] No turn snapshot for ${agent.id}:`, err);
+    }
+  } else if (event === "finished") {
+    void endTurn(agent.id, agent.projectId, agent.cliType);
   }
 }
 
@@ -395,16 +418,8 @@ export function createSpawnCallbacks(
       if (!isShell) {
         removePerAgentMcpConfig(agent.id);
         try {
-          const row = db
-            .prepare(
-              `SELECT COALESCE(w.path, p.path) AS cwd
-               FROM agents a
-               LEFT JOIN worktrees w ON w.id = a.worktree_id
-               JOIN projects p ON p.id = a.project_id
-               WHERE a.id = ?`,
-            )
-            .get(agent.id) as { cwd?: string } | undefined;
-          if (row?.cwd) {
+          const cwd = getAgentCwd(db, agent.id);
+          if (cwd) {
             // The config file is per-DIRECTORY: agents sharing a cwd share it.
             // Deleting on exit would strip a LIVE sibling's server entry and
             // leave it with no MCP at all (live incident 2026-08-12).
@@ -419,13 +434,13 @@ export function createSpawnCallbacks(
                    AND a.status IN (${statuses.map(() => "?").join(",")})
                  LIMIT 1`,
               )
-              .get(row.cwd, agent.id, ...statuses) as { id?: string } | undefined;
+              .get(cwd, agent.id, ...statuses) as { id?: string } | undefined;
             if (sibling?.id) {
               logger.info(
-                `[AgentCallback] Keeping MCP config in ${row.cwd} — agent ${sibling.id} still lives there`,
+                `[AgentCallback] Keeping MCP config in ${cwd} — agent ${sibling.id} still lives there`,
               );
             } else {
-              removeAgentMcpConfig(row.cwd);
+              removeAgentMcpConfig(cwd);
             }
           }
         } catch (err) {
@@ -443,6 +458,7 @@ export function createSpawnCallbacks(
       }
       forgetBroadcastStatus(agent.id);
       forgetTerminalViewers(agent.id);
+      forgetTurns(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.
       handleParallelAgentExit(db, agent.id);

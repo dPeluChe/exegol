@@ -4,10 +4,12 @@ import type {
   OplogEntry,
   OplogSnapshot,
   ScoringStats,
+  TurnChanges,
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { toastError } from "../stores/toasts";
+import { useMountEffect } from "./use-mount-effect";
 
 // ─── Scoring ────────────────────────────────────────────────────────────────
 
@@ -135,5 +137,43 @@ export function useRestoreOplogSnapshot(projectId: string | null) {
       queryClient.invalidateQueries({ queryKey: ["diff"] });
     },
     onError: toastError("Restore failed"),
+  });
+}
+
+// ─── T200.5: changes of an agent's last turn ───────────────────────────────
+
+export function useLatestTurn(agentId: string) {
+  const queryClient = useQueryClient();
+  useMountEffect(() =>
+    window.api.onTurnChanges((event) =>
+      queryClient.invalidateQueries({ queryKey: ["oplog", "turn", event.agentId] }),
+    ),
+  );
+  return useQuery({
+    queryKey: ["oplog", "turn", agentId],
+    queryFn: () => trpcInvoke<TurnChanges | null>("oplog.latestTurn", { agentId }),
+  });
+}
+
+export function useTurnDiff(turn: TurnChanges | null) {
+  return useQuery({
+    queryKey: ["oplog", "turn-diff", turn?.agentId, turn?.turnIndex],
+    queryFn: () =>
+      trpcInvoke<string>("oplog.turnDiff", { agentId: turn?.agentId, turnIndex: turn?.turnIndex }),
+    enabled: !!turn,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
+export function useUndoTurn() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (turn: TurnChanges) =>
+      trpcMutate<string>("oplog.undoTurn", { agentId: turn.agentId, turnIndex: turn.turnIndex }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["oplog"] });
+      queryClient.invalidateQueries({ queryKey: ["diff"] });
+    },
+    onError: toastError("Undo turn failed"),
   });
 }

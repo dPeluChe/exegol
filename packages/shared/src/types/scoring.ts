@@ -65,6 +65,25 @@ export type OplogSnapshot = {
   timestamp: number;
 };
 
+/** T200.5: one file a turn changed (numstat; null counts = binary) */
+export type TurnFileChange = {
+  path: string;
+  additions: number | null;
+  deletions: number | null;
+};
+
+/** T200.5: what an interactive agent's last turn changed; `snapshotSha` is the AgentTurn
+ *  oplog snapshot of the folder before the turn, the one Undo turn restores */
+export type TurnChanges = {
+  agentId: string;
+  projectId: string;
+  turnIndex: number;
+  startedAt: number;
+  endedAt: number;
+  snapshotSha: string;
+  files: TurnFileChange[];
+};
+
 export type RustDiffLine = {
   content: string;
   lineType: string;
