@@ -1,4 +1,5 @@
 import type { Project } from "@exegol/shared";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { useMountEffect } from "../hooks/use-mount-effect";
 import { useAgents, useProject } from "../hooks/use-trpc";
@@ -29,10 +30,11 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const { data: dbAgents } = useAgents(activeProjectId);
   const syncFromDb = useAgentStore((s) => s.syncFromDb);
   const agentsRecord = useAgentStore((s) => s.agents);
+  const queryClient = useQueryClient();
 
   // T17: Subscribe to push events for agent status updates (Rule 4: external system sync)
   useMountEffect(() => {
-    startAgentStatusPush();
+    startAgentStatusPush(queryClient);
     return () => stopAgentStatusPush();
   });
 

@@ -454,7 +454,9 @@ Quick ones first (S):
 
 Then (S-M / M):
 4. Follow-up queue + steer.
-5. Per-turn snapshot, "changes this turn", Undo turn (extends T129).
+5. ~~Per-turn snapshot, "changes this turn", Undo turn (extends T129)~~: shipped on
+   `feat/undo-turn` (`TASK_COMPLETED/2610.md`), Claude Code hook turns only. Left: the per-file
+   history below, and turn snapshots for CLIs once they have hooks (item 9).
    > Merged from T179.2 (`added: 2026-08-13`) on 2026-10-04: **per-file local history** as a view
    > over the same snapshots. Athas keeps per-file snapshots with `reason: save | auto-save |
    > restore | manual`, content hash, size, and restore-with-diff (`local-history-api.ts`). More

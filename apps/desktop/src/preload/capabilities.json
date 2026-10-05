@@ -160,11 +160,14 @@
       "stats"
     ],
     "oplog": [
+      "latestTurn",
       "listAgent",
       "listProject",
       "listSnapshots",
       "restoreSnapshot",
-      "undo"
+      "turnDiff",
+      "undo",
+      "undoTurn"
     ],
     "pipeline": [
       "cancelRun",
@@ -347,6 +350,7 @@
     "settings:broadcast-changed",
     "settings:changed",
     "app:toggle-devtools",
-    "terminal:set-visible"
+    "terminal:set-visible",
+    "agent:turn-changes"
   ]
 }

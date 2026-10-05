@@ -149,6 +149,20 @@ export function getAgent(db: Database.Database, id: string): Agent | null {
   return row ? mapAgentRow(row as Record<string, unknown>) : null;
 }
 
+/** The folder an agent works in: its worktree, else the project root */
+export function getAgentCwd(db: Database.Database, id: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(w.path, p.path) AS cwd
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       JOIN projects p ON p.id = a.project_id
+       WHERE a.id = ?`,
+    )
+    .get(id) as { cwd?: string } | undefined;
+  return row?.cwd ?? null;
+}
+
 export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   const id = nanoid();
   const now = Math.floor(Date.now() / 1000);
