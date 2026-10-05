@@ -4,6 +4,7 @@ import type { Agent, AgentScoreRow, ParallelRun, ParallelRunStatus } from "@exeg
 import type Database from "libsql";
 import { coreRust } from "../../agents/spawn-env";
 import { getScrollbackPath } from "../../ipc/procedures/scrollback";
+import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
 import { getAgent } from "./agents";
 import { mapScoreRow } from "./scoring";
@@ -183,7 +184,8 @@ async function computeDiffStat(
 ): Promise<{ filesChanged: number; insertions: number; deletions: number } | null> {
   if (!worktreePath || !coreRust) return null;
   try {
-    const files = await coreRust.getDiffAsync(worktreePath, false);
+    const rust = coreRust;
+    const files = await runNative(() => rust.getDiffAsync(worktreePath, false));
     let insertions = 0;
     let deletions = 0;
     for (const file of files) {
@@ -196,7 +198,7 @@ async function computeDiffStat(
     }
     return { filesChanged: files.length, insertions, deletions };
   } catch (err) {
-    logger.warn("[enrichParallelRunForComparison] getDiff failed:", err);
+    logger.warn("[enrichParallelRunForComparison] getDiffAsync failed:", err);
     return null;
   }
 }

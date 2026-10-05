@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
 import { getProject, listWorktrees } from "../../db/queries";
-import { mapWithConcurrency } from "../../lib/concurrency";
+import { runNative } from "../../lib/concurrency";
 import { escapeRegExp } from "../../lib/escape-regexp";
 import { isPathAllowed } from "../../security/path-guard";
 import { detectRunTargets } from "../../system/scripts";
@@ -29,9 +29,6 @@ const grepInput = z.object({
   globs: z.array(z.string().min(1)).optional(),
 });
 
-/** Walks share the libuv pool (4 threads) with fs I/O: leave half of it free */
-const SEARCH_CONCURRENCY = 2;
-
 function requireCoreRust(): NonNullable<typeof coreRust> {
   if (!coreRust) {
     throw new TRPCError({
@@ -48,26 +45,30 @@ export const fsSearchRouter = router({
   fuzzyFind: publicProcedure.input(fuzzyFindInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
     await assertPathInsideProject(input.root, ctx);
-    return rust.fsSearchAsync(input.query, input.root, {
-      maxResults: input.maxResults,
-      maxDepth: input.maxDepth,
-      includeHidden: input.includeHidden,
-      respectGitignore: input.respectGitignore,
-    });
+    return runNative(() =>
+      rust.fsSearchAsync(input.query, input.root, {
+        maxResults: input.maxResults,
+        maxDepth: input.maxDepth,
+        includeHidden: input.includeHidden,
+        respectGitignore: input.respectGitignore,
+      }),
+    );
   }),
 
   /** Regex content search backed by Rust `grep-regex` + `grep-searcher`. */
   grep: publicProcedure.input(grepInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
     await assertPathInsideProject(input.root, ctx);
-    return rust.fsGrepAsync(input.pattern, input.root, {
-      caseInsensitive: input.caseInsensitive,
-      includeHidden: input.includeHidden,
-      respectGitignore: input.respectGitignore,
-      maxMatches: input.maxMatches,
-      maxFileSizeKb: input.maxFileSizeKb,
-      globs: input.globs,
-    });
+    return runNative(() =>
+      rust.fsGrepAsync(input.pattern, input.root, {
+        caseInsensitive: input.caseInsensitive,
+        includeHidden: input.includeHidden,
+        respectGitignore: input.respectGitignore,
+        maxMatches: input.maxMatches,
+        maxFileSizeKb: input.maxFileSizeKb,
+        globs: input.globs,
+      }),
+    );
   }),
 
   /**
@@ -100,11 +101,12 @@ export const fsSearchRouter = router({
       const prefix = (rel: string, p: string) => (rel ? `${rel}/${p}` : p);
       if (input.mode === "name") {
         const seen = new Set<string>();
-        const perFolder = await mapWithConcurrency(folders, SEARCH_CONCURRENCY, async (f) =>
-          (await rust.fsSearchAsync(input.query, f.path, { maxResults: 100 })).map((r) => ({
-            ...r,
-            relativePath: prefix(f.rel, r.relativePath),
-          })),
+        const perFolder = await Promise.all(
+          folders.map(async (f) =>
+            (
+              await runNative(() => rust.fsSearchAsync(input.query, f.path, { maxResults: 100 }))
+            ).map((r) => ({ ...r, relativePath: prefix(f.rel, r.relativePath) })),
+          ),
         );
         const names = perFolder
           .flat()
@@ -114,13 +116,17 @@ export const fsSearchRouter = router({
         return { mode: input.mode, names, hits: [] };
       }
       const seen = new Set<string>();
-      const perFolder = await mapWithConcurrency(folders, SEARCH_CONCURRENCY, async (f) =>
-        (
-          await rust.fsGrepAsync(escapeRegExp(input.query), f.path, {
-            caseInsensitive: input.caseInsensitive ?? true,
-            maxMatches: 300,
-          })
-        ).map((h) => ({ ...h, relativePath: prefix(f.rel, h.relativePath) })),
+      const perFolder = await Promise.all(
+        folders.map(async (f) =>
+          (
+            await runNative(() =>
+              rust.fsGrepAsync(escapeRegExp(input.query), f.path, {
+                caseInsensitive: input.caseInsensitive ?? true,
+                maxMatches: 300,
+              }),
+            )
+          ).map((h) => ({ ...h, relativePath: prefix(f.rel, h.relativePath) })),
+        ),
       );
       const hits = perFolder
         .flat()

@@ -44,7 +44,7 @@ export const tokenUsageRouter = router({
     .input(z.object({ projectId: z.string() }).optional())
     .mutation(async ({ ctx, input }) => {
       const since = Math.floor(Date.now() / 1000) - 30 * 86400; // Last 30 days
-      const entries = await scanAllLogs(since);
+      const { entries } = await scanAllLogs(since);
       const agentId = input?.projectId ? `scan:${input.projectId}` : "external";
 
       // Dedup: check existing entries to avoid re-importing on repeated scans

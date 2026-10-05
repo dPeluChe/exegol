@@ -343,7 +343,6 @@ pub(crate) fn check_has_changes(path: &str) -> Result<bool, Error> {
 }
 
 /// Get a unified diff of all changes (staged + unstaged + untracked) in a worktree.
-#[napi]
 pub fn get_worktree_diff(worktree_path: String) -> Result<String, Error> {
   let repo = open_repo(&worktree_path)?;
 

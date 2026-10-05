@@ -1,136 +1,66 @@
-//! Libuv-threadpool variants of the git and search calls the main process polls.
-//! The sync versions froze Electron's main thread (PTY pump included) for the whole walk.
+//! Libuv-threadpool napi exports for the git and search calls the main process polls.
+//! Sync versions froze Electron's main thread (PTY pump included) for the whole walk.
 
 use napi::bindgen_prelude::AsyncTask;
 use napi::{Env, Result, Task};
 use napi_derive::napi;
 
-use crate::git::{check_has_changes, get_diff, get_worktree_diff, FileDiff};
+use crate::git::{get_diff, get_worktree_diff, worktree_has_changes, FileDiff};
 use crate::search::{fs_grep, fs_search, GrepHit, GrepOptions, SearchLimits, SearchResult};
 
-pub struct WorktreeHasChangesTask {
-  path: String,
+/// `fn name(args) -> Out as Task = compute`: a `Task` holding the args, run by `compute` on the
+/// pool, and the `#[napi]` export returning it.
+macro_rules! async_task {
+  ($(#[$doc:meta])* fn $name:ident($($arg:ident: $ty:ty),*) -> $out:ty as $task:ident = $compute:path) => {
+    pub struct $task {
+      $($arg: $ty),*
+    }
+
+    #[napi]
+    impl Task for $task {
+      type Output = $out;
+      type JsValue = $out;
+
+      fn compute(&mut self) -> Result<$out> {
+        $compute($(std::mem::take(&mut self.$arg)),*)
+      }
+
+      fn resolve(&mut self, _env: Env, output: $out) -> Result<$out> {
+        Ok(output)
+      }
+    }
+
+    $(#[$doc])*
+    #[napi]
+    pub fn $name($($arg: $ty),*) -> AsyncTask<$task> {
+      AsyncTask::new($task { $($arg),* })
+    }
+  };
 }
 
-#[napi]
-impl Task for WorktreeHasChangesTask {
-  type Output = bool;
-  type JsValue = bool;
-
-  fn compute(&mut self) -> Result<bool> {
-    check_has_changes(&self.path)
-  }
-
-  fn resolve(&mut self, _env: Env, output: bool) -> Result<bool> {
-    Ok(output)
-  }
+async_task! {
+  /// Whether a worktree has uncommitted changes, computed off the JS thread.
+  fn worktree_has_changes_async(worktree_path: String) -> bool as WorktreeHasChangesTask = worktree_has_changes
 }
 
-/// Async `worktreeHasChanges`, computed off the JS thread.
-#[napi]
-pub fn worktree_has_changes_async(worktree_path: String) -> AsyncTask<WorktreeHasChangesTask> {
-  AsyncTask::new(WorktreeHasChangesTask { path: worktree_path })
+async_task! {
+  /// Structured diff (staged or unstaged), computed off the JS thread.
+  fn get_diff_async(repo_path: String, staged: bool) -> Vec<FileDiff> as GetDiffTask = get_diff
 }
 
-pub struct GetDiffTask {
-  repo_path: String,
-  staged: bool,
+async_task! {
+  /// Unified diff of a worktree, computed off the JS thread.
+  fn get_worktree_diff_async(worktree_path: String) -> String as GetWorktreeDiffTask = get_worktree_diff
 }
 
-#[napi]
-impl Task for GetDiffTask {
-  type Output = Vec<FileDiff>;
-  type JsValue = Vec<FileDiff>;
-
-  fn compute(&mut self) -> Result<Vec<FileDiff>> {
-    get_diff(self.repo_path.clone(), self.staged)
-  }
-
-  fn resolve(&mut self, _env: Env, output: Vec<FileDiff>) -> Result<Vec<FileDiff>> {
-    Ok(output)
-  }
+async_task! {
+  /// Fuzzy file find under `root`, computed off the JS thread.
+  fn fs_search_async(query: String, root: String, limits: SearchLimits) -> Vec<SearchResult> as FsSearchTask = fs_search
 }
 
-/// Async `getDiff`, computed off the JS thread.
-#[napi]
-pub fn get_diff_async(repo_path: String, staged: bool) -> AsyncTask<GetDiffTask> {
-  AsyncTask::new(GetDiffTask { repo_path, staged })
-}
-
-pub struct GetWorktreeDiffTask {
-  path: String,
-}
-
-#[napi]
-impl Task for GetWorktreeDiffTask {
-  type Output = String;
-  type JsValue = String;
-
-  fn compute(&mut self) -> Result<String> {
-    get_worktree_diff(self.path.clone())
-  }
-
-  fn resolve(&mut self, _env: Env, output: String) -> Result<String> {
-    Ok(output)
-  }
-}
-
-/// Async `getWorktreeDiff`, computed off the JS thread.
-#[napi]
-pub fn get_worktree_diff_async(worktree_path: String) -> AsyncTask<GetWorktreeDiffTask> {
-  AsyncTask::new(GetWorktreeDiffTask { path: worktree_path })
-}
-
-pub struct FsSearchTask {
-  query: String,
-  root: String,
-  limits: SearchLimits,
-}
-
-#[napi]
-impl Task for FsSearchTask {
-  type Output = Vec<SearchResult>;
-  type JsValue = Vec<SearchResult>;
-
-  fn compute(&mut self) -> Result<Vec<SearchResult>> {
-    fs_search(self.query.clone(), self.root.clone(), self.limits.clone())
-  }
-
-  fn resolve(&mut self, _env: Env, output: Vec<SearchResult>) -> Result<Vec<SearchResult>> {
-    Ok(output)
-  }
-}
-
-/// Async `fsSearch`, computed off the JS thread.
-#[napi]
-pub fn fs_search_async(query: String, root: String, limits: SearchLimits) -> AsyncTask<FsSearchTask> {
-  AsyncTask::new(FsSearchTask { query, root, limits })
-}
-
-pub struct FsGrepTask {
-  pattern: String,
-  root: String,
-  opts: GrepOptions,
-}
-
-#[napi]
-impl Task for FsGrepTask {
-  type Output = Vec<GrepHit>;
-  type JsValue = Vec<GrepHit>;
-
-  fn compute(&mut self) -> Result<Vec<GrepHit>> {
-    fs_grep(self.pattern.clone(), self.root.clone(), self.opts.clone())
-  }
-
-  fn resolve(&mut self, _env: Env, output: Vec<GrepHit>) -> Result<Vec<GrepHit>> {
-    Ok(output)
-  }
-}
-
-/// Async `fsGrep`, computed off the JS thread.
-#[napi]
-pub fn fs_grep_async(pattern: String, root: String, opts: GrepOptions) -> AsyncTask<FsGrepTask> {
-  AsyncTask::new(FsGrepTask { pattern, root, opts })
+async_task! {
+  /// Regex content search under `root`, computed off the JS thread.
+  fn fs_grep_async(pattern: String, root: String, opts: GrepOptions) -> Vec<GrepHit> as FsGrepTask = fs_grep
 }
 
 #[cfg(test)]
@@ -155,31 +85,23 @@ mod tests {
   }
 
   #[test]
-  fn async_tasks_compute_what_the_sync_calls_return() {
+  fn async_tasks_compute_dirty_state_diffs_and_searches() {
     let tmp = committed_repo();
     let path = tmp.path().to_string_lossy().into_owned();
-    let mut dirty = WorktreeHasChangesTask { path: path.clone() };
-    assert!(!dirty.compute().unwrap());
+    let dirty = || WorktreeHasChangesTask { worktree_path: path.clone() }.compute().unwrap();
+    assert!(!dirty());
 
     fs::write(tmp.path().join("a.txt"), "two\n").unwrap();
-    assert!(dirty.compute().unwrap());
-    assert!(GetWorktreeDiffTask { path: path.clone() }.compute().unwrap().contains("+two"));
+    assert!(dirty());
+    assert!(GetWorktreeDiffTask { worktree_path: path.clone() }.compute().unwrap().contains("+two"));
     let staged = false;
     assert_eq!(GetDiffTask { repo_path: path.clone(), staged }.compute().unwrap().len(), 1);
 
-    let opts = GrepOptions {
-      case_insensitive: None,
-      include_hidden: None,
-      respect_gitignore: None,
-      max_matches: None,
-      max_file_size_kb: None,
-      globs: None,
-    };
+    let opts = GrepOptions::default();
     let hits = FsGrepTask { pattern: "two".into(), root: path.clone(), opts }.compute().unwrap();
     assert_eq!(hits.len(), 1);
 
-    let limits =
-      SearchLimits { max_results: None, max_depth: None, include_hidden: None, respect_gitignore: None };
+    let limits = SearchLimits::default();
     let names = FsSearchTask { query: "a.txt".into(), root: path, limits }.compute().unwrap();
     assert!(names.iter().any(|r| r.relative_path == "a.txt"));
   }

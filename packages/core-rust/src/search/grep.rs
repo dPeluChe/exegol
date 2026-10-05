@@ -9,7 +9,6 @@ use grep_searcher::sinks::UTF8;
 use grep_searcher::{BinaryDetection, SearcherBuilder};
 use ignore::{WalkBuilder, WalkState};
 use napi::{Error, Result};
-use napi_derive::napi;
 
 use super::types::{GrepHit, GrepOptions};
 
@@ -26,7 +25,6 @@ const LINE_CAP: usize = 240;
 /// `root` MUST be a directory the caller is authorized to search; this
 /// function does no path validation. Returns Err on invalid regex or
 /// missing root.
-#[napi]
 pub fn fs_grep(pattern: String, root: String, opts: GrepOptions) -> Result<Vec<GrepHit>> {
   if pattern.is_empty() {
     return Err(Error::from_reason("pattern must not be empty"));

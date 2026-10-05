@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, openSync, renameSync, rmSync, write, writeSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, renameSync, rmSync, writeSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,9 +20,7 @@ try {
 const logFile = join(LOG_DIR, "exegol.log");
 const MAX_ROTATED = 5;
 
-/** The log's fd; writes are positional so the async batch and a sync flush can't reorder */
 let fd: number | null = null;
-let position = 0;
 
 // Rotate on startup: exegol.log → exegol.1.log → … → exegol.5.log, so
 // previous sessions survive restarts (needed to diagnose crash/recovery).
@@ -33,59 +31,35 @@ try {
     if (existsSync(from)) renameSync(from, join(LOG_DIR, `exegol.${i + 1}.log`));
   }
   if (existsSync(logFile)) renameSync(logFile, join(LOG_DIR, "exegol.1.log"));
-  fd = openSync(logFile, "w");
-  const header = Buffer.from(`--- Session started ${new Date().toISOString()} ---\n`);
-  position = writeSync(fd, header, 0, header.length, 0);
+  fd = openSync(logFile, "a");
+  writeSync(fd, `--- Session started ${new Date().toISOString()} ---\n`);
 } catch {
   /* ignore */
 }
 
 // appendFileSync per line blocked the main thread on every log call: lines now
-// queue and go out in one async write per tick.
+// queue and go out in one write per 50ms.
 const FLUSH_DELAY_MS = 50;
 let pending: string[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
-let inflight: { buf: Buffer; at: number } | null = null;
-
-function takeBatch(): { buf: Buffer; at: number } | null {
-  if (pending.length === 0) return null;
-  const buf = Buffer.from(pending.join(""));
-  pending = [];
-  const batch = { buf, at: position };
-  position += buf.length;
-  return batch;
-}
 
 function scheduleFlush(): void {
-  if (flushTimer || inflight) return;
-  flushTimer = setTimeout(flushAsync, FLUSH_DELAY_MS);
+  if (flushTimer) return;
+  flushTimer = setTimeout(flushLogSync, FLUSH_DELAY_MS);
   flushTimer.unref?.();
 }
 
-function flushAsync(): void {
-  flushTimer = null;
-  if (fd === null || inflight) return;
-  const batch = takeBatch();
-  if (!batch) return;
-  inflight = batch;
-  write(fd, batch.buf, 0, batch.buf.length, batch.at, () => {
-    inflight = null;
-    if (pending.length > 0) scheduleFlush();
-  });
-}
-
-/** Crash and exit paths: the queued lines (and a write still in flight) reach disk before we die */
+/** Also the crash and exit path: the queued lines reach disk before we die */
 export function flushLogSync(): void {
-  if (fd === null) return;
   if (flushTimer) {
     clearTimeout(flushTimer);
     flushTimer = null;
   }
+  if (fd === null || pending.length === 0) return;
+  const batch = pending.join("");
+  pending = [];
   try {
-    // Positional, so rewriting the in-flight batch is idempotent if it already landed
-    if (inflight) writeSync(fd, inflight.buf, 0, inflight.buf.length, inflight.at);
-    const batch = takeBatch();
-    if (batch) writeSync(fd, batch.buf, 0, batch.buf.length, batch.at);
+    writeSync(fd, batch);
   } catch {
     /* non-fatal */
   }

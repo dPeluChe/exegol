@@ -22,3 +22,25 @@ export async function mapWithConcurrency<T, R>(
   await Promise.all(workers);
   return results;
 }
+
+/** Runs `fn` once fewer than `limit` calls are in flight, FIFO */
+export function createLimiter(limit: number): <R>(fn: () => Promise<R>) => Promise<R> {
+  let active = 0;
+  const queue: (() => void)[] = [];
+  return async (fn) => {
+    // A finishing call hands its slot straight to the next waiter, so a newcomer can't jump in
+    if (active >= limit) await new Promise<void>((resolve) => queue.push(resolve));
+    else active++;
+    try {
+      return await fn();
+    } finally {
+      const next = queue.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
+
+/** Every `*Async` napi call (walks, diffs, dirty checks) runs on the 4-thread libuv pool
+ *  that fs I/O also needs: at most 2 at once, app-wide */
+export const runNative = createLimiter(2);

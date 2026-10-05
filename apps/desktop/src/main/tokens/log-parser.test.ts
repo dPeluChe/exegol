@@ -2,12 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  lastScanParsedFiles,
-  mayCarryClaudeUsage,
-  parseCodexSessionFile,
-  scanAllLogs,
-} from "./log-parser";
+import { mayCarryClaudeUsage, parseCodexSessionFile, scanAllLogs } from "./log-parser";
 
 let home: string;
 const now = Math.floor(Date.now() / 1000);
@@ -37,17 +32,17 @@ describe("scanAllLogs", () => {
     writeFileSync(file, `${claudeLine(10, 5)}\n{"type":"user","message":"hi"}\n`);
 
     const first = await scanAllLogs(since, home);
-    expect(first.map((e) => e.inputTokens)).toEqual([10]);
-    expect(lastScanParsedFiles).toBe(1);
+    expect(first.entries.map((e) => e.inputTokens)).toEqual([10]);
+    expect(first.parsedFiles).toBe(1);
 
     const second = await scanAllLogs(since, home);
-    expect(second.map((e) => e.inputTokens)).toEqual([10]);
-    expect(lastScanParsedFiles).toBe(0);
+    expect(second.entries.map((e) => e.inputTokens)).toEqual([10]);
+    expect(second.parsedFiles).toBe(0);
 
     writeFileSync(file, `${claudeLine(10, 5)}\n${claudeLine(20, 7)}\n`);
     const third = await scanAllLogs(since, home);
-    expect(third.map((e) => e.inputTokens)).toEqual([10, 20]);
-    expect(lastScanParsedFiles).toBe(1);
+    expect(third.entries.map((e) => e.inputTokens)).toEqual([10, 20]);
+    expect(third.parsedFiles).toBe(1);
   });
 
   it("skips files last modified before the window", async () => {
@@ -56,8 +51,7 @@ describe("scanAllLogs", () => {
     const file = join(dir, "old.jsonl");
     writeFileSync(file, `${claudeLine(10, 5, since - 100)}\n`);
     utimesSync(file, since - 100, since - 100);
-    expect(await scanAllLogs(since, home)).toEqual([]);
-    expect(lastScanParsedFiles).toBe(0);
+    expect(await scanAllLogs(since, home)).toEqual({ entries: [], parsedFiles: 0 });
   });
 });
 

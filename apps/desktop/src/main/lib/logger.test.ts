@@ -15,7 +15,7 @@ const read = () => readFileSync(join(LOG_DIR, "exegol.log"), "utf-8");
 afterAll(() => rmSync(join(LOG_DIR, ".."), { recursive: true, force: true }));
 
 describe("logger file writes", () => {
-  it("queues lines off the call and keeps their order across async and sync flushes", async () => {
+  it("queues lines off the call and keeps their order across timed and sync flushes", async () => {
     expect(LOG_DIR).toContain(`exegol-logger-${process.pid}`);
     logger.debug("one");
     logger.debug("two");

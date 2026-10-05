@@ -8,12 +8,15 @@ import { SCROLLBACK_THROTTLE_MS, type Session } from "./pty-session-types";
 const flushedRevision = new WeakMap<Session, number>();
 
 /** The snapshot to write, or null when the disk copy is already current */
-function dirtySnapshot(session: Session): { snapshot: string; revision: number } | null {
-  if (!session.scrollbackPath) return null;
+function dirtySnapshot(
+  session: Session,
+): { path: string; snapshot: string; revision: number } | null {
+  const path = session.scrollbackPath;
+  if (!path) return null;
   const revision = session.emulator.revision;
   if (flushedRevision.get(session) === revision) return null;
   const snapshot = session.emulator.snapshot();
-  return snapshot ? { snapshot, revision } : null;
+  return snapshot ? { path, snapshot, revision } : null;
 }
 
 export function scheduleScrollbackFlush(session: Session): void {
@@ -26,10 +29,10 @@ export function scheduleScrollbackFlush(session: Session): void {
 
 async function flushScrollbackAsync(session: Session): Promise<void> {
   const dirty = dirtySnapshot(session);
-  if (!dirty || !session.scrollbackPath) return;
+  if (!dirty) return;
   try {
-    await mkdir(dirname(session.scrollbackPath), { recursive: true });
-    await writeFile(session.scrollbackPath, dirty.snapshot, "utf-8");
+    await mkdir(dirname(dirty.path), { recursive: true });
+    await writeFile(dirty.path, dirty.snapshot, "utf-8");
     flushedRevision.set(session, dirty.revision);
   } catch (err) {
     logger.error(`[PtyHost] Scrollback write failed for ${session.id}:`, err);
@@ -38,10 +41,10 @@ async function flushScrollbackAsync(session: Session): Promise<void> {
 
 export function flushScrollbackSync(session: Session): void {
   const dirty = dirtySnapshot(session);
-  if (!dirty || !session.scrollbackPath) return;
+  if (!dirty) return;
   try {
-    mkdirSync(dirname(session.scrollbackPath), { recursive: true });
-    writeFileSync(session.scrollbackPath, dirty.snapshot, "utf-8");
+    mkdirSync(dirname(dirty.path), { recursive: true });
+    writeFileSync(dirty.path, dirty.snapshot, "utf-8");
     flushedRevision.set(session, dirty.revision);
   } catch (err) {
     logger.error(`[PtyHost] Sync scrollback write failed for ${session.id}:`, err);

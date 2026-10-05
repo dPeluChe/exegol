@@ -3,6 +3,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { dayDirs } from "../history/providers/codex";
 import { mapWithConcurrency } from "../lib/concurrency";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -61,16 +62,19 @@ interface CachedFile {
 
 const fileCache = new Map<string, CachedFile>();
 
-/** Files parsed (not served from the cache) by the last scan; for tests */
-export let lastScanParsedFiles = 0;
-
 type FileParser = (path: string, since: number) => Promise<ParsedTokenEntry[]>;
+
+interface ScanStats {
+  /** Files parsed, not served from the cache */
+  parsedFiles: number;
+  seen: Set<string>;
+}
 
 async function scanFile(
   path: string,
   since: number,
   parse: FileParser,
-  seen: Set<string>,
+  stats: ScanStats,
 ): Promise<ParsedTokenEntry[]> {
   let info: { mtimeMs: number; size: number };
   try {
@@ -79,7 +83,7 @@ async function scanFile(
     return [];
   }
   if (info.mtimeMs / 1000 < since) return [];
-  seen.add(path);
+  stats.seen.add(path);
   const hit = fileCache.get(path);
   if (hit && hit.mtimeMs === info.mtimeMs && hit.size === info.size && hit.since <= since) {
     return hit.entries.filter((e) => e.timestamp >= since);
@@ -90,7 +94,7 @@ async function scanFile(
   } catch {
     /* unreadable file */
   }
-  lastScanParsedFiles++;
+  stats.parsedFiles++;
   fileCache.set(path, { mtimeMs: info.mtimeMs, size: info.size, since, entries });
   return entries;
 }
@@ -186,22 +190,16 @@ function extractClaudeTokenUsage(
  * payload.info.total_token_usage.{input_tokens, output_tokens}; the model and
  * provider come from the session_meta entry.
  */
-async function listCodexFiles(home: string): Promise<string[]> {
-  const sessionsDir = join(home, ".codex", "sessions");
-  const files: string[] = [];
-  for (const year of await safeReaddir(sessionsDir)) {
-    const yearDir = join(sessionsDir, year.name);
-    for (const month of await safeReaddir(yearDir)) {
-      const monthDir = join(yearDir, month.name);
-      for (const day of await safeReaddir(monthDir)) {
-        const dayDir = join(monthDir, day.name);
-        for (const f of await safeReaddir(dayDir)) {
-          if (f.name.endsWith(".jsonl")) files.push(join(dayDir, f.name));
-        }
-      }
-    }
-  }
-  return files;
+async function listCodexFiles(home: string, since: number): Promise<string[]> {
+  const dirs = await dayDirs(join(home, ".codex", "sessions"), since);
+  const perDay = await Promise.all(
+    dirs.map(async (dir) =>
+      (await safeReaddir(dir))
+        .filter((f) => f.name.endsWith(".jsonl"))
+        .map((f) => join(dir, f.name)),
+    ),
+  );
+  return perDay.flat();
 }
 
 /** Codex reports cumulative totals: only the LAST token_count (the session total) counts */
@@ -214,7 +212,10 @@ export async function parseCodexSessionFile(
   let fallbackModel: string | null = null;
   let sessionProvider = "openai";
   let sessionTimestamp = 0;
-  let last: { usage: Record<string, number>; timestamp?: string } | null = null;
+  // A holder, not a `let`: TS would keep a closure-assigned local narrowed to null
+  const last: { value: { input: number; output: number; timestamp?: string } | null } = {
+    value: null,
+  };
 
   await forEachLine(path, (line) => {
     const isMeta = !metaSeen && line.includes('"session_meta"');
@@ -243,16 +244,20 @@ export async function parseCodexSessionFile(
     if (payload?.type !== "token_count") return;
     const info = payload.info as Record<string, unknown> | undefined;
     const usage = info?.total_token_usage as Record<string, number> | undefined;
-    if (usage && typeof usage.input_tokens === "number") last = { usage, timestamp: d.timestamp };
+    if (usage && typeof usage.input_tokens === "number") {
+      last.value = {
+        input: usage.input_tokens,
+        output: usage.output_tokens ?? 0,
+        timestamp: d.timestamp,
+      };
+    }
   });
 
-  if (sessionTimestamp < since || !last) return [];
-  const { usage, timestamp } = last as { usage: Record<string, number>; timestamp?: string };
+  if (sessionTimestamp < since || !last.value) return [];
+  const { input: inputTokens, output: outputTokens, timestamp } = last.value;
   const ts = timestamp ? new Date(timestamp).getTime() / 1000 : sessionTimestamp;
   if (ts < since) return [];
   const model = metaModel ?? fallbackModel ?? "unknown";
-  const inputTokens = usage.input_tokens as number;
-  const outputTokens = usage.output_tokens ?? 0;
   return [
     {
       provider: sessionProvider,
@@ -368,12 +373,11 @@ const SCAN_CONCURRENCY = 4;
 export async function scanAllLogs(
   sinceTimestamp: number,
   home = homedir(),
-): Promise<ParsedTokenEntry[]> {
-  lastScanParsedFiles = 0;
-  const seen = new Set<string>();
+): Promise<{ entries: ParsedTokenEntry[]; parsedFiles: number }> {
+  const stats: ScanStats = { parsedFiles: 0, seen: new Set() };
   const [claudeFiles, codexFiles] = await Promise.all([
     listClaudeFiles(home),
-    listCodexFiles(home),
+    listCodexFiles(home, sinceTimestamp),
   ]);
   const jobs: [string, FileParser][] = [
     ...claudeFiles.map((f): [string, FileParser] => [f, parseClaudeFile]),
@@ -381,8 +385,8 @@ export async function scanAllLogs(
     ...aiderFiles(home).map((f): [string, FileParser] => [f, parseAiderFile]),
   ];
   const results = await mapWithConcurrency(jobs, SCAN_CONCURRENCY, ([path, parse]) =>
-    scanFile(path, sinceTimestamp, parse, seen),
+    scanFile(path, sinceTimestamp, parse, stats),
   );
-  for (const path of fileCache.keys()) if (!seen.has(path)) fileCache.delete(path);
-  return results.flat();
+  for (const path of fileCache.keys()) if (!stats.seen.has(path)) fileCache.delete(path);
+  return { entries: results.flat(), parsedFiles: stats.parsedFiles };
 }
