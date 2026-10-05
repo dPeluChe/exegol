@@ -22,6 +22,7 @@ import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
 import { WatchToggle } from "../common/WatchToggle";
 import { CliUpdateControl } from "./CliUpdateControl";
+import { TurnChangesChip } from "./TurnChanges";
 
 interface TerminalToolbarProps {
   /** T160: live agent identity for the session-name chip (omit for shells). */
@@ -333,6 +334,7 @@ function SessionControls({ agent }: { agent: QuietAgent }) {
         <>
           <QuietControls agent={agent} className="py-0 text-[9px]" />
           <CliUpdateControl agentId={agent.id} />
+          <TurnChangesChip agentId={agent.id} />
         </>
       )}
       {agent.launchedInShell && agent.status === "idle" && (

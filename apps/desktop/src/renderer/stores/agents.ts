@@ -7,6 +7,7 @@ import {
   classifyActivity,
   LIVE_STATUSES,
 } from "@exegol/shared";
+import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
@@ -63,9 +64,12 @@ function statusToAttention(
 let pushCleanup: (() => void) | null = null;
 
 /** Start listening for agent status push events from main process */
-export function startAgentStatusPush(): void {
+export function startAgentStatusPush(queryClient: QueryClient): void {
   if (pushCleanup) return; // Already subscribed
-  pushCleanup = window.api.onAgentStatus((event) => {
+  const stopTurns = window.api.onTurnChanges((event) =>
+    queryClient.invalidateQueries({ queryKey: ["oplog", "turn", event.agentId] }),
+  );
+  const stopStatus = window.api.onAgentStatus((event) => {
     const store = useAgentStore.getState();
     const existing = store.agents[event.agentId];
     if (existing) {
@@ -117,6 +121,10 @@ export function startAgentStatusPush(): void {
       }
     }
   });
+  pushCleanup = () => {
+    stopTurns();
+    stopStatus();
+  };
 }
 
 /** Stop listening for push events */
