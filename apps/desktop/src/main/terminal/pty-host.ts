@@ -1,4 +1,5 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
+import type { ScreenDialog } from "@exegol/shared";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { terminalProcesses, terminateAll } from "../system/process-tree";
@@ -25,6 +26,7 @@ import {
 import { scanForMarker } from "./pty-shell-ready";
 import type { SidecarClient } from "./pty-sidecar-client";
 import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
+import { readScreenDialog } from "./screen-dialog";
 
 export type { SessionCallbacks } from "./pty-session-types";
 
@@ -126,8 +128,8 @@ export class PtyHost {
     spawnOpts: { cols: number; rows: number },
     callbacks: SessionCallbacks,
     options?: { scrollbackPath?: string },
-  ): Promise<void> {
-    if (!this.sidecarClient?.isConnected()) return;
+  ): Promise<string | null> {
+    if (!this.sidecarClient?.isConnected()) return null;
 
     const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
     const session: Session = {
@@ -149,13 +151,12 @@ export class PtyHost {
     };
     this.sessions.set(id, session);
 
-    // Replay ring buffer snapshot to rebuild emulator state
+    // The ring rebuilds the model only (replayed through onData it re-fired old status/OSC);
+    // the caller seeds its scrollback from the returned snapshot
+    let snapshot: string | null = null;
     try {
-      const snapshot = await this.sidecarClient.snapshot(id);
-      if (snapshot) {
-        emulator.write(snapshot);
-        callbacks.onData(snapshot);
-      }
+      snapshot = await this.sidecarClient.snapshot(id);
+      if (snapshot) emulator.write(snapshot);
     } catch {
       // Snapshot unavailable — session still reattaches, just without scrollback history
     }
@@ -166,6 +167,7 @@ export class PtyHost {
       this.resize(id, pending.cols, pending.rows);
       broadcast("terminal:resized", id, pending.cols, pending.rows);
     }
+    return snapshot;
   }
 
   /** Create a new PTY session — uses sidecar if available, falls back to subprocess */
@@ -361,6 +363,12 @@ export class PtyHost {
     const emulator = this.sessions.get(id)?.emulator;
     const snapshot = emulator?.snapshot();
     return emulator && snapshot ? snapshot + emulator.modeSequence() : null;
+  }
+
+  /** The numbered dialog the session's screen shows now, if any */
+  screenDialog(id: string): ScreenDialog | null {
+    const lines = this.sessions.get(id)?.emulator.visibleLines();
+    return lines ? readScreenDialog(lines) : null;
   }
 
   isAlive(id: string): boolean {

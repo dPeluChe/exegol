@@ -2,6 +2,7 @@ import type { AgentCliType, AgentProvider, ResumableSession, SpawnPreview } from
 import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import { cliSetupFor } from "../../agents/cli-catalog";
 import { takeLostOnRestart, whenRecovered } from "../../agents/lost-sessions";
@@ -38,6 +39,7 @@ import {
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
 import { isPathAllowed } from "../../security/path-guard";
 import { installedProviderIds } from "../../system/cli-versions";
+import { getPtyHost } from "../../terminal/pty-host";
 import { publicProcedure, router } from "../trpc";
 
 /** Each provider marked installed (one PATH check, the one spawn uses) with how to install it on
@@ -387,6 +389,38 @@ export const agentRouter = router({
     await ctx.agentManager.stop(ctx.db, input.id);
     return getAgent(ctx.db, input.id);
   }),
+
+  /** The numbered question the agent's screen is waiting on (permission prompt, approval) */
+  screenDialog: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => getPtyHost().screenDialog(input.id)),
+
+  /** Press one option, only on an agent waiting on the same question the user saw: two prompts
+   *  in a row both offer 1/2/3, and a stale click must not answer the next one */
+  answerDialog: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        key: z.string().regex(/^\d$/),
+        fingerprint: z.string().max(8000),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      const agent = getAgent(ctx.db, input.id);
+      const waiting = agent?.status === "waiting_input" || isAgentAwaitingApproval(input.id);
+      const dialog = getPtyHost().screenDialog(input.id);
+      if (
+        !agent ||
+        agent.cliType === "shell" ||
+        !waiting ||
+        dialog?.fingerprint !== input.fingerprint ||
+        !dialog.options.some((o) => o.key === input.key)
+      ) {
+        throw new TRPCError({ code: "CONFLICT", message: "That question is no longer on screen" });
+      }
+      ctx.agentManager.write(input.id, input.key);
+      return { ok: true };
+    }),
 
   stop: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);

@@ -11,16 +11,20 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Watch PR: a session's toolbar can watch its branch's pull request. Failing checks (with links), new review comments or requested changes, and merge conflicts are sent to the agent at its next turn and show in Needs attention, with caps so it never loops
+- Answer an agent's question without opening its pane: when it waits on a numbered prompt (Claude's "Do you want to proceed? 1. Yes / 2. Yes, always… / 3. No", Codex's approval), the Dashboard card and the attention queue show the question, what it wants to run and each option as a button. Exegol presses it only if that same question is still on screen
 - Status bar: open agents per CLI (its icon, how many, how many working; hover lists them with their project) and each CLI's plan usage, 5-hour and weekly with the time to reset, amber at 70% and red at 90%. Codex's comes from its own session logs; Claude's is read with Claude Code's login once you click "Show plan usage". The token count and platform that showed nothing useful are gone (tokens stay in Monitor)
-
-### Fixed
-- The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
+- Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows
 
 ### Changed
 - CLI updates name every session they restart, with its project, in the notice; Restart to update and Update in a terminal's toolbar ask whether to restart only that session or all of the CLI's sessions, and list the others
+- Faster start with many live agents: reconnecting a terminal rebuilds its screen without re-reading its whole history as new output (which also re-fired old status changes). Git panes no longer ask GitHub for the PR every 15 seconds (once a minute, and right after a commit, push, or a PR created or merged from Exegol), and background refreshes pause while Exegol is not the app in focus
 
-### Added
-- Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows
+### Fixed
+- Agents in a worktree or pipeline folder of a project you trusted in Claude no longer stop on Claude's "trust this folder?" prompt
+- Agents launched from an Exegol started inside another Claude session (a dev build in an agent's terminal) kept that session's markers, and Claude silently stopped saving their conversation; they start clean now
+- A pane or Dashboard card that hits an error shows it in place with "Show it again", instead of blanking the whole window
+- The commit message button (Sparkles) works without an API key, through your logged-in Claude CLI
+- The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
 
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly
 

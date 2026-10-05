@@ -19,6 +19,7 @@
       "setGroup"
     ],
     "agents": [
+      "answerDialog",
       "archive",
       "archiveEnded",
       "cancelParallelRun",
@@ -43,10 +44,11 @@
       "recentSessions",
       "registerProvider",
       "resetProviderArgs",
+      "screenDialog",
       "setAlias",
+      "setMuted",
       "spawn",
       "spawnParallel",
-      "setMuted",
       "setPrWatch",
       "stop",
       "suspend",
@@ -319,6 +321,7 @@
     "menu:focus-location",
     "agent:status-changed",
     "agent:pr-watch",
+    "window:focus-changed",
     "metrics:update",
     "pipeline:status-changed",
     "dialog:showOpenDialog",

@@ -31,8 +31,8 @@ function useRunningAgentsQuery(projectId: string | undefined) {
     queryKey: ["agents", projectId],
     queryFn: () => trpcInvoke<Agent[]>("agents.list", { projectId }),
     enabled: !!projectId,
-    refetchInterval: 5_000,
-    staleTime: 3_000,
+    refetchInterval: 30_000,
+    staleTime: 15_000,
   });
   return useMemo(() => (projectAgents ?? []).filter(isPasteTarget), [projectAgents]);
 }

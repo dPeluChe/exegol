@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
-import { BrowserWindow } from "electron";
+import { app, BrowserWindow } from "electron";
 import windowStateKeeper from "electron-window-state";
 import { registerMainWindow } from "../windows/floating";
 import { getMainWindow, setMainWindowRef } from "../windows/main-window-ref";
@@ -12,7 +12,28 @@ let mainWindow: BrowserWindow | null = null;
 
 export { getMainWindow };
 
+let focusRelayInstalled = false;
+
+/** The app's focus for the main window's polls (TanStack focusManager): any Exegol window
+ *  counts, so Settings or a PiP window does not pause the panes still on screen */
+function installFocusRelay(): void {
+  if (focusRelayInstalled) return;
+  focusRelayInstalled = true;
+  const send = (focused: boolean) => {
+    const win = getMainWindow();
+    if (win && !win.isDestroyed()) win.webContents.send("window:focus-changed", focused);
+  };
+  app.on("browser-window-focus", () => send(true));
+  // Focus moving between our windows blurs one before the other gains it
+  app.on("browser-window-blur", () =>
+    setImmediate(() => {
+      if (!BrowserWindow.getFocusedWindow()) send(false);
+    }),
+  );
+}
+
 export function createWindow(): void {
+  installFocusRelay();
   const state = windowStateKeeper({
     defaultWidth: 1400,
     defaultHeight: 900,

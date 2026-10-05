@@ -154,6 +154,17 @@ export const MODEL_SUGGESTIONS: Record<string, string[]> = {
 /** Goes into the shell command unquoted: model ids only (letters, digits, . _ - : / @) */
 export const MODEL_ID_PATTERN = /^[\w.:/@-]{1,100}$/;
 
+/** A numbered question an agent CLI waits on (Claude's permission prompt, Codex's approval) */
+export interface ScreenDialog {
+  /** The line that asks ("Do you want to proceed?"), when one sits right above the options */
+  question: string | null;
+  /** A few lines above the question: what the agent wants to run or change */
+  context: string[];
+  options: { key: string; label: string }[];
+  /** Question + context: an answer names the dialog it was given for */
+  fingerprint: string;
+}
+
 /** One window of a CLI's subscription plan (Claude: 5h and weekly; Codex: primary/secondary) */
 export interface PlanWindow {
   usedPercent: number;

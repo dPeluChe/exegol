@@ -73,3 +73,23 @@ describe("PtyHost clear", () => {
     expect(host.getSnapshot("c")).not.toContain("old history");
   });
 });
+
+describe("PtyHost reattach", () => {
+  it("rebuilds the model from the ring without replaying it as new output", async () => {
+    const onData = vi.fn();
+    const client = {
+      ...(fakeSidecar().client as object),
+      snapshot: async () => "old screen\r\n",
+    } as unknown as SidecarClient;
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    const snapshot = await host.reattachSession("r", { cols: 80, rows: 24 }, {
+      onData,
+      onExit: () => {},
+    } as never);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(snapshot).toBe("old screen\r\n");
+    expect(onData).not.toHaveBeenCalled();
+    expect(host.getSnapshot("r")).toContain("old screen");
+  });
+});

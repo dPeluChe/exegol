@@ -3,6 +3,7 @@ import { z } from "zod";
 import { detectGhCli, execFileAsync } from "../../integrations/github/gh";
 import { publicProcedure } from "../trpc";
 import { resolveProjectPath } from "./diff-helpers";
+import { forgetPrState } from "./diff-state";
 
 export const prProcedures = {
   /** Create a GitHub PR via gh CLI. Falls back to error if gh not installed. */
@@ -34,6 +35,7 @@ export const prProcedures = {
       if (input.draft) args.push("--draft");
       try {
         const { stdout } = await execFileAsync("gh", args, { cwd, timeout: 30_000 });
+        forgetPrState(cwd);
         return { url: stdout.trim() };
       } catch (err) {
         throw new TRPCError({
@@ -65,6 +67,7 @@ export const prProcedures = {
       if (input.deleteBranch) args.push("--delete-branch");
       try {
         const { stdout } = await execFileAsync("gh", args, { cwd, timeout: 60_000 });
+        forgetPrState(cwd);
         return { output: stdout.trim() || "Merged successfully" };
       } catch (err) {
         throw new TRPCError({
