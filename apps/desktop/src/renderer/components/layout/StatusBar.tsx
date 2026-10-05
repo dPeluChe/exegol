@@ -16,7 +16,8 @@ import { useCliUpdates } from "../../hooks/use-cli-updates";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useNow } from "../../hooks/use-now";
 import { useEnabledProviders } from "../../hooks/use-providers";
-import { useProject, useSettings, useWorktrees } from "../../hooks/use-trpc";
+import { useProject, useSettings, useSystemMetrics } from "../../hooks/use-trpc";
+import { useUpdateStatus } from "../../hooks/use-update-status";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { sessionName } from "../../lib/agent-label";
 import { formatCost, formatTokens } from "../../lib/format";
@@ -33,6 +34,7 @@ import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
+import type { GitState } from "../workspace/SmartGitAction";
 import { formatUptime, thresholdColor } from "../workspace/sections/resource-format";
 import { AgentsWidget } from "./StatusBarAgents";
 
@@ -178,25 +180,23 @@ function FocusedAgentWidget() {
   );
 }
 
-interface GitState {
-  ahead: number;
-  behind: number;
-  dirtyStaged: number;
-  dirtyUnstaged: number;
-  pr: { state: "none" | "open" | "merged" | "closed" };
-}
-
-/** SmartGitAction's query (same key): read when shown, refreshed by the Git pane, no polling */
+/** SmartGitAction's query (same key): read when shown, refreshed by the Git pane, no polling.
+ *  The path is the one the Git pane opens for this agent (agents.getWorktreePath) */
 function GitStateWidget() {
   const projectId = useAppStore((s) => s.activeProjectId);
   const agentId = useFocusedAgentId();
   const hasWorktree = useAgentStore((s) => !!(agentId && s.agents[agentId]?.branchName));
-  const { data: worktrees } = useWorktrees(projectId ?? "", !!projectId && hasWorktree);
-  const path = hasWorktree ? worktrees?.find((w) => w.agentId === agentId)?.path : undefined;
+  const { data: worktreePath, isFetched } = useQuery({
+    queryKey: ["agents", "worktreePath", agentId],
+    queryFn: () => trpcInvoke<string | null>("agents.getWorktreePath", { agentId }),
+    enabled: hasWorktree,
+    staleTime: 60_000,
+  });
+  const path = (hasWorktree && worktreePath) || undefined;
   const { data: state } = useQuery({
     queryKey: ["git", "state", path || projectId],
     queryFn: () => trpcInvoke<GitState>("diff.gitState", { projectId, pathOverride: path }),
-    enabled: !!projectId,
+    enabled: !!projectId && (!hasWorktree || isFetched),
     staleTime: 60_000,
   });
   if (!state) return null;
@@ -245,21 +245,14 @@ function ReconnectWidget() {
   );
 }
 
-/** What the title bar's update button shows; only events after this widget mounts reach it */
+/** What the title bar's update button shows */
 function AppUpdateWidget() {
-  const [update, setUpdate] = useState<{ status: string; version?: string } | null>(null);
-  useMountEffect(() =>
-    window.api.updater.onStatus((data) => {
-      const next = data as { status: string; info?: { version?: string } };
-      setUpdate({ status: next.status, version: next.info?.version });
-    }),
-  );
-  if (!update) return null;
+  const update = useUpdateStatus();
   if (update.status === "ready") {
     return (
       <span className="flex shrink-0 items-center gap-1 text-success">
         <ArrowDownCircle className="h-3 w-3" />
-        Exegol {update.version} ready
+        Exegol {update.info.version} ready
       </span>
     );
   }
@@ -267,19 +260,21 @@ function AppUpdateWidget() {
   return (
     <span className="flex shrink-0 items-center gap-1">
       <Loader2 className="h-3 w-3 animate-spin" />
-      Downloading Exegol {update.version}
+      Downloading Exegol {update.info.version}
     </span>
   );
 }
 
 function TokensWidget() {
-  const midnight = new Date(useNow());
-  midnight.setHours(0, 0, 0, 0);
-  const since = Math.floor(midnight.getTime() / 1000);
   const { data } = useQuery({
-    queryKey: ["tokenUsage", "today", since],
-    queryFn: () => trpcInvoke<TokenUsageSummary>("tokenUsage.summary", { since }),
-    staleTime: 60_000,
+    queryKey: ["tokenUsage", "today"],
+    queryFn: () => {
+      const midnight = new Date();
+      midnight.setHours(0, 0, 0, 0);
+      const since = Math.floor(midnight.getTime() / 1000);
+      return trpcInvoke<TokenUsageSummary>("tokenUsage.summary", { since });
+    },
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
   });
   if (!data) return null;
@@ -294,9 +289,12 @@ function TokensWidget() {
   );
 }
 
+/** Push first, the query until the first push lands */
 function ResourcesWidget() {
-  const [metrics, setMetrics] = useState<SystemMetricsEvent | null>(null);
-  useMountEffect(() => window.api.onMetrics(setMetrics));
+  const [pushed, setPushed] = useState<SystemMetricsEvent | null>(null);
+  useMountEffect(() => window.api.onMetrics(setPushed));
+  const { data: queried } = useSystemMetrics();
+  const metrics = pushed ?? queried;
   if (!metrics) return null;
   return (
     <span

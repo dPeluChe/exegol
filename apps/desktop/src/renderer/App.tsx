@@ -25,6 +25,7 @@ import { useAutoResumeLost } from "./hooks/use-resume-agent";
 import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
+import { useUpdateStatusSync } from "./hooks/use-update-status";
 import { useAppStore } from "./stores/app";
 
 // Lazy: rarely-used surfaces are not needed on first paint.
@@ -60,6 +61,7 @@ export default function App() {
   useFloatingPaneSync();
   usePanelessAgentSweep();
   useSettingsSync();
+  useUpdateStatusSync();
   useAutoResumeLost();
   useCliRestarts();
   useFleetSync();

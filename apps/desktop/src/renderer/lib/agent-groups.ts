@@ -12,7 +12,7 @@ type Grouped = Pick<
 
 /** Need you: an unread question, or a dialog still open (its action_needed item lives until the
  *  agent runs again). Working: busy. Everything else live is waiting */
-export function agentGroup(a: Grouped, item: AttentionItem | undefined): AgentGroup {
+function agentGroup(a: Grouped, item: AttentionItem | undefined): AgentGroup {
   if (item?.level === "action_needed" && (!item.read || a.status === "waiting_input")) {
     return "needYou";
   }

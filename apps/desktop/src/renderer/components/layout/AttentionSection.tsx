@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNow } from "../../hooks/use-now";
 import { usePointerReorder } from "../../hooks/use-pointer-reorder";
 import { useProject, useProjects } from "../../hooks/use-trpc";
 import {
@@ -69,17 +70,17 @@ const LEVEL_CONFIG: Record<
 
 // ─── Time formatting ─────────────────────────────────────────────────────
 
-function timeAgo(ts: number): string {
-  const diff = Math.floor((Date.now() - ts) / 1000);
+function timeAgo(ts: number, now: number): string {
+  const diff = Math.floor((now - ts) / 1000);
   if (diff < 60) return `${diff}s`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
   return `${Math.floor(diff / 86400)}d`;
 }
 
-function elapsed(startedAt: number | null): string {
+function elapsed(startedAt: number | null, now: number): string {
   if (!startedAt) return "";
-  return timeAgo(startedAt * 1000);
+  return timeAgo(startedAt * 1000, now);
 }
 
 // ─── Main Component ──────────────────────────────────────────────────────
@@ -110,13 +111,6 @@ export function AttentionSection() {
       return b.timestamp - a.timestamp;
     });
   }, [rawItems]);
-
-  // Force re-render every 10s for elapsed time updates
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 10_000);
-    return () => clearInterval(id);
-  }, []);
 
   // Every live agent, one waiting on you included: its row carries the amber mark, and the
   // attention list is a separate view (the switch), so nothing shows twice
@@ -414,6 +408,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
   const isWaiting = agent.status === "waiting_input" && hasUnreadAttention;
   const recovery = useSessionRecovery();
   const reconnecting = isSessionReconnecting(recovery, agent.id);
+  const now = useNow();
 
   return (
     <button
@@ -452,7 +447,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
       </span>
 
       {/* Elapsed time */}
-      <span className="shrink-0 text-[9px] text-text-muted">{elapsed(agent.startedAt)}</span>
+      <span className="shrink-0 text-[9px] text-text-muted">{elapsed(agent.startedAt, now)}</span>
     </button>
   );
 }
@@ -477,6 +472,7 @@ function AttentionCard({
 }) {
   const config = LEVEL_CONFIG[item.level];
   const LevelIcon = config.icon;
+  const now = useNow();
 
   return (
     <div
@@ -507,7 +503,7 @@ function AttentionCard({
             <span className="ml-auto flex min-w-0 items-center gap-1 text-[9px] text-text-muted">
               <LevelIcon className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">{item.reason}</span>
-              <span className="shrink-0">{timeAgo(item.timestamp)}</span>
+              <span className="shrink-0">{timeAgo(item.timestamp, now)}</span>
             </span>
           </div>
           {project && (

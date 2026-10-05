@@ -1,7 +1,7 @@
 import type { AgentActivityLevel, AgentStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import type { AttentionItem } from "../stores/agents";
-import { agentGroup, groupAgents } from "./agent-groups";
+import { groupAgents } from "./agent-groups";
 
 const agent = (
   id: string,
@@ -30,7 +30,15 @@ const item = (agentId: string, level: AttentionItem["level"], read: boolean): At
   pinned: false,
 });
 
-describe("agentGroup", () => {
+type Agent = ReturnType<typeof agent>;
+
+/** The group one live agent lands in */
+const agentGroup = (a: Agent, attention: AttentionItem | undefined) => {
+  const groups = groupAgents([a], attention ? { [a.id]: attention } : {});
+  return (Object.keys(groups) as (keyof typeof groups)[]).find((g) => groups[g].length > 0);
+};
+
+describe("agent groups", () => {
   it("an unread question needs you", () => {
     expect(agentGroup(agent("a", "running", "busy"), item("a", "action_needed", false))).toBe(
       "needYou",

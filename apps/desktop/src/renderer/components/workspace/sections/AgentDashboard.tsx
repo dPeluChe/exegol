@@ -18,8 +18,9 @@ import {
   Square,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useFleetSync } from "../../../hooks/use-fleet-sync";
+import { useNow } from "../../../hooks/use-now";
 import { submitToAgent } from "../../../lib/agent-input";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
@@ -89,8 +90,8 @@ const DEFAULT_STATUS = {
   label: "Unknown",
 };
 
-function elapsedStr(startedAt: number): string {
-  const s = Math.floor(Date.now() / 1000 - startedAt);
+function elapsedStr(startedAt: number, now: number): string {
+  const s = Math.floor(now / 1000 - startedAt);
   if (s < 60) return `${s}s`;
   if (s < 3600) return `${Math.floor(s / 60)}m`;
   return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
@@ -98,15 +99,11 @@ function elapsedStr(startedAt: number): string {
 
 /** Leaf timer: only this span re-renders as time passes, not the whole grid. */
 function Elapsed({ startedAt }: { startedAt: number }) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => clearInterval(id);
-  }, []);
+  const now = useNow();
   return (
     <span className="flex items-center gap-0.5">
       <Clock className="h-2.5 w-2.5" />
-      {elapsedStr(startedAt)}
+      {elapsedStr(startedAt, now)}
     </span>
   );
 }

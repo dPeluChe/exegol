@@ -219,7 +219,8 @@ export const wave3Migrations: Migration[] = [
     // Time in state that survives a restart. A trigger, so every status write sets it (ms)
     id: "w3_020_agent_status_changed_at",
     sql: `ALTER TABLE agents ADD COLUMN status_changed_at INTEGER;
-    UPDATE agents SET status_changed_at = COALESCE(stopped_at, started_at) * 1000;
+    UPDATE agents SET status_changed_at = COALESCE(stopped_at, started_at) * 1000
+    WHERE status NOT IN ('idle', 'spawning', 'running', 'waiting_input', 'paused');
     CREATE TRIGGER IF NOT EXISTS agents_status_changed_at
     AFTER UPDATE OF status ON agents WHEN NEW.status IS NOT OLD.status
     BEGIN

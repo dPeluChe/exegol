@@ -2,7 +2,12 @@ import { exec, execSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { delimiter, join } from "node:path";
-import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
+import {
+  type AgentCliType,
+  type AgentSignalType,
+  type AgentStatus,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { getDb } from "../db/client";
 import { createOplogEntry, getAgent, insertActivity, isAgentQuiet, stopAgent } from "../db/queries";
@@ -80,7 +85,8 @@ function statusChangedAt(
   if (prev === undefined) {
     try {
       const row = getAgent(getDb(), agentId);
-      if (row?.status === next && row.statusChangedAt) at = row.statusChangedAt;
+      // Startup reattach reports waiting_input over a row saying running: a live row keeps its stamp
+      if (row?.statusChangedAt && LIVE_STATUSES.has(row.status)) at = row.statusChangedAt;
     } catch {
       // db not ready during early startup: now is the best guess
     }

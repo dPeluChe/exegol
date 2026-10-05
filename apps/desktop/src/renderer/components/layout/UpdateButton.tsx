@@ -1,11 +1,14 @@
 import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
 import { ArrowDownCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
+import {
+  type UpdateState,
+  type UpdateStatus,
+  useCheckForUpdates,
+  useUpdateStatus,
+} from "../../hooks/use-update-status";
 import { ReleaseNotesDialog, useUpdateNotes } from "./ReleaseNotesDialog";
-
-type Status = "idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error";
-type Info = { version?: string; percent?: number; message?: string };
 
 interface View {
   Icon: LucideIcon;
@@ -16,7 +19,12 @@ interface View {
   onClick?: () => void;
 }
 
-function viewFor(status: Status, info: Info, check: () => void, showNotes: () => void): View {
+function viewFor(
+  status: UpdateState,
+  info: UpdateStatus["info"],
+  check: () => void,
+  showNotes: () => void,
+): View {
   switch (status) {
     case "checking":
       return { Icon: Loader2, title: "Checking for updates...", spin: true };
@@ -67,44 +75,24 @@ function viewFor(status: Status, info: Info, check: () => void, showNotes: () =>
  * checked 10s after launch and every 4h, so testing a release meant restarting the app.
  */
 export function UpdateButton() {
-  const [status, setStatus] = useState<Status>("idle");
-  const [info, setInfo] = useState<Info>({});
-  const settleRef = useRef<ReturnType<typeof setTimeout>>();
+  const { status, info } = useUpdateStatus();
+  const checkNow = useCheckForUpdates();
   const [notesOpen, setNotesOpen] = useState(false);
   // Only a check the user asked for opens the notes by itself: a background check must not
   // pop a dialog over whatever they are typing
-  const manualCheckRef = useRef(false);
-  // The update version, kept while the status moves on (downloading carries no version)
-  const [updateVersion, setUpdateVersion] = useState<string>();
+  const [manualCheck, setManualCheck] = useState(false);
+  const [seenStatus, setSeenStatus] = useState(status);
+  if (status !== seenStatus) {
+    setSeenStatus(status);
+    if (status === "available" && manualCheck) setNotesOpen(true);
+    if (status !== "checking") setManualCheck(false);
+  }
+  const updateVersion = info.version;
   const notes = useUpdateNotes(updateVersion, notesOpen);
 
-  useEffect(() => {
-    const unsub = window.api?.updater?.onStatus?.((data: unknown) => {
-      const next = data as { status: Status; info?: Info };
-      clearTimeout(settleRef.current);
-      setStatus(next.status);
-      setInfo(next.info ?? {});
-      if (next.info?.version) setUpdateVersion(next.info.version);
-      if (next.status === "available" && manualCheckRef.current) setNotesOpen(true);
-      if (next.status !== "checking") manualCheckRef.current = false;
-      // "Up to date" is a moment, not a state to keep on screen
-      if (next.status === "up-to-date") {
-        settleRef.current = setTimeout(() => setStatus("idle"), 4_000);
-      }
-    });
-    return () => {
-      clearTimeout(settleRef.current);
-      unsub?.();
-    };
-  }, []);
-
   const check = () => {
-    manualCheckRef.current = true;
-    setStatus("checking");
-    window.api?.updater?.check?.();
-    // Dev builds and silenced errors answer nothing: do not spin forever
-    clearTimeout(settleRef.current);
-    settleRef.current = setTimeout(() => setStatus((s) => (s === "checking" ? "idle" : s)), 15_000);
+    setManualCheck(true);
+    checkNow();
   };
 
   const { Icon, title, tone, badge, spin, onClick } = viewFor(status, info, check, () =>

@@ -1,30 +1,15 @@
 // T44: Auto-update notification banner.
-// Listens for updater:status IPC events and shows a banner when an update is ready.
+// Shows the updater's shared status when there is something to act on.
 
 import { Download, RefreshCw, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-
-interface UpdateStatus {
-  status: "idle" | "checking" | "available" | "downloading" | "ready" | "up-to-date" | "error";
-  info?: { version?: string; percent?: number; message?: string };
-}
+import { useCallback, useState } from "react";
+import { useUpdateStatus } from "../../hooks/use-update-status";
 
 export function UpdateBanner() {
-  const [update, setUpdate] = useState<UpdateStatus>({ status: "idle" });
-  const [dismissed, setDismissed] = useState(false);
-
-  useEffect(() => {
-    const unsub = window.api?.updater?.onStatus?.((data: unknown) => {
-      const { status, info } = data as { status: string; info?: Record<string, unknown> };
-      setUpdate({ status: status as UpdateStatus["status"], info: info as UpdateStatus["info"] });
-      if (status === "available" || status === "ready") {
-        setDismissed(false); // Re-show on new update
-      }
-    });
-    return () => {
-      unsub?.();
-    };
-  }, []);
+  const update = useUpdateStatus();
+  // What was dismissed: a new version, or the download becoming ready, shows again
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const dismissKey = `${update.status === "ready" ? "ready" : "found"}:${update.info.version}`;
 
   const handleInstall = useCallback(() => {
     window.api?.updater?.install?.();
@@ -35,7 +20,7 @@ export function UpdateBanner() {
   }, []);
 
   // Only show for actionable states
-  if (dismissed) return null;
+  if (dismissed === dismissKey) return null;
   if (update.status === "idle" || update.status === "up-to-date" || update.status === "checking") {
     return null;
   }
@@ -46,7 +31,7 @@ export function UpdateBanner() {
         <>
           <Download className="h-3.5 w-3.5 text-accent" />
           <span className="text-accent">
-            Update {update.info?.version ?? ""} available — downloading...
+            Update {update.info.version ?? ""} available — downloading...
           </span>
         </>
       )}
@@ -54,14 +39,14 @@ export function UpdateBanner() {
       {update.status === "downloading" && (
         <>
           <Download className="h-3.5 w-3.5 animate-pulse text-accent" />
-          <span className="text-accent">Downloading update... {update.info?.percent ?? 0}%</span>
+          <span className="text-accent">Downloading update... {update.info.percent ?? 0}%</span>
         </>
       )}
 
       {update.status === "ready" && (
         <>
           <RefreshCw className="h-3.5 w-3.5 text-green-400" />
-          <span className="text-green-300">Update {update.info?.version ?? ""} ready</span>
+          <span className="text-green-300">Update {update.info.version ?? ""} ready</span>
           <button
             type="button"
             onClick={handleInstall}
@@ -74,7 +59,7 @@ export function UpdateBanner() {
 
       {update.status === "error" && (
         <>
-          <span className="text-red-300">Update error: {update.info?.message ?? "Unknown"}</span>
+          <span className="text-red-300">Update error: {update.info.message ?? "Unknown"}</span>
           <button
             type="button"
             onClick={handleCheck}
@@ -87,7 +72,7 @@ export function UpdateBanner() {
 
       <button
         type="button"
-        onClick={() => setDismissed(true)}
+        onClick={() => setDismissed(dismissKey)}
         className="ml-auto text-text-muted hover:text-text-primary"
         title="Dismiss"
       >
