@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Follow-up queue and Steer: Queue in a terminal's toolbar or on a Dashboard Watching card holds prompts for the agent's next turn (typed when the turn ends, one per turn; removable until then). Steer interrupts the turn with Esc, waits up to 20 seconds for the prompt and types your message; if the prompt does not come back it stays queued and you are told
 - Answer an agent's question without opening its pane: when it waits on a numbered prompt (Claude's "Do you want to proceed? 1. Yes / 2. Yes, always… / 3. No", Codex's approval), the Dashboard card and the attention queue show the question, what it wants to run and each option as a button. Exegol presses it only if that same question is still on screen
 - Status bar: open agents per CLI (its icon, how many, how many working; hover lists them with their project) and each CLI's plan usage, 5-hour and weekly with the time to reset, amber at 70% and red at 90%. Codex's comes from its own session logs; Claude's is read with Claude Code's login once you click "Show plan usage". The token count and platform that showed nothing useful are gone (tokens stay in Monitor)
 - Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows

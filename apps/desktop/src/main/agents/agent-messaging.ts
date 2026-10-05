@@ -344,7 +344,8 @@ export function deliverPendingAgentMessages(db: Database.Database, agentId: stri
     );
     return;
   }
-  setOutcome(db, next.messageId, "delivered");
+  if (next.followUp) next.followUp.onDelivered();
+  else setOutcome(db, next.messageId, "delivered");
   if (queue.length === 0) queues.delete(agentId);
 }
 
@@ -432,6 +433,36 @@ function ensureSweep(): void {
   if (sweepTimer) return;
   sweepTimer = setInterval(sweepQuietAgents, SWEEP_MS);
   sweepTimer.unref?.();
+}
+
+// ─── Shared with the user's follow-up queue (follow-up-queue.ts) ────────────
+
+/** Same queue, same turn-boundary delivery as agent_send; `first` jumps the line (Steer) */
+export function queueForBoundary(pending: PendingMessage, first = false): void {
+  const queue = queues.get(pending.toAgentId) ?? [];
+  if (first) queue.unshift(pending);
+  else queue.push(pending);
+  queues.set(pending.toAgentId, queue);
+  ensureSweep();
+}
+
+export function queuedFor(agentId: string): readonly PendingMessage[] {
+  return queues.get(agentId) ?? [];
+}
+
+/** Remove one queued item without delivering it */
+export function takeQueued(agentId: string, messageId: string): PendingMessage | null {
+  const queue = queues.get(agentId);
+  const idx = queue?.findIndex((p) => p.messageId === messageId) ?? -1;
+  if (!queue || idx === -1) return null;
+  const [taken] = queue.splice(idx, 1);
+  if (queue.length === 0) queues.delete(agentId);
+  return taken ?? null;
+}
+
+export function msSinceAgentOutput(agentId: string): number {
+  const last = lastOutputAt.get(agentId);
+  return last === undefined ? Number.POSITIVE_INFINITY : Date.now() - last;
 }
 
 // Every per-agent structure in one place. The hand-written delete list had

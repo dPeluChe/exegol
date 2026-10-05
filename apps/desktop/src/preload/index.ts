@@ -159,6 +159,13 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:status-changed", handler as never);
     };
   },
+  onFollowUps: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:follow-ups", handler as never);
+    return () => {
+      safe.off("agent:follow-ups", handler as never);
+    };
+  },
   onMetrics: (callback: (metrics: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("metrics:update", handler as never);

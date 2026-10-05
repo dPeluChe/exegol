@@ -37,6 +37,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Shell to agent**: type a CLI in a plain terminal and that terminal becomes the agent (name,
   status, Dashboard); when the CLI exits, Continue resumes it.
 - **Send to**: select text in one terminal and paste it into another live agent.
+- **Follow-ups and Steer**: Queue in the terminal toolbar (and on a Watching card) holds prompts
+  for an agent's next turn; each is typed when the turn ends, one per turn. Steer interrupts the
+  turn (Esc), waits up to 20s for the prompt and types right away. The queue lives in memory: it
+  is lost on app quit and dropped when the session ends.
 - **Launch options**: model (for CLIs with a model flag) and session name in the launcher.
 - **Access modes**: read, write or plan per agent or pipeline step, shown as a badge.
 - **Resume**: Claude sessions resume with their session id after a restart.

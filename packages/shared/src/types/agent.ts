@@ -165,6 +165,18 @@ export interface ScreenDialog {
   fingerprint: string;
 }
 
+/** A prompt the user queued for an agent's next turn boundary (T200.4) */
+export interface FollowUpItem {
+  id: string;
+  text: string;
+}
+
+/** Push payload: an agent's follow-up queue after any change */
+export interface FollowUpsChangedEvent {
+  agentId: string;
+  items: FollowUpItem[];
+}
+
 /** One window of a CLI's subscription plan (Claude: 5h and weekly; Codex: primary/secondary) */
 export interface PlanWindow {
   usedPercent: number;

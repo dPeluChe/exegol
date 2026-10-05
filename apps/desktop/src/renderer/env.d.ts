@@ -78,6 +78,10 @@ interface Window {
     onWindowFocus: (callback: (focused: boolean) => void) => () => void;
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
+    /** T200.4: an agent's follow-up queue changed */
+    onFollowUps: (
+      callback: (event: import("@exegol/shared").FollowUpsChangedEvent) => void,
+    ) => () => void;
     onNotificationNavigate?: (callback: (data: { agentId: string }) => void) => () => void;
     /** Toggle the app's own DevTools (TitleBar button) */
     toggleDevTools?: () => void;

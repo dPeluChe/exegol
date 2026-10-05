@@ -28,6 +28,7 @@ import {
 } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
+import { dropFollowUps } from "./follow-up-queue";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -440,6 +441,7 @@ export function createSpawnCallbacks(
           logger.warn(`[AgentCallback] MCP config cleanup failed for ${agent.id}:`, err);
         }
       }
+      dropFollowUps(agent.id);
       clearAgentMessageQueue(db, agent.id);
       clearAgentLinks(db, agent.id);
       // T172: a dead agent must not keep files reserved — the next one would be
