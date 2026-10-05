@@ -29,6 +29,7 @@ import {
 } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
+import { detachOutputPipeline } from "./output-pipeline";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -397,11 +398,8 @@ export function createSpawnCallbacks(
         ? ""
         : (maps.scrollbackBuffers.get(agent.id)?.join("") ?? "");
 
-      maps.outputProcessors.delete(agent.id);
-      maps.titleTrackers.delete(agent.id);
+      detachOutputPipeline(maps, agent.id);
       maps.sessionIdsCaptured.delete(agent.id);
-      maps.scrollbackBuffers.delete(agent.id);
-      maps.scrollbackSizes.delete(agent.id);
       maps.dataCallbacks.delete(agent.id);
       maps.contexts.delete(agent.id);
 

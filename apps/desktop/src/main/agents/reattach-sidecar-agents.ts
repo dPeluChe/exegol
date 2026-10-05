@@ -107,7 +107,9 @@ export async function reattachSidecarAgents(
         taskDescription: (row.task_description as string) ?? "",
         launchedInShell: row.launched_in_shell === 1,
       };
-      if (!isShell) attachOutputPipeline(maps, agent);
+      // Back at its shell prompt: shell promotion re-attaches once the CLI runs again
+      const atShellPrompt = agent.launchedInShell && row.status === "idle";
+      if (!isShell && !atShellPrompt) attachOutputPipeline(maps, agent);
 
       const scrollbackPath = isShell ? undefined : getScrollbackPath(agentId);
 
@@ -139,11 +141,7 @@ export async function reattachSidecarAgents(
       // (sidecar may hold a dead session whose exit event fires immediately)
       const alive = ptyHost.isAlive(agentId);
       if (!alive) {
-        // Clean up the half-initialized runtime state and mark as dead so
-        // the caller knows to treat this agent as crashed (NOT as alive).
-        // Previously this was a silent `continue`, which left the agent in
-        // DB as "running" with no PTY, producing a broken pane that the
-        // renderer couldn't recover from.
+        // A dead session must reach the crash sweep, not stay "running" with no PTY
         detachOutputPipeline(maps, agentId);
         result.deadIds.add(agentId);
         logger.warn(
@@ -183,11 +181,10 @@ export async function reattachSidecarAgents(
       // Scan the ring tail on reattach so the resume handle isn't lost.
       if (!isShell && resumePattern && !row.resume_command) {
         try {
-          const snap = snapshot;
-          if (snap) {
+          if (snapshot) {
             // Slice before stripping: only the tail matters, no need to
             // regex-clean the whole ring.
-            const tail = stripAnsi(stripOscSequences(snap.slice(-16_000))).slice(-4000);
+            const tail = stripAnsi(stripOscSequences(snapshot.slice(-16_000))).slice(-4000);
             const resumeCommand = parseResumeCommandFromPattern(resumePattern, tail);
             if (resumeCommand) {
               updateResumeCommand.run(resumeCommand, agentId);
