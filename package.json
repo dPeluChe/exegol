@@ -10,7 +10,7 @@
     "dev:ui": "turbo run dev",
     "build": "turbo run build",
     "build:rust": "cd packages/core-rust && npx napi build --platform --release",
-    "rebuild:native": "bun run build:rust && npx @electron/rebuild -v 41.0.2 -m . -o node-pty",
+    "rebuild:native": "bun run build:rust && electron-rebuild -v 41.0.2 -m . -o node-pty",
     "lint": "biome check --error-on-warnings apps/ packages/shared/src/ packages/ui/src/",
     "format": "biome format --write .",
     "format:check": "biome format .",
@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.7",
+    "@electron/rebuild": "4.0.3",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0"
   },
