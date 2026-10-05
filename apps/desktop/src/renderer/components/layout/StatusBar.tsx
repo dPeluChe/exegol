@@ -25,11 +25,6 @@ export function StatusBar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const { data: project } = useProject(activeProjectId);
   const attentionCount = useAgentStore((s) => s.unreadAttentionCount);
-  const [now, setNow] = useState(Date.now);
-  useMountEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), CLOCK_MS);
-    return () => clearInterval(id);
-  });
 
   return (
     <div className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-border bg-bg-secondary px-3 text-[11px] text-text-muted">
@@ -48,7 +43,7 @@ export function StatusBar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <LiveAgentsByCli now={now} />
+        <LiveAgentsByCli />
         {attentionCount > 0 && (
           <div className="flex items-center gap-1 text-amber-400">
             <Bell className="h-3 w-3" />
@@ -66,7 +61,12 @@ export function StatusBar() {
 
 /** Live sessions per CLI: its icon, how many are open, how many are working and for how long;
  *  hovering lists them with their project and how long each has worked or waited */
-function LiveAgentsByCli({ now }: { now: number }) {
+function LiveAgentsByCli() {
+  const [now, setNow] = useState(Date.now);
+  useMountEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), CLOCK_MS);
+    return () => clearInterval(id);
+  });
   const agents = useAgentStore((s) => s.agents);
   const { data: projects = [] } = useProjects();
   const projectName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
