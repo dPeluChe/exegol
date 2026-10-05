@@ -9,7 +9,7 @@ vi.mock("../../hooks/use-cli-updates", async () => {
     useCliUpdates: vi.fn(),
   };
 });
-vi.mock("../terminal/CliUpdateControl", () => ({ useSessionWhere: vi.fn() }));
+vi.mock("../common/SessionChips", () => ({ SessionChips: vi.fn() }));
 const { cliUpdateRows, rowsKey } = await import("./CliUpdatesNotice");
 
 const status = (cliType: string, installed: string, latest: string | null, cmd: string | null) => ({

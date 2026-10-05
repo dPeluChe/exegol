@@ -8,7 +8,7 @@ import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useCliRestartStore } from "../../stores/cli-restarts";
 import { AgentIcon } from "../common/AgentIcon";
-import { useSessionWhere } from "../terminal/CliUpdateControl";
+import { SessionChips } from "../common/SessionChips";
 
 const DISMISSED_KEY = "exegol.cliUpdates.dismissed";
 
@@ -68,7 +68,6 @@ export function CliUpdatesNotice() {
   const agents = useAgentStore((s) => s.agents);
   const providers = useEnabledProviders();
   const nameOf = (cliType: string) => providers.find((p) => p.id === cliType)?.name ?? cliType;
-  const where = useSessionWhere();
   const rows = cliUpdateRows(statuses, Object.values(agents));
   const key = rowsKey(rows);
   const [closedKey, setClosedKey] = useState<string | null>(readDismissed);
@@ -135,17 +134,13 @@ export function CliUpdatesNotice() {
                       : `${r.sessions.length} session${r.sessions.length > 1 ? "s" : ""}`}
                   </span>
                 </div>
-                {/* Which ones, and in which project, so you know what restarts */}
-                <ul className="mt-0.5 max-h-28 space-y-px overflow-y-auto pl-6 text-[10px] text-text-muted">
-                  {(r.behind.length > 0 ? r.behind : r.sessions).map((id) => {
-                    const a = agents[id];
-                    return a ? (
-                      <li key={id} className="truncate">
-                        {where(a)}
-                      </li>
-                    ) : null;
-                  })}
-                </ul>
+                <div className="mt-1 pl-6">
+                  <SessionChips
+                    sessions={(r.behind.length > 0 ? r.behind : r.sessions).flatMap((id) =>
+                      agents[id] ? [agents[id]] : [],
+                    )}
+                  />
+                </div>
               </li>
             ))}
           </ul>

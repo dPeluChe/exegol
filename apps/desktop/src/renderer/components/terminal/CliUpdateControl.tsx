@@ -7,6 +7,7 @@ import { useProjects } from "../../hooks/use-trpc";
 import { sessionName } from "../../lib/agent-label";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useCliRestartStore } from "../../stores/cli-restarts";
+import { SessionChips } from "../common/SessionChips";
 
 const chip = "flex shrink-0 items-center gap-1 text-[9px]";
 
@@ -30,7 +31,7 @@ function otherSessions(agent: AgentState, status: CliUpdateStatus, update: boole
 }
 
 /** "name · project" for a session, so the list says where each one is */
-export function useSessionWhere(): (a: AgentState) => string {
+function useSessionWhere(): (a: AgentState) => string {
   const { data: projects = [] } = useProjects();
   const nameOf = new Map(projects.map((p) => [p.id, p.name]));
   return (a) => `${sessionName(a)} · ${nameOf.get(a.projectId) ?? "another project"}`;
@@ -184,13 +185,9 @@ function RestartScopeDialog({
               </p>
               <div>
                 <p className="text-text-muted">Other sessions of the same CLI:</p>
-                <ul className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
-                  {choice.others.map((a) => (
-                    <li key={a.id} className="truncate">
-                      {where(a)}
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-1">
+                  <SessionChips sessions={choice.others} />
+                </div>
               </div>
               <p className="text-text-muted">
                 Each restarts when its turn ends and resumes its conversation.

@@ -9,6 +9,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+
 ## [0.5.15] — 2026-10-05 — Queue and steer, undo a turn, PR watch, answer agent questions
 
 ### Added
@@ -17,10 +18,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Undo a turn: after a Claude Code turn that changed files, the terminal toolbar shows "N files changed". It opens what that turn changed and offers Undo turn, which asks first, lists the files, and puts back only the files that turn changed. A file edited since the turn ended is left alone and named in the result; nothing is committed on your branch, and a safety snapshot in the Oplog makes the undo itself undoable
 - Answer an agent's question without opening its pane: when it waits on a numbered prompt (Claude's "Do you want to proceed? 1. Yes / 2. Yes, always… / 3. No", Codex's approval), the Dashboard card and the attention queue show the question, what it wants to run and each option as a button. Exegol presses it only if that same question is still on screen
 - Status bar: open agents per CLI (its icon, how many, how many working; hover lists them with their project) and each CLI's plan usage, 5-hour and weekly with the time to reset, amber at 70% and red at 90%. Codex's comes from its own session logs; Claude's is read with Claude Code's login once you click "Show plan usage". The token count and platform that showed nothing useful are gone (tokens stay in Monitor)
+- Status bar shows how long agents have been busy: each CLI's chip reads "3 · 2 working 14m" (the longest current turn), and hovering lists every session as "working 14m" or "waiting 3m". The count turns amber when a session has waited on you for 5 minutes or more
 - Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows
 
 ### Changed
 - CLI updates name every session they restart, with its project, in the notice; Restart to update and Update in a terminal's toolbar ask whether to restart only that session or all of the CLI's sessions, and list the others
+- The CLI updates notice and the restart-scope question show those sessions as compact chips grouped by project instead of a scrolling list; past 16, a "+N more" chip lists the rest on hover
 - Fewer stalls while agents stream: the Tokens tab scan no longer freezes the app (it reads the CLI logs in the background and skips unchanged files), and the worktree list, diffs, project search and logging no longer block the window
 - Faster start with many live agents: reconnecting a terminal rebuilds its screen without re-reading its whole history as new output (which also re-fired old status changes). Git panes no longer ask GitHub for the PR every 15 seconds (once a minute, and right after a commit, push, or a PR created or merged from Exegol), and background refreshes pause while Exegol is not the app in focus
 

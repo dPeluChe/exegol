@@ -11,6 +11,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
+import { nextActivitySince } from "../lib/busy-time";
 import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
@@ -209,6 +210,8 @@ export interface AgentState {
   claudeSessionId: string | null;
   /** T70: Derived activity level — busy/idle/neutral. Updated on every status change. */
   activityLevel: AgentActivityLevel;
+  /** When activityLevel last changed (ms): the start of the current turn or wait */
+  activitySince?: number;
   /** T181: dismissed from the dashboard. Kept in the store on purpose — removing
    *  the row makes an open terminal pane look like a leftover from a previous
    *  session, and WorkspacePane converts it to empty, destroying the transcript. */
@@ -401,6 +404,7 @@ export const useAgentStore = create<AgentStore>()(
               merged.cliType,
             );
           }
+          merged.activitySince = nextActivitySince(existing, merged.activityLevel, Date.now());
           // A new agents object re-renders every pane subscribed to the map
           return shallow(merged, existing) ? state : { agents: { ...state.agents, [id]: merged } };
         }),
@@ -408,7 +412,10 @@ export const useAgentStore = create<AgentStore>()(
       addAgent: (agent) => {
         removedIds.delete(agent.id);
         set((state) => ({
-          agents: { ...state.agents, [agent.id]: agent },
+          agents: {
+            ...state.agents,
+            [agent.id]: { ...agent, activitySince: agent.activitySince ?? Date.now() },
+          },
         }));
       },
 
@@ -484,6 +491,7 @@ export const useAgentStore = create<AgentStore>()(
                 accessMode: dbAgent.accessMode ?? null,
                 claudeSessionId: dbAgent.claudeSessionId ?? null,
                 activityLevel: classifyActivity(dbStatus, dbAgent.currentStep, dbAgent.cliType),
+                activitySince: Date.now(),
                 muted: dbAgent.muted ?? false,
                 prWatch: dbAgent.prWatch ?? false,
                 suspended: dbAgent.suspendedAt != null,
