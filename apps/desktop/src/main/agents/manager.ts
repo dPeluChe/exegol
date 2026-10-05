@@ -23,6 +23,7 @@ import {
 } from "./agent-session-callbacks";
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { inheritClaudeTrust } from "./claude-trust";
 import { applyLaunchModel } from "./launch-model";
 import { attachOutputPipeline } from "./output-pipeline";
 import { runPreflight } from "./preflight";
@@ -161,6 +162,7 @@ export class AgentManager {
     runSetupIfNeeded(project.path).catch(() => {});
 
     const cwd = setupAgentCwd(db, agent, config, project, this.worktrees, this.initialSnapshots);
+    if (agent.cliType === "claude-code") await inheritClaudeTrust(cwd, project.path);
 
     // A known session id makes the store check moot; it only guards the generic resume flag
     const knownSession = config.resumeLocalSessionId

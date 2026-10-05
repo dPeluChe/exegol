@@ -147,6 +147,13 @@ contextBridge.exposeInMainWorld("api", {
     };
   },
   // Push event subscriptions (T17: push-first status updates)
+  onWindowFocus: (callback: (focused: boolean) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, focused: boolean) => callback(focused);
+    safe.on("window:focus-changed", handler as never);
+    return () => {
+      safe.off("window:focus-changed", handler as never);
+    };
+  },
   onAgentStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("agent:status-changed", handler as never);

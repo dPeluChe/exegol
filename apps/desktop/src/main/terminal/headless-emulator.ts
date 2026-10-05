@@ -127,6 +127,16 @@ export class HeadlessEmulator {
     this.terminal.resize(cols, rows);
   }
 
+  /** The rows on screen as plain text (the active buffer's viewport) */
+  visibleLines(): string[] {
+    const buffer = this.terminal.buffer.active;
+    const lines: string[] = [];
+    for (let i = 0; i < this.terminal.rows; i++) {
+      lines.push(buffer.getLine(buffer.viewportY + i)?.translateToString(true) ?? "");
+    }
+    return lines;
+  }
+
   /** Clear Terminal: drop the scrollback and screen, as the view's xterm does */
   clear(): void {
     this._revision++;
