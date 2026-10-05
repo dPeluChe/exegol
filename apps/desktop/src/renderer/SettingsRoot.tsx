@@ -6,6 +6,7 @@ import { useWindowCloseKeys } from "./hooks/use-window-close-keys";
 
 const VALID_TABS: SettingsTab[] = [
   "general",
+  "statusbar",
   "clis",
   "terminal",
   "shortcuts",

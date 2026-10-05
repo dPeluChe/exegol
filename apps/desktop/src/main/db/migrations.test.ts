@@ -199,3 +199,26 @@ describe("runMigrations", () => {
     expect(row.name).toBe("keeper");
   });
 });
+
+describe("agents.status_changed_at", () => {
+  it("a status change stamps it (ms); a write that keeps the status does not", () => {
+    const db = new Database(":memory:");
+    runMigrations(db);
+    db.prepare("INSERT INTO projects (id, name, path) VALUES ('p1', 'One', '/a')").run();
+    db.prepare(
+      "INSERT INTO agents (id, project_id, cli_type, status, task_description, status_changed_at) VALUES ('a1', 'p1', 'codex', 'running', 't', 5)",
+    ).run();
+    const stamp = () =>
+      (
+        db.prepare("SELECT status_changed_at AS at FROM agents WHERE id = 'a1'").get() as {
+          at: number;
+        }
+      ).at;
+    db.prepare("UPDATE agents SET status = 'running', current_step = 'x' WHERE id = 'a1'").run();
+    expect(stamp()).toBe(5);
+    const before = Date.now() - 1000;
+    db.prepare("UPDATE agents SET status = 'waiting_input' WHERE id = 'a1'").run();
+    expect(stamp()).toBeGreaterThanOrEqual(before);
+    expect(stamp()).toBeLessThanOrEqual(Date.now() + 1000);
+  });
+});

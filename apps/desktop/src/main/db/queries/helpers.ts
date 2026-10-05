@@ -109,6 +109,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     cliVersion: r.cli_version ?? null,
     model: r.model ?? null,
     claudeSessionId: r.claude_session_id ?? null,
+    statusChangedAt: r.status_changed_at ?? null,
   };
 }
 

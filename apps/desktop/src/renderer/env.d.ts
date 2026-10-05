@@ -18,6 +18,8 @@ interface AgentStatusEvent {
   /** A terminal's session became an agent: its new name, and that it runs over a shell */
   alias?: string | null;
   launchedInShell?: boolean;
+  /** When the status last changed (ms), durable across app restarts */
+  statusChangedAt?: number;
 }
 
 interface SystemMetricsEvent {
@@ -126,7 +128,9 @@ interface Window {
     };
     // T120: Settings as a separate BrowserWindow
     settings: {
-      open: (tab?: "general" | "clis" | "terminal" | "shortcuts" | "apikeys") => Promise<void>;
+      open: (
+        tab?: "general" | "statusbar" | "clis" | "terminal" | "shortcuts" | "apikeys",
+      ) => Promise<void>;
       selfClose: () => void;
       onNavigate: (callback: (tab: string) => void) => () => void;
       broadcastChanged: () => void;

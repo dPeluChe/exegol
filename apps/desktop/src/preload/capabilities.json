@@ -295,6 +295,7 @@
     "updates": [
       "markSeen",
       "notes",
+      "status",
       "whatsNew"
     ],
     "projectGroups": [

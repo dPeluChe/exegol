@@ -215,4 +215,17 @@ export const wave3Migrations: Migration[] = [
     );
     CREATE INDEX IF NOT EXISTS idx_scheduled_runs_task_state ON scheduled_runs(task_id, state);`,
   },
+  {
+    // Time in state that survives a restart. A trigger, so every status write sets it (ms)
+    id: "w3_020_agent_status_changed_at",
+    sql: `ALTER TABLE agents ADD COLUMN status_changed_at INTEGER;
+    UPDATE agents SET status_changed_at = COALESCE(stopped_at, started_at) * 1000
+    WHERE status NOT IN ('idle', 'spawning', 'running', 'waiting_input', 'paused');
+    CREATE TRIGGER IF NOT EXISTS agents_status_changed_at
+    AFTER UPDATE OF status ON agents WHEN NEW.status IS NOT OLD.status
+    BEGIN
+      UPDATE agents SET status_changed_at = CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)
+      WHERE id = NEW.id;
+    END;`,
+  },
 ];

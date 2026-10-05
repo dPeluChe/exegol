@@ -7,6 +7,7 @@ import { autoUpdater } from "electron-updater";
 import { prerelease } from "semver";
 import { logger } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";
+import { setUpdateStatus, type UpdateStatus } from "./update-status";
 import { allowQuit } from "./work-guard";
 
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -75,9 +76,10 @@ export function silencedReason(error: Error): string | null {
   return SILENCED.find((s) => s.needles.some((n) => msg.includes(n)))?.reason ?? null;
 }
 
-function broadcastUpdateStatus(status: string, info?: unknown): void {
+function broadcastUpdateStatus(status: string, info: UpdateStatus["info"] = {}): void {
+  const next = setUpdateStatus(status, info);
   for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send("updater:status", { status, info });
+    win.webContents.send("updater:status", next);
   }
 }
 

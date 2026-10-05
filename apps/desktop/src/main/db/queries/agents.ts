@@ -175,9 +175,9 @@ export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   const task = resolveTaskLabel(data.cliType, data.taskDescription);
 
   db.prepare(
-    `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, access_mode, alias)
-     VALUES (?, ?, ?, 'spawning', ?, ?, ?, ?)`,
-  ).run(id, data.projectId, data.cliType, task, now, accessMode, alias);
+    `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, access_mode, alias, status_changed_at)
+     VALUES (?, ?, ?, 'spawning', ?, ?, ?, ?, ?)`,
+  ).run(id, data.projectId, data.cliType, task, now, accessMode, alias, Date.now());
 
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getAgent(db, id)!;

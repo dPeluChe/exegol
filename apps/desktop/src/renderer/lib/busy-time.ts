@@ -20,16 +20,6 @@ export function turnTime(a: Timed, now: number): TurnTime | null {
   return { state: a.activityLevel === "busy" ? "working" : "waiting", seconds };
 }
 
-/** The longest current working turn among the sessions, or null when none is working */
-export function longestWorking(list: Timed[], now: number): number | null {
-  let longest: number | null = null;
-  for (const a of list) {
-    const t = turnTime(a, now);
-    if (t?.state === "working" && (longest === null || t.seconds > longest)) longest = t.seconds;
-  }
-  return longest;
-}
-
 export function isLongWait(a: Timed, now: number): boolean {
   const t = turnTime(a, now);
   return a.status === "waiting_input" && t?.state === "waiting" && t.seconds >= LONG_WAIT_SECONDS;

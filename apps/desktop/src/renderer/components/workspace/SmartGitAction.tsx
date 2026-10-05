@@ -19,7 +19,7 @@ function toast(type: "success" | "error", title: string, body?: string) {
   useToastStore.getState().addToast({ type, title, body });
 }
 
-interface GitState {
+export interface GitState {
   branch: string;
   defaultBranch?: string;
   hasUpstream: boolean;

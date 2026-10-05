@@ -102,6 +102,9 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
       if (event.cliType !== existing.cliType) update.cliType = event.cliType as AgentCliType;
       if (event.alias !== undefined) update.alias = event.alias;
       if (event.launchedInShell !== undefined) update.launchedInShell = event.launchedInShell;
+      if (event.statusChangedAt && newStatus !== existing.status) {
+        update.activitySince = event.statusChangedAt;
+      }
       store.updateAgent(event.agentId, update);
 
       // Add to attention inbox (markUnread is now derived from this).
@@ -175,6 +178,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     accessMode: agent.accessMode ?? null,
     claudeSessionId: agent.claudeSessionId ?? null,
     activityLevel: classifyActivity(agent.status, agent.currentStep, agent.cliType),
+    activitySince: agent.statusChangedAt ?? undefined,
     muted: agent.muted ?? false,
     prWatch: agent.prWatch ?? false,
     suspended: agent.suspendedAt != null,
@@ -404,7 +408,11 @@ export const useAgentStore = create<AgentStore>()(
               merged.cliType,
             );
           }
-          merged.activitySince = nextActivitySince(existing, merged.activityLevel, Date.now());
+          merged.activitySince = nextActivitySince(
+            existing,
+            merged.activityLevel,
+            update.activitySince ?? Date.now(),
+          );
           // A new agents object re-renders every pane subscribed to the map
           return shallow(merged, existing) ? state : { agents: { ...state.agents, [id]: merged } };
         }),
@@ -491,7 +499,7 @@ export const useAgentStore = create<AgentStore>()(
                 accessMode: dbAgent.accessMode ?? null,
                 claudeSessionId: dbAgent.claudeSessionId ?? null,
                 activityLevel: classifyActivity(dbStatus, dbAgent.currentStep, dbAgent.cliType),
-                activitySince: Date.now(),
+                activitySince: dbAgent.statusChangedAt ?? Date.now(),
                 muted: dbAgent.muted ?? false,
                 prWatch: dbAgent.prWatch ?? false,
                 suspended: dbAgent.suspendedAt != null,

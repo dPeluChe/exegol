@@ -2,7 +2,12 @@ import { exec, execSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { delimiter, join } from "node:path";
-import type { AgentCliType, AgentSignalType, AgentStatus } from "@exegol/shared";
+import {
+  type AgentCliType,
+  type AgentSignalType,
+  type AgentStatus,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { getDb } from "../db/client";
 import { createOplogEntry, getAgent, insertActivity, isAgentQuiet, stopAgent } from "../db/queries";
@@ -52,6 +57,8 @@ interface AgentStatusEvent {
   /** Set when a terminal's session became an agent (or went back to its prompt) */
   alias?: string | null;
   launchedInShell?: boolean;
+  /** When the status last changed (ms); the DB's value for the first event after a restart */
+  statusChangedAt?: number;
 }
 
 // Last status we broadcast per agent — turn-boundary side effects fire on the
@@ -60,18 +67,44 @@ interface AgentStatusEvent {
 // SELECTs; and reattach synthesizes waiting_input at startup → premature link
 // firing. Undefined prev (first event, incl. reattach) is NOT an edge.
 const lastBroadcastStatus = new Map<string, AgentStatus>();
+const statusSince = new Map<string, number>();
 
 export function forgetBroadcastStatus(agentId: string): void {
   lastBroadcastStatus.delete(agentId);
+  statusSince.delete(agentId);
+}
+
+function statusChangedAt(
+  agentId: string,
+  prev: AgentStatus | undefined,
+  next: AgentStatus,
+): number {
+  const known = statusSince.get(agentId);
+  if (prev === next && known !== undefined) return known;
+  let at = Date.now();
+  if (prev === undefined) {
+    try {
+      const row = getAgent(getDb(), agentId);
+      // Startup reattach reports waiting_input over a row saying running: a live row keeps its stamp
+      if (row?.statusChangedAt && LIVE_STATUSES.has(row.status)) at = row.statusChangedAt;
+    } catch {
+      // db not ready during early startup: now is the best guess
+    }
+  }
+  statusSince.set(agentId, at);
+  return at;
 }
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
 export function broadcastAgentStatus(event: AgentStatusEvent): void {
-  broadcast("agent:status-changed", event);
-  refreshTray();
-
   const prev = lastBroadcastStatus.get(event.agentId);
   lastBroadcastStatus.set(event.agentId, event.status);
+  broadcast("agent:status-changed", {
+    ...event,
+    statusChangedAt: statusChangedAt(event.agentId, prev, event.status),
+  });
+  refreshTray();
+
   // needsAttention is transient (never persisted), so messaging can't read it
   // from the DB — mirror it here so a sender can't inject into a permission
   // dialog and confirm it with the trailing Enter.

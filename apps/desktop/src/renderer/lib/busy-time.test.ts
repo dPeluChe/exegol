@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLongWait, longestWorking, nextActivitySince, turnTime } from "./busy-time";
+import { isLongWait, nextActivitySince, turnTime } from "./busy-time";
 
 const now = 1_000_000_000;
 const ago = (s: number) => now - s * 1000;
@@ -29,13 +29,6 @@ describe("turnTime", () => {
     );
     expect(turnTime({ status: "running", activityLevel: "busy" }, now)).toBe(null);
     expect(turnTime(busy(-5), now)?.seconds).toBe(0);
-  });
-});
-
-describe("longestWorking", () => {
-  it("takes the longest working turn and ignores waiting ones", () => {
-    expect(longestWorking([busy(60), busy(840), waiting(9999)], now)).toBe(840);
-    expect(longestWorking([waiting(9999)], now)).toBe(null);
   });
 });
 

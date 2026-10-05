@@ -12,7 +12,15 @@ import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { BrowserWindow, ipcMain } from "electron";
 
-type SettingsTab = "general" | "clis" | "terminal" | "shortcuts" | "apikeys" | "mcp" | "doctor";
+type SettingsTab =
+  | "general"
+  | "statusbar"
+  | "clis"
+  | "terminal"
+  | "shortcuts"
+  | "apikeys"
+  | "mcp"
+  | "doctor";
 
 let settingsWindow: BrowserWindow | null = null;
 
