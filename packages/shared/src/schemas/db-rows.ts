@@ -119,6 +119,19 @@ export const scheduledTaskRowSchema = z.object({
   last_result_status: optStr,
   enabled: sqlBool,
   depends_on: optStr,
+  timeout_minutes: optNum,
+});
+
+export const scheduledRunRowSchema = z.object({
+  id: z.string(),
+  task_id: z.string(),
+  agent_id: optStr,
+  state: z.string(),
+  attempt: z.number(),
+  summary: z.string(),
+  queued_at: z.number(),
+  started_at: optNum,
+  ended_at: optNum,
 });
 
 export const scheduledResultRowSchema = z.object({

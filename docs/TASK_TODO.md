@@ -28,7 +28,7 @@
    loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
    silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
-   T185.11 scheduler timeout, T193.2 execPath.
+   T193.2 execPath.
 
 Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI, T144.
 
@@ -182,7 +182,9 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
   Near-100% precision before any model opines.
   - From T132: a template catalog over `scheduler/engine` ("daily summary", "scan vulns", "add
     test coverage", "triage TODOs"), each run delivered via NotificationBus (T124) with empty
-    results suppressed, one-click enable from Project → Tasks. After T185.11.
+    results suppressed, one-click enable from Project → Tasks. Needs a scheduler UI first: none
+    since 274e611 (SchedulerSection deleted); create/edit/toggle/run and the `scheduler.*` router
+    are there, no renderer hooks (was T185.11/T185.1).
   - From T186 (Owl Phase 1, kills the manual "what have I not seen?" scan across active repos):
     port the cli-proman collector commands (`status`, `git-status`, `wip`, `blocked`, `review`,
     `next`...) as deterministic per-repo collectors → facts JSON; scheduler (interval/on-wake)
@@ -381,16 +383,6 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     - `FloatingBrowser` polls `agents.list` every 5s (shared key makes it win over 30s)
 
 **From the 2026-09-05 review (reproduced there, confirmed still in code 2026-09-22)**
-11. **Scheduler timeout double-records and frees capacity early** (#3): the 10-min timeout
-    (`scheduler/engine.ts:277`) logs `timeout`, drops the task from `runningTasks` without stopping
-    the agent, and a later finish logs `success` for the same run. Stored `maxTokenBudget` and
-    `skillName` never reach spawn options; a full concurrency slot returns without a durable
-    deferred run. Separate task from run; persist queue, attempt and terminal state; close each run
-    once. Prerequisite for the T153 automations catalog (was T132).
-    > Merged from T185.1 on 2026-10-04.
-    - (was 1) **Scheduler has no UI** since 274e611 (SchedulerSection deleted); the sidebar
-      Schedulers section was removed in the 2026-09-22 PR. Create/edit/toggle/run UI missing; hooks
-      in `renderer/hooks/use-trpc-scheduler.ts` unused.
 12. **Embeddings: a failed call leaves a permanent hole, and a model change never invalidates**
     (#4, #5): `indexProject` stores the file hash before the vector, so a `null` embedding is never
     retried; the cache compares content hash only, and `cosineSimilarity` truncates to the shorter

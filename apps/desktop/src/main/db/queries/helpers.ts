@@ -7,6 +7,7 @@ import type {
   ProjectGroup,
   Prompt,
   ScheduledResult,
+  ScheduledRun,
   ScheduledTask,
   TokenUsage,
   Worktree,
@@ -19,6 +20,7 @@ import {
   projectRowSchema,
   promptRowSchema,
   scheduledResultRowSchema,
+  scheduledRunRowSchema,
   scheduledTaskRowSchema,
   tokenUsageRowSchema,
   worktreeRowSchema,
@@ -141,6 +143,22 @@ export function mapScheduledTaskRow(row: Record<string, unknown>): ScheduledTask
     lastResultStatus: r.last_result_status,
     enabled: r.enabled,
     dependsOn: r.depends_on,
+    timeoutMinutes: r.timeout_minutes,
+  };
+}
+
+export function mapScheduledRunRow(row: Record<string, unknown>): ScheduledRun {
+  const r = parseRow(scheduledRunRowSchema, row, "scheduledRun");
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    agentId: r.agent_id,
+    state: r.state as ScheduledRun["state"],
+    attempt: r.attempt,
+    summary: r.summary,
+    queuedAt: r.queued_at,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
   };
 }
 

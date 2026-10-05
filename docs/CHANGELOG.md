@@ -28,6 +28,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - A pane or Dashboard card that hits an error shows it in place with "Show it again", instead of blanking the whole window
 - The commit message button (Sparkles) works without an API key, through your logged-in Claude CLI
 - The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
+- Scheduled tasks: cron jobs never fired (an invalid timezone option threw on every schedule). A run that hangs now times out (30 minutes, or the task's own limit), its agent and what it started are stopped, and it is recorded once as timed out; a new tick never starts a second run of the same task, and a run that finds every slot busy waits in a queue that survives a restart
 
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly
 
