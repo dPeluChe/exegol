@@ -1,9 +1,10 @@
-import { deriveIsolationMode } from "@exegol/shared";
+import { deriveIsolationMode, isSessionReconnecting } from "@exegol/shared";
 import { AlertCircle } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { useAgent, useStopAgent } from "../../hooks/use-trpc";
+import { useSessionRecovery } from "../../lib/session-recovery";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
@@ -46,8 +47,10 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const { viewMode, setViewMode, liveSnapshot, toggleLiveView } = useLiveViewMode(terminalRef);
   const stopAgent = useStopAgent();
   const resumeAgent = useResumeAgent();
+  const recovery = useSessionRecovery();
+  const reconnecting = isSessionReconnecting(recovery, agentId);
   const { hasData, startTimedOut, isStopped, scrollbackContent, scrollbackLoading } =
-    useTerminalLifecycle({ agentId, status: agent?.status });
+    useTerminalLifecycle({ agentId, status: agent?.status, reconnecting });
 
   const toolbarProjectId = agent?.projectId ?? activeProjectId ?? undefined;
   const gitInfo = useTerminalGitInfo(toolbarProjectId, agent?.branchName);
@@ -149,6 +152,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       {!hasData && (
         <LiveStartOverlay
           cliType={agent?.cliType}
+          reconnecting={reconnecting}
           timedOut={startTimedOut}
           onDismiss={() => stopAgent.mutate(agentId)}
           onOpenTerminal={handleOpenShellHere}

@@ -11,10 +11,13 @@ const STOPPED_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 export function useTerminalLifecycle({
   agentId,
   status,
+  reconnecting = false,
   startTimeoutMs = 8_000,
 }: {
   agentId: string;
   status: string | undefined;
+  /** Startup reattach has not reached this session: no output yet is not a failed start */
+  reconnecting?: boolean;
   startTimeoutMs?: number;
 }) {
   const rawIsStopped = status ? STOPPED_STATUSES.has(status) : false;
@@ -38,7 +41,7 @@ export function useTerminalLifecycle({
   }, [agentId, rawIsStopped, hasData]);
 
   useEffect(() => {
-    if (hasData || rawIsStopped) {
+    if (hasData || rawIsStopped || reconnecting) {
       if (startTimerRef.current) {
         window.clearTimeout(startTimerRef.current);
         startTimerRef.current = null;
@@ -50,7 +53,7 @@ export function useTerminalLifecycle({
       startTimerRef.current = null;
       setStartTimedOut(true);
     }, startTimeoutMs);
-  }, [hasData, rawIsStopped, startTimeoutMs]);
+  }, [hasData, rawIsStopped, reconnecting, startTimeoutMs]);
 
   return {
     hasData,

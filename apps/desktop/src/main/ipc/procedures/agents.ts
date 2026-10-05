@@ -13,7 +13,7 @@ import {
   removeFollowUp,
   steerFollowUp,
 } from "../../agents/follow-up-queue";
-import { takeLostOnRestart, whenRecovered } from "../../agents/lost-sessions";
+import { takeLostOnRestart } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
 import { broadcastAgentStatus, coreRust, resolveCommand } from "../../agents/spawn-env";
@@ -48,6 +48,7 @@ import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr
 import { isPathAllowed } from "../../security/path-guard";
 import { installedProviderIds } from "../../system/cli-versions";
 import { getPtyHost } from "../../terminal/pty-host";
+import { getRecoveryState } from "../../terminal/reattach-gate";
 import { publicProcedure, router } from "../trpc";
 
 /** Each provider marked installed (one PATH check, the one spawn uses) with how to install it on
@@ -210,11 +211,11 @@ export const agentRouter = router({
   }),
 
   /** T156: cross-project non-terminal agents (project name + group color). */
-  // After the reattach: asked earlier it returned pre-recovery statuses
-  listActive: publicProcedure.query(async ({ ctx }) => {
-    await whenRecovered();
-    return listActiveAgents(ctx.db);
-  }),
+  // At once, even mid-recovery: the sidebar lists sessions while they reconnect (recoveryState)
+  listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  /** Startup reattach progress; `recovery:progress` pushes each change */
+  recoveryState: publicProcedure.query(() => getRecoveryState()),
 
   /** Sessions a restart took with the sidecar, to resume in their panes (handed out once) */
   takeLostOnRestart: publicProcedure.query(async ({ ctx }) =>

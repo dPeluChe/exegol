@@ -1,3 +1,4 @@
+import { isSessionReconnecting, reconnectingLabel } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   AlertCircle,
@@ -5,6 +6,7 @@ import {
   CheckCircle,
   Cuboid,
   Eye,
+  Loader2,
   Pin,
   PinOff,
   Trash2,
@@ -20,6 +22,7 @@ import {
   useGroupShortcuts,
   useLiveTabGroups,
 } from "../../lib/live-tabs";
+import { useSessionRecovery } from "../../lib/session-recovery";
 import {
   type AgentState,
   type AttentionItem,
@@ -183,8 +186,11 @@ export function AttentionSection() {
   const pickedView = useAppStore((s) => s.sidebarAgentsView);
   const setPickedView = useAppStore((s) => s.setSidebarAgentsView);
   const hasRead = attentionItems.some((i) => i.read && !i.pinned);
+  const recovery = useSessionRecovery();
+  const recovering = reconnectingLabel(recovery);
 
   if (!hasRunning && !hasAttention) {
+    if (recovering) return <RecoveryNotice label={recovering} />;
     return <p className="py-2 text-center text-[9px] italic text-text-muted">No agents active</p>;
   }
   // Both have something: the user's pick. Only one does: that one, whatever was picked
@@ -193,6 +199,7 @@ export function AttentionSection() {
 
   return (
     <div className="space-y-2">
+      {recovering && <RecoveryNotice label={recovering} />}
       {showSwitch && (
         <SegmentedTabs
           compact
@@ -262,6 +269,16 @@ export function AttentionSection() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Startup reattach in progress: sessions are listed, their terminals are on the way */
+function RecoveryNotice({ label }: { label: string }) {
+  return (
+    <p className="flex items-center justify-center gap-1.5 py-1 text-[9px] text-text-muted">
+      <Loader2 className="h-2.5 w-2.5 animate-spin text-accent" />
+      {label}
+    </p>
   );
 }
 
@@ -395,6 +412,8 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
   // the row kept its ⚠ after the user answered the prompt).
   const hasUnreadAttention = useAgentStore((s) => s.isUnread(agent.id));
   const isWaiting = agent.status === "waiting_input" && hasUnreadAttention;
+  const recovery = useSessionRecovery();
+  const reconnecting = isSessionReconnecting(recovery, agent.id);
 
   return (
     <button
@@ -405,10 +424,12 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
         isWaiting && "bg-amber-500/5",
       )}
       onClick={onClick}
-      title={agent.taskDescription}
+      title={reconnecting ? "Reconnecting to its terminal" : agent.taskDescription}
     >
-      {/* Attention warning / idle dot / busy spinner */}
-      {isWaiting ? (
+      {/* Reconnecting / attention warning / idle dot / busy spinner */}
+      {reconnecting ? (
+        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-text-muted" />
+      ) : isWaiting ? (
         <AlertTriangle className="h-3 w-3 shrink-0 animate-pulse text-amber-400" />
       ) : agent.status === "waiting_input" ? (
         <span
@@ -427,7 +448,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
       <span className="font-medium text-text-primary">{agent.alias ?? agent.cliType}</span>
       {agent.alias && <span className="text-[10px] text-text-muted">{agent.cliType}</span>}
       <span className="min-w-0 flex-1 truncate text-text-muted">
-        {agent.currentStep ?? agent.taskDescription}
+        {reconnecting ? "Reconnecting..." : (agent.currentStep ?? agent.taskDescription)}
       </span>
 
       {/* Elapsed time */}

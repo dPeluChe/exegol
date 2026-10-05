@@ -16,6 +16,7 @@ export * from "./prompt";
 export * from "./scheduler";
 export * from "./scoring";
 export * from "./search";
+export * from "./session-recovery";
 export * from "./settings";
 export * from "./skill";
 export * from "./token-usage";
