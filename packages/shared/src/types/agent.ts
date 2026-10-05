@@ -259,6 +259,8 @@ export type Agent = {
   yolo?: boolean | null;
   /** Alive, but kept out of Needs attention and notifications */
   muted?: boolean;
+  /** Opt-in: Exegol tells it about its PR's failing checks, reviews and conflicts */
+  prWatch?: boolean;
   /** Stopped on purpose to come back later (Resume); quiet like muted */
   suspendedAt?: number | null;
   /** Started by hand in a plain terminal: the CLI can exit back to the shell prompt */

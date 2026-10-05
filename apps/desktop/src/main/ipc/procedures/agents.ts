@@ -26,6 +26,7 @@ import {
   archiveEndedAgents,
   listActiveAgents,
   setAgentAlias,
+  setAgentPrWatch,
 } from "../../db/queries/agents";
 import {
   createParallelRun,
@@ -34,6 +35,7 @@ import {
   listParallelRuns,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
+import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
 import { isPathAllowed } from "../../security/path-guard";
 import { installedProviderIds } from "../../system/cli-versions";
 import { publicProcedure, router } from "../trpc";
@@ -363,6 +365,20 @@ export const agentRouter = router({
       setAgentMuted(ctx.db, input.id, input.muted);
       return getAgent(ctx.db, input.id);
     }),
+
+  /** T142 phase 1: tell the agent about its PR's failing checks, reviews and conflicts */
+  setPrWatch: publicProcedure
+    .input(z.object({ id: z.string(), on: z.boolean() }))
+    .mutation(({ ctx, input }) => {
+      setAgentPrWatch(ctx.db, input.id, input.on);
+      onPrWatchToggled(input.id, input.on);
+      return getAgent(ctx.db, input.id);
+    }),
+
+  /** What the PR watch last saw (in memory, never calls gh) */
+  prWatchStatus: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => getPrWatchStatus(input.id)),
 
   /** Stop quietly and keep the session for Resume (marked before the stop, so its exit is quiet too) */
   suspend: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {

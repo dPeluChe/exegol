@@ -302,23 +302,70 @@ export function sendAgentMessage(
   };
 
   if (!input.system) rememberSend(dedupKey, record.id, now);
+  return { messageId: record.id, delivered: route(db, target.status, pending, queue) };
+}
 
-  // Target at its prompt → inject immediately; otherwise queue for the boundary.
-  // NEVER inject while it's on a permission dialog (see agentsAwaitingApproval).
+/**
+ * Target at its prompt → inject immediately; otherwise queue for the boundary.
+ * NEVER inject while it's on a permission dialog (see agentsAwaitingApproval).
+ */
+function route(
+  db: Database.Database,
+  targetStatus: string,
+  pending: PendingMessage,
+  queue: PendingMessage[],
+): boolean {
+  const { toAgentId } = pending;
   const atIdlePrompt =
-    (target.status === "waiting_input" || target.status === "idle") &&
+    (targetStatus === "waiting_input" || targetStatus === "idle") &&
     !agentsAwaitingApproval.has(toAgentId);
   if (atIdlePrompt && injectNow(pending)) {
-    setOutcome(db, record.id, "delivered");
-    return { messageId: record.id, delivered: true };
+    setOutcome(db, pending.messageId, "delivered");
+    return true;
   }
   queue.push(pending);
   queues.set(toAgentId, queue);
   ensureSweep();
   logger.info(
-    `[AgentMsg] Queued ${record.id} ${fromAgentId} → ${toAgentId} (target ${target.status}, ${queue.length} pending)`,
+    `[AgentMsg] Queued ${pending.messageId} ${pending.fromAgentId} → ${toAgentId} (target ${targetStatus}, ${queue.length} pending)`,
   );
-  return { messageId: record.id, delivered: false };
+  return false;
+}
+
+/**
+ * A message from Exegol itself (PR watch), not from another agent: no sender row,
+ * no reply expected, same queue and boundary rules as agent_send.
+ */
+export function sendSystemMessage(
+  db: Database.Database,
+  input: { toAgentId: string; source: string; text: string },
+): { messageId: string; delivered: boolean } | null {
+  const target = getAgent(db, input.toAgentId);
+  const text = sanitize(input.text).trim().slice(0, MAX_MESSAGE_CHARS);
+  if (!target || !text || !LIVE_STATUSES.has(target.status)) return null;
+  const queue = queues.get(target.id) ?? [];
+  if (queue.length >= MAX_QUEUE_PER_TARGET) return null;
+  const record = sendMessage(db, {
+    fromAgentId: null,
+    toAgentId: target.id,
+    type: "status",
+    content: text,
+    deliveryState: "queued",
+  });
+  const pending: PendingMessage = {
+    messageId: record.id,
+    fromAgentId: "exegol",
+    fromLabel: input.source,
+    replyTarget: "",
+    toAgentId: target.id,
+    text,
+    expectsReply: false,
+    senderProject: null,
+    crossProject: false,
+    inReplyTo: null,
+    system: true,
+  };
+  return { messageId: record.id, delivered: route(db, target.status, pending, queue) };
 }
 
 /**
@@ -459,7 +506,7 @@ export function clearAgentMessageQueue(db: Database.Database, agentId: string): 
     const goneLabel = gone?.alias ?? agentId;
     const notified = new Set<string>();
     for (const p of pending) {
-      if (notified.has(p.fromAgentId)) continue;
+      if (p.system || notified.has(p.fromAgentId)) continue;
       notified.add(p.fromAgentId);
       try {
         sendAgentMessage(db, {

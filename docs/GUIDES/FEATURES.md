@@ -36,6 +36,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   and a desktop notification with the pending question. `Cmd+J` goes to the next one.
 - **Shell to agent**: type a CLI in a plain terminal and that terminal becomes the agent (name,
   status, Dashboard); when the CLI exits, Continue resumes it.
+- **Watch PR**: opt in from a session's toolbar and Exegol checks its branch's PR every 3 minutes
+  (needs `gh`). Failing checks, new review comments and merge conflicts are sent to the agent at
+  its next turn (never over a permission prompt) and land in Needs attention. At most 3 messages
+  of each kind per pushed commit and 10 per watch; the agent's own comments are skipped.
 - **Send to**: select text in one terminal and paste it into another live agent.
 - **Launch options**: model (for CLIs with a model flag) and session name in the launcher.
 - **Access modes**: read, write or plan per agent or pipeline step, shown as a badge.

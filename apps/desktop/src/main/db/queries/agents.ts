@@ -54,6 +54,26 @@ export function setAgentMuted(db: Database.Database, id: string, muted: boolean)
   db.prepare("UPDATE agents SET muted = ? WHERE id = ?").run(muted ? 1 : 0, id);
 }
 
+export function setAgentPrWatch(db: Database.Database, id: string, on: boolean): void {
+  db.prepare("UPDATE agents SET pr_watch = ? WHERE id = ?").run(on ? 1 : 0, id);
+}
+
+/** Live agents that opted into PR watch, with the folder they work in */
+export function listPrWatchedAgents(
+  db: Database.Database,
+): Array<{ id: string; projectId: string; cwd: string }> {
+  const statuses = [...LIVE_STATUSES];
+  return db
+    .prepare(
+      `SELECT a.id, a.project_id AS projectId, COALESCE(w.path, p.path) AS cwd
+       FROM agents a
+       JOIN projects p ON p.id = a.project_id
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       WHERE a.pr_watch = 1 AND a.cli_type != 'shell' AND a.status IN (${statuses.map(() => "?").join(",")})`,
+    )
+    .all(...statuses) as Array<{ id: string; projectId: string; cwd: string }>;
+}
+
 export function setAgentSuspended(db: Database.Database, id: string, at: number | null): void {
   db.prepare("UPDATE agents SET suspended_at = ? WHERE id = ?").run(at, id);
 }

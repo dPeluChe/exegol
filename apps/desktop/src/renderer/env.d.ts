@@ -74,6 +74,9 @@ interface Window {
     };
     pathForFile?: (file: File) => string;
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
+    onPrWatch: (
+      callback: (event: { agentId: string; projectId: string; reason: string }) => void,
+    ) => () => void;
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
     onNotificationNavigate?: (callback: (data: { agentId: string }) => void) => () => void;
