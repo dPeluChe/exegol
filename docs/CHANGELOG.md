@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - CLI updates name every session they restart, with its project, in the notice; Restart to update and Update in a terminal's toolbar ask whether to restart only that session or all of the CLI's sessions, and list the others
+- Faster start with many live agents: reconnecting a terminal rebuilds its screen without re-reading its whole history as new output (which also re-fired old status changes). Git panes no longer ask GitHub for the PR every 15 seconds (once a minute, and right after a commit, push, or a PR created or merged from Exegol), and background refreshes pause while Exegol is not the app in focus
 
 ### Fixed
 - Agents in a worktree or pipeline folder of a project you trusted in Claude no longer stop on Claude's "trust this folder?" prompt

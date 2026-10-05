@@ -8,7 +8,11 @@ import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exego
 import { getPtyHost } from "../terminal/pty-host";
 import { expectReattach, settleReattach } from "../terminal/reattach-gate";
 import { createOutputProcessor } from "./agent-output-processor";
-import { createSpawnCallbacks, type SessionMaps } from "./agent-session-callbacks";
+import {
+  appendScrollback,
+  createSpawnCallbacks,
+  type SessionMaps,
+} from "./agent-session-callbacks";
 import { cleanupWorktree, hydrateTrackedWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { readableStep } from "./readable-step";
 import { getProviderRegistry } from "./registry";
@@ -122,7 +126,7 @@ export async function reattachSidecarAgents(
 
       // The PTY kept its last size in the sidecar; replaying its ring into a
       // model of any other size reflows everything the CLI drew
-      await ptyHost.reattachSession(
+      const snapshot = await ptyHost.reattachSession(
         agentId,
         {
           cols: (row.pty_cols as number | null) ?? DEFAULT_PTY_COLS,
@@ -131,6 +135,10 @@ export async function reattachSidecarAgents(
         callbacks,
         { scrollbackPath },
       );
+      // The ring's end seeds the scrollback that attention tails, final output and scoring read
+      if (!isShell && snapshot) {
+        appendScrollback(maps, agentId, snapshot.slice(-maxScrollbackBytes), maxScrollbackBytes);
+      }
 
       // Only mark as running if the PTY process is actually alive
       // (sidecar may hold a dead session whose exit event fires immediately)
@@ -182,7 +190,7 @@ export async function reattachSidecarAgents(
       // Scan the ring tail on reattach so the resume handle isn't lost.
       if (!isShell && resumePattern && !row.resume_command) {
         try {
-          const snap = ptyHost.getSnapshot(agentId);
+          const snap = snapshot;
           if (snap) {
             // Slice before stripping: only the tail matters, no need to
             // regex-clean the whole ring.
