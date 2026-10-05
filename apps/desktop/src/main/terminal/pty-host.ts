@@ -126,8 +126,8 @@ export class PtyHost {
     spawnOpts: { cols: number; rows: number },
     callbacks: SessionCallbacks,
     options?: { scrollbackPath?: string },
-  ): Promise<void> {
-    if (!this.sidecarClient?.isConnected()) return;
+  ): Promise<string | null> {
+    if (!this.sidecarClient?.isConnected()) return null;
 
     const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
     const session: Session = {
@@ -149,13 +149,12 @@ export class PtyHost {
     };
     this.sessions.set(id, session);
 
-    // Replay ring buffer snapshot to rebuild emulator state
+    // The ring rebuilds the model only (replayed through onData it re-fired old status/OSC);
+    // the caller seeds its scrollback from the returned snapshot
+    let snapshot: string | null = null;
     try {
-      const snapshot = await this.sidecarClient.snapshot(id);
-      if (snapshot) {
-        emulator.write(snapshot);
-        callbacks.onData(snapshot);
-      }
+      snapshot = await this.sidecarClient.snapshot(id);
+      if (snapshot) emulator.write(snapshot);
     } catch {
       // Snapshot unavailable — session still reattaches, just without scrollback history
     }
@@ -166,6 +165,7 @@ export class PtyHost {
       this.resize(id, pending.cols, pending.rows);
       broadcast("terminal:resized", id, pending.cols, pending.rows);
     }
+    return snapshot;
   }
 
   /** Create a new PTY session — uses sidecar if available, falls back to subprocess */

@@ -315,6 +315,7 @@
     "menu:reload",
     "menu:focus-location",
     "agent:status-changed",
+    "window:focus-changed",
     "metrics:update",
     "pipeline:status-changed",
     "dialog:showOpenDialog",

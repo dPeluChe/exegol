@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Faster start with many live agents: reconnecting a terminal rebuilds its screen without re-reading its whole history as new output (which also re-fired old status changes). Git panes no longer ask GitHub for the PR every 15 seconds (once a minute, and right after a commit, push, or a PR created or merged from Exegol), and background refreshes pause while Exegol is not the app in focus
+
 ### Fixed
 - The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
 
