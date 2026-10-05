@@ -3,6 +3,7 @@ import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
 import { latestTurn, turnDiff, undoLatestTurn } from "../../agents/turn-snapshots";
 import { createOplogEntry, getAgent, listAgentOplog, listProjectOplog } from "../../db/queries";
+import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
 import { publicProcedure, router } from "../trpc";
 import { invalidateProjectDiff } from "./diff-helpers";
@@ -25,89 +26,92 @@ export const oplogRouter = router({
   /** Undo an operation by reverting to ref_before.
    *  Creates a new "revert" commit — never force-pushes.
    */
-  undo: publicProcedure.input(z.object({ oplogId: z.string() })).mutation(({ ctx, input }) => {
-    if (!coreRust) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Rust native module not available — cannot undo",
+  undo: publicProcedure
+    .input(z.object({ oplogId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const rust = coreRust;
+      if (!rust) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Rust native module not available — cannot undo",
+        });
+      }
+
+      const entry = ctx.db.prepare("SELECT * FROM oplog WHERE id = ?").get(input.oplogId) as
+        | Record<string, unknown>
+        | undefined;
+
+      if (!entry) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Oplog entry not found" });
+      }
+
+      const refBefore = entry.ref_before as string | null;
+      if (!refBefore) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "No ref_before recorded — cannot undo this operation",
+        });
+      }
+
+      // Resolve project path
+      const projectId = entry.project_id as string;
+      const project = ctx.db.prepare("SELECT path FROM projects WHERE id = ?").get(projectId) as
+        | { path: string }
+        | undefined;
+
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      }
+
+      // revertToSnapshot force-checks-out project.path: refuse every case where that destroys work
+      if (entry.operation === "worktree_create") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Worktree creation can't be undone here",
+        });
+      }
+      if (getAgent(ctx.db, entry.agent_id as string)?.worktreeId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This agent worked in a worktree; undo would rewrite the main checkout",
+        });
+      }
+      if (await runNative(() => rust.worktreeHasChangesAsync(project.path))) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Uncommitted changes in the project; commit or stash them before undoing",
+        });
+      }
+      const snapshotBefore = rust.getRepoSnapshot(project.path);
+      const refAfter = entry.ref_after as string | null;
+      if (refAfter && snapshotBefore.headSha !== refAfter) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "HEAD moved since this operation; undoing it would drop later commits",
+        });
+      }
+
+      // Perform the revert
+      const newSha = rust.revertToSnapshot(project.path, refBefore);
+
+      // Record the revert in oplog
+      const revertEntry = createOplogEntry(ctx.db, {
+        agentId: entry.agent_id as string,
+        projectId,
+        operation: "revert",
+        refBefore: snapshotBefore.headSha,
+        refAfter: newSha,
+        description: `Reverted to ${refBefore.slice(0, 8)}`,
       });
-    }
 
-    const entry = ctx.db.prepare("SELECT * FROM oplog WHERE id = ?").get(input.oplogId) as
-      | Record<string, unknown>
-      | undefined;
-
-    if (!entry) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "Oplog entry not found" });
-    }
-
-    const refBefore = entry.ref_before as string | null;
-    if (!refBefore) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "No ref_before recorded — cannot undo this operation",
+      logger.info("[Oplog] Undo completed:", {
+        oplogId: input.oplogId,
+        revertedTo: refBefore.slice(0, 8),
+        newCommit: newSha.slice(0, 8),
       });
-    }
 
-    // Resolve project path
-    const projectId = entry.project_id as string;
-    const project = ctx.db.prepare("SELECT path FROM projects WHERE id = ?").get(projectId) as
-      | { path: string }
-      | undefined;
-
-    if (!project) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-    }
-
-    // revertToSnapshot force-checks-out project.path: refuse every case where that destroys work
-    if (entry.operation === "worktree_create") {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "Worktree creation can't be undone here",
-      });
-    }
-    if (getAgent(ctx.db, entry.agent_id as string)?.worktreeId) {
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "This agent worked in a worktree; undo would rewrite the main checkout",
-      });
-    }
-    if (coreRust.worktreeHasChanges(project.path)) {
-      throw new TRPCError({
-        code: "PRECONDITION_FAILED",
-        message: "Uncommitted changes in the project; commit or stash them before undoing",
-      });
-    }
-    const snapshotBefore = coreRust.getRepoSnapshot(project.path);
-    const refAfter = entry.ref_after as string | null;
-    if (refAfter && snapshotBefore.headSha !== refAfter) {
-      throw new TRPCError({
-        code: "PRECONDITION_FAILED",
-        message: "HEAD moved since this operation; undoing it would drop later commits",
-      });
-    }
-
-    // Perform the revert
-    const newSha = coreRust.revertToSnapshot(project.path, refBefore);
-
-    // Record the revert in oplog
-    const revertEntry = createOplogEntry(ctx.db, {
-      agentId: entry.agent_id as string,
-      projectId,
-      operation: "revert",
-      refBefore: snapshotBefore.headSha,
-      refAfter: newSha,
-      description: `Reverted to ${refBefore.slice(0, 8)}`,
-    });
-
-    logger.info("[Oplog] Undo completed:", {
-      oplogId: input.oplogId,
-      revertedTo: refBefore.slice(0, 8),
-      newCommit: newSha.slice(0, 8),
-    });
-
-    return revertEntry;
-  }),
+      return revertEntry;
+    }),
 
   // ─── Oplog v2 (T129) — hidden-ref turn snapshots. Git is the source of
   // truth here: no parallel DB table, just read/write the hidden ref chain.

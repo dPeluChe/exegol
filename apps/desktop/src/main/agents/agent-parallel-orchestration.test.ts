@@ -115,7 +115,7 @@ describe("promoteParallelAgent", () => {
     db = setupDb();
   });
 
-  it("marks the run as completed with the promoted agent id", () => {
+  it("marks the run as completed with the promoted agent id", async () => {
     insertAgent(db, "a1", "completed", null);
     insertAgent(db, "a2", "completed", null);
     const run = createParallelRun(db, {
@@ -125,14 +125,14 @@ describe("promoteParallelAgent", () => {
       agentIds: ["a1", "a2"],
     });
 
-    promoteParallelAgent(db, run.id, "a1");
+    await promoteParallelAgent(db, run.id, "a1");
 
     const after = getParallelRun(db, run.id);
     expect(after?.status).toBe("completed");
     expect(after?.promotedAgentId).toBe("a1");
   });
 
-  it("ignores promotion of an agent that is not part of the run", () => {
+  it("ignores promotion of an agent that is not part of the run", async () => {
     insertAgent(db, "a1", "completed", null);
     insertAgent(db, "x99", "completed", null);
     const run = createParallelRun(db, {
@@ -142,13 +142,13 @@ describe("promoteParallelAgent", () => {
       agentIds: ["a1"],
     });
 
-    promoteParallelAgent(db, run.id, "x99");
+    await promoteParallelAgent(db, run.id, "x99");
 
     const after = getParallelRun(db, run.id);
     expect(after?.promotedAgentId).toBeNull();
   });
 
-  it("is idempotent — calling twice with the same agentId leaves state unchanged", () => {
+  it("is idempotent — calling twice with the same agentId leaves state unchanged", async () => {
     insertAgent(db, "a1", "completed", null);
     const run = createParallelRun(db, {
       projectId: "p1",
@@ -157,9 +157,9 @@ describe("promoteParallelAgent", () => {
       agentIds: ["a1"],
     });
 
-    promoteParallelAgent(db, run.id, "a1");
+    await promoteParallelAgent(db, run.id, "a1");
     const first = getParallelRun(db, run.id);
-    promoteParallelAgent(db, run.id, "a1");
+    await promoteParallelAgent(db, run.id, "a1");
     const second = getParallelRun(db, run.id);
 
     expect(second?.completedAt).toBe(first?.completedAt);

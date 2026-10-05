@@ -5,6 +5,7 @@ import {
   getWorktreeByAgentId,
 } from "../db/queries";
 import { countLiveAgentsInWorktree } from "../db/queries/agents";
+import { runNative } from "../lib/concurrency";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig, runLifecycleScript } from "../lifecycle/loader";
 import { coreRust } from "./spawn-env";
@@ -46,7 +47,8 @@ export async function cleanupWorktree(
 ): Promise<void> {
   hydrateTrackedWorktree(db, agentId, worktrees);
   const wt = worktrees.get(agentId);
-  if (!wt || !coreRust) return;
+  const rust = coreRust;
+  if (!wt || !rust) return;
   // findReusableWorktree lets agents share a branch's worktree; never pull it out from under one
   if (countLiveAgentsInWorktree(db, wt.dbId, agentId) > 0) {
     logger.info(`[AgentManager] Worktree '${wt.worktreeName}' still in use — keeping it`);
@@ -54,7 +56,7 @@ export async function cleanupWorktree(
     return;
   }
   try {
-    const hasChanges = coreRust.worktreeHasChanges(wt.worktreePath);
+    const hasChanges = await runNative(() => rust.worktreeHasChangesAsync(wt.worktreePath));
     if (hasChanges) {
       logger.info(
         `[AgentManager] Worktree '${wt.worktreeName}' has changes — keeping at ${wt.worktreePath}`,

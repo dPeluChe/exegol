@@ -84,12 +84,12 @@ export function handleParallelAgentExit(db: Database.Database, agentId: string):
  *    false; dirty ones are skipped (returned in the report) unless `force`
  *  - Broadcasts `parallel-run:changed` so any open comparator refetches
  */
-export function promoteParallelAgent(
+export async function promoteParallelAgent(
   db: Database.Database,
   runId: string,
   agentId: string,
   opts: { clean?: boolean; force?: boolean } = {},
-): LoserCleanupResult[] {
+): Promise<LoserCleanupResult[]> {
   const run = getParallelRun(db, runId);
   if (!run) {
     logger.warn(`[ParallelOrchestration] promote: run ${runId} not found`);
@@ -115,7 +115,7 @@ export function promoteParallelAgent(
 
   if (opts.clean === false) return [];
 
-  const cleanup = cleanupLoserWorktrees(db, run, agentId, { force: opts.force });
+  const cleanup = await cleanupLoserWorktrees(db, run, agentId, { force: opts.force });
   logger.info("[ParallelOrchestration] Promote & clean:", {
     runId,
     winner: agentId,
