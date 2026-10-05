@@ -20,12 +20,6 @@ export const aiProcedures = {
     .mutation(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       const apiKey = getApiKey(ctx.db, "anthropic");
-      if (!apiKey) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: "Anthropic API key not configured. Set it in Settings → API Keys.",
-        });
-      }
       // Grab the diff (prefer staged if anything is staged; else worktree)
       const diff = await runGitDiff(cwd, input.staged ? ["--cached"] : []);
       if (!diff.trim()) {
