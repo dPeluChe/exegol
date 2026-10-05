@@ -31,6 +31,7 @@ import {
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
+import { ErrorBoundary, paneFallback } from "../ErrorBoundary";
 import { FileExplorer } from "../workspace/FileExplorer";
 import { GitPane } from "../workspace/GitPane";
 import { BrowserPane } from "./BrowserPaneContent";
@@ -480,7 +481,11 @@ function PaneBody({ pane, paneId, isFloating }: PaneContentProps & { isFloating:
   if (pane.invalidReason) return <InvalidPane reason={pane.invalidReason} paneId={paneId} />;
   if (isFloating) return <FloatingPlaceholder paneId={paneId} />;
   const Content = PANE_CONTENT[pane.type];
-  return <Content pane={pane} paneId={paneId} />;
+  return (
+    <ErrorBoundary fallback={paneFallback}>
+      <Content pane={pane} paneId={paneId} />
+    </ErrorBoundary>
+  );
 }
 
 // ─── Drop target (tab merge / pane rearrange) ───────────────────────────────

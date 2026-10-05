@@ -18,6 +18,7 @@ import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { StatusDot } from "../../common/StatusDot";
+import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
 
 const DRAG_TYPE = "application/x-exegol-watch";
@@ -300,13 +301,15 @@ function WatchCard({
             if (needsInput) useAgentStore.getState().markAttentionRead(agent.id);
           }}
         >
-          <TerminalInstance
-            key={`mirror-${agent.id}`}
-            agentId={agent.id}
-            cliType={agent.cliType}
-            mirror
-            cardFont={cardFont}
-          />
+          <ErrorBoundary fallback={paneFallback}>
+            <TerminalInstance
+              key={`mirror-${agent.id}`}
+              agentId={agent.id}
+              cliType={agent.cliType}
+              mirror
+              cardFont={cardFont}
+            />
+          </ErrorBoundary>
         </div>
       ) : (
         <div className="mx-3 mb-2 flex items-center gap-2 text-[11px] text-text-muted">
