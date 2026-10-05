@@ -2,10 +2,12 @@ import type { PlanUsage, PlanWindow } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, GitBranch } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useEnabledProviders } from "../../hooks/use-providers";
 import { useProject, useProjects } from "../../hooks/use-trpc";
 import { sessionName } from "../../lib/agent-label";
+import { isLongWait, longestWorking, turnTime } from "../../lib/busy-time";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { type AgentState, isLiveAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
@@ -13,6 +15,7 @@ import { AgentIcon } from "../common/AgentIcon";
 import { formatUptime, thresholdColor } from "../workspace/sections/resource-format";
 
 const PLAN_POLL_MS = 60_000;
+const CLOCK_MS = 30_000;
 
 /** Time left until a window resets ("4h 12m"), or null when the source does not say */
 const timeLeft = (resetsAt: number | null) =>
@@ -22,6 +25,11 @@ export function StatusBar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const { data: project } = useProject(activeProjectId);
   const attentionCount = useAgentStore((s) => s.unreadAttentionCount);
+  const [now, setNow] = useState(Date.now);
+  useMountEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), CLOCK_MS);
+    return () => clearInterval(id);
+  });
 
   return (
     <div className="flex h-6 shrink-0 items-center justify-between gap-3 border-t border-border bg-bg-secondary px-3 text-[11px] text-text-muted">
@@ -40,7 +48,7 @@ export function StatusBar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <LiveAgentsByCli />
+        <LiveAgentsByCli now={now} />
         {attentionCount > 0 && (
           <div className="flex items-center gap-1 text-amber-400">
             <Bell className="h-3 w-3" />
@@ -56,9 +64,9 @@ export function StatusBar() {
   );
 }
 
-/** Live sessions per CLI: its icon, how many are open and how many are working right now;
- *  hovering lists them with their project */
-function LiveAgentsByCli() {
+/** Live sessions per CLI: its icon, how many are open, how many are working and for how long;
+ *  hovering lists them with their project and how long each has worked or waited */
+function LiveAgentsByCli({ now }: { now: number }) {
   const agents = useAgentStore((s) => s.agents);
   const { data: projects = [] } = useProjects();
   const projectName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
@@ -76,14 +84,26 @@ function LiveAgentsByCli() {
     <div className="flex items-center gap-2.5">
       {byCli.map(([cliType, list]) => {
         const working = list.filter((a) => a.activityLevel === "busy").length;
+        const longest = longestWorking(list, now);
+        const longWait = list.some((a) => isLongWait(a, now));
         const title = list
-          .map((a) => `${sessionName(a)} · ${projectName.get(a.projectId) ?? "?"} · ${a.status}`)
+          .map((a) => {
+            const t = turnTime(a, now);
+            const state = t ? `${t.state} ${formatUptime(t.seconds)}` : a.status;
+            return `${sessionName(a)} · ${projectName.get(a.projectId) ?? "?"} · ${state}`;
+          })
           .join("\n");
         return (
-          <span key={cliType} className="flex items-center gap-1" title={title}>
+          <span key={cliType} className="flex items-center gap-1 tabular-nums" title={title}>
             <AgentIcon provider={cliType} size={12} />
-            <span className="text-text-secondary">{list.length}</span>
-            {working > 0 && <span className="text-success">({working} working)</span>}
+            <span className={longWait ? "text-amber-400" : "text-text-secondary"}>
+              {list.length}
+            </span>
+            {working > 0 && (
+              <span className="text-success">
+                · {working} working{longest !== null && ` ${formatUptime(longest)}`}
+              </span>
+            )}
           </span>
         );
       })}
