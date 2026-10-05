@@ -6,7 +6,6 @@ import type {
   Project,
   ProjectGroup,
   Prompt,
-  ScheduledResult,
   ScheduledRun,
   ScheduledTask,
   TokenUsage,
@@ -19,7 +18,6 @@ import {
   projectGroupRowSchema,
   projectRowSchema,
   promptRowSchema,
-  scheduledResultRowSchema,
   scheduledRunRowSchema,
   scheduledTaskRowSchema,
   tokenUsageRowSchema,
@@ -154,23 +152,10 @@ export function mapScheduledRunRow(row: Record<string, unknown>): ScheduledRun {
     taskId: r.task_id,
     agentId: r.agent_id,
     state: r.state as ScheduledRun["state"],
-    attempt: r.attempt,
     summary: r.summary,
     queuedAt: r.queued_at,
     startedAt: r.started_at,
     endedAt: r.ended_at,
-  };
-}
-
-export function mapScheduledResultRow(row: Record<string, unknown>): ScheduledResult {
-  const r = parseRow(scheduledResultRowSchema, row, "scheduledResult");
-  return {
-    id: r.id,
-    taskId: r.task_id,
-    agentId: r.agent_id,
-    status: r.status as ScheduledResult["status"],
-    summary: r.summary,
-    createdAt: r.created_at,
   };
 }
 

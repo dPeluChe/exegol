@@ -13,16 +13,13 @@ import {
   getAgent,
   getOpenScheduledRun,
   getScheduledTask,
-  getTokenUsageSummary,
   listQueuedScheduledRuns,
   listRunningScheduledRuns,
   listScheduledTasks,
   queueScheduledRun,
-  recordScheduledResult,
   startScheduledRun,
   updateScheduledTask,
 } from "../db/queries";
-import { TimeoutError } from "../lib/errors";
 import { logger } from "../lib/logger";
 
 let instance: SchedulerEngine | null = null;
@@ -35,14 +32,13 @@ export function getSchedulerEngine(): SchedulerEngine {
 }
 
 const DEFAULT_MAX_CONCURRENT = 3;
-export const BUDGET_CHECK_MS = 30_000;
 
 interface ActiveRun {
   runId: string;
   taskId: string;
   agentId: string;
   closed: boolean;
-  timers: ReturnType<typeof setTimeout>[];
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 type DependencyGate = { state: "ready" } | { state: "wait" | "blocked"; ids: string[] };
@@ -77,7 +73,7 @@ export class SchedulerEngine {
       job.stop();
       this.jobs.delete(id);
     }
-    for (const run of this.active.values()) this.clearTimers(run);
+    for (const run of this.active.values()) this.clearTimer(run);
     this.active.clear();
     this.db = null;
     logger.info("[Scheduler] Stopped all jobs");
@@ -209,7 +205,7 @@ export class SchedulerEngine {
   }
 
   private startRun(db: Database.Database, run: ScheduledRun, task: ScheduledTask): void {
-    logger.info(`[Scheduler] Executing task ${task.id} (run ${run.attempt})`);
+    logger.info(`[Scheduler] Executing task ${task.id} (run ${run.id})`);
     const skillNames = task.skillName ? [task.skillName] : undefined;
     const config = {
       projectId: task.projectId,
@@ -223,32 +219,16 @@ export class SchedulerEngine {
       taskId: task.id,
       agentId: agent.id,
       closed: false,
-      timers: [],
+      timer: null,
     };
     this.active.set(task.id, active);
     startScheduledRun(db, run.id, agent.id);
     updateScheduledTask(db, task.id, { lastRunAt: Math.floor(Date.now() / 1000) });
 
     const minutes = task.timeoutMinutes ?? DEFAULT_SCHEDULED_TIMEOUT_MINUTES;
-    active.timers.push(
-      setTimeout(() => {
-        const err = new TimeoutError(`Agent did not complete within ${minutes} minutes`);
-        void this.abort(active, "timeout", err.message);
-      }, minutes * 60_000),
-    );
-    const budget = task.maxTokenBudget;
-    if (budget) {
-      active.timers.push(
-        setInterval(() => {
-          if (!this.db) return;
-          const usage = getTokenUsageSummary(this.db, agent.id, 0);
-          const used = usage.totalInputTokens + usage.totalOutputTokens;
-          if (used > budget) {
-            void this.abort(active, "budget_exceeded", `Used ${used} tokens, budget ${budget}`);
-          }
-        }, BUDGET_CHECK_MS),
-      );
-    }
+    active.timer = setTimeout(() => {
+      void this.abort(active, "timeout", `Agent did not complete within ${minutes} minutes`);
+    }, minutes * 60_000);
 
     const manager = getAgentManager();
     manager.onAgentComplete(agent.id, (exitCode) => {
@@ -284,15 +264,9 @@ export class SchedulerEngine {
   private close(active: ActiveRun, status: ScheduledResultStatus, summary: string): void {
     if (active.closed) return;
     active.closed = true;
-    this.clearTimers(active);
+    this.clearTimer(active);
     const db = this.db;
     if (!db || !closeScheduledRun(db, active.runId, status, summary)) return;
-    recordScheduledResult(db, {
-      taskId: active.taskId,
-      agentId: active.agentId,
-      status,
-      summary,
-    });
     updateScheduledTask(db, active.taskId, { lastResultStatus: status });
   }
 
@@ -303,25 +277,26 @@ export class SchedulerEngine {
     this.pump();
   }
 
-  private clearTimers(active: ActiveRun): void {
-    for (const t of active.timers) clearTimeout(t);
-    active.timers = [];
+  private clearTimer(active: ActiveRun): void {
+    if (active.timer) clearTimeout(active.timer);
+    active.timer = null;
   }
 
-  /** A run left open by a quit has nobody waiting on it: close it so the task can run again */
+  /** A run left open by a quit has nobody waiting on it. The sidecar kept its agent alive, so
+   *  stop that too: otherwise the next tick could start a run beside it */
   private closeInterruptedRuns(db: Database.Database): void {
     for (const run of listRunningScheduledRuns(db)) {
-      const summary = "Interrupted: Exegol quit during the run";
-      if (!closeScheduledRun(db, run.id, "failure", summary)) continue;
-      if (run.agentId) {
-        recordScheduledResult(db, {
-          taskId: run.taskId,
-          agentId: run.agentId,
-          status: "failure",
-          summary,
-        });
+      if (!closeScheduledRun(db, run.id, "failure", "Interrupted: Exegol quit during the run")) {
+        continue;
       }
       updateScheduledTask(db, run.taskId, { lastResultStatus: "failure" });
+      const agentId = run.agentId;
+      if (!agentId) continue;
+      getAgentManager()
+        .stop(db, agentId)
+        .catch((err: unknown) => {
+          logger.warn(`[Scheduler] Failed to stop interrupted agent ${agentId}:`, err);
+        });
     }
   }
 

@@ -1,12 +1,11 @@
 import type {
-  ScheduledResult,
   ScheduledResultStatus,
   ScheduledRun,
   ScheduledTask,
   ScheduledTaskCreate,
 } from "@exegol/shared";
 import type Database from "libsql";
-import { mapScheduledResultRow, mapScheduledRunRow, mapScheduledTaskRow, nanoid } from "./helpers";
+import { mapScheduledRunRow, mapScheduledTaskRow, nanoid } from "./helpers";
 
 export function listScheduledTasks(db: Database.Database, projectId?: string): ScheduledTask[] {
   if (projectId) {
@@ -128,26 +127,18 @@ export function toggleScheduledTask(db: Database.Database, id: string, enabled: 
   db.prepare("UPDATE scheduled_tasks SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
 }
 
-export function recordScheduledResult(
-  db: Database.Database,
-  data: { taskId: string; agentId: string; status: string; summary: string },
-): void {
-  const id = nanoid();
-  db.prepare(
-    `INSERT INTO scheduled_results (id, task_id, agent_id, status, summary)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, data.taskId, data.agentId, data.status, data.summary);
-}
-
+/** Closed runs, newest first: the task's run history (scheduled_results is no longer written) */
 export function listScheduledResults(
   db: Database.Database,
   taskId: string,
   limit = 20,
-): ScheduledResult[] {
+): ScheduledRun[] {
   const rows = db
-    .prepare("SELECT * FROM scheduled_results WHERE task_id = ? ORDER BY created_at DESC LIMIT ?")
+    .prepare(
+      "SELECT * FROM scheduled_runs WHERE task_id = ? AND state NOT IN ('queued', 'running') ORDER BY ended_at DESC, rowid DESC LIMIT ?",
+    )
     .all(taskId, limit);
-  return (rows as Record<string, unknown>[]).map(mapScheduledResultRow);
+  return (rows as Record<string, unknown>[]).map(mapScheduledRunRow);
 }
 
 /** The task's queued or running run, if any: a task never has two */
@@ -167,10 +158,7 @@ export function getScheduledRun(db: Database.Database, id: string): ScheduledRun
 
 export function queueScheduledRun(db: Database.Database, taskId: string): ScheduledRun {
   const id = nanoid();
-  db.prepare(
-    `INSERT INTO scheduled_runs (id, task_id, attempt)
-     VALUES (?, ?, (SELECT COUNT(*) + 1 FROM scheduled_runs WHERE task_id = ?))`,
-  ).run(id, taskId, taskId);
+  db.prepare("INSERT INTO scheduled_runs (id, task_id) VALUES (?, ?)").run(id, taskId);
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getScheduledRun(db, id)!;
 }

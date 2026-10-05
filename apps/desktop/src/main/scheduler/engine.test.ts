@@ -23,7 +23,7 @@ vi.mock("../agents/manager", () => ({
 }));
 
 import { createScheduledTask, getScheduledTask, listScheduledResults } from "../db/queries";
-import { BUDGET_CHECK_MS, SchedulerEngine } from "./engine";
+import { SchedulerEngine } from "./engine";
 
 let db: Database.Database;
 let engine: SchedulerEngine;
@@ -40,8 +40,8 @@ function addTask(extra: Partial<Parameters<typeof createScheduledTask>[1]> = {})
 
 function runs(taskId: string) {
   return db
-    .prepare("SELECT state, agent_id, attempt FROM scheduled_runs WHERE task_id = ? ORDER BY rowid")
-    .all(taskId) as Array<{ state: string; agent_id: string | null; attempt: number }>;
+    .prepare("SELECT state, agent_id FROM scheduled_runs WHERE task_id = ? ORDER BY rowid")
+    .all(taskId) as Array<{ state: string; agent_id: string | null }>;
 }
 
 /** Lets the stop() promise in abort settle */
@@ -80,7 +80,7 @@ describe("SchedulerEngine timeout", () => {
 
     finish(agentId, 0);
     const results = listScheduledResults(db, task.id);
-    expect(results.map((r) => r.status)).toEqual(["timeout"]);
+    expect(results.map((r) => r.state)).toEqual(["timeout"]);
     expect(results[0]?.summary).toContain("5 minutes");
   });
 
@@ -100,7 +100,7 @@ describe("SchedulerEngine timeout", () => {
     finish(mgr.spawned[0]?.agentId as string, 0);
     await vi.advanceTimersByTimeAsync(2 * 60_000);
     expect(mgr.stopped).toEqual([]);
-    expect(listScheduledResults(db, task.id).map((r) => r.status)).toEqual(["success"]);
+    expect(listScheduledResults(db, task.id).map((r) => r.state)).toEqual(["success"]);
   });
 
   it("records a spawn failure", async () => {
@@ -123,7 +123,7 @@ describe("SchedulerEngine overlap and capacity", () => {
 
     finish(mgr.spawned[0]?.agentId as string);
     await engine.runNow(task.id);
-    expect(runs(task.id).map((r) => r.attempt)).toEqual([1, 2]);
+    expect(runs(task.id).map((r) => r.state)).toEqual(["success", "running"]);
   });
 
   it("fires on its cron and does not stack ticks on a hung run", async () => {
@@ -159,10 +159,11 @@ describe("SchedulerEngine overlap and capacity", () => {
     expect(runs(b.id)[0]?.state).toBe("running");
   });
 
-  it("starts a queued run left by a previous session and closes an interrupted one", async () => {
+  it("starts a queued run left by a previous session, closes an interrupted one and stops its agent", async () => {
     const a = addTask();
     const b = addTask();
     await engine.runNow(a.id);
+    const interruptedAgent = mgr.spawned[0]?.agentId as string;
     engine.stop();
     db.prepare("INSERT INTO scheduled_runs (id, task_id) VALUES ('q1', ?)").run(b.id);
 
@@ -170,11 +171,12 @@ describe("SchedulerEngine overlap and capacity", () => {
     engine.start(db);
     expect(runs(a.id)[0]?.state).toBe("failure");
     expect(listScheduledResults(db, a.id)[0]?.summary).toContain("Interrupted");
+    expect(mgr.stopped).toEqual([interruptedAgent]);
     expect(runs(b.id)[0]?.state).toBe("running");
   });
 });
 
-describe("SchedulerEngine dependencies and budget", () => {
+describe("SchedulerEngine dependencies", () => {
   it("blocks a dependent after its dependency timed out", async () => {
     const dep = addTask({ timeoutMinutes: 1 });
     const child = addTask({ dependsOn: dep.id });
@@ -194,18 +196,5 @@ describe("SchedulerEngine dependencies and budget", () => {
     await engine.runNow(child.id);
     finish(mgr.spawned[0]?.agentId as string);
     expect(runs(child.id)[0]?.state).toBe("running");
-  });
-
-  it("stops a run over its token budget", async () => {
-    const task = addTask({ maxTokenBudget: 100 });
-    await engine.runNow(task.id);
-    const agentId = mgr.spawned[0]?.agentId as string;
-    db.prepare(
-      `INSERT INTO token_usage (id, agent_id, provider, model, input_tokens, output_tokens, estimated_cost_usd, tool_call_count)
-       VALUES ('t1', ?, 'anthropic', 'm', 80, 40, 0, 0)`,
-    ).run(agentId);
-    await vi.advanceTimersByTimeAsync(BUDGET_CHECK_MS);
-    expect(mgr.stopped).toEqual([agentId]);
-    expect(listScheduledResults(db, task.id).map((r) => r.status)).toEqual(["budget_exceeded"]);
   });
 });

@@ -168,14 +168,13 @@ export const wave3Migrations: Migration[] = [
   {
     // T185.11: a run is its own row (queued, running, closed once) so a full slot defers it
     // durably and a timeout can never be followed by a second result for the same run
-    id: "w3_018_scheduled_runs",
+    id: "w3_019_scheduled_runs",
     sql: `ALTER TABLE scheduled_tasks ADD COLUMN timeout_minutes INTEGER;
     CREATE TABLE IF NOT EXISTS scheduled_runs (
       id TEXT PRIMARY KEY,
       task_id TEXT NOT NULL,
       agent_id TEXT,
       state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'running', 'success', 'failure', 'timeout', 'budget_exceeded', 'skipped')),
-      attempt INTEGER NOT NULL DEFAULT 1,
       summary TEXT NOT NULL DEFAULT '',
       queued_at INTEGER NOT NULL DEFAULT (unixepoch()),
       started_at INTEGER,

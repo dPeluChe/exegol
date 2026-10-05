@@ -40,18 +40,8 @@ export type ScheduledRun = {
   taskId: string;
   agentId: string | null;
   state: ScheduledRunState;
-  attempt: number;
   summary: string;
   queuedAt: number;
   startedAt: number | null;
   endedAt: number | null;
-};
-
-export type ScheduledResult = {
-  id: string;
-  taskId: string;
-  agentId: string;
-  status: ScheduledResultStatus;
-  summary: string;
-  createdAt: number;
 };

@@ -127,20 +127,10 @@ export const scheduledRunRowSchema = z.object({
   task_id: z.string(),
   agent_id: optStr,
   state: z.string(),
-  attempt: z.number(),
   summary: z.string(),
   queued_at: z.number(),
   started_at: optNum,
   ended_at: optNum,
-});
-
-export const scheduledResultRowSchema = z.object({
-  id: z.string(),
-  task_id: z.string(),
-  agent_id: z.string(),
-  status: z.string(),
-  summary: z.string(),
-  created_at: z.number(),
 });
 
 export const tokenUsageRowSchema = z.object({

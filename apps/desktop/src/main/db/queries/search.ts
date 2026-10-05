@@ -375,8 +375,9 @@ export function rebuildIndex(db: Database.Database): { indexed: number } {
   const results = db
     .prepare(
       `SELECT sr.id, sr.summary, st.project_id, sr.agent_id
-       FROM scheduled_results sr
-       JOIN scheduled_tasks st ON sr.task_id = st.id`,
+       FROM scheduled_runs sr
+       JOIN scheduled_tasks st ON sr.task_id = st.id
+       WHERE sr.state NOT IN ('queued', 'running')`,
     )
     .all() as Array<Record<string, unknown>>;
   for (const r of results) {

@@ -183,7 +183,8 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
     test coverage", "triage TODOs"), each run delivered via NotificationBus (T124) with empty
     results suppressed, one-click enable from Project → Tasks. Needs a scheduler UI first: none
     since 274e611 (SchedulerSection deleted); create/edit/toggle/run and the `scheduler.*` router
-    are there, no renderer hooks (was T185.11/T185.1).
+    are there, no renderer hooks (was T185.11/T185.1). `maxTokenBudget` is stored but not
+    enforced: it needs a per-agent token source (nothing writes per-agent `token_usage` rows).
   - From T186 (Owl Phase 1, kills the manual "what have I not seen?" scan across active repos):
     port the cli-proman collector commands (`status`, `git-status`, `wip`, `blocked`, `review`,
     `next`...) as deterministic per-repo collectors → facts JSON; scheduler (interval/on-wake)
@@ -347,8 +348,9 @@ exchange-bus MVP only, no headless council executions. Absorbs:
    preload (UI polls every 10s); `agents.cancelParallelRun` has no UI. If every spawn fails the
    run stays `running` forever (was T193.17, merged 2026-10-04).
 4. **Dead surface** (P2): `agent:signal` / `agent:turn-boundary` broadcasts have no subscriber;
-   tables `sessions`, `port_registry`, `host_metrics` unused; `queue.*` has no UI. Wire or
-   delete (feeds T144).
+   tables `sessions`, `port_registry`, `host_metrics` unused; `scheduled_results` unused since
+   T185.11 (run history is `scheduled_runs`; drop it); `queue.*` has no UI. Wire or delete
+   (feeds T144).
 5. **LLM tier-3 score persists (w3_009) but nothing displays it**: show it in Scoring/History or stop
    the paid Haiku call.
 
