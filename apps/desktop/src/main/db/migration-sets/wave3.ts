@@ -165,4 +165,36 @@ export const wave3Migrations: Migration[] = [
     id: "w3_017_agent_pr_watch",
     sql: "ALTER TABLE agents ADD COLUMN pr_watch INTEGER NOT NULL DEFAULT 0;",
   },
+  {
+    // Log-scan rows belong to a project, not an agent: agent_id NULL + project_id, both FKs
+    // cascade. Old log_scan rows double-counted content blocks; the next scan restores them.
+    id: "w3_018_token_usage_scan_key",
+    sql: `CREATE TABLE token_usage_new (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT,
+      project_id TEXT,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0.0,
+      tool_call_count INTEGER NOT NULL DEFAULT 0,
+      recorded_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      source TEXT NOT NULL DEFAULT 'agent' CHECK (source IN ('agent', 'log_scan')),
+      dedup_key TEXT UNIQUE,
+      CHECK (agent_id IS NOT NULL OR project_id IS NOT NULL),
+      FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    );
+    INSERT INTO token_usage_new (id, agent_id, provider, model, input_tokens, output_tokens,
+      estimated_cost_usd, tool_call_count, recorded_at, source)
+      SELECT id, agent_id, provider, model, input_tokens, output_tokens,
+        estimated_cost_usd, tool_call_count, recorded_at, source FROM token_usage
+      WHERE source != 'log_scan' AND agent_id IN (SELECT id FROM agents);
+    DROP TABLE token_usage;
+    ALTER TABLE token_usage_new RENAME TO token_usage;
+    CREATE INDEX IF NOT EXISTS idx_token_usage_agent ON token_usage(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_project ON token_usage(project_id);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_recorded ON token_usage(recorded_at);`,
+  },
 ];

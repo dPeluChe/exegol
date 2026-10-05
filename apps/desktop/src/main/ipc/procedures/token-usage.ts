@@ -1,13 +1,16 @@
-import { nanoid } from "nanoid";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   getAgentCosts,
   getDailyTrend,
   getModelBreakdown,
   getPipelineRunCost,
+  getProject,
   getProjectTokenUsage,
   getProjectTokenUsageSummary,
   getTokenUsageSummary,
+  importScannedTokenUsage,
+  listWorktrees,
 } from "../../db/queries";
 import { scanAllLogs } from "../../tokens/log-parser";
 import { publicProcedure, router } from "../trpc";
@@ -41,51 +44,15 @@ export const tokenUsageRouter = router({
 
   /** Scan local CLI logs and import token usage into the database */
   scan: publicProcedure
-    .input(z.object({ projectId: z.string() }).optional())
+    .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
       const since = Math.floor(Date.now() / 1000) - 30 * 86400; // Last 30 days
-      const { entries } = await scanAllLogs(since);
-      const agentId = input?.projectId ? `scan:${input.projectId}` : "external";
-
-      // Dedup: check existing entries to avoid re-importing on repeated scans
-      const existingCheck = ctx.db.prepare(
-        `SELECT COUNT(*) as cnt FROM token_usage
-         WHERE agent_id = ? AND model = ? AND input_tokens = ? AND output_tokens = ? AND source = 'log_scan'`,
-      );
-
-      // Insert with source='log_scan' to distinguish scanned records from agent records
-      const insertStmt = ctx.db.prepare(
-        `INSERT INTO token_usage (id, agent_id, provider, model, input_tokens, output_tokens, estimated_cost_usd, tool_call_count, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'log_scan')`,
-      );
-
-      let imported = 0;
-      let skipped = 0;
-      for (const entry of entries) {
-        const existing = existingCheck.get(
-          agentId,
-          entry.model,
-          entry.inputTokens,
-          entry.outputTokens,
-        ) as { cnt: number };
-        if (existing.cnt > 0) {
-          skipped++;
-          continue;
-        }
-
-        insertStmt.run(
-          nanoid(),
-          agentId,
-          entry.provider,
-          entry.model,
-          entry.inputTokens,
-          entry.outputTokens,
-          entry.estimatedCostUsd,
-          entry.toolCallCount,
-        );
-        imported++;
-      }
-
+      // CLI logs cover every project on the machine: keep sessions run in this one or its worktrees
+      const roots = [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)];
+      const { entries } = await scanAllLogs(since, undefined, roots);
+      const { imported, skipped } = await importScannedTokenUsage(ctx.db, project.id, entries);
       return { imported, skipped, total: entries.length };
     }),
 

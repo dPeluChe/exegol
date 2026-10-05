@@ -73,7 +73,12 @@ describe("parseCodexSessionFile", () => {
       [
         JSON.stringify({
           type: "session_meta",
-          payload: { model: "gpt-5", model_provider: "openai", timestamp: iso(now - 120) },
+          payload: {
+            model: "gpt-5",
+            model_provider: "openai",
+            timestamp: iso(now - 120),
+            cwd: "/repo",
+          },
         }),
         count(100, 10),
         count(250, 40),
@@ -81,7 +86,12 @@ describe("parseCodexSessionFile", () => {
     );
     const entries = await parseCodexSessionFile(file, since);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ model: "gpt-5", inputTokens: 250, outputTokens: 40 });
+    expect(entries[0]).toMatchObject({
+      model: "gpt-5",
+      inputTokens: 250,
+      outputTokens: 40,
+      cwd: "/repo",
+    });
   });
 });
 
@@ -90,5 +100,84 @@ describe("mayCarryClaudeUsage", () => {
     expect(mayCarryClaudeUsage(claudeLine(1, 1))).toBe(true);
     expect(mayCarryClaudeUsage('{"costUSD":0.1,"inputTokens":3}')).toBe(true);
     expect(mayCarryClaudeUsage('{"type":"user","message":"hello"}')).toBe(false);
+  });
+});
+
+describe("Claude transcripts", () => {
+  const nested = (
+    id: string,
+    block: string,
+    usage: Record<string, unknown>,
+    requestId = "req_1",
+    cwd = "/repo",
+  ) =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: iso(now - 60),
+      sessionId: "s1",
+      requestId,
+      cwd,
+      message: { id, model: "claude-sonnet-4-6", content: [{ type: block }], usage },
+    });
+
+  function write(lines: string[], dir = "-repo", name = "s.jsonl"): void {
+    const path = join(home, ".claude", "projects", dir);
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, name), `${lines.join("\n")}\n`);
+  }
+
+  it("reads nested message.usage and counts a message once across its content blocks", async () => {
+    const usage = {
+      input_tokens: 10,
+      output_tokens: 100,
+      cache_read_input_tokens: 1_000_000,
+      cache_creation_input_tokens: 300_000,
+      cache_creation: { ephemeral_5m_input_tokens: 100_000, ephemeral_1h_input_tokens: 200_000 },
+    };
+    write([
+      nested("msg_1", "thinking", usage),
+      nested("msg_1", "text", usage),
+      nested("msg_1", "tool_use", usage),
+      nested("msg_2", "text", { input_tokens: 5, output_tokens: 7 }, "req_2"),
+    ]);
+    const { entries } = await scanAllLogs(since, home);
+    expect(entries.map((e) => [e.key, e.inputTokens, e.outputTokens, e.cwd])).toEqual([
+      ["claude:msg_1:req_1", 10, 100, "/repo"],
+      ["claude:msg_2:req_2", 5, 7, "/repo"],
+    ]);
+    // Sonnet $3/$15: (10 + 1M x 0.1 + 100k x 1.25 + 200k x 2) at input, 100 at output
+    expect(entries[0]?.estimatedCostUsd).toBeCloseTo(
+      (10 + 100_000 + 125_000 + 400_000) * 3e-6 + 100 * 15e-6,
+    );
+  });
+
+  it("still reads the older top-level usage shape", async () => {
+    write([claudeLine(10, 5), claudeLine(20, 7)]);
+    const { entries } = await scanAllLogs(since, home);
+    expect(entries.map((e) => [e.model, e.inputTokens, e.outputTokens])).toEqual([
+      ["claude-sonnet-4-6", 10, 5],
+      ["claude-sonnet-4-6", 20, 7],
+    ]);
+    expect(new Set(entries.map((e) => e.key)).size).toBe(2);
+  });
+
+  it("with roots keeps sessions in the project, a subfolder or a worktree, and nothing else", async () => {
+    const usage = { input_tokens: 1, output_tokens: 1 };
+    write([nested("in_repo", "text", usage, "r1", "/repo")], "-repo");
+    write([nested("in_sub", "text", usage, "r2", "/repo/sub")], "-repo-sub");
+    write([nested("in_wt", "text", usage, "r3", "/wt/a")], "-wt-a");
+    write([nested("sibling", "text", usage, "r4", "/repo2")], "-repo2");
+    // Same folder name as /repo-x but the transcript says /other: the cwd check drops it
+    write([nested("lossy", "text", usage, "r5", "/other")], "-repo-x");
+    writeFileSync(
+      join(home, ".aider.chat.history.md"),
+      "Tokens: 1k sent, 1k received. Cost: $0.01",
+    );
+    const { entries } = await scanAllLogs(since, home, ["/repo", "/wt/a"]);
+    expect(entries.map((e) => e.key).sort()).toEqual([
+      "claude:in_repo:r1",
+      "claude:in_sub:r2",
+      "claude:in_wt:r3",
+    ]);
   });
 });

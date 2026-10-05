@@ -434,11 +434,6 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     (`perf/pack-2`, `TASK_COMPLETED/2610.md`). Left:
     - Search: give the Rust walker a nested-`.git` scope so a workspace is one walk instead of
       the per-folder loop (the loop now runs async on the libuv pool, 2 folders at a time)
-    - Claude token import (T183.1 tokens track): Claude transcripts nest usage under
-      `message.usage`, so almost nothing imports (the extractor reads top-level `usage`). The fix
-      needs dedup by `message.id` (one line per content block repeats the same usage), and then
-      the per-entry `existingCheck` SELECT loop in `ipc/procedures/token-usage.ts` becomes a sync
-      hot spot. Separate PR with its own changelog entry
 
 ---
 
