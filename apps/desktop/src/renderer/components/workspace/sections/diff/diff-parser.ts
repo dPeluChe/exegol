@@ -23,6 +23,7 @@ export interface DiffFile {
   hunks: DiffHunk[];
   isNew: boolean;
   isDeleted: boolean;
+  isRenamed: boolean;
 }
 
 export function parseUnifiedDiff(raw: string): DiffFile[] {
@@ -45,6 +46,7 @@ export function parseUnifiedDiff(raw: string): DiffFile[] {
       hunks: [],
       isNew: false,
       isDeleted: false,
+      isRenamed: false,
     };
 
     i++; // skip "diff --git" line
@@ -59,6 +61,12 @@ export function parseUnifiedDiff(raw: string): DiffFile[] {
       const line = lines[i] ?? "";
       if (line.startsWith("new file")) file.isNew = true;
       if (line.startsWith("deleted file")) file.isDeleted = true;
+      // A pure rename has no ---/+++ lines: these are its only paths
+      if (line.startsWith("rename from ")) file.oldPath = line.slice(12);
+      if (line.startsWith("rename to ")) {
+        file.newPath = line.slice(10);
+        file.isRenamed = true;
+      }
       i++;
     }
 

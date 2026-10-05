@@ -26,12 +26,15 @@ export function resolveProjectPath(db: Database.Database, projectId: string): st
   return row.path;
 }
 
+const GIT_MAX_BUFFER = 5 * 1024 * 1024;
+
+function execGit(cwd: string, args: string[]) {
+  return execFileAsync("git", args, { cwd, maxBuffer: GIT_MAX_BUFFER });
+}
+
 export async function runGitDiff(cwd: string, args: string[]): Promise<string> {
   try {
-    const { stdout } = await execFileAsync("git", ["diff", ...args], {
-      cwd,
-      maxBuffer: 5 * 1024 * 1024, // 5MB
-    });
+    const { stdout } = await execGit(cwd, ["diff", ...args]);
     return stdout;
   } catch (err: unknown) {
     // git diff returns exit code 1 when there are differences
@@ -42,5 +45,29 @@ export async function runGitDiff(cwd: string, args: string[]): Promise<string> {
       code: "INTERNAL_SERVER_ERROR",
       message: `Failed to run git diff: ${err}`,
     });
+  }
+}
+
+/** The lines of a failed git run worth showing: its fatal/error lines, else the last few */
+export function gitErrorSummary(err: unknown): string {
+  const e = err as { stderr?: unknown; stdout?: unknown; message?: unknown };
+  const text =
+    String(e?.stderr ?? "").trim() || String(e?.stdout ?? "").trim() || String(e?.message ?? err);
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("hint:"));
+  const errors = lines.filter((l) => /^(fatal|error):/i.test(l));
+  const summary = (errors.length > 0 ? errors : lines.slice(-3)).join("\n");
+  return summary.length > 400 ? `${summary.slice(0, 400)}…` : summary;
+}
+
+/** Runs git; a failure throws an Error carrying git's own message instead of "Command failed" */
+export async function runGit(cwd: string, args: string[]): Promise<string> {
+  try {
+    const { stdout } = await execGit(cwd, args);
+    return stdout;
+  } catch (err) {
+    throw new Error(gitErrorSummary(err));
   }
 }
