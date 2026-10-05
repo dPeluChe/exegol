@@ -7,13 +7,13 @@ import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-confi
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
 import { expectReattach, settleReattach } from "../terminal/reattach-gate";
-import { createOutputProcessor } from "./agent-output-processor";
 import {
   appendScrollback,
   createSpawnCallbacks,
   type SessionMaps,
 } from "./agent-session-callbacks";
 import { cleanupWorktree, hydrateTrackedWorktree, type WorktreeRecord } from "./agent-worktree-ops";
+import { attachOutputPipeline, detachOutputPipeline } from "./output-pipeline";
 import { readableStep } from "./readable-step";
 import { getProviderRegistry } from "./registry";
 import {
@@ -100,14 +100,6 @@ export async function reattachSidecarAgents(
 
     try {
       hydrateTrackedWorktree(db, agentId, worktrees);
-      if (!isShell) {
-        maps.outputProcessors.set(agentId, createOutputProcessor(agentId, cliType, resumePattern));
-        maps.scrollbackBuffers.set(agentId, []);
-        maps.scrollbackSizes.set(agentId, 0);
-      }
-
-      const scrollbackPath = isShell ? undefined : getScrollbackPath(agentId);
-
       const agent: AgentContext = {
         id: agentId,
         cliType,
@@ -115,6 +107,9 @@ export async function reattachSidecarAgents(
         taskDescription: (row.task_description as string) ?? "",
         launchedInShell: row.launched_in_shell === 1,
       };
+      if (!isShell) attachOutputPipeline(maps, agent);
+
+      const scrollbackPath = isShell ? undefined : getScrollbackPath(agentId);
 
       const callbacks = createSpawnCallbacks(
         db,
@@ -149,9 +144,7 @@ export async function reattachSidecarAgents(
         // Previously this was a silent `continue`, which left the agent in
         // DB as "running" with no PTY, producing a broken pane that the
         // renderer couldn't recover from.
-        maps.outputProcessors.delete(agentId);
-        maps.scrollbackBuffers.delete(agentId);
-        maps.scrollbackSizes.delete(agentId);
+        detachOutputPipeline(maps, agentId);
         result.deadIds.add(agentId);
         logger.warn(
           `[Reattach] Dead sidecar session for ${agentId} (${cliType}) — PTY not alive after reattach, will be marked crashed`,
@@ -224,9 +217,7 @@ export async function reattachSidecarAgents(
       result.aliveIds.add(agentId);
       logger.info(`[Reattach] OK — reattached ${agentId} (${cliType}), PTY alive`);
     } catch (err) {
-      maps.outputProcessors.delete(agentId);
-      maps.scrollbackBuffers.delete(agentId);
-      maps.scrollbackSizes.delete(agentId);
+      detachOutputPipeline(maps, agentId);
       result.failedIds.add(agentId);
       logger.warn(`[Reattach] FAILED ${agentId} (${cliType}): ${err}`);
     }
