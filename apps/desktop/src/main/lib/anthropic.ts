@@ -1,3 +1,4 @@
+import { runClaudePrint } from "./claude-print";
 import { PermanentError, TimeoutError, TransientError, withRetry } from "./errors";
 
 interface AnthropicMessageResult {
@@ -7,7 +8,9 @@ interface AnthropicMessageResult {
 }
 
 interface AnthropicCallOptions {
-  apiKey: string;
+  /** null: through the logged-in Claude CLI (`claude -p`). Only for features the user asks for:
+   *  background ones (evaluator, evidence, scoring) would spend their plan limits unseen */
+  apiKey: string | null;
   model: string;
   maxTokens: number;
   prompt: string;
@@ -25,6 +28,8 @@ interface AnthropicCallOptions {
 export async function callAnthropicMessage(
   opts: AnthropicCallOptions,
 ): Promise<AnthropicMessageResult> {
+  const { apiKey } = opts;
+  if (!apiKey) return runClaudePrint(opts.prompt, opts.model, opts.timeoutMs);
   return withRetry(
     async () => {
       let res: Response;
@@ -33,7 +38,7 @@ export async function callAnthropicMessage(
           method: "POST",
           headers: {
             "content-type": "application/json",
-            "x-api-key": opts.apiKey,
+            "x-api-key": apiKey,
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
