@@ -83,6 +83,10 @@ interface Window {
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
     /** T200.5: an agent's turn changes were recorded or undone */
     onTurnChanges: (callback: (event: { agentId: string }) => void) => () => void;
+    /** Startup reattach progress (each session back, then done) */
+    onRecoveryProgress: (
+      callback: (state: import("@exegol/shared").SessionRecoveryState) => void,
+    ) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
     /** T200.4: an agent's follow-up queue changed */
     onFollowUps: (

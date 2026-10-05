@@ -7,7 +7,8 @@ import { useAgentStore } from "../stores/agents";
 /**
  * Every project's live agents in the store, from startup. Only the active project was loaded
  * (the Dashboard did the rest), so after a restart the sidebar counts stayed empty until each
- * project was opened. `agents.listActive` answers after the sidecar reattach.
+ * project was opened. `agents.listActive` answers at once, mid-reattach too: the sidebar lists the
+ * sessions while they reconnect, and the end of recovery refetches it.
  */
 export function useFleetSync<T extends Agent = Agent>(): T[] | undefined {
   const { data } = useQuery({

@@ -64,7 +64,9 @@ export function registerIpcHandlers(): void {
     getPtyHost().clear(agentId);
   });
 
-  ipcMain.handle("terminal:get-size", (_event, agentId: string) => {
+  // A mirror sizes itself from this before its snapshot: before the reattach there is no size yet
+  ipcMain.handle("terminal:get-size", async (_event, agentId: string) => {
+    await whenSessionReady(agentId);
     return getPtyHost().getSize(agentId);
   });
 

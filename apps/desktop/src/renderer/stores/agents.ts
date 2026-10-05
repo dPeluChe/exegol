@@ -12,6 +12,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { nextActivitySince } from "../lib/busy-time";
+import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
@@ -131,7 +132,16 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
       }
     }
   });
+  const stopRecovery = window.api.onRecoveryProgress((state) => {
+    queryClient.setQueryData(RECOVERY_KEY, state);
+    if (!state.done) return;
+    useAgentStore.setState((s) => ({ agents: applyRecoveredCrashes(s.agents, state.crashed) }));
+    // Panes and lists read DB statuses from before the sweep
+    queryClient.invalidateQueries({ queryKey: ["agents"] });
+    queryClient.invalidateQueries({ queryKey: ["agent"] });
+  });
   pushCleanup = () => {
+    stopRecovery();
     offPrWatch();
     stopFollowUps();
     stopTurns();

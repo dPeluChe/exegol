@@ -1,4 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
+import { recoveryQuery } from "../lib/session-recovery";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
 import { useWorkspaceStore } from "../stores/workspace";
@@ -30,8 +32,12 @@ function collectPanedAgentIds(): Set<string> {
  */
 export function usePanelessAgentSweep(): void {
   const attemptedStops = useRef(new Set<string>());
+  const queryClient = useQueryClient();
   useEffect(() => {
-    const sweep = () => {
+    const sweep = async () => {
+      // The store lists every session before it is reattached: stopping one then raced the reattach
+      const recovery = await queryClient.ensureQueryData(recoveryQuery).catch(() => null);
+      if (!recovery?.done) return;
       const paned = collectPanedAgentIds();
       const { agents, attentionItems, dismissAttention } = useAgentStore.getState();
       for (const agent of Object.values(agents)) {
@@ -57,5 +63,5 @@ export function usePanelessAgentSweep(): void {
       clearTimeout(initial);
       clearInterval(interval);
     };
-  }, []);
+  }, [queryClient]);
 }

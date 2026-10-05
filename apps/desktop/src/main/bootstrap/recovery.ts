@@ -1,4 +1,4 @@
-import { markRecoveryDone, setLostOnRestart } from "../agents/lost-sessions";
+import { setLostOnRestart } from "../agents/lost-sessions";
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { recoverStaleAgents } from "../db/queries";
@@ -149,6 +149,7 @@ export async function runStartupRecovery(): Promise<void> {
       }
     }
   }
+  let crashedIds: string[] = [];
   try {
     // Only agents that are ACTUALLY alive get skipped from the crash sweep.
     // Dead sidecar sessions (session map still populated during grace period
@@ -186,6 +187,7 @@ export async function runStartupRecovery(): Promise<void> {
       }
     }
     const recovery = recoverStaleAgents(getDb(), aliveSkipIds);
+    crashedIds = recovery.crashedIds;
     logger.info(
       `[Startup] Crash sweep: marked ${recovery.crashed} agent(s) as crashed (${recovery.alive} alive)`,
     );
@@ -213,7 +215,6 @@ export async function runStartupRecovery(): Promise<void> {
   } catch (err) {
     logger.error("[Startup] Agent recovery failed (non-fatal):", err);
   } finally {
-    settleAllReattach();
-    markRecoveryDone();
+    settleAllReattach(crashedIds);
   }
 }

@@ -279,11 +279,14 @@ export function TerminalViewToggle({
 
 export function LiveStartOverlay({
   cliType,
+  reconnecting = false,
   timedOut,
   onDismiss,
   onOpenTerminal,
 }: {
   cliType?: string;
+  /** Startup reattach still on its way to this session */
+  reconnecting?: boolean;
   timedOut: boolean;
   onDismiss: () => void;
   /** T155 (verify session): convert the dead pane into a plain shell so the
@@ -318,7 +321,9 @@ export function LiveStartOverlay({
       ) : (
         <>
           <Loader2 className="h-5 w-5 animate-spin text-accent" />
-          <span className="text-[11px] text-text-muted">Starting {cliType ?? "agent"}...</span>
+          <span className="text-[11px] text-text-muted">
+            {reconnecting ? "Reconnecting" : "Starting"} {cliType ?? "agent"}...
+          </span>
         </>
       )}
     </div>

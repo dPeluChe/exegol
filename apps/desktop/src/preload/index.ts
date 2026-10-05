@@ -176,6 +176,13 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:pr-watch", handler as never);
     };
   },
+  onRecoveryProgress: (callback: (state: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("recovery:progress", handler as never);
+    return () => {
+      safe.off("recovery:progress", handler as never);
+    };
+  },
   onMetrics: (callback: (metrics: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("metrics:update", handler as never);

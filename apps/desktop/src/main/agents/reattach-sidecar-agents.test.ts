@@ -1,7 +1,13 @@
 import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const pty = vi.hoisted(() => ({ alive: true }));
+const pty = vi.hoisted(() => ({
+  alive: true,
+  delayMs: 0,
+  inFlight: 0,
+  maxInFlight: 0,
+  order: [] as string[],
+}));
 
 vi.mock("../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn() } }));
 vi.mock("../db/queries", () => ({ updateAgentStatus: vi.fn() }));
@@ -16,11 +22,17 @@ vi.mock("../mcp/exegol-server", () => ({
 }));
 vi.mock("../terminal/pty-host", () => ({
   getPtyHost: () => ({
-    reattachSession: async () => "",
+    reattachSession: async (id: string) => {
+      pty.order.push(id);
+      pty.maxInFlight = Math.max(pty.maxInFlight, ++pty.inFlight);
+      await new Promise((r) => setTimeout(r, pty.delayMs));
+      pty.inFlight--;
+      return "";
+    },
     isAlive: () => pty.alive,
   }),
 }));
-vi.mock("../terminal/reattach-gate", () => ({ expectReattach: vi.fn(), settleReattach: vi.fn() }));
+vi.mock("../lib/event-bus", () => ({ broadcast: vi.fn() }));
 vi.mock("./agent-output-processor", () => ({ createOutputProcessor: () => ({}) }));
 vi.mock("./agent-session-callbacks", () => ({
   appendScrollback: vi.fn(),
@@ -37,6 +49,7 @@ vi.mock("./spawn-env", () => ({
   DEFAULT_PTY_ROWS: 24,
 }));
 
+import { getRecoveryState, whenSessionReady } from "../terminal/reattach-gate";
 import type { SessionMaps } from "./agent-session-callbacks";
 import { reattachSidecarAgents } from "./reattach-sidecar-agents";
 import { broadcastAgentStatus } from "./spawn-env";
@@ -80,6 +93,9 @@ async function reattach(cliType: string) {
 describe("reattachSidecarAgents output pipeline", () => {
   beforeEach(() => {
     pty.alive = true;
+    pty.delayMs = 0;
+    pty.maxInFlight = 0;
+    pty.order = [];
     vi.mocked(broadcastAgentStatus).mockClear();
   });
   afterEach(() => vi.useRealTimers());
@@ -118,5 +134,35 @@ describe("reattachSidecarAgents output pipeline", () => {
     expect(maps.outputProcessors.size).toBe(0);
     expect(maps.titleTrackers.size).toBe(0);
     expect(maps.scrollbackBuffers.size).toBe(0);
+  });
+});
+
+describe("reattachSidecarAgents pool", () => {
+  it("reattaches 3 at a time, a session a pane waits on next", async () => {
+    pty.alive = true;
+    pty.delayMs = 20;
+    pty.maxInFlight = 0;
+    pty.order = [];
+    const db = setupDb();
+    const ids = Array.from({ length: 9 }, (_, i) => `s${i}`);
+    for (const id of ids) {
+      db.prepare(
+        "INSERT INTO agents (id, cli_type, project_id, task_description, status) VALUES (?, 'shell', 'p1', '', 'running')",
+      ).run(id);
+    }
+    const started = Date.now();
+    const run = reattachSidecarAgents(db, ids, emptyMaps(), new Map(), 1024);
+    // A pane mounts while the first three are in flight
+    const waited = whenSessionReady("s7");
+    const result = await run;
+    const elapsed = Date.now() - started;
+    await waited;
+
+    expect(result.aliveIds.size).toBe(9);
+    expect(pty.order.slice(0, 4)).toEqual(["s0", "s1", "s2", "s7"]);
+    expect(pty.maxInFlight).toBe(3);
+    // 3 rounds of 20ms, not 9 one after another
+    expect(elapsed).toBeLessThan(9 * 20);
+    expect(getRecoveryState().ready).toEqual(expect.arrayContaining(ids));
   });
 });
