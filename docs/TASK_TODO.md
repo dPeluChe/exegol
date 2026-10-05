@@ -392,6 +392,9 @@ exchange-bus MVP only, no headless council executions. Absorbs:
      sessions have a live view.
    - (P2) Renderer-acked, per-session flow control: `OutputGate` pauses every PTY when one socket
      backs up (terax `pty/output.rs`, klaudio 10d1e70).
+   - Snapshot only the ring tail (~1 MB) on reattach: needs a sidecar change + SIDECAR_VERSION
+     bump, which restarts every live PTY once; schedule with the user. Today each full 8 MB ring
+     takes ~2s to serve and parse (23 sessions in 15.9s, 0.5.15 log)
 10. **Polls**: GitPane / SmartGitAction / TerminalPanel poll git status + `gh pr view` every 15s;
     refetch on turn-end / commit / push events instead. The PR poll part is shared with T142.
     > Merged from the "Queue after 0.5.7" performance follow-ups (0.5.3 audit) on 2026-10-04.

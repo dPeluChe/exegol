@@ -44,6 +44,7 @@ export class HeadlessEmulator {
   private _modes: TerminalModes = { ...DEFAULT_MODES };
   private _revision = 0;
   private _hasContent = false;
+  private parseWaiters = new Set<() => void>();
 
   constructor(cols: number, rows: number, scrollback = 5000) {
     this.terminal = new Terminal({ cols, rows, scrollback, allowProposedApi: true });
@@ -53,10 +54,26 @@ export class HeadlessEmulator {
 
   /** Feed raw terminal data */
   write(data: string): void {
+    this.queue(data);
+  }
+
+  /** xterm only queues a write: a snapshot taken before it is parsed misses it (a reattached
+   *  pane got an empty screen) */
+  writeParsed(data: string): Promise<void> {
+    return new Promise((resolve) => {
+      this.parseWaiters.add(resolve);
+      this.queue(data, () => {
+        this.parseWaiters.delete(resolve);
+        resolve();
+      });
+    });
+  }
+
+  private queue(data: string, onParsed?: () => void): void {
     this._revision++;
     if (data.length > 0) this._hasContent = true;
     this.parseDecModes(data);
-    this.terminal.write(data);
+    this.terminal.write(data, onParsed);
   }
 
   /**
@@ -144,6 +161,8 @@ export class HeadlessEmulator {
   }
 
   dispose(): void {
+    for (const resolve of this.parseWaiters) resolve();
+    this.parseWaiters.clear();
     this.terminal.dispose();
   }
 

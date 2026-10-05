@@ -156,7 +156,7 @@ export class PtyHost {
     let snapshot: string | null = null;
     try {
       snapshot = await this.sidecarClient.snapshot(id);
-      if (snapshot) emulator.write(snapshot);
+      if (snapshot) await emulator.writeParsed(snapshot);
     } catch {
       // Snapshot unavailable — session still reattaches, just without scrollback history
     }
