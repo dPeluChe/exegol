@@ -320,7 +320,6 @@ pub fn list_worktrees(repo_path: String) -> Result<Vec<WorktreeInfo>, Error> {
 }
 
 /// Check if a worktree (or any repo working directory) has uncommitted changes.
-#[napi]
 pub fn worktree_has_changes(worktree_path: String) -> Result<bool, Error> {
   check_has_changes(&worktree_path)
 }

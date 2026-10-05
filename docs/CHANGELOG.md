@@ -26,6 +26,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Git pane: the Changes diff showed staged edits too; it now shows only what is not staged. A file with staged and unstaged edits is listed under both, each with its own diff
 - Git pane: renamed files show as `old → new`, and staging or unstaging one moves both paths (before, it passed the arrow text to git and failed)
 - Git pane: a failed stage, unstage, commit or push, or a failed worktree delete, shows git's own error instead of doing nothing; Agent Ops no longer offers Undo on a worktree creation it cannot undo
+- After an app restart, Claude Code, Gemini, Codex and Crush sessions show working and waiting again from their terminal title, as they do before the restart
 - Agents in a worktree or pipeline folder of a project you trusted in Claude no longer stop on Claude's "trust this folder?" prompt
 - Agents launched from an Exegol started inside another Claude session (a dev build in an agent's terminal) kept that session's markers, and Claude silently stopped saving their conversation; they start clean now
 - A pane or Dashboard card that hits an error shows it in place with "Show it again", instead of blanking the whole window
