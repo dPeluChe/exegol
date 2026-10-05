@@ -72,6 +72,7 @@ export const oplogRouter = router({
         message: "This agent worked in a worktree; undo would rewrite the main checkout",
       });
     }
+    // Sync on purpose: an await here would let a write land between the dirty check and the revert
     if (coreRust.worktreeHasChanges(project.path)) {
       throw new TRPCError({
         code: "PRECONDITION_FAILED",

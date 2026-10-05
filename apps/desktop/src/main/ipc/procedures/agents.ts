@@ -637,8 +637,8 @@ export const agentRouter = router({
         force: z.boolean().default(false),
       }),
     )
-    .mutation(({ ctx, input }) => {
-      const cleanup = promoteParallelAgent(ctx.db, input.runId, input.agentId, {
+    .mutation(async ({ ctx, input }) => {
+      const cleanup = await promoteParallelAgent(ctx.db, input.runId, input.agentId, {
         clean: input.clean,
         force: input.force,
       });
