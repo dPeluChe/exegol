@@ -23,7 +23,7 @@
 3. ~~Trust pack~~: shipped (`fix/trust-pack`): T200.1 trust inherited by worktrees, T200.2, T200.3,
    T183.2 for the commit message; left: T182.3 run-command review, T183.2 background opt-in.
 4. **Performance pack 2**: T185.19 main process off the hot path.
-5. **User features, one PR each**: T200.6 answer agent questions, T200.4 queue + steer, T200.5 undo
+5. **User features, one PR each**: ~~T200.6 answer agent questions~~ (shipped, `feat/answer-prompts`), T200.4 queue + steer, T200.5 undo
    turn, T142 PR loop phase 1 (T200.7).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
    silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
@@ -459,7 +459,9 @@ Then (S-M / M):
    > restore | manual`, content hash, size, and restore-with-diff (`local-history-api.ts`). More
    > valuable for us because AGENTS edit the files: the oplog stores git trees per operation, so
    > there is no way to open one file and see its timeline after an agent touched it.
-6. Answer agent questions from the Dashboard / notification (PermissionRequest hook body,
+6. ~~Answer agent questions~~ shipped 2026-10-04 for numbered prompts read from the screen
+   (`feat/answer-prompts`); left: notification buttons, the hook body as a cross-check. Was:
+   Answer agent questions from the Dashboard / notification (PermissionRequest hook body,
    `ask_user` MCP tool). T133 (remote channel) depends on this.
    > Merged from T171 (`added: 2026-08-13`) on 2026-10-04: **signed authorization over the agent
    > bus.** When a step genuinely needs the user, the bus has no way to carry an authorization the

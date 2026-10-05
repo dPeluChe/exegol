@@ -12,6 +12,7 @@ import {
   useAgentStore,
 } from "../../stores/agents";
 import { useNotificationPrefsStore } from "../../stores/notification-prefs";
+import { AgentQuestion } from "../agents/AgentQuestion";
 import { AgentIcon } from "../common/AgentIcon";
 
 const LEVEL_ICON: Record<AttentionLevel, typeof AlertCircle> = {
@@ -145,26 +146,31 @@ function AttentionQueueRow({ item, onClose }: { item: AttentionItem; onClose: ()
   const LevelIcon = LEVEL_ICON[item.level];
 
   return (
-    <button
-      type="button"
-      onClick={() => {
-        jumpToAgent(item.agentId, item.projectId);
-        onClose();
-      }}
-      className={cn(
-        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/5",
-        item.read && "opacity-60",
-      )}
-    >
-      <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", LEVEL_DOT[item.level])} />
-      <AgentIcon provider={item.cliType} size={13} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1 truncate text-text-primary">
-          <span className="font-medium">{project?.name ?? item.projectId.slice(0, 10)}</span>
-          <LevelIcon className="h-2.5 w-2.5 shrink-0 text-text-muted" />
-          <span className="truncate text-text-muted">{item.reason}</span>
+    <div className={cn(item.read && "opacity-60")}>
+      <button
+        type="button"
+        onClick={() => {
+          jumpToAgent(item.agentId, item.projectId);
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-white/5"
+      >
+        <div className={cn("h-1.5 w-1.5 shrink-0 rounded-full", LEVEL_DOT[item.level])} />
+        <AgentIcon provider={item.cliType} size={13} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1 truncate text-text-primary">
+            <span className="font-medium">{project?.name ?? item.projectId.slice(0, 10)}</span>
+            <LevelIcon className="h-2.5 w-2.5 shrink-0 text-text-muted" />
+            <span className="truncate text-text-muted">{item.reason}</span>
+          </div>
         </div>
+      </button>
+      <div className="px-2.5 pb-1.5 empty:hidden">
+        <AgentQuestion
+          agentId={item.agentId}
+          enabled={item.level === "action_needed" && !item.read}
+        />
       </div>
-    </button>
+    </div>
   );
 }
