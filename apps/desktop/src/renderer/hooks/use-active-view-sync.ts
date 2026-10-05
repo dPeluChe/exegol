@@ -1,3 +1,4 @@
+import type { ActiveView } from "@exegol/shared";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "../stores/app";
 import { useWatchStore } from "../stores/watch";
@@ -10,11 +11,6 @@ import {
 import { useMountEffect } from "./use-mount-effect";
 
 const SYNC_DELAY_MS = 1_000;
-
-interface ActiveView {
-  projectId: string | null;
-  agentIds: string[];
-}
 
 /** The sessions on screen, focused pane first; null when nothing project-wise is shown */
 function currentActiveView(): ActiveView | null {

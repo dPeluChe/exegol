@@ -1,13 +1,8 @@
+import type { ActiveView } from "@exegol/shared";
 import type Database from "libsql";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
 
 const ACTIVE_VIEW_KEY = "lastActiveView";
-
-/** What the user was looking at: the active tab's sessions (focused pane first) and its project */
-export interface ActiveView {
-  projectId: string | null;
-  agentIds: string[];
-}
 
 const NONE: ActiveView = { projectId: null, agentIds: [] };
 
