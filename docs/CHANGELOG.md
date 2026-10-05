@@ -27,6 +27,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The CLI updates notice and the restart-scope question show those sessions as compact chips grouped by project instead of a scrolling list; past 16, a "+N more" chip lists the rest on hover
 - Fewer stalls while agents stream: the Tokens tab scan no longer freezes the app (it reads the CLI logs in the background and skips unchanged files), and the worktree list, diffs, project search and logging no longer block the window
 - Faster start with many live agents: reconnecting a terminal rebuilds its screen without re-reading its whole history as new output (which also re-fired old status changes). Git panes no longer ask GitHub for the PR every 15 seconds (once a minute, and right after a commit, push, or a PR created or merged from Exegol), and background refreshes pause while Exegol is not the app in focus
+- Opening the app reconnects the sessions you were looking at first: the focused pane, then the rest of its tab, then its project, then everything else
 
 ### Fixed
 - Git pane: the Changes diff showed staged edits too; it now shows only what is not staged. A file with staged and unstaged edits is listed under both, each with its own diff
@@ -41,6 +42,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Scheduled tasks: cron jobs never fired (an invalid timezone option threw on every schedule). A run that hangs now times out (30 minutes, or the task's own limit), its agent and what it started are stopped, and it is recorded once as timed out; a new tick never starts a second run of the same task, and a run that finds every slot busy waits in a queue that survives a restart
 - Monitor now counts Claude Code usage: Scan Logs read almost nothing from Claude's transcripts, so its cost showed near zero. Each reply counts once, cache reads and writes are priced, Claude and Codex sessions count for the project when run in its folder or one of its worktrees (others are left out), and a rescan of thousands of replies no longer stalls the window
 - Opening the app with many live sessions: a terminal whose session was still reconnecting showed "Failed to start" until it came back; the app now reconnects several sessions at once, visible ones first, and a terminal says "Reconnecting" until its own session is back
+- Opening the app: a terminal whose session had just reconnected stayed black and ignored typing until something redrew it (its screen was read before the session's history was loaded); it now shows its screen and takes the keyboard as soon as its own session is back
 - Opening the app: the sidebar's Agents list stayed empty until every session had reconnected; it now lists them at once, each marked as reconnecting until it is back, with a "Reconnecting N sessions" note
 
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly

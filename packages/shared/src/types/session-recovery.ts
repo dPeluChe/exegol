@@ -40,3 +40,9 @@ export function reconnectingLabel(state: SessionRecoveryState | undefined): stri
   const n = reconnectingCount(state);
   return n ? `Reconnecting ${n} session${n === 1 ? "" : "s"}...` : "Reconnecting sessions...";
 }
+
+/** What the user was looking at: the active tab's sessions (focused pane first) and its project */
+export interface ActiveView {
+  projectId: string | null;
+  agentIds: string[];
+}

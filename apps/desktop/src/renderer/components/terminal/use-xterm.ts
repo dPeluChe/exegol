@@ -5,7 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
 import { useTerminalStore } from "../../stores/terminals";
-import { useWorkspaceStore } from "../../stores/workspace";
+import {
+  getFocusedOrFirstPaneId,
+  getProjectState,
+  useWorkspaceStore,
+} from "../../stores/workspace";
 import {
   fitAndSyncSize,
   fitMirror,
@@ -128,6 +132,16 @@ export function useXterm({
       window.api.terminal.redraw(agentId);
     };
 
+    // A pane mounted at startup waits for its reattach; nothing gave it the keyboard meanwhile
+    const takeKeyboard = () => {
+      if (readOnly || mirror || !paneId) return;
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      const { tabs, activeTabId } = getProjectState();
+      const tab = tabs.find((t) => t.id === activeTabId);
+      if (tab && getFocusedOrFirstPaneId(tab) === paneId) terminalRef.current?.focus();
+    };
+
     const live = latest.current;
     const next = setupTerminalSession(container, {
       agentId,
@@ -142,6 +156,7 @@ export function useXterm({
         // The alt-screen kick needs the snapshot in the buffer; at startup it waits for the
         // reattach, so a fixed timer ran before it and never kicked
         kickAltScreen();
+        takeKeyboard();
       },
       initialContent,
       fontSize,
