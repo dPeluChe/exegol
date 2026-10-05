@@ -65,6 +65,8 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
   (opencode)`
 - Status bar: agents per CLI with their working count; Codex 5h/weekly with reset; "Show plan
   usage" turns Claude's on (keychain read, no prompt expected)
+- Status bar busy time: a working session shows "N working Xm" growing every 30s; hover shows
+  working/waiting per session; a prompt left 5 minutes turns the count amber
 - Sidebar tree: a layout tab lists browser, launcher and both shells; a shell running `bun dev`
   shows it and pulses, at the prompt it is still; the + menu fits near the bottom
 - Sidebar Projects auto order: Cmd+n ones first in key order, live ones next, then A-Z; the
