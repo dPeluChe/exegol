@@ -22,9 +22,10 @@
    polls; the V8 compile cache was dropped (see `TASK_COMPLETED/2610.md`).
 3. ~~Trust pack~~: shipped (`fix/trust-pack`): T200.1 trust inherited by worktrees, T200.2, T200.3,
    T183.2 for the commit message; left: T182.3 run-command review, T183.2 background opt-in.
-4. **Performance pack 2**: T185.19 main process off the hot path.
-5. **User features, one PR each**: ~~T200.6 answer agent questions~~ (shipped, `feat/answer-prompts`), ~~T200.4 queue + steer~~ (shipped, `feat/queue-steer`), T200.5 undo
-   turn, T142 PR loop phase 1 (T200.7).
+4. ~~Performance pack 2~~: shipped (`perf/pack-2`): T185.19 main process off the hot path.
+5. ~~User features, one PR each~~: shipped: ~~T200.6 answer agent questions~~ (`feat/answer-prompts`),
+   ~~T200.4 queue + steer~~ (`feat/queue-steer`), ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR
+   loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
    silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
    T185.11 scheduler timeout, T193.2 execPath.
@@ -414,24 +415,20 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
 
 **Main process off the hot path** (P1, Priority Order #4)
-19. Everything that blocks the main thread on a polled or per-flush path.
-    > Merged from T185.6, T185.7, T185.9 and the "Queue after 0.5.7" search and main-process
-    > follow-ups (#151 simplify pass, 0.5.3 audit) on 2026-10-04.
-    - (was 6) **Tokens tab Scan** (`tokens/log-parser.ts`) is sync `readFileSync` + `JSON.parse`
-      over `~/.claude/projects`: 2.1s freeze at ~1GB. Move to a worker_thread or stream with
-      mtime skip. Same for the sync log scan in `tokens.scan`
-    - (was 7) **Headless xterm serialize on main** (`headless-emulator.ts:69`), 25-40ms per 5000
-      lines: runs on every 5s scrollback flush per agent even when idle (add a dirty flag), and
-      twice per pane mount (`use-terminal-lifecycle.ts` fetches a full snapshot to test
-      non-empty, `terminal-setup.ts` fetches again). Sync `emulator.snapshot()` per scrollback flush
-    - (was 9) **`projects.listAllWorktrees` calls sync napi `worktreeHasChanges` per worktree** on
-      the main thread (10ms/worktree here, est 150ms+ on 10k files). Use a napi AsyncTask or
-      async git status
-    - Sync napi `getDiff`/`getWorktreeDiff` on polled paths
-    - `appendFileSync` per log line
-    - Search: `fsSearch`/`fsGrep` are sync napi calls run per folder on the main process (fine at
-      3-10ms per repo, a freeze on a 30-repo workspace); make them `AsyncTask` and give the Rust
-      walker a nested-`.git` scope instead of the per-folder loop
+19. ~~Everything that blocks the main thread on a polled or per-flush path~~: shipped
+    (`perf/pack-2`, `TASK_COMPLETED/2610.md`). Left:
+    - Search: give the Rust walker a nested-`.git` scope so a workspace is one walk instead of
+      the per-folder loop (the loop now runs async on the libuv pool, 2 folders at a time)
+    - One-shot sync `worktreeHasChanges` calls (pipeline and agent worktree cleanup, race-mode
+      cleanup, oplog undo) still run on main; not polled, so left as they are. Follow-up: the 4
+      callers (`pipeline/pipeline-worktree.ts`, `agents/agent-worktree-ops.ts`,
+      `agents/race-mode.ts`, `ipc/procedures/oplog.ts`) move to `worktreeHasChangesAsync` via
+      `runNative`
+    - Claude token import (T183.1 tokens track): Claude transcripts nest usage under
+      `message.usage`, so almost nothing imports (the extractor reads top-level `usage`). The fix
+      needs dedup by `message.id` (one line per content block repeats the same usage), and then
+      the per-entry `existingCheck` SELECT loop in `ipc/procedures/token-usage.ts` becomes a sync
+      hot spot. Separate PR with its own changelog entry
 
 ---
 
@@ -453,7 +450,9 @@ Quick ones first (S):
 
 Then (S-M / M):
 4. ~~Follow-up queue + steer~~ shipped 2026-10-04 (`feat/queue-steer`, `TASK_COMPLETED/2610.md`).
-5. Per-turn snapshot, "changes this turn", Undo turn (extends T129).
+5. ~~Per-turn snapshot, "changes this turn", Undo turn (extends T129)~~: shipped on
+   `feat/undo-turn` (`TASK_COMPLETED/2610.md`), Claude Code hook turns only. Left: the per-file
+   history below, and turn snapshots for CLIs once they have hooks (item 9).
    > Merged from T179.2 (`added: 2026-08-13`) on 2026-10-04: **per-file local history** as a view
    > over the same snapshots. Athas keeps per-file snapshots with `reason: save | auto-save |
    > restore | manual`, content hash, size, and restore-with-diff (`local-history-api.ts`). More
@@ -1157,10 +1156,12 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 > Merged from T200.7, T184.8, T184.9, the `COMPETITIVE_UPDATE_2026_10.md` P2 "worktree cleanup
 > after merge" and the T174 worktree hygiene note on 2026-10-04. The PR poll itself is T185.10.
-- (T200.7) **React to PR checks, reviews and conflicts**: a `gh` poller in main; deliver at the
-  turn boundary like `agent_send`; MCP `pr_watch` (t3code `pullRequestWatch.ts`: wake cap 10, new
-  head SHA resets; agent-orchestrator `reactions.go`: dedup on content, max 3, held during a
-  permission prompt). Phase 1 of the PR loop (Priority Order #5)
+- (T200.7) **React to PR checks, reviews and conflicts**: phase 1 shipped 2026-10-04
+  (`feat/pr-watch`, `TASK_COMPLETED/2610.md`): opt-in "Watch PR" per agent, `gh` poller, boundary
+  delivery, attention. Left: MCP `pr_watch` so an agent can start its own watch
+- (T142) **The user's own PR comments are ignored**: the agent posts through the same `gh` login,
+  so PR watch skips every comment by that login. Planned heuristic: a same-login comment created
+  while the agent was idle counts as the user's
 - (T184.8) **Merge PR has no guard.** `diff-pr.ts:51-52` defaults to `--squash` +
   `--delete-branch` (strategy is now a parameter) with no base-protection check; pullfrog refuses
   a direct merge when the base is unprotected ("base branch not protected — refusing CI-ungated

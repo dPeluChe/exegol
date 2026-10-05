@@ -76,6 +76,7 @@ export const agentRowSchema = z.object({
   resume_command: optStr,
   yolo: optNum,
   muted: optNum,
+  pr_watch: optNum,
   suspended_at: optNum,
   launched_in_shell: optNum,
   cli_version: optStr,

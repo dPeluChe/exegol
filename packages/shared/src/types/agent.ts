@@ -282,6 +282,8 @@ export type Agent = {
   yolo?: boolean | null;
   /** Alive, but kept out of Needs attention and notifications */
   muted?: boolean;
+  /** Opt-in: Exegol tells it about its PR's failing checks, reviews and conflicts */
+  prWatch?: boolean;
   /** Stopped on purpose to come back later (Resume); quiet like muted */
   suspendedAt?: number | null;
   /** Started by hand in a plain terminal: the CLI can exit back to the shell prompt */
@@ -588,3 +590,9 @@ export type HistoryEntry = {
    *  which have better evidence. */
   sizeBytes: number;
 };
+
+/** What the PR watch last saw for one agent (T142) */
+export interface PrWatchStatus {
+  pr: { number: number; url: string; failingChecks: number; conflicting: boolean } | null;
+  lastPolledAt: number | null;
+}

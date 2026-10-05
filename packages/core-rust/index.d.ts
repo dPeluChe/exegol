@@ -97,35 +97,14 @@ export interface FileDiff {
   hunks: Array<DiffHunk>
 }
 
-/**
- * Regex-search file contents under `root`. Gitignore-aware by default,
- * honors `globs` include filters, skips files larger than
- * `max_file_size_kb`, stops early once `max_matches` is reached.
- *
- * `root` MUST be a directory the caller is authorized to search; this
- * function does no path validation. Returns Err on invalid regex or
- * missing root.
- */
-export declare function fsGrep(pattern: string, root: string, opts: GrepOptions): Array<GrepHit>
+/** r" Regex content search under `root`, computed off the JS thread. */
+export declare function fsGrepAsync(pattern: string, root: string, opts: GrepOptions): Promise<Array<GrepHit>>
 
-/**
- * Fuzzy-find files and directories under `root`.
- *
- * `root` MUST be a directory the caller is authorized to search; this
- * function does no path validation. Results are gitignore-aware (default)
- * and bounded by `max_results`.
- *
- * Scoring: basename substring (+200) outranks full-path substring (+100);
- * word-boundary hits add +50; subsequence-only matches score by query
- * length. Empty query returns the first `max_results` entries in walk order.
- */
-export declare function fsSearch(query: string, root: string, limits: SearchLimits): Array<SearchResult>
+/** r" Fuzzy file find under `root`, computed off the JS thread. */
+export declare function fsSearchAsync(query: string, root: string, limits: SearchLimits): Promise<Array<SearchResult>>
 
-/**
- * Get structured diff of changes (staged or unstaged).
- * Returns a list of FileDiff objects with hunks and lines.
- */
-export declare function getDiff(repoPath: string, staged: boolean): Array<FileDiff>
+/** r" Structured diff (staged or unstaged), computed off the JS thread. */
+export declare function getDiffAsync(repoPath: string, staged: boolean): Promise<Array<FileDiff>>
 
 /** Get repository information including current branch, remote URL, dirty state, and HEAD commit. */
 export declare function getRepoInfo(path: string): RepoInfo
@@ -133,8 +112,8 @@ export declare function getRepoInfo(path: string): RepoInfo
 /** Get the current repo snapshot (HEAD sha + branch + timestamp). */
 export declare function getRepoSnapshot(repoPath: string): RepoSnapshot
 
-/** Get a unified diff of all changes (staged + unstaged + untracked) in a worktree. */
-export declare function getWorktreeDiff(worktreePath: string): string
+/** r" Unified diff of a worktree, computed off the JS thread. */
+export declare function getWorktreeDiffAsync(worktreePath: string): Promise<string>
 
 /** A single line match from `fs_grep`. */
 export interface GrepHit {
@@ -335,6 +314,9 @@ export declare function stripAnsi(input: string): string
 
 /** Check if a worktree (or any repo working directory) has uncommitted changes. */
 export declare function worktreeHasChanges(worktreePath: string): boolean
+
+/** r" Whether a worktree has uncommitted changes, computed off the JS thread. */
+export declare function worktreeHasChangesAsync(worktreePath: string): Promise<boolean>
 
 /** Information about a git worktree. */
 export interface WorktreeInfo {

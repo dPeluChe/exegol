@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, renameSync, rmSync, writeSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,6 +20,8 @@ try {
 const logFile = join(LOG_DIR, "exegol.log");
 const MAX_ROTATED = 5;
 
+let fd: number | null = null;
+
 // Rotate on startup: exegol.log → exegol.1.log → … → exegol.5.log, so
 // previous sessions survive restarts (needed to diagnose crash/recovery).
 try {
@@ -29,13 +31,41 @@ try {
     if (existsSync(from)) renameSync(from, join(LOG_DIR, `exegol.${i + 1}.log`));
   }
   if (existsSync(logFile)) renameSync(logFile, join(LOG_DIR, "exegol.1.log"));
-  require("node:fs").writeFileSync(
-    logFile,
-    `--- Session started ${new Date().toISOString()} ---\n`,
-  );
+  fd = openSync(logFile, "a");
+  writeSync(fd, `--- Session started ${new Date().toISOString()} ---\n`);
 } catch {
   /* ignore */
 }
+
+// appendFileSync per line blocked the main thread on every log call: lines now
+// queue and go out in one write per 50ms.
+const FLUSH_DELAY_MS = 50;
+let pending: string[] = [];
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleFlush(): void {
+  if (flushTimer) return;
+  flushTimer = setTimeout(flushLogSync, FLUSH_DELAY_MS);
+  flushTimer.unref?.();
+}
+
+/** Also the crash and exit path: the queued lines reach disk before we die */
+export function flushLogSync(): void {
+  if (flushTimer) {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+  }
+  if (fd === null || pending.length === 0) return;
+  const batch = pending.join("");
+  pending = [];
+  try {
+    writeSync(fd, batch);
+  } catch {
+    /* non-fatal */
+  }
+}
+
+process.on("exit", flushLogSync);
 
 /** JSON.stringify(new Error()) is "{}": the message and stack were lost from every logged error */
 function formatArg(a: unknown): string {
@@ -49,10 +79,12 @@ function formatArg(a: unknown): string {
 }
 
 function writeToFile(level: string, args: unknown[]): void {
+  if (fd === null) return;
   try {
     const ts = new Date().toISOString();
     const msg = args.map(formatArg).join(" ");
-    appendFileSync(logFile, `${ts} [${level}] ${msg}\n`);
+    pending.push(`${ts} [${level}] ${msg}\n`);
+    scheduleFlush();
   } catch {
     /* non-fatal */
   }

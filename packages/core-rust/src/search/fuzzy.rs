@@ -4,7 +4,6 @@ use std::path::Path;
 
 use ignore::WalkBuilder;
 use napi::{Error, Result};
-use napi_derive::napi;
 
 use super::types::{SearchLimits, SearchResult};
 
@@ -22,7 +21,6 @@ const HARD_MAX_DEPTH: u32 = 32;
 /// Scoring: basename substring (+200) outranks full-path substring (+100);
 /// word-boundary hits add +50; subsequence-only matches score by query
 /// length. Empty query returns the first `max_results` entries in walk order.
-#[napi]
 pub fn fs_search(query: String, root: String, limits: SearchLimits) -> Result<Vec<SearchResult>> {
   let root_path = Path::new(&root);
   if !root_path.is_dir() {

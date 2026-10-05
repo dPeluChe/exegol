@@ -9,6 +9,18 @@ export async function setAgentMuted(agentId: string, muted: boolean): Promise<vo
   await trpcMutate("agents.setMuted", { id: agentId, muted });
 }
 
+/** PR watch: optimistic, rolled back if main refuses */
+export async function setAgentPrWatch(agentId: string, on: boolean): Promise<void> {
+  const store = useAgentStore.getState();
+  store.updateAgent(agentId, { prWatch: on });
+  try {
+    await trpcMutate("agents.setPrWatch", { id: agentId, on });
+  } catch (err) {
+    store.updateAgent(agentId, { prWatch: !on });
+    throw err;
+  }
+}
+
 /**
  * Suspend: stop it quietly and keep it for Resume. The flag goes on first so
  * the stop's own status event does not land in Needs attention.

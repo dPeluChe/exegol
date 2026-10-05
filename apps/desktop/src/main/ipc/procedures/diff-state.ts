@@ -1,5 +1,10 @@
+import {
+  currentBranch,
+  detectGhCli,
+  execFileAsync,
+  isDefaultBranch,
+} from "../../integrations/github/gh";
 import { AsyncLruCache } from "../../lib/lru-cache";
-import { detectGhCli, execFileAsync } from "./diff-helpers";
 
 interface GitState {
   branch: string;
@@ -60,9 +65,7 @@ async function readPrState(cwd: string): Promise<GitState["pr"]> {
 }
 
 export async function buildGitState(cwd: string, defaultBranch = "main"): Promise<GitState> {
-  const branch = await execFileAsync("git", ["branch", "--show-current"], { cwd })
-    .then(({ stdout }) => stdout.trim())
-    .catch(() => "unknown");
+  const branch = (await currentBranch(cwd)) ?? "unknown";
 
   // Upstream + ahead/behind
   let hasUpstream = false;
@@ -120,9 +123,8 @@ export async function buildGitState(cwd: string, defaultBranch = "main"): Promis
 
   // GitHub PR state (optional; only if gh is installed)
   const ghInstalled = await detectGhCli();
-  const onDefault = branch === defaultBranch || branch === "main" || branch === "master";
   const pr =
-    ghInstalled && branch !== "unknown" && !onDefault
+    ghInstalled && branch !== "unknown" && !isDefaultBranch(branch, defaultBranch)
       ? await prCache
           .getOrCompute(`${cwd}|${branch}:${ahead}:${hasUpstream}`, () => readPrState(cwd))
           .catch(() => NO_PR)

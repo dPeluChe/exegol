@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { detectGhCli, execFileAsync } from "../../integrations/github/gh";
 import { publicProcedure } from "../trpc";
-import { detectGhCli, execFileAsync, resolveProjectPath } from "./diff-helpers";
+import { resolveProjectPath } from "./diff-helpers";
 import { forgetPrState } from "./diff-state";
 
 export const prProcedures = {

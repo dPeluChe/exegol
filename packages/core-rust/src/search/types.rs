@@ -16,7 +16,7 @@ pub struct SearchResult {
 
 /// Limits applied to `fs_search` walks.
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SearchLimits {
   /// Max results to return. Default 100, hard cap 500.
   pub max_results: Option<u32>,
@@ -49,7 +49,7 @@ pub struct GrepHit {
 
 /// Options for `fs_grep`.
 #[napi(object)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GrepOptions {
   /// Case-insensitive regex. Default false.
   pub case_insensitive: Option<bool>,

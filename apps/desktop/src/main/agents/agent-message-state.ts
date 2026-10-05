@@ -44,6 +44,8 @@ export interface PendingMessage {
   crossProject: boolean;
   /** T165: id of the message this one answers, so a room stays threaded. */
   inReplyTo: string | null;
+  /** From Exegol itself (PR watch): framed as a notice, not as another agent */
+  system?: boolean;
 }
 
 export type { MessageDeliveryState };

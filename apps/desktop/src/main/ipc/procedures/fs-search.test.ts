@@ -6,8 +6,8 @@ const fsGrep = vi.fn();
 
 vi.mock("../../agents/spawn-env", () => ({
   coreRust: {
-    fsSearch: (...args: unknown[]) => fsSearch(...args),
-    fsGrep: (...args: unknown[]) => fsGrep(...args),
+    fsSearchAsync: (...args: unknown[]) => fsSearch(...args),
+    fsGrepAsync: (...args: unknown[]) => fsGrep(...args),
   },
 }));
 
@@ -37,7 +37,7 @@ describe("search root guard", () => {
 });
 
 describe("fsSearchRouter.fuzzyFind", () => {
-  it("forwards input to coreRust.fsSearch and returns its result", async () => {
+  it("forwards input to coreRust.fsSearchAsync and returns its result", async () => {
     const fake = [{ path: "/r/a.ts", relativePath: "a.ts", score: 250, isDir: false }];
     fsSearch.mockReturnValue(fake);
 
@@ -88,7 +88,7 @@ describe("fsSearchRouter.fuzzyFind", () => {
 });
 
 describe("fsSearchRouter.grep", () => {
-  it("forwards input to coreRust.fsGrep and returns its result", async () => {
+  it("forwards input to coreRust.fsGrepAsync and returns its result", async () => {
     const fake = [
       {
         path: "/r/a.ts",

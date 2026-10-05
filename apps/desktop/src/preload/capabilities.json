@@ -40,6 +40,7 @@
       "listResumable",
       "preflight",
       "previewSpawn",
+      "prWatchStatus",
       "promoteParallelAgent",
       "queueFollowUp",
       "recentSessions",
@@ -51,6 +52,7 @@
       "setMuted",
       "spawn",
       "spawnParallel",
+      "setPrWatch",
       "steer",
       "stop",
       "suspend",
@@ -162,11 +164,14 @@
       "stats"
     ],
     "oplog": [
+      "latestTurn",
       "listAgent",
       "listProject",
       "listSnapshots",
       "restoreSnapshot",
-      "undo"
+      "turnDiff",
+      "undo",
+      "undoTurn"
     ],
     "pipeline": [
       "cancelRun",
@@ -310,6 +315,7 @@
     "terminal:write",
     "terminal:resize",
     "terminal:get-snapshot",
+    "terminal:has-content",
     "terminal:save-clipboard-image",
     "terminal:get-size",
     "log:renderer-error",
@@ -323,6 +329,7 @@
     "menu:focus-location",
     "agent:status-changed",
     "agent:follow-ups",
+    "agent:pr-watch",
     "window:focus-changed",
     "metrics:update",
     "pipeline:status-changed",
@@ -349,6 +356,7 @@
     "settings:broadcast-changed",
     "settings:changed",
     "app:toggle-devtools",
-    "terminal:set-visible"
+    "terminal:set-visible",
+    "agent:turn-changes"
   ]
 }

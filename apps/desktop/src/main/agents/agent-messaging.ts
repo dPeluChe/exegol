@@ -8,7 +8,7 @@
  * agent-message-state.ts; T162 links in agent-links.ts.
  */
 
-import { LIVE_STATUSES } from "@exegol/shared";
+import { type Agent, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { getDb } from "../db/client";
 // Direct module imports (not the queries barrel): the barrel pulls
@@ -212,11 +212,7 @@ export function sendAgentMessage(
   },
 ): { messageId: string; delivered: boolean; duplicate?: boolean } {
   const { fromAgentId } = input;
-  const text = sanitize(input.text).trim();
-  if (!text) throw new AgentMessagingError("message must not be empty", -32602);
-  if (text.length > MAX_MESSAGE_CHARS) {
-    throw new AgentMessagingError(`message too long (max ${MAX_MESSAGE_CHARS})`, -32602);
-  }
+  const text = messageText(input.text);
 
   // Before ANY validation or rate accounting: a retry of a call that already
   // succeeded must be a no-op that reports the original outcome.
@@ -233,9 +229,7 @@ export function sendAgentMessage(
   if (toAgentId === fromAgentId) {
     throw new AgentMessagingError("cannot send a message to yourself", -32602);
   }
-  if (!LIVE_STATUSES.has(target.status)) {
-    throw new AgentMessagingError(`target agent is ${target.status} — not reachable`, -32011);
-  }
+  assertReachable(target);
 
   const now = Date.now();
   const dedupKey = `${fromAgentId}→${toAgentId}:${text}`;
@@ -267,11 +261,6 @@ export function sendAgentMessage(
     throw new AgentMessagingError("too many messages in flight across the fleet", -32017);
   }
 
-  const queue = queues.get(toAgentId) ?? [];
-  if (queue.length >= MAX_QUEUE_PER_TARGET) {
-    throw new AgentMessagingError("target's message queue is full", -32013);
-  }
-
   const sender = getAgent(db, fromAgentId);
   const senderTask = sender?.taskDescription?.slice(0, 60) ?? "";
   const fromLabel = sender
@@ -280,45 +269,126 @@ export function sendAgentMessage(
 
   const senderProject = sender ? getProject(db, sender.projectId) : null;
 
+  const result = enqueue(
+    db,
+    target,
+    {
+      fromAgentId,
+      fromLabel,
+      replyTarget: sender?.alias ?? fromAgentId,
+      text,
+      expectsReply: input.expectsReply ?? true,
+      senderProject: senderProject ? { name: senderProject.name, path: senderProject.path } : null,
+      crossProject: !!sender && sender.projectId !== target.projectId,
+      inReplyTo: input.inReplyTo ?? null,
+    },
+    { type: "text", clientKey: input.clientKey ?? null },
+  );
+  if (!input.system) rememberSend(dedupKey, result.messageId, now);
+  return result;
+}
+
+function messageText(raw: string): string {
+  const text = sanitize(raw).trim();
+  if (!text) throw new AgentMessagingError("message must not be empty", -32602);
+  if (text.length > MAX_MESSAGE_CHARS) {
+    throw new AgentMessagingError(`message too long (max ${MAX_MESSAGE_CHARS})`, -32602);
+  }
+  return text;
+}
+
+function assertReachable(target: Pick<Agent, "status">): void {
+  if (!LIVE_STATUSES.has(target.status)) {
+    throw new AgentMessagingError(`target agent is ${target.status} — not reachable`, -32011);
+  }
+}
+
+/** Queue cap, the message row, then inject now or wait for the boundary */
+function enqueue(
+  db: Database.Database,
+  target: Pick<Agent, "id" | "status">,
+  message: Omit<PendingMessage, "messageId" | "toAgentId">,
+  row: { type: "text" | "status"; clientKey?: string | null },
+): { messageId: string; delivered: boolean } {
+  assertReachable(target);
+  const queue = queues.get(target.id) ?? [];
+  if (queue.length >= MAX_QUEUE_PER_TARGET) {
+    throw new AgentMessagingError("target's message queue is full", -32013);
+  }
   const record = sendMessage(db, {
-    fromAgentId,
-    toAgentId,
-    type: "text",
-    content: text,
-    clientKey: input.clientKey ?? null,
+    fromAgentId: message.system ? null : message.fromAgentId,
+    toAgentId: target.id,
+    type: row.type,
+    content: message.text,
+    clientKey: row.clientKey ?? null,
     deliveryState: "queued",
   });
-  const pending: PendingMessage = {
-    messageId: record.id,
-    fromAgentId,
-    fromLabel,
-    replyTarget: sender?.alias ?? fromAgentId,
-    toAgentId,
-    text,
-    expectsReply: input.expectsReply ?? true,
-    senderProject: senderProject ? { name: senderProject.name, path: senderProject.path } : null,
-    crossProject: !!sender && sender.projectId !== target.projectId,
-    inReplyTo: input.inReplyTo ?? null,
-  };
+  const pending: PendingMessage = { ...message, messageId: record.id, toAgentId: target.id };
+  return { messageId: record.id, delivered: route(db, target.status, pending, queue) };
+}
 
-  if (!input.system) rememberSend(dedupKey, record.id, now);
-
-  // Target at its prompt → inject immediately; otherwise queue for the boundary.
-  // NEVER inject while it's on a permission dialog (see agentsAwaitingApproval).
+/**
+ * Target at its prompt → inject immediately; otherwise queue for the boundary.
+ * NEVER inject while it's on a permission dialog (see agentsAwaitingApproval).
+ */
+function route(
+  db: Database.Database,
+  targetStatus: string,
+  pending: PendingMessage,
+  queue: PendingMessage[],
+): boolean {
+  const { toAgentId } = pending;
   const atIdlePrompt =
-    (target.status === "waiting_input" || target.status === "idle") &&
+    (targetStatus === "waiting_input" || targetStatus === "idle") &&
     !agentsAwaitingApproval.has(toAgentId);
   if (atIdlePrompt && injectNow(pending)) {
-    setOutcome(db, record.id, "delivered");
-    return { messageId: record.id, delivered: true };
+    setOutcome(db, pending.messageId, "delivered");
+    return true;
   }
   queue.push(pending);
   queues.set(toAgentId, queue);
   ensureSweep();
   logger.info(
-    `[AgentMsg] Queued ${record.id} ${fromAgentId} → ${toAgentId} (target ${target.status}, ${queue.length} pending)`,
+    `[AgentMsg] Queued ${pending.messageId} ${pending.fromAgentId} → ${toAgentId} (target ${targetStatus}, ${queue.length} pending)`,
   );
-  return { messageId: record.id, delivered: false };
+  return false;
+}
+
+const EXEGOL_SENDER = {
+  fromAgentId: "exegol",
+  replyTarget: "",
+  expectsReply: false,
+  senderProject: null,
+  crossProject: false,
+  inReplyTo: null,
+  system: true,
+} as const;
+
+/**
+ * A message from Exegol itself (PR watch), not from another agent: no sender row,
+ * no reply expected, same queue and boundary rules as agent_send.
+ */
+export function sendSystemMessage(
+  db: Database.Database,
+  input: { toAgentId: string; source: string; text: string },
+): { messageId: string; delivered: boolean } | null {
+  const target = getAgent(db, input.toAgentId);
+  if (!target) return null;
+  try {
+    return enqueue(
+      db,
+      target,
+      {
+        ...EXEGOL_SENDER,
+        fromLabel: input.source,
+        text: messageText(input.text.slice(0, MAX_MESSAGE_CHARS)),
+      },
+      { type: "status" },
+    );
+  } catch (err) {
+    if (err instanceof AgentMessagingError) return null;
+    throw err;
+  }
 }
 
 /**
@@ -490,7 +560,7 @@ export function clearAgentMessageQueue(db: Database.Database, agentId: string): 
     const goneLabel = gone?.alias ?? agentId;
     const notified = new Set<string>();
     for (const p of pending) {
-      if (notified.has(p.fromAgentId)) continue;
+      if (p.system || notified.has(p.fromAgentId)) continue;
       notified.add(p.fromAgentId);
       try {
         sendAgentMessage(db, {

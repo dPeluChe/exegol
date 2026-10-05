@@ -1,13 +1,11 @@
+import type { OplogSnapshotOperation } from "@exegol/shared";
 import { coreRust } from "../agents/spawn-env";
 import { logger } from "../lib/logger";
 
 /**
  * T129 — wires the GitButler-style hidden-ref oplog chain into pipeline
- * step boundaries. STUB: turn boundaries should come from WT-A's T123
- * (mid-conversation turn signals); until that merges, a pipeline step's
- * agent process exit is used as the turn boundary (see TurnBoundary in
- * packages/shared/src/types/agent-signals.ts). Wire real turns after
- * rebasing on T123.
+ * step boundaries (a step's agent exit is its boundary). Interactive agents'
+ * hook turns commit here too, as "AgentTurn" (T200.5, agents/turn-snapshots.ts).
  *
  * Failures here are always swallowed — a broken snapshot must never break
  * pipeline execution, it just means that turn has no undo point.
@@ -36,19 +34,21 @@ export function commitStepSnapshot(
   provider: string,
   turnIndex: number,
   description: string,
-): void {
-  if (!worktreePath || !treeSha || !coreRust) return;
+  operation: OplogSnapshotOperation = "PipelineStep",
+): string | null {
+  if (!worktreePath || !treeSha || !coreRust) return null;
   try {
-    coreRust.commitTurnSnapshot(
+    return coreRust.commitTurnSnapshot(
       worktreePath,
       treeSha,
-      "PipelineStep",
+      operation,
       agentId,
       provider,
       turnIndex,
       description,
-    );
+    ).sha;
   } catch (err) {
     logger.warn("[Oplog] commit_turn_snapshot failed:", err);
+    return null;
   }
 }

@@ -15,8 +15,9 @@ import { endMark, startMark } from "./bootstrap/startup-timings";
 import { createWindow, showMainWindow } from "./bootstrap/window";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
+import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
-import { logger, markShutdown } from "./lib/logger";
+import { flushLogSync, logger, markShutdown } from "./lib/logger";
 import {
   ensureExegolMcpServerStarted,
   setMcpVerboseLogging,
@@ -60,6 +61,7 @@ app.whenReady().then(async () => {
       "Exegol could not open its database",
       `${err instanceof Error ? err.message : String(err)}\n\nDatabase: ${app.getPath("userData")}/exegol.db`,
     );
+    flushLogSync();
     app.exit(1);
     return;
   }
@@ -126,6 +128,7 @@ app.whenReady().then(async () => {
   getSchedulerEngine().start(getDb());
   getQueueExecutor().start(getDb());
   getAgentManager().startShellPromotion(getDb());
+  startPrWatch();
   getPipelineExecutor().recoverOnStartup(getDb());
   initAutoUpdater(); // Deferred: check for updates after window shows
   integrateAppImage(); // Linux AppImage: a menu entry so it can be found again
@@ -143,6 +146,7 @@ process.on("uncaughtException", (err) => {
   if (err.message?.includes("EIO") || err.message?.includes("EPIPE")) return;
   // To the log file, not just the console: a packaged app has no console
   logger.error("[Crash] Uncaught exception:", err);
+  flushLogSync();
 });
 process.on("unhandledRejection", (reason) => {
   logger.error("[Crash] Unhandled rejection:", reason);
@@ -219,6 +223,7 @@ function teardownSteps() {
     { name: "queueExecutor", run: () => getQueueExecutor().stop() },
     { name: "metrics", run: stopMetricsCollector },
     { name: "messageSweep", run: stopSweep },
+    { name: "prWatch", run: stopPrWatch },
     { name: "database", run: closeDatabase },
     // Last: it silences console output, and until now it ran FIRST — hiding
     // every [Shutdown] line in the dev terminal, the one place someone chasing

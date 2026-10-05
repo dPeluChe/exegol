@@ -92,6 +92,8 @@ contextBridge.exposeInMainWorld("api", {
       safe.send("terminal:resize", id, cols, rows),
     /** Get ring buffer snapshot for late-mounting terminals */
     getSnapshot: (id: string): Promise<string | null> => safe.invoke("terminal:get-snapshot", id),
+    /** Whether the session ever produced output, without serializing it */
+    hasContent: (id: string): Promise<boolean> => safe.invoke("terminal:has-content", id),
     /** T178: report whether this view can draw the agent. A repaint, when one is
      *  needed, arrives on terminal:data so it stays ordered with live output. */
     setVisible: (id: string, visible: boolean, viewId: string, fresh?: boolean): Promise<void> =>
@@ -166,11 +168,26 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:follow-ups", handler as never);
     };
   },
+  /** T142: the PR watch told an agent about its PR (attention item) */
+  onPrWatch: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:pr-watch", handler as never);
+    return () => {
+      safe.off("agent:pr-watch", handler as never);
+    };
+  },
   onMetrics: (callback: (metrics: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("metrics:update", handler as never);
     return () => {
       safe.off("metrics:update", handler as never);
+    };
+  },
+  onTurnChanges: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:turn-changes", handler as never);
+    return () => {
+      safe.off("agent:turn-changes", handler as never);
     };
   },
   onPipelineStatus: (callback: (event: unknown) => void) => {

@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getProject } from "../../db/queries";
+import { execFileAsync } from "../../integrations/github/gh";
+import { runNative } from "../../lib/concurrency";
 import { TimeoutError, TransientError, withRetry } from "../../lib/errors";
 import { remoteWebUrl } from "../../lib/remote-web-url";
 import { publicProcedure, router } from "../trpc";
@@ -10,7 +12,6 @@ import { aiProcedures } from "./diff-ai";
 import {
   coreRust,
   diffCache,
-  execFileAsync,
   invalidateProjectDiff,
   resolveProjectPath,
   runGitDiff,
@@ -94,7 +95,9 @@ export const diffRouter = router({
       }
       const rust = coreRust;
       const key = `${input.projectId}|structured|${input.staged}|`;
-      return diffCache.getOrCompute(key, async () => rust.getDiff(projectPath, input.staged));
+      return diffCache.getOrCompute(key, () =>
+        runNative(() => rust.getDiffAsync(projectPath, input.staged)),
+      );
     }),
 
   /** Legacy string diff — kept for backward compat, prefers Rust when available */
@@ -106,7 +109,8 @@ export const diffRouter = router({
       return diffCache.getOrCompute(key, async () => {
         if (coreRust) {
           try {
-            return coreRust.getWorktreeDiff(projectPath);
+            const rust = coreRust;
+            return await runNative(() => rust.getWorktreeDiffAsync(projectPath));
           } catch {
             // Fall through to CLI
           }

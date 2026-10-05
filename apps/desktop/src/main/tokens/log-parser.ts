@@ -1,10 +1,14 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { createReadStream } from "node:fs";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline";
+import { dayDirs } from "../history/providers/codex";
+import { mapWithConcurrency } from "../lib/concurrency";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface ParsedTokenEntry {
+export interface ParsedTokenEntry {
   provider: string;
   model: string;
   inputTokens: number;
@@ -45,11 +49,96 @@ function estimateCost(model: string, inputTokens: number, outputTokens: number):
   return (inputTokens * costs.input + outputTokens * costs.output) / 1_000_000;
 }
 
+// ─── Per-file cache ─────────────────────────────────────────────────────────
+
+// A full scan read ~1 GB synchronously (2.1-2.5s main-thread freeze). Logs are
+// append-only, so an unchanged mtime + size means the parse is still valid.
+interface CachedFile {
+  mtimeMs: number;
+  size: number;
+  since: number;
+  entries: ParsedTokenEntry[];
+}
+
+const fileCache = new Map<string, CachedFile>();
+
+type FileParser = (path: string, since: number) => Promise<ParsedTokenEntry[]>;
+
+interface ScanStats {
+  /** Files parsed, not served from the cache */
+  parsedFiles: number;
+  seen: Set<string>;
+}
+
+async function scanFile(
+  path: string,
+  since: number,
+  parse: FileParser,
+  stats: ScanStats,
+): Promise<ParsedTokenEntry[]> {
+  let info: { mtimeMs: number; size: number };
+  try {
+    info = await stat(path);
+  } catch {
+    return [];
+  }
+  if (info.mtimeMs / 1000 < since) return [];
+  stats.seen.add(path);
+  const hit = fileCache.get(path);
+  if (hit && hit.mtimeMs === info.mtimeMs && hit.size === info.size && hit.since <= since) {
+    return hit.entries.filter((e) => e.timestamp >= since);
+  }
+  let entries: ParsedTokenEntry[] = [];
+  try {
+    entries = await parse(path, since);
+  } catch {
+    /* unreadable file */
+  }
+  stats.parsedFiles++;
+  fileCache.set(path, { mtimeMs: info.mtimeMs, size: info.size, since, entries });
+  return entries;
+}
+
+/** Streams lines so a 35 MB transcript never sits in memory or blocks one tick */
+async function forEachLine(path: string, onLine: (line: string) => void): Promise<void> {
+  const lines = createInterface({
+    input: createReadStream(path, { encoding: "utf-8" }),
+    crlfDelay: Number.POSITIVE_INFINITY,
+  });
+  for await (const line of lines) onLine(line);
+}
+
 // ─── Claude Code JSONL Parser ───────────────────────────────────────────────
 
-function parseClaudeCodeLogs(sinceTimestamp: number): ParsedTokenEntry[] {
-  const claudeDir = join(homedir(), ".claude", "projects");
-  return parseJsonlDirectory(claudeDir, sinceTimestamp, "anthropic", extractClaudeTokenUsage);
+/** Only these lines can match extractClaudeTokenUsage; JSON.parse on the rest was most of the cost */
+export function mayCarryClaudeUsage(line: string): boolean {
+  return line.includes('"input_tokens"') || line.includes('"costUSD"');
+}
+
+async function parseClaudeFile(path: string, since: number): Promise<ParsedTokenEntry[]> {
+  const entries: ParsedTokenEntry[] = [];
+  await forEachLine(path, (line) => {
+    if (!mayCarryClaudeUsage(line)) return;
+    try {
+      const parsed = extractClaudeTokenUsage(JSON.parse(line), since);
+      if (parsed) entries.push(parsed);
+    } catch {
+      /* skip */
+    }
+  });
+  return entries;
+}
+
+async function listClaudeFiles(home: string): Promise<string[]> {
+  const base = join(home, ".claude", "projects");
+  const files: string[] = [];
+  for (const dir of await safeReaddir(base)) {
+    if (!dir.isDirectory()) continue;
+    for (const f of await safeReaddir(join(base, dir.name))) {
+      if (f.name.endsWith(".jsonl")) files.push(join(base, dir.name, f.name));
+    }
+  }
+  return files;
 }
 
 function extractClaudeTokenUsage(
@@ -96,194 +185,144 @@ function extractClaudeTokenUsage(
 // ─── Codex JSONL Parser (T03) ───────────────────────────────────────────────
 
 /**
- * Parse Codex (OpenAI) session logs from ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl
+ * Codex (OpenAI) session logs from ~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl.
  * Token data is in entries with payload.type === "token_count" with
- * payload.info.total_token_usage.{input_tokens, output_tokens, cached_input_tokens}
- * Model/provider comes from session_meta entry.
+ * payload.info.total_token_usage.{input_tokens, output_tokens}; the model and
+ * provider come from the session_meta entry.
  */
-function parseCodexLogs(sinceTimestamp: number): ParsedTokenEntry[] {
-  const sessionsDir = join(homedir(), ".codex", "sessions");
-  const entries: ParsedTokenEntry[] = [];
-
-  // Walk YYYY/MM/DD directory structure
-  for (const year of safeReaddir(sessionsDir)) {
-    for (const month of safeReaddir(join(sessionsDir, year))) {
-      for (const day of safeReaddir(join(sessionsDir, year, month))) {
-        const dayDir = join(sessionsDir, year, month, day);
-        for (const file of safeReaddir(dayDir).filter((f) => f.endsWith(".jsonl"))) {
-          const filePath = join(dayDir, file);
-          try {
-            if (statSync(filePath).mtimeMs / 1000 < sinceTimestamp) continue;
-          } catch {
-            continue;
-          }
-          entries.push(...parseCodexSessionFile(filePath, sinceTimestamp));
-        }
-      }
-    }
-  }
-  return entries;
+async function listCodexFiles(home: string, since: number): Promise<string[]> {
+  const dirs = await dayDirs(join(home, ".codex", "sessions"), since);
+  const perDay = await Promise.all(
+    dirs.map(async (dir) =>
+      (await safeReaddir(dir))
+        .filter((f) => f.name.endsWith(".jsonl"))
+        .map((f) => join(dir, f.name)),
+    ),
+  );
+  return perDay.flat();
 }
 
-function parseCodexSessionFile(filePath: string, since: number): ParsedTokenEntry[] {
-  const entries: ParsedTokenEntry[] = [];
-  let sessionModel = "unknown";
+/** Codex reports cumulative totals: only the LAST token_count (the session total) counts */
+export async function parseCodexSessionFile(
+  path: string,
+  since: number,
+): Promise<ParsedTokenEntry[]> {
+  let metaSeen = false;
+  let metaModel: string | null = null;
+  let fallbackModel: string | null = null;
   let sessionProvider = "openai";
   let sessionTimestamp = 0;
+  // A holder, not a `let`: TS would keep a closure-assigned local narrowed to null
+  const last: { value: { input: number; output: number; timestamp?: string } | null } = {
+    value: null,
+  };
 
-  try {
-    const content = readFileSync(filePath, "utf-8");
-    const lines = content.split("\n").filter((l) => l.trim());
-
-    // First pass: extract session meta (model, provider, timestamp)
-    for (const line of lines) {
-      try {
-        const d = JSON.parse(line) as {
-          timestamp?: string;
-          type?: string;
-          payload?: Record<string, unknown>;
-        };
-        if (d.type === "session_meta" && d.payload) {
-          sessionModel = (d.payload.model as string) ?? "unknown";
-          sessionProvider = (d.payload.model_provider as string) ?? "openai";
-          if (d.payload.timestamp) {
-            const t = new Date(d.payload.timestamp as string);
-            sessionTimestamp = Number.isNaN(t.getTime()) ? 0 : t.getTime() / 1000;
-          }
-          // Also check nested in base_instructions or collaboration_mode for model
-          break;
-        }
-      } catch {
-        /* skip */
-      }
+  await forEachLine(path, (line) => {
+    const isMeta = !metaSeen && line.includes('"session_meta"');
+    const isCount = line.includes('"token_count"');
+    if (!isMeta && !isCount && !(fallbackModel === null && line.includes('"model"'))) return;
+    let d: { timestamp?: string; type?: string; payload?: Record<string, unknown> };
+    try {
+      d = JSON.parse(line);
+    } catch {
+      return;
     }
-
-    // If no model from session_meta, try to find it in response items
-    if (sessionModel === "unknown") {
-      for (const line of lines) {
-        try {
-          const d = JSON.parse(line);
-          const model = d?.payload?.model;
-          if (typeof model === "string" && model.length > 0) {
-            sessionModel = model;
-            break;
-          }
-        } catch {
-          /* skip */
-        }
-      }
+    const payload = d.payload;
+    if (fallbackModel === null && typeof payload?.model === "string" && payload.model.length > 0) {
+      fallbackModel = payload.model;
     }
-
-    if (sessionTimestamp < since) return entries;
-
-    // Second pass: extract token_count entries
-    for (const line of lines) {
-      try {
-        const d = JSON.parse(line) as { timestamp?: string; payload?: Record<string, unknown> };
-        const payload = d.payload;
-        if (!payload || payload.type !== "token_count") continue;
-
-        const info = payload.info as Record<string, unknown> | undefined;
-        if (!info) continue;
-
-        const totalUsage = info.total_token_usage as Record<string, number> | undefined;
-        if (!totalUsage || typeof totalUsage.input_tokens !== "number") continue;
-
-        const ts = d.timestamp ? new Date(d.timestamp).getTime() / 1000 : sessionTimestamp;
-        if (ts < since) continue;
-
-        entries.push({
-          provider: sessionProvider,
-          model: sessionModel,
-          inputTokens: totalUsage.input_tokens,
-          outputTokens: totalUsage.output_tokens ?? 0,
-          estimatedCostUsd: estimateCost(
-            sessionModel,
-            totalUsage.input_tokens,
-            totalUsage.output_tokens ?? 0,
-          ),
-          toolCallCount: 0,
-          timestamp: ts,
-        });
-      } catch {
-        /* skip */
+    if (!metaSeen && d.type === "session_meta" && payload) {
+      metaSeen = true;
+      metaModel = (payload.model as string) ?? null;
+      sessionProvider = (payload.model_provider as string) ?? "openai";
+      if (payload.timestamp) {
+        const t = new Date(payload.timestamp as string);
+        sessionTimestamp = Number.isNaN(t.getTime()) ? 0 : t.getTime() / 1000;
       }
+      return;
     }
-  } catch {
-    /* unreadable file */
-  }
+    if (payload?.type !== "token_count") return;
+    const info = payload.info as Record<string, unknown> | undefined;
+    const usage = info?.total_token_usage as Record<string, number> | undefined;
+    if (usage && typeof usage.input_tokens === "number") {
+      last.value = {
+        input: usage.input_tokens,
+        output: usage.output_tokens ?? 0,
+        timestamp: d.timestamp,
+      };
+    }
+  });
 
-  // Codex reports cumulative totals — we want the LAST entry only (final session total)
-  const last = entries[entries.length - 1];
-  return last ? [last] : [];
+  if (sessionTimestamp < since || !last.value) return [];
+  const { input: inputTokens, output: outputTokens, timestamp } = last.value;
+  const ts = timestamp ? new Date(timestamp).getTime() / 1000 : sessionTimestamp;
+  if (ts < since) return [];
+  const model = metaModel ?? fallbackModel ?? "unknown";
+  return [
+    {
+      provider: sessionProvider,
+      model,
+      inputTokens,
+      outputTokens,
+      estimatedCostUsd: estimateCost(model, inputTokens, outputTokens),
+      toolCallCount: 0,
+      timestamp: ts,
+    },
+  ];
 }
 
 // ─── Aider Log Parser (T03) ────────────────────────────────────────────────
 
 /**
- * Parse Aider usage from .aider.chat.history.md files.
- * Aider logs cost/token info in markdown comments like:
- * > Tokens: 12.3k sent, 1.2k received. Cost: $0.04
+ * Aider usage from ~/.aider.chat.history.md and its token cache. The history
+ * logs cost lines like: > Tokens: 12.3k sent, 1.2k received. Cost: $0.04
  */
-function parseAiderLogs(sinceTimestamp: number): ParsedTokenEntry[] {
+function aiderFiles(home: string): string[] {
+  return [join(home, ".aider.chat.history.md"), join(home, ".aider.token.usage.cache.v1")];
+}
+
+async function parseAiderFile(filePath: string): Promise<ParsedTokenEntry[]> {
   const entries: ParsedTokenEntry[] = [];
-  const home = homedir();
-
-  // Aider stores history in project directories — scan common locations
-  const searchPaths = [
-    join(home, ".aider.chat.history.md"),
-    join(home, ".aider.token.usage.cache.v1"),
-  ];
-
-  for (const filePath of searchPaths) {
+  const content = await readFile(filePath, "utf-8");
+  // Parse token usage cache (JSON format)
+  if (filePath.endsWith(".cache.v1")) {
     try {
-      if (statSync(filePath).mtimeMs / 1000 < sinceTimestamp) continue;
-      const content = readFileSync(filePath, "utf-8");
-
-      // Parse token usage cache (JSON format)
-      if (filePath.endsWith(".cache.v1")) {
-        try {
-          const cache = JSON.parse(content) as Record<
-            string,
-            { sent: number; received: number; cost: number; model?: string }
-          >;
-          for (const [model, usage] of Object.entries(cache)) {
-            if (typeof usage.sent !== "number") continue;
-            entries.push({
-              provider: guessProvider(model),
-              model,
-              inputTokens: usage.sent,
-              outputTokens: usage.received ?? 0,
-              estimatedCostUsd: usage.cost ?? estimateCost(model, usage.sent, usage.received ?? 0),
-              toolCallCount: 0,
-              timestamp: Math.floor(Date.now() / 1000), // Cache doesn't have per-entry timestamps
-            });
-          }
-        } catch {
-          /* malformed cache */
-        }
-        continue;
-      }
-
-      // Parse markdown history for cost lines
-      const costPattern = /Tokens: ([\d.]+)k sent, ([\d.]+)k received.*?Cost: \$([\d.]+)/g;
-      let match: RegExpExecArray | null;
-      for (match = costPattern.exec(content); match !== null; match = costPattern.exec(content)) {
+      const cache = JSON.parse(content) as Record<
+        string,
+        { sent: number; received: number; cost: number; model?: string }
+      >;
+      for (const [model, usage] of Object.entries(cache)) {
+        if (typeof usage.sent !== "number") continue;
         entries.push({
-          provider: "unknown",
-          model: "aider-session",
-          inputTokens: Math.round(Number.parseFloat(match[1] ?? "0") * 1000),
-          outputTokens: Math.round(Number.parseFloat(match[2] ?? "0") * 1000),
-          estimatedCostUsd: Number.parseFloat(match[3] ?? "0"),
+          provider: guessProvider(model),
+          model,
+          inputTokens: usage.sent,
+          outputTokens: usage.received ?? 0,
+          estimatedCostUsd: usage.cost ?? estimateCost(model, usage.sent, usage.received ?? 0),
           toolCallCount: 0,
-          timestamp: Math.floor(Date.now() / 1000),
+          timestamp: Math.floor(Date.now() / 1000), // Cache doesn't have per-entry timestamps
         });
       }
     } catch {
-      /* file doesn't exist */
+      /* malformed cache */
     }
+    return entries;
   }
 
+  // Parse markdown history for cost lines
+  const costPattern = /Tokens: ([\d.]+)k sent, ([\d.]+)k received.*?Cost: \$([\d.]+)/g;
+  let match: RegExpExecArray | null;
+  for (match = costPattern.exec(content); match !== null; match = costPattern.exec(content)) {
+    entries.push({
+      provider: "unknown",
+      model: "aider-session",
+      inputTokens: Math.round(Number.parseFloat(match[1] ?? "0") * 1000),
+      outputTokens: Math.round(Number.parseFloat(match[2] ?? "0") * 1000),
+      estimatedCostUsd: Number.parseFloat(match[3] ?? "0"),
+      toolCallCount: 0,
+      timestamp: Math.floor(Date.now() / 1000),
+    });
+  }
   return entries;
 }
 
@@ -296,48 +335,12 @@ function guessProvider(model: string): string {
   return "unknown";
 }
 
-function safeReaddir(dir: string): string[] {
+async function safeReaddir(dir: string) {
   try {
-    return readdirSync(dir);
+    return await readdir(dir, { withFileTypes: true });
   } catch {
     return [];
   }
-}
-
-function parseJsonlDirectory(
-  baseDir: string,
-  sinceTimestamp: number,
-  _defaultProvider: string,
-  extractor: (entry: Record<string, unknown>, since: number) => ParsedTokenEntry | null,
-): ParsedTokenEntry[] {
-  const entries: ParsedTokenEntry[] = [];
-  for (const dir of safeReaddir(baseDir)) {
-    const projectPath = join(baseDir, dir);
-    try {
-      if (!statSync(projectPath).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    for (const file of safeReaddir(projectPath).filter((f) => f.endsWith(".jsonl"))) {
-      const filePath = join(projectPath, file);
-      try {
-        if (statSync(filePath).mtimeMs / 1000 < sinceTimestamp) continue;
-        const content = readFileSync(filePath, "utf-8");
-        for (const line of content.split("\n")) {
-          if (!line.trim()) continue;
-          try {
-            const parsed = extractor(JSON.parse(line), sinceTimestamp);
-            if (parsed) entries.push(parsed);
-          } catch {
-            /* skip */
-          }
-        }
-      } catch {
-        /* skip */
-      }
-    }
-  }
-  return entries;
 }
 
 function getTimestamp(entry: Record<string, unknown>): number {
@@ -364,9 +367,26 @@ function countToolCalls(entry: Record<string, unknown>): number {
 
 // ─── Aggregate Scanner ──────────────────────────────────────────────────────
 
-export function scanAllLogs(sinceTimestamp: number): ParsedTokenEntry[] {
-  const claude = parseClaudeCodeLogs(sinceTimestamp);
-  const codex = parseCodexLogs(sinceTimestamp);
-  const aider = parseAiderLogs(sinceTimestamp);
-  return [...claude, ...codex, ...aider];
+/** Few enough open streams that parsing still interleaves with PTY output */
+const SCAN_CONCURRENCY = 4;
+
+export async function scanAllLogs(
+  sinceTimestamp: number,
+  home = homedir(),
+): Promise<{ entries: ParsedTokenEntry[]; parsedFiles: number }> {
+  const stats: ScanStats = { parsedFiles: 0, seen: new Set() };
+  const [claudeFiles, codexFiles] = await Promise.all([
+    listClaudeFiles(home),
+    listCodexFiles(home, sinceTimestamp),
+  ]);
+  const jobs: [string, FileParser][] = [
+    ...claudeFiles.map((f): [string, FileParser] => [f, parseClaudeFile]),
+    ...codexFiles.map((f): [string, FileParser] => [f, parseCodexSessionFile]),
+    ...aiderFiles(home).map((f): [string, FileParser] => [f, parseAiderFile]),
+  ];
+  const results = await mapWithConcurrency(jobs, SCAN_CONCURRENCY, ([path, parse]) =>
+    scanFile(path, sinceTimestamp, parse, stats),
+  );
+  for (const path of fileCache.keys()) if (!stats.seen.has(path)) fileCache.delete(path);
+  return { entries: results.flat(), parsedFiles: stats.parsedFiles };
 }

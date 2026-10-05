@@ -28,6 +28,7 @@ import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/ag
 import { getAppSettings } from "../../db/queries/settings";
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde } from "../../ide/opener";
+import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
 import {
@@ -285,26 +286,29 @@ export const projectRouter = router({
 
   /** T176: dirty worktrees are flagged because deleting them loses work, which
    *  is the only reason to hesitate. */
-  listAllWorktrees: publicProcedure.query(({ ctx }) => {
-    return listAllWorktreeRows(ctx.db).map((r) => {
-      const exists = existsSync(r.path);
-      // git2 in-process, not a `git status` subprocess per row: this renders on
-      // every dashboard mount, and 20 spawns each rewriting .git/index would
-      // contend with the agents working in those very worktrees.
-      let dirty = false;
-      if (exists) {
-        try {
-          dirty = coreRust?.worktreeHasChanges(r.path) ?? true;
-        } catch (err) {
-          // Treat an unreadable worktree as DIRTY, matching race-mode: guessing
-          // "clean" is what authorises a destructive delete.
-          logger.warn(`[Worktrees] dirty check failed for ${r.path}, treating as DIRTY:`, err);
-          dirty = true;
+  listAllWorktrees: publicProcedure.query(({ ctx }) =>
+    Promise.all(
+      listAllWorktreeRows(ctx.db).map(async (r) => {
+        const exists = existsSync(r.path);
+        // git2 on the libuv pool, not a `git status` subprocess per row: this renders on
+        // every dashboard mount, and 20 spawns each rewriting .git/index would
+        // contend with the agents working in those very worktrees.
+        let dirty = false;
+        if (exists) {
+          try {
+            const rust = coreRust;
+            dirty = rust ? await runNative(() => rust.worktreeHasChangesAsync(r.path)) : true;
+          } catch (err) {
+            // Treat an unreadable worktree as DIRTY, matching race-mode: guessing
+            // "clean" is what authorises a destructive delete.
+            logger.warn(`[Worktrees] dirty check failed for ${r.path}, treating as DIRTY:`, err);
+            dirty = true;
+          }
         }
-      }
-      return { ...r, exists, dirty };
-    });
-  }),
+        return { ...r, exists, dirty };
+      }),
+    ),
+  ),
 
   deleteWorktree: publicProcedure
     .input(

@@ -46,6 +46,7 @@ interface Window {
       write: (id: string, data: string) => void;
       resize: (id: string, cols: number, rows: number) => void;
       getSnapshot: (id: string) => Promise<string | null>;
+      hasContent: (id: string) => Promise<boolean>;
       /** T178: report whether this view can draw the agent. A repaint, when one
        *  is needed, arrives on terminal:data so it stays ordered. */
       setVisible: (id: string, visible: boolean, viewId: string, fresh?: boolean) => Promise<void>;
@@ -74,9 +75,14 @@ interface Window {
     };
     pathForFile?: (file: File) => string;
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
+    onPrWatch: (
+      callback: (event: { agentId: string; projectId: string; reason?: string }) => void,
+    ) => () => void;
     /** Exegol gained or lost the focus (another app took it; not a webview or our own windows) */
     onWindowFocus: (callback: (focused: boolean) => void) => () => void;
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;
+    /** T200.5: an agent's turn changes were recorded or undone */
+    onTurnChanges: (callback: (event: { agentId: string }) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
     /** T200.4: an agent's follow-up queue changed */
     onFollowUps: (

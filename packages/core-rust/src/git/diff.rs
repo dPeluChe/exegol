@@ -2,7 +2,6 @@ use super::open_repo;
 use super::types::{FileDiff, DiffHunk, DiffLine};
 use git2::{Delta, Diff, DiffOptions};
 use napi::Error;
-use napi_derive::napi;
 
 /// Convert a git2::Delta to a human-readable status string.
 fn delta_to_status(delta: Delta) -> &'static str {
@@ -152,7 +151,6 @@ fn extract_file_diffs(diff: &Diff) -> Result<Vec<FileDiff>, Error> {
 
 /// Get structured diff of changes (staged or unstaged).
 /// Returns a list of FileDiff objects with hunks and lines.
-#[napi]
 pub fn get_diff(repo_path: String, staged: bool) -> Result<Vec<FileDiff>, Error> {
   let repo = open_repo(&repo_path)?;
 
