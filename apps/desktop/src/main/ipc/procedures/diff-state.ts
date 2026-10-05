@@ -5,6 +5,7 @@ import {
   isDefaultBranch,
 } from "../../integrations/github/gh";
 import { AsyncLruCache } from "../../lib/lru-cache";
+import { readGitStatus } from "./git-status";
 
 interface GitState {
   branch: string;
@@ -97,25 +98,10 @@ export async function buildGitState(cwd: string, defaultBranch = "main"): Promis
   let dirtyUnstaged = 0;
   let conflicts = 0;
   try {
-    const { stdout } = await execFileAsync("git", ["status", "--porcelain=v1", "-uall"], {
-      cwd,
-      maxBuffer: 1024 * 1024,
-    });
-    for (const line of stdout.split("\n").filter(Boolean)) {
-      const index = line[0];
-      const work = line[1];
-      // Unmerged markers — see git-status(1) porcelain output
-      if (
-        index === "U" ||
-        work === "U" ||
-        (index === "D" && work === "D") ||
-        (index === "A" && work === "A")
-      ) {
-        conflicts++;
-        continue;
-      }
-      if (index && index !== " " && index !== "?") dirtyStaged++;
-      if ((work && work !== " " && work !== "?") || index === "?") dirtyUnstaged++;
+    for (const file of await readGitStatus(cwd)) {
+      if (file.status === "U") conflicts++;
+      else if (file.staged) dirtyStaged++;
+      else dirtyUnstaged++;
     }
   } catch {
     /* ignore */

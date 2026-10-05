@@ -48,7 +48,9 @@ function OplogTimelineEntry({
 }) {
   const Icon = OPERATION_ICONS[entry.operation] ?? History;
   const iconColor = OPERATION_COLORS[entry.operation] ?? "text-text-muted";
-  const canUndo = entry.refBefore && entry.operation !== "revert";
+  // oplog.undo refuses worktree_create: it would force-checkout the main project
+  const canUndo =
+    entry.refBefore && entry.operation !== "revert" && entry.operation !== "worktree_create";
 
   const timeAgo = formatTimeAgoLong(entry.createdAt);
 

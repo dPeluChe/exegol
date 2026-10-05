@@ -19,6 +19,7 @@ import {
 import { prProcedures } from "./diff-pr";
 import { buildReviewSummary } from "./diff-review";
 import { buildGitState } from "./diff-state";
+import { gitErrorSummary, readGitStatus, runGit } from "./git-status";
 
 // Network failure phrases in git stderr — only these are safe to retry;
 // rejections (non-fast-forward, auth, no-upstream) must fail immediately.
@@ -126,7 +127,7 @@ export const diffRouter = router({
       const projectPath = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       const key = `${input.projectId}|staged|true|${input.pathOverride ?? ""}`;
       return diffCache.getOrCompute(key, async () =>
-        runGitDiff(projectPath, ["--cached", "--unified=3"]),
+        runGitDiff(projectPath, ["--cached", "--find-renames", "--unified=3"]),
       );
     }),
 
@@ -135,22 +136,7 @@ export const diffRouter = router({
     .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .query(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      try {
-        const { stdout } = await execFileAsync("git", ["status", "--porcelain=v1", "-uall"], {
-          cwd,
-          maxBuffer: 1024 * 1024,
-        });
-        return stdout
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => ({
-            status: line.slice(0, 2).trim(),
-            staged: line[0] !== " " && line[0] !== "?",
-            path: line.slice(3),
-          }));
-      } catch {
-        return [];
-      }
+      return readGitStatus(cwd).catch(() => []);
     }),
 
   /** Stage specific files or all */
@@ -164,8 +150,9 @@ export const diffRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      const args = input.files && input.files.length > 0 ? ["add", ...input.files] : ["add", "-A"];
-      await execFileAsync("git", args, { cwd });
+      const args =
+        input.files && input.files.length > 0 ? ["add", "--", ...input.files] : ["add", "-A"];
+      await runGit(cwd, args);
       invalidateProjectDiff(input.projectId);
       return { success: true };
     }),
@@ -183,9 +170,9 @@ export const diffRouter = router({
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       const args =
         input.files && input.files.length > 0
-          ? ["reset", "HEAD", ...input.files]
-          : ["reset", "HEAD"];
-      await execFileAsync("git", args, { cwd });
+          ? ["reset", "-q", "HEAD", "--", ...input.files]
+          : ["reset", "-q", "HEAD"];
+      await runGit(cwd, args);
       invalidateProjectDiff(input.projectId);
       return { success: true };
     }),
@@ -213,9 +200,9 @@ export const diffRouter = router({
       }
       // Stage all if requested (avoids race condition from separate stage+commit calls)
       if (input.stageAll) {
-        await execFileAsync("git", ["add", "-A"], { cwd });
+        await runGit(cwd, ["add", "-A"]);
       }
-      const { stdout } = await execFileAsync("git", ["commit", "-m", input.message], { cwd });
+      const stdout = await runGit(cwd, ["commit", "-m", input.message]);
       invalidateProjectDiff(input.projectId);
       return { output: stdout.trim() };
     }),
@@ -235,10 +222,17 @@ export const diffRouter = router({
           const { stdout: branch } = await execFileAsync("git", ["branch", "--show-current"], {
             cwd,
           });
-          const out = await runGitPush(cwd, ["push", "--set-upstream", "origin", branch.trim()]);
+          const out = await runGitPush(cwd, [
+            "push",
+            "--set-upstream",
+            "origin",
+            branch.trim(),
+          ]).catch((e) => {
+            throw new Error(gitErrorSummary((e as Error).cause ?? e));
+          });
           return { output: out.trim() || "Pushed with upstream set" };
         }
-        throw err;
+        throw new Error(gitErrorSummary((err as Error).cause ?? err));
       }
     }),
 

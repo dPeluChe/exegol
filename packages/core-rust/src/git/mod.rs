@@ -342,22 +342,19 @@ pub(crate) fn check_has_changes(path: &str) -> Result<bool, Error> {
   Ok(!statuses.is_empty())
 }
 
-/// Get a unified diff of all changes (staged + unstaged + untracked) in a worktree.
+/// Unified diff of what is not staged: index vs working tree, untracked files included.
+/// Staged changes are the `git diff --cached` side, so a staged file never shows twice.
 pub fn get_worktree_diff(worktree_path: String) -> Result<String, Error> {
   let repo = open_repo(&worktree_path)?;
 
   let mut diff_opts = DiffOptions::new();
   diff_opts
     .include_untracked(true)
-    .recurse_untracked_dirs(true);
-
-  let head_tree = repo
-    .head()
-    .ok()
-    .and_then(|h| h.peel_to_tree().ok());
+    .recurse_untracked_dirs(true)
+    .show_untracked_content(true);
 
   let diff = repo
-    .diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut diff_opts))
+    .diff_index_to_workdir(None, Some(&mut diff_opts))
     .map_err(|e| Error::from_reason(format!("Failed to compute diff: {e}")))?;
 
   let mut output = String::new();
@@ -412,6 +409,40 @@ mod tests {
 
     let repo = open_repo(&path).unwrap();
     assert!(repo.find_branch("feature/loser", git2::BranchType::Local).is_err());
+  }
+
+  #[test]
+  fn worktree_diff_shows_only_unstaged_side() {
+    let tmp = init_repo_with_branch("feature/x");
+    let path = tmp.path().to_string_lossy().into_owned();
+    let repo = open_repo(&path).unwrap();
+
+    fs::write(tmp.path().join("a.txt"), "staged\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("a.txt")).unwrap();
+    index.write().unwrap();
+    fs::write(tmp.path().join("a.txt"), "staged\nunstaged\n").unwrap();
+    fs::write(tmp.path().join("new.txt"), "fresh\n").unwrap();
+
+    let diff = get_worktree_diff(path).unwrap();
+    assert!(diff.contains("+unstaged"));
+    assert!(!diff.contains("-one"));
+    assert!(!diff.contains("+staged"));
+    assert!(diff.contains("+fresh"));
+  }
+
+  #[test]
+  fn worktree_diff_ignores_fully_staged_file() {
+    let tmp = init_repo_with_branch("feature/x");
+    let path = tmp.path().to_string_lossy().into_owned();
+    let repo = open_repo(&path).unwrap();
+
+    fs::write(tmp.path().join("a.txt"), "two\n").unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(Path::new("a.txt")).unwrap();
+    index.write().unwrap();
+
+    assert_eq!(get_worktree_diff(path).unwrap(), "");
   }
 
   #[test]

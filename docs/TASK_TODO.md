@@ -26,8 +26,8 @@
 5. ~~User features, one PR each~~: shipped: ~~T200.6 answer agent questions~~ (`feat/answer-prompts`),
    ~~T200.4 queue + steer~~ (`feat/queue-steer`), ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR
    loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
-6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
-   silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
+6. **Daily bugs**: opencode dies across app quit (Verify live below), ~~git pane renames / MM
+   files / silent failures~~ (`fix/git-pane-audit`), T193.9 title trackers on reattach, T138 split modes,
    T185.11 scheduler timeout, T193.2 execPath.
 
 Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI, T144.
@@ -110,10 +110,6 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
 - Monitor → Resources: eviction actually drops RSS; budget alert fires once per period
 
 ### Audit leftovers (2026-09-28), not release blockers
-- Git: Unstaged shows HEAD vs working tree (staged files appear twice); a file with staged and
-  unstaged changes lists only under Staged; renamed files pass `old -> new` as the path; Undo is
-  offered for `worktree_create` oplog entries the backend refuses; failed stage/unstage/create/
-  delete show no error
 - Files: unsaved edits are lost on rename of the open file (keep drafts in a store; the peek and
   the Files viewer already ask before closing unsaved edits, #215)
 - Watching: a card waiting for input cannot be collapsed. QA: saving a test does not refresh
