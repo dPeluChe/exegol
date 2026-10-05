@@ -12,14 +12,16 @@ import { aiProcedures } from "./diff-ai";
 import {
   coreRust,
   diffCache,
+  gitErrorSummary,
   invalidateProjectDiff,
   resolveProjectPath,
+  runGit,
   runGitDiff,
 } from "./diff-helpers";
 import { prProcedures } from "./diff-pr";
 import { buildReviewSummary } from "./diff-review";
 import { buildGitState } from "./diff-state";
-import { gitErrorSummary, readGitStatus, runGit } from "./git-status";
+import { readGitStatus } from "./git-status";
 
 // Network failure phrases in git stderr — only these are safe to retry;
 // rejections (non-fast-forward, auth, no-upstream) must fail immediately.
@@ -116,6 +118,7 @@ export const diffRouter = router({
             // Fall through to CLI
           }
         }
+        // Gap vs Rust: git diff cannot list untracked files without touching the index
         return runGitDiff(projectPath, ["--unified=3"]);
       });
     }),

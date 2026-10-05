@@ -58,27 +58,3 @@ export async function readGitStatus(cwd: string): Promise<GitFileStatus[]> {
   });
   return parseGitStatus(stdout);
 }
-
-/** The lines of a failed git run worth showing: its fatal/error lines, else the last few */
-export function gitErrorSummary(err: unknown): string {
-  const e = err as { stderr?: unknown; stdout?: unknown; message?: unknown };
-  const text =
-    String(e?.stderr ?? "").trim() || String(e?.stdout ?? "").trim() || String(e?.message ?? err);
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("hint:"));
-  const errors = lines.filter((l) => /^(fatal|error):/i.test(l));
-  const summary = (errors.length > 0 ? errors : lines.slice(-3)).join("\n");
-  return summary.length > 400 ? `${summary.slice(0, 400)}…` : summary;
-}
-
-/** Runs git; a failure throws an Error carrying git's own message instead of "Command failed" */
-export async function runGit(cwd: string, args: string[]): Promise<string> {
-  try {
-    const { stdout } = await execFileAsync("git", args, { cwd, maxBuffer: 5 * 1024 * 1024 });
-    return stdout;
-  } catch (err) {
-    throw new Error(gitErrorSummary(err));
-  }
-}

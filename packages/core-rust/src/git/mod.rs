@@ -350,7 +350,9 @@ pub fn get_worktree_diff(worktree_path: String) -> Result<String, Error> {
   diff_opts
     .include_untracked(true)
     .recurse_untracked_dirs(true)
-    .show_untracked_content(true);
+    .show_untracked_content(true)
+    // Polled every 5s: a file over 1 MB prints as "Binary files differ" instead of its content
+    .max_size(1024 * 1024);
 
   let diff = repo
     .diff_index_to_workdir(None, Some(&mut diff_opts))
@@ -442,6 +444,17 @@ mod tests {
     index.write().unwrap();
 
     assert_eq!(get_worktree_diff(path).unwrap(), "");
+  }
+
+  #[test]
+  fn worktree_diff_skips_content_of_large_untracked_file() {
+    let tmp = init_repo_with_branch("feature/x");
+    let path = tmp.path().to_string_lossy().into_owned();
+    fs::write(tmp.path().join("big.txt"), "x\n".repeat(600 * 1024)).unwrap();
+
+    let out = get_worktree_diff(path).unwrap();
+    assert!(out.contains("big.txt"));
+    assert!(out.len() < 1024);
   }
 
   #[test]
