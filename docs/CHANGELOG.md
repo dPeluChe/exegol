@@ -28,6 +28,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - A pane or Dashboard card that hits an error shows it in place with "Show it again", instead of blanking the whole window
 - The commit message button (Sparkles) works without an API key, through your logged-in Claude CLI
 - The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
+- Monitor now counts Claude Code usage: Scan Logs read almost nothing from Claude's transcripts, so its cost showed near zero. Each reply counts once, cache reads and writes are priced, sessions run outside the project are left out, and a rescan of thousands of replies no longer stalls the window
 
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly
 

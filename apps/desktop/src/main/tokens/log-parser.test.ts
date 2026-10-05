@@ -2,7 +2,12 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mayCarryClaudeUsage, parseCodexSessionFile, scanAllLogs } from "./log-parser";
+import {
+  mayCarryClaudeUsage,
+  parseClaudeFile,
+  parseCodexSessionFile,
+  scanAllLogs,
+} from "./log-parser";
 
 let home: string;
 const now = Math.floor(Date.now() / 1000);
@@ -90,5 +95,60 @@ describe("mayCarryClaudeUsage", () => {
     expect(mayCarryClaudeUsage(claudeLine(1, 1))).toBe(true);
     expect(mayCarryClaudeUsage('{"costUSD":0.1,"inputTokens":3}')).toBe(true);
     expect(mayCarryClaudeUsage('{"type":"user","message":"hello"}')).toBe(false);
+  });
+});
+
+describe("parseClaudeFile", () => {
+  const nested = (id: string, block: string, usage: Record<string, unknown>, requestId = "req_1") =>
+    JSON.stringify({
+      type: "assistant",
+      timestamp: iso(now - 60),
+      sessionId: "s1",
+      requestId,
+      cwd: "/repo",
+      message: { id, model: "claude-sonnet-4-6", content: [{ type: block }], usage },
+    });
+
+  function write(lines: string[]): string {
+    const dir = join(home, ".claude", "projects", "p1");
+    mkdirSync(dir, { recursive: true });
+    const file = join(dir, "s.jsonl");
+    writeFileSync(file, `${lines.join("\n")}\n`);
+    return file;
+  }
+
+  it("reads nested message.usage and counts a message once across its content blocks", async () => {
+    const usage = {
+      input_tokens: 10,
+      output_tokens: 100,
+      cache_read_input_tokens: 1_000_000,
+      cache_creation_input_tokens: 300_000,
+      cache_creation: { ephemeral_5m_input_tokens: 100_000, ephemeral_1h_input_tokens: 200_000 },
+    };
+    const file = write([
+      nested("msg_1", "thinking", usage),
+      nested("msg_1", "text", usage),
+      nested("msg_1", "tool_use", usage),
+      nested("msg_2", "text", { input_tokens: 5, output_tokens: 7 }, "req_2"),
+    ]);
+    const entries = await parseClaudeFile(file, since);
+    expect(entries.map((e) => [e.key, e.inputTokens, e.outputTokens, e.cwd])).toEqual([
+      ["claude:msg_1:req_1", 10, 100, "/repo"],
+      ["claude:msg_2:req_2", 5, 7, "/repo"],
+    ]);
+    // Sonnet $3/$15: (10 + 1M x 0.1 + 100k x 1.25 + 200k x 2) at input, 100 at output
+    expect(entries[0]?.estimatedCostUsd).toBeCloseTo(
+      (10 + 100_000 + 125_000 + 400_000) * 3e-6 + 100 * 15e-6,
+    );
+  });
+
+  it("still reads the older top-level usage shape", async () => {
+    const file = write([claudeLine(10, 5), claudeLine(20, 7)]);
+    const entries = await parseClaudeFile(file, since);
+    expect(entries.map((e) => [e.model, e.inputTokens, e.outputTokens])).toEqual([
+      ["claude-sonnet-4-6", 10, 5],
+      ["claude-sonnet-4-6", 20, 7],
+    ]);
+    expect(new Set(entries.map((e) => e.key)).size).toBe(2);
   });
 });

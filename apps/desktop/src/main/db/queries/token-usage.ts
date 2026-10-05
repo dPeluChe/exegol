@@ -6,6 +6,8 @@ import type {
   TokenUsageSummary,
 } from "@exegol/shared";
 import type Database from "libsql";
+import { nanoid } from "nanoid";
+import type { ParsedTokenEntry } from "../../tokens/log-parser";
 import { mapTokenUsageRow } from "./helpers";
 
 export function getTokenUsageSummary(
@@ -225,4 +227,41 @@ export function getPipelineRunCost(db: Database.Database, pipelineRunId: string)
     totalTokens: perStep.reduce((sum, s) => sum + s.tokens, 0),
     perStep,
   };
+}
+
+/** One transaction of upserts: a rescan re-sends the whole window and unchanged rows are skipped */
+export function importScannedTokenUsage(
+  db: Database.Database,
+  agentId: string,
+  entries: ParsedTokenEntry[],
+): { imported: number; skipped: number } {
+  const upsert = db.prepare(
+    `INSERT INTO token_usage (id, agent_id, provider, model, input_tokens, output_tokens,
+       estimated_cost_usd, tool_call_count, recorded_at, source, dedup_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'log_scan', ?)
+     ON CONFLICT(agent_id, dedup_key) DO UPDATE SET
+       model = excluded.model, input_tokens = excluded.input_tokens,
+       output_tokens = excluded.output_tokens, estimated_cost_usd = excluded.estimated_cost_usd,
+       tool_call_count = excluded.tool_call_count, recorded_at = excluded.recorded_at
+     WHERE input_tokens != excluded.input_tokens OR output_tokens != excluded.output_tokens
+       OR model != excluded.model`,
+  );
+  let imported = 0;
+  db.transaction(() => {
+    for (const e of entries) {
+      imported += upsert.run(
+        nanoid(),
+        agentId,
+        e.provider,
+        e.model,
+        e.inputTokens,
+        e.outputTokens,
+        e.estimatedCostUsd,
+        e.toolCallCount,
+        Math.floor(e.timestamp),
+        e.key,
+      ).changes;
+    }
+  })();
+  return { imported, skipped: entries.length - imported };
 }

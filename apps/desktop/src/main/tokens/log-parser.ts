@@ -1,7 +1,7 @@
 import { createReadStream } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
 import { dayDirs } from "../history/providers/codex";
 import { mapWithConcurrency } from "../lib/concurrency";
@@ -9,6 +9,10 @@ import { mapWithConcurrency } from "../lib/concurrency";
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface ParsedTokenEntry {
+  /** Stable per source record, so a rescan updates the row instead of adding one */
+  key: string;
+  /** Working directory the record came from, when the log says (Claude only) */
+  cwd?: string;
   provider: string;
   model: string;
   inputTokens: number;
@@ -40,13 +44,34 @@ const MODEL_COSTS: Record<string, { input: number; output: number }> = {
   "gemini-2.5-flash": { input: 0.15, output: 0.6 },
 };
 
-function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+// Anthropic bills cache reads at 0.1x the input price, cache writes at 1.25x (5 min) or 2x (1 h)
+const CACHE_READ_RATE = 0.1;
+const CACHE_WRITE_5M_RATE = 1.25;
+const CACHE_WRITE_1H_RATE = 2;
+
+interface CacheTokens {
+  read: number;
+  write5m: number;
+  write1h: number;
+}
+
+function estimateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cache?: CacheTokens,
+): number {
   const costs = MODEL_COSTS[model] ??
     Object.entries(MODEL_COSTS).find(([key]) => model.startsWith(key))?.[1] ?? {
       input: 3,
       output: 15,
     }; // default to Sonnet pricing
-  return (inputTokens * costs.input + outputTokens * costs.output) / 1_000_000;
+  const cachedInput = cache
+    ? cache.read * CACHE_READ_RATE +
+      cache.write5m * CACHE_WRITE_5M_RATE +
+      cache.write1h * CACHE_WRITE_1H_RATE
+    : 0;
+  return ((inputTokens + cachedInput) * costs.input + outputTokens * costs.output) / 1_000_000;
 }
 
 // ─── Per-file cache ─────────────────────────────────────────────────────────
@@ -115,13 +140,24 @@ export function mayCarryClaudeUsage(line: string): boolean {
   return line.includes('"input_tokens"') || line.includes('"costUSD"');
 }
 
-async function parseClaudeFile(path: string, since: number): Promise<ParsedTokenEntry[]> {
+export async function parseClaudeFile(path: string, since: number): Promise<ParsedTokenEntry[]> {
   const entries: ParsedTokenEntry[] = [];
+  const seen = new Set<string>();
+  let lineNo = 0;
   await forEachLine(path, (line) => {
+    lineNo++;
     if (!mayCarryClaudeUsage(line)) return;
     try {
-      const parsed = extractClaudeTokenUsage(JSON.parse(line), since);
-      if (parsed) entries.push(parsed);
+      const parsed = extractClaudeTokenUsage(
+        JSON.parse(line),
+        since,
+        `${basename(path)}:${lineNo}`,
+      );
+      // One line per content block, each repeating the message's usage
+      if (parsed && !seen.has(parsed.key)) {
+        seen.add(parsed.key);
+        entries.push(parsed);
+      }
     } catch {
       /* skip */
     }
@@ -141,26 +177,46 @@ async function listClaudeFiles(home: string): Promise<string[]> {
   return files;
 }
 
+const num = (v: unknown): number => (typeof v === "number" ? v : 0);
+
+function claudeCacheTokens(usage: Record<string, unknown>): CacheTokens {
+  const write = num(usage.cache_creation_input_tokens);
+  const split = usage.cache_creation as Record<string, unknown> | undefined;
+  const write1h = Math.min(num(split?.ephemeral_1h_input_tokens), write);
+  return { read: num(usage.cache_read_input_tokens), write5m: write - write1h, write1h };
+}
+
 function extractClaudeTokenUsage(
   entry: Record<string, unknown>,
   since: number,
+  fallbackKey: string,
 ): ParsedTokenEntry | null {
   const ts = getTimestamp(entry);
   if (ts < since) return null;
+  const cwd = typeof entry.cwd === "string" ? entry.cwd : undefined;
 
-  // Pattern 1: Direct usage field { usage: { input_tokens, output_tokens }, model }
-  const usage = entry.usage as Record<string, unknown> | undefined;
+  // Transcripts nest it: { message: { id, model, usage, content }, requestId }; older logs had it top-level
+  const message =
+    typeof entry.message === "object" && entry.message !== null
+      ? (entry.message as Record<string, unknown>)
+      : undefined;
+  const source = message?.usage ? message : entry;
+  const usage = source.usage as Record<string, unknown> | undefined;
   if (usage && typeof usage.input_tokens === "number") {
-    const model = (entry.model as string) ?? "unknown";
-    const inputTokens = usage.input_tokens as number;
-    const outputTokens = typeof usage.output_tokens === "number" ? usage.output_tokens : 0;
+    const model = typeof source.model === "string" ? source.model : "unknown";
+    const inputTokens = usage.input_tokens;
+    const outputTokens = num(usage.output_tokens);
+    const id = typeof source.id === "string" ? source.id : (entry.uuid as string | undefined);
+    const requestId = typeof entry.requestId === "string" ? `:${entry.requestId}` : "";
     return {
+      key: `claude:${id ? `${id}${requestId}` : fallbackKey}`,
+      cwd,
       provider: "anthropic",
       model,
       inputTokens,
       outputTokens,
-      estimatedCostUsd: estimateCost(model, inputTokens, outputTokens),
-      toolCallCount: countToolCalls(entry),
+      estimatedCostUsd: estimateCost(model, inputTokens, outputTokens, claudeCacheTokens(usage)),
+      toolCallCount: countToolCalls(source),
       timestamp: ts,
     };
   }
@@ -169,6 +225,8 @@ function extractClaudeTokenUsage(
   if (typeof entry.costUSD === "number" && typeof entry.inputTokens === "number") {
     const model = (entry.model as string) ?? "unknown";
     return {
+      key: `claude:${(entry.uuid as string | undefined) ?? fallbackKey}`,
+      cwd,
       provider: "anthropic",
       model,
       inputTokens: entry.inputTokens as number,
@@ -260,6 +318,7 @@ export async function parseCodexSessionFile(
   const model = metaModel ?? fallbackModel ?? "unknown";
   return [
     {
+      key: `codex:${basename(path)}`,
       provider: sessionProvider,
       model,
       inputTokens,
@@ -294,6 +353,7 @@ async function parseAiderFile(filePath: string): Promise<ParsedTokenEntry[]> {
       for (const [model, usage] of Object.entries(cache)) {
         if (typeof usage.sent !== "number") continue;
         entries.push({
+          key: `aider:cache:${model}`,
           provider: guessProvider(model),
           model,
           inputTokens: usage.sent,
@@ -314,6 +374,7 @@ async function parseAiderFile(filePath: string): Promise<ParsedTokenEntry[]> {
   let match: RegExpExecArray | null;
   for (match = costPattern.exec(content); match !== null; match = costPattern.exec(content)) {
     entries.push({
+      key: `aider:history:${match.index}`,
       provider: "unknown",
       model: "aider-session",
       inputTokens: Math.round(Number.parseFloat(match[1] ?? "0") * 1000),

@@ -165,4 +165,35 @@ export const wave3Migrations: Migration[] = [
     id: "w3_017_agent_pr_watch",
     sql: "ALTER TABLE agents ADD COLUMN pr_watch INTEGER NOT NULL DEFAULT 0;",
   },
+  {
+    // Log-scan rows use pseudo agent ids (`scan:<projectId>`, `external`) that the agents FK
+    // rejected; the trigger keeps the cascade. dedup_key makes a rescan an upsert.
+    id: "w3_018_token_usage_scan_key",
+    sql: `CREATE TABLE token_usage_new (
+      id TEXT PRIMARY KEY,
+      agent_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      estimated_cost_usd REAL NOT NULL DEFAULT 0.0,
+      tool_call_count INTEGER NOT NULL DEFAULT 0,
+      recorded_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      source TEXT NOT NULL DEFAULT 'agent' CHECK (source IN ('agent', 'log_scan')),
+      dedup_key TEXT
+    );
+    INSERT INTO token_usage_new (id, agent_id, provider, model, input_tokens, output_tokens,
+      estimated_cost_usd, tool_call_count, recorded_at, source)
+      SELECT id, agent_id, provider, model, input_tokens, output_tokens,
+        estimated_cost_usd, tool_call_count, recorded_at, source FROM token_usage;
+    DROP TABLE token_usage;
+    ALTER TABLE token_usage_new RENAME TO token_usage;
+    CREATE INDEX IF NOT EXISTS idx_token_usage_agent ON token_usage(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_token_usage_recorded ON token_usage(recorded_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_token_usage_dedup ON token_usage(agent_id, dedup_key);
+    CREATE TRIGGER IF NOT EXISTS trg_agents_delete_token_usage AFTER DELETE ON agents
+    BEGIN
+      DELETE FROM token_usage WHERE agent_id = OLD.id;
+    END;`,
+  },
 ];

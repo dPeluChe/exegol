@@ -1,14 +1,16 @@
-import { nanoid } from "nanoid";
 import { z } from "zod";
 import {
   getAgentCosts,
   getDailyTrend,
   getModelBreakdown,
   getPipelineRunCost,
+  getProject,
   getProjectTokenUsage,
   getProjectTokenUsageSummary,
   getTokenUsageSummary,
+  importScannedTokenUsage,
 } from "../../db/queries";
+import { isInside } from "../../system/ports";
 import { scanAllLogs } from "../../tokens/log-parser";
 import { publicProcedure, router } from "../trpc";
 
@@ -44,48 +46,14 @@ export const tokenUsageRouter = router({
     .input(z.object({ projectId: z.string() }).optional())
     .mutation(async ({ ctx, input }) => {
       const since = Math.floor(Date.now() / 1000) - 30 * 86400; // Last 30 days
-      const { entries } = await scanAllLogs(since);
+      const { entries: scanned } = await scanAllLogs(since);
       const agentId = input?.projectId ? `scan:${input.projectId}` : "external";
-
-      // Dedup: check existing entries to avoid re-importing on repeated scans
-      const existingCheck = ctx.db.prepare(
-        `SELECT COUNT(*) as cnt FROM token_usage
-         WHERE agent_id = ? AND model = ? AND input_tokens = ? AND output_tokens = ? AND source = 'log_scan'`,
-      );
-
-      // Insert with source='log_scan' to distinguish scanned records from agent records
-      const insertStmt = ctx.db.prepare(
-        `INSERT INTO token_usage (id, agent_id, provider, model, input_tokens, output_tokens, estimated_cost_usd, tool_call_count, source)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'log_scan')`,
-      );
-
-      let imported = 0;
-      let skipped = 0;
-      for (const entry of entries) {
-        const existing = existingCheck.get(
-          agentId,
-          entry.model,
-          entry.inputTokens,
-          entry.outputTokens,
-        ) as { cnt: number };
-        if (existing.cnt > 0) {
-          skipped++;
-          continue;
-        }
-
-        insertStmt.run(
-          nanoid(),
-          agentId,
-          entry.provider,
-          entry.model,
-          entry.inputTokens,
-          entry.outputTokens,
-          entry.estimatedCostUsd,
-          entry.toolCallCount,
-        );
-        imported++;
-      }
-
+      const project = input?.projectId ? getProject(ctx.db, input.projectId) : null;
+      // Claude logs cover every project on the machine: keep the ones run inside this one
+      const entries = project
+        ? scanned.filter((e) => !e.cwd || isInside(e.cwd, project.path))
+        : scanned;
+      const { imported, skipped } = importScannedTokenUsage(ctx.db, agentId, entries);
       return { imported, skipped, total: entries.length };
     }),
 

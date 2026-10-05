@@ -424,11 +424,6 @@ exchange-bus MVP only, no headless council executions. Absorbs:
       callers (`pipeline/pipeline-worktree.ts`, `agents/agent-worktree-ops.ts`,
       `agents/race-mode.ts`, `ipc/procedures/oplog.ts`) move to `worktreeHasChangesAsync` via
       `runNative`
-    - Claude token import (T183.1 tokens track): Claude transcripts nest usage under
-      `message.usage`, so almost nothing imports (the extractor reads top-level `usage`). The fix
-      needs dedup by `message.id` (one line per content block repeats the same usage), and then
-      the per-entry `existingCheck` SELECT loop in `ipc/procedures/token-usage.ts` becomes a sync
-      hot spot. Separate PR with its own changelog entry
 
 ---
 
