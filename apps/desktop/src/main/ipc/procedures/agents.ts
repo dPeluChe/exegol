@@ -4,7 +4,15 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
-import { cliSetupFor } from "../../agents/cli-catalog";
+import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
+import {
+  FOLLOW_UP_MAX_CHARS,
+  FollowUpError,
+  listFollowUps,
+  queueFollowUp,
+  removeFollowUp,
+  steerFollowUp,
+} from "../../agents/follow-up-queue";
 import { takeLostOnRestart, whenRecovered } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
@@ -53,8 +61,19 @@ function withInstallInfo(providers: AgentProvider[]): AgentProvider[] {
       installed: p.id === "shell" || installed.has(p.id),
       installCommand: setup?.install ?? null,
       installDocs: setup?.docs ?? null,
+      interruptKey: interruptKeyOf(p.id),
     };
   });
+}
+
+async function followUpCall<T>(run: () => T | Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (err) {
+    if (err instanceof FollowUpError)
+      throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
+    throw err;
+  }
 }
 
 export const agentRouter = router({
@@ -421,6 +440,24 @@ export const agentRouter = router({
       ctx.agentManager.write(input.id, input.key);
       return { ok: true };
     }),
+
+  /** T200.4: the user's follow-up queue, typed at the agent's turn boundary (in memory) */
+  followUps: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => listFollowUps(input.id)),
+
+  queueFollowUp: publicProcedure
+    .input(z.object({ id: z.string(), text: z.string().min(1).max(FOLLOW_UP_MAX_CHARS) }))
+    .mutation(({ ctx, input }) => followUpCall(() => queueFollowUp(ctx.db, input.id, input.text))),
+
+  removeFollowUp: publicProcedure
+    .input(z.object({ id: z.string(), itemId: z.string().max(100) }))
+    .mutation(({ input }) => removeFollowUp(input.id, input.itemId)),
+
+  /** Interrupt, wait for the prompt (STEER_TIMEOUT_MS cap), type; past the cap it stays queued */
+  steer: publicProcedure
+    .input(z.object({ id: z.string(), text: z.string().min(1).max(FOLLOW_UP_MAX_CHARS) }))
+    .mutation(({ ctx, input }) => followUpCall(() => steerFollowUp(ctx.db, input.id, input.text))),
 
   stop: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);

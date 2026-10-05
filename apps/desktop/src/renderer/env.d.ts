@@ -84,6 +84,10 @@ interface Window {
     /** T200.5: an agent's turn changes were recorded or undone */
     onTurnChanges: (callback: (event: { agentId: string }) => void) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
+    /** T200.4: an agent's follow-up queue changed */
+    onFollowUps: (
+      callback: (event: import("@exegol/shared").FollowUpsChangedEvent) => void,
+    ) => () => void;
     onNotificationNavigate?: (callback: (data: { agentId: string }) => void) => () => void;
     /** Toggle the app's own DevTools (TitleBar button) */
     toggleDevTools?: () => void;

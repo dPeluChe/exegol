@@ -17,6 +17,8 @@ interface CliEntry {
   latest?: { npm: string } | { pypi: string };
   /** Newer names of its binary (the provider's command is the first): Kilo Code 1.0 ships `kilo` */
   binaryAliases?: string[];
+  /** The key that interrupts a turn and returns to the prompt (Steer) */
+  interrupt?: string;
 }
 
 const CURL = (url: string, sh = "bash") => `curl -fsSL ${url} | ${sh}`;
@@ -33,6 +35,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     update: "claude update",
     docs: "https://code.claude.com/docs/en/setup",
     latest: { npm: "@anthropic-ai/claude-code" },
+    interrupt: "\x1b",
   },
   codex: {
     install: {
@@ -41,6 +44,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     },
     docs: "https://github.com/openai/codex",
     latest: { npm: "@openai/codex" },
+    interrupt: "\x1b",
   },
   gemini: {
     install: "npm install -g @google/gemini-cli",
@@ -155,6 +159,8 @@ export function cliSetupFor(cliType: string, platform: NodeJS.Platform = process
     deprecated: setup.deprecated,
   };
 }
+
+export const interruptKeyOf = (cliType: string) => CLI_CATALOG[cliType]?.interrupt ?? null;
 
 /** Where a CLI's newest release is published, if anywhere we can read */
 export const latestSourceOf = (cliType: string) => CLI_CATALOG[cliType]?.latest;

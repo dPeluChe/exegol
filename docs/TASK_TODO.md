@@ -23,9 +23,9 @@
 3. ~~Trust pack~~: shipped (`fix/trust-pack`): T200.1 trust inherited by worktrees, T200.2, T200.3,
    T183.2 for the commit message; left: T182.3 run-command review, T183.2 background opt-in.
 4. ~~Performance pack 2~~: shipped (`perf/pack-2`): T185.19 main process off the hot path.
-5. **User features, one PR each**: ~~T200.6 answer agent questions~~ (shipped, `feat/answer-prompts`),
-   T200.4 queue + steer, ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR loop phase 1 (T200.7)~~:
-   shipped (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
+5. ~~User features, one PR each~~: shipped: ~~T200.6 answer agent questions~~ (`feat/answer-prompts`),
+   ~~T200.4 queue + steer~~ (`feat/queue-steer`), ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR
+   loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
    silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
    T185.11 scheduler timeout, T193.2 execPath.
@@ -449,7 +449,7 @@ Quick ones first (S):
 13. Send diff comments to the agent (emdash).
 
 Then (S-M / M):
-4. Follow-up queue + steer.
+4. ~~Follow-up queue + steer~~ shipped 2026-10-04 (`feat/queue-steer`, `TASK_COMPLETED/2610.md`).
 5. ~~Per-turn snapshot, "changes this turn", Undo turn (extends T129)~~: shipped on
    `feat/undo-turn` (`TASK_COMPLETED/2610.md`), Claude Code hook turns only. Left: the per-file
    history below, and turn snapshots for CLIs once they have hooks (item 9).

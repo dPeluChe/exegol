@@ -20,6 +20,7 @@ import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { StatusDot } from "../../common/StatusDot";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
+import { FollowUpControl } from "../../terminal/FollowUpControl";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
 
 const DRAG_TYPE = "application/x-exegol-watch";
@@ -276,6 +277,7 @@ function WatchCard({
             </span>
           )}
         </div>
+        <FollowUpControl agentId={agent.id} className="py-0.5 text-[10px]" />
         {live && <CardSizeControls agentId={agent.id} />}
         <button
           type="button"

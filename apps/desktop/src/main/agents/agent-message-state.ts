@@ -33,6 +33,8 @@ export interface PendingMessage {
   replyTarget: string;
   toAgentId: string;
   text: string;
+  /** Typed by the user (follow-up queue): raw text, no framing, no messages row; called once typed */
+  onDelivered?: () => void;
   /** Antonio 2026-08-12: explicit cycle — sender states whether it awaits a
    *  reply, so the receiver knows to close the loop (or not). */
   expectsReply: boolean;

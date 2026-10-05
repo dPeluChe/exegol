@@ -8,7 +8,13 @@
  * agent-message-state.ts; T162 links in agent-links.ts.
  */
 
-import { type Agent, LIVE_STATUSES } from "@exegol/shared";
+import { randomUUID } from "node:crypto";
+import {
+  type Agent,
+  type FollowUpItem,
+  type FollowUpsChangedEvent,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { getDb } from "../db/client";
 // Direct module imports (not the queries barrel): the barrel pulls
@@ -20,6 +26,7 @@ import {
   sendMessage,
 } from "../db/queries/messages";
 import { getProject } from "../db/queries/projects";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import {
   forgetAgentInjectionState,
@@ -84,9 +91,7 @@ export function cancelQueuedMessage(
   if (!entry || entry.fromAgentId !== senderAgentId) {
     return { cancelled: false, state: "unknown", reason: "no message of yours with that id" };
   }
-  const queue = queues.get(entry.toAgentId);
-  const idx = queue?.findIndex((p) => p.messageId === messageId) ?? -1;
-  if (!queue || idx === -1) {
+  if (!takeQueued(entry.toAgentId, (p) => p.messageId === messageId)) {
     const { state } = deriveState(entry, messageId);
     return {
       cancelled: false,
@@ -94,9 +99,7 @@ export function cancelQueuedMessage(
       reason: "already left the queue — send a follow-up message instead",
     };
   }
-  const [removed] = queue.splice(idx, 1);
-  if (removed) setOutcome(db, messageId, "cancelled");
-  if (queue.length === 0) queues.delete(entry.toAgentId);
+  setOutcome(db, messageId, "cancelled");
   return { cancelled: true, state: "cancelled" };
 }
 
@@ -256,7 +259,7 @@ export function sendAgentMessage(
 
   // Fleet-wide backpressure: many agents each holding a near-full queue.
   let totalQueued = 0;
-  for (const q of queues.values()) totalQueued += q.length;
+  for (const q of queues.values()) totalQueued += agentMessageCount(q);
   if (totalQueued >= MAX_TOTAL_QUEUED) {
     throw new AgentMessagingError("too many messages in flight across the fleet", -32017);
   }
@@ -303,49 +306,67 @@ function assertReachable(target: Pick<Agent, "status">): void {
   }
 }
 
-/** Queue cap, the message row, then inject now or wait for the boundary */
-function enqueue(
+/** User follow-ups have their own cap (follow-up-queue.ts) and do not count toward agent_send's */
+const agentMessageCount = (queue: readonly PendingMessage[]) =>
+  queue.reduce((n, p) => (p.onDelivered ? n : n + 1), 0);
+
+/**
+ * Queue cap, the message row (none for a user follow-up, `row: null`), then inject now or wait
+ * for the boundary. `first` puts it at the head of the queue (Steer).
+ */
+export function enqueue(
   db: Database.Database,
   target: Pick<Agent, "id" | "status">,
   message: Omit<PendingMessage, "messageId" | "toAgentId">,
-  row: { type: "text" | "status"; clientKey?: string | null },
+  row: { type: "text" | "status"; clientKey?: string | null } | null,
+  first = false,
 ): { messageId: string; delivered: boolean } {
   assertReachable(target);
   const queue = queues.get(target.id) ?? [];
-  if (queue.length >= MAX_QUEUE_PER_TARGET) {
+  if (row && agentMessageCount(queue) >= MAX_QUEUE_PER_TARGET) {
     throw new AgentMessagingError("target's message queue is full", -32013);
   }
-  const record = sendMessage(db, {
-    fromAgentId: message.system ? null : message.fromAgentId,
-    toAgentId: target.id,
-    type: row.type,
-    content: message.text,
-    clientKey: row.clientKey ?? null,
-    deliveryState: "queued",
-  });
-  const pending: PendingMessage = { ...message, messageId: record.id, toAgentId: target.id };
-  return { messageId: record.id, delivered: route(db, target.status, pending, queue) };
+  const messageId = row
+    ? sendMessage(db, {
+        fromAgentId: message.system ? null : message.fromAgentId,
+        toAgentId: target.id,
+        type: row.type,
+        content: message.text,
+        clientKey: row.clientKey ?? null,
+        deliveryState: "queued",
+      }).id
+    : `fu_${randomUUID()}`;
+  const pending: PendingMessage = { ...message, messageId, toAgentId: target.id };
+  return { messageId, delivered: route(db, target.status, pending, queue, first) };
 }
 
 /**
  * Target at its prompt → inject immediately; otherwise queue for the boundary.
  * NEVER inject while it's on a permission dialog (see agentsAwaitingApproval).
+ * User follow-ups go ahead of agent messages, and wait their turn behind earlier ones.
  */
 function route(
   db: Database.Database,
   targetStatus: string,
   pending: PendingMessage,
   queue: PendingMessage[],
+  first: boolean,
 ): boolean {
   const { toAgentId } = pending;
   const atIdlePrompt =
     (targetStatus === "waiting_input" || targetStatus === "idle") &&
-    !agentsAwaitingApproval.has(toAgentId);
+    !agentsAwaitingApproval.has(toAgentId) &&
+    !(pending.onDelivered && !first && queue.some((p) => p.onDelivered));
   if (atIdlePrompt && injectNow(pending)) {
-    setOutcome(db, pending.messageId, "delivered");
+    if (!pending.onDelivered) setOutcome(db, pending.messageId, "delivered");
     return true;
   }
-  queue.push(pending);
+  if (first) queue.unshift(pending);
+  else if (!pending.onDelivered) queue.push(pending);
+  else {
+    const firstAgentMessage = queue.findIndex((p) => !p.onDelivered);
+    queue.splice(firstAgentMessage === -1 ? queue.length : firstAgentMessage, 0, pending);
+  }
   queues.set(toAgentId, queue);
   ensureSweep();
   logger.info(
@@ -407,14 +428,16 @@ export function deliverPendingAgentMessages(db: Database.Database, agentId: stri
   if (!next) return;
   if (!injectNow(next)) {
     // PTY gone — drop the queue; the messages stay persisted in the DB.
-    markUndeliverable(db, [next, ...queue]);
+    const dropped = [next, ...queue];
+    markUndeliverable(db, dropped);
     queues.delete(agentId);
+    if (dropped.some((p) => p.onDelivered)) notifyFollowUps(agentId);
     logger.warn(
-      `[AgentMsg] Target ${agentId} PTY gone — ${queue.length + 1} message(s) undeliverable`,
+      `[AgentMsg] Target ${agentId} PTY gone — ${dropped.length} message(s) undeliverable`,
     );
     return;
   }
-  setOutcome(db, next.messageId, "delivered");
+  if (!next.onDelivered) setOutcome(db, next.messageId, "delivered");
   if (queue.length === 0) queues.delete(agentId);
 }
 
@@ -465,12 +488,8 @@ function sweepQuietAgents(): void {
     stopSweep();
     return;
   }
-  const now = Date.now();
   for (const agentId of [...queues.keys()]) {
-    const last = lastOutputAt.get(agentId);
-    // No output recorded yet means nothing has ever been written to that PTY —
-    // treat it as quiet too, otherwise a silent agent never receives anything.
-    const quietFor = last === undefined ? Number.POSITIVE_INFINITY : now - last;
+    const quietFor = msSinceAgentOutput(agentId);
     // Providers that announce boundaries get a long grace instead of an
     // exemption: normally their signal arrives first, but if it never does the
     // queue must not stall forever.
@@ -490,11 +509,11 @@ function sweepQuietAgents(): void {
 }
 
 // The one ambient db in this module: a 2s timer owns no caller to thread it from.
-/** The queue died; the row is where the sender can still learn that. */
+/** The queue died; the row is where the sender can still learn that (follow-ups have no row). */
 function markUndeliverable(db: Database.Database, pending: PendingMessage[]): void {
   markMessagesUndeliverable(
     db,
-    pending.map((p) => p.messageId),
+    pending.filter((p) => !p.onDelivered).map((p) => p.messageId),
   );
 }
 
@@ -502,6 +521,44 @@ function ensureSweep(): void {
   if (sweepTimer) return;
   sweepTimer = setInterval(sweepQuietAgents, SWEEP_MS);
   sweepTimer.unref?.();
+}
+
+/** No output recorded yet means nothing has ever been written to that PTY: quiet too, otherwise
+ *  a silent agent never receives anything */
+export function msSinceAgentOutput(agentId: string): number {
+  const last = lastOutputAt.get(agentId);
+  return last === undefined ? Number.POSITIVE_INFINITY : Date.now() - last;
+}
+
+// ─── Shared with the user's follow-up queue (follow-up-queue.ts) ────────────
+
+export function queuedFor(agentId: string): readonly PendingMessage[] {
+  return queues.get(agentId) ?? [];
+}
+
+/** Remove the first queued item that matches, without delivering it */
+export function takeQueued(
+  agentId: string,
+  match: (p: PendingMessage) => boolean,
+): PendingMessage | null {
+  const queue = queues.get(agentId);
+  const idx = queue?.findIndex(match) ?? -1;
+  if (!queue || idx === -1) return null;
+  const [taken] = queue.splice(idx, 1);
+  if (queue.length === 0) queues.delete(agentId);
+  return taken ?? null;
+}
+
+export function listFollowUps(agentId: string): FollowUpItem[] {
+  return queuedFor(agentId)
+    .filter((p) => p.onDelivered)
+    .map((p) => ({ id: p.messageId, text: p.text }));
+}
+
+/** The renderer's follow-up count follows every change to them */
+export function notifyFollowUps(agentId: string): void {
+  const event: FollowUpsChangedEvent = { agentId, items: listFollowUps(agentId) };
+  broadcast("agent:follow-ups", event);
 }
 
 // Every per-agent structure in one place. The hand-written delete list had
@@ -524,12 +581,16 @@ const PER_AGENT_STATE: Array<{ delete(key: string): unknown }> = [
 export function clearAgentMessageQueue(db: Database.Database, agentId: string): void {
   const pending = queues.get(agentId);
   markUndeliverable(db, pending ?? []);
+  if (pending?.some((p) => p.onDelivered)) {
+    queues.delete(agentId);
+    notifyFollowUps(agentId);
+  }
   if (pending?.length) {
     const gone = getAgent(db, agentId);
     const goneLabel = gone?.alias ?? agentId;
     const notified = new Set<string>();
     for (const p of pending) {
-      if (p.system || notified.has(p.fromAgentId)) continue;
+      if (p.system || p.onDelivered || notified.has(p.fromAgentId)) continue;
       notified.add(p.fromAgentId);
       try {
         sendAgentMessage(db, {

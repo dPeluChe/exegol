@@ -22,6 +22,7 @@ import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
 import { WatchToggle } from "../common/WatchToggle";
 import { CliUpdateControl } from "./CliUpdateControl";
+import { FollowUpControl } from "./FollowUpControl";
 import { PrWatchControl } from "./PrWatchControl";
 import { TurnChangesChip } from "./TurnChanges";
 
@@ -331,6 +332,7 @@ function SessionControls({ agent }: { agent: QuietAgent }) {
     <>
       <SessionAlias agent={agent} textClassName="text-[10px]" />
       <WatchToggle agentId={agent.id} className="py-0 text-[9px]" />
+      <FollowUpControl agentId={agent.id} />
       {LIVE_STATUSES.has(agent.status) && (
         <>
           <QuietControls agent={agent} className="py-0 text-[9px]" />
