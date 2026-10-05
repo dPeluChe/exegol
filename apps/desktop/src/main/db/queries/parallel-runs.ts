@@ -4,6 +4,7 @@ import type { Agent, AgentScoreRow, ParallelRun, ParallelRunStatus } from "@exeg
 import type Database from "libsql";
 import { coreRust } from "../../agents/spawn-env";
 import { getScrollbackPath } from "../../ipc/procedures/scrollback";
+import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
 import { getAgent } from "./agents";
 import { mapScoreRow } from "./scoring";
@@ -113,10 +114,10 @@ const LAST_LINES_COUNT = 10;
  * Build a single-payload comparator view of a parallel run. One IPC round
  * trip → server-side N work → renderer just renders.
  */
-export function enrichParallelRunForComparison(
+export async function enrichParallelRunForComparison(
   db: Database.Database,
   run: ParallelRun,
-): ParallelRunDetails {
+): Promise<ParallelRunDetails> {
   const columns: ParallelRunColumn[] = [];
   for (const agentId of run.agentIds) {
     const agent = getAgent(db, agentId);
@@ -126,7 +127,7 @@ export function enrichParallelRunForComparison(
     columns.push({
       agent,
       worktreePath,
-      diffStat: computeDiffStat(worktreePath),
+      diffStat: await computeDiffStat(worktreePath),
       score: getScoreRow(db, agentId),
       cost: getCostSummary(db, agentId, run.createdAt),
       durationSeconds: computeDuration(agent),
@@ -178,12 +179,13 @@ function computeDuration(agent: Agent): number | null {
   return Math.max(0, end - agent.startedAt);
 }
 
-function computeDiffStat(
+async function computeDiffStat(
   worktreePath: string | null,
-): { filesChanged: number; insertions: number; deletions: number } | null {
+): Promise<{ filesChanged: number; insertions: number; deletions: number } | null> {
   if (!worktreePath || !coreRust) return null;
   try {
-    const files = coreRust.getDiff(worktreePath, false);
+    const rust = coreRust;
+    const files = await runNative(() => rust.getDiffAsync(worktreePath, false));
     let insertions = 0;
     let deletions = 0;
     for (const file of files) {
@@ -196,7 +198,7 @@ function computeDiffStat(
     }
     return { filesChanged: files.length, insertions, deletions };
   } catch (err) {
-    logger.warn("[enrichParallelRunForComparison] getDiff failed:", err);
+    logger.warn("[enrichParallelRunForComparison] getDiffAsync failed:", err);
     return null;
   }
 }

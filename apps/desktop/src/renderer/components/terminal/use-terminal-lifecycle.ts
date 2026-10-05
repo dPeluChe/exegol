@@ -31,8 +31,8 @@ export function useTerminalLifecycle({
       setHasData(true);
       unsub();
     });
-    window.api.terminal.getSnapshot(agentId).then((snapshot) => {
-      if (snapshot && snapshot.length > 0) setHasData(true);
+    window.api.terminal.hasContent(agentId).then((has) => {
+      if (has) setHasData(true);
     });
     return unsub;
   }, [agentId, rawIsStopped, hasData]);

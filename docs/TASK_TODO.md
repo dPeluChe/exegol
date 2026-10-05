@@ -22,7 +22,7 @@
    polls; the V8 compile cache was dropped (see `TASK_COMPLETED/2610.md`).
 3. ~~Trust pack~~: shipped (`fix/trust-pack`): T200.1 trust inherited by worktrees, T200.2, T200.3,
    T183.2 for the commit message; left: T182.3 run-command review, T183.2 background opt-in.
-4. **Performance pack 2**: T185.19 main process off the hot path.
+4. ~~Performance pack 2~~: shipped (`perf/pack-2`): T185.19 main process off the hot path.
 5. **User features, one PR each**: ~~T200.6 answer agent questions~~ (shipped, `feat/answer-prompts`),
    T200.4 queue + steer, ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR loop phase 1 (T200.7)~~:
    shipped (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
@@ -415,24 +415,20 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
 
 **Main process off the hot path** (P1, Priority Order #4)
-19. Everything that blocks the main thread on a polled or per-flush path.
-    > Merged from T185.6, T185.7, T185.9 and the "Queue after 0.5.7" search and main-process
-    > follow-ups (#151 simplify pass, 0.5.3 audit) on 2026-10-04.
-    - (was 6) **Tokens tab Scan** (`tokens/log-parser.ts`) is sync `readFileSync` + `JSON.parse`
-      over `~/.claude/projects`: 2.1s freeze at ~1GB. Move to a worker_thread or stream with
-      mtime skip. Same for the sync log scan in `tokens.scan`
-    - (was 7) **Headless xterm serialize on main** (`headless-emulator.ts:69`), 25-40ms per 5000
-      lines: runs on every 5s scrollback flush per agent even when idle (add a dirty flag), and
-      twice per pane mount (`use-terminal-lifecycle.ts` fetches a full snapshot to test
-      non-empty, `terminal-setup.ts` fetches again). Sync `emulator.snapshot()` per scrollback flush
-    - (was 9) **`projects.listAllWorktrees` calls sync napi `worktreeHasChanges` per worktree** on
-      the main thread (10ms/worktree here, est 150ms+ on 10k files). Use a napi AsyncTask or
-      async git status
-    - Sync napi `getDiff`/`getWorktreeDiff` on polled paths
-    - `appendFileSync` per log line
-    - Search: `fsSearch`/`fsGrep` are sync napi calls run per folder on the main process (fine at
-      3-10ms per repo, a freeze on a 30-repo workspace); make them `AsyncTask` and give the Rust
-      walker a nested-`.git` scope instead of the per-folder loop
+19. ~~Everything that blocks the main thread on a polled or per-flush path~~: shipped
+    (`perf/pack-2`, `TASK_COMPLETED/2610.md`). Left:
+    - Search: give the Rust walker a nested-`.git` scope so a workspace is one walk instead of
+      the per-folder loop (the loop now runs async on the libuv pool, 2 folders at a time)
+    - One-shot sync `worktreeHasChanges` calls (pipeline and agent worktree cleanup, race-mode
+      cleanup, oplog undo) still run on main; not polled, so left as they are. Follow-up: the 4
+      callers (`pipeline/pipeline-worktree.ts`, `agents/agent-worktree-ops.ts`,
+      `agents/race-mode.ts`, `ipc/procedures/oplog.ts`) move to `worktreeHasChangesAsync` via
+      `runNative`
+    - Claude token import (T183.1 tokens track): Claude transcripts nest usage under
+      `message.usage`, so almost nothing imports (the extractor reads top-level `usage`). The fix
+      needs dedup by `message.id` (one line per content block repeats the same usage), and then
+      the per-entry `existingCheck` SELECT loop in `ipc/procedures/token-usage.ts` becomes a sync
+      hot spot. Separate PR with its own changelog entry
 
 ---
 

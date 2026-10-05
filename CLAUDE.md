@@ -172,7 +172,8 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything â
 - `processing/osc_notify.rs`, `status_matchers.rs`: OSC-777 signal parsing, status matchers
 - `search/`: fuzzy file finder + grep
 - `git/` â€” worktree, diff, oplog, repo info via git2
-- 54 `#[test]` functions, Clippy pedantic clean
+- `tasks.rs`: `*Async` variants (napi `AsyncTask`, libuv pool) of the git and search calls the main process polls
+- 55 `#[test]` functions, Clippy pedantic clean
 
 ## Monorepo Structure
 

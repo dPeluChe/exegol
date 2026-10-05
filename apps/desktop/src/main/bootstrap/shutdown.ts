@@ -22,7 +22,7 @@
  */
 
 import { app } from "electron";
-import { logger } from "../lib/logger";
+import { flushLogSync, logger } from "../lib/logger";
 import { allowQuit } from "../system/work-guard";
 
 interface TeardownStep {
@@ -62,6 +62,7 @@ export function runTeardown(steps: TeardownStep[]): void {
   }
 
   logger.info(`[Shutdown] teardown complete in ${Date.now() - startedAt}ms`);
+  flushLogSync();
 }
 
 /**
@@ -94,6 +95,7 @@ export function installSignalHandlers(onForceExit: () => void): void {
         } catch (err) {
           logger.warn("[Shutdown] forced teardown failed:", err);
         }
+        flushLogSync();
         app.exit(0);
       }, FORCE_EXIT_MS);
     });

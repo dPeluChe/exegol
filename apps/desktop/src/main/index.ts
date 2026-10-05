@@ -17,7 +17,7 @@ import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
-import { logger, markShutdown } from "./lib/logger";
+import { flushLogSync, logger, markShutdown } from "./lib/logger";
 import {
   ensureExegolMcpServerStarted,
   setMcpVerboseLogging,
@@ -61,6 +61,7 @@ app.whenReady().then(async () => {
       "Exegol could not open its database",
       `${err instanceof Error ? err.message : String(err)}\n\nDatabase: ${app.getPath("userData")}/exegol.db`,
     );
+    flushLogSync();
     app.exit(1);
     return;
   }
@@ -145,6 +146,7 @@ process.on("uncaughtException", (err) => {
   if (err.message?.includes("EIO") || err.message?.includes("EPIPE")) return;
   // To the log file, not just the console: a packaged app has no console
   logger.error("[Crash] Uncaught exception:", err);
+  flushLogSync();
 });
 process.on("unhandledRejection", (reason) => {
   logger.error("[Crash] Unhandled rejection:", reason);

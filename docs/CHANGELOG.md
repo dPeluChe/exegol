@@ -18,6 +18,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - CLI updates name every session they restart, with its project, in the notice; Restart to update and Update in a terminal's toolbar ask whether to restart only that session or all of the CLI's sessions, and list the others
+- Fewer stalls while agents stream: the Tokens tab scan no longer freezes the app (it reads the CLI logs in the background and skips unchanged files), and the worktree list, diffs, project search and logging no longer block the window
 - Faster start with many live agents: reconnecting a terminal rebuilds its screen without re-reading its whole history as new output (which also re-fired old status changes). Git panes no longer ask GitHub for the PR every 15 seconds (once a minute, and right after a commit, push, or a PR created or merged from Exegol), and background refreshes pause while Exegol is not the app in focus
 
 ### Fixed

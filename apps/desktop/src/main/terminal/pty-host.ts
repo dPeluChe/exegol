@@ -354,6 +354,10 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.size ?? null;
   }
 
+  hasContent(id: string): boolean {
+    return this.sessions.get(id)?.emulator.hasContent ?? false;
+  }
+
   getSnapshot(id: string): string | null {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
