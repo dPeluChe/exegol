@@ -1,6 +1,11 @@
-import type { ScheduledResult, ScheduledTask, ScheduledTaskCreate } from "@exegol/shared";
+import type {
+  ScheduledResultStatus,
+  ScheduledRun,
+  ScheduledTask,
+  ScheduledTaskCreate,
+} from "@exegol/shared";
 import type Database from "libsql";
-import { mapScheduledResultRow, mapScheduledTaskRow, nanoid } from "./helpers";
+import { mapScheduledRunRow, mapScheduledTaskRow, nanoid } from "./helpers";
 
 export function listScheduledTasks(db: Database.Database, projectId?: string): ScheduledTask[] {
   if (projectId) {
@@ -25,8 +30,8 @@ export function createScheduledTask(
 ): ScheduledTask {
   const id = nanoid();
   db.prepare(
-    `INSERT INTO scheduled_tasks (id, project_id, prompt, cron_expression, skill_name, cli_agent, max_token_budget, next_run_at, depends_on)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO scheduled_tasks (id, project_id, prompt, cron_expression, skill_name, cli_agent, max_token_budget, next_run_at, depends_on, timeout_minutes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id,
     data.projectId,
@@ -37,6 +42,7 @@ export function createScheduledTask(
     data.maxTokenBudget ?? null,
     nextRunAt,
     data.dependsOn ?? null,
+    data.timeoutMinutes ?? null,
   );
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getScheduledTask(db, id)!;
@@ -56,6 +62,7 @@ export function updateScheduledTask(
     lastResultStatus: string;
     enabled: boolean;
     dependsOn: string | null;
+    timeoutMinutes: number | null;
   }>,
 ): void {
   const sets: string[] = [];
@@ -102,6 +109,11 @@ export function updateScheduledTask(
     values.push(data.dependsOn);
   }
 
+  if (data.timeoutMinutes !== undefined) {
+    sets.push("timeout_minutes = ?");
+    values.push(data.timeoutMinutes);
+  }
+
   if (sets.length === 0) return;
   values.push(id);
   db.prepare(`UPDATE scheduled_tasks SET ${sets.join(", ")} WHERE id = ?`).run(...values);
@@ -115,24 +127,74 @@ export function toggleScheduledTask(db: Database.Database, id: string, enabled: 
   db.prepare("UPDATE scheduled_tasks SET enabled = ? WHERE id = ?").run(enabled ? 1 : 0, id);
 }
 
-export function recordScheduledResult(
-  db: Database.Database,
-  data: { taskId: string; agentId: string; status: string; summary: string },
-): void {
-  const id = nanoid();
-  db.prepare(
-    `INSERT INTO scheduled_results (id, task_id, agent_id, status, summary)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, data.taskId, data.agentId, data.status, data.summary);
-}
-
+/** Closed runs, newest first: the task's run history (scheduled_results is no longer written) */
 export function listScheduledResults(
   db: Database.Database,
   taskId: string,
   limit = 20,
-): ScheduledResult[] {
+): ScheduledRun[] {
   const rows = db
-    .prepare("SELECT * FROM scheduled_results WHERE task_id = ? ORDER BY created_at DESC LIMIT ?")
+    .prepare(
+      "SELECT * FROM scheduled_runs WHERE task_id = ? AND state NOT IN ('queued', 'running') ORDER BY ended_at DESC, rowid DESC LIMIT ?",
+    )
     .all(taskId, limit);
-  return (rows as Record<string, unknown>[]).map(mapScheduledResultRow);
+  return (rows as Record<string, unknown>[]).map(mapScheduledRunRow);
+}
+
+/** The task's queued or running run, if any: a task never has two */
+export function getOpenScheduledRun(db: Database.Database, taskId: string): ScheduledRun | null {
+  const row = db
+    .prepare(
+      "SELECT * FROM scheduled_runs WHERE task_id = ? AND state IN ('queued', 'running') LIMIT 1",
+    )
+    .get(taskId);
+  return row ? mapScheduledRunRow(row as Record<string, unknown>) : null;
+}
+
+export function getScheduledRun(db: Database.Database, id: string): ScheduledRun | null {
+  const row = db.prepare("SELECT * FROM scheduled_runs WHERE id = ?").get(id);
+  return row ? mapScheduledRunRow(row as Record<string, unknown>) : null;
+}
+
+export function queueScheduledRun(db: Database.Database, taskId: string): ScheduledRun {
+  const id = nanoid();
+  db.prepare("INSERT INTO scheduled_runs (id, task_id) VALUES (?, ?)").run(id, taskId);
+  // biome-ignore lint/style/noNonNullAssertion: row was just inserted
+  return getScheduledRun(db, id)!;
+}
+
+export function listQueuedScheduledRuns(db: Database.Database): ScheduledRun[] {
+  const rows = db
+    .prepare(
+      "SELECT * FROM scheduled_runs WHERE state = 'queued' ORDER BY queued_at ASC, rowid ASC",
+    )
+    .all();
+  return (rows as Record<string, unknown>[]).map(mapScheduledRunRow);
+}
+
+export function listRunningScheduledRuns(db: Database.Database): ScheduledRun[] {
+  const rows = db.prepare("SELECT * FROM scheduled_runs WHERE state = 'running'").all();
+  return (rows as Record<string, unknown>[]).map(mapScheduledRunRow);
+}
+
+export function startScheduledRun(db: Database.Database, id: string, agentId: string): void {
+  db.prepare(
+    "UPDATE scheduled_runs SET state = 'running', agent_id = ?, started_at = unixepoch() WHERE id = ? AND state = 'queued'",
+  ).run(agentId, id);
+}
+
+/** Moves an open run to its terminal state. False when it was already closed, so a late exit
+ *  after a timeout cannot record a second result for the same run */
+export function closeScheduledRun(
+  db: Database.Database,
+  id: string,
+  state: ScheduledResultStatus | "skipped",
+  summary: string,
+): boolean {
+  const res = db
+    .prepare(
+      "UPDATE scheduled_runs SET state = ?, summary = ?, ended_at = unixepoch() WHERE id = ? AND state IN ('queued', 'running')",
+    )
+    .run(state, summary, id);
+  return res.changes === 1;
 }

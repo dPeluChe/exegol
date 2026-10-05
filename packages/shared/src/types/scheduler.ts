@@ -14,6 +14,8 @@ export type ScheduledTask = {
   lastResultStatus: string | null;
   enabled: boolean;
   dependsOn: string | null;
+  /** Null = DEFAULT_SCHEDULED_TIMEOUT_MINUTES */
+  timeoutMinutes: number | null;
 };
 
 export type ScheduledTaskCreate = {
@@ -24,13 +26,22 @@ export type ScheduledTaskCreate = {
   skillName?: string;
   maxTokenBudget?: number;
   dependsOn?: string;
+  timeoutMinutes?: number;
 };
 
-export type ScheduledResult = {
+export const DEFAULT_SCHEDULED_TIMEOUT_MINUTES = 30;
+export const MAX_SCHEDULED_TIMEOUT_MINUTES = 24 * 60;
+
+export type ScheduledResultStatus = "success" | "failure" | "timeout" | "budget_exceeded";
+export type ScheduledRunState = "queued" | "running" | "skipped" | ScheduledResultStatus;
+
+export type ScheduledRun = {
   id: string;
   taskId: string;
-  agentId: string;
-  status: "success" | "failure" | "timeout" | "budget_exceeded";
+  agentId: string | null;
+  state: ScheduledRunState;
   summary: string;
-  createdAt: number;
+  queuedAt: number;
+  startedAt: number | null;
+  endedAt: number | null;
 };

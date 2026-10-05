@@ -197,4 +197,22 @@ export const wave3Migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_token_usage_project ON token_usage(project_id);
     CREATE INDEX IF NOT EXISTS idx_token_usage_recorded ON token_usage(recorded_at);`,
   },
+  {
+    // T185.11: a run is its own row (queued, running, closed once) so a full slot defers it
+    // durably and a timeout can never be followed by a second result for the same run
+    id: "w3_019_scheduled_runs",
+    sql: `ALTER TABLE scheduled_tasks ADD COLUMN timeout_minutes INTEGER;
+    CREATE TABLE IF NOT EXISTS scheduled_runs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      agent_id TEXT,
+      state TEXT NOT NULL DEFAULT 'queued' CHECK (state IN ('queued', 'running', 'success', 'failure', 'timeout', 'budget_exceeded', 'skipped')),
+      summary TEXT NOT NULL DEFAULT '',
+      queued_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      started_at INTEGER,
+      ended_at INTEGER,
+      FOREIGN KEY (task_id) REFERENCES scheduled_tasks(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_scheduled_runs_task_state ON scheduled_runs(task_id, state);`,
+  },
 ];

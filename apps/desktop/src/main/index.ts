@@ -107,8 +107,9 @@ app.whenReady().then(async () => {
   // Once: projects added before icons were kept get theirs (off the startup path)
   setTimeout(() => void backfillProjectIcons(getDb()).catch(() => {}), 5_000);
 
-  // Background: sidecar connection + agent recovery (non-blocking)
-  void runStartupRecovery();
+  // Background: sidecar connection + agent recovery (non-blocking). The scheduler waits for it:
+  // stopping an interrupted run's agent needs its reattached PTY
+  void runStartupRecovery().finally(() => getSchedulerEngine().start(getDb()));
 
   // Background services (non-blocking, start after window)
   cleanupOldEvents(getDb());
@@ -125,7 +126,6 @@ app.whenReady().then(async () => {
     }
   });
   startMetricsCollector();
-  getSchedulerEngine().start(getDb());
   getQueueExecutor().start(getDb());
   getAgentManager().startShellPromotion(getDb());
   startPrWatch();

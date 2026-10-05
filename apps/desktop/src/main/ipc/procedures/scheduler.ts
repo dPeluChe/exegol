@@ -157,7 +157,6 @@ export const schedulerRouter = router({
     }
 
     const engine = ctx.schedulerEngine;
-    // Fire and forget — don't await completion (it polls for 5s intervals)
     engine.runNow(input.id).catch((err) => {
       console.error(`[Scheduler] runNow failed for task ${input.id}:`, err);
     });
