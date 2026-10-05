@@ -15,6 +15,8 @@
 
 ### Queue after 0.5.7 (2026-09-29)
 
+0. **T200 quick ones** (October competitor review): folder pre-trust, child env markers,
+   per-pane error boundary, orchestration skills, diff comments to the agent.
 1. **Verify opencode across app quit** (P1 #2 below).
 2. **Search follow-ups** (from the #151 simplify pass): `fsSearch`/`fsGrep` are sync napi calls
    run per folder on the main process (fine at 3-10ms per repo, a freeze on a 30-repo workspace);
@@ -544,6 +546,22 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
 
 ---
+
+### T200 — Learnings from the October competitor review `added: 2026-10-04`
+**Priority**: P1 for items 1-13 | **Effort**: varies | **Source**: 48 repos (spark tag `exegol`),
+two waves. Evidence, P2 and P3 items: `docs/RESEARCH/COMPETITIVE_UPDATE_2026_10.md`.
+
+Quick ones first (S): 1. pre-trust the folder before spawning (orca); 2. strip the launching
+session's markers (CLAUDECODE, CLAUDE_CODE_CHILD_SESSION...) from the child env (klaudio);
+3. per-pane error boundary (superset); 11. bundled orchestration skills on our MCP tools (paseo);
+13. send diff comments to the agent (emdash).
+
+Then (S-M / M): 4. follow-up queue + steer; 5. per-turn snapshot, "changes this turn", Undo turn
+(extends T129); 6. answer agent questions from the Dashboard / notification (PermissionRequest
+hook body, `ask_user` MCP tool); 7. react to PR checks, reviews and conflicts (next to T142);
+8. plan usage meter (5h / weekly, reset); 9. hooks for Codex and other CLIs, session id from the
+hook (T191); 10. stuck-agent watchdog ladder; 12. agent-driven UI over MCP (`pane_open`,
+`notify`).
 
 ### T195 — Distribution: universal build `added: 2026-09-24`
 **Priority**: P2 | **Effort**: M
