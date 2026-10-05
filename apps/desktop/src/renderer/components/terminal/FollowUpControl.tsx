@@ -1,27 +1,24 @@
-import { type FollowUpItem, LIVE_STATUSES } from "@exegol/shared";
+import { acceptsFollowUps, type FollowUpItem, STEER_TIMEOUT_MS } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { ListPlus, X, Zap } from "lucide-react";
 import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
-import { useMountEffect } from "../../hooks/use-mount-effect";
+import { useEnabledProviders } from "../../hooks/use-providers";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
+import { followUpsKey, useAgentStore } from "../../stores/agents";
 import { toastError, useToastStore } from "../../stores/toasts";
 
-const followUpsKey = (agentId: string) => ["agents", "followUps", agentId];
+const STEER_SECONDS = STEER_TIMEOUT_MS / 1000;
 
-/** The queue lives in main; its push event keeps every view of it current */
+/** The queue lives in main; its push event (startAgentStatusPush) keeps the cache current */
 function useFollowUps(agentId: string, enabled: boolean): FollowUpItem[] {
-  const queryClient = useQueryClient();
-  useMountEffect(() =>
-    window.api.onFollowUps((e) => queryClient.setQueryData(followUpsKey(e.agentId), e.items)),
-  );
   const { data = [] } = useQuery({
     queryKey: followUpsKey(agentId),
     queryFn: () => trpcInvoke<FollowUpItem[]>("agents.followUps", { id: agentId }),
     enabled,
+    staleTime: Number.POSITIVE_INFINITY,
   });
   return data;
 }
@@ -30,11 +27,8 @@ function useFollowUps(agentId: string, enabled: boolean): FollowUpItem[] {
  *  typed at its next turn boundary; Steer interrupts the turn and types now */
 export function FollowUpControl({ agentId, className }: { agentId: string; className?: string }) {
   const agent = useAgentStore((s) => s.agents[agentId]);
-  const eligible =
-    !!agent &&
-    agent.cliType !== "shell" &&
-    LIVE_STATUSES.has(agent.status) &&
-    !(agent.launchedInShell && agent.status === "idle");
+  const eligible = !!agent && acceptsFollowUps(agent);
+  const canSteer = !!useEnabledProviders().find((p) => p.id === agent?.cliType)?.interruptKey;
   const items = useFollowUps(agentId, eligible);
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -78,7 +72,12 @@ export function FollowUpControl({ agentId, className }: { agentId: string; class
               className="fixed z-[101] w-80 rounded-lg border border-border bg-bg-secondary p-2 shadow-2xl"
               style={menuStyle}
             >
-              <FollowUpPanel agentId={agentId} items={items} onClose={() => setAnchor(null)} />
+              <FollowUpPanel
+                agentId={agentId}
+                items={items}
+                canSteer={canSteer}
+                onClose={() => setAnchor(null)}
+              />
             </div>
           </>,
           document.body,
@@ -90,10 +89,12 @@ export function FollowUpControl({ agentId, className }: { agentId: string; class
 function FollowUpPanel({
   agentId,
   items,
+  canSteer,
   onClose,
 }: {
   agentId: string;
   items: FollowUpItem[];
+  canSteer: boolean;
   onClose: () => void;
 }) {
   const [text, setText] = useState("");
@@ -112,7 +113,7 @@ function FollowUpPanel({
       useToastStore.getState().addToast({
         type: "warning",
         title: "Steer: still queued",
-        body: "The agent did not reach its prompt within 20s. The message goes at its next turn.",
+        body: `The agent did not reach its prompt within ${STEER_SECONDS}s. The message goes at its next turn.`,
         agentId,
       });
     },
@@ -182,19 +183,21 @@ function FollowUpPanel({
         >
           Send later
         </button>
-        <button
-          type="button"
-          disabled={!trimmed || busy}
-          onClick={() => steer.mutate(trimmed)}
-          className={cn(
-            btn,
-            "flex items-center gap-1 border border-accent/50 bg-accent/15 text-text-primary hover:bg-accent/25",
-          )}
-          title="Interrupt the turn (Esc), wait for the prompt (up to 20s), then type this"
-        >
-          <Zap className="h-3 w-3" />
-          Steer
-        </button>
+        {canSteer && (
+          <button
+            type="button"
+            disabled={!trimmed || busy}
+            onClick={() => steer.mutate(trimmed)}
+            className={cn(
+              btn,
+              "flex items-center gap-1 border border-accent/50 bg-accent/15 text-text-primary hover:bg-accent/25",
+            )}
+            title={`Interrupt the turn, wait for the prompt (up to ${STEER_SECONDS}s), then type this`}
+          >
+            <Zap className="h-3 w-3" />
+            Steer
+          </button>
+        )}
       </div>
     </div>
   );

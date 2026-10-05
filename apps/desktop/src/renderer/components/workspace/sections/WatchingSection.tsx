@@ -277,7 +277,7 @@ function WatchCard({
             </span>
           )}
         </div>
-        {live && <FollowUpControl agentId={agent.id} className="py-0.5 text-[10px]" />}
+        <FollowUpControl agentId={agent.id} className="py-0.5 text-[10px]" />
         {live && <CardSizeControls agentId={agent.id} />}
         <button
           type="button"

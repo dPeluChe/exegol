@@ -42,8 +42,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   of each kind per pushed commit and 10 per watch; the agent's own comments are skipped.
 - **Send to**: select text in one terminal and paste it into another live agent.
 - **Follow-ups and Steer**: Queue in the terminal toolbar (and on a Watching card) holds prompts
-  for an agent's next turn; each is typed when the turn ends, one per turn. Steer interrupts the
-  turn (Esc), waits up to 20s for the prompt and types right away. The queue lives in memory: it
+  for an agent's next turn; each is typed when the turn ends, one per turn. Steer (Claude Code,
+  Codex) interrupts the turn (Esc), waits up to 20s for the prompt and types right away. The queue lives in memory: it
   is lost on app quit and dropped when the session ends.
 - **Launch options**: model (for CLIs with a model flag) and session name in the launcher.
 - **Access modes**: read, write or plan per agent or pipeline step, shown as a badge.

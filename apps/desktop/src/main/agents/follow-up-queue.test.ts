@@ -1,3 +1,4 @@
+import { STEER_TIMEOUT_MS } from "@exegol/shared";
 import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
@@ -33,9 +34,7 @@ import {
   listFollowUps,
   queueFollowUp,
   removeFollowUp,
-  STEER_TIMEOUT_MS,
   steerFollowUp,
-  waitUntil,
 } from "./follow-up-queue";
 
 let db: Database.Database;
@@ -68,7 +67,6 @@ beforeEach(() => {
 
 afterEach(() => {
   for (const id of ["a1", "a2", "s1"]) {
-    dropFollowUps(id);
     clearAgentMessageQueue(db, id);
     setAgentAwaitingApproval(id, false);
   }
@@ -133,6 +131,39 @@ describe("follow-up queue", () => {
     for (const id of ["s1", "a1", "a2", "missing"]) {
       expect(() => queueFollowUp(db, id, "x")).toThrow(/live agent/);
     }
+  });
+
+  it("goes ahead of agent messages and does not count toward agent_send's caps", () => {
+    insertAgent("a1", "running");
+    insertAgent("a2", "running");
+    for (let i = 0; i < 10; i++) queueFollowUp(db, "a2", `mine ${i}`);
+    sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "hi there" });
+    queueFollowUp(db, "a1", "x");
+    expect(() => queueFollowUp(db, "a2", "one more")).toThrow(/full/);
+    removeFollowUp("a2", listFollowUps("a2")[9]?.id ?? "");
+    queueFollowUp(db, "a2", "late");
+    for (let i = 0; i < 10; i++) deliverPendingAgentMessages(db, "a2");
+    expect(typed()).not.toContain("hi there");
+    expect(typed()).toContain("late");
+    deliverPendingAgentMessages(db, "a2");
+    expect(typed()).toContain("hi there");
+  });
+
+  it("PTY gone: follow-ups are dropped, the renderer told, no messages row", () => {
+    insertAgent("a1", "running");
+    queueFollowUp(db, "a1", "never");
+    ptyMock.alive.delete("a1");
+    deliverPendingAgentMessages(db, "a1");
+    expect(listFollowUps("a1")).toEqual([]);
+    expect(events.at(-1)?.payload).toEqual({ agentId: "a1", items: [] });
+  });
+
+  it("session end drops follow-ups without messaging anyone", () => {
+    insertAgent("a1", "running");
+    queueFollowUp(db, "a1", "never");
+    clearAgentMessageQueue(db, "a1");
+    expect(events.at(-1)?.payload).toEqual({ agentId: "a1", items: [] });
+    expect(db.prepare("SELECT COUNT(*) AS n FROM messages").get()).toMatchObject({ n: 0 });
   });
 
   it("leaves agent_send messages alone: remove and drop touch only follow-ups", () => {
@@ -201,27 +232,43 @@ describe("steer", () => {
     expect(typed()).toBe("\x1b");
   });
 
+  it("a second Steer while one waits joins its text, with no second Esc", async () => {
+    insertAgent("a1", "running");
+    noteAgentOutput("a1");
+    const first = steerFollowUp(db, "a1", "stop");
+    const second = steerFollowUp(db, "a1", "and use v2");
+    expect(listFollowUps("a1").map((i) => i.text)).toEqual(["stop\n\nand use v2"]);
+    await vi.advanceTimersByTimeAsync(1_750);
+    await expect(first).resolves.toMatchObject({ delivered: true });
+    await expect(second).resolves.toMatchObject({ delivered: true });
+    expect(ptyMock.writes.filter((w) => w.data === "\x1b")).toHaveLength(1);
+  });
+
+  it("not delivered when the item is removed or the agent exits while it waits", async () => {
+    insertAgent("a1", "running");
+    noteAgentOutput("a1");
+    const removed = steerFollowUp(db, "a1", "one");
+    removeFollowUp("a1", listFollowUps("a1")[0]?.id ?? "");
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(removed).resolves.toMatchObject({ delivered: false });
+
+    noteAgentOutput("a1");
+    const exited = steerFollowUp(db, "a1", "two");
+    clearAgentMessageQueue(db, "a1");
+    await vi.advanceTimersByTimeAsync(250);
+    await expect(exited).resolves.toMatchObject({ delivered: false });
+  });
+
+  it("refuses a CLI with no interrupt key", async () => {
+    insertAgent("a1", "running", "aider");
+    await expect(steerFollowUp(db, "a1", "x")).rejects.toThrow(/interrupt/);
+    expect(ptyMock.writes).toHaveLength(0);
+  });
+
   it("types at once, without Esc, when the agent is already at its prompt", async () => {
     insertAgent("a1", "idle");
     await expect(steerFollowUp(db, "a1", "next")).resolves.toMatchObject({ delivered: true });
     expect(typed()).not.toContain("\x1b\x1b");
     expect(ptyMock.writes[0]?.data.startsWith("\x1b[200~")).toBe(true);
-  });
-});
-
-describe("waitUntil", () => {
-  it("resolves true as soon as the check holds", async () => {
-    let ready = false;
-    const p = waitUntil(() => ready, { timeoutMs: 1_000, intervalMs: 100 });
-    await vi.advanceTimersByTimeAsync(300);
-    ready = true;
-    await vi.advanceTimersByTimeAsync(100);
-    await expect(p).resolves.toBe(true);
-  });
-
-  it("resolves false at the cap", async () => {
-    const p = waitUntil(() => false, { timeoutMs: 1_000, intervalMs: 100 });
-    await vi.advanceTimersByTimeAsync(1_100);
-    await expect(p).resolves.toBe(false);
   });
 });

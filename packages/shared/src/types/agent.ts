@@ -177,6 +177,20 @@ export interface FollowUpsChangedEvent {
   items: FollowUpItem[];
 }
 
+/** Steer waits this long for the prompt after the interrupt; past it the message stays queued */
+export const STEER_TIMEOUT_MS = 20_000;
+
+/** A live agent session (not a shell, not a CLI back at its shell prompt) takes follow-ups */
+export function acceptsFollowUps(
+  agent: Pick<Agent, "cliType" | "status" | "launchedInShell">,
+): boolean {
+  return (
+    agent.cliType !== "shell" &&
+    LIVE_STATUSES.has(agent.status) &&
+    !(agent.launchedInShell && agent.status === "idle")
+  );
+}
+
 /** One window of a CLI's subscription plan (Claude: 5h and weekly; Codex: primary/secondary) */
 export interface PlanWindow {
   usedPercent: number;
@@ -375,6 +389,8 @@ export type AgentProvider = {
   installCommand?: string | null;
   /** The vendor's install guide (the only way when this OS has no command, e.g. amp on Windows) */
   installDocs?: string | null;
+  /** The key that interrupts its turn (Steer); absent: Steer is not offered */
+  interruptKey?: string | null;
 };
 
 // ─── Messages ───────────────────────────────────────────────────────────────

@@ -63,6 +63,8 @@ function statusToAttention(
 
 let pushCleanup: (() => void) | null = null;
 
+export const followUpsKey = (agentId: string) => ["agents", "followUps", agentId];
+
 /** Start listening for agent status push events from main process */
 export function startAgentStatusPush(queryClient: QueryClient): void {
   if (pushCleanup) return; // Already subscribed
@@ -70,6 +72,9 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   const offPrWatch = window.api.onPrWatch(({ agentId, reason }) => {
     if (reason) useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason });
   });
+  const stopFollowUps = window.api.onFollowUps((e) =>
+    queryClient.setQueryData(followUpsKey(e.agentId), e.items),
+  );
   const stopTurns = window.api.onTurnChanges((event) =>
     queryClient.invalidateQueries({ queryKey: ["oplog", "turn", event.agentId] }),
   );
@@ -127,6 +132,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   });
   pushCleanup = () => {
     offPrWatch();
+    stopFollowUps();
     stopTurns();
     stopStatus();
   };

@@ -332,10 +332,10 @@ function SessionControls({ agent }: { agent: QuietAgent }) {
     <>
       <SessionAlias agent={agent} textClassName="text-[10px]" />
       <WatchToggle agentId={agent.id} className="py-0 text-[9px]" />
+      <FollowUpControl agentId={agent.id} />
       {LIVE_STATUSES.has(agent.status) && (
         <>
           <QuietControls agent={agent} className="py-0 text-[9px]" />
-          <FollowUpControl agentId={agent.id} />
           <PrWatchControl agent={agent} />
           <CliUpdateControl agentId={agent.id} />
           <TurnChangesChip agentId={agent.id} />

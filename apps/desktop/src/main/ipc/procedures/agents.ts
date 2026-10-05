@@ -4,8 +4,9 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
-import { cliSetupFor } from "../../agents/cli-catalog";
+import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
 import {
+  FOLLOW_UP_MAX_CHARS,
   FollowUpError,
   listFollowUps,
   queueFollowUp,
@@ -60,6 +61,7 @@ function withInstallInfo(providers: AgentProvider[]): AgentProvider[] {
       installed: p.id === "shell" || installed.has(p.id),
       installCommand: setup?.install ?? null,
       installDocs: setup?.docs ?? null,
+      interruptKey: interruptKeyOf(p.id),
     };
   });
 }
@@ -445,16 +447,16 @@ export const agentRouter = router({
     .query(({ input }) => listFollowUps(input.id)),
 
   queueFollowUp: publicProcedure
-    .input(z.object({ id: z.string(), text: z.string().min(1).max(12_000) }))
+    .input(z.object({ id: z.string(), text: z.string().min(1).max(FOLLOW_UP_MAX_CHARS) }))
     .mutation(({ ctx, input }) => followUpCall(() => queueFollowUp(ctx.db, input.id, input.text))),
 
   removeFollowUp: publicProcedure
     .input(z.object({ id: z.string(), itemId: z.string().max(100) }))
     .mutation(({ input }) => removeFollowUp(input.id, input.itemId)),
 
-  /** Esc, wait for the prompt (20s cap), type; past the cap it stays queued */
+  /** Interrupt, wait for the prompt (STEER_TIMEOUT_MS cap), type; past the cap it stays queued */
   steer: publicProcedure
-    .input(z.object({ id: z.string(), text: z.string().min(1).max(12_000) }))
+    .input(z.object({ id: z.string(), text: z.string().min(1).max(FOLLOW_UP_MAX_CHARS) }))
     .mutation(({ ctx, input }) => followUpCall(() => steerFollowUp(ctx.db, input.id, input.text))),
 
   stop: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
