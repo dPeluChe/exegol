@@ -18,9 +18,8 @@
 > Source: the 2026-10-04 backlog audit (`TASK_COMPLETED/2610.md`). User-facing and performance first.
 
 1. ~~Status bar usage (T200.8)~~: shipped #284 (`TASK_COMPLETED/2610.md`).
-2. **Performance pack 1**: T185.8 reattach replay; polls (T185.10: git status + `gh pr view`,
-   TanStack `focusManager` + `enabled: isVisible`, `FloatingBrowser` 5s); V8 compile cache
-   (`module.enableCompileCache()` in main and the sidecar, `COMPETITIVE_UPDATE_2026_10.md` P2).
+2. ~~Performance pack 1~~: shipped (`perf/pack-1`): T185.8 reattach, T185.10 PR cache + focus-paused
+   polls; the V8 compile cache was dropped (see `TASK_COMPLETED/2610.md`).
 3. **Trust pack**: T200.1 folder pre-trust, T200.2 child env markers, T200.3 per-pane error
    boundary, T183.2 AI features via the logged-in CLI.
 4. **Performance pack 2**: T185.19 main process off the hot path.

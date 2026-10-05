@@ -40,6 +40,8 @@ export function useCliUpdates(): Map<string, CliUpdateStatus> {
     queryFn: () => trpcInvoke<CliUpdateStatus[]>("doctor.cliUpdates", { cliTypes }),
     enabled: cliTypes.length > 0,
     refetchInterval: awaiting ? AWAIT_MS : CHECK_MS,
+    // An update started before switching apps restarts its sessions without waiting for focus
+    refetchIntervalInBackground: awaiting,
     staleTime: CHECK_MS / 2,
   });
   return useMemo(() => new Map((data ?? []).map((s) => [s.cliType, s])), [data]);
