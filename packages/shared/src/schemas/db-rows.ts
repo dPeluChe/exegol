@@ -132,7 +132,7 @@ export const scheduledResultRowSchema = z.object({
 
 export const tokenUsageRowSchema = z.object({
   id: z.string(),
-  agent_id: z.string(),
+  agent_id: z.string().nullable(),
   provider: z.string(),
   model: z.string(),
   input_tokens: z.number(),

@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   getAgentCosts,
@@ -9,8 +10,8 @@ import {
   getProjectTokenUsageSummary,
   getTokenUsageSummary,
   importScannedTokenUsage,
+  listWorktrees,
 } from "../../db/queries";
-import { isInside } from "../../system/ports";
 import { scanAllLogs } from "../../tokens/log-parser";
 import { publicProcedure, router } from "../trpc";
 
@@ -43,17 +44,15 @@ export const tokenUsageRouter = router({
 
   /** Scan local CLI logs and import token usage into the database */
   scan: publicProcedure
-    .input(z.object({ projectId: z.string() }).optional())
+    .input(z.object({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
       const since = Math.floor(Date.now() / 1000) - 30 * 86400; // Last 30 days
-      const { entries: scanned } = await scanAllLogs(since);
-      const agentId = input?.projectId ? `scan:${input.projectId}` : "external";
-      const project = input?.projectId ? getProject(ctx.db, input.projectId) : null;
-      // Claude logs cover every project on the machine: keep the ones run inside this one
-      const entries = project
-        ? scanned.filter((e) => !e.cwd || isInside(e.cwd, project.path))
-        : scanned;
-      const { imported, skipped } = importScannedTokenUsage(ctx.db, agentId, entries);
+      // CLI logs cover every project on the machine: keep sessions run in this one or its worktrees
+      const roots = [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)];
+      const { entries } = await scanAllLogs(since, undefined, roots);
+      const { imported, skipped } = await importScannedTokenUsage(ctx.db, project.id, entries);
       return { imported, skipped, total: entries.length };
     }),
 

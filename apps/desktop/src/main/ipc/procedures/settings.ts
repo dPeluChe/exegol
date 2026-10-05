@@ -5,22 +5,19 @@ import { registerGlobalHotkey } from "../../bootstrap/global-hotkey";
 import { getAppSettings, saveAppSettings } from "../../db/queries/settings";
 import { setMcpVerboseLogging } from "../../mcp/exegol-server";
 import { invalidateDesktopChannelCache } from "../../notifications/channels/desktop";
+import { MODEL_PRICES, type ModelPrice } from "../../tokens/pricing";
 import type { Context } from "../context";
 import { publicProcedure, router } from "../trpc";
 
 // ─── Model Pricing Catalog (T19) ─────────────────────────────────────────
 
-const DEFAULT_MODEL_CATALOG: Record<string, { input: number; output: number }> = {
-  "claude-opus-4-6": { input: 15 / 1e6, output: 75 / 1e6 },
-  "claude-sonnet-4-6": { input: 3 / 1e6, output: 15 / 1e6 },
-  "claude-haiku-4-5-20251001": { input: 0.8 / 1e6, output: 4 / 1e6 },
-  "gpt-4o": { input: 2.5 / 1e6, output: 10 / 1e6 },
-  "gpt-4o-mini": { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-  o3: { input: 10 / 1e6, output: 40 / 1e6 },
-  "o4-mini": { input: 1.1 / 1e6, output: 4.4 / 1e6 },
-  "gemini-2.5-pro": { input: 1.25 / 1e6, output: 10 / 1e6 },
-  "gemini-2.5-flash": { input: 0.15 / 1e6, output: 0.6 / 1e6 },
-};
+// The log parser's table, per token instead of per 1M
+const DEFAULT_MODEL_CATALOG: Record<string, ModelPrice> = Object.fromEntries(
+  Object.entries(MODEL_PRICES).map(([model, p]) => [
+    model,
+    { input: p.input / 1e6, output: p.output / 1e6 },
+  ]),
+);
 
 function getModelCatalog(db: Context["db"]): Record<string, { input: number; output: number }> {
   const row = db.prepare("SELECT value FROM settings WHERE key = 'model_catalog'").get() as

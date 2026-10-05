@@ -3,15 +3,18 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
+import { claudeProjectDir } from "../history/providers/claude-code";
 import { dayDirs } from "../history/providers/codex";
 import { mapWithConcurrency } from "../lib/concurrency";
+import { isInside } from "../system/ports";
+import { claudeCacheInput, estimateCost } from "./pricing";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface ParsedTokenEntry {
   /** Stable per source record, so a rescan updates the row instead of adding one */
   key: string;
-  /** Working directory the record came from, when the log says (Claude only) */
+  /** Working directory the record came from (Claude, Codex); aider logs have none */
   cwd?: string;
   provider: string;
   model: string;
@@ -20,58 +23,6 @@ export interface ParsedTokenEntry {
   estimatedCostUsd: number;
   toolCallCount: number;
   timestamp: number;
-}
-
-// ─── Cost estimation per model (USD per 1M tokens) ──────────────────────────
-
-const MODEL_COSTS: Record<string, { input: number; output: number }> = {
-  // Anthropic
-  "claude-opus-4-6": { input: 15, output: 75 },
-  "claude-sonnet-4-6": { input: 3, output: 15 },
-  "claude-haiku-4-5-20251001": { input: 0.8, output: 4 },
-  "claude-sonnet-4-5-20250514": { input: 3, output: 15 },
-  "claude-3-5-sonnet-20241022": { input: 3, output: 15 },
-  "claude-3-5-haiku-20241022": { input: 0.8, output: 4 },
-  "claude-3-opus-20240229": { input: 15, output: 75 },
-  // OpenAI
-  "gpt-5": { input: 2.5, output: 10 },
-  "gpt-4o": { input: 2.5, output: 10 },
-  "gpt-4o-mini": { input: 0.15, output: 0.6 },
-  o3: { input: 10, output: 40 },
-  "o4-mini": { input: 1.1, output: 4.4 },
-  // Google
-  "gemini-2.5-pro": { input: 1.25, output: 10 },
-  "gemini-2.5-flash": { input: 0.15, output: 0.6 },
-};
-
-// Anthropic bills cache reads at 0.1x the input price, cache writes at 1.25x (5 min) or 2x (1 h)
-const CACHE_READ_RATE = 0.1;
-const CACHE_WRITE_5M_RATE = 1.25;
-const CACHE_WRITE_1H_RATE = 2;
-
-interface CacheTokens {
-  read: number;
-  write5m: number;
-  write1h: number;
-}
-
-function estimateCost(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  cache?: CacheTokens,
-): number {
-  const costs = MODEL_COSTS[model] ??
-    Object.entries(MODEL_COSTS).find(([key]) => model.startsWith(key))?.[1] ?? {
-      input: 3,
-      output: 15,
-    }; // default to Sonnet pricing
-  const cachedInput = cache
-    ? cache.read * CACHE_READ_RATE +
-      cache.write5m * CACHE_WRITE_5M_RATE +
-      cache.write1h * CACHE_WRITE_1H_RATE
-    : 0;
-  return ((inputTokens + cachedInput) * costs.input + outputTokens * costs.output) / 1_000_000;
 }
 
 // ─── Per-file cache ─────────────────────────────────────────────────────────
@@ -140,7 +91,7 @@ export function mayCarryClaudeUsage(line: string): boolean {
   return line.includes('"input_tokens"') || line.includes('"costUSD"');
 }
 
-export async function parseClaudeFile(path: string, since: number): Promise<ParsedTokenEntry[]> {
+async function parseClaudeFile(path: string, since: number): Promise<ParsedTokenEntry[]> {
   const entries: ParsedTokenEntry[] = [];
   const seen = new Set<string>();
   let lineNo = 0;
@@ -165,11 +116,16 @@ export async function parseClaudeFile(path: string, since: number): Promise<Pars
   return entries;
 }
 
-async function listClaudeFiles(home: string): Promise<string[]> {
+/** With roots, only the folders Claude names after them (or a subfolder of them) */
+async function listClaudeFiles(home: string, roots?: string[]): Promise<string[]> {
   const base = join(home, ".claude", "projects");
+  const prefixes = roots?.map(claudeProjectDir);
   const files: string[] = [];
   for (const dir of await safeReaddir(base)) {
     if (!dir.isDirectory()) continue;
+    if (prefixes && !prefixes.some((p) => dir.name === p || dir.name.startsWith(`${p}-`))) {
+      continue;
+    }
     for (const f of await safeReaddir(join(base, dir.name))) {
       if (f.name.endsWith(".jsonl")) files.push(join(base, dir.name, f.name));
     }
@@ -179,13 +135,6 @@ async function listClaudeFiles(home: string): Promise<string[]> {
 
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);
 
-function claudeCacheTokens(usage: Record<string, unknown>): CacheTokens {
-  const write = num(usage.cache_creation_input_tokens);
-  const split = usage.cache_creation as Record<string, unknown> | undefined;
-  const write1h = Math.min(num(split?.ephemeral_1h_input_tokens), write);
-  return { read: num(usage.cache_read_input_tokens), write5m: write - write1h, write1h };
-}
-
 function extractClaudeTokenUsage(
   entry: Record<string, unknown>,
   since: number,
@@ -193,7 +142,6 @@ function extractClaudeTokenUsage(
 ): ParsedTokenEntry | null {
   const ts = getTimestamp(entry);
   if (ts < since) return null;
-  const cwd = typeof entry.cwd === "string" ? entry.cwd : undefined;
 
   // Transcripts nest it: { message: { id, model, usage, content }, requestId }; older logs had it top-level
   const message =
@@ -202,42 +150,38 @@ function extractClaudeTokenUsage(
       : undefined;
   const source = message?.usage ? message : entry;
   const usage = source.usage as Record<string, unknown> | undefined;
-  if (usage && typeof usage.input_tokens === "number") {
-    const model = typeof source.model === "string" ? source.model : "unknown";
-    const inputTokens = usage.input_tokens;
+  const hasUsage = typeof usage?.input_tokens === "number";
+  const hasCost = typeof entry.costUSD === "number" && typeof entry.inputTokens === "number";
+  if (!hasUsage && !hasCost) return null;
+
+  const model = typeof source.model === "string" ? source.model : "unknown";
+  const id = typeof source.id === "string" ? source.id : (entry.uuid as string | undefined);
+  const requestId = hasUsage && typeof entry.requestId === "string" ? `:${entry.requestId}` : "";
+  const shared = {
+    key: `claude:${id ? `${id}${requestId}` : fallbackKey}`,
+    cwd: typeof entry.cwd === "string" ? entry.cwd : undefined,
+    provider: "anthropic",
+    model,
+    toolCallCount: countToolCalls(source),
+    timestamp: ts,
+  };
+  if (usage && hasUsage) {
+    const inputTokens = usage.input_tokens as number;
     const outputTokens = num(usage.output_tokens);
-    const id = typeof source.id === "string" ? source.id : (entry.uuid as string | undefined);
-    const requestId = typeof entry.requestId === "string" ? `:${entry.requestId}` : "";
     return {
-      key: `claude:${id ? `${id}${requestId}` : fallbackKey}`,
-      cwd,
-      provider: "anthropic",
-      model,
+      ...shared,
       inputTokens,
       outputTokens,
-      estimatedCostUsd: estimateCost(model, inputTokens, outputTokens, claudeCacheTokens(usage)),
-      toolCallCount: countToolCalls(source),
-      timestamp: ts,
+      estimatedCostUsd: estimateCost(model, inputTokens + claudeCacheInput(usage), outputTokens),
     };
   }
-
-  // Pattern 2: costUSD field (newer logs)
-  if (typeof entry.costUSD === "number" && typeof entry.inputTokens === "number") {
-    const model = (entry.model as string) ?? "unknown";
-    return {
-      key: `claude:${(entry.uuid as string | undefined) ?? fallbackKey}`,
-      cwd,
-      provider: "anthropic",
-      model,
-      inputTokens: entry.inputTokens as number,
-      outputTokens: typeof entry.outputTokens === "number" ? entry.outputTokens : 0,
-      estimatedCostUsd: entry.costUSD as number,
-      toolCallCount: countToolCalls(entry),
-      timestamp: ts,
-    };
-  }
-
-  return null;
+  // costUSD form (older logs)
+  return {
+    ...shared,
+    inputTokens: entry.inputTokens as number,
+    outputTokens: num(entry.outputTokens),
+    estimatedCostUsd: entry.costUSD as number,
+  };
 }
 
 // ─── Codex JSONL Parser (T03) ───────────────────────────────────────────────
@@ -270,6 +214,7 @@ export async function parseCodexSessionFile(
   let fallbackModel: string | null = null;
   let sessionProvider = "openai";
   let sessionTimestamp = 0;
+  let cwd: string | undefined;
   // A holder, not a `let`: TS would keep a closure-assigned local narrowed to null
   const last: { value: { input: number; output: number; timestamp?: string } | null } = {
     value: null,
@@ -293,6 +238,7 @@ export async function parseCodexSessionFile(
       metaSeen = true;
       metaModel = (payload.model as string) ?? null;
       sessionProvider = (payload.model_provider as string) ?? "openai";
+      if (typeof payload.cwd === "string") cwd = payload.cwd;
       if (payload.timestamp) {
         const t = new Date(payload.timestamp as string);
         sessionTimestamp = Number.isNaN(t.getTime()) ? 0 : t.getTime() / 1000;
@@ -319,6 +265,7 @@ export async function parseCodexSessionFile(
   return [
     {
       key: `codex:${basename(path)}`,
+      cwd,
       provider: sessionProvider,
       model,
       inputTokens,
@@ -431,23 +378,35 @@ function countToolCalls(entry: Record<string, unknown>): number {
 /** Few enough open streams that parsing still interleaves with PTY output */
 const SCAN_CONCURRENCY = 4;
 
+/** With roots (a project and its worktrees), only records whose cwd is inside one of them */
 export async function scanAllLogs(
   sinceTimestamp: number,
   home = homedir(),
+  roots?: string[],
 ): Promise<{ entries: ParsedTokenEntry[]; parsedFiles: number }> {
   const stats: ScanStats = { parsedFiles: 0, seen: new Set() };
   const [claudeFiles, codexFiles] = await Promise.all([
-    listClaudeFiles(home),
+    listClaudeFiles(home, roots),
     listCodexFiles(home, sinceTimestamp),
   ]);
   const jobs: [string, FileParser][] = [
     ...claudeFiles.map((f): [string, FileParser] => [f, parseClaudeFile]),
     ...codexFiles.map((f): [string, FileParser] => [f, parseCodexSessionFile]),
-    ...aiderFiles(home).map((f): [string, FileParser] => [f, parseAiderFile]),
+    // Aider logs carry no cwd, so they cannot belong to a project
+    ...(roots ? [] : aiderFiles(home)).map((f): [string, FileParser] => [f, parseAiderFile]),
   ];
   const results = await mapWithConcurrency(jobs, SCAN_CONCURRENCY, ([path, parse]) =>
     scanFile(path, sinceTimestamp, parse, stats),
   );
-  for (const path of fileCache.keys()) if (!stats.seen.has(path)) fileCache.delete(path);
-  return { entries: results.flat(), parsedFiles: stats.parsedFiles };
+  // A project scan skips other projects' files: keep theirs until they age out of the window
+  for (const [path, hit] of fileCache) {
+    if (!stats.seen.has(path) && (!roots || hit.mtimeMs / 1000 < sinceTimestamp)) {
+      fileCache.delete(path);
+    }
+  }
+  const entries = results.flat();
+  return {
+    entries: roots ? entries.filter((e) => roots.some((r) => isInside(e.cwd, r))) : entries,
+    parsedFiles: stats.parsedFiles,
+  };
 }

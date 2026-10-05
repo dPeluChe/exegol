@@ -2,12 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  mayCarryClaudeUsage,
-  parseClaudeFile,
-  parseCodexSessionFile,
-  scanAllLogs,
-} from "./log-parser";
+import { mayCarryClaudeUsage, parseCodexSessionFile, scanAllLogs } from "./log-parser";
 
 let home: string;
 const now = Math.floor(Date.now() / 1000);
@@ -78,7 +73,12 @@ describe("parseCodexSessionFile", () => {
       [
         JSON.stringify({
           type: "session_meta",
-          payload: { model: "gpt-5", model_provider: "openai", timestamp: iso(now - 120) },
+          payload: {
+            model: "gpt-5",
+            model_provider: "openai",
+            timestamp: iso(now - 120),
+            cwd: "/repo",
+          },
         }),
         count(100, 10),
         count(250, 40),
@@ -86,7 +86,12 @@ describe("parseCodexSessionFile", () => {
     );
     const entries = await parseCodexSessionFile(file, since);
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ model: "gpt-5", inputTokens: 250, outputTokens: 40 });
+    expect(entries[0]).toMatchObject({
+      model: "gpt-5",
+      inputTokens: 250,
+      outputTokens: 40,
+      cwd: "/repo",
+    });
   });
 });
 
@@ -98,23 +103,27 @@ describe("mayCarryClaudeUsage", () => {
   });
 });
 
-describe("parseClaudeFile", () => {
-  const nested = (id: string, block: string, usage: Record<string, unknown>, requestId = "req_1") =>
+describe("Claude transcripts", () => {
+  const nested = (
+    id: string,
+    block: string,
+    usage: Record<string, unknown>,
+    requestId = "req_1",
+    cwd = "/repo",
+  ) =>
     JSON.stringify({
       type: "assistant",
       timestamp: iso(now - 60),
       sessionId: "s1",
       requestId,
-      cwd: "/repo",
+      cwd,
       message: { id, model: "claude-sonnet-4-6", content: [{ type: block }], usage },
     });
 
-  function write(lines: string[]): string {
-    const dir = join(home, ".claude", "projects", "p1");
-    mkdirSync(dir, { recursive: true });
-    const file = join(dir, "s.jsonl");
-    writeFileSync(file, `${lines.join("\n")}\n`);
-    return file;
+  function write(lines: string[], dir = "-repo", name = "s.jsonl"): void {
+    const path = join(home, ".claude", "projects", dir);
+    mkdirSync(path, { recursive: true });
+    writeFileSync(join(path, name), `${lines.join("\n")}\n`);
   }
 
   it("reads nested message.usage and counts a message once across its content blocks", async () => {
@@ -125,13 +134,13 @@ describe("parseClaudeFile", () => {
       cache_creation_input_tokens: 300_000,
       cache_creation: { ephemeral_5m_input_tokens: 100_000, ephemeral_1h_input_tokens: 200_000 },
     };
-    const file = write([
+    write([
       nested("msg_1", "thinking", usage),
       nested("msg_1", "text", usage),
       nested("msg_1", "tool_use", usage),
       nested("msg_2", "text", { input_tokens: 5, output_tokens: 7 }, "req_2"),
     ]);
-    const entries = await parseClaudeFile(file, since);
+    const { entries } = await scanAllLogs(since, home);
     expect(entries.map((e) => [e.key, e.inputTokens, e.outputTokens, e.cwd])).toEqual([
       ["claude:msg_1:req_1", 10, 100, "/repo"],
       ["claude:msg_2:req_2", 5, 7, "/repo"],
@@ -143,12 +152,32 @@ describe("parseClaudeFile", () => {
   });
 
   it("still reads the older top-level usage shape", async () => {
-    const file = write([claudeLine(10, 5), claudeLine(20, 7)]);
-    const entries = await parseClaudeFile(file, since);
+    write([claudeLine(10, 5), claudeLine(20, 7)]);
+    const { entries } = await scanAllLogs(since, home);
     expect(entries.map((e) => [e.model, e.inputTokens, e.outputTokens])).toEqual([
       ["claude-sonnet-4-6", 10, 5],
       ["claude-sonnet-4-6", 20, 7],
     ]);
     expect(new Set(entries.map((e) => e.key)).size).toBe(2);
+  });
+
+  it("with roots keeps sessions in the project, a subfolder or a worktree, and nothing else", async () => {
+    const usage = { input_tokens: 1, output_tokens: 1 };
+    write([nested("in_repo", "text", usage, "r1", "/repo")], "-repo");
+    write([nested("in_sub", "text", usage, "r2", "/repo/sub")], "-repo-sub");
+    write([nested("in_wt", "text", usage, "r3", "/wt/a")], "-wt-a");
+    write([nested("sibling", "text", usage, "r4", "/repo2")], "-repo2");
+    // Same folder name as /repo-x but the transcript says /other: the cwd check drops it
+    write([nested("lossy", "text", usage, "r5", "/other")], "-repo-x");
+    writeFileSync(
+      join(home, ".aider.chat.history.md"),
+      "Tokens: 1k sent, 1k received. Cost: $0.01",
+    );
+    const { entries } = await scanAllLogs(since, home, ["/repo", "/wt/a"]);
+    expect(entries.map((e) => e.key).sort()).toEqual([
+      "claude:in_repo:r1",
+      "claude:in_sub:r2",
+      "claude:in_wt:r3",
+    ]);
   });
 });

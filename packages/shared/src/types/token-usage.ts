@@ -1,6 +1,7 @@
 export type TokenUsage = {
   id: string;
-  agentId: string;
+  /** null for rows imported from CLI logs, which belong to a project */
+  agentId: string | null;
   provider: string;
   model: string;
   inputTokens: number;
