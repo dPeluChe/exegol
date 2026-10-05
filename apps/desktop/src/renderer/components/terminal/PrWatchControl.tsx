@@ -1,14 +1,13 @@
+import type { PrWatchStatus } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GitPullRequest } from "lucide-react";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
+import { useMountEffect } from "../../hooks/use-mount-effect";
+import { setAgentPrWatch } from "../../lib/session-quiet";
+import { trpcInvoke } from "../../lib/trpc-client";
 import type { QuietAgent } from "../common/QuietControls";
 
-interface PrWatchStatus {
-  pr: { number: number; url: string; failingChecks: number; conflicting: boolean } | null;
-  lastPolledAt: number | null;
-}
+const statusKey = (agentId: string) => ["agents", "prWatchStatus", agentId];
 
 function describe(status: PrWatchStatus | undefined): { label: string; title: string } {
   const pr = status?.pr;
@@ -17,7 +16,7 @@ function describe(status: PrWatchStatus | undefined): { label: string; title: st
       label: "PR watch",
       title: status?.lastPolledAt
         ? "Watching, but this branch has no open PR. Click to stop"
-        : "Watching: the first check runs within a minute. Click to stop",
+        : "Watching: checking the branch's PR now. Click to stop",
     };
   }
   const problems = [
@@ -37,21 +36,19 @@ export function PrWatchControl({ agent }: { agent: QuietAgent }) {
   const on = !!agent.prWatch;
   const queryClient = useQueryClient();
   const { data: status } = useQuery({
-    queryKey: ["agents", "prWatchStatus", agent.id],
+    queryKey: statusKey(agent.id),
     queryFn: () => trpcInvoke<PrWatchStatus>("agents.prWatchStatus", { id: agent.id }),
     enabled: on,
-    refetchInterval: 60_000,
   });
+  useMountEffect(() =>
+    window.api.onPrWatch(({ agentId }) =>
+      queryClient.invalidateQueries({ queryKey: statusKey(agentId) }),
+    ),
+  );
   const toggle = () => {
-    useAgentStore.getState().updateAgent(agent.id, { prWatch: !on });
-    trpcMutate("agents.setPrWatch", { id: agent.id, on: !on })
-      .then(() =>
-        queryClient.invalidateQueries({ queryKey: ["agents", "prWatchStatus", agent.id] }),
-      )
-      .catch((err) => {
-        useAgentStore.getState().updateAgent(agent.id, { prWatch: on });
-        console.error("[PrWatch] toggle failed:", err);
-      });
+    setAgentPrWatch(agent.id, !on)
+      .then(() => queryClient.invalidateQueries({ queryKey: statusKey(agent.id) }))
+      .catch((err) => console.error("[PrWatch] toggle failed:", err));
   };
   const { label, title } = on
     ? describe(status)

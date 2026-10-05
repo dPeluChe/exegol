@@ -1,4 +1,9 @@
-import { detectGhCli, execFileAsync } from "./diff-helpers";
+import {
+  currentBranch,
+  detectGhCli,
+  execFileAsync,
+  isDefaultBranch,
+} from "../../integrations/github/gh";
 
 interface GitState {
   branch: string;
@@ -20,9 +25,7 @@ interface GitState {
 }
 
 export async function buildGitState(cwd: string, defaultBranch = "main"): Promise<GitState> {
-  const branch = await execFileAsync("git", ["branch", "--show-current"], { cwd })
-    .then(({ stdout }) => stdout.trim())
-    .catch(() => "unknown");
+  const branch = (await currentBranch(cwd)) ?? "unknown";
 
   // Upstream + ahead/behind
   let hasUpstream = false;
@@ -81,8 +84,7 @@ export async function buildGitState(cwd: string, defaultBranch = "main"): Promis
   // GitHub PR state (optional; only if gh is installed)
   const ghInstalled = await detectGhCli();
   let pr: GitState["pr"] = { state: "none" };
-  const onDefault = branch === defaultBranch || branch === "main" || branch === "master";
-  if (ghInstalled && branch !== "unknown" && !onDefault) {
+  if (ghInstalled && branch !== "unknown" && !isDefaultBranch(branch, defaultBranch)) {
     try {
       const { stdout } = await execFileAsync(
         "gh",

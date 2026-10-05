@@ -50,11 +50,13 @@ export const MAX_WAKES = 10;
 const MAX_FEEDBACK_ITEMS = 5;
 const MAX_BODY_CHARS = 400;
 
+const zeroKinds = (): Record<ReactionKind, number> => ({ checks: 0, review: 0, conflict: 0 });
+
 export function newWatchState(since: number): PrWatchState {
   return {
     headSha: null,
     sent: new Set(),
-    perKind: { checks: 0, review: 0, conflict: 0 },
+    perKind: zeroKinds(),
     seenFeedback: new Set(),
     since,
     wakes: 0,
@@ -131,7 +133,7 @@ const FAILED = new Set([
 
 const ts = (iso: string | null | undefined) => (iso ? Date.parse(iso) || 0 : 0);
 
-export function parsePrSnapshot(viewJson: string, inlineJson: string | null): PrSnapshot | null {
+export function parsePrSnapshot(viewJson: string): PrSnapshot | null {
   const view = parseJson(viewJson, prViewSchema);
   if (!view) return null;
   const failingChecks = (view.statusCheckRollup ?? [])
@@ -164,18 +166,6 @@ export function parsePrSnapshot(viewJson: string, inlineJson: string | null): Pr
       body: c.body.trim(),
     });
   }
-  for (const c of (inlineJson && parseJson(inlineJson, inlineCommentsSchema)) || []) {
-    const line = c.line ?? c.original_line;
-    feedback.push({
-      id: `inline:${c.id}`,
-      author: c.user?.login ?? "unknown",
-      at: ts(c.created_at),
-      kind: "inline",
-      body: c.body.trim(),
-      location: line ? `${c.path}:${line}` : c.path,
-    });
-  }
-
   return {
     number: view.number,
     url: view.url,
@@ -187,6 +177,21 @@ export function parsePrSnapshot(viewJson: string, inlineJson: string | null): Pr
   };
 }
 
+/** Line comments: `gh pr view` leaves them out, they come from the REST API */
+export function parseInlineFeedback(json: string): PrFeedback[] {
+  return (parseJson(json, inlineCommentsSchema) ?? []).map((c): PrFeedback => {
+    const line = c.line ?? c.original_line;
+    return {
+      id: `inline:${c.id}`,
+      author: c.user?.login ?? "unknown",
+      at: ts(c.created_at),
+      kind: "inline",
+      body: c.body.trim(),
+      location: line ? `${c.path}:${line}` : c.path,
+    };
+  });
+}
+
 // ─── snapshot → reactions ──────────────────────────────────────────────────
 
 const hash = (s: string) => createHash("sha1").update(s).digest("hex").slice(0, 16);
@@ -195,7 +200,7 @@ const clip = (s: string) => {
   return flat.length > MAX_BODY_CHARS ? `${flat.slice(0, MAX_BODY_CHARS)}…` : flat;
 };
 
-export function buildChecksMessage(pr: PrSnapshot): PrReaction {
+function buildChecksMessage(pr: PrSnapshot): PrReaction {
   const list = pr.failingChecks.map((c) => `- ${c.name}${c.link ? `: ${c.link}` : ""}`).join("\n");
   const names = pr.failingChecks.map((c) => c.name).join(", ");
   return {
@@ -207,7 +212,7 @@ export function buildChecksMessage(pr: PrSnapshot): PrReaction {
   };
 }
 
-export function buildReviewMessage(pr: PrSnapshot, items: PrFeedback[]): PrReaction {
+function buildReviewMessage(pr: PrSnapshot, items: PrFeedback[]): PrReaction {
   const shown = items.slice(0, MAX_FEEDBACK_ITEMS);
   const lines = shown.map((f) => {
     const what =
@@ -229,7 +234,7 @@ export function buildReviewMessage(pr: PrSnapshot, items: PrFeedback[]): PrReact
   };
 }
 
-export function buildConflictMessage(pr: PrSnapshot): PrReaction {
+function buildConflictMessage(pr: PrSnapshot): PrReaction {
   return {
     kind: "conflict",
     summary: `PR #${pr.number}: merge conflicts`,
@@ -253,7 +258,7 @@ export function computeReactions(
   if (state.headSha !== pr.headSha) {
     state.headSha = pr.headSha;
     state.sent.clear();
-    state.perKind = { checks: 0, review: 0, conflict: 0 };
+    state.perKind = zeroKinds();
   }
 
   const candidates: PrReaction[] = [];

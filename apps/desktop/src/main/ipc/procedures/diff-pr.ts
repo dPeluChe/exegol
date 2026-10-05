@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { detectGhCli, execFileAsync } from "../../integrations/github/gh";
 import { publicProcedure } from "../trpc";
-import { detectGhCli, execFileAsync, resolveProjectPath } from "./diff-helpers";
+import { resolveProjectPath } from "./diff-helpers";
 
 export const prProcedures = {
   /** Create a GitHub PR via gh CLI. Falls back to error if gh not installed. */

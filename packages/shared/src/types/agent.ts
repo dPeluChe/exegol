@@ -567,3 +567,9 @@ export type HistoryEntry = {
    *  which have better evidence. */
   sizeBytes: number;
 };
+
+/** What the PR watch last saw for one agent (T142) */
+export interface PrWatchStatus {
+  pr: { number: number; url: string; failingChecks: number; conflicting: boolean } | null;
+  lastPolledAt: number | null;
+}

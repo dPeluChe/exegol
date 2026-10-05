@@ -370,7 +370,7 @@ export const agentRouter = router({
   setPrWatch: publicProcedure
     .input(z.object({ id: z.string(), on: z.boolean() }))
     .mutation(({ ctx, input }) => {
-      setAgentPrWatch(ctx.db, input.id, input.on);
+      setAgentPrWatch(ctx.db, input.id, input.on ? Date.now() : null);
       onPrWatchToggled(input.id, input.on);
       return getAgent(ctx.db, input.id);
     }),

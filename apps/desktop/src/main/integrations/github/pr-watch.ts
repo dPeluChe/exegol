@@ -1,46 +1,46 @@
+import type { PrWatchStatus } from "@exegol/shared";
 import type Database from "libsql";
 import { sendSystemMessage } from "../../agents/agent-messaging";
 import { getDb } from "../../db/client";
-import { isAgentQuiet, listPrWatchedAgents } from "../../db/queries/agents";
-import { detectGhCli, execFileAsync } from "../../ipc/procedures/diff-helpers";
+import {
+  advancePrWatchCursor,
+  isAgentQuiet,
+  listPrWatchedAgents,
+  type PrWatchedAgent,
+} from "../../db/queries/agents";
 import { broadcast } from "../../lib/event-bus";
 import { logger } from "../../lib/logger";
-import { AsyncLruCache } from "../../lib/lru-cache";
 import { getNotificationBus } from "../../notifications/bus";
+import { currentBranch, detectGhCli, execFileAsync, isDefaultBranch } from "./gh";
 import {
   computeReactions,
+  MAX_WAKES,
   newWatchState,
   type PrReaction,
   type PrSnapshot,
   type PrWatchState,
+  parseInlineFeedback,
   parsePrSnapshot,
 } from "./pr-watch-reactions";
 
-const TICK_MS = 60_000;
 // Slow on purpose: gh hits the network and the GitHub rate limit
 const POLL_MS = 3 * 60_000;
+const NO_PR_BACKOFF_MS = 15 * 60_000;
 const GH_TIMEOUT_MS = 15_000;
+const GH_MAX_BUFFER = 4 * 1024 * 1024;
 const SOURCE = "PR watch";
-
-export interface PrWatchStatus {
-  pr: {
-    number: number;
-    url: string;
-    failingChecks: number;
-    conflicting: boolean;
-  } | null;
-  lastPolledAt: number | null;
-}
 
 interface Watched {
   state: PrWatchState;
   lastPolledAt: number | null;
   pr: PrSnapshot | null;
+  /** No PR for the branch yet: next look not before this */
+  retryAt: number;
+  /** Merged or closed: nothing left to watch */
+  done: boolean;
 }
 
 const watched = new Map<string, Watched>();
-// Two agents in one folder share one PR: one gh round per folder per poll
-const snapshots = new AsyncLruCache<string, PrSnapshot | null>(16, POLL_MS - 10_000);
 let timer: ReturnType<typeof setInterval> | null = null;
 let ticking = false;
 let selfLogin: Promise<string | null> | null = null;
@@ -55,44 +55,35 @@ async function ghSelfLogin(): Promise<string | null> {
   return selfLogin;
 }
 
-async function fetchSnapshot(cwd: string): Promise<PrSnapshot | null> {
-  const branch = await execFileAsync("git", ["branch", "--show-current"], { cwd })
-    .then(({ stdout }) => stdout.trim())
-    .catch(() => "");
-  if (!branch || branch === "main" || branch === "master") return null;
-  let view: string;
-  try {
-    ({ stdout: view } = await execFileAsync(
-      "gh",
-      [
-        "pr",
-        "view",
-        "--json",
-        "number,url,state,headRefOid,mergeable,mergeStateStatus,statusCheckRollup,reviews,comments",
-      ],
-      { cwd, timeout: GH_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
-    ));
-  } catch {
-    return null; // no PR for this branch
-  }
-  const number = parsePrSnapshot(view, null)?.number;
-  if (!number) return null;
-  // Line comments are not in `gh pr view`; gh fills {owner}/{repo} from the cwd
+async function fetchSnapshot(cwd: string, defaultBranch: string): Promise<PrSnapshot | null> {
+  const branch = await currentBranch(cwd);
+  if (!branch || isDefaultBranch(branch, defaultBranch)) return null;
+  const pr = await execFileAsync(
+    "gh",
+    [
+      "pr",
+      "view",
+      "--json",
+      "number,url,state,headRefOid,mergeable,mergeStateStatus,statusCheckRollup,reviews,comments",
+    ],
+    { cwd, timeout: GH_TIMEOUT_MS, maxBuffer: GH_MAX_BUFFER },
+  )
+    .then(({ stdout }) => parsePrSnapshot(stdout))
+    .catch(() => null); // no PR for this branch
+  if (pr?.state !== "OPEN") return pr;
+  // gh fills {owner}/{repo} from the cwd
   const inline = await execFileAsync(
     "gh",
-    ["api", `repos/{owner}/{repo}/pulls/${number}/comments?per_page=100`],
-    { cwd, timeout: GH_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+    ["api", `repos/{owner}/{repo}/pulls/${pr.number}/comments?per_page=100`],
+    { cwd, timeout: GH_TIMEOUT_MS, maxBuffer: GH_MAX_BUFFER },
   )
-    .then(({ stdout }) => stdout)
-    .catch(() => null);
-  return parsePrSnapshot(view, inline);
+    .then(({ stdout }) => parseInlineFeedback(stdout))
+    .catch(() => []);
+  pr.feedback.push(...inline);
+  return pr;
 }
 
-function deliver(
-  db: Database.Database,
-  agent: { id: string; projectId: string },
-  reactions: PrReaction[],
-): void {
+function deliver(db: Database.Database, agent: PrWatchedAgent, reactions: PrReaction[]): void {
   const quiet = isAgentQuiet(db, agent.id);
   for (const r of reactions) {
     const sent = sendSystemMessage(db, { toAgentId: agent.id, source: SOURCE, text: r.text });
@@ -118,18 +109,26 @@ function deliver(
 
 async function pollAgent(
   db: Database.Database,
-  agent: { id: string; projectId: string; cwd: string },
+  agent: PrWatchedAgent,
   entry: Watched,
+  pr: PrSnapshot | null,
 ): Promise<void> {
-  entry.lastPolledAt = Date.now();
-  const pr = await snapshots.getOrCompute(agent.cwd, () => fetchSnapshot(agent.cwd));
+  const now = Date.now();
+  entry.lastPolledAt = now;
   entry.pr = pr?.state === "OPEN" ? pr : null;
-  if (!entry.pr) return;
-  const reactions = computeReactions(entry.state, entry.pr, await ghSelfLogin());
-  if (reactions.length > 0) deliver(db, agent, reactions);
+  if (!pr) entry.retryAt = now + NO_PR_BACKOFF_MS;
+  else if (!entry.pr) entry.done = true;
+  if (entry.pr) {
+    const reactions = computeReactions(entry.state, entry.pr, await ghSelfLogin());
+    if (reactions.length > 0) deliver(db, agent, reactions);
+    // Persisted so feedback posted while the app is closed still counts as news after a restart
+    const newest = Math.max(0, ...entry.pr.feedback.map((f) => f.at));
+    if (newest >= agent.since) advancePrWatchCursor(db, agent.id, newest + 1);
+  }
+  broadcast("agent:pr-watch", { agentId: agent.id, projectId: agent.projectId });
 }
 
-async function tick(): Promise<void> {
+async function tick(only?: string): Promise<void> {
   if (ticking) return;
   ticking = true;
   try {
@@ -139,16 +138,27 @@ async function tick(): Promise<void> {
     for (const id of watched.keys()) if (!live.has(id)) watched.delete(id);
     if (agents.length === 0 || !(await detectGhCli())) return;
     const now = Date.now();
+    // Two agents in one folder share one PR: one gh round per folder per tick
+    const byCwd = new Map<string, Promise<PrSnapshot | null>>();
     for (const agent of agents) {
-      let entry = watched.get(agent.id);
-      if (!entry) {
-        entry = { state: newWatchState(now), lastPolledAt: null, pr: null };
-        watched.set(agent.id, entry);
+      if (only && agent.id !== only) continue;
+      const entry = watched.get(agent.id) ?? {
+        state: newWatchState(agent.since),
+        lastPolledAt: null,
+        pr: null,
+        retryAt: 0,
+        done: false,
+      };
+      watched.set(agent.id, entry);
+      if (entry.done || entry.state.wakes >= MAX_WAKES || now < entry.retryAt) continue;
+      let snapshot = byCwd.get(agent.cwd);
+      if (!snapshot) {
+        snapshot = fetchSnapshot(agent.cwd, agent.defaultBranch);
+        byCwd.set(agent.cwd, snapshot);
       }
-      if (entry.lastPolledAt !== null && now - entry.lastPolledAt < POLL_MS) continue;
-      await pollAgent(db, agent, entry).catch((err) =>
-        logger.warn(`[PrWatch] poll failed for ${agent.id}:`, err),
-      );
+      await snapshot
+        .then((pr) => pollAgent(db, agent, entry, pr))
+        .catch((err) => logger.warn(`[PrWatch] poll failed for ${agent.id}:`, err));
     }
   } catch (err) {
     logger.warn("[PrWatch] tick failed:", err);
@@ -159,7 +169,7 @@ async function tick(): Promise<void> {
 
 export function startPrWatch(): void {
   if (timer) return;
-  timer = setInterval(() => void tick(), TICK_MS);
+  timer = setInterval(() => void tick(), POLL_MS);
   timer.unref?.();
 }
 
@@ -168,10 +178,10 @@ export function stopPrWatch(): void {
   timer = null;
 }
 
-/** Toggled on: start fresh (new baseline, caps reset) and poll now, not in a minute */
+/** Toggled on: start fresh (caps reset) and poll it now, not at the next interval */
 export function onPrWatchToggled(agentId: string, on: boolean): void {
   watched.delete(agentId);
-  if (on) void tick();
+  if (on) void tick(agentId);
 }
 
 export function getPrWatchStatus(agentId: string): PrWatchStatus {

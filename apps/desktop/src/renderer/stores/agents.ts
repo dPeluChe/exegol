@@ -66,10 +66,8 @@ let pushCleanup: (() => void) | null = null;
 export function startAgentStatusPush(): void {
   if (pushCleanup) return; // Already subscribed
   // "info": action_needed clears when the agent runs, and this message makes it run
-  const offPrWatch = window.api.onPrWatch((event) => {
-    useAgentStore
-      .getState()
-      .addAttentionItem(event.agentId, { level: "info", reason: event.reason });
+  const offPrWatch = window.api.onPrWatch(({ agentId, reason }) => {
+    if (reason) useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason });
   });
   const offStatus = window.api.onAgentStatus((event) => {
     const store = useAgentStore.getState();

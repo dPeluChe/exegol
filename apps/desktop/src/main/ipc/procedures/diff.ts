@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getProject } from "../../db/queries";
+import { execFileAsync } from "../../integrations/github/gh";
 import { TimeoutError, TransientError, withRetry } from "../../lib/errors";
 import { remoteWebUrl } from "../../lib/remote-web-url";
 import { publicProcedure, router } from "../trpc";
@@ -10,7 +11,6 @@ import { aiProcedures } from "./diff-ai";
 import {
   coreRust,
   diffCache,
-  execFileAsync,
   invalidateProjectDiff,
   resolveProjectPath,
   runGitDiff,

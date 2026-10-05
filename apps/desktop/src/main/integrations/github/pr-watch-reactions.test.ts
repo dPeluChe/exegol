@@ -5,6 +5,7 @@ import {
   MAX_WAKES,
   newWatchState,
   type PrSnapshot,
+  parseInlineFeedback,
   parsePrSnapshot,
 } from "./pr-watch-reactions";
 
@@ -59,7 +60,8 @@ describe("parsePrSnapshot", () => {
         created_at: "2026-10-02T00:00:00Z",
       },
     ]);
-    const pr = parsePrSnapshot(view, inline);
+    const pr = parsePrSnapshot(view);
+    pr?.feedback.push(...parseInlineFeedback(inline));
     expect(pr?.headSha).toBe("abc1234def");
     expect(pr?.conflicting).toBe(true);
     expect(pr?.failingChecks).toEqual([
@@ -74,8 +76,8 @@ describe("parsePrSnapshot", () => {
   });
 
   it("returns null for output that is not a PR", () => {
-    expect(parsePrSnapshot("no pull requests found", null)).toBeNull();
-    expect(parsePrSnapshot(JSON.stringify({ number: 1 }), null)).toBeNull();
+    expect(parsePrSnapshot("no pull requests found")).toBeNull();
+    expect(parsePrSnapshot(JSON.stringify({ number: 1 }))).toBeNull();
   });
 });
 

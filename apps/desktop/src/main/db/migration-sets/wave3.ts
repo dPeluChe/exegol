@@ -161,7 +161,7 @@ export const wave3Migrations: Migration[] = [
     sql: "ALTER TABLE agents ADD COLUMN model TEXT;",
   },
   {
-    // T142 phase 1: opt-in, the agent hears about its PR's checks, reviews and conflicts
+    // T142 phase 1: 0 = off, else the review-feedback cursor (ms) so a restart misses nothing
     id: "w3_017_agent_pr_watch",
     sql: "ALTER TABLE agents ADD COLUMN pr_watch INTEGER NOT NULL DEFAULT 0;",
   },

@@ -1,6 +1,6 @@
 import { extname } from "node:path";
+import { execFileAsync } from "../../integrations/github/gh";
 import { getProjectPorts } from "../../system/ports";
-import { execFileAsync } from "./diff-helpers";
 
 const SENSITIVE_PATTERNS = [
   /\.env($|\.)/,

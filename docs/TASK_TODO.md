@@ -1156,8 +1156,10 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 > after merge" and the T174 worktree hygiene note on 2026-10-04. The PR poll itself is T185.10.
 - (T200.7) **React to PR checks, reviews and conflicts**: phase 1 shipped 2026-10-04
   (`feat/pr-watch`, `TASK_COMPLETED/2610.md`): opt-in "Watch PR" per agent, `gh` poller, boundary
-  delivery, attention. Left: MCP `pr_watch` so an agent can start its own watch, and keeping the
-  watch state across an app restart
+  delivery, attention. Left: MCP `pr_watch` so an agent can start its own watch
+- (T142) **The user's own PR comments are ignored**: the agent posts through the same `gh` login,
+  so PR watch skips every comment by that login. Planned heuristic: a same-login comment created
+  while the agent was idle counts as the user's
 - (T184.8) **Merge PR has no guard.** `diff-pr.ts:51-52` defaults to `--squash` +
   `--delete-branch` (strategy is now a parameter) with no base-protection check; pullfrog refuses
   a direct merge when the base is unprotected ("base branch not protected — refusing CI-ungated
