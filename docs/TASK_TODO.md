@@ -43,7 +43,26 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
   session should still be alive. If it dies, `exegol.log` says how. Seen then: the wrapper shell
   survived in the sidecar but opencode exited with its `Continue: opencode -s ses_…` message,
   while claude-code survived the same flow; resume_command (T101) + the session browser (T155.5)
-  are the recovery path
+  are the recovery path.
+  **2026-10-05 investigation (`fix/opencode-across-quit`, no code fix, not reproduced):** opencode
+  1.18.34 run in an isolated sidecar (built `pty-sidecar-entry.js`, temp HOME and sockets, the
+  app's `zsh -i` + `exec opencode` spawn, the real shim from `opencode.json`) SURVIVED: main's
+  sidecar client and the MCP server going away, the shim reconnecting to a new server, the shim
+  being killed outright, a resize jiggle and focus in/out, and a replay of the query-stripped
+  snapshot into `@xterm/headless` (it answers nothing). Quit kills nothing either: teardown only
+  calls `disconnectSidecar()` (`index.ts` ptyHost step); `PtyHost.kill`/`terminateAll` are never
+  reached on quit. What DOES kill it: one Ctrl+C (`\x03`) at an empty prompt exits opencode with
+  code 0 (claude-code asks for a second one, which fits "claude survived"); and on reopen
+  `bootstrap/recovery.ts` kills any live sidecar session whose agent is not `running`,
+  `spawning` or `waiting_input` (`reattach-sidecar-agents.ts` query) as an orphan, SIGHUP.
+  Live checklist if it happens again: (1) before quitting, note the agent's status
+  (`sqlite3 ~/.exegol/exegol.db "select id,status from agents where cli_type='opencode'"`);
+  (2) quit with Cmd+Q, confirm the dialog; (3) before reopening, `ps -o pid,ppid,stat,command
+  -t <tty>` for the opencode pid (alive here = the app is not the killer at quit); (4) reopen and
+  read `~/.exegol/logs/exegol.log` for `[Reattach]`, `Killed orphan sidecar session <id>` (status
+  outside the reattach set), `Dead sidecar sessions ... <id>(exit=N/sig=N)` (died while the app
+  was closed; exit 0 with no signal = it quit by itself or got a Ctrl+C) and `onExit: <id>
+  (opencode)`
 - Status bar: agents per CLI with their working count; Codex 5h/weekly with reset; "Show plan
   usage" turns Claude's on (keychain read, no prompt expected)
 - Sidebar tree: a layout tab lists browser, launcher and both shells; a shell running `bun dev`
