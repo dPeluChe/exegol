@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -30,6 +30,10 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Polls (git status, tokens, scoring...) run only while Exegol has the focus: TanStack's
+// intervals pause when unfocused. Push events keep agent state live meanwhile
+focusManager.setEventListener((setFocused) => window.api.onWindowFocus(setFocused));
 
 installRendererErrorReporting();
 

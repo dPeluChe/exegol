@@ -6,6 +6,7 @@ import {
   setAgentWorktree,
 } from "../db/queries";
 import { runSetupHook } from "../hooks/project-hooks";
+import { childEnv } from "../lib/child-env";
 import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
@@ -207,12 +208,6 @@ function captureInitialSnapshot(
   }
 }
 
-/** process.env minus EXEGOL_*: Exegol started from an agent's terminal (dev) would hand
- *  that agent's MCP token and id to every session it spawns */
-function inheritedEnv(): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("EXEGOL_")));
-}
-
 /**
  * Build the PTY shell, args, and env for an agent. Handles plain-shell mode,
  * interactive CLIs (which need stdin injection after shell ready), and the
@@ -248,7 +243,7 @@ export function buildPtyInvocation(
     shell = userShell;
     args = ["-il"];
     env = {
-      ...inheritedEnv(),
+      ...childEnv(),
       ...shellInitGuards,
       TERM: "xterm-256color",
       EXEGOL_AGENT_ID: agent.id,
@@ -426,7 +421,7 @@ export function buildPtyInvocation(
       args = ["-ic", `${hookPrefix}${fullCommand}`];
     }
     env = {
-      ...inheritedEnv(),
+      ...childEnv(),
       ...shellInitGuards,
       ...apiKeyEnv,
       ...cliConfig.env,

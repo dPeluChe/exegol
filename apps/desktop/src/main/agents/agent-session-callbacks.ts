@@ -248,6 +248,21 @@ export function dispatchAgentFileEvent(
   applyAgentSignals(db, agent, maps, [{ agentId: event.agentId, event: sigType }], null);
 }
 
+/** Keep the LAST maxScrollbackBytes: attention tails, final output and scoring read the end */
+export function appendScrollback(
+  maps: SessionMaps,
+  agentId: string,
+  data: string,
+  maxScrollbackBytes: number,
+): void {
+  const chunks = maps.scrollbackBuffers.get(agentId);
+  if (!chunks) return;
+  chunks.push(data);
+  let size = (maps.scrollbackSizes.get(agentId) ?? 0) + data.length;
+  while (size > maxScrollbackBytes && chunks.length > 1) size -= chunks.shift()?.length ?? 0;
+  maps.scrollbackSizes.set(agentId, size);
+}
+
 export function createSpawnCallbacks(
   db: Database.Database,
   agent: AgentContext,
@@ -267,14 +282,7 @@ export function createSpawnCallbacks(
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
-      // Keep the LAST maxScrollbackBytes: attention tails, final output and scoring read the end
-      const chunks = maps.scrollbackBuffers.get(agent.id);
-      if (chunks) {
-        chunks.push(data);
-        let size = (maps.scrollbackSizes.get(agent.id) ?? 0) + data.length;
-        while (size > maxScrollbackBytes && chunks.length > 1) size -= chunks.shift()?.length ?? 0;
-        maps.scrollbackSizes.set(agent.id, size);
-      }
+      appendScrollback(maps, agent.id, data, maxScrollbackBytes);
 
       if (SKIP_PARSING.has(agent.cliType)) return;
 

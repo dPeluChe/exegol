@@ -1,16 +1,23 @@
+import { AlertTriangle } from "lucide-react";
 import React from "react";
 import { reportRendererError } from "../lib/report-error";
+import { EmptyState } from "./common/EmptyState";
 
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
 }
 
+interface ErrorBoundaryProps {
+  /** A smaller fallback (one pane) instead of the whole-window one; `retry` renders it again */
+  fallback?: (error: Error | null, retry: () => void) => React.ReactNode;
+}
+
 export class ErrorBoundary extends React.Component<
-  React.PropsWithChildren<object>,
+  React.PropsWithChildren<ErrorBoundaryProps>,
   ErrorBoundaryState
 > {
-  constructor(props: React.PropsWithChildren<object>) {
+  constructor(props: React.PropsWithChildren<ErrorBoundaryProps>) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -25,6 +32,11 @@ export class ErrorBoundary extends React.Component<
   }
 
   render() {
+    if (this.state.hasError && this.props.fallback) {
+      return this.props.fallback(this.state.error, () =>
+        this.setState({ hasError: false, error: null }),
+      );
+    }
     if (this.state.hasError) {
       return (
         <div
@@ -77,4 +89,17 @@ export class ErrorBoundary extends React.Component<
 
     return this.props.children;
   }
+}
+
+/** The fallback for one pane or card: its own error and a retry, the rest of the window intact */
+export function paneFallback(error: Error | null, retry: () => void): React.ReactNode {
+  return (
+    <EmptyState
+      icon={<AlertTriangle className="h-8 w-8 text-yellow-400/60" />}
+      title="This view hit an error"
+      description={error?.message ?? "Unknown error"}
+      action={{ label: "Show it again", onClick: retry }}
+      className="h-full"
+    />
+  );
 }
