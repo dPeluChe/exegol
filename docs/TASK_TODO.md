@@ -17,8 +17,7 @@
 
 > Source: the 2026-10-04 backlog audit (`TASK_COMPLETED/2610.md`). User-facing and performance first.
 
-1. **Status bar usage** (T200.8): agents per CLI, Claude 5h / weekly plan usage with reset time,
-   Codex rate limits.
+1. ~~Status bar usage (T200.8)~~: shipped #284 (`TASK_COMPLETED/2610.md`).
 2. **Performance pack 1**: T185.8 reattach replay; polls (T185.10: git status + `gh pr view`,
    TanStack `focusManager` + `enabled: isVisible`, `FloatingBrowser` 5s); V8 compile cache
    (`module.enableCompileCache()` in main and the sidecar, `COMPETITIVE_UPDATE_2026_10.md` P2).
@@ -45,6 +44,8 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
   survived in the sidecar but opencode exited with its `Continue: opencode -s ses_…` message,
   while claude-code survived the same flow; resume_command (T101) + the session browser (T155.5)
   are the recovery path
+- Status bar: agents per CLI with their working count; Codex 5h/weekly with reset; "Show plan
+  usage" turns Claude's on (keychain read, no prompt expected)
 - Sidebar tree: a layout tab lists browser, launcher and both shells; a shell running `bun dev`
   shows it and pulses, at the prompt it is still; the + menu fits near the bottom
 - Sidebar Projects auto order: Cmd+n ones first in key order, live ones next, then A-Z; the

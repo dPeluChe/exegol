@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Status bar: open agents per CLI (its icon, how many, how many working; hover lists them with their project) and each CLI's plan usage, 5-hour and weekly with the time to reset, amber at 70% and red at 90%. Codex's comes from its own session logs; Claude's is read with Claude Code's login once you click "Show plan usage". The token count and platform that showed nothing useful are gone (tokens stay in Monitor)
+
 ### Fixed
 - The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
 

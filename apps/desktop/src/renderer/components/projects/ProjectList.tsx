@@ -1,4 +1,4 @@
-import { type AgentStatus, LIVE_STATUSES, type Project, type ProjectGroup } from "@exegol/shared";
+import type { AgentStatus, Project, ProjectGroup } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { ArrowLeft, Clock, Cuboid, GitBranch, Pause, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -6,7 +6,7 @@ import { useProjects } from "../../hooks/use-trpc";
 import { useProjectGroups } from "../../hooks/use-trpc-project-groups";
 import { formatTimeAgoLong, tailPath } from "../../lib/format";
 import { shortcutLabel, useProjectShortcuts } from "../../lib/live-tabs";
-import { useAgentStore } from "../../stores/agents";
+import { isLiveAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { ProjectChip } from "../common/ProjectChip";
@@ -29,7 +29,7 @@ function useLiveCounts(): Map<string, LiveCounts> {
   return useMemo(() => {
     const byProject = new Map<string, LiveCounts>();
     for (const a of Object.values(agents)) {
-      if (!LIVE_STATUSES.has(a.status) || a.cliType === "shell") continue;
+      if (!isLiveAgent(a)) continue;
       const c = byProject.get(a.projectId) ?? { ...EMPTY_COUNTS };
       const item = attention[a.id];
       if (item && !item.read) c.waiting++;

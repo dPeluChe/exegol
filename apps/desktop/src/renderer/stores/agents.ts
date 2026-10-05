@@ -5,6 +5,7 @@ import {
   type AgentCliType,
   type AgentStatus,
   classifyActivity,
+  LIVE_STATUSES,
 } from "@exegol/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -14,6 +15,10 @@ import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
 import { useWatchStore } from "./watch";
 import { collectPaneIds, useWorkspaceStore } from "./workspace";
+
+/** A session that counts as an open agent: live, and not a plain shell */
+export const isLiveAgent = (a: Pick<AgentState, "cliType" | "status">) =>
+  a.cliType !== "shell" && LIVE_STATUSES.has(a.status);
 
 // ─── Attention model (T57) ────────────────────────────────────────────────
 
