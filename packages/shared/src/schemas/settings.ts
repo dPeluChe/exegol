@@ -24,6 +24,16 @@ export const settingsSchema = z.object({
   ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
   ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),
   mcpVerboseLogging: z.boolean().default(false),
+  statusBarWidgets: z
+    .array(
+      z.object({
+        id: z.string().regex(/^[a-z][a-z-]{0,39}$/),
+        on: z.boolean(),
+        slot: z.enum(["left", "center", "right"]),
+      }),
+    )
+    .max(50)
+    .default([]),
 });
 
 export type SettingsSchema = z.infer<typeof settingsSchema>;

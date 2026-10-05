@@ -308,6 +308,8 @@ export type Agent = {
   model?: string | null;
   /** Claude Code's own session id, once known (resume, and finding a resumed session's pin) */
   claudeSessionId?: string | null;
+  /** When the status last changed (ms), kept across app restarts */
+  statusChangedAt?: number | null;
 };
 
 export type AgentCreate = {

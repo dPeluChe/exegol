@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   getAgentCosts,
+  getAllTokenUsageSummary,
   getDailyTrend,
   getModelBreakdown,
   getPipelineRunCost,
@@ -24,11 +25,13 @@ export const tokenUsageRouter = router({
           projectId: z.string().optional(),
           /** The Tokens section's range; the cards said "Last 30 days" over 24h of data */
           days: z.number().int().min(1).max(365).optional(),
+          /** Unix seconds; overrides `days` (the status bar's "today" starts at local midnight) */
+          since: z.number().int().min(0).optional(),
         })
         .optional(),
     )
     .query(({ ctx, input }) => {
-      const since = Math.floor(Date.now() / 1000) - 86400 * (input?.days ?? 1);
+      const since = input?.since ?? Math.floor(Date.now() / 1000) - 86400 * (input?.days ?? 1);
 
       if (input?.agentId) {
         return getTokenUsageSummary(ctx.db, input.agentId, since);
@@ -38,8 +41,7 @@ export const tokenUsageRouter = router({
         return getProjectTokenUsageSummary(ctx.db, input.projectId, since);
       }
 
-      // Fallback: empty agent id (legacy behavior)
-      return getTokenUsageSummary(ctx.db, "", since);
+      return getAllTokenUsageSummary(ctx.db, since);
     }),
 
   /** Scan local CLI logs and import token usage into the database */

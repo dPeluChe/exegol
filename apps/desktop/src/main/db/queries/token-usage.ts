@@ -37,6 +37,29 @@ export function getTokenUsageSummary(
   };
 }
 
+/** Every agent and log scan, all projects */
+export function getAllTokenUsageSummary(db: Database.Database, since: number): TokenUsageSummary {
+  const row = db
+    .prepare(
+      `SELECT
+        COALESCE(SUM(input_tokens), 0) AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS total_output_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0.0) AS total_cost_usd,
+        COALESCE(SUM(tool_call_count), 0) AS total_tool_calls
+      FROM token_usage
+      WHERE recorded_at >= ?`,
+    )
+    .get(since) as Record<string, number>;
+  return {
+    totalInputTokens: row.total_input_tokens ?? 0,
+    totalOutputTokens: row.total_output_tokens ?? 0,
+    totalCostUsd: row.total_cost_usd ?? 0,
+    totalToolCalls: row.total_tool_calls ?? 0,
+    periodStart: since,
+    periodEnd: Math.floor(Date.now() / 1000),
+  };
+}
+
 export function getProjectTokenUsageSummary(
   db: Database.Database,
   projectId: string,

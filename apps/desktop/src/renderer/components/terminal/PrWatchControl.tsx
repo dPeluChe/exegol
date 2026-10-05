@@ -7,7 +7,7 @@ import { setAgentPrWatch } from "../../lib/session-quiet";
 import { trpcInvoke } from "../../lib/trpc-client";
 import type { QuietAgent } from "../common/QuietControls";
 
-const statusKey = (agentId: string) => ["agents", "prWatchStatus", agentId];
+export const prWatchStatusKey = (agentId: string) => ["agents", "prWatchStatus", agentId];
 
 function describe(status: PrWatchStatus | undefined): { label: string; title: string } {
   const pr = status?.pr;
@@ -36,18 +36,18 @@ export function PrWatchControl({ agent }: { agent: QuietAgent }) {
   const on = !!agent.prWatch;
   const queryClient = useQueryClient();
   const { data: status } = useQuery({
-    queryKey: statusKey(agent.id),
+    queryKey: prWatchStatusKey(agent.id),
     queryFn: () => trpcInvoke<PrWatchStatus>("agents.prWatchStatus", { id: agent.id }),
     enabled: on,
   });
   useMountEffect(() =>
     window.api.onPrWatch(({ agentId }) =>
-      queryClient.invalidateQueries({ queryKey: statusKey(agentId) }),
+      queryClient.invalidateQueries({ queryKey: prWatchStatusKey(agentId) }),
     ),
   );
   const toggle = () => {
     setAgentPrWatch(agent.id, !on)
-      .then(() => queryClient.invalidateQueries({ queryKey: statusKey(agent.id) }))
+      .then(() => queryClient.invalidateQueries({ queryKey: prWatchStatusKey(agent.id) }))
       .catch((err) => console.error("[PrWatch] toggle failed:", err));
   };
   const { label, title } = on

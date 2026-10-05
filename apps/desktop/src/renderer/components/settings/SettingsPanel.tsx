@@ -7,6 +7,7 @@ import {
   Keyboard,
   Monitor,
   Network,
+  PanelBottom,
   Settings2,
   Stethoscope,
   Terminal,
@@ -18,11 +19,13 @@ import { DoctorSettings } from "./DoctorSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { McpServerSettings } from "./McpServerSettings";
+import { StatusBarSettings } from "./StatusBarSettings";
 import { TerminalSettings } from "./TerminalSettings";
 import { useSettingsForm } from "./use-settings-form";
 
 export type SettingsTab =
   | "general"
+  | "statusbar"
   | "clis"
   | "terminal"
   | "shortcuts"
@@ -32,6 +35,7 @@ export type SettingsTab =
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: Settings2 },
+  { id: "statusbar", label: "Status bar", icon: PanelBottom },
   { id: "clis", label: "Agent CLIs", icon: Terminal },
   { id: "terminal", label: "Terminal", icon: Monitor },
   { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
@@ -47,6 +51,7 @@ interface TabContentProps {
 
 const TAB_CONTENT: Record<SettingsTab, (props: TabContentProps) => ReactNode> = {
   general: (props) => <GeneralSettings {...props} />,
+  statusbar: (props) => <StatusBarSettings {...props} />,
   clis: () => <CliSettings />,
   terminal: (props) => <TerminalSettings {...props} />,
   shortcuts: () => <KeyboardShortcuts />,

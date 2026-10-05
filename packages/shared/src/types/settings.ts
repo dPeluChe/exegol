@@ -7,6 +7,13 @@ export type AgentCliConfig = {
   env: Record<string, string>;
 };
 
+/** One status bar widget's placement; the array order is the bar's order */
+export type StatusBarWidgetSetting = {
+  id: string;
+  on: boolean;
+  slot: "left" | "center" | "right";
+};
+
 export type Settings = {
   defaultIde: IdeType;
   customIdePath: string | null;
@@ -26,6 +33,8 @@ export type Settings = {
   /** T163: write per-call Exegol MCP server lines to the backend log. The
    *  in-app activity view works regardless — this is the noisy channel. */
   mcpVerboseLogging: boolean;
+  /** Empty: the built-in widgets at their defaults */
+  statusBarWidgets: StatusBarWidgetSetting[];
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,4 +56,5 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaUrl: "http://localhost:11434",
   ollamaModel: "nomic-embed-text",
   mcpVerboseLogging: false,
+  statusBarWidgets: [],
 };

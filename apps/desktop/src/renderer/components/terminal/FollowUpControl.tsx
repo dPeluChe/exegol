@@ -13,7 +13,7 @@ import { toastError, useToastStore } from "../../stores/toasts";
 const STEER_SECONDS = STEER_TIMEOUT_MS / 1000;
 
 /** The queue lives in main; its push event (startAgentStatusPush) keeps the cache current */
-function useFollowUps(agentId: string, enabled: boolean): FollowUpItem[] {
+export function useFollowUps(agentId: string, enabled: boolean): FollowUpItem[] {
   const { data = [] } = useQuery({
     queryKey: followUpsKey(agentId),
     queryFn: () => trpcInvoke<FollowUpItem[]>("agents.followUps", { id: agentId }),
