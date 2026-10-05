@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.15] — 2026-10-05 — Queue and steer, undo a turn, PR watch, answer agent questions
+
 ### Added
 - Follow-up queue and Steer: Queue in a terminal's toolbar or on a Dashboard Watching card holds prompts for the agent's next turn (typed when the turn ends, one per turn; removable until then). Your follow-ups go ahead of messages from other agents. Steer (Claude Code and Codex) interrupts the turn with Esc, waits up to 20 seconds for the prompt and types your message; a second Steer while it waits joins the first; if the prompt does not come back it stays queued and you are told
 - Watch PR: a session's toolbar can watch its branch's pull request. Failing checks (with links), new review comments or requested changes, and merge conflicts are sent to the agent at its next turn and show in Needs attention, with caps so it never loops
