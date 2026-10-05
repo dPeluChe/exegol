@@ -595,5 +595,4 @@ module.exports.removeWorktree = nativeBinding.removeWorktree
 module.exports.restoreOplogSnapshot = nativeBinding.restoreOplogSnapshot
 module.exports.revertToSnapshot = nativeBinding.revertToSnapshot
 module.exports.stripAnsi = nativeBinding.stripAnsi
-module.exports.worktreeHasChanges = nativeBinding.worktreeHasChanges
 module.exports.worktreeHasChangesAsync = nativeBinding.worktreeHasChangesAsync

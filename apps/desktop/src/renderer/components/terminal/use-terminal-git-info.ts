@@ -29,7 +29,7 @@ export function useTerminalGitInfo(
   });
   return {
     branchName: branchName ?? repoBranch ?? null,
-    dirtyCount: gitStatusFiles?.length ?? 0,
+    dirtyCount: new Set(gitStatusFiles?.map((f) => f.path)).size,
     repoUrl,
   };
 }

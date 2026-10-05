@@ -23,6 +23,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Faster start with many live agents: reconnecting a terminal rebuilds its screen without re-reading its whole history as new output (which also re-fired old status changes). Git panes no longer ask GitHub for the PR every 15 seconds (once a minute, and right after a commit, push, or a PR created or merged from Exegol), and background refreshes pause while Exegol is not the app in focus
 
 ### Fixed
+- Git pane: the Changes diff showed staged edits too; it now shows only what is not staged. A file with staged and unstaged edits is listed under both, each with its own diff
+- Git pane: renamed files show as `old → new`, and staging or unstaging one moves both paths (before, it passed the arrow text to git and failed)
+- Git pane: a failed stage, unstage, commit or push, or a failed worktree delete, shows git's own error instead of doing nothing; Agent Ops no longer offers Undo on a worktree creation it cannot undo
 - After an app restart, Claude Code, Gemini, Codex and Crush sessions show working and waiting again from their terminal title, as they do before the restart
 - Agents in a worktree or pipeline folder of a project you trusted in Claude no longer stop on Claude's "trust this folder?" prompt
 - Agents launched from an Exegol started inside another Claude session (a dev build in an agent's terminal) kept that session's markers, and Claude silently stopped saving their conversation; they start clean now
@@ -30,6 +33,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The commit message button (Sparkles) works without an API key, through your logged-in Claude CLI
 - The CLI updates notice came back after restarting a single session from its pane (it counted the sessions behind); it now returns only for a newer version
 - Scheduled tasks: cron jobs never fired (an invalid timezone option threw on every schedule). A run that hangs now times out (30 minutes, or the task's own limit), its agent and what it started are stopped, and it is recorded once as timed out; a new tick never starts a second run of the same task, and a run that finds every slot busy waits in a queue that survives a restart
+- Monitor now counts Claude Code usage: Scan Logs read almost nothing from Claude's transcripts, so its cost showed near zero. Each reply counts once, cache reads and writes are priced, Claude and Codex sessions count for the project when run in its folder or one of its worktrees (others are left out), and a rescan of thousands of replies no longer stalls the window
 
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly
 

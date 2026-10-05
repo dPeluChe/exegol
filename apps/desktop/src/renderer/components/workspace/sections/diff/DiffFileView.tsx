@@ -129,7 +129,7 @@ export function DiffFileView({
         )}
 
         <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text-primary">
-          {file.newPath}
+          {file.isRenamed ? `${file.oldPath} → ${file.newPath}` : file.newPath}
         </span>
 
         <span className="flex shrink-0 gap-2 text-[11px]">

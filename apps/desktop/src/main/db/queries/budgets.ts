@@ -119,10 +119,10 @@ export function getBudgetUsage(
       `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens,
         COALESCE(SUM(estimated_cost_usd), 0.0) AS cost
        FROM token_usage
-       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR agent_id = ?)
+       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR project_id = ?)
          AND recorded_at >= ?`,
     )
-    .get(projectId, `scan:${projectId}`, since) as { tokens: number; cost: number };
+    .get(projectId, projectId, since) as { tokens: number; cost: number };
   return { tokens: row.tokens, costUsd: row.cost, since, periodKey };
 }
 

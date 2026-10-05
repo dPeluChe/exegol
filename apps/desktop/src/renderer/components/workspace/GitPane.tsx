@@ -13,7 +13,7 @@ import { useCallback, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { useToastStore } from "../../stores/toasts";
+import { toastError, useToastStore } from "../../stores/toasts";
 import { SmartGitAction } from "./SmartGitAction";
 import { DiffSection } from "./sections/DiffSection";
 import { OplogSection } from "./sections/OplogSection";
@@ -24,7 +24,11 @@ interface FileStatus {
   status: string;
   staged: boolean;
   path: string;
+  origPath?: string;
 }
+
+/** A rename is staged as delete + add: both paths move together */
+const filePaths = (f: FileStatus) => (f.origPath ? [f.origPath, f.path] : [f.path]);
 
 // ─── Hooks ──────────────────────────────────────────────────────────────────
 
@@ -77,12 +81,14 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
     mutationFn: (fileList?: string[]) =>
       trpcMutate("diff.stage", { projectId, files: fileList, pathOverride: overridePath }),
     onSuccess: invalidate,
+    onError: toastError("Stage failed"),
   });
 
   const unstageMutation = useMutation({
     mutationFn: (fileList?: string[]) =>
       trpcMutate("diff.unstage", { projectId, files: fileList, pathOverride: overridePath }),
     onSuccess: invalidate,
+    onError: toastError("Unstage failed"),
   });
 
   const commitMutation = useMutation({
@@ -100,13 +106,7 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
         .addToast({ type: "success", title: "Committed", body: result.output });
       invalidate();
     },
-    onError: (err) => {
-      useToastStore.getState().addToast({
-        type: "error",
-        title: "Commit failed",
-        body: err instanceof Error ? err.message : String(err),
-      });
-    },
+    onError: toastError("Commit failed"),
   });
 
   const suggestMutation = useMutation({
@@ -119,13 +119,7 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
     onSuccess: (r) => {
       setCommitMsg(r.message);
     },
-    onError: (err) => {
-      useToastStore.getState().addToast({
-        type: "error",
-        title: "Could not generate commit message",
-        body: err instanceof Error ? err.message : String(err),
-      });
-    },
+    onError: toastError("Could not generate commit message"),
   });
 
   const handleCommit = useCallback(() => {
@@ -137,7 +131,7 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
     return <p className="p-4 text-xs text-text-muted">Loading git status...</p>;
   }
 
-  const totalChanges = (files ?? []).length;
+  const totalChanges = new Set(files?.map((f) => f.path)).size;
 
   return (
     <div className="flex h-full flex-col">
@@ -184,7 +178,7 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
                   <FileRow
                     key={`s-${f.path}`}
                     file={f}
-                    onToggle={() => unstageMutation.mutate([f.path])}
+                    onToggle={() => unstageMutation.mutate(filePaths(f))}
                     toggleIcon={Minus}
                     toggleTitle="Unstage"
                   />
@@ -217,7 +211,7 @@ function ChangesView({ projectId, overridePath }: { projectId: string; overrideP
                   <FileRow
                     key={`u-${f.path}`}
                     file={f}
-                    onToggle={() => stageMutation.mutate([f.path])}
+                    onToggle={() => stageMutation.mutate(filePaths(f))}
                     toggleIcon={Plus}
                     toggleTitle="Stage"
                   />
@@ -288,7 +282,9 @@ function FileRow({
       className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-white/5"
     >
       <span className={cn("w-2 text-center text-[9px] font-bold", info.color)}>{file.status}</span>
-      <span className="flex-1 truncate text-[10px] text-text-secondary">{file.path}</span>
+      <span className="flex-1 truncate text-[10px] text-text-secondary">
+        {file.origPath ? `${file.origPath} → ${file.path}` : file.path}
+      </span>
       <button
         type="button"
         onClick={onToggle}

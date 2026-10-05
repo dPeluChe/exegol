@@ -6,6 +6,7 @@ import type {
   TokenUsageSummary,
 } from "@exegol/shared";
 import type Database from "libsql";
+import type { ParsedTokenEntry } from "../../tokens/log-parser";
 import { mapTokenUsageRow } from "./helpers";
 
 export function getTokenUsageSummary(
@@ -42,7 +43,6 @@ export function getProjectTokenUsageSummary(
   since: number,
 ): TokenUsageSummary {
   const now = Math.floor(Date.now() / 1000);
-  // Include both agent-linked entries and scan-imported entries
   const row = db
     .prepare(
       `SELECT
@@ -51,10 +51,10 @@ export function getProjectTokenUsageSummary(
         COALESCE(SUM(estimated_cost_usd), 0.0) AS total_cost_usd,
         COALESCE(SUM(tool_call_count), 0) AS total_tool_calls
       FROM token_usage
-      WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR agent_id = ?)
+      WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR project_id = ?)
         AND recorded_at >= ?`,
     )
-    .get(projectId, `scan:${projectId}`, since) as Record<string, unknown>;
+    .get(projectId, projectId, since) as Record<string, unknown>;
 
   return {
     totalInputTokens: (row.total_input_tokens as number) ?? 0,
@@ -72,15 +72,14 @@ export function getProjectTokenUsage(
   days: number,
 ): TokenUsage[] {
   const since = Math.floor(Date.now() / 1000) - days * 86400;
-  // Include both agent-linked entries and scan-imported entries
   const rows = db
     .prepare(
       `SELECT * FROM token_usage
-       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR agent_id = ?)
+       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR project_id = ?)
          AND recorded_at >= ?
        ORDER BY recorded_at DESC`,
     )
-    .all(projectId, `scan:${projectId}`, since);
+    .all(projectId, projectId, since);
   return (rows as Record<string, unknown>[]).map(mapTokenUsageRow);
 }
 
@@ -100,12 +99,12 @@ export function getModelBreakdown(
         COALESCE(SUM(estimated_cost_usd), 0.0) AS total_cost,
         COUNT(*) AS request_count
        FROM token_usage
-       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR agent_id = ?)
+       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR project_id = ?)
          AND recorded_at >= ?
        GROUP BY model, provider
        ORDER BY total_cost DESC`,
     )
-    .all(projectId, `scan:${projectId}`, since) as Record<string, unknown>[];
+    .all(projectId, projectId, since) as Record<string, unknown>[];
 
   return rows.map((r) => ({
     model: r.model as string,
@@ -165,12 +164,12 @@ export function getDailyTrend(
         COALESCE(SUM(input_tokens + output_tokens), 0) AS total_tokens,
         COUNT(*) AS request_count
        FROM token_usage
-       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR agent_id = ?)
+       WHERE (agent_id IN (SELECT id FROM agents WHERE project_id = ?) OR project_id = ?)
          AND recorded_at >= ?
        GROUP BY date(recorded_at, 'unixepoch')
        ORDER BY date ASC`,
     )
-    .all(projectId, `scan:${projectId}`, since) as Record<string, unknown>[];
+    .all(projectId, projectId, since) as Record<string, unknown>[];
 
   return rows.map((r) => ({
     date: r.date as string,
@@ -225,4 +224,53 @@ export function getPipelineRunCost(db: Database.Database, pipelineRunId: string)
     totalTokens: perStep.reduce((sum, s) => sum + s.tokens, 0),
     perStep,
   };
+}
+
+const IMPORT_CHUNK = 2000;
+
+/**
+ * Upserts on dedup_key: a rescan re-sends the whole window and unchanged rows are skipped.
+ * Chunked transactions with a yield between, so a large import never holds main for long.
+ */
+export async function importScannedTokenUsage(
+  db: Database.Database,
+  projectId: string,
+  entries: ParsedTokenEntry[],
+): Promise<{ imported: number; skipped: number }> {
+  const upsert = db.prepare(
+    `INSERT INTO token_usage (id, project_id, provider, model, input_tokens, output_tokens,
+       estimated_cost_usd, tool_call_count, recorded_at, source, dedup_key)
+     VALUES (lower(hex(randomblob(10))), ?, ?, ?, ?, ?, ?, ?, ?, 'log_scan', ?)
+     ON CONFLICT(dedup_key) DO UPDATE SET
+       project_id = excluded.project_id, model = excluded.model,
+       input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
+       estimated_cost_usd = excluded.estimated_cost_usd,
+       tool_call_count = excluded.tool_call_count, recorded_at = excluded.recorded_at
+     WHERE input_tokens != excluded.input_tokens OR output_tokens != excluded.output_tokens
+       OR model != excluded.model OR estimated_cost_usd != excluded.estimated_cost_usd
+       OR project_id IS NOT excluded.project_id`,
+  );
+  const importChunk = db.transaction((chunk: ParsedTokenEntry[]) => {
+    let changed = 0;
+    for (const e of chunk) {
+      changed += upsert.run(
+        projectId,
+        e.provider,
+        e.model,
+        e.inputTokens,
+        e.outputTokens,
+        e.estimatedCostUsd,
+        e.toolCallCount,
+        Math.floor(e.timestamp),
+        e.key,
+      ).changes;
+    }
+    return changed;
+  });
+  let imported = 0;
+  for (let i = 0; i < entries.length; i += IMPORT_CHUNK) {
+    if (i > 0) await new Promise((resolve) => setImmediate(resolve));
+    imported += importChunk(entries.slice(i, i + IMPORT_CHUNK)) as number;
+  }
+  return { imported, skipped: entries.length - imported };
 }

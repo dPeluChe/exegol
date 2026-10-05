@@ -12,7 +12,7 @@ import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "..
  * the transcript's own `cwd` field is what actually decides the match; this only
  * tells us where to look.
  */
-function projectDirFor(cwd: string): string {
+export function claudeProjectDir(cwd: string): string {
   return cwd.replace(/[/_]/g, "-");
 }
 
@@ -53,7 +53,7 @@ export const claudeCodeHistory: LocalHistoryProvider = {
 
   list(cwds: string[], since: number): Promise<LocalSession[]> {
     return scanPerCwdDir(cwds, {
-      dirFor: (cwd) => join(homedir(), ".claude", "projects", projectDirFor(cwd)),
+      dirFor: (cwd) => join(homedir(), ".claude", "projects", claudeProjectDir(cwd)),
       ext: ".jsonl",
       read: (path, entry, cwd) => readTranscript(path, entry, cwd, since),
     });
