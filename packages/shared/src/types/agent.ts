@@ -154,6 +154,25 @@ export const MODEL_SUGGESTIONS: Record<string, string[]> = {
 /** Goes into the shell command unquoted: model ids only (letters, digits, . _ - : / @) */
 export const MODEL_ID_PATTERN = /^[\w.:/@-]{1,100}$/;
 
+/** One window of a CLI's subscription plan (Claude: 5h and weekly; Codex: primary/secondary) */
+export interface PlanWindow {
+  usedPercent: number;
+  /** Epoch ms; null when the source does not say */
+  resetsAt: number | null;
+  windowMins: number | null;
+}
+
+/** A CLI's plan usage, as its own login reports it */
+export interface PlanUsage {
+  cliType: string;
+  session: PlanWindow | null;
+  weekly: PlanWindow | null;
+  /** When the numbers were read (Codex: its last turn) */
+  fetchedAt: number;
+  /** The last good reading, served while the source fails or rate-limits */
+  stale: boolean;
+}
+
 /** A CLI's installed version against its newest release (Doctor's cliUpdates) */
 export interface CliUpdateStatus {
   cliType: string;

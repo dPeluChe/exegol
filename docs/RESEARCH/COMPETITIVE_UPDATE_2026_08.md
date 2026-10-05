@@ -66,3 +66,52 @@ cross-provider con peek) + T157 (mensajería inter-agente cross-provider con el 
 confianza de Anthropic que a herdr le falta). Los tres primitivos ya existen en Exegol:
 store cross-project + jumpToAttentionItem (T141), tabla messages (T25, huérfana), MCP server
 con tokens por agente (T145), turn boundaries deterministas (T123).
+
+## Moved from TASK_TODO (2026-10-04)
+
+Findings and verdicts from T184 (fx, eve, pullfrog, openchamber, clay; filed 2026-08-22) and
+T183 (monocode, mcp_agent_mail_rust, proliferate; filed 2026-08-19). They are research, not
+pending work, so the 2026-10-04 backlog audit moved them here verbatim.
+
+### From T184: observability (clay)
+
+14. **The state we scrape for is a first-class variable inside these CLIs and is never emitted.**
+    clay has `CLAY_APP_PROMPTING` with a state-change hook, and its own comment says the opaque slot
+    is "for the driver (the main loop today, an agent daemon later)". Confirms T123's hook approach is
+    the right shape and that scraping is what is left when a CLI exposes nothing.
+
+### From T184: permissions, refuted claims, not worth copying
+
+**Permissions (fx).** Their model is worth adopting as a FRAMING: read/list/glob/search need no
+approval, only state-changing calls do, and an approval grants exactly the scope shown rather than a
+category. Our access modes are a sentence in the prompt plus an env var — not a gate. The T175 claim
+guard is the only thing that actually intercepts, and only for claude-code.
+
+**Refuted — recorded so nobody re-files them:**
+- *"History expansion breaks the spawn"*: measured on a real PTY with histexpand confirmed active
+  (control: `echo !e` expanded). `!`, `!important` and `!!` inside our quoted heredoc all pass, because
+  bash history-expands only the FIRST line of a command and our prompt text is always a continuation
+  line. Bracketed paste is on and we do not wrap the payload — fragile, not broken.
+- *"Spawn context is rebuilt uncached every spawn"*: the expensive part already is cached —
+  `skills/loader.ts:49` memoizes the per-skill `execSync` binary checks with a TTL. File reads and the
+  MCP tool context are rebuilt, which is cheap.
+
+**Explicitly NOT worth copying:** pullfrog's Linux/CI-only namespace sandbox (wrong threat model —
+our agent runs as the user on the user's machine) and its bot-identity commit authorship (T142 already
+ruled that out; single human identity keeps CODEOWNERS working); openchamber's five-surface matrix,
+12-locale i18n, client-side multi-run, and in-process server (our sidecar is why terminals survive a
+reload); clay's NULL-absorbing JSON accessors and first-word command allowlist.
+
+### From T183: not worth copying
+
+**Explicitly NOT worth copying:**
+- Their sender authentication is OFF by default and identity is a tmux-pane file with three legacy
+  fallbacks — a symptom of not owning the process. We mint a token at spawn and revoke on exit.
+- proliferate's workflow triggers: the README claims "recurring and event-driven" and there are NO
+  automated triggers of any kind — no cron, no webhook, no schedule column. Our `scheduler/engine.ts`
+  is ahead of them on this axis.
+- proliferate's intra-workspace concurrency: two in-process locks, no per-file arbitration at all.
+  Our path claims are the differentiated thing here — keep them.
+- 900k LOC for a mailbox, with a live Bayes-risk policy that can release other agents' reservations
+  on by default. Take the deadlock detector (Tarjan SCC over the conflict graph, surfaced as an
+  advisory notification), leave the rest.

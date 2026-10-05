@@ -265,7 +265,8 @@
     ],
     "doctor": [
       "run",
-      "cliUpdates"
+      "cliUpdates",
+      "planUsage"
     ],
     "diagnostics": [
       "collect",

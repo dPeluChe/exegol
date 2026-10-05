@@ -32,6 +32,10 @@ interface AppStore {
   sidebarProjectsHeight: number | null;
   setSidebarProjectsHeight: (height: number | null) => void;
 
+  /** Footer reads Claude's plan usage with Claude Code's own login: only once the user asks */
+  claudePlanUsage: boolean;
+  setClaudePlanUsage: (on: boolean) => void;
+
   /** Sidebar Projects order: by Cmd+n, then live, then name; or the order dragged by hand */
   projectsOrder: "auto" | "manual";
   setProjectsOrder: (order: "auto" | "manual") => void;
@@ -106,6 +110,9 @@ export const useAppStore = create<AppStore>()(
       sidebarProjectsHeight: null,
       setSidebarProjectsHeight: (height) => set({ sidebarProjectsHeight: height }),
 
+      claudePlanUsage: false,
+      setClaudePlanUsage: (on) => set({ claudePlanUsage: on }),
+
       projectsOrder: "auto",
       setProjectsOrder: (order) => set({ projectsOrder: order }),
 
@@ -135,6 +142,7 @@ export const useAppStore = create<AppStore>()(
         sidebarProjectsHeight: state.sidebarProjectsHeight,
         sidebarAgentsView: state.sidebarAgentsView,
         projectsOrder: state.projectsOrder,
+        claudePlanUsage: state.claudePlanUsage,
       }),
     },
   ),

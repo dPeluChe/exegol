@@ -4,7 +4,13 @@ import { useEffect, useMemo } from "react";
 import { suspendAgent } from "../lib/session-quiet";
 import { runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
-import { type AgentState, findAgentPane, showProject, useAgentStore } from "../stores/agents";
+import {
+  type AgentState,
+  findAgentPane,
+  isLiveAgent,
+  showProject,
+  useAgentStore,
+} from "../stores/agents";
 import { useCliRestartStore } from "../stores/cli-restarts";
 import { toastError, useToastStore } from "../stores/toasts";
 import { useResumeAgent } from "./use-resume-agent";
@@ -23,7 +29,7 @@ export function useCliUpdates(): Map<string, CliUpdateStatus> {
       [
         ...new Set(
           Object.values(agents)
-            .filter((a) => a.cliType !== "shell" && LIVE_STATUSES.has(a.status))
+            .filter(isLiveAgent)
             .map((a) => a.cliType),
         ),
       ].sort(),
