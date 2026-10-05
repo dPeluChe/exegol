@@ -42,9 +42,9 @@ export const tokenUsageRouter = router({
   /** Scan local CLI logs and import token usage into the database */
   scan: publicProcedure
     .input(z.object({ projectId: z.string() }).optional())
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const since = Math.floor(Date.now() / 1000) - 30 * 86400; // Last 30 days
-      const entries = scanAllLogs(since);
+      const entries = await scanAllLogs(since);
       const agentId = input?.projectId ? `scan:${input.projectId}` : "external";
 
       // Dedup: check existing entries to avoid re-importing on repeated scans

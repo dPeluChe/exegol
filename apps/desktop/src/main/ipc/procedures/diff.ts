@@ -94,7 +94,7 @@ export const diffRouter = router({
       }
       const rust = coreRust;
       const key = `${input.projectId}|structured|${input.staged}|`;
-      return diffCache.getOrCompute(key, async () => rust.getDiff(projectPath, input.staged));
+      return diffCache.getOrCompute(key, () => rust.getDiffAsync(projectPath, input.staged));
     }),
 
   /** Legacy string diff — kept for backward compat, prefers Rust when available */
@@ -106,7 +106,7 @@ export const diffRouter = router({
       return diffCache.getOrCompute(key, async () => {
         if (coreRust) {
           try {
-            return coreRust.getWorktreeDiff(projectPath);
+            return await coreRust.getWorktreeDiffAsync(projectPath);
           } catch {
             // Fall through to CLI
           }

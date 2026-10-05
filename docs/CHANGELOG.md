@@ -17,6 +17,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - CLI updates name every session they restart, with its project, in the notice; Restart to update and Update in a terminal's toolbar ask whether to restart only that session or all of the CLI's sessions, and list the others
+- Fewer stalls while agents stream: the Tokens tab scan no longer freezes the app (it reads the CLI logs in the background and skips unchanged files), and the worktree list, diffs, project search and logging no longer block the window
 
 ### Added
 - Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows

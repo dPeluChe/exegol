@@ -113,10 +113,10 @@ const LAST_LINES_COUNT = 10;
  * Build a single-payload comparator view of a parallel run. One IPC round
  * trip → server-side N work → renderer just renders.
  */
-export function enrichParallelRunForComparison(
+export async function enrichParallelRunForComparison(
   db: Database.Database,
   run: ParallelRun,
-): ParallelRunDetails {
+): Promise<ParallelRunDetails> {
   const columns: ParallelRunColumn[] = [];
   for (const agentId of run.agentIds) {
     const agent = getAgent(db, agentId);
@@ -126,7 +126,7 @@ export function enrichParallelRunForComparison(
     columns.push({
       agent,
       worktreePath,
-      diffStat: computeDiffStat(worktreePath),
+      diffStat: await computeDiffStat(worktreePath),
       score: getScoreRow(db, agentId),
       cost: getCostSummary(db, agentId, run.createdAt),
       durationSeconds: computeDuration(agent),
@@ -178,12 +178,12 @@ function computeDuration(agent: Agent): number | null {
   return Math.max(0, end - agent.startedAt);
 }
 
-function computeDiffStat(
+async function computeDiffStat(
   worktreePath: string | null,
-): { filesChanged: number; insertions: number; deletions: number } | null {
+): Promise<{ filesChanged: number; insertions: number; deletions: number } | null> {
   if (!worktreePath || !coreRust) return null;
   try {
-    const files = coreRust.getDiff(worktreePath, false);
+    const files = await coreRust.getDiffAsync(worktreePath, false);
     let insertions = 0;
     let deletions = 0;
     for (const file of files) {

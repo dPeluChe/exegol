@@ -23,7 +23,7 @@
    (`module.enableCompileCache()` in main and the sidecar, `COMPETITIVE_UPDATE_2026_10.md` P2).
 3. **Trust pack**: T200.1 folder pre-trust, T200.2 child env markers, T200.3 per-pane error
    boundary, T183.2 AI features via the logged-in CLI.
-4. **Performance pack 2**: T185.19 main process off the hot path.
+4. ~~Performance pack 2~~: shipped (`perf/pack-2`)
 5. **User features, one PR each**: T200.6 answer agent questions, T200.4 queue + steer, T200.5 undo
    turn, T142 PR loop phase 1 (T200.7).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
@@ -415,24 +415,12 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     `broadcastAgentStatus` callers still write the DB and broadcast on repeats.
 
 **Main process off the hot path** (P1, Priority Order #4)
-19. Everything that blocks the main thread on a polled or per-flush path.
-    > Merged from T185.6, T185.7, T185.9 and the "Queue after 0.5.7" search and main-process
-    > follow-ups (#151 simplify pass, 0.5.3 audit) on 2026-10-04.
-    - (was 6) **Tokens tab Scan** (`tokens/log-parser.ts`) is sync `readFileSync` + `JSON.parse`
-      over `~/.claude/projects`: 2.1s freeze at ~1GB. Move to a worker_thread or stream with
-      mtime skip. Same for the sync log scan in `tokens.scan`
-    - (was 7) **Headless xterm serialize on main** (`headless-emulator.ts:69`), 25-40ms per 5000
-      lines: runs on every 5s scrollback flush per agent even when idle (add a dirty flag), and
-      twice per pane mount (`use-terminal-lifecycle.ts` fetches a full snapshot to test
-      non-empty, `terminal-setup.ts` fetches again). Sync `emulator.snapshot()` per scrollback flush
-    - (was 9) **`projects.listAllWorktrees` calls sync napi `worktreeHasChanges` per worktree** on
-      the main thread (10ms/worktree here, est 150ms+ on 10k files). Use a napi AsyncTask or
-      async git status
-    - Sync napi `getDiff`/`getWorktreeDiff` on polled paths
-    - `appendFileSync` per log line
-    - Search: `fsSearch`/`fsGrep` are sync napi calls run per folder on the main process (fine at
-      3-10ms per repo, a freeze on a 30-repo workspace); make them `AsyncTask` and give the Rust
-      walker a nested-`.git` scope instead of the per-folder loop
+19. ~~Everything that blocks the main thread on a polled or per-flush path~~: shipped
+    (`perf/pack-2`, `TASK_COMPLETED/2610.md`). Left:
+    - Search: give the Rust walker a nested-`.git` scope so a workspace is one walk instead of
+      the per-folder loop (the loop now runs async on the libuv pool, 2 folders at a time)
+    - One-shot sync `worktreeHasChanges` calls (pipeline and agent worktree cleanup, race-mode
+      cleanup, oplog undo) still run on main; not polled, so left as they are
 
 ---
 

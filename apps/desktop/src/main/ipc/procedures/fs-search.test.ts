@@ -6,8 +6,8 @@ const fsGrep = vi.fn();
 
 vi.mock("../../agents/spawn-env", () => ({
   coreRust: {
-    fsSearch: (...args: unknown[]) => fsSearch(...args),
-    fsGrep: (...args: unknown[]) => fsGrep(...args),
+    fsSearchAsync: (...args: unknown[]) => fsSearch(...args),
+    fsGrepAsync: (...args: unknown[]) => fsGrep(...args),
   },
 }));
 

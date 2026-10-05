@@ -108,6 +108,9 @@ export interface FileDiff {
  */
 export declare function fsGrep(pattern: string, root: string, opts: GrepOptions): Array<GrepHit>
 
+/** Async `fsGrep`, computed off the JS thread. */
+export declare function fsGrepAsync(pattern: string, root: string, opts: GrepOptions): Promise<Array<GrepHit>>
+
 /**
  * Fuzzy-find files and directories under `root`.
  *
@@ -121,11 +124,17 @@ export declare function fsGrep(pattern: string, root: string, opts: GrepOptions)
  */
 export declare function fsSearch(query: string, root: string, limits: SearchLimits): Array<SearchResult>
 
+/** Async `fsSearch`, computed off the JS thread. */
+export declare function fsSearchAsync(query: string, root: string, limits: SearchLimits): Promise<Array<SearchResult>>
+
 /**
  * Get structured diff of changes (staged or unstaged).
  * Returns a list of FileDiff objects with hunks and lines.
  */
 export declare function getDiff(repoPath: string, staged: boolean): Array<FileDiff>
+
+/** Async `getDiff`, computed off the JS thread. */
+export declare function getDiffAsync(repoPath: string, staged: boolean): Promise<Array<FileDiff>>
 
 /** Get repository information including current branch, remote URL, dirty state, and HEAD commit. */
 export declare function getRepoInfo(path: string): RepoInfo
@@ -135,6 +144,9 @@ export declare function getRepoSnapshot(repoPath: string): RepoSnapshot
 
 /** Get a unified diff of all changes (staged + unstaged + untracked) in a worktree. */
 export declare function getWorktreeDiff(worktreePath: string): string
+
+/** Async `getWorktreeDiff`, computed off the JS thread. */
+export declare function getWorktreeDiffAsync(worktreePath: string): Promise<string>
 
 /** A single line match from `fs_grep`. */
 export interface GrepHit {
@@ -335,6 +347,9 @@ export declare function stripAnsi(input: string): string
 
 /** Check if a worktree (or any repo working directory) has uncommitted changes. */
 export declare function worktreeHasChanges(worktreePath: string): boolean
+
+/** Async `worktreeHasChanges`, computed off the JS thread. */
+export declare function worktreeHasChangesAsync(worktreePath: string): Promise<boolean>
 
 /** Information about a git worktree. */
 export interface WorktreeInfo {

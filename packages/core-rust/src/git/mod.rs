@@ -326,7 +326,7 @@ pub fn worktree_has_changes(worktree_path: String) -> Result<bool, Error> {
 }
 
 /// Internal helper to check for uncommitted changes.
-fn check_has_changes(path: &str) -> Result<bool, Error> {
+pub(crate) fn check_has_changes(path: &str) -> Result<bool, Error> {
   let repo = open_repo(path)?;
 
   let mut opts = StatusOptions::new();

@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
 import { getProject, listWorktrees } from "../../db/queries";
+import { mapWithConcurrency } from "../../lib/concurrency";
 import { escapeRegExp } from "../../lib/escape-regexp";
 import { isPathAllowed } from "../../security/path-guard";
 import { detectRunTargets } from "../../system/scripts";
@@ -28,6 +29,9 @@ const grepInput = z.object({
   globs: z.array(z.string().min(1)).optional(),
 });
 
+/** Walks share the libuv pool (4 threads) with fs I/O: leave half of it free */
+const SEARCH_CONCURRENCY = 2;
+
 function requireCoreRust(): NonNullable<typeof coreRust> {
   if (!coreRust) {
     throw new TRPCError({
@@ -44,7 +48,7 @@ export const fsSearchRouter = router({
   fuzzyFind: publicProcedure.input(fuzzyFindInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
     await assertPathInsideProject(input.root, ctx);
-    return rust.fsSearch(input.query, input.root, {
+    return rust.fsSearchAsync(input.query, input.root, {
       maxResults: input.maxResults,
       maxDepth: input.maxDepth,
       includeHidden: input.includeHidden,
@@ -56,7 +60,7 @@ export const fsSearchRouter = router({
   grep: publicProcedure.input(grepInput).query(async ({ ctx, input }) => {
     const rust = requireCoreRust();
     await assertPathInsideProject(input.root, ctx);
-    return rust.fsGrep(input.pattern, input.root, {
+    return rust.fsGrepAsync(input.pattern, input.root, {
       caseInsensitive: input.caseInsensitive,
       includeHidden: input.includeHidden,
       respectGitignore: input.respectGitignore,
@@ -96,27 +100,30 @@ export const fsSearchRouter = router({
       const prefix = (rel: string, p: string) => (rel ? `${rel}/${p}` : p);
       if (input.mode === "name") {
         const seen = new Set<string>();
-        const names = folders
-          .flatMap((f) =>
-            rust
-              .fsSearch(input.query, f.path, { maxResults: 100 })
-              .map((r) => ({ ...r, relativePath: prefix(f.rel, r.relativePath) })),
-          )
+        const perFolder = await mapWithConcurrency(folders, SEARCH_CONCURRENCY, async (f) =>
+          (await rust.fsSearchAsync(input.query, f.path, { maxResults: 100 })).map((r) => ({
+            ...r,
+            relativePath: prefix(f.rel, r.relativePath),
+          })),
+        );
+        const names = perFolder
+          .flat()
           .filter((r) => !r.isDir && !seen.has(r.path) && seen.add(r.path))
           .sort((a, b) => b.score - a.score)
           .slice(0, 100);
         return { mode: input.mode, names, hits: [] };
       }
       const seen = new Set<string>();
-      const hits = folders
-        .flatMap((f) =>
-          rust
-            .fsGrep(escapeRegExp(input.query), f.path, {
-              caseInsensitive: input.caseInsensitive ?? true,
-              maxMatches: 300,
-            })
-            .map((h) => ({ ...h, relativePath: prefix(f.rel, h.relativePath) })),
-        )
+      const perFolder = await mapWithConcurrency(folders, SEARCH_CONCURRENCY, async (f) =>
+        (
+          await rust.fsGrepAsync(escapeRegExp(input.query), f.path, {
+            caseInsensitive: input.caseInsensitive ?? true,
+            maxMatches: 300,
+          })
+        ).map((h) => ({ ...h, relativePath: prefix(f.rel, h.relativePath) })),
+      );
+      const hits = perFolder
+        .flat()
         .filter((h) => {
           const key = `${h.path}:${h.lineNumber}`;
           return !seen.has(key) && seen.add(key);

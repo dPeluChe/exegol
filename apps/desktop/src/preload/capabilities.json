@@ -304,6 +304,7 @@
     "terminal:write",
     "terminal:resize",
     "terminal:get-snapshot",
+    "terminal:has-content",
     "terminal:save-clipboard-image",
     "terminal:get-size",
     "log:renderer-error",

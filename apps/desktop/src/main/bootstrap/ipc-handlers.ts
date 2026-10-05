@@ -76,6 +76,12 @@ export function registerIpcHandlers(): void {
     return getPtyHost().getLiveSnapshot(agentId);
   });
 
+  // A mount only needs to know whether output exists: serializing it just to test length cost 25-40ms
+  ipcMain.handle("terminal:has-content", async (_event, agentId: string) => {
+    await whenSessionReady(agentId);
+    return getPtyHost().hasContent(agentId);
+  });
+
   /** T178: a view reports whether it can currently draw this agent. Returns a
    *  snapshot when output was dropped while hidden, so the view repaints from
    *  the model instead of resuming mid-stream on a screen that moved on. */

@@ -42,6 +42,8 @@ export class HeadlessEmulator {
   private terminal: Terminal;
   private serializer: SerializeAddon;
   private _modes: TerminalModes = { ...DEFAULT_MODES };
+  private _revision = 0;
+  private _hasContent = false;
 
   constructor(cols: number, rows: number, scrollback = 5000) {
     this.terminal = new Terminal({ cols, rows, scrollback, allowProposedApi: true });
@@ -51,6 +53,8 @@ export class HeadlessEmulator {
 
   /** Feed raw terminal data */
   write(data: string): void {
+    this._revision++;
+    if (data.length > 0) this._hasContent = true;
     this.parseDecModes(data);
     this.terminal.write(data);
   }
@@ -108,12 +112,24 @@ export class HeadlessEmulator {
     return { cols: this.terminal.cols, rows: this.terminal.rows };
   }
 
+  /** Bumped by anything that changes the snapshot: a flush skips an unchanged screen */
+  get revision(): number {
+    return this._revision;
+  }
+
+  /** Output ever arrived: a mount's "anything to show?" probe without serializing */
+  get hasContent(): boolean {
+    return this._hasContent;
+  }
+
   resize(cols: number, rows: number): void {
+    this._revision++;
     this.terminal.resize(cols, rows);
   }
 
   /** Clear Terminal: drop the scrollback and screen, as the view's xterm does */
   clear(): void {
+    this._revision++;
     this.terminal.clear();
   }
 

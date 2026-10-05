@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import type { BugDiagnostics } from "@exegol/shared";
 import type Database from "libsql";
-import { LOG_DIR } from "../lib/logger";
+import { flushLogSync, LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_SLUG, EXEGOL_REPO_URL } from "../lib/repo";
 import { SIDECAR_LOG } from "../terminal/pty-sidecar-discovery";
 import { SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
@@ -160,6 +160,7 @@ export async function collectDiagnostics(
 ): Promise<BugDiagnostics> {
   const version = app.getVersion();
   const doctor = await runDoctorChecks(db).catch(() => null);
+  flushLogSync();
   const current = compactLog(tailFile(join(LOG_DIR, "exegol.log"), 300));
   const previous = [1, 2]
     .map((i) => problemLines(join(LOG_DIR, `exegol.${i}.log`), 40))

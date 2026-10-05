@@ -3,10 +3,12 @@
 mod git;
 mod processing;
 mod search;
+mod tasks;
 
 pub use git::*;
 pub use processing::*;
 pub use search::*;
+pub use tasks::*;
 
 use napi_derive::napi;
 

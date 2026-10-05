@@ -4,7 +4,7 @@ const electronMock = vi.hoisted(() => ({ exit: vi.fn(), quit: vi.fn() }));
 vi.mock("electron", () => ({ app: electronMock }));
 
 const warn = vi.hoisted(() => vi.fn());
-vi.mock("../lib/logger", () => ({ logger: { warn, info: vi.fn() } }));
+vi.mock("../lib/logger", () => ({ logger: { warn, info: vi.fn() }, flushLogSync: vi.fn() }));
 
 describe("runTeardown", () => {
   beforeEach(() => {
