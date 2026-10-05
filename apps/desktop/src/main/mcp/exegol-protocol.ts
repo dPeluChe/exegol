@@ -65,6 +65,8 @@ export interface ExegolToolCallParams {
   token?: string;
   /** Shim's parent pid — disambiguates agents that share a config file. */
   ppid?: number;
+  /** The shim passes MCP content blocks through (browser_screenshot sends an image) */
+  images?: boolean;
 }
 
 // ─── Tool definitions ────────────────────────────────────────────────────────
@@ -85,6 +87,18 @@ export const EXEGOL_TOOL_NAMES = [
   "claim_paths",
   "release_paths",
   "list_claims",
+  "browser_list",
+  "browser_open",
+  "browser_snapshot",
+  "browser_screenshot",
+  "browser_logs",
+  "browser_wait_for_user",
+  "browser_navigate",
+  "browser_click",
+  "browser_type",
+  "browser_press",
+  "browser_select",
+  "browser_eval",
 ] as const;
 export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
 
@@ -105,6 +119,13 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "claim_paths",
   "release_paths",
   "list_claims",
+  // Looking at the page and asking the user for help change nothing in the repo
+  "browser_list",
+  "browser_open",
+  "browser_snapshot",
+  "browser_screenshot",
+  "browser_logs",
+  "browser_wait_for_user",
 ]);
 
 interface ExegolToolDef {
@@ -114,6 +135,159 @@ interface ExegolToolDef {
 }
 
 const MEMORY_CATEGORY_VALUES = [...MEMORY_CATEGORIES];
+
+const PANE_ARG = {
+  pane: {
+    type: "string",
+    description: "Pane id from browser_list. Omit to use the pane you used last (or the only one).",
+  },
+};
+const REF_ARG = {
+  ref: { type: "string", description: "Element ref from browser_snapshot, e.g. e12" },
+};
+const BROWSER_SCOPE =
+  "Exegol's own browser pane, shared live with the user, scoped to YOUR project (its panes and " +
+  "its logins only). Agents may open only local hosts (localhost, 127.0.0.1, *.localhost, " +
+  "*.local) and the hosts the user allowed in Edit project; for anything else, or any login, " +
+  "ask the user.";
+
+const BROWSER_TOOL_DEFS: ExegolToolDef[] = [
+  {
+    name: "browser_list",
+    description: `List your project's live browser panes: id, url, title, who controls each. ${BROWSER_SCOPE}`,
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "browser_open",
+    description:
+      "Open a page in your project's browser pane (reuses the pane you used last, or opens one " +
+      'beside you). url "dev" opens the project\'s running dev server. Returns url and title, or ' +
+      `status needs_user when the page wants a login. ${BROWSER_SCOPE}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: 'http(s) URL on an allowed host, or "dev"' },
+        new_pane: { type: "boolean", description: "Open a new pane instead of reusing one" },
+        ...PANE_ARG,
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "browser_snapshot",
+    description:
+      "Read the page: URL, title, visible text (trimmed) and interactive elements with refs " +
+      "(e12) and roles. Sees what the user did in the pane too. Call it before acting and again " +
+      "after the page changes. A needs_user field means a human step (login, captcha): call " +
+      "browser_wait_for_user.",
+    inputSchema: { type: "object", properties: { ...PANE_ARG } },
+  },
+  {
+    name: "browser_screenshot",
+    description:
+      "Screenshot the pane as PNG (an image, or a file path under ~/.exegol/screenshots).",
+    inputSchema: { type: "object", properties: { ...PANE_ARG } },
+  },
+  {
+    name: "browser_logs",
+    description:
+      "DevTools logs of the pane's page: console messages (level, text, source:line), uncaught " +
+      "errors and failed or 4xx/5xx network requests, last 500. Pass since (the lastSeq of your " +
+      "previous call) for only new ones; level: debug|info|warning|error (that level and up).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        since: { type: "number" },
+        level: { type: "string", enum: ["debug", "info", "warning", "error"] },
+        limit: { type: "number" },
+        ...PANE_ARG,
+      },
+    },
+  },
+  {
+    name: "browser_wait_for_user",
+    description:
+      "Ask the user to do something in the browser pane (log in, solve a captcha, set up data) " +
+      "and wait until they click Hand back. Exegol shows them your reason and raises an alert. " +
+      "Each call waits up to ~25s and returns status waiting: call it again with the same reason " +
+      "until it returns handed_back (then browser_snapshot) or timed_out. Never type passwords " +
+      "yourself.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        reason: { type: "string", maxLength: 300, description: "What the user should do" },
+        timeout_minutes: { type: "number", description: "Default 10, max 30" },
+        ...PANE_ARG,
+      },
+      required: ["reason"],
+    },
+  },
+  {
+    name: "browser_navigate",
+    description: `Go to a URL in the pane (write mode). ${BROWSER_SCOPE}`,
+    inputSchema: {
+      type: "object",
+      properties: { url: { type: "string" }, ...PANE_ARG },
+      required: ["url"],
+    },
+  },
+  {
+    name: "browser_click",
+    description: "Click an element by ref from your last browser_snapshot (write mode).",
+    inputSchema: { type: "object", properties: { ...REF_ARG, ...PANE_ARG }, required: ["ref"] },
+  },
+  {
+    name: "browser_type",
+    description:
+      "Set the text of an input, textarea or editable element by ref (write mode). Refused on " +
+      "password fields: logins are the user's (browser_wait_for_user). submit: true submits its form.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...REF_ARG,
+        text: { type: "string", maxLength: 5000 },
+        append: {
+          type: "boolean",
+          description: "Add to the current value instead of replacing it",
+        },
+        submit: { type: "boolean" },
+        ...PANE_ARG,
+      },
+      required: ["ref", "text"],
+    },
+  },
+  {
+    name: "browser_press",
+    description:
+      "Press a key in the page (write mode): a, Enter, Tab, Escape, ArrowDown, Backspace, " +
+      "Shift+Tab, Control+a. Refused while a password field has the focus.",
+    inputSchema: {
+      type: "object",
+      properties: { key: { type: "string" }, ...PANE_ARG },
+      required: ["key"],
+    },
+  },
+  {
+    name: "browser_select",
+    description: "Choose an option of a <select> by its value or label (write mode).",
+    inputSchema: {
+      type: "object",
+      properties: { ...REF_ARG, value: { type: "string" }, ...PANE_ARG },
+      required: ["ref", "value"],
+    },
+  },
+  {
+    name: "browser_eval",
+    description:
+      "Run JavaScript in the page and get its JSON result (write mode, 10s limit). For checks " +
+      "the snapshot cannot do; prefer click and type for interaction.",
+    inputSchema: {
+      type: "object",
+      properties: { js: { type: "string", maxLength: 20000 }, ...PANE_ARG },
+      required: ["js"],
+    },
+  },
+];
 
 export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
   {
@@ -318,6 +492,7 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
       required: ["target"],
     },
   },
+  ...BROWSER_TOOL_DEFS,
 ];
 
 /** Tool defs visible at the given access mode (display-only in the shim — the

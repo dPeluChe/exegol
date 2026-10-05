@@ -307,7 +307,11 @@ function callSocket(
 
 async function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
   try {
-    return await callSocket("call_tool", { tool, args, token, ppid: process.ppid }, tool);
+    return await callSocket(
+      "call_tool",
+      { tool, args, token, ppid: process.ppid, images: true },
+      tool,
+    );
   } catch (err) {
     // A stale token (app restarted, config rewritten) is permanent for the rest
     // of the session unless we re-read it: the file on disk may already hold a
@@ -317,7 +321,11 @@ async function callTool(tool: string, args: Record<string, unknown>): Promise<un
       if (fresh && fresh !== token) {
         token = fresh;
         process.stderr.write("[exegol-mcp-shim] token refreshed from disk, retrying\n");
-        return callSocket("call_tool", { tool, args, token, ppid: process.ppid }, tool);
+        return callSocket(
+          "call_tool",
+          { tool, args, token, ppid: process.ppid, images: true },
+          tool,
+        );
       }
     }
     throw err;
@@ -375,8 +383,12 @@ function handleClientMessage(
       const params = msg.params as { name: string; arguments?: Record<string, unknown> };
       callTool(params.name, params.arguments ?? {})
         .then((result) => {
+          // Ready-made content blocks (browser_screenshot's image) go through as they are
+          const blocks = (result as { __mcpContent?: unknown } | null)?.__mcpContent;
           writeToClient(msg.id as number, framed, {
-            content: [{ type: "text", text: JSON.stringify(result) }],
+            content: Array.isArray(blocks)
+              ? blocks
+              : [{ type: "text", text: JSON.stringify(result) }],
           });
         })
         .catch((err: Error) => {

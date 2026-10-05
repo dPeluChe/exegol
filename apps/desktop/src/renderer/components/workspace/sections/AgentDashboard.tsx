@@ -31,6 +31,7 @@ import { AccessModeBadge } from "../../common/AccessModeBadge";
 import { AgentIcon } from "../../common/AgentIcon";
 import { AgentSpinner } from "../../common/AgentSpinner";
 import { FilterChip } from "../../common/FilterChip";
+import { McpStatusIndicator } from "../../common/McpStatusIndicator";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { QuietBadge } from "../../common/QuietControls";
 import { SessionAlias } from "../../common/SessionAlias";
@@ -548,6 +549,7 @@ function AgentCard({
             {agent.startedAt && <Elapsed startedAt={agent.startedAt} />}
             <AgentTokenUsage usage={agent.tokenUsage} />
             <AccessModeBadge mode={agent.accessMode} variant="inline" />
+            <McpStatusIndicator agentId={agent.id} accessMode={agent.accessMode} />
             {agent.branchName && (
               <span className="truncate rounded bg-white/5 px-1 py-0.5 font-mono text-[9px]">
                 {agent.branchName}

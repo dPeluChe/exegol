@@ -37,7 +37,11 @@ export interface AttentionItem {
   timestamp: number;
   read: boolean;
   pinned: boolean;
+  /** Agent browser: the pane the agent needs the user in (clears on hand-back, not on running) */
+  paneId?: string;
 }
+
+export type AttentionCause = { level: AttentionLevel; reason: string; paneId?: string };
 
 function statusToAttention(
   status: string,
@@ -74,6 +78,9 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   const offPrWatch = window.api.onPrWatch(({ agentId, reason }) => {
     if (reason) useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason });
   });
+  const stopMcp = window.api.onMcpStatus((e) =>
+    queryClient.setQueryData(["agents", "mcpStatus"], e),
+  );
   const stopFollowUps = window.api.onFollowUps((e) =>
     queryClient.setQueryData(followUpsKey(e.agentId), e.items),
   );
@@ -129,7 +136,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
         // stayed amber for 54m after approval). Review items for finished
         // agents stay until dismissed — only action_needed auto-clears.
         const item = useAgentStore.getState().attentionItems[event.agentId];
-        if (item && item.level === "action_needed") {
+        if (item && item.level === "action_needed" && !item.paneId) {
           store.dismissAttention(event.agentId);
         }
       }
@@ -146,6 +153,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   pushCleanup = () => {
     stopRecovery();
     offPrWatch();
+    stopMcp();
     stopFollowUps();
     stopTurns();
     stopStatus();
@@ -276,7 +284,7 @@ interface AgentStore {
   /** Attention inbox — agents needing user attention, persisted across restarts */
   attentionItems: Record<string, AttentionItem>;
   /** `cause` overrides the status-derived reason (PR watch) */
-  addAttentionItem: (agentId: string, cause?: { level: AttentionLevel; reason: string }) => void;
+  addAttentionItem: (agentId: string, cause?: AttentionCause) => void;
   markAttentionRead: (agentId: string) => void;
   dismissAttention: (agentId: string) => void;
   toggleAttentionPin: (agentId: string) => void;
@@ -319,6 +327,16 @@ export function findAgentPane(
   return null;
 }
 
+/** The tab holding a pane of a project */
+export function findPane(
+  projectId: string,
+  paneId: string,
+): { tabId: string; paneId: string } | null {
+  const pw = useWorkspaceStore.getState().projectWorkspaces[projectId];
+  const tab = pw?.tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
+  return tab ? { tabId: tab.id, paneId } : null;
+}
+
 /** Bring a project's workspace on screen from anywhere, the Dashboard included */
 export function showProject(projectId: string): void {
   if (useAppStore.getState().activeProjectId !== projectId) {
@@ -340,7 +358,9 @@ export function focusPane(projectId: string, tabId: string, paneId?: string): vo
  * switches project/tab if needed, focuses the pane, marks its attention read.
  */
 export function jumpToAgent(agentId: string, projectId: string): void {
-  const location = findAgentPane(agentId, projectId);
+  const browserPane = useAgentStore.getState().attentionItems[agentId]?.paneId;
+  const location =
+    (browserPane && findPane(projectId, browserPane)) || findAgentPane(agentId, projectId);
   if (location) {
     focusPane(projectId, location.tabId, location.paneId);
   } else {
@@ -568,6 +588,7 @@ export const useAgentStore = create<AgentStore>()(
             timestamp: Date.now(),
             read: isRead,
             pinned: existing?.pinned ?? false,
+            ...(cause?.paneId ? { paneId: cause.paneId } : {}),
           };
           const countDelta = isRead ? 0 : wasUnread ? 0 : 1;
           return {

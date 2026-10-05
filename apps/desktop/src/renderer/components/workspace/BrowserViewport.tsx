@@ -1,3 +1,4 @@
+import { browserPartitionFor } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Check, X } from "lucide-react";
 import { forwardRef, type ReactNode, useState } from "react";
@@ -177,15 +178,21 @@ export function DeviceFrame({
   );
 }
 
-/** Electron's <webview> as the browser panes use it (popups allowed) */
-export const PageView = forwardRef<HTMLElement, { src: string }>(function PageView({ src }, ref) {
-  return (
-    <webview
-      // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
-      ref={ref as React.Ref<any>}
-      src={src}
-      className="h-full w-full"
-      {...({ allowpopups: "true" } as Record<string, string>)}
-    />
-  );
-});
+/** Electron's <webview> as the browser panes use it (popups allowed). With a project, its own
+ *  persistent session: logins are shared with that project's agents and no other project */
+export const PageView = forwardRef<HTMLElement, { src: string; projectId?: string | null }>(
+  function PageView({ src, projectId }, ref) {
+    // Fixed when the webview attaches: a pane belongs to one project for its whole life
+    const partition = projectId ? browserPartitionFor(projectId) : undefined;
+    return (
+      <webview
+        // biome-ignore lint/suspicious/noExplicitAny: Electron webview not in TS DOM
+        ref={ref as React.Ref<any>}
+        src={src}
+        className="h-full w-full"
+        {...({ allowpopups: "true" } as Record<string, string>)}
+        {...(partition ? { partition } : {})}
+      />
+    );
+  },
+);

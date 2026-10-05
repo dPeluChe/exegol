@@ -70,6 +70,14 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Browser pane**: a webview with URL bar and navigation, next to your agents. It remembers
   the page it was on, and can show it at a device size (desktop, laptop, tablet, mobile).
 - **Design mode**: click an element to send its selector, styles and HTML to an agent.
+- **Agents in the browser**: agents drive the project's browser pane through the Exegol MCP
+  tools (`browser_open`, `browser_snapshot`, `browser_click`...), live in the same pane you see.
+  Each project has its own browser session; agents only reach local hosts and the hosts listed
+  in Edit project > Agent browser hosts. A banner shows who is driving, with Take over and Hand
+  back. At a login the agent stops and asks you (an alert opens the pane), and resumes when you
+  click "Done, hand back". Agents never type passwords.
+- **Ask agent**: from the browser bar, send an agent the page you are on, a note and a picked
+  element; it arrives at the agent's next turn.
 - **QA record and replay**: record clicks, typing and navigation as a test, replay it, and see
   per-step results, console errors and screenshots in the QA Tests section.
 

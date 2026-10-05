@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
 
-import { projectCreateSchema } from "@exegol/shared";
+import { MAX_BROWSER_HOSTS, parseBrowserHosts, projectCreateSchema } from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import {
@@ -25,6 +25,7 @@ import {
   updateProjectSortOrder,
 } from "../../db/queries";
 import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
+import { setProjectBrowserHosts } from "../../db/queries/projects";
 import { getAppSettings } from "../../db/queries/settings";
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde } from "../../ide/opener";
@@ -148,6 +149,22 @@ export const projectRouter = router({
     .input(z.object({ id: z.string(), name: z.string().min(1) }))
     .mutation(({ ctx, input }) => {
       renameProject(ctx.db, input.id, input.name);
+      return getProject(ctx.db, input.id);
+    }),
+
+  /** Agent browser: hosts beyond the local ones this project's agents may open */
+  setBrowserHosts: publicProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        hosts: z.array(z.string().max(300)).max(MAX_BROWSER_HOSTS * 2),
+      }),
+    )
+    .mutation(({ ctx, input }) => {
+      if (!getProject(ctx.db, input.id)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      }
+      setProjectBrowserHosts(ctx.db, input.id, parseBrowserHosts(input.hosts));
       return getProject(ctx.db, input.id);
     }),
 

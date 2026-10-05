@@ -6,6 +6,7 @@ import { deleteAgent } from "../../hooks/use-delete-agent";
 import { confirmClosePanes } from "../../lib/close-guard";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcMutate } from "../../lib/trpc-client";
+import { useAgentBrowserStore } from "../../stores/agent-browser";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import {
@@ -39,6 +40,12 @@ export function WorkspaceTabBar() {
   const panes = useWorkspaceStore(selectPanes);
   const agents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
+  const browserPanes = useAgentBrowserStore((s) => s.panes);
+  const browsingPanes = new Set(
+    Object.values(browserPanes)
+      .filter((p) => p.active)
+      .map((p) => p.paneId),
+  );
   const { projectId } = useProjectContext();
 
   /** Close a tab, after asking when that ends a session, a terminal or unsaved edits */
@@ -231,6 +238,7 @@ export function WorkspaceTabBar() {
             // T155.3: unread attention beats activity in the tab dot
             const attentionItem = primaryAgentId ? attentionItems[primaryAgentId] : undefined;
             const tabAttention = !!attentionItem && !attentionItem.read;
+            const agentBrowsing = collectPaneIds(tab.layout).some((id) => browsingPanes.has(id));
 
             return (
               <WorkspaceTabItem
@@ -243,6 +251,7 @@ export function WorkspaceTabBar() {
                 agentCliType={agentCliType}
                 tabActivity={tabActivity}
                 tabAttention={tabAttention}
+                agentBrowsing={agentBrowsing}
                 dragOverTabId={dragOverTabId}
                 editValue={editValue}
                 setEditValue={setEditValue}

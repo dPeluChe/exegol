@@ -20,6 +20,7 @@ import {
   resolveTargetAgent,
   sendAgentMessage,
 } from "../agents/agent-messaging";
+import { BrowserToolError, callBrowserTool, isBrowserTool } from "../browser/agent-browser-tools";
 import { getProject } from "../db/queries";
 import {
   AGENT_LINK_ROLES,
@@ -412,12 +413,21 @@ export async function callExegolTool(
   tool: string,
   args: Record<string, unknown>,
   context: ExegolToolContext,
+  opts: { images?: boolean } = {},
 ): Promise<unknown> {
   if (!(EXEGOL_TOOL_NAMES as readonly string[]).includes(tool)) {
     throw new ExegolToolError(`Unknown tool: ${tool}`, -32601);
   }
   const toolName = tool as ExegolToolName;
   requireWriteAccess(toolName, context);
+  if (isBrowserTool(toolName)) {
+    try {
+      return await callBrowserTool(db, toolName, args, context, opts);
+    } catch (err) {
+      if (err instanceof BrowserToolError) throw new ExegolToolError(err.message, err.code);
+      throw err;
+    }
+  }
 
   // Single translation point: messaging throws AgentMessagingError (its own
   // JSON-RPC codes), which the socket layer surfaces to the agent verbatim.

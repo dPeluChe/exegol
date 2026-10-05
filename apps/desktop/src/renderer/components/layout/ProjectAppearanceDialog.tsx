@@ -1,4 +1,4 @@
-import type { Project } from "@exegol/shared";
+import { type Project, parseBrowserHosts } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
@@ -40,10 +40,19 @@ export function ProjectAppearanceDialog({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
   const [name, setName] = useState(project.name);
-  // Icon and color apply as they are picked; Save commits the name and closes
+  const savedHosts = (project.browserHosts ?? []).join("\n");
+  const [hosts, setHosts] = useState(savedHosts);
+  const saveHosts = useMutation({
+    mutationFn: (list: string[]) =>
+      trpcMutate("projects.setBrowserHosts", { id: project.id, hosts: list }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+  });
+  // Icon and color apply as they are picked; Save commits the name and hosts and closes
   const saveAndClose = () => {
     const trimmed = name.trim();
     if (trimmed && trimmed !== project.name) onRename(trimmed);
+    const list = parseBrowserHosts(hosts);
+    if (list.join("\n") !== savedHosts) saveHosts.mutate(list);
     onOpenChange(false);
   };
 
@@ -79,6 +88,23 @@ export function ProjectAppearanceDialog({
           </label>
 
           <ShortcutPicker projectId={project.id} />
+
+          <label className="mb-3 block">
+            <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+              Agent browser hosts
+            </span>
+            <textarea
+              value={hosts}
+              onChange={(e) => setHosts(e.target.value)}
+              rows={3}
+              placeholder={"staging.myapp.com\n*.myapp.dev"}
+              className="w-full min-w-0 resize-y rounded border border-border bg-bg-tertiary px-2 py-1 font-mono text-[11px] text-text-primary outline-none focus:border-accent/50"
+            />
+            <span className="mt-1 block text-[10px] text-text-muted">
+              Besides local hosts (localhost, *.local), the sites this project's agents may open in
+              its browser pane. One per line; *.domain covers its subdomains.
+            </span>
+          </label>
 
           <ProjectIconPicker
             found={found}

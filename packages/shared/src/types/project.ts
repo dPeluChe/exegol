@@ -15,6 +15,8 @@ export type Project = {
   icon?: string | null;
   /** An image file inside the project used as its icon (favicon, app icon) */
   iconImage?: string | null;
+  /** Hosts beyond the local ones its agents may open in the browser pane ("*.app.com") */
+  browserHosts?: string[];
 };
 
 export type ProjectCreate = Omit<

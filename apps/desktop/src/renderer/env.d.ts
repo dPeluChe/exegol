@@ -109,7 +109,23 @@ interface Window {
       /** `webContentsId`: the pane's own webview; without it the window's first one */
       executeJs: (code: string, webContentsId?: number) => Promise<unknown>;
       captureScreenshot: (webContentsId?: number) => Promise<string | null>;
+      registerPane: (paneId: string, projectId: string, webContentsId: number) => Promise<boolean>;
+      control: (paneId: string, action: "take-over" | "hand-back") => Promise<boolean>;
+      agentStates: () => Promise<import("@exegol/shared").AgentBrowserPaneState[]>;
+      onAgentState: (
+        callback: (state: import("@exegol/shared").AgentBrowserPaneState) => void,
+      ) => () => void;
+      onOpenRequest: (
+        callback: (req: {
+          requestId: string;
+          projectId: string;
+          agentId: string;
+          url: string;
+        }) => void,
+      ) => () => void;
+      openResult: (result: { requestId: string; paneId?: string; error?: string }) => Promise<void>;
     };
+    onMcpStatus: (callback: (event: import("@exegol/shared").McpStatusEvent) => void) => () => void;
     floating: {
       open: (config: {
         paneId: string;

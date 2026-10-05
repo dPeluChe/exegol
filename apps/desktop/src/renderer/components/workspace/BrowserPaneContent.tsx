@@ -10,11 +10,14 @@ import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
+import { AgentBrowserBanner } from "./AgentBrowserBanner";
+import { AskAgentBar, AskAgentButton } from "./AskAgentBar";
 import { BrowserAddressBar } from "./BrowserAddressBar";
 import { BrowserQaRecordingBar } from "./BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./BrowserReplayResultBar";
 import { DeviceFrame, PageView } from "./BrowserViewport";
 import { DesignIssueBubble } from "./DesignIssueBubble";
+import { useAgentBrowserPane } from "./use-agent-browser-pane";
 import { useBrowserQa } from "./use-browser-qa";
 import { useDevServerPorts } from "./use-dev-server-ports";
 import { type LoadError, useWebviewControls, useWebviewNavState } from "./use-webview";
@@ -136,6 +139,9 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
 
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFocused = focusedPaneId === paneId;
+  useAgentBrowserPane(webviewRef, paneId, projectId);
+  const [asking, setAsking] = useState(false);
+  const showAsk = asking && runningAgents.length > 0;
 
   return (
     <div role="none" className="flex h-full flex-col" onMouseDown={() => setFocusedPane(paneId)}>
@@ -167,11 +173,30 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         onSetPreferredPort={(port) => {
           if (projectId) setPreferred.mutate({ projectId, port });
         }}
+        extra={
+          runningAgents.length > 0 ? (
+            <AskAgentButton active={showAsk} onClick={() => setAsking((a) => !a)} />
+          ) : undefined
+        }
       />
+      <AgentBrowserBanner paneId={paneId} />
+      {showAsk && (
+        <AskAgentBar
+          paneId={paneId}
+          agents={runningAgents}
+          currentUrl={currentUrl}
+          getTitle={() => pageTitle(webviewRef)}
+          element={qa.capturedElement}
+          picking={qa.designMode}
+          onPick={qa.toggleDesignMode}
+          onClearElement={() => qa.setCapturedElement(null)}
+          onClose={() => setAsking(false)}
+        />
+      )}
       {/* Webview with focus capture overlay when not active */}
       <div className="relative flex-1">
         <DeviceFrame size={viewport}>
-          <PageView ref={webviewRef} src={src} />
+          <PageView ref={webviewRef} src={src} projectId={projectId} />
         </DeviceFrame>
         <StopServerDialog pendingStop={pendingStop} onDone={() => setPendingStop(null)} />
         {loadError && (
@@ -190,7 +215,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           />
         )}
 
-        {qa.capturedElement && (
+        {qa.capturedElement && !showAsk && (
           <DesignIssueBubble
             element={qa.capturedElement}
             message={issueMessage}
@@ -235,6 +260,14 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
       )}
     </div>
   );
+}
+
+function pageTitle(ref: React.RefObject<HTMLElement | null>): string {
+  try {
+    return (ref.current as unknown as { getTitle?: () => string } | null)?.getTitle?.() ?? "";
+  } catch {
+    return "";
+  }
 }
 
 function StopServerDialog({

@@ -46,6 +46,7 @@ import {
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
+import { getMcpAgentStates } from "../../mcp/exegol-server";
 import { isPathAllowed } from "../../security/path-guard";
 import { installedProviderIds } from "../../system/cli-versions";
 import { getPtyHost } from "../../terminal/pty-host";
@@ -452,6 +453,9 @@ export const agentRouter = router({
       ctx.agentManager.write(input.id, input.key);
       return { ok: true };
     }),
+
+  /** Which live agents have the Exegol MCP tools connected (pushed on mcp:status after this) */
+  mcpStatus: publicProcedure.query(({ ctx }) => ({ agents: getMcpAgentStates(ctx.db) })),
 
   /** T200.4: the user's follow-up queue, typed at the agent's turn boundary (in memory) */
   followUps: publicProcedure

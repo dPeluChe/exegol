@@ -228,4 +228,9 @@ export const wave3Migrations: Migration[] = [
       WHERE id = NEW.id;
     END;`,
   },
+  {
+    // Agent browser: hosts beyond the local ones a project's agents may open (JSON array)
+    id: "w3_021_project_browser_hosts",
+    sql: "ALTER TABLE projects ADD COLUMN browser_hosts TEXT;",
+  },
 ];

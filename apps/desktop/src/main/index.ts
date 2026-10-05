@@ -13,13 +13,17 @@ import { cleanupStaleData, runStartupRecovery } from "./bootstrap/recovery";
 import { installSignalHandlers, runTeardown } from "./bootstrap/shutdown";
 import { endMark, startMark } from "./bootstrap/startup-timings";
 import { createWindow, showMainWindow } from "./bootstrap/window";
+import { installAgentBrowser, migrateBrowserCookies } from "./browser/electron-host";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
+import { broadcast } from "./lib/event-bus";
 import { flushLogSync, logger, markShutdown } from "./lib/logger";
 import {
   ensureExegolMcpServerStarted,
+  getMcpAgentStates,
+  setMcpStatusListener,
   setMcpVerboseLogging,
   stopExegolMcpServer,
 } from "./mcp/exegol-server";
@@ -67,6 +71,7 @@ app.whenReady().then(async () => {
   }
   endMark("dbInit");
   ensureExegolMcpServerStarted(getDb()); // T163: the socket belongs to the app
+  setMcpStatusListener(() => broadcast("mcp:status", { agents: getMcpAgentStates(getDb()) }));
   seedAgentLinkCache(getDb()); // T162: warm the in-memory has-links set
   const settings = getAppSettings(getDb());
   setMcpVerboseLogging(settings.mcpVerboseLogging === true);
@@ -76,9 +81,18 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   registerFloatingIpcHandlers();
   registerSettingsIpcHandlers();
+  installAgentBrowser(getDb());
   registerGlobalHotkey(settings.globalHotkey, showMainWindow);
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
+  // Before any pane loads: a project's first page in its own partition finds its logins there.
+  // Capped, so a slow cookie store never holds the window back
+  await Promise.race([
+    migrateBrowserCookies(getDb()).catch((err) =>
+      logger.warn("[Startup] browser cookie migration failed:", err),
+    ),
+    new Promise((resolve) => setTimeout(resolve, 3_000)),
+  ]);
   endMark("criticalPath");
   // ────────────────────────────────────────────────────────────────────
 

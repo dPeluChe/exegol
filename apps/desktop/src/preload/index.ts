@@ -252,6 +252,35 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("browser:execute-js", { code, webContentsId }),
     captureScreenshot: (webContentsId?: number) =>
       safe.invoke("browser:capture-screenshot", { webContentsId }),
+    /** Agent browser: this pane's webview may be driven by its project's agents */
+    registerPane: (paneId: string, projectId: string, webContentsId: number) =>
+      safe.invoke("browser:register-pane", { paneId, projectId, webContentsId }),
+    control: (paneId: string, action: "take-over" | "hand-back") =>
+      safe.invoke("browser:control", { paneId, action }),
+    agentStates: () => safe.invoke("browser:agent-states"),
+    onAgentState: (callback: (state: unknown) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+      safe.on("browser:agent-state", handler as never);
+      return () => {
+        safe.off("browser:agent-state", handler as never);
+      };
+    },
+    onOpenRequest: (callback: (req: unknown) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+      safe.on("browser:open-request", handler as never);
+      return () => {
+        safe.off("browser:open-request", handler as never);
+      };
+    },
+    openResult: (result: { requestId: string; paneId?: string; error?: string }) =>
+      safe.invoke("browser:open-result", result),
+  },
+  onMcpStatus: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("mcp:status", handler as never);
+    return () => {
+      safe.off("mcp:status", handler as never);
+    };
   },
   // T120: Settings as a separate BrowserWindow
   settings: {

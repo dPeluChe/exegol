@@ -36,6 +36,15 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
 > `docs/ARCHITECTURE/COUNCIL_BASE.md` (council mode / structured executions — backs T188/T189)
 > + `docs/ARCHITECTURE/OWL_FLEET_WATCH.md` (fleet watch module — backs T153 Owl phases, T188).
 
+### Agent browser leftovers (2026-10-05, `feat/agent-browser`)
+- Verify live: register, snapshot/click/type on a local app, login hand-back, Take over, Ask
+  agent, screenshot image in Claude Code, cookie copy on first start, MCP plug and widget.
+- Panes of a project not on screen are unmounted, so an agent there gets a floating window; keep
+  project browser panes alive offscreen instead.
+- `browser_eval` can still fetch with the project's cookies; consider a CSP or an opt-in.
+- Clear a project's partition (cookies, storage) when the project is deleted.
+- Follower views of the floating Sizes compare are not registered (only the leading one).
+
 ### Verify live (2026-09-29/30, not checked in the app)
 - **opencode TUI across app quit** (reported 2026-08-11, before the two likely causes changed on
   2026-08-12: interactive CLIs now `exec` (no wrapper shell left behind) and the MCP shim

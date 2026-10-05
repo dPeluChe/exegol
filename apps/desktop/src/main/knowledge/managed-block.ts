@@ -32,7 +32,12 @@ const MANAGED_BLOCK_BODY =
   "directories you are about to edit BEFORE editing them, and `release_paths` when you finish. " +
   "If the claim is refused, the response names who holds the file — pick different work or " +
   "agree with them via `agent_send`. Coordinators should call `list_claims` before handing out " +
-  "assignments.";
+  "assignments.\n\n" +
+  "To check a web UI, use the `exegol` server's `browser_*` tools: they drive Exegol's browser " +
+  "pane for this project, shared live with the user (start with `browser_open` and " +
+  "`browser_snapshot`). Only local hosts and the hosts the user allowed are reachable. Never " +
+  "type passwords: when a page needs a login or any human step, call `browser_wait_for_user` " +
+  "and let the user do it.";
 // Deliberately NOT here: how to retry a timed-out agent_send. That is tool
 // mechanics, it lives in the tool's own description, and this block is written
 // into the user's committed AGENTS.md/CLAUDE.md — protocol details would go
