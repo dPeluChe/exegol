@@ -1,3 +1,4 @@
+import { AsyncLruCache } from "../../lib/lru-cache";
 import { detectGhCli, execFileAsync } from "./diff-helpers";
 
 interface GitState {
@@ -17,6 +18,45 @@ interface GitState {
   ghInstalled: boolean;
   /** The repo's default branch: nothing to open a PR from there */
   defaultBranch: string;
+}
+
+const NO_PR: GitState["pr"] = { state: "none" };
+/** `gh pr view` goes to the network: the git polls share one read per minute. A commit or push
+ *  changes the key (branch, ahead, upstream) and reads it again at once; a network failure is
+ *  not kept */
+const prCache = new AsyncLruCache<string, GitState["pr"]>(16, 60_000);
+
+/** After Exegol creates or merges a PR: the next read asks GitHub */
+export function forgetPrState(cwd: string): void {
+  prCache.invalidateWhere((k) => k.startsWith(`${cwd}|`));
+}
+
+async function readPrState(cwd: string): Promise<GitState["pr"]> {
+  try {
+    const { stdout } = await execFileAsync(
+      "gh",
+      ["pr", "view", "--json", "state,url,mergeable,mergeStateStatus"],
+      { cwd, timeout: 5000 },
+    );
+    const parsed = JSON.parse(stdout) as {
+      state: string;
+      url: string;
+      mergeable: string;
+      mergeStateStatus: string;
+    };
+    return {
+      state: (parsed.state?.toLowerCase() as GitState["pr"]["state"]) ?? "none",
+      url: parsed.url,
+      mergeable: parsed.mergeable === "MERGEABLE",
+      mergeStateStatus: parsed.mergeStateStatus,
+    };
+  } catch (err) {
+    // No PR for this branch is an answer; anything else (offline, auth) is asked again next time
+    if (String((err as { stderr?: string }).stderr ?? "").includes("no pull requests found")) {
+      return NO_PR;
+    }
+    throw err;
+  }
 }
 
 export async function buildGitState(cwd: string, defaultBranch = "main"): Promise<GitState> {
@@ -80,31 +120,13 @@ export async function buildGitState(cwd: string, defaultBranch = "main"): Promis
 
   // GitHub PR state (optional; only if gh is installed)
   const ghInstalled = await detectGhCli();
-  let pr: GitState["pr"] = { state: "none" };
   const onDefault = branch === defaultBranch || branch === "main" || branch === "master";
-  if (ghInstalled && branch !== "unknown" && !onDefault) {
-    try {
-      const { stdout } = await execFileAsync(
-        "gh",
-        ["pr", "view", "--json", "state,url,mergeable,mergeStateStatus"],
-        { cwd, timeout: 5000 },
-      );
-      const parsed = JSON.parse(stdout) as {
-        state: string;
-        url: string;
-        mergeable: string;
-        mergeStateStatus: string;
-      };
-      pr = {
-        state: (parsed.state?.toLowerCase() as GitState["pr"]["state"]) ?? "none",
-        url: parsed.url,
-        mergeable: parsed.mergeable === "MERGEABLE",
-        mergeStateStatus: parsed.mergeStateStatus,
-      };
-    } catch {
-      // No PR for this branch — treat as "none"
-    }
-  }
+  const pr =
+    ghInstalled && branch !== "unknown" && !onDefault
+      ? await prCache
+          .getOrCompute(`${cwd}|${branch}:${ahead}:${hasUpstream}`, () => readPrState(cwd))
+          .catch(() => NO_PR)
+      : NO_PR;
 
   return {
     branch,
