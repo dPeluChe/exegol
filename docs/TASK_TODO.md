@@ -27,7 +27,7 @@
    ~~T200.4 queue + steer~~ (`feat/queue-steer`), ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR
    loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), git pane renames / MM files /
-   silent failures (Audit leftovers below), T193.9 title trackers on reattach, T138 split modes,
+   silent failures (Audit leftovers below), T138 split modes,
    T185.11 scheduler timeout, T193.2 execPath.
 
 Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI, T144.
@@ -516,7 +516,6 @@ Notarization (since 0.5.4) and GitHub releases are done. The build is still arm6
 **Agents**
 8. Memory extraction on exit is dead (`extractAndStoreMemories` only via `memory.extract`, never
    called since 8b26000). Decide: wire on exit or drop from CLAUDE.md.
-9. Reattach doesn't recreate title trackers.
 10. `getAppSettings` falls back to defaults on bad JSON; the next update saves over the row.
 
 **Pipelines and git**
