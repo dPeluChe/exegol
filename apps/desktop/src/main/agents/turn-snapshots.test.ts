@@ -156,8 +156,7 @@ describe("turn bookkeeping", () => {
   });
 });
 
-// Real git in a temp repo: under a full parallel suite a run can pass the 5s default
-describe("undo against a real repo", { timeout: 30_000 }, () => {
+describe("undo against a real repo", () => {
   let repo: string;
   const sh = (...args: string[]) => execFileSync("git", args, { cwd: repo, encoding: "utf-8" });
   const read = (p: string) => readFileSync(join(repo, p), "utf-8");

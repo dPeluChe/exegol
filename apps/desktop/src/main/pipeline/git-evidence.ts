@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -25,10 +25,15 @@ export async function captureTree(cwd: string, ref?: string): Promise<string> {
     const env = { ...process.env, GIT_INDEX_FILE: index };
     // The real index's stat cache lets `add --all` skip rehashing unchanged files
     const realIndex = resolve(cwd, (await git(cwd, ["rev-parse", "--git-path", "index"])).trim());
-    const seeded = await copyFile(realIndex, index).then(
-      () => true,
-      () => false,
-    );
+    // The copy keeps the real index's mtime: git rehashes entries written in that same second
+    // ("racy git"); a fresh mtime would trust a same-size edit made right after the index write
+    const seeded = await copyFile(realIndex, index)
+      .then(() => stat(realIndex))
+      .then((s) => utimes(index, s.atime, s.mtime))
+      .then(
+        () => true,
+        () => false,
+      );
     if (!seeded) await git(cwd, ["read-tree", "HEAD"], env);
     await git(cwd, ["add", "--all", "--", "."], env);
     const tree = (await git(cwd, ["write-tree"], env)).trim();
