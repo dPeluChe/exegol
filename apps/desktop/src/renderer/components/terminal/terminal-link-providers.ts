@@ -1,11 +1,6 @@
-import type { IDisposable, ILink, ILinkHandler, Terminal } from "@xterm/xterm";
+import type { IBufferRange, IDisposable, ILink, ILinkHandler, Terminal } from "@xterm/xterm";
 import { trpcInvoke } from "../../lib/trpc-client";
-import {
-  type LinkSource,
-  openTerminalFile,
-  openTerminalUrl,
-  sessionCwd,
-} from "./terminal-link-actions";
+import { openTerminalFile, openTerminalUrl, sessionCwd } from "./terminal-link-actions";
 import { LinkPathResolver } from "./terminal-link-resolver";
 import {
   findFileMatches,
@@ -46,6 +41,29 @@ function rowText(terminal: Terminal, y: number): string | null {
   return terminal.buffer.active.getLine(y - 1)?.translateToString(true) ?? null;
 }
 
+/** What the OSC 8 link shows on screen, which may not be where it goes */
+function rangeText(terminal: Terminal, range: IBufferRange): string {
+  let out = "";
+  for (let y = range.start.y; y <= range.end.y; y++) {
+    const line = terminal.buffer.active.getLine(y - 1);
+    const start = y === range.start.y ? range.start.x - 1 : 0;
+    const end = y === range.end.y ? range.end.x : undefined;
+    out += line?.translateToString(true, start, end) ?? "";
+  }
+  return out.trim();
+}
+
+/** The punycode form of the target, flagged when the visible text names something else */
+function osc8Label(terminal: Terminal, uri: string, range: IBufferRange): string {
+  let href = uri;
+  try {
+    href = new URL(uri).href;
+  } catch {}
+  const shown = rangeText(terminal, range);
+  const differs = shown !== uri && shown !== href;
+  return differs ? `${href}\nThe link text differs from where it goes` : href;
+}
+
 /** Every path candidate on screen: what one resolve call asks about */
 function viewportCandidates(terminal: Terminal): string[] {
   const buffer = terminal.buffer.active;
@@ -62,11 +80,11 @@ function viewportCandidates(terminal: Terminal): string[] {
  * read-only over the terminal. Cmd+click: URL to the browser, file to the IDE; Cmd+Shift: Finder. Scheme'd,
  * bare and OSC 8 URLs all go through `openTerminalUrl`.
  */
-export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSource): IDisposable {
+export function registerTerminalLinkProviders(terminal: Terminal, agentId: string): IDisposable {
   const tooltip = createTooltip(terminal);
   const resolver = new LinkPathResolver((texts, cwd) =>
     trpcInvoke<Array<{ text: string; path: string | null }>>("terminalLinks.resolve", {
-      agentId: source.agentId,
+      agentId,
       cwd,
       texts,
     }),
@@ -86,8 +104,9 @@ export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSo
   });
 
   const osc8: ILinkHandler = {
-    activate: (event, uri) => openTerminalUrl(source, uri, linkClick(event)),
-    hover: (event, uri) => tooltip.show(event, linkHint("url", uri)),
+    activate: (event, uri) => openTerminalUrl(agentId, uri, linkClick(event)),
+    hover: (event, uri, range) =>
+      tooltip.show(event, linkHint("url", uri, osc8Label(terminal, uri, range))),
     leave: tooltip.hide,
     allowNonHttpProtocols: false,
   };
@@ -100,7 +119,7 @@ export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSo
         ? findUrlMatches(text).map((m) => {
             const url = m.url ?? m.text;
             return toLink(m, y, linkHint("url", url), (event) =>
-              openTerminalUrl(source, url, linkClick(event)),
+              openTerminalUrl(agentId, url, linkClick(event)),
             );
           })
         : [];
@@ -116,7 +135,7 @@ export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSo
       resolver
         .resolve(
           matches.map((m) => m.text),
-          sessionCwd(source.agentId),
+          sessionCwd(agentId),
           () => viewportCandidates(terminal),
         )
         .then((resolved) => {
@@ -125,7 +144,7 @@ export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSo
             .map((m) => {
               const target = m.line ? `${m.text}:${m.line}${m.col ? `:${m.col}` : ""}` : m.text;
               return toLink(m, y, linkHint("file", m.text, target), (event) =>
-                openTerminalFile(source, m, linkClick(event)),
+                openTerminalFile(agentId, m, linkClick(event)),
               );
             });
           callback(links.length ? links : undefined);

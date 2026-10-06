@@ -140,7 +140,7 @@ export function setupTerminalSession(
   let unsubData: (() => void) | null = null;
 
   // URLs and file paths open in Exegol (read-only snapshots and mirrors too)
-  disposables.push(registerTerminalLinkProviders(terminal, { agentId: deps.agentId }));
+  disposables.push(registerTerminalLinkProviders(terminal, deps.agentId));
 
   if (!deps.readOnly) {
     terminal.attachCustomKeyEventHandler((e) => {

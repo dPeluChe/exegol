@@ -203,10 +203,7 @@ export function useXterm({
       // next.dispose() unsubscribes onData/onScroll/OSC handlers + the
       // dormant ring pipe (T115) before xterm's own teardown runs.
       next.dispose();
-      // T143 disposal audit: FitAddon/SerializeAddon are not
-      // disposed individually — xterm.js's Terminal.dispose() disposes every
-      // addon still registered via its internal addon manager. Explicit here
-      // so this isn't mistaken for a leak on a future audit.
+      // Disposes every loaded addon too (T143 audit: not a leak)
       next.terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;

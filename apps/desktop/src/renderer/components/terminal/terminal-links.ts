@@ -1,3 +1,4 @@
+import { linkFileKind } from "@exegol/shared";
 import { editKeys, hasClickModifier, IS_MAC } from "../../lib/keymap";
 
 /**
@@ -33,7 +34,7 @@ const SCHEME_URL_RE = /\bhttps?:\/\/[^\s"'`<>]+/gi;
 
 /** Prose and markdown wrap URLs: a trailing `.` or `,` and an unbalanced `)` or `]` are not
  *  part of it */
-export function trimUrl(url: string): string {
+function trimUrl(url: string): string {
   let out = url;
   while (out.length) {
     const last = out[out.length - 1] as string;
@@ -99,32 +100,6 @@ function overlaps(matches: LinkMatch[], index: number, length: number): boolean 
   return matches.some((m) => index < m.index + m.length && m.index < index + length);
 }
 
-const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
-/** Opened by the system app: the peek has nothing useful to show for these. Main decides again */
-const SYSTEM_EXT = new Set([
-  "pdf",
-  "doc",
-  "docx",
-  "xls",
-  "xlsx",
-  "ppt",
-  "pptx",
-  "key",
-  "numbers",
-  "pages",
-  "mp3",
-  "wav",
-  "mp4",
-  "mov",
-  "webm",
-]);
-/** Nothing to show and nothing safe to open: shown in Finder */
-const REVEAL_EXT = new Set(["zip", "gz", "tgz", "tar", "dmg"]);
-
-const extOf = (path: string) => path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-
-export const isImagePath = (path: string) => IMAGE_EXT.has(extOf(path));
-
 export type LinkAction = "pane" | "browser" | "peek" | "system" | "ide" | "reveal";
 /** `mod`: Cmd+click (Ctrl+click off macOS); `modShift`: Cmd+Shift+click */
 export type LinkClick = "plain" | "mod" | "modShift";
@@ -143,9 +118,8 @@ export function linkAction(kind: "url" | "file", click: LinkClick, path = ""): L
   if (kind === "url") return click === "plain" ? "pane" : "browser";
   if (click === "mod") return "ide";
   if (click === "modShift") return "reveal";
-  const ext = extOf(path);
-  if (REVEAL_EXT.has(ext)) return "reveal";
-  return SYSTEM_EXT.has(ext) ? "system" : "peek";
+  const fileKind = linkFileKind(path);
+  return fileKind === "system" || fileKind === "reveal" ? fileKind : "peek";
 }
 
 const ACTION_LABEL: Record<LinkAction, (mac: boolean) => string> = {

@@ -1,20 +1,21 @@
-import { stat } from "node:fs/promises";
+import { constants, realpathSync } from "node:fs";
+import { open, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { extname, isAbsolute } from "node:path";
+import { isAbsolute } from "node:path";
+import { linkFileKind } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { shell } from "electron";
 import { z } from "zod";
-import {
-  getAgent,
-  getAgentCwd,
-  getProject,
-  listAllWorktreeRows,
-  listProjects,
-} from "../../db/queries";
-import { getAppSettings } from "../../db/queries/settings";
-import { openInIde } from "../../ide/opener";
+import { getAgent, getAgentCwd, getProject, listWorktrees } from "../../db/queries";
+import { openInIde, resolveIde } from "../../ide/opener";
+import { mapWithConcurrency } from "../../lib/concurrency";
 import { resolveLinkPath } from "../../lib/link-paths";
-import { assertSafePath, isPathInside, realpathSafeSync } from "../../security/path-guard";
+import {
+  assertSafePathIn,
+  isPathInside,
+  realpathSafe,
+  realpathSafeSync,
+} from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 import { openWithSystemApp, readForViewer } from "./files";
 
@@ -27,53 +28,13 @@ const linkInput = z.object({
 });
 const linkText = z.string().min(1).max(1024);
 
-/** A default app may open these; anything else (scripts, apps, archives, .webloc/.url/.html
- *  that run or redirect) is revealed in Finder, whatever the renderer asked */
-const DEFAULT_APP_EXT = new Set(
-  [
-    "pdf",
-    "doc",
-    "docx",
-    "xls",
-    "xlsx",
-    "ppt",
-    "pptx",
-    "odt",
-    "ods",
-    "odp",
-    "rtf",
-    "key",
-    "numbers",
-    "pages",
-    "png",
-    "jpg",
-    "jpeg",
-    "gif",
-    "webp",
-    "bmp",
-    "tiff",
-    "heic",
-    "mp3",
-    "wav",
-    "m4a",
-    "aac",
-    "flac",
-    "mp4",
-    "mov",
-    "m4v",
-    "webm",
-    "txt",
-    "md",
-    "csv",
-    "log",
-    "json",
-  ].map((e) => `.${e}`),
-);
+type LinkOpen = "reveal" | "external" | "ide";
 
-export type LinkOpen = "reveal" | "external" | "ide";
-
+/** Only listed documents and media go to a default app; anything else (scripts, apps,
+ *  .webloc/.url/.html that run or redirect) is revealed in Finder, whatever the renderer asked */
 export function linkOpenAction(path: string, how: LinkOpen): LinkOpen {
-  if (how === "external" && !DEFAULT_APP_EXT.has(extname(path).toLowerCase())) return "reveal";
+  const kind = linkFileKind(path);
+  if (how === "external" && kind !== "system" && kind !== "peek") return "reveal";
   return how;
 }
 
@@ -85,38 +46,62 @@ function sessionCwd(ctx: Ctx, input: z.infer<typeof linkInput>): string | null {
 }
 
 /**
- * A link reaches a file only when its realpath is inside a project or one of its worktrees and
- * passes the path guard (sensitive names, symlinks out). Session output is never trusted: an
- * agent can print anything. Returns the canonical realpath, the only path read or opened.
+ * A link reaches a file only when its realpath is inside the session's own project or one of
+ * that project's worktrees and passes the path guard (sensitive names, symlinks out). Session
+ * output is never trusted: an agent can print anything. Returns the canonical realpath, the only
+ * path read or opened.
  */
-function linkAccess(ctx: Ctx, input: z.infer<typeof linkInput>) {
+async function linkAccess(ctx: Ctx, input: z.infer<typeof linkInput>) {
+  const agent = getAgent(ctx.db, input.agentId);
+  const project = agent ? getProject(ctx.db, agent.projectId) : null;
   const cwd = sessionCwd(ctx, input);
-  const bases = [
-    ...listProjects(ctx.db).map((p) => p.path),
-    ...listAllWorktreeRows(ctx.db).map((w) => w.path),
-  ];
+  if (!project || !cwd) return async (_text: string): Promise<string | null> => null;
+  const bases = await Promise.all(
+    [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)].map(realpathSafe),
+  );
   return async (text: string): Promise<string | null> => {
-    if (!cwd) return null;
     try {
-      return await assertSafePath(resolveLinkPath(text, cwd, homedir()), { allowedBases: bases });
+      return await assertSafePathIn(resolveLinkPath(text, cwd, homedir()), bases);
     } catch {
       return null;
     }
   };
 }
 
+const forbidden = () => new TRPCError({ code: "FORBIDDEN", message: "Not a project file" });
+
 async function requireAccess(ctx: Ctx, input: z.infer<typeof linkInput> & { text: string }) {
-  const path = await linkAccess(ctx, input)(input.text);
-  if (!path) throw new TRPCError({ code: "FORBIDDEN", message: "Not a project file" });
+  const path = await (await linkAccess(ctx, input))(input.text);
+  if (!path) throw forbidden();
   return path;
 }
 
-async function openInUserIde(ctx: Ctx, agentId: string, path: string, line?: number) {
-  const agent = getAgent(ctx.db, agentId);
-  const project = agent ? getProject(ctx.db, agent.projectId) : null;
-  const settings = getAppSettings(ctx.db);
-  const ide = settings.defaultIde ?? project?.defaultIde ?? "vscode";
-  await openInIde(path, ide, settings.customIdePath ?? undefined, line);
+/** The checked path must still be itself when acting on it: a swap to a symlink since the check
+ *  changes its realpath */
+function recheck(path: string): void {
+  let real: string;
+  try {
+    real = realpathSync.native(path);
+  } catch {
+    throw forbidden();
+  }
+  if (real !== path) throw forbidden();
+}
+
+/** Pins the checked file: no symlink at the end (O_NOFOLLOW), no FIFO to block on, and the open
+ *  fd must be the same inode the realpath names now */
+async function openPinned(path: string) {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const [held, now, real] = await Promise.all([handle.stat(), stat(path), realpath(path)]);
+    if (!held.isFile() || real !== path || held.dev !== now.dev || held.ino !== now.ino) {
+      throw forbidden();
+    }
+    return handle;
+  } catch (err) {
+    await handle.close();
+    throw err;
+  }
 }
 
 export const terminalLinksRouter = router({
@@ -125,18 +110,16 @@ export const terminalLinksRouter = router({
   resolve: publicProcedure
     .input(linkInput.extend({ texts: z.array(linkText).max(300) }))
     .query(async ({ ctx, input }) => {
-      const access = linkAccess(ctx, input);
-      return Promise.all(
-        input.texts.map(async (text) => {
-          try {
-            const path = await access(text);
-            if (!path || !(await stat(path)).isFile()) return { text, path: null };
-            return { text, path };
-          } catch {
-            return { text, path: null };
-          }
-        }),
-      );
+      const access = await linkAccess(ctx, input);
+      return mapWithConcurrency(input.texts, 16, async (text) => {
+        try {
+          const path = await access(text);
+          if (!path || !(await stat(path)).isFile()) return { text, path: null };
+          return { text, path };
+        } catch {
+          return { text, path: null };
+        }
+      });
     }),
 
   /** Read-only: a link never writes */
@@ -144,7 +127,7 @@ export const terminalLinksRouter = router({
     .input(linkInput.extend({ text: linkText }))
     .query(async ({ ctx, input }) => {
       const path = await requireAccess(ctx, input);
-      return { ...(await readForViewer(path, { svgAsImage: true })), path };
+      return { ...(await readForViewer(path, { svgAsImage: true, open: openPinned })), path };
     }),
 
   open: publicProcedure
@@ -159,13 +142,16 @@ export const terminalLinksRouter = router({
       const path = await requireAccess(ctx, input);
       const how = linkOpenAction(path, input.how);
       if (how === "ide") {
-        await openInUserIde(ctx, input.agentId, path, input.line);
+        const { ide, customPath } = resolveIde(ctx.db, getAgent(ctx.db, input.agentId)?.projectId);
+        recheck(path);
+        await openInIde(path, ide, customPath, input.line);
         return { opened: true, revealed: false };
       }
       if (how === "reveal") {
+        recheck(path);
         shell.showItemInFolder(path);
         return { opened: false, revealed: true };
       }
-      return openWithSystemApp(path);
+      return openWithSystemApp(path, () => recheck(path));
     }),
 });

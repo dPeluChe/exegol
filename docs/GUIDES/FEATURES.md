@@ -21,7 +21,7 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Terminal links**: URLs and file paths in any terminal (agents, shells, Dashboard cards) are
   clickable. A URL opens in the tab's link preview pane; a file (`src/app.ts:42:7`, `./a.tsx`,
   `~/notes.md`, absolute) opens read-only over the terminal at its line, images as pictures, PDFs
-  in their app. Only files inside a project or its worktrees are links. Cmd+click (Ctrl+click on
+  in their app. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
   Linux and Windows) opens a URL in the system browser and a file in the IDE at its line;
   Cmd+Shift+click shows the file in Finder. Hovering shows the target and the clicks.
 - **Command palette** (`Cmd+K`): projects, agents, commands, and `!<cmd>` for a one-shot shell.

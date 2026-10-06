@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  findFileMatches,
-  findUrlMatches,
-  linkAction,
-  linkClick,
-  linkHint,
-  trimUrl,
-} from "./terminal-links";
+import { findFileMatches, findUrlMatches, linkAction, linkClick, linkHint } from "./terminal-links";
 
 describe("findFileMatches", () => {
   it("matches a relative path with line number", () => {
@@ -98,10 +91,11 @@ describe("findUrlMatches", () => {
   });
 });
 
-describe("trimUrl", () => {
-  it("keeps balanced parens and strips quotes", () => {
-    expect(trimUrl("https://a.com/b(c)")).toBe("https://a.com/b(c)");
-    expect(trimUrl("https://a.com/b'")).toBe("https://a.com/b");
+describe("URL trimming", () => {
+  it("keeps balanced parens and drops trailing prose punctuation", () => {
+    const urls = (row: string) => findUrlMatches(row).map((m) => m.url);
+    expect(urls("see (https://a.com/b(c)).")).toEqual(["https://a.com/b(c)"]);
+    expect(urls("at https://a.com/b*, then")).toEqual(["https://a.com/b"]);
   });
 });
 
