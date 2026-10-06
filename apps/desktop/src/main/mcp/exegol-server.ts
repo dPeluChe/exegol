@@ -18,11 +18,13 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { type AgentStatus, LIVE_STATUSES, type McpAgentState } from "@exegol/shared";
 import type Database from "libsql";
+import { forgetBrowserAgent } from "../browser/agent-browser-tools";
 import { listActiveAgents } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { realpathSafeSync } from "../security/path-guard";
+import { readsExegolMcpConfig } from "./exegol-mcp-config";
 import {
   createNdjsonBuffer,
   EXEGOL_DIR,
@@ -99,6 +101,8 @@ export function revokeAgentMcpToken(agentId: string): void {
     else tokensBySecret.set(token, rest);
   }
   tokensByAgent.delete(agentId);
+  // Its browser waits and "needs you" alerts die with it
+  forgetBrowserAgent(agentId);
   notifyMcpStatus();
 }
 
@@ -142,7 +146,7 @@ export function getMcpAgentStates(db: Database.Database): Record<string, McpAgen
     if (a.cliType === "shell") continue;
     out[a.id] = connected.has(a.id)
       ? "connected"
-      : tokensByAgent.has(a.id)
+      : tokensByAgent.has(a.id) && readsExegolMcpConfig(a.cliType)
         ? "not_connected"
         : "not_wired";
   }
@@ -545,9 +549,7 @@ export async function handleRequest(
 
   const startedAt = Date.now();
   try {
-    const result = await callExegolTool(db, params.tool, params.args ?? {}, context, {
-      images: params.images === true,
-    });
+    const result = await callExegolTool(db, params.tool, params.args ?? {}, context);
     record({
       kind: "call",
       tool: params.tool,

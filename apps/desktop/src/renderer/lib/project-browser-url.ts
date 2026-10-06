@@ -1,3 +1,4 @@
+import { pickDevServerPort } from "@exegol/shared";
 import type { PortInfo } from "../hooks/use-trpc-scheduler";
 import { trpcInvoke } from "./trpc-client";
 
@@ -10,8 +11,8 @@ export async function projectBrowserUrl(projectId?: string | null, projectPath?:
     }
     if (projectPath) {
       const ports = await trpcInvoke<PortInfo[]>("resources.ports", { projectPath });
-      const first = ports?.find((p) => p.source === "runtime") ?? ports?.[0];
-      if (first) return `http://localhost:${first.port}`;
+      const port = pickDevServerPort(ports ?? []);
+      if (port) return `http://localhost:${port}`;
     }
   } catch {
     /* fall back to the default */

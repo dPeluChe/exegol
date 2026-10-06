@@ -10,10 +10,10 @@ import { BrowserQaRecordingBar } from "./components/workspace/BrowserQaRecording
 import { BrowserReplayResultBar } from "./components/workspace/BrowserReplayResultBar";
 import { DeviceFrame, PageView, useAllSizes } from "./components/workspace/BrowserViewport";
 import { DesignIssueBubble } from "./components/workspace/DesignIssueBubble";
-import { useAgentBrowserPane } from "./components/workspace/use-agent-browser-pane";
 import { webviewIdOf } from "./components/workspace/use-browser-qa";
 import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
+import { useRegisterBrowserPane } from "./components/workspace/use-register-browser-pane";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
 import { useMountEffect } from "./hooks/use-mount-effect";
 import type { PortInfo } from "./hooks/use-trpc-scheduler";
@@ -85,7 +85,7 @@ export function FloatingBrowser({
   // What is being typed in the address bar; null shows the page's URL
   const [draft, setDraft] = useState<string | null>(null);
   const runningAgents = useRunningAgentsQuery(projectId);
-  useAgentBrowserPane(webviewRef, paneId, projectId);
+  useRegisterBrowserPane(webviewRef, paneId, projectId);
   useMountEffect(() => startAgentBrowserPush(false));
 
   // The leading webview by id: with several sizes open, "the window's webview" is ambiguous

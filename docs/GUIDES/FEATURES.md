@@ -72,10 +72,14 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Design mode**: click an element to send its selector, styles and HTML to an agent.
 - **Agents in the browser**: agents drive the project's browser pane through the Exegol MCP
   tools (`browser_open`, `browser_snapshot`, `browser_click`...), live in the same pane you see.
-  Each project has its own browser session; agents only reach local hosts and the hosts listed
-  in Edit project > Agent browser hosts. A banner shows who is driving, with Take over and Hand
-  back. At a login the agent stops and asks you (an alert opens the pane), and resumes when you
-  click "Done, hand back". Agents never type passwords.
+  Each project has its own browser session; agents only reach local hosts (localhost,
+  127.0.0.1, *.localhost) and the hosts listed in Edit project > Agent browser hosts (add `.local`
+  names there too); adding a host copies your logins for it. While an agent drives, requests to
+  other hosts are blocked. `browser_eval` (JavaScript in the page) is off until you tick it in
+  Edit project. A banner shows who is driving, with Take over and Hand back. At a login page the
+  agent stops and asks you (an alert opens the pane), and resumes when you click "Done, hand
+  back". Agents are told never to type passwords; Exegol also refuses fields it recognizes as
+  passwords, but treat that as a safeguard, not a guarantee.
 - **Ask agent**: from the browser bar, send an agent the page you are on, a note and a picked
   element; it arrives at the agent's next turn.
 - **QA record and replay**: record clicks, typing and navigation as a test, replay it, and see

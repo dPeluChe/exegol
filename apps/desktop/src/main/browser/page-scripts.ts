@@ -1,10 +1,10 @@
 // Scripts run in the page's isolated world (its own globals, the page's DOM): refs survive between
 // calls on the same document and page code cannot tamper with them.
 
-export const MAX_SNAPSHOT_ELEMENTS = 250;
-export const MAX_SNAPSHOT_TEXT = 8_000;
+const MAX_SNAPSHOT_ELEMENTS = 250;
+const MAX_SNAPSHOT_TEXT = 8_000;
 
-export interface RawElement {
+interface RawElement {
   ref: string;
   role: string;
   name: string;
@@ -16,24 +16,33 @@ export interface RawElement {
   href?: string;
 }
 
-export interface RawSnapshot {
+/** The small read every action does before and after it: where the page is and what it asks */
+export interface RawSignals {
   url: string;
   title: string;
-  text: string;
-  elements: RawElement[];
-  totalInteractive: number;
   hasPasswordField: boolean;
   hasCaptcha: boolean;
+  loggedIn: boolean;
+  /** A password field (or one drawn as one) has the focus */
+  focusSecret: boolean;
 }
 
-const REF_RE = /^e[1-9]\d{0,5}$/;
+export interface RawSnapshot extends RawSignals {
+  text: string;
+  elements: RawElement[];
+  /** The walk stopped at the element cap */
+  more: boolean;
+}
+
+/** e12.k3x: element 12 of the document k3x. A ref from a page the pane has left never resolves */
+const REF_RE = /^e[1-9]\d{0,5}\.[a-z0-9]{3,8}$/;
 
 export function parseRef(raw: unknown): string | null {
   return typeof raw === "string" && REF_RE.test(raw.trim()) ? raw.trim() : null;
 }
 
-/** Elements as one line each ("e12 button "Save" [disabled]"): compact for the model */
-export function formatElement(e: RawElement): string {
+/** Elements as one line each ("e12.k3x button "Save" [disabled]"): compact for the model */
+function formatElement(e: RawElement): string {
   const parts = [e.ref, e.role];
   if (e.name) parts.push(JSON.stringify(e.name));
   if (e.type && e.type !== "text" && e.role === "textbox") parts.push(`type=${e.type}`);
@@ -47,28 +56,22 @@ export function formatElement(e: RawElement): string {
 export function formatSnapshot(
   raw: RawSnapshot,
   caps: { maxElements?: number; maxText?: number } = {},
-): {
-  url: string;
-  title: string;
-  text: string;
-  elements: string[];
-  truncated: boolean;
-} {
+): { title: string; text: string; elements: string[]; truncated: boolean } {
   const maxElements = caps.maxElements ?? MAX_SNAPSHOT_ELEMENTS;
   const maxText = caps.maxText ?? MAX_SNAPSHOT_TEXT;
   const text = raw.text.length > maxText ? `${raw.text.slice(0, maxText)}…` : raw.text;
-  const elements = raw.elements.slice(0, maxElements).map(formatElement);
   return {
-    url: raw.url,
     title: raw.title.slice(0, 300),
     text,
-    elements,
-    truncated:
-      raw.text.length > maxText ||
-      raw.elements.length > maxElements ||
-      raw.totalInteractive > raw.elements.length,
+    elements: raw.elements.slice(0, maxElements).map(formatElement),
+    truncated: raw.text.length > maxText || raw.elements.length > maxElements || raw.more,
   };
 }
+
+/** Throws unless the page is still on the host the caller checked: the check and what follows
+ *  run in the same JS task, so a navigation in between cannot slip a foreign page in */
+const HOST_GUARD = (expectedHost: string) =>
+  `if (location.host !== ${JSON.stringify(expectedHost)}) throw new Error("exegol:page_changed");`;
 
 const COMMON = `
 const vis = (el) => {
@@ -77,16 +80,40 @@ const vis = (el) => {
   const s = getComputedStyle(el);
   return s.visibility !== "hidden" && s.display !== "none";
 };
-const isSecret = (el) =>
-  !!el && el.tagName === "INPUT" &&
-  (el.type === "password" || /password/i.test(el.autocomplete || "") || /passw|pwd/i.test(el.name || el.id || ""));
+const isSecret = (el) => {
+  if (!el || (el.tagName !== "INPUT" && el.tagName !== "TEXTAREA")) return false;
+  if (el.type === "password" || /password/i.test(el.autocomplete || "") || /passw|pwd/i.test(el.name || el.id || "")) return true;
+  const ts = getComputedStyle(el).webkitTextSecurity;
+  return !!ts && ts !== "none";
+};
+const deepActive = () => {
+  let a = document.activeElement;
+  while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+  return a;
+};
+const signals = () => ({
+  url: location.href,
+  title: document.title,
+  hasPasswordField: [...document.querySelectorAll("input")].some((el) => isSecret(el) && vis(el)),
+  hasCaptcha: !!document.querySelector('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha,.cf-turnstile'),
+  loggedIn: !!document.querySelector('a[href*="logout" i],a[href*="signout" i],a[href*="sign_out" i],a[href*="log_out" i],form[action*="logout" i]') ||
+    [...document.querySelectorAll('button,[role=button],[role=menuitem]')].slice(0, 300).some((el) => /^\\s*(log|sign)\\s?out\\s*$/i.test(el.textContent || "")),
+  focusSecret: isSecret(deepActive()),
+});
 `;
 
-export function snapshotScript(maxElements = MAX_SNAPSHOT_ELEMENTS): string {
+export function signalsScript(): string {
+  return `(() => {
+${COMMON}
+return signals();
+})()`;
+}
+
+export function snapshotScript(): string {
   return `(() => {
 ${COMMON}
 const g = globalThis;
-if (!g.__exegol) g.__exegol = { refs: new Map(), ids: new WeakMap(), next: 1 };
+if (!g.__exegol) g.__exegol = { refs: new Map(), ids: new WeakMap(), next: 1, doc: Math.random().toString(36).slice(2, 6).padEnd(4, "0") };
 const st = g.__exegol;
 for (const [k, w] of st.refs) if (!w.deref() || !w.deref().isConnected) st.refs.delete(k);
 const SEL = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button],[role=link],[role=checkbox],[role=radio],[role=tab],[role=menuitem],[role=switch],[role=combobox],[role=textbox],[role=option],[contenteditable=""],[contenteditable=true]';
@@ -104,11 +131,13 @@ const nameOf = (el) => {
   if (el.tagName === "INPUT" && (el.type === "submit" || el.type === "button")) return clean(el.value);
   return clean(el.placeholder || el.getAttribute("alt") || el.title || el.innerText || el.getAttribute("name") || "");
 };
-const all = [...document.querySelectorAll(SEL)].filter(vis);
 const elements = [];
-for (const el of all.slice(0, ${maxElements})) {
+let more = false;
+for (const el of document.querySelectorAll(SEL)) {
+  if (elements.length >= ${MAX_SNAPSHOT_ELEMENTS}) { more = true; break; }
+  if (!vis(el)) continue;
   let ref = st.ids.get(el);
-  if (!ref) { ref = "e" + st.next++; st.ids.set(el, ref); }
+  if (!ref) { ref = "e" + st.next++ + "." + st.doc; st.ids.set(el, ref); }
   st.refs.set(ref, new WeakRef(el));
   const item = { ref, role: roleOf(el), name: nameOf(el), tag: el.tagName.toLowerCase() };
   if (el.tagName === "INPUT") {
@@ -116,33 +145,31 @@ for (const el of all.slice(0, ${maxElements})) {
     if (el.type === "checkbox" || el.type === "radio") item.checked = el.checked;
     else if (!isSecret(el)) item.value = String(el.value || "").slice(0, 120);
   } else if (el.tagName === "TEXTAREA" || el.tagName === "SELECT") {
-    item.value = String(el.value || "").slice(0, 120);
+    if (!isSecret(el)) item.value = String(el.value || "").slice(0, 120);
   }
   if (el.disabled || el.getAttribute("aria-disabled") === "true") item.disabled = true;
   if (el.tagName === "A") item.href = String(el.getAttribute("href") || "").slice(0, 160);
   elements.push(item);
 }
-const pw = [...document.querySelectorAll("input")].some((el) => isSecret(el) && vis(el));
-const captcha = !!document.querySelector('iframe[src*="recaptcha"],iframe[src*="hcaptcha"],iframe[src*="challenges.cloudflare.com"],.g-recaptcha,.h-captcha,.cf-turnstile');
-const text = (document.body ? document.body.innerText : "").replace(/\\n{3,}/g, "\\n\\n").trim().slice(0, 20000);
-return { url: location.href, title: document.title, text, elements, totalInteractive: all.length, hasPasswordField: pw, hasCaptcha: captcha };
+const text = (document.body ? document.body.innerText : "").slice(0, ${MAX_SNAPSHOT_TEXT * 2}).replace(/\\n{3,}/g, "\\n\\n").trim().slice(0, ${MAX_SNAPSHOT_TEXT + 1});
+return { ...signals(), text, elements, more };
 })()`;
 }
 
 export type PageAction =
   | { action: "click" }
   | { action: "type"; text: string; submit?: boolean; append?: boolean }
-  | { action: "select"; value: string }
-  | { action: "check-focus" };
+  | { action: "select"; value: string };
 
-/** Act on a ref from the last snapshot. Args go in as JSON, never spliced as code */
-export function actionScript(ref: string | null, act: PageAction): string {
+/** Act on a ref from the last snapshot, on the host inspect checked. Args go in as JSON, never
+ *  spliced as code */
+export function actionScript(ref: string, act: PageAction, expectedHost: string): string {
   return `((ref, act) => {
+${HOST_GUARD(expectedHost)}
 ${COMMON}
-if (act.action === "check-focus") {
-  return { ok: true, secret: isSecret(document.activeElement) };
-}
-const el = globalThis.__exegol?.refs.get(ref)?.deref();
+const st = globalThis.__exegol;
+if (!st || ref.split(".")[1] !== st.doc) return { error: "stale_ref" };
+const el = st.refs.get(ref)?.deref();
 if (!el || !el.isConnected) return { error: "stale_ref" };
 el.scrollIntoView({ block: "center", inline: "center" });
 if (el.disabled) return { error: "disabled" };
@@ -183,6 +210,14 @@ if (act.action === "select") {
 return { error: "unknown_action" };
 })(${JSON.stringify(ref)}, ${JSON.stringify(act)})`;
 }
+
+/** browser_eval's code behind the host guard. Its completion value stays the code's own */
+export function guardedEvalScript(code: string, expectedHost: string): string {
+  return `${HOST_GUARD(expectedHost)}\n${code}`;
+}
+
+export const isPageChangedError = (err: unknown): boolean =>
+  String(err instanceof Error ? err.message : err).includes("exegol:page_changed");
 
 const KEY_RE =
   /^((Shift|Control|Alt|Meta)\+){0,3}([A-Za-z0-9]|Enter|Tab|Escape|Backspace|Delete|Space|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown|F[1-9]|F1[0-2])$/;

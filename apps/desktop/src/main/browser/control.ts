@@ -1,7 +1,7 @@
-import type { AgentBrowserPaneState } from "@exegol/shared";
+import type { AgentBrowserPaneState, NeedsUserKind } from "@exegol/shared";
 
 /** How long after its last action an agent still shows as using the pane */
-export const ACTIVE_WINDOW_MS = 15_000;
+const ACTIVE_WINDOW_MS = 15_000;
 
 interface PaneControl {
   paneId: string;
@@ -11,15 +11,16 @@ interface PaneControl {
   lastActionAt: number | null;
   userHasControl: boolean;
   waiting: { agentId: string; reason: string; deadline: number } | null;
-  needsUserHost: string | null;
+  needsUser: { host: string; kind: NeedsUserKind } | null;
   /** Bumped on every hand-back, so a long poll can tell it happened while it slept */
   handBacks: number;
 }
 
+export type WakeReason = "handed_back" | "pane_closed" | "timeout";
 type Listener = (state: AgentBrowserPaneState) => void;
 
 const panes = new Map<string, PaneControl>();
-const waiters = new Map<string, Set<() => void>>();
+const waiters = new Map<string, Set<(r: WakeReason) => void>>();
 const expiry = new Map<string, ReturnType<typeof setTimeout>>();
 let listener: Listener | null = null;
 
@@ -38,7 +39,7 @@ function ensure(paneId: string, projectId: string): PaneControl {
       lastActionAt: null,
       userHasControl: false,
       waiting: null,
-      needsUserHost: null,
+      needsUser: null,
       handBacks: 0,
     };
     panes.set(paneId, p);
@@ -46,18 +47,19 @@ function ensure(paneId: string, projectId: string): PaneControl {
   return p;
 }
 
-export function toPaneState(p: PaneControl, now = Date.now()): AgentBrowserPaneState {
+function toPaneState(p: PaneControl, now = Date.now()): AgentBrowserPaneState {
   const recent = p.lastActionAt !== null && now - p.lastActionAt < ACTIVE_WINDOW_MS;
   return {
     paneId: p.paneId,
     projectId: p.projectId,
     agentId: p.agentId,
     alias: p.alias,
-    active: !!p.agentId && (recent || !!p.waiting || !!p.needsUserHost),
+    active: !!p.agentId && (recent || !!p.waiting || !!p.needsUser),
     lastActionAt: p.lastActionAt,
     userHasControl: p.userHasControl,
     waitingReason: p.waiting?.reason ?? null,
-    needsUserHost: p.needsUserHost,
+    needsUserHost: p.needsUser?.host ?? null,
+    needsUserKind: p.needsUser?.kind ?? null,
   };
 }
 
@@ -79,6 +81,14 @@ function scheduleExpiry(p: PaneControl): void {
 
 export function getPaneControl(paneId: string): Readonly<PaneControl> | undefined {
   return panes.get(paneId);
+}
+
+/** The agent itself is driving the pane right now: it acted in the last few seconds and has not
+ *  handed the pane to the user (take over, a wait, a login). The network guard applies only then */
+export function isAgentActing(paneId: string, now = Date.now()): boolean {
+  const p = panes.get(paneId);
+  if (!p?.agentId || p.userHasControl || p.waiting || p.needsUser) return false;
+  return p.lastActionAt !== null && now - p.lastActionAt < ACTIVE_WINDOW_MS;
 }
 
 export function listPaneStates(): AgentBrowserPaneState[] {
@@ -109,10 +119,14 @@ export function lastPaneOf(agentId: string, paneIds: readonly string[]): string 
   return best?.paneId ?? null;
 }
 
-export function setNeedsUser(paneId: string, projectId: string, host: string | null): void {
+export function setNeedsUser(
+  paneId: string,
+  projectId: string,
+  needs: { host: string; kind: NeedsUserKind } | null,
+): void {
   const p = ensure(paneId, projectId);
-  if (p.needsUserHost === host) return;
-  p.needsUserHost = host;
+  if (p.needsUser?.host === needs?.host && p.needsUser?.kind === needs?.kind) return;
+  p.needsUser = needs;
   emit(p);
 }
 
@@ -124,18 +138,26 @@ export function takeOver(paneId: string): boolean {
   return true;
 }
 
-/** "Hand back" and "Done, hand back": the agent may drive again, and a waiting one wakes up */
-export function handBack(paneId: string): boolean {
+function wake(paneId: string, reason: WakeReason): number {
+  const set = waiters.get(paneId);
+  waiters.delete(paneId);
+  for (const fn of set ?? []) fn(reason);
+  return set?.size ?? 0;
+}
+
+/** "Hand back" and "Done, hand back": the agent may drive again, and a waiting one wakes up.
+ *  `woke` is false when no agent was waiting on it (the caller tells the agent another way) */
+export function handBack(paneId: string): { agentId: string | null; woke: boolean } | null {
   const p = panes.get(paneId);
-  if (!p) return false;
+  if (!p) return null;
+  const wasWaiting = !!p.waiting;
   p.userHasControl = false;
-  p.needsUserHost = null;
+  p.needsUser = null;
   p.waiting = null;
   p.handBacks += 1;
   emit(p);
-  for (const wake of waiters.get(paneId) ?? []) wake();
-  waiters.delete(paneId);
-  return true;
+  const woken = wake(paneId, "handed_back");
+  return { agentId: p.agentId, woke: wasWaiting || woken > 0 };
 }
 
 export function startWaiting(
@@ -144,15 +166,13 @@ export function startWaiting(
   agent: { id: string; alias: string | null },
   reason: string,
   deadline: number,
-): { started: boolean } {
+): void {
   const p = ensure(paneId, projectId);
   p.agentId = agent.id;
   p.alias = agent.alias;
   p.lastActionAt = Date.now();
-  if (p.waiting?.agentId === agent.id) return { started: false };
   p.waiting = { agentId: agent.id, reason, deadline };
   emit(p);
-  return { started: true };
 }
 
 export function clearWaiting(paneId: string): void {
@@ -163,28 +183,48 @@ export function clearWaiting(paneId: string): void {
   scheduleExpiry(p);
 }
 
-/** Resolves true on a hand-back, false when `ms` passes first */
-export function waitForHandBack(paneId: string, ms: number): Promise<boolean> {
+/** Resolves on a hand-back or the pane closing, or "timeout" when `ms` passes first */
+export function waitForHandBack(paneId: string, ms: number): Promise<WakeReason> {
   return new Promise((resolve) => {
-    const set = waiters.get(paneId) ?? new Set<() => void>();
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const wake = () => {
-      if (timer) clearTimeout(timer);
-      resolve(true);
+    const set = waiters.get(paneId) ?? new Set<(r: WakeReason) => void>();
+    const done = (r: WakeReason) => {
+      clearTimeout(timer);
+      resolve(r);
     };
-    timer = setTimeout(() => {
-      set.delete(wake);
-      resolve(false);
+    const timer = setTimeout(() => {
+      set.delete(done);
+      resolve("timeout");
     }, ms);
-    set.add(wake);
+    set.add(done);
     waiters.set(paneId, set);
   });
 }
 
-/** Tests only */
-export function resetBrowserControl(): void {
-  for (const t of expiry.values()) clearTimeout(t);
-  expiry.clear();
-  panes.clear();
-  waiters.clear();
+/** The pane's webview is gone: the renderer drops it (and its alert), waiters wake */
+export function forgetPane(paneId: string): void {
+  const p = panes.get(paneId);
+  const timer = expiry.get(paneId);
+  if (timer) clearTimeout(timer);
+  expiry.delete(paneId);
+  panes.delete(paneId);
+  wake(paneId, "pane_closed");
+  if (p) {
+    listener?.({
+      ...toPaneState({ ...p, waiting: null, needsUser: null, userHasControl: false }),
+      active: false,
+      closed: true,
+    });
+  }
+}
+
+/** The agent exited: its waits and "needs you" flags go with it */
+export function forgetAgentControl(agentId: string): void {
+  for (const p of panes.values()) {
+    const waiting = p.waiting?.agentId === agentId;
+    const flagged = p.agentId === agentId && !!p.needsUser;
+    if (!waiting && !flagged) continue;
+    if (waiting) p.waiting = null;
+    if (flagged) p.needsUser = null;
+    emit(p);
+  }
 }

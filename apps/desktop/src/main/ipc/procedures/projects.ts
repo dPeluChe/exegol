@@ -10,6 +10,7 @@ const execFileAsync = promisify(execFile);
 import { MAX_BROWSER_HOSTS, parseBrowserHosts, projectCreateSchema } from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
+import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/electron-host";
 import {
   createProject,
   deleteProject,
@@ -25,7 +26,7 @@ import {
   updateProjectSortOrder,
 } from "../../db/queries";
 import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
-import { setProjectBrowserHosts } from "../../db/queries/projects";
+import { setProjectBrowserEval, setProjectBrowserHosts } from "../../db/queries/projects";
 import { getAppSettings } from "../../db/queries/settings";
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde } from "../../ide/opener";
@@ -139,6 +140,7 @@ export const projectRouter = router({
         ...input,
         gitRemote,
       });
+      markCookiesMigrated(ctx.db, project.id);
       // What the user picked in the dialog; otherwise its app icon, found once and kept
       if (appearance) await applyAppearance(ctx.db, project, appearance);
       else await adoptDetectedIcon(ctx.db, project.id).catch(() => {});
@@ -152,19 +154,26 @@ export const projectRouter = router({
       return getProject(ctx.db, input.id);
     }),
 
-  /** Agent browser: hosts beyond the local ones this project's agents may open */
+  /** Agent browser: hosts beyond the local ones this project's agents may open, and whether
+   *  browser_eval is allowed. A newly added host brings its logins from the old shared session */
   setBrowserHosts: publicProcedure
     .input(
       z.object({
         id: z.string(),
         hosts: z.array(z.string().max(300)).max(MAX_BROWSER_HOSTS * 2),
+        allowEval: z.boolean().optional(),
       }),
     )
-    .mutation(({ ctx, input }) => {
-      if (!getProject(ctx.db, input.id)) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-      }
-      setProjectBrowserHosts(ctx.db, input.id, parseBrowserHosts(input.hosts));
+    .mutation(async ({ ctx, input }) => {
+      const before = getProject(ctx.db, input.id);
+      if (!before) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+      const hosts = parseBrowserHosts(input.hosts);
+      setProjectBrowserHosts(ctx.db, input.id, hosts);
+      if (input.allowEval !== undefined) setProjectBrowserEval(ctx.db, input.id, input.allowEval);
+      const added = hosts.filter((h) => !(before.browserHosts ?? []).includes(h));
+      await copyCookiesForHosts(input.id, added).catch((err) =>
+        logger.warn("[AgentBrowser] cookie copy for new hosts failed:", err),
+      );
       return getProject(ctx.db, input.id);
     }),
 

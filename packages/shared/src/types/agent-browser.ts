@@ -11,12 +11,25 @@ export function projectIdFromPartition(partition: string | undefined | null): st
 
 export const MAX_BROWSER_HOSTS = 50;
 
-/** localhost, 127.0.0.1, [::1], *.localhost, *.local */
+/** What agents may always open, as browser_list and the refusals show it. `.local` (mDNS) names
+ *  can be other machines on the network, so they go in the allowlist like any other host */
+export const LOCAL_HOST_PATTERNS = ["localhost", "127.0.0.1", "[::1]", "*.localhost"] as const;
+
+/** localhost, 127.0.0.0/8, [::1], 0.0.0.0, *.localhost */
 export function isLocalHost(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "0.0.0.0") return true;
   if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
-  return h.endsWith(".localhost") || h.endsWith(".local");
+  return h.endsWith(".localhost");
+}
+
+/** Hostname of a URL, or null when it does not parse or has none */
+export function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname || null;
+  } catch {
+    return null;
+  }
 }
 
 /** One allowlist entry as typed ("https://staging.app.com/x", "*.app.com") to a host pattern, or
@@ -58,6 +71,14 @@ export function isHostAllowed(hostname: string, allowedHosts: readonly string[])
   return isLocalHost(hostname) || allowedHosts.some((p) => hostMatches(hostname, p));
 }
 
+/** A web URL (http, https, ws, wss) whose host is neither local nor allowed. Other schemes (data:,
+ *  blob:, about:) carry nothing off the machine and are not "outside" */
+export function isOutsideAllowlist(url: string, allowedHosts: readonly string[]): boolean {
+  if (!/^(https?|wss?):/i.test(url)) return false;
+  const h = hostOf(url);
+  return h !== null && !isHostAllowed(h, allowedHosts);
+}
+
 export type UrlCheck = { ok: true; url: string; host: string } | { ok: false; reason: string };
 
 /** An agent may open http(s) pages on local hosts and the project's allowlist; nothing else */
@@ -87,7 +108,7 @@ export function checkAgentUrl(raw: string, allowedHosts: readonly string[]): Url
       ok: false,
       reason:
         `${url.hostname} is not allowed for agents in this project. Only local hosts ` +
-        "(localhost, 127.0.0.1, *.localhost, *.local) and the project's allowlist are. " +
+        `(${LOCAL_HOST_PATTERNS.join(", ")}) and the project's allowlist are. ` +
         "Ask the user to add it in Edit project > Agent browser hosts, or to open it themselves.",
     };
   }
@@ -108,6 +129,31 @@ export interface AgentBrowserPaneState {
   waitingReason: string | null;
   /** A login, SSO, captcha or 401/403 the agent stopped at */
   needsUserHost: string | null;
+  needsUserKind: NeedsUserKind | null;
+  /** The pane's webview is gone: drop it */
+  closed?: boolean;
+}
+
+export type NeedsUserKind =
+  | "login"
+  | "sso"
+  | "captcha"
+  | "http_401"
+  | "http_403"
+  | "outside_allowlist";
+
+/** What the user is asked to do, for the banner, the attention item and the notification */
+export function needsUserReason(
+  s: Pick<AgentBrowserPaneState, "waitingReason" | "needsUserHost" | "needsUserKind">,
+): string | null {
+  if (s.waitingReason) return s.waitingReason;
+  const host = s.needsUserHost;
+  if (!host) return null;
+  if (s.needsUserKind === "captcha") return `solve a captcha at ${host}`;
+  if (s.needsUserKind === "outside_allowlist") {
+    return `take over at ${host} (outside the agent's allowed hosts)`;
+  }
+  return `log in at ${host}`;
 }
 
 export type McpAgentState = "connected" | "not_connected" | "not_wired";

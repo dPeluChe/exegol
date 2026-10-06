@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app, clipboard, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
+import { isHostedWebview } from "../browser/electron-host";
 import { getDb } from "../db/client";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
@@ -163,13 +164,11 @@ export function registerIpcHandlers(): void {
   /** The pane's own webview (by id, and only one hosted by the sender window); without an id,
    *  the window's first. The first-only lookup hit the wrong page with two browser panes */
   const findWebview = (sender: Electron.WebContents, id?: number) => {
-    const isOurs = (wc: Electron.WebContents | undefined) =>
-      !!wc && wc.getType() === "webview" && wc.hostWebContents === sender;
     if (id !== undefined) {
       const wc = webContents.fromId(id);
-      return isOurs(wc) ? wc : undefined;
+      return isHostedWebview(wc, sender) ? wc : undefined;
     }
-    return webContents.getAllWebContents().find(isOurs);
+    return webContents.getAllWebContents().find((wc) => isHostedWebview(wc, sender));
   };
 
   // Inject JS into the webview and return the result

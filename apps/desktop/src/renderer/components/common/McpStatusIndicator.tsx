@@ -18,7 +18,7 @@ export function useMcpStatus(): Record<string, McpAgentState> {
 }
 
 /** What the agent can do with the browser pane, by access mode */
-export function browserToolsLabel(mode: AgentAccessMode | null | undefined): string {
+function browserToolsLabel(mode: AgentAccessMode | null | undefined): string {
   return mode === "write"
     ? "browser tools: full (navigate, click, type)"
     : "browser tools: look only (list, open, snapshot, screenshot, logs)";
@@ -48,7 +48,7 @@ export function McpStatusIndicator({
     <span
       className={cn(
         "flex shrink-0 items-center",
-        state === "connected" ? "text-emerald-400" : "text-text-muted/50",
+        state === "connected" ? "text-success" : "text-text-muted/50",
         className,
       )}
       title={mcpStateTitle(state, accessMode)}

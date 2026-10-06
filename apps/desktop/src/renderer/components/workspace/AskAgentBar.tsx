@@ -1,4 +1,5 @@
 import { cn } from "@exegol/ui";
+import { useMutation } from "@tanstack/react-query";
 import { MessageSquare, MousePointer2, Send, X } from "lucide-react";
 import { useState } from "react";
 import { sessionName } from "../../lib/agent-label";
@@ -7,7 +8,7 @@ import type { CapturedElement } from "../../lib/design-capture";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentBrowserPane } from "../../stores/agent-browser";
 import type { AgentState } from "../../stores/agents";
-import { useToastStore } from "../../stores/toasts";
+import { toastError, useToastStore } from "../../stores/toasts";
 
 /** Address bar button: shown while the project has live agents */
 export function AskAgentButton({ active, onClick }: { active: boolean; onClick: () => void }) {
@@ -55,39 +56,19 @@ export function AskAgentBar({
   const [chosen, setChosen] = useState<string | null>(null);
   const agentId = chosen && agents.some((a) => a.id === chosen) ? chosen : fallback;
   const [note, setNote] = useState("");
-  const [sending, setSending] = useState(false);
-
-  const send = async () => {
-    if (!agentId || sending) return;
-    setSending(true);
-    try {
-      const text = buildAskAgentMessage({
-        paneId,
-        url: currentUrl,
-        title: getTitle(),
-        note,
-        element,
-      });
-      const r = await trpcMutate<{ delivered: boolean }>("agents.queueFollowUp", {
-        id: agentId,
-        text,
-      });
+  const send = useMutation({
+    mutationFn: (text: string) =>
+      trpcMutate<{ delivered: boolean }>("agents.queueFollowUp", { id: agentId, text }),
+    onSuccess: (r) => {
       useToastStore.getState().addToast({
         type: "success",
         title: r.delivered ? "Sent to the agent" : "Queued for the agent's next turn",
       });
-      onClearElement();
       onClose();
-    } catch (err) {
-      useToastStore.getState().addToast({
-        type: "error",
-        title: "Could not send",
-        body: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setSending(false);
-    }
-  };
+    },
+    onError: toastError("Could not send"),
+  });
+  const sending = send.isPending;
 
   const field =
     "h-6 rounded border border-border bg-bg-tertiary px-1.5 text-[11px] text-text-primary outline-none focus:border-accent/50";
@@ -96,7 +77,10 @@ export function AskAgentBar({
       className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-border bg-bg-secondary/80 px-2 py-1"
       onSubmit={(e) => {
         e.preventDefault();
-        void send();
+        if (!agentId || sending) return;
+        send.mutate(
+          buildAskAgentMessage({ paneId, url: currentUrl, title: getTitle(), note, element }),
+        );
       }}
     >
       <select
@@ -120,7 +104,7 @@ export function AskAgentBar({
         className={cn(field, "min-w-[8rem] flex-1")}
       />
       {element ? (
-        <span className="flex max-w-[12rem] items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] text-blue-300">
+        <span className="flex max-w-[12rem] items-center gap-1 rounded bg-info/15 px-1.5 py-0.5 text-[10px] text-info">
           <span className="truncate" title={element.selector}>
             {element.selector}
           </span>
@@ -134,7 +118,7 @@ export function AskAgentBar({
           onClick={onPick}
           className={cn(
             "flex h-6 items-center gap-1 rounded border border-border px-1.5 text-[10px]",
-            picking ? "bg-blue-500/20 text-blue-300" : "text-text-muted hover:bg-white/10",
+            picking ? "bg-info/20 text-info" : "text-text-muted hover:bg-white/10",
           )}
           title="Click a part of the page to send with the question"
         >

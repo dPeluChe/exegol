@@ -1,4 +1,4 @@
-import type { AgentBrowserPaneState } from "@exegol/shared";
+import { type AgentBrowserPaneState, needsUserReason } from "@exegol/shared";
 import { nanoid } from "nanoid";
 import { create } from "zustand";
 import { useAgentStore } from "./agents";
@@ -15,19 +15,13 @@ export const useAgentBrowserStore = create<AgentBrowserStore>()(() => ({ panes: 
 
 export const useAgentBrowserPane = (paneId: string) => useAgentBrowserStore((s) => s.panes[paneId]);
 
-/** What the attention item says: the agent's own reason, or the login it stopped at */
-export function needsUserReason(s: AgentBrowserPaneState): string | null {
-  if (s.waitingReason) return s.waitingReason;
-  if (s.needsUserHost) return `log in at ${s.needsUserHost}`;
-  return null;
-}
-
-/** An agent asking the user for the browser raises an alert that opens that pane; the hand-back
- *  clears it */
+/** An agent asking the user for the browser raises one alert that opens that pane (a wait that
+ *  follows a login it stopped at is the same ask); the hand-back or a closed pane clears it */
 function syncAttention(prev: AgentBrowserPaneState | undefined, next: AgentBrowserPaneState) {
   const reason = needsUserReason(next);
   const store = useAgentStore.getState();
-  if (reason && next.agentId && reason !== (prev ? needsUserReason(prev) : null)) {
+  const prevReason = prev && prev.agentId === next.agentId ? needsUserReason(prev) : null;
+  if (reason && next.agentId && !prevReason) {
     const alias = next.alias ?? "An agent";
     store.addAttentionItem(next.agentId, {
       level: "action_needed",
@@ -43,7 +37,10 @@ function syncAttention(prev: AgentBrowserPaneState | undefined, next: AgentBrows
 
 function apply(state: AgentBrowserPaneState, mainWindow: boolean): void {
   const prev = useAgentBrowserStore.getState().panes[state.paneId];
-  useAgentBrowserStore.setState((s) => ({ panes: { ...s.panes, [state.paneId]: state } }));
+  useAgentBrowserStore.setState((s) => {
+    const { [state.paneId]: _gone, ...rest } = s.panes;
+    return { panes: state.closed ? rest : { ...rest, [state.paneId]: state } };
+  });
   if (mainWindow) syncAttention(prev, state);
 }
 
@@ -72,6 +69,7 @@ function openForAgent(req: { projectId: string; agentId: string; url: string }):
     title: "Agent browser",
     url: req.url,
     projectId: req.projectId,
+    inactive: true,
   });
   return paneId;
 }

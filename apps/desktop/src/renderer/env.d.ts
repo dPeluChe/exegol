@@ -135,6 +135,7 @@ interface Window {
         url?: string;
         projectId?: string;
         viewport?: string;
+        inactive?: boolean;
       }) => Promise<void>;
       close: (paneId: string) => Promise<void>;
       selfClose: () => void;

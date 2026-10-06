@@ -17,9 +17,9 @@ import { BrowserQaRecordingBar } from "./BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./BrowserReplayResultBar";
 import { DeviceFrame, PageView } from "./BrowserViewport";
 import { DesignIssueBubble } from "./DesignIssueBubble";
-import { useAgentBrowserPane } from "./use-agent-browser-pane";
 import { useBrowserQa } from "./use-browser-qa";
 import { useDevServerPorts } from "./use-dev-server-ports";
+import { useRegisterBrowserPane } from "./use-register-browser-pane";
 import { type LoadError, useWebviewControls, useWebviewNavState } from "./use-webview";
 
 // ─── Browser Pane ──────────────────────────────────────────────────────────
@@ -139,9 +139,15 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
 
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFocused = focusedPaneId === paneId;
-  useAgentBrowserPane(webviewRef, paneId, projectId);
+  useRegisterBrowserPane(webviewRef, paneId, projectId);
   const [asking, setAsking] = useState(false);
   const showAsk = asking && runningAgents.length > 0;
+  // The element picked for the question goes with the bar: no design bubble left behind
+  const closeAsk = () => {
+    setAsking(false);
+    qa.setCapturedElement(null);
+    if (qa.designMode) qa.toggleDesignMode();
+  };
 
   return (
     <div role="none" className="flex h-full flex-col" onMouseDown={() => setFocusedPane(paneId)}>
@@ -175,7 +181,10 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         }}
         extra={
           runningAgents.length > 0 ? (
-            <AskAgentButton active={showAsk} onClick={() => setAsking((a) => !a)} />
+            <AskAgentButton
+              active={showAsk}
+              onClick={() => (showAsk ? closeAsk() : setAsking(true))}
+            />
           ) : undefined
         }
       />
@@ -190,7 +199,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           picking={qa.designMode}
           onPick={qa.toggleDesignMode}
           onClearElement={() => qa.setCapturedElement(null)}
-          onClose={() => setAsking(false)}
+          onClose={closeAsk}
         />
       )}
       {/* Webview with focus capture overlay when not active */}

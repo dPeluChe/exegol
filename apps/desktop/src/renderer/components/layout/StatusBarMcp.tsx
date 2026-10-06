@@ -19,10 +19,7 @@ export function McpWidget() {
   });
   return (
     <span
-      className={cn(
-        "flex shrink-0 items-center gap-1",
-        connected < ids.length && "text-amber-400/80",
-      )}
+      className={cn("flex shrink-0 items-center gap-1", connected < ids.length && "text-warning")}
       title={lines.join("\n")}
     >
       <Plug className="h-3 w-3" />

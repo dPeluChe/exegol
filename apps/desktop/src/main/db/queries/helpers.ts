@@ -77,6 +77,7 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     icon: r.icon ?? null,
     iconImage: r.icon_image ?? null,
     browserHosts: parseHostsColumn(r.browser_hosts),
+    browserEval: r.browser_eval === 1,
   };
 }
 

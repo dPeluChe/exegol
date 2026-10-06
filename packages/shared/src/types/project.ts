@@ -17,6 +17,8 @@ export type Project = {
   iconImage?: string | null;
   /** Hosts beyond the local ones its agents may open in the browser pane ("*.app.com") */
   browserHosts?: string[];
+  /** browser_eval allowed for its agents (off by default) */
+  browserEval?: boolean;
 };
 
 export type ProjectCreate = Omit<

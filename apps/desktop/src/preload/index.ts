@@ -319,6 +319,7 @@ contextBridge.exposeInMainWorld("api", {
       url?: string;
       projectId?: string;
       viewport?: string;
+      inactive?: boolean;
     }) => safe.invoke("floating:open", config),
     /** Floating browser: the page it is on now (kept for its pane when the window closes) */
     reportPage: (url: string) => safe.send("floating:page", url),

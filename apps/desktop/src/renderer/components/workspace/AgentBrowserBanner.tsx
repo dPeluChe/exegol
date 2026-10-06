@@ -1,6 +1,7 @@
+import { needsUserReason } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Bot, Hand } from "lucide-react";
-import { needsUserReason, useAgentBrowserPane } from "../../stores/agent-browser";
+import { useAgentBrowserPane } from "../../stores/agent-browser";
 
 const btn =
   "shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium transition-colors hover:bg-white/10";
@@ -25,7 +26,7 @@ export function AgentBrowserBanner({ paneId }: { paneId: string }) {
       className={cn(
         "flex shrink-0 items-center gap-2 border-b px-2 py-1 text-[11px]",
         ask
-          ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+          ? "border-warning/40 bg-warning/10 text-warning"
           : "border-accent/30 bg-accent/10 text-text-secondary",
       )}
     >
@@ -49,7 +50,7 @@ export function AgentBrowserBanner({ paneId }: { paneId: string }) {
       {(ask || state.userHasControl) && (
         <button
           type="button"
-          className={cn(btn, "border-amber-500/40")}
+          className={cn(btn, "border-warning/40")}
           onClick={() => control("hand-back")}
         >
           {ask ? "Done, hand back" : "Hand back"}

@@ -46,6 +46,7 @@ export const projectRowSchema = z.object({
   icon: optStr,
   icon_image: optStr,
   browser_hosts: optStr,
+  browser_eval: optNum,
 });
 
 export const projectGroupRowSchema = z.object({

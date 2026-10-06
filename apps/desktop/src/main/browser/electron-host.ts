@@ -1,32 +1,51 @@
 import { randomUUID } from "node:crypto";
-import { browserPartitionFor, projectIdFromPartition } from "@exegol/shared";
+import {
+  browserPartitionFor,
+  hostOf,
+  isOutsideAllowlist,
+  PREFERRED_PORTS_KEY,
+  pickDevServerPort,
+  projectIdFromPartition,
+} from "@exegol/shared";
 import { app, ipcMain, type Session, session, type WebContents, webContents } from "electron";
 import type Database from "libsql";
+import { queueFollowUp } from "../agents/follow-up-queue";
 import { getProject, listProjects } from "../db/queries/projects";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getNotificationBus } from "../notifications/bus";
-import { listDevServers } from "../system/dev-servers";
+import { getProjectPorts } from "../system/ports";
 import { getMainWindow } from "../windows/main-window-ref";
+import {
+  forgetPane,
+  handBack,
+  isAgentActing,
+  listPaneStates,
+  onBrowserControlChange,
+  takeOver,
+} from "./control";
+import { projectsToMigrate, selectCookiesToCopy, toSetDetails } from "./cookie-migration";
+import { type BrowserLogEntry, LogRing, toLogLevel } from "./log-ring";
+import { blocksAgentRequest, logUrl } from "./request-guard";
 import {
   type BrowserHost,
   type BrowserPaneHandle,
-  BrowserToolError,
   setBrowserHost,
   setNeedsUserNotifier,
-} from "./agent-browser-tools";
-import { handBack, listPaneStates, onBrowserControlChange, takeOver } from "./control";
-import { selectCookiesToCopy, toSetDetails } from "./cookie-migration";
-import { type BrowserLogEntry, LogRing, toLogLevel } from "./log-ring";
+} from "./tool-guards";
 
 const PANE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 /** Our own isolated world in the page: refs live there, out of the page's reach */
 const AGENT_WORLD_ID = 1337;
 const ISOLATED_TIMEOUT_MS = 10_000;
 const OPEN_TIMEOUT_MS = 15_000;
-const PREFERRED_PORTS_KEY = "project_preferred_ports";
+const SCREENSHOT_MAX_WIDTH = 1280;
+/** Projects whose partition got the one-time copy (or were created after it) */
 const COOKIES_MIGRATED_KEY = "browser_partition_cookies_migrated";
+/** Set once the one-time upgrade copy ran: it never runs again */
+const COOKIES_UPGRADE_DONE_KEY = "browser_partition_cookies_upgrade_done";
 
 interface Registered {
   paneId: string;
@@ -37,13 +56,14 @@ interface Registered {
 const registered = new Map<string, Registered>();
 const rings = new Map<number, LogRing>();
 const httpStatus = new Map<number, number>();
-const hookedSessions = new WeakSet<Session>();
+const projectBySession = new WeakMap<Session, string>();
 const registrationWaiters = new Map<string, () => void>();
 const pendingOpens = new Map<string, (r: { paneId?: string; error?: string }) => void>();
+let dbRef: Database.Database | null = null;
 
 function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new BrowserToolError(`${what} timed out`, -32027)), ms);
+    const t = setTimeout(() => reject(new ExegolToolError(`${what} timed out`, -32027)), ms);
     p.then(
       (v) => {
         clearTimeout(t);
@@ -59,11 +79,40 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
 
 const projectSession = (projectId: string) => session.fromPartition(browserPartitionFor(projectId));
 
+/** A webview the given window hosts (the check every renderer-supplied webContents id goes
+ *  through) */
+export function isHostedWebview(
+  wc: WebContents | undefined | null,
+  host: WebContents,
+): wc is WebContents {
+  return !!wc && !wc.isDestroyed() && wc.getType() === "webview" && wc.hostWebContents === host;
+}
+
 /** The webview runs in this project's own partition: the check every agent call goes through */
 function inProjectPartition(wc: WebContents, projectId: string): boolean {
   return (
     !wc.isDestroyed() && wc.getType() === "webview" && wc.session === projectSession(projectId)
   );
+}
+
+const allowedHostsOf = (projectId: string) =>
+  (dbRef && getProject(dbRef, projectId)?.browserHosts) || [];
+
+function paneOfWebContents(wcId: number): Registered | undefined {
+  for (const r of registered.values()) if (r.wcId === wcId) return r;
+  return undefined;
+}
+
+/** An agent is driving this webview (or, for a request with no webview, any pane of the project) */
+function agentActingOn(projectId: string, wcId: number | undefined): boolean {
+  if (wcId !== undefined) {
+    const r = paneOfWebContents(wcId);
+    return !!r && isAgentActing(r.paneId);
+  }
+  for (const r of registered.values()) {
+    if (r.projectId === projectId && isAgentActing(r.paneId)) return true;
+  }
+  return false;
 }
 
 function ringOf(wcId: number): LogRing {
@@ -75,12 +124,9 @@ function ringOf(wcId: number): LogRing {
   return ring;
 }
 
-function hostOfUrl(url: string): string | undefined {
-  try {
-    return new URL(url).hostname || undefined;
-  } catch {
-    return undefined;
-  }
+function pageUrlOf(wcId: number): string {
+  const wc = webContents.fromId(wcId);
+  return wc && !wc.isDestroyed() ? wc.getURL() : "";
 }
 
 /** Each entry remembers the host of the page it came from: the tool hides the ones logged while
@@ -88,15 +134,67 @@ function hostOfUrl(url: string): string | undefined {
 function pushLog(wcId: number, entry: Omit<BrowserLogEntry, "seq" | "at">, pageUrl?: string) {
   const ring = rings.get(wcId);
   if (!ring) return;
-  const wc = pageUrl === undefined ? webContents.fromId(wcId) : undefined;
-  const url = pageUrl ?? (wc && !wc.isDestroyed() ? wc.getURL() : "");
-  ring.push({ ...entry, page: hostOfUrl(url) });
+  ring.push({ ...entry, page: hostOf(pageUrl ?? pageUrlOf(wcId)) ?? undefined });
+}
+
+function pushNetworkLog(
+  d: { webContentsId?: number; method: string; url: string },
+  detail: { level: BrowserLogEntry["level"]; outcome: string; status?: number },
+) {
+  if (d.webContentsId === undefined) return;
+  const page = pageUrlOf(d.webContentsId);
+  const url = logUrl(d.url, hostOf(page));
+  pushLog(
+    d.webContentsId,
+    {
+      kind: "network",
+      level: detail.level,
+      text: `${d.method} ${url} ${detail.outcome}`,
+      status: detail.status,
+      method: d.method,
+      url,
+    },
+    page,
+  );
+}
+
+/** Popups and navigations of a project's pages. While an agent drives the pane, nothing may leave
+ *  the project's hosts; a popup never opens a window, at most it loads in the same pane */
+function guardWebview(wc: WebContents): void {
+  const projectOf = () => projectBySession.get(wc.session);
+  wc.setWindowOpenHandler(({ url }) => {
+    const projectId = projectOf();
+    if (projectId && /^https?:/i.test(url) && !isOutsideAllowlist(url, allowedHostsOf(projectId))) {
+      wc.loadURL(url).catch(() => {});
+    } else if (projectId) {
+      pushLog(wc.id, {
+        kind: "load",
+        level: "warning",
+        text: "popup blocked",
+        url: hostOf(url) ?? "",
+      });
+    }
+    return { action: "deny" };
+  });
+  wc.on("will-frame-navigate", (event) => {
+    const projectId = projectOf();
+    if (!projectId || !agentActingOn(projectId, wc.id)) return;
+    if (isOutsideAllowlist(event.url, allowedHostsOf(projectId))) {
+      event.preventDefault();
+      pushLog(wc.id, {
+        kind: "load",
+        level: "error",
+        text: `blocked: navigation outside the allowed hosts while an agent drives the pane (${hostOf(event.url)})`,
+      });
+    }
+  });
 }
 
 /** Console, uncaught errors and failed loads of every webview, from the moment it exists */
 function trackWebview(wc: WebContents): void {
   const id = wc.id;
   ringOf(id);
+  guardWebview(wc);
   wc.on("console-message", (...args: unknown[]) => {
     const d = args[0] as {
       level?: string;
@@ -131,34 +229,38 @@ function trackWebview(wc: WebContents): void {
   wc.once("destroyed", () => {
     rings.delete(id);
     httpStatus.delete(id);
-    for (const [paneId, r] of registered) if (r.wcId === id) registered.delete(paneId);
+    for (const [paneId, r] of registered) {
+      if (r.wcId !== id) continue;
+      registered.delete(paneId);
+      forgetPane(paneId);
+    }
   });
 }
 
-/** Failed and 4xx/5xx requests of a project's pages (one listener per session is all Electron has) */
-function hookSession(ses: Session): void {
-  if (hookedSessions.has(ses)) return;
-  hookedSessions.add(ses);
+/** Network log and the agent request guard of a project's session (Electron allows one listener
+ *  per event and session) */
+function hookSession(ses: Session, projectId: string): void {
+  if (projectBySession.has(ses)) return;
+  projectBySession.set(ses, projectId);
+  ses.webRequest.onBeforeRequest((d, callback) => {
+    const acting = agentActingOn(projectId, d.webContentsId);
+    const cancel = acting && blocksAgentRequest(d.url, acting, allowedHostsOf(projectId));
+    if (cancel && d.webContentsId !== undefined) {
+      pushNetworkLog(d, { level: "error", outcome: "blocked (outside the allowed hosts)" });
+    }
+    callback({ cancel });
+  });
   ses.webRequest.onCompleted((d) => {
-    if (d.statusCode < 400 || d.webContentsId === undefined) return;
-    pushLog(d.webContentsId, {
-      kind: "network",
+    if (d.statusCode < 400) return;
+    pushNetworkLog(d, {
       level: d.statusCode >= 500 ? "error" : "warning",
-      text: `${d.method} ${d.url} ${d.statusCode}`,
+      outcome: String(d.statusCode),
       status: d.statusCode,
-      method: d.method,
-      url: d.url,
     });
   });
   ses.webRequest.onErrorOccurred((d) => {
-    if (d.error === "net::ERR_ABORTED" || d.webContentsId === undefined) return;
-    pushLog(d.webContentsId, {
-      kind: "network",
-      level: "error",
-      text: `${d.method} ${d.url} ${d.error}`,
-      method: d.method,
-      url: d.url,
-    });
+    if (d.error === "net::ERR_ABORTED" || d.error === "net::ERR_BLOCKED_BY_CLIENT") return;
+    pushNetworkLog(d, { level: "error", outcome: d.error });
   });
 }
 
@@ -176,8 +278,8 @@ function registerPane(
   const wc = webContents.fromId(webContentsId);
   // Only a webview this window hosts, in that project's partition: a renderer cannot hand an
   // agent another project's page by claiming its id
-  if (!wc || wc.hostWebContents !== sender || !inProjectPartition(wc, projectId)) return false;
-  hookSession(wc.session);
+  if (!isHostedWebview(wc, sender) || !inProjectPartition(wc, projectId)) return false;
+  hookSession(wc.session, projectId);
   registered.set(paneId, { paneId, projectId, wcId: wc.id });
   registrationWaiters.get(paneId)?.();
   return true;
@@ -211,7 +313,12 @@ function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
         }
       }
     },
-    capture: async () => (await wc.capturePage()).toPNG(),
+    capture: async () => {
+      let img = await wc.capturePage();
+      if (img.getSize().width > SCREENSHOT_MAX_WIDTH)
+        img = img.resize({ width: SCREENSHOT_MAX_WIDTH });
+      return img.toJPEG(80);
+    },
     sendKey: (keyCode, modifiers) => {
       const mods = modifiers as ("shift" | "control" | "alt" | "meta")[];
       wc.sendInputEvent({ type: "keyDown", keyCode, modifiers: mods });
@@ -256,7 +363,7 @@ function waitForRegistration(paneId: string, projectId: string): Promise<Browser
 async function openPane(req: { projectId: string; agentId: string; url: string }) {
   const win = getMainWindow();
   if (!win || win.isDestroyed()) {
-    throw new BrowserToolError("Exegol's window is closed: no browser pane can open", -32603);
+    throw new ExegolToolError("Exegol's window is closed: no browser pane can open", -32603);
   }
   const requestId = randomUUID();
   const result = await withTimeout(
@@ -268,43 +375,95 @@ async function openPane(req: { projectId: string; agentId: string; url: string }
     "Opening the browser pane",
   ).finally(() => pendingOpens.delete(requestId));
   if (!result.paneId) {
-    throw new BrowserToolError(result.error ?? "Exegol could not open a browser pane", -32028);
+    throw new ExegolToolError(result.error ?? "Exegol could not open a browser pane", -32028);
   }
   return waitForRegistration(result.paneId, req.projectId);
 }
 
+/** The project's running dev server, picked like a new browser pane picks it */
 async function devServerUrl(db: Database.Database, projectId: string): Promise<string | null> {
-  const servers = (await listDevServers(db)).filter((s) => s.project?.id === projectId);
-  const ports = servers.flatMap((s) => s.ports);
-  if (ports.length === 0) return null;
+  const project = getProject(db, projectId);
+  if (!project) return null;
+  const running = (await getProjectPorts(project.path)).filter((p) => p.source === "runtime");
   const preferred = getJsonSetting<Record<string, number>>(db, PREFERRED_PORTS_KEY, {})[projectId];
-  const port = preferred && ports.includes(preferred) ? preferred : ports[0];
-  return `http://localhost:${port}`;
+  const port = pickDevServerPort(
+    running,
+    running.some((p) => p.port === preferred) ? preferred : null,
+  );
+  return port ? `http://localhost:${port}` : null;
 }
 
-/** Once per project: the cookies its panes had in the shared session move into its own partition,
- *  for the hosts its agents may open (no re-login after the switch) */
-export async function migrateBrowserCookies(db: Database.Database): Promise<void> {
-  const done = new Set(getJsonSetting<string[]>(db, COOKIES_MIGRATED_KEY, []));
-  const pending = listProjects(db).filter((p) => !done.has(p.id));
-  if (pending.length === 0) return;
-  const nowSec = Date.now() / 1000;
+async function copyCookies(
+  projectId: string,
+  scope: { local: boolean; hosts: readonly string[] },
+): Promise<number> {
   const all = await session.defaultSession.cookies.get({});
-  for (const project of pending) {
-    const target = projectSession(project.id);
-    const picked = selectCookiesToCopy(all, project.browserHosts ?? [], nowSec);
-    // allSettled: one bad cookie must not stop the rest
-    const results = await Promise.allSettled(
-      picked.map((cookie) => target.cookies.set(toSetDetails(cookie))),
-    );
-    const copied = results.filter((r) => r.status === "fulfilled").length;
-    done.add(project.id);
+  const picked = selectCookiesToCopy(all, scope, Date.now() / 1000);
+  const target = projectSession(projectId);
+  // allSettled: one bad cookie must not stop the rest
+  const results = await Promise.allSettled(
+    picked.map((cookie) => target.cookies.set(toSetDetails(cookie))),
+  );
+  return results.filter((r) => r.status === "fulfilled").length;
+}
+
+/** Hosts just added to a project's allowlist bring their logins from the old shared session */
+export async function copyCookiesForHosts(projectId: string, hosts: string[]): Promise<void> {
+  if (hosts.length === 0) return;
+  const copied = await copyCookies(projectId, { local: false, hosts });
+  if (copied > 0) logger.info(`[AgentBrowser] Copied ${copied} cookies for newly allowed hosts`);
+}
+
+/** A project created after the upgrade starts with an empty partition: never part of the copy */
+export function markCookiesMigrated(db: Database.Database, projectId: string): void {
+  const done = getJsonSetting<string[]>(db, COOKIES_MIGRATED_KEY, []);
+  if (!done.includes(projectId)) setJsonSetting(db, COOKIES_MIGRATED_KEY, [...done, projectId]);
+}
+
+/** Once, on the upgrade: the projects that shared the default session get its local-host
+ *  cookies (and their allowlist's) in their own partition, so nobody logs in again */
+export async function migrateBrowserCookies(db: Database.Database): Promise<void> {
+  const state = {
+    done: getJsonSetting<boolean>(db, COOKIES_UPGRADE_DONE_KEY, false),
+    migrated: getJsonSetting<string[]>(db, COOKIES_MIGRATED_KEY, []),
+  };
+  const projects = listProjects(db);
+  const pending = projectsToMigrate(
+    projects.map((p) => p.id),
+    state,
+  );
+  const migrated = new Set(state.migrated);
+  for (const project of projects) {
+    if (!pending.includes(project.id)) continue;
+    const copied = await copyCookies(project.id, {
+      local: true,
+      hosts: project.browserHosts ?? [],
+    });
+    migrated.add(project.id);
     if (copied > 0) logger.info(`[AgentBrowser] Copied ${copied} cookies into a project partition`);
   }
-  setJsonSetting(db, COOKIES_MIGRATED_KEY, [...done]);
+  setJsonSetting(db, COOKIES_MIGRATED_KEY, [...migrated]);
+  setJsonSetting(db, COOKIES_UPGRADE_DONE_KEY, true);
+}
+
+/** Hand back with no agent waiting on it: tell the agent that last drove the pane */
+function handBackAndTell(db: Database.Database, paneId: string): boolean {
+  const r = handBack(paneId);
+  if (!r) return false;
+  if (!r.woke && r.agentId) {
+    const reg = registered.get(paneId);
+    const url = reg ? pageUrlOf(reg.wcId) : "";
+    try {
+      queueFollowUp(db, r.agentId, `The user handed the browser back: ${url || "(no page)"}`);
+    } catch {
+      /* the agent is gone */
+    }
+  }
+  return true;
 }
 
 export function installAgentBrowser(db: Database.Database): void {
+  dbRef = db;
   app.on("web-contents-created", (_e, contents) => {
     if (contents.getType() === "webview") {
       trackWebview(contents);
@@ -315,7 +474,14 @@ export function installAgentBrowser(db: Database.Database): void {
       delete webPreferences.preload;
       webPreferences.nodeIntegration = false;
       webPreferences.contextIsolation = true;
-      if (params.partition && !projectIdFromPartition(params.partition)) event.preventDefault();
+      if (!params.partition) return;
+      const projectId = projectIdFromPartition(params.partition);
+      if (!projectId) {
+        event.preventDefault();
+        return;
+      }
+      // Every page of the project's partition, registered or not, gets the guard from its first load
+      hookSession(session.fromPartition(params.partition), projectId);
     });
   });
 
@@ -325,7 +491,7 @@ export function installAgentBrowser(db: Database.Database): void {
   ipcMain.handle("browser:control", (_event, input: { paneId?: unknown; action?: unknown }) => {
     if (typeof input?.paneId !== "string") return false;
     if (input.action === "take-over") return takeOver(input.paneId);
-    if (input.action === "hand-back") return handBack(input.paneId);
+    if (input.action === "hand-back") return handBackAndTell(db, input.paneId);
     return false;
   });
   ipcMain.handle("browser:agent-states", () => listPaneStates());
@@ -344,7 +510,7 @@ export function installAgentBrowser(db: Database.Database): void {
   );
 
   onBrowserControlChange((state) => broadcast("browser:agent-state", state));
-  setNeedsUserNotifier((ctx, alias, _paneId, what) => {
+  setNeedsUserNotifier((ctx, alias, what) => {
     try {
       getNotificationBus().emit({
         type: "agent:attention",

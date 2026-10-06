@@ -11,6 +11,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
+import { MCP_STATUS_KEY } from "../components/common/McpStatusIndicator";
 import { nextActivitySince } from "../lib/busy-time";
 import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
@@ -78,9 +79,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   const offPrWatch = window.api.onPrWatch(({ agentId, reason }) => {
     if (reason) useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason });
   });
-  const stopMcp = window.api.onMcpStatus((e) =>
-    queryClient.setQueryData(["agents", "mcpStatus"], e),
-  );
+  const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
     queryClient.setQueryData(followUpsKey(e.agentId), e.items),
   );

@@ -233,4 +233,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_021_project_browser_hosts",
     sql: "ALTER TABLE projects ADD COLUMN browser_hosts TEXT;",
   },
+  {
+    // Agent browser: browser_eval is opt-in per project
+    id: "w3_022_project_browser_eval",
+    sql: "ALTER TABLE projects ADD COLUMN browser_eval INTEGER NOT NULL DEFAULT 0;",
+  },
 ];
