@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { LayoutNode, Pane, ProjectWorkspace, WorkspaceStore } from "./types";
+import type { LayoutNode, Pane, ProjectWorkspace, WorkspaceStore, WorkspaceTab } from "./types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -137,12 +137,18 @@ export function releaseAgentPanes(pw: ProjectWorkspace, agentId: string): Projec
   return { ...pw, tabs, panes, activeTabId };
 }
 
+/** `paneId` when the tab's layout holds it, else the tab's first pane */
+export function paneInTabOrFirst(
+  tab: WorkspaceTab,
+  paneId: string | null | undefined,
+): string | null {
+  return paneId && layoutHasPane(tab.layout, paneId) ? paneId : findFirstPaneId(tab.layout);
+}
+
 /** The pane a project gets the focus back on: the one it was left on, if its active tab has it */
 export function restoredFocus(pw: ProjectWorkspace | undefined): string | null {
   const tab = pw?.tabs.find((t) => t.id === pw.activeTabId);
-  if (!tab) return null;
-  const last = pw?.lastFocusedPaneId;
-  return last && layoutHasPane(tab.layout, last) ? last : findFirstPaneId(tab.layout);
+  return tab ? paneInTabOrFirst(tab, pw?.lastFocusedPaneId) : null;
 }
 
 /** Leave the active project (remembering its focused pane) for `next`, as it was left */

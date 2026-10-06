@@ -8,6 +8,7 @@ import {
   findFirstPaneId,
   getPw,
   layoutHasPane,
+  paneInTabOrFirst,
   switchProject,
 } from "./workspace/helpers";
 import { migrateWorkspaceState, onWorkspaceRehydrate } from "./workspace/recovery";
@@ -73,11 +74,7 @@ export function getProjectState(): ProjectWorkspace {
  * otherwise falls back to the first pane in the layout.
  */
 export function getFocusedOrFirstPaneId(tab: WorkspaceTab): string | null {
-  const { focusedPaneId } = useWorkspaceStore.getState();
-  if (focusedPaneId && layoutHasPane(tab.layout, focusedPaneId)) {
-    return focusedPaneId;
-  }
-  return findFirstPaneId(tab.layout);
+  return paneInTabOrFirst(tab, useWorkspaceStore.getState().focusedPaneId);
 }
 
 export { collectPaneIds, findFirstPaneId, layoutHasPane };
