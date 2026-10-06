@@ -13,7 +13,7 @@ import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { useAgentStore } from "../../stores/agents";
 import { type Pane, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-import { PANE_TYPE_ICONS } from "./tab-bar-helpers";
+import { PANE_TYPE_ICONS, tabLabel } from "./tab-bar-helpers";
 
 const PANE_LABEL: Record<string, string> = { git: "Git", empty: "Launcher", terminal: "Terminal" };
 
@@ -108,34 +108,44 @@ function Row({
   );
 }
 
-/** Ctrl+Tab held: the project's tabs (most recent first) and their panes */
-export function PaneSwitcher() {
-  useMountEffect(installPaneSwitcherKeys);
-  const view = usePaneSwitcherView((s) => s.view);
+type SwitcherView = NonNullable<ReturnType<typeof usePaneSwitcherView.getState>["view"]>;
+
+function SwitcherOverlay({ view }: { view: SwitcherView }) {
   const tabs = useWorkspaceStore(selectTabs);
   const panes = useWorkspaceStore(selectPanes);
-  if (!view) return null;
-
-  const tabLabel = (tabId: string) => {
+  const labelOf = (tabId: string) => {
     const at = tabs.findIndex((t) => t.id === tabId);
-    return tabs[at]?.label || `Tab ${at + 1}`;
+    const tab = tabs[at];
+    return tab ? tabLabel(tab, at) : "";
   };
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[210] flex items-center justify-center">
-      <div className="pointer-events-auto max-h-[70vh] w-[360px] max-w-[calc(100vw-32px)] overflow-y-auto rounded-xl border border-border bg-bg-primary p-2 shadow-2xl">
-        {view.items.map((item, i) => (
-          <Row
-            key={`${item.kind}:${item.paneId}:${item.tabId}`}
-            item={item}
-            index={i}
-            highlighted={i === view.index}
-            isCurrent={item.kind === "pane" && item.paneId === view.current}
-            label={tabLabel(item.tabId)}
-            pane={panes[item.paneId]}
-          />
-        ))}
+      <div className="pointer-events-auto flex max-h-[70vh] w-[360px] max-w-[calc(100vw-32px)] flex-col rounded-xl border border-border bg-bg-primary p-2 shadow-2xl">
+        <div className="min-h-0 overflow-y-auto">
+          {view.items.map((item, i) => (
+            <Row
+              key={`${item.kind}:${item.paneId}:${item.tabId}`}
+              item={item}
+              index={i}
+              highlighted={i === view.index}
+              isCurrent={item.kind === "pane" && item.paneId === view.current}
+              label={labelOf(item.tabId)}
+              pane={panes[item.paneId]}
+            />
+          ))}
+        </div>
+        <div className="mt-1 border-t border-border px-2 pt-1.5 text-[10px] text-text-muted">
+          Tab / Shift+Tab to move, release Ctrl to go, Esc cancels
+        </div>
       </div>
     </div>
   );
+}
+
+/** Ctrl+Tab held: the project's tabs (most recent first) and their panes */
+export function PaneSwitcher() {
+  useMountEffect(installPaneSwitcherKeys);
+  const view = usePaneSwitcherView((s) => s.view);
+  return view ? <SwitcherOverlay view={view} /> : null;
 }

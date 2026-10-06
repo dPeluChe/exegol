@@ -79,7 +79,7 @@ const MAC_SHORTCUTS: Shortcut[] = [
     id: "pane-switcher",
     label: "Switch Pane",
     description:
-      "Hold Ctrl and press Tab to pick any tab or pane of this project (Shift+Tab or arrows move, Esc cancels); a quick press goes back to the previous pane",
+      "Hold Ctrl and press Tab to pick any tab or pane of this project (Tab / Shift+Tab move, Esc cancels); a quick press goes back to the previous pane",
     keys: "Ctrl+Tab",
     category: "navigation",
   },

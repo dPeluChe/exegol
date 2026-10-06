@@ -23,7 +23,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Ask agent in a browser pane's bar (when the project has live agents): pick the agent (the last one that used the pane by default), add a note and optionally pick a part of the page; it gets the URL, title, your note and the element at its next turn
 - Exegol tools status: a plug in each agent's terminal toolbar and Dashboard card shows whether its Exegol MCP tools are connected (the tooltip says why not, and what it may do with the browser), plus an opt-in status bar widget "MCP: N/M"
 - Cmd+L in a browser pane (or the floating browser) selects its address bar, ready to type a URL; Ctrl+Shift+L and Ctrl+Shift+R on Linux and Windows
-- Pane switcher: hold Ctrl and press Tab to see this project's tabs (most recently used first) with their panes: agents with their name and status, browser pages, files, git. Tab and Shift+Tab (or the arrows) move, releasing Ctrl goes there, Esc cancels, a click picks one. Works from a terminal or a browser page
+- Pane switcher: hold Ctrl and press Tab to see this project's tabs (most recently used first) with their panes: agents with their name and status, browser pages, files, git. Tab and Shift+Tab move, releasing Ctrl goes there, Esc cancels, a click picks one. Works from a terminal or a browser page
 
 ### Changed
 - Ctrl+Tab no longer steps to the next pane of the tab: a quick press goes back to the pane you used before (like Cmd+Tab between apps), holding Ctrl opens the pane switcher. Cmd+] / Cmd+[ still step through the tab's panes

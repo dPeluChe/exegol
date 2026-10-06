@@ -4,7 +4,7 @@ import { pageLabel } from "../../lib/browser-viewports";
 import { focusPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
-import { PANE_TYPE_ICONS } from "../workspace/tab-bar-helpers";
+import { PANE_TYPE_ICONS, tabLabel } from "../workspace/tab-bar-helpers";
 import { AgentMiniCard } from "./AgentMiniCard";
 
 const PANE_LABEL: Record<string, string> = {
@@ -70,7 +70,7 @@ export function TabsOverview({ projectId }: { projectId: string }) {
                   isActive ? "bg-accent" : "bg-text-muted/40",
                 )}
               />
-              <span className="truncate">{tab.label || `Tab ${i + 1}`}</span>
+              <span className="truncate">{tabLabel(tab, i)}</span>
             </button>
             <div className="space-y-px">
               {collectPaneIds(tab.layout).map((paneId) => {

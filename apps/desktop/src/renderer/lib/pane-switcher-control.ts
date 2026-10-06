@@ -10,6 +10,7 @@ import {
   quickSwitchTarget,
   type SwitcherItem,
   stepIndex,
+  touchMru,
 } from "./pane-switcher";
 
 interface SwitcherView {
@@ -29,7 +30,24 @@ interface Session extends SwitcherView {
 /** What the overlay shows; null while hidden (also during a quick switch) */
 export const usePaneSwitcherView = create<{ view: SwitcherView | null }>(() => ({ view: null }));
 
+/** Panes by last focus, per project. In-memory only */
+const paneMru = new Map<string, string[]>();
+
+useWorkspaceStore.subscribe((s, prev) => {
+  const paneId = s.focusedPaneId;
+  const pid = s._activeProjectId;
+  if (!paneId || !pid || paneId === prev.focusedPaneId) return;
+  if (!s.projectWorkspaces[pid]?.panes[paneId]) return;
+  paneMru.set(pid, touchMru(paneMru.get(pid) ?? [], paneId));
+});
+
 let session: Session | null = null;
+let mounted = false;
+
+/** Whether this window has the switcher (floating windows do not) */
+export function isPaneSwitcherMounted(): boolean {
+  return mounted;
+}
 let showTimer: ReturnType<typeof setTimeout> | undefined;
 
 function publish(): void {
@@ -50,7 +68,7 @@ function start(backwards: boolean): void {
   const projectId = useAppStore.getState().activeProjectId;
   if (!projectId) return;
   const ws = useWorkspaceStore.getState();
-  const mru = ws.paneMru[projectId] ?? [];
+  const mru = paneMru.get(projectId) ?? [];
   const items = buildSwitcherItems(getProjectState().tabs, mru);
   if (items.length === 0) return;
   const current = ws.focusedPaneId;
@@ -130,6 +148,13 @@ export function installPaneSwitcherKeys(): () => void {
       return;
     }
     if (!session) return;
+    // Ctrl was released where no keyup reached us: the session would stay open
+    if (!e.ctrlKey) {
+      if (e.key === "Escape") end();
+      else commit();
+      return;
+    }
+    // Ctrl+arrows are macOS Mission Control; they still move elsewhere
     const direction = e.key === "ArrowDown" ? "next" : e.key === "ArrowUp" ? "prev" : null;
     if (!direction && e.key !== "Escape" && e.key !== "Enter") return;
     e.preventDefault();
@@ -141,8 +166,13 @@ export function installPaneSwitcherKeys(): () => void {
   const onKeyUp = (e: KeyboardEvent) => {
     if (session && e.key === "Control") commit();
   };
+  const onPointerMove = (e: PointerEvent) => {
+    if (session && !e.ctrlKey) commit();
+  };
+  mounted = true;
   window.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("keyup", onKeyUp, true);
+  window.addEventListener("pointermove", onPointerMove, true);
   window.addEventListener("blur", end);
   const unsubPage = window.api.onPaneSwitcherKey((key) => {
     if (key.kind === "tab") press(!!key.shift);
@@ -151,7 +181,9 @@ export function installPaneSwitcherKeys(): () => void {
   return () => {
     window.removeEventListener("keydown", onKeyDown, true);
     window.removeEventListener("keyup", onKeyUp, true);
+    window.removeEventListener("pointermove", onPointerMove, true);
     window.removeEventListener("blur", end);
+    mounted = false;
     unsubPage();
     end();
   };
