@@ -44,6 +44,7 @@ import { getPtyHost } from "./terminal/pty-host";
 import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
+import { forwardSwitcherKeys } from "./windows/pane-switcher-keys";
 import { closeSettingsWindow, registerSettingsIpcHandlers } from "./windows/settings";
 
 app.setName("Exegol");
@@ -169,6 +170,7 @@ let stopWorkGuard: (() => void) | null = null;
 
 app.on("web-contents-created", (_event, contents) => {
   captureConsole(contents);
+  if (contents.getType() === "webview") forwardSwitcherKeys(contents);
   // Every Exegol window (settings and floating ones too, not only main): a link must not open
   // an Electron child window, which would hand the preload's window.api to that page
   if (contents.getType() === "window") {

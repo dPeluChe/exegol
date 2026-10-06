@@ -16,14 +16,6 @@ export function useHotkeys() {
   // Rule 4: external system sync — global keyboard event listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Tab / Ctrl+Shift+Tab: next or previous pane of the tab (plain Tab stays with the
-      // terminal; tabs cycle with Cmd+Shift+[ ])
-      if (e.ctrlKey && e.key === "Tab") {
-        e.preventDefault();
-        cyclePane(e.shiftKey ? "prev" : "next");
-        return;
-      }
-
       // Cmd on macOS, Ctrl+Shift elsewhere (lib/keymap): Ctrl alone belongs to the terminal.
       // Below, "Cmd" and "Shift" read as that chord and its variant
       const chord = appChord(e);

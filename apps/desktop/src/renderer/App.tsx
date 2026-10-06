@@ -11,6 +11,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { SidebarRail } from "./components/layout/SidebarRail";
 import { StatusBar } from "./components/layout/StatusBar";
 import { TitleBar } from "./components/layout/TitleBar";
+import { PaneSwitcher } from "./components/workspace/PaneSwitcher";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useActiveViewSync } from "./hooks/use-active-view-sync";
@@ -120,6 +121,7 @@ export default function App() {
 
         <StatusBar />
         <ToastStack />
+        <PaneSwitcher />
         <Suspense fallback={null}>
           <CommandPalette />
         </Suspense>

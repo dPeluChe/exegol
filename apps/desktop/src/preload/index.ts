@@ -146,6 +146,17 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("menu:focus-location", onFocusLocation as never);
     };
   },
+  /** Ctrl+Tab and the Ctrl release from a focused browser pane's page (main forwards them) */
+  onPaneSwitcherKey: (callback: (key: { kind: "tab" | "release"; shift?: boolean }) => void) => {
+    const handler = (
+      _e: Electron.IpcRendererEvent,
+      key: { kind: "tab" | "release"; shift?: boolean },
+    ) => callback(key);
+    safe.on("pane-switcher:key", handler as never);
+    return () => {
+      safe.off("pane-switcher:key", handler as never);
+    };
+  },
   // Push event subscriptions (T17: push-first status updates)
   onWindowFocus: (callback: (focused: boolean) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, focused: boolean) => callback(focused);

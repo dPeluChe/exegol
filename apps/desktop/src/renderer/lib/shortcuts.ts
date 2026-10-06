@@ -76,10 +76,18 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "pane-switcher",
+    label: "Switch Pane",
+    description:
+      "Hold Ctrl and press Tab to pick any tab or pane of this project (Tab / Shift+Tab move, Esc cancels); a quick press goes back to the previous pane",
+    keys: "Ctrl+Tab",
+    category: "navigation",
+  },
+  {
     id: "next-pane",
     label: "Next / Previous Pane",
-    description: "Move the cursor to the next pane of this tab, or back (Shift, or [)",
-    keys: "Ctrl+Tab / Ctrl+Shift+Tab (or Cmd+] / Cmd+[)",
+    description: "Move the cursor to the next pane of this tab, or back",
+    keys: "Cmd+] / Cmd+[",
     category: "navigation",
   },
   {

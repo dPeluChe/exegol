@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
+import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
 import { useAgentStore } from "../../stores/agents";
 import { stripTerminalReports } from "./mirror-input";
 import {
@@ -156,9 +157,9 @@ export function setupTerminalSession(
         }
         return false;
       }
-      // Ctrl+Tab cycles panes (use-hotkeys): xterm would send Tab, and Ctrl+Shift+Tab Shift+Tab,
-      // which flips Claude's permission mode
-      if (e.ctrlKey && e.key === "Tab") return false;
+      // Ctrl+Tab is the pane switcher where one is mounted: xterm would send Tab, and
+      // Ctrl+Shift+Tab Shift+Tab, which flips Claude's permission mode
+      if (e.ctrlKey && e.key === "Tab") return !isPaneSwitcherMounted();
       if (e.type !== "keydown") return true;
       if (e.key === "Backspace" && (e.ctrlKey || e.metaKey || e.altKey)) {
         window.api.terminal.write(deps.agentId, "\x17");
