@@ -12,7 +12,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { shallow } from "zustand/shallow";
 import { useNow } from "../../hooks/use-now";
 import { usePointerReorder } from "../../hooks/use-pointer-reorder";
 import { useProject, useProjects } from "../../hooks/use-trpc";
@@ -20,7 +21,7 @@ import {
   groupByProject,
   type LiveProjectGroup,
   type LiveTabGroup,
-  reorderKeys,
+  reorderProjectOrder,
   shortcutLabel,
   useLiveTabGroups,
   useProjectShortcuts,
@@ -122,9 +123,24 @@ export function AttentionSection() {
   // One card per project in the user's order, its live tabs inside; the card carries its Cmd+n.
   // A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
-  const cards = groupByProject(groups);
+  const cards = useMemo(() => groupByProject(groups), [groups]);
+  const agentsByProject = useMemo(
+    () =>
+      new Map(
+        cards.map((c) => [
+          c.projectId,
+          Object.fromEntries(
+            c.tabs
+              .flatMap((t) => t.agentIds)
+              .flatMap((id) => (agents[id] ? [[id, agents[id]]] : [])),
+          ) as Record<string, AgentState>,
+        ]),
+      ),
+    [cards, agents],
+  );
   const projectShortcuts = useProjectShortcuts();
   const setOrder = useAppStore((s) => s.setLiveProjectOrder);
+  const savedOrder = useAppStore((s) => s.liveProjectOrder);
   const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();
   for (const agent of activeAgents) {
@@ -146,8 +162,9 @@ export function AttentionSection() {
   // Dropped on the card below it goes after it (inserting before put it back where it was)
   const reorder = usePointerReorder((drag, target) =>
     setOrder(
-      reorderKeys(
+      reorderProjectOrder(
         cards.map((c) => c.projectId),
+        savedOrder,
         drag,
         target,
       ),
@@ -246,9 +263,9 @@ export function AttentionSection() {
               key={card.projectId}
               card={card}
               shortcut={shortcutLabel(projectShortcuts.get(card.projectId))}
-              agents={agents}
+              agents={agentsByProject.get(card.projectId) ?? {}}
               onNavigate={navigateToAgent}
-              reorderProps={reorder.itemProps(card.projectId)}
+              itemProps={reorder.itemProps}
               dragging={reorder.draggingKey === card.projectId}
               dropSide={dropSideFor(card.projectId)}
               onScreen={card.projectId === activeProjectId}
@@ -282,24 +299,14 @@ function RecoveryNotice({ label }: { label: string }) {
 
 // ─── Project Card ────────────────────────────────────────────────────────
 
-function ProjectCard({
-  card,
-  shortcut,
-  agents,
-  onNavigate,
-  reorderProps,
-  dragging,
-  dropSide,
-  onScreen,
-  activeTabId,
-  flashKey,
-}: {
+interface ProjectCardProps {
   card: LiveProjectGroup;
   shortcut: string | null;
+  /** This project's sessions only */
   agents: Record<string, AgentState>;
   onNavigate: (agentId: string, projectId: string) => void;
   /** Press anywhere on the card and move to reorder it (Cmd+2..9 number projects in this order) */
-  reorderProps: ReturnType<ReturnType<typeof usePointerReorder>["itemProps"]>;
+  itemProps: ReturnType<typeof usePointerReorder>["itemProps"];
   dragging: boolean;
   /** Where the dragged card lands: a line above this one (moving up) or below (moving down) */
   dropSide: "before" | "after" | null;
@@ -309,7 +316,30 @@ function ProjectCard({
   activeTabId: string | null;
   /** The group key a Cmd+n jump landed on */
   flashKey: string | null;
-}) {
+}
+
+// Groups rebuild on every agent push, so the card is compared by content and agents by entry
+const sameCardProps = (a: ProjectCardProps, b: ProjectCardProps) =>
+  (Object.keys(a) as (keyof ProjectCardProps)[]).every((k) =>
+    k === "card"
+      ? JSON.stringify(a.card) === JSON.stringify(b.card)
+      : k === "agents"
+        ? shallow(a.agents, b.agents)
+        : Object.is(a[k], b[k]),
+  );
+
+const ProjectCard = memo(function ProjectCard({
+  card,
+  shortcut,
+  agents,
+  onNavigate,
+  itemProps,
+  dragging,
+  dropSide,
+  onScreen,
+  activeTabId,
+  flashKey,
+}: ProjectCardProps) {
   const { data: project } = useProject(card.projectId);
   const single = card.tabs.length === 1;
   const flashing = single && card.tabs.some((t) => t.key === flashKey);
@@ -326,7 +356,7 @@ function ProjectCard({
       ));
   return (
     <div
-      {...reorderProps}
+      {...itemProps(card.projectId)}
       className={cn(
         "relative select-none rounded-lg border bg-bg-tertiary/30 p-1.5 transition-colors",
         onScreen ? "border-accent/60" : "border-border/50",
@@ -399,7 +429,7 @@ function ProjectCard({
       )}
     </div>
   );
-}
+}, sameCardProps);
 
 // ─── Project Agent Group ─────────────────────────────────────────────────
 

@@ -139,9 +139,8 @@ export function goToShortcut(digit: string): string | null {
   if (!projectId) return null;
   showProject(projectId);
   const tabId = useWorkspaceStore.getState().projectWorkspaces[projectId]?.activeTabId;
-  const own = groups.filter((g) => g.projectId === projectId);
-  const key = own.find((g) => g.tabId === tabId)?.key ?? own[0]?.key;
-  return key ?? (tabId ? `${projectId}:${tabId}` : null);
+  const own = groupByProject(groups).find((c) => c.projectId === projectId)?.tabs ?? [];
+  return own.find((g) => g.tabId === tabId)?.key ?? own[0]?.key ?? null;
 }
 
 /** How a digit reads next to its group or project */
@@ -155,4 +154,18 @@ export function reorderKeys(all: string[], drag: string, target: string): string
   const keys = all.filter((k) => k !== drag);
   keys.splice(keys.indexOf(target) + (movingDown ? 1 : 0), 0, drag);
   return keys;
+}
+
+/**
+ * Drag among the visible (live) cards; the saved projects not live now keep their relative order
+ * after them, so an idle project keeps its place and its Cmd+n slot
+ */
+export function reorderProjectOrder(
+  live: string[],
+  saved: string[],
+  drag: string,
+  target: string,
+): string[] {
+  const visible = new Set(live);
+  return [...reorderKeys(live, drag, target), ...saved.filter((id) => !visible.has(id))];
 }

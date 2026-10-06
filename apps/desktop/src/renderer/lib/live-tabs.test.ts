@@ -5,6 +5,7 @@ import {
   groupByProject,
   type LiveTabGroup,
   reorderKeys,
+  reorderProjectOrder,
 } from "./live-tabs";
 
 const pane = (paneId: string) => ({ type: "pane" as const, paneId });
@@ -118,6 +119,21 @@ describe("reorderKeys", () => {
   });
   it("dropping on a group above moves it up", () => {
     expect(reorderKeys(["a", "b", "c"], "c", "a")).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("reorderProjectOrder", () => {
+  it("reorders the live cards and keeps idle saved projects after them, in their order", () => {
+    expect(reorderProjectOrder(["b", "d"], ["a", "b", "c", "d", "e"], "d", "b")).toEqual([
+      "d",
+      "b",
+      "a",
+      "c",
+      "e",
+    ]);
+  });
+  it("a live project the saved order never had joins it", () => {
+    expect(reorderProjectOrder(["a", "n"], ["a", "x"], "a", "n")).toEqual(["n", "a", "x"]);
   });
 });
 

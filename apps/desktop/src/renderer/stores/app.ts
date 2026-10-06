@@ -74,11 +74,14 @@ export function migrateAppStore(persisted: unknown, fromVersion: number): AppSto
     sidebarCollapsed?: boolean;
     onboardingComplete?: boolean;
     welcomeTourSeen?: boolean;
-    liveTabOrder?: string[];
+    liveTabOrder?: unknown;
     liveProjectOrder?: string[];
   };
   if (fromVersion < 4) {
-    state.liveProjectOrder = projectOrderFromTabKeys(state.liveTabOrder ?? []);
+    const keys = Array.isArray(state.liveTabOrder) ? state.liveTabOrder : [];
+    state.liveProjectOrder = projectOrderFromTabKeys(
+      keys.filter((k): k is string => typeof k === "string"),
+    );
     delete state.liveTabOrder;
   }
   if (fromVersion < 2 && state.activeView === "settings") {
