@@ -1,5 +1,12 @@
 import { useRef, useState } from "react";
-import { useFileContent } from "../../hooks/use-trpc";
+import { useFileContent, useTerminalLinkFile } from "../../hooks/use-trpc";
+import { trpcMutate } from "../../lib/trpc-client";
+import {
+  closeTerminalPeek,
+  type TerminalLinkPeek as LinkPeek,
+  useTerminalLinkStore,
+} from "../../stores/terminal-links";
+import { toastError } from "../../stores/toasts";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { FileExplorer } from "../workspace/FileExplorer";
 import { FilePreview } from "../workspace/FilePreview";
@@ -69,6 +76,36 @@ export function PeekFileOverlay({
         confirmLabel="Discard"
         variant="destructive"
         onConfirm={onClose}
+      />
+    </div>
+  );
+}
+
+/** A file clicked in this session's terminal, read-only over it (project files only) */
+export function TerminalLinkPeek({ agentId }: { agentId: string }) {
+  const peek = useTerminalLinkStore((s) => s.peeks[agentId]);
+  if (!peek) return null;
+  return <LinkFileOverlay key={`${peek.text}:${peek.line ?? ""}`} agentId={agentId} peek={peek} />;
+}
+
+function LinkFileOverlay({ agentId, peek }: { agentId: string; peek: LinkPeek }) {
+  const source = { agentId, cwd: peek.cwd, text: peek.text };
+  const { data, error } = useTerminalLinkFile(source);
+  const open = (how: "reveal" | "external") =>
+    trpcMutate("terminalLinks.open", { ...source, how }).catch(
+      toastError("Could not open the file"),
+    );
+  return (
+    <div className="absolute inset-0 z-10 flex bg-bg-primary" data-peek-file>
+      <FilePreview
+        path={data?.path ?? peek.text}
+        file={data}
+        error={error}
+        revealLine={peek.line}
+        readOnly
+        onClose={() => closeTerminalPeek(agentId)}
+        onOpenExternal={() => open("external")}
+        onReveal={() => open("reveal")}
       />
     </div>
   );

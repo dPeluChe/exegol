@@ -7,10 +7,11 @@ import { useAgent, useStopAgent } from "../../hooks/use-trpc";
 import { useSessionRecovery } from "../../lib/session-recovery";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
+import { closeTerminalPeek } from "../../stores/terminal-links";
 import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
-import { FilesPeek, PeekFileOverlay } from "./FilesPeek";
+import { FilesPeek, PeekFileOverlay, TerminalLinkPeek } from "./FilesPeek";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { type ScrollbackAgent, TerminalScrollback } from "./TerminalScrollback";
@@ -56,19 +57,6 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const gitInfo = useTerminalGitInfo(toolbarProjectId, agent?.branchName);
   const filesPeek = useFilesPeek(toolbarProjectId);
   const agentProjectId = agent?.projectId;
-  // T155: Cmd+click on a file path in the terminal → open in the IDE at line
-  const handleOpenFileLink = useCallback(
-    (path: string, line?: number) => {
-      if (!agentProjectId) return;
-      trpcMutate("projects.openInIde", {
-        projectId: agentProjectId,
-        file: path,
-        line,
-        agentId,
-      }).catch(() => {});
-    },
-    [agentProjectId, agentId],
-  );
   const handleOpenShellHere = useOpenShellHere({
     agentId,
     paneId,
@@ -76,7 +64,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     activeProjectId,
     stopAgent,
   });
-  // A browser pane beside this one: Cmd+click on a URL (T155), the preview chip, the repo button
+  // A browser pane beside this one: the preview chip, the repo button
   const openBesideInBrowser = useCallback(
     (url: string) => {
       if (!paneId) return;
@@ -143,7 +131,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       className="relative flex h-full flex-col"
       onKeyDownCapture={(e) => {
         if (e.key !== "Escape" || document.querySelector('[role="dialog"]')) return;
-        if (filesPeek.escape()) {
+        if (closeTerminalPeek(agentId) || filesPeek.escape()) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -189,8 +177,6 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                 cliType={agent?.cliType}
                 onReady={onReady}
                 onScrollPosition={handleScrollPosition}
-                onOpenFileLink={handleOpenFileLink}
-                onOpenUrlInPane={openBesideInBrowser}
                 onSelectionChange={onSelectionChange}
               />
               {floatingButtons}
@@ -203,6 +189,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               onDirtyChange={filesPeek.setFileDirty}
             />
           )}
+          <TerminalLinkPeek agentId={agentId} />
         </div>
         {filesPeek.filesOpen && filesPeek.peekProject && (
           <FilesPeek

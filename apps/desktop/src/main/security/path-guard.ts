@@ -25,7 +25,7 @@ export function isPathInside(base: string, target: string): boolean {
  * identical apart from the `await` — they had already drifted on how they took
  * the segment, which is the failure this note is here to prevent.
  */
-async function realpathSafe(p: string): Promise<string> {
+export async function realpathSafe(p: string): Promise<string> {
   const abs = resolve(p);
   let current = abs;
   const missing: string[] = [];
@@ -217,6 +217,12 @@ function eachSegment(p: string): string[] {
  * path on success so callers can use it directly (no TOCTOU window).
  */
 export async function assertSafePath(p: string, opts: { allowedBases: string[] }): Promise<string> {
+  return assertSafePathIn(p, await Promise.all(opts.allowedBases.map(realpathSafe)));
+}
+
+/** {@link assertSafePath} against bases already realpath-resolved, for callers checking many
+ *  paths: one realpath per path */
+export async function assertSafePathIn(p: string, resolvedBases: string[]): Promise<string> {
   if (typeof p !== "string" || p.length === 0) {
     throw new PathGuardError("sensitive-path", p, "Refused: empty path.");
   }
@@ -258,8 +264,7 @@ export async function assertSafePath(p: string, opts: { allowedBases: string[] }
       "Refused: canonical path resolves to a sensitive location.",
     );
   }
-  const allowed = await isPathAllowed(p, opts.allowedBases);
-  if (!allowed) {
+  if (!resolvedBases.some((base) => isPathInside(base, canonical))) {
     throw new PathGuardError(
       "outside-allowed-bases",
       p,

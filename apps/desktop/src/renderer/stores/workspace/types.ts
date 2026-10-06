@@ -21,6 +21,8 @@ export interface Pane {
   openFile?: string;
   /** Browser pane: the size the page is shown at (device toolbar); absent fits the pane */
   viewport?: PageSize;
+  /** Browser pane: the tab's one pane that URLs clicked in its terminals open in */
+  linkPreview?: boolean;
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }
@@ -95,7 +97,7 @@ export interface WorkspaceStore {
     direction: "horizontal" | "vertical",
     newPaneType: PaneType,
     /** `id`: the caller needs the new pane (to spawn a shell into it) */
-    config?: { agentId?: string; url?: string; id?: string },
+    config?: { agentId?: string; url?: string; id?: string; linkPreview?: boolean },
   ) => void;
   updatePane: (paneId: string, updates: Partial<Pane>) => void;
   /** The page a browser pane is on: any project's pane, without taking focus (a redirect in a

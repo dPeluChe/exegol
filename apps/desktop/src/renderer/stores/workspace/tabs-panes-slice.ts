@@ -222,6 +222,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
         type: newPaneType,
         agentId: config?.agentId,
         url: config?.url,
+        ...(config?.linkPreview ? { linkPreview: true } : {}),
       };
 
       const newLayout = splitNodeByPaneId(tab.layout, targetId, direction, newPane.id);

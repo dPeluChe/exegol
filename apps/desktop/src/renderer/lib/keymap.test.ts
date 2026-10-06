@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appChord, appKeys, chordBadge, chordKey, editKeys } from "./keymap";
+import { appChord, appKeys, chordBadge, chordKey, editKeys, hasClickModifier } from "./keymap";
 
 const ev = (over: Partial<KeyboardEvent>) =>
   ({
@@ -72,5 +72,15 @@ describe("editKeys / chordBadge", () => {
   it("badges", () => {
     expect(chordBadge("2", true)).toBe("⌘2");
     expect(chordBadge("2", false)).toBe("^⇧2");
+  });
+});
+
+describe("hasClickModifier", () => {
+  const click = (metaKey: boolean, ctrlKey: boolean) => ({ metaKey, ctrlKey });
+  it("is Cmd on macOS and Ctrl elsewhere", () => {
+    expect(hasClickModifier(click(true, false), true)).toBe(true);
+    expect(hasClickModifier(click(false, true), true)).toBe(false);
+    expect(hasClickModifier(click(false, true), false)).toBe(true);
+    expect(hasClickModifier(click(true, false), false)).toBe(false);
   });
 });

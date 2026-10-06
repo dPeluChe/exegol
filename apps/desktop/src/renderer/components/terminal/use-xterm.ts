@@ -57,9 +57,7 @@ export function useXterm({
   initialContent,
   onReady,
   onScrollPosition,
-  onOpenFileLink,
   onSelectionChange,
-  onOpenUrlInPane,
 }: UseXtermArgs) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -112,8 +110,6 @@ export function useXterm({
     cardFont,
     sizeTerminal,
     onScrollPosition,
-    onOpenFileLink,
-    onOpenUrlInPane,
     onSelectionChange,
   });
 
@@ -165,12 +161,6 @@ export function useXterm({
       onScrollPosition: live.onScrollPosition
         ? (...args) => latest.current.onScrollPosition?.(...args)
         : undefined,
-      onOpenFileLink: live.onOpenFileLink
-        ? (...args) => latest.current.onOpenFileLink?.(...args)
-        : undefined,
-      onOpenUrlInPane: live.onOpenUrlInPane
-        ? (...args) => latest.current.onOpenUrlInPane?.(...args)
-        : undefined,
       onSelectionChange: live.onSelectionChange
         ? (...args) => latest.current.onSelectionChange?.(...args)
         : undefined,
@@ -213,10 +203,7 @@ export function useXterm({
       // next.dispose() unsubscribes onData/onScroll/OSC handlers + the
       // dormant ring pipe (T115) before xterm's own teardown runs.
       next.dispose();
-      // T143 disposal audit: FitAddon/WebLinksAddon/SerializeAddon are not
-      // disposed individually — xterm.js's Terminal.dispose() disposes every
-      // addon still registered via its internal addon manager. Explicit here
-      // so this isn't mistaken for a leak on a future audit.
+      // Disposes every loaded addon too (T143 audit: not a leak)
       next.terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;

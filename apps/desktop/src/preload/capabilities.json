@@ -126,6 +126,11 @@
       "reveal",
       "writeFile"
     ],
+    "terminalLinks": [
+      "open",
+      "read",
+      "resolve"
+    ],
     "prompts": [
       "create",
       "delete",

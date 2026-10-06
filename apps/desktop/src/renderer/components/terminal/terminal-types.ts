@@ -24,10 +24,6 @@ export interface TerminalInstanceProps {
   onReady?: () => void;
   /** `wrote` is true when triggered by new output landing (vs a user scroll). */
   onScrollPosition?: (atTop: boolean, atBottom: boolean, wrote?: boolean) => void;
-  /** T155: Cmd+click on a file path inside the terminal (e.g. `src/foo.ts:42`). */
-  onOpenFileLink?: (path: string, line?: number) => void;
-  /** T155: Cmd+click on a URL → open in an in-app browser pane (plain click = external). */
-  onOpenUrlInPane?: (url: string) => void;
   /** Text selected or cleared: "Send to" only shows when there is something to send */
   onSelectionChange?: (hasSelection: boolean) => void;
 }
