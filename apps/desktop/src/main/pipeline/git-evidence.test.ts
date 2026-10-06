@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it } from "vitest";
@@ -89,4 +89,19 @@ it("marks oversized evidence unavailable instead of returning a partial diff", a
   const base = await captureTree(cwd);
   writeFileSync(join(cwd, "oversized.txt"), "evidence\n".repeat(2_000_000));
   expect(await captureGitDiff(cwd, base)).toContain("16 MiB diff limit");
+});
+
+it("sees a same-size edit made in the same second the index was written (racy git)", async () => {
+  // Entry and index both stamped 10s ago, as if the edit landed right after the index write;
+  // trustctime off so only the mtime/size cache (and git's racy check) can tell
+  git("config", "core.trustctime", "false");
+  const file = join(cwd, "tracked.txt");
+  const then = new Date(Date.now() - 10_000);
+  utimesSync(file, then, then);
+  git("add", "--all");
+  utimesSync(join(cwd, ".git", "index"), then, then);
+  writeFileSync(file, "changed\n");
+  utimesSync(file, then, then);
+  const tree = await captureTree(cwd);
+  expect(git("cat-file", "-p", `${tree}:tracked.txt`)).toBe("changed");
 });

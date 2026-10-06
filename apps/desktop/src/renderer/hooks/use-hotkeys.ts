@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { focusAddressBar } from "../lib/address-bar";
 import { confirmClosePanes } from "../lib/close-guard";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
-import { groupForDigit } from "../lib/live-tabs";
+import { goToShortcut } from "../lib/live-tabs";
 import { cyclePane, focusActivePane } from "../lib/pane-focus";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -137,20 +137,17 @@ export function useHotkeys() {
 
       const digit = /^[0-9]$/.test(key) ? key : undefined;
 
-      // Cmd+1: Dashboard; Cmd+2-9, 0: the live tab groups (numbers given in Edit project first,
-      // then the sidebar's order, pinned ones last: lib/live-tabs)
+      // Cmd+1: Dashboard; Cmd+2-9, 0: a project's own number, else a live tab group (lib/live-tabs)
       if (digit && !chord.alt && !chord.shift) {
         e.preventDefault();
         if (digit === "1") {
           useAppStore.getState().openDashboard();
           return;
         }
-        const group = groupForDigit(digit);
-        const first = group?.agentIds[0];
-        if (group && first) {
-          jumpToAgent(first, group.projectId);
+        const flash = goToShortcut(digit);
+        if (flash) {
           focusActivePane();
-          window.dispatchEvent(new CustomEvent("exegol:live-tab-flash", { detail: group.key }));
+          window.dispatchEvent(new CustomEvent("exegol:live-tab-flash", { detail: flash }));
         }
         return;
       }

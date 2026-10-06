@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { type AgentState, useAgentStore } from "../stores/agents";
+import { type AgentState, jumpToAgent, showProject, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../stores/shortcuts";
 import { useWatchStore } from "../stores/watch";
@@ -130,7 +130,7 @@ export function useProjectShortcuts(): Map<string, ShortcutDigit> {
 }
 
 /** The live group Cmd+digit jumps to (for the hotkey, outside React) */
-export function groupForDigit(digit: string): LiveTabGroup | undefined {
+function groupForDigit(digit: string): LiveTabGroup | undefined {
   const groups = getLiveTabGroups();
   const byGroup = assignGroupShortcuts(
     groups,
@@ -138,6 +138,25 @@ export function groupForDigit(digit: string): LiveTabGroup | undefined {
     new Set(useWatchStore.getState().watched),
   );
   return groups.find((g) => byGroup.get(g.key) === digit);
+}
+
+/**
+ * Cmd+digit. A number the user gave a project switches to that project as it was left (its tab
+ * and pane); any other goes to its live group's tab. Returns the group key to flash
+ */
+export function goToShortcut(digit: string): string | null {
+  const assigned = Object.entries(useShortcutStore.getState().assigned);
+  const projectId = assigned.find(([, d]) => d === digit)?.[0];
+  if (projectId) {
+    showProject(projectId);
+    const tabId = useWorkspaceStore.getState().projectWorkspaces[projectId]?.activeTabId;
+    return tabId ? `${projectId}:${tabId}` : null;
+  }
+  const group = groupForDigit(digit);
+  const first = group?.agentIds[0];
+  if (!group || !first) return null;
+  jumpToAgent(first, group.projectId);
+  return group.key;
 }
 
 /** How a digit reads next to its group or project */

@@ -47,6 +47,8 @@ export interface ProjectWorkspace {
   tabs: WorkspaceTab[];
   activeTabId: string | null;
   panes: Record<string, Pane>;
+  /** The pane focused when the user left this project: switching back restores it */
+  lastFocusedPaneId?: string | null;
 }
 
 // ─── Store interface ────────────────────────────────────────────────────────
