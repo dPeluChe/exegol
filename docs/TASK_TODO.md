@@ -155,6 +155,10 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
   T185.16
 
 ### Platform and health tracks
+- **Terminal links: Windows file paths not linkified** (2026-10-06, `feat/terminal-links`):
+  `FILE_LINK_RE` and `resolveLinkPath` only know POSIX paths, so `C:\repo\src\app.ts` and
+  backslash-relative paths printed on Windows are plain text. Before a Windows build: match
+  drive letters and `\`, resolve them in main with `path.win32`
 - **Windows install commands, unverified**: `CLI_SETUP` has a `win` command per CLI taken from
   each vendor's docs (2026-10-01), but Exegol ships no Windows build, so none has been run.
   Before a Windows build: run each on Windows 11 (PowerShell vs cmd: `runCommandInNewTab`

@@ -58,6 +58,11 @@ export function editKeys(keys: string, mac = IS_MAC): string {
   return mac ? keys : keys.replace(/Cmd\+/g, "Ctrl+");
 }
 
+/** The click modifier of `editKeys("Cmd+click")`: Cmd on macOS, plain Ctrl elsewhere */
+export function hasClickModifier(e: { metaKey: boolean; ctrlKey: boolean }, mac = IS_MAC): boolean {
+  return mac ? e.metaKey : e.ctrlKey;
+}
+
 /** A short badge for an app chord plus one key: "⌘2", or "^⇧2" off macOS */
 export function chordBadge(key: string, mac = IS_MAC): string {
   return mac ? `⌘${key}` : `^⇧${key}`;

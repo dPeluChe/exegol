@@ -1,158 +1,145 @@
-import type { IDisposable, ILink, Terminal } from "@xterm/xterm";
-import { openInBrowser } from "../../lib/open-in-browser";
+import { linkFileKind } from "@exegol/shared";
+import { editKeys, hasClickModifier, IS_MAC } from "../../lib/keymap";
 
 /**
- * T155: link providers for terminal panes (klaudio-panels pattern).
- *
- * - File paths (`src/foo.ts`, `./a/b.rs:42`): Cmd+click opens in the IDE at
- *   the line. Cmd is required — file-ish tokens are everywhere in agent
- *   output and plain click must keep meaning "select text".
- * - Bare URLs (`github.com/x/y`, no scheme): plain click opens the default
- *   external browser (same as the scheme'd URLs WebLinksAddon already
- *   handles); Cmd+click opens an in-app browser pane.
+ * What a terminal row links to: http(s) URLs (scheme'd or bare `github.com/x`) and file paths
+ * (absolute, `~/`, relative to the session cwd, with an optional `:line` or `:line:col`).
+ * Paths only become links once main confirms the file exists (terminal-link-resolver).
  */
 
-const FILE_LINK_RE =
-  /(?:^|[\s"'`(<[])((?:\.{1,2}\/|\/)?(?:[\w@~+-][\w.@~+-]*\/)+[\w.@~+-]+\.[A-Za-z][A-Za-z0-9]{0,7}|[\w@~+-][\w.@~+-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d{1,6}))?(?=$|[\s"'`)>\],:;])/g;
-
-/** Small allowlist so `foo.ts` / `config.json` never read as domains. */
-const BARE_URL_TLDS = new Set([
-  "com",
-  "org",
-  "net",
-  "io",
-  "dev",
-  "ai",
-  "app",
-  "sh",
-  "co",
-  "me",
-  "gg",
-  "xyz",
-]);
-
-const BARE_URL_RE =
-  /(?:^|[\s"'`(<[])((?:[\w-]+\.)+([a-z]{2,6})(?::\d{2,5})?(?:\/[\w\-./?=&#%~+@]*)?)(?=$|[\s"'`)>\],;])/g;
-
-interface LinkMatch {
+export interface LinkMatch {
   text: string;
   /** 0-based start index of `text` in the row string */
   index: number;
-  /** underline length (may exceed text, e.g. the `:42` suffix) */
+  /** underline length (may exceed text, e.g. the `:42:7` suffix) */
   length: number;
   line?: number;
+  col?: number;
+  /** URL matches: what opens (a bare domain gets https://) */
+  url?: string;
+}
+
+const FILE_LINK_RE =
+  /(?:^|[\s"'`(<[])((?:\.{1,2}\/|\/)?(?:[\w@~+-][\w.@~+-]*\/)+[\w.@~+-]+\.[A-Za-z][A-Za-z0-9]{0,7}|[\w@~+-][\w.@~+-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d{1,6})(?::(\d{1,4}))?)?(?=$|[\s"'`)>\],:;!?]|\.(?:$|\s))/g;
+
+/** Small allowlist so `foo.ts` / `config.json` never read as domains; no `sh`/`app`, which are
+ *  file extensions (`install.sh`) */
+const BARE_URL_TLDS = new Set(["com", "org", "net", "io", "dev", "ai", "co", "me", "gg", "xyz"]);
+
+const BARE_URL_RE =
+  /(?:^|[\s"'`(<[])((?:[\w-]+\.)+([a-z]{2,6})(?::\d{2,5})?(?:\/[\w\-./?=&#%~+@]*)?)(?=$|[\s"'`)>\],;:!?]|\.(?:$|\s))/g;
+
+/** Only http(s): file:, javascript: and data: never become URL links */
+const SCHEME_URL_RE = /\bhttps?:\/\/[^\s"'`<>]+/gi;
+
+/** Prose and markdown wrap URLs: a trailing `.` or `,` and an unbalanced `)` or `]` are not
+ *  part of it */
+function trimUrl(url: string): string {
+  let out = url;
+  while (out.length) {
+    const last = out[out.length - 1] as string;
+    if (/[.,;:!?'"*]/.test(last)) {
+      out = out.slice(0, -1);
+      continue;
+    }
+    const open = last === ")" ? "(" : last === "]" ? "[" : null;
+    if (open && out.split(open).length < out.split(last).length) {
+      out = out.slice(0, -1);
+      continue;
+    }
+    break;
+  }
+  return out;
+}
+
+export function findUrlMatches(rowText: string): LinkMatch[] {
+  const out: LinkMatch[] = [];
+  for (const m of rowText.matchAll(SCHEME_URL_RE)) {
+    const text = trimUrl(m[0]);
+    if (text.length > "https://".length) {
+      out.push({ text, index: m.index ?? 0, length: text.length, url: text });
+    }
+  }
+  for (const m of rowText.matchAll(BARE_URL_RE)) {
+    const text = m[1];
+    const tld = m[2];
+    if (!text || !tld || !BARE_URL_TLDS.has(tld)) continue;
+    // A bare domain needs `www.` or a path: `notes.md` style tokens stay files
+    if (!text.startsWith("www.") && !text.includes("/")) continue;
+    const index = (m.index ?? 0) + m[0].indexOf(text);
+    if (overlaps(out, index, text.length)) continue;
+    out.push({ text, index, length: text.length, url: `https://${text}` });
+  }
+  return out.sort((a, b) => a.index - b.index);
 }
 
 export function findFileMatches(rowText: string): LinkMatch[] {
+  const urls = findUrlMatches(rowText);
   const out: LinkMatch[] = [];
-  FILE_LINK_RE.lastIndex = 0;
-  let m = FILE_LINK_RE.exec(rowText);
-  while (m !== null) {
+  for (const m of rowText.matchAll(FILE_LINK_RE)) {
     const path = m[1];
-    if (path) {
-      const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-      // A dotted token without slashes whose "extension" is a TLD is a domain,
-      // not a file — leave it to the URL provider.
-      if (!(BARE_URL_TLDS.has(ext) && !path.includes("/"))) {
-        const index = m.index + m[0].indexOf(path);
-        const suffix = m[2] ? m[2].length + 1 : 0;
-        out.push({
-          text: path,
-          index,
-          length: path.length + suffix,
-          line: m[2] ? Number(m[2]) : undefined,
-        });
-      }
-    }
-    m = FILE_LINK_RE.exec(rowText);
+    if (!path) continue;
+    const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
+    // A dotted token without slashes whose "extension" is a TLD is a domain, not a file
+    if (BARE_URL_TLDS.has(ext) && !path.includes("/")) continue;
+    const index = (m.index ?? 0) + m[0].indexOf(path);
+    const suffix = (m[2] ? m[2].length + 1 : 0) + (m[3] ? m[3].length + 1 : 0);
+    if (overlaps(urls, index, path.length)) continue;
+    out.push({
+      text: path,
+      index,
+      length: path.length + suffix,
+      line: m[2] ? Number(m[2]) : undefined,
+      col: m[3] ? Number(m[3]) : undefined,
+    });
   }
   return out;
 }
 
-export function findBareUrlMatches(rowText: string): LinkMatch[] {
-  const out: LinkMatch[] = [];
-  BARE_URL_RE.lastIndex = 0;
-  let m = BARE_URL_RE.exec(rowText);
-  while (m !== null) {
-    const url = m[1];
-    const tld = m[2];
-    if (url && tld && BARE_URL_TLDS.has(tld)) {
-      out.push({ text: url, index: m.index + m[0].indexOf(url), length: url.length });
-    }
-    m = BARE_URL_RE.exec(rowText);
-  }
-  return out;
+function overlaps(matches: LinkMatch[], index: number, length: number): boolean {
+  return matches.some((m) => index < m.index + m.length && m.index < index + length);
 }
 
-function toLink(
-  match: LinkMatch,
-  y: number,
-  activate: (event: MouseEvent, text: string) => void,
-): ILink {
-  return {
-    range: {
-      start: { x: match.index + 1, y },
-      end: { x: match.index + match.length, y },
-    },
-    text: match.text,
-    activate,
-  };
+export type LinkAction = "pane" | "browser" | "peek" | "system" | "ide" | "reveal";
+/** `mod`: Cmd+click (Ctrl+click off macOS); `modShift`: Cmd+Shift+click */
+export type LinkClick = "plain" | "mod" | "modShift";
+
+export function linkClick(
+  e: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean },
+  mac = IS_MAC,
+): LinkClick {
+  if (!hasClickModifier(e, mac)) return "plain";
+  return e.shiftKey ? "modShift" : "mod";
 }
 
-interface TerminalLinkHandlers {
-  onOpenFile?: (path: string, line?: number) => void;
-  onOpenUrlInPane?: (url: string) => void;
+/** Plain click keeps the user in Exegol; the modifier hands a URL to the browser, a file to the
+ *  IDE (Shift: Finder) */
+export function linkAction(kind: "url" | "file", click: LinkClick, path = ""): LinkAction {
+  if (kind === "url") return click === "plain" ? "pane" : "browser";
+  if (click === "mod") return "ide";
+  if (click === "modShift") return "reveal";
+  const fileKind = linkFileKind(path);
+  return fileKind === "system" || fileKind === "reveal" ? fileKind : "peek";
 }
 
-export function registerTerminalLinkProviders(
-  terminal: Terminal,
-  handlers: TerminalLinkHandlers,
-): IDisposable {
-  const disposables: IDisposable[] = [];
+const ACTION_LABEL: Record<LinkAction, (mac: boolean) => string> = {
+  pane: () => "open in the preview pane",
+  browser: () => "open in the system browser",
+  peek: () => "open here",
+  system: () => "open with the default app",
+  ide: () => "open in the IDE",
+  reveal: (mac) => (mac ? "reveal in Finder" : "show in the file manager"),
+};
 
-  if (handlers.onOpenFile) {
-    const onOpenFile = handlers.onOpenFile;
-    disposables.push(
-      terminal.registerLinkProvider({
-        provideLinks(y, callback) {
-          const row = terminal.buffer.active.getLine(y - 1);
-          if (!row) return callback(undefined);
-          const text = row.translateToString(true);
-          const links = findFileMatches(text).map((match) =>
-            toLink(match, y, (event) => {
-              if (event.metaKey || event.ctrlKey) onOpenFile(match.text, match.line);
-            }),
-          );
-          callback(links.length ? links : undefined);
-        },
-      }),
-    );
-  }
-
-  disposables.push(
-    terminal.registerLinkProvider({
-      provideLinks(y, callback) {
-        const row = terminal.buffer.active.getLine(y - 1);
-        if (!row) return callback(undefined);
-        const text = row.translateToString(true);
-        const links = findBareUrlMatches(text).map((match) =>
-          toLink(match, y, (event) => {
-            const url = `https://${match.text}`;
-            if ((event.metaKey || event.ctrlKey) && handlers.onOpenUrlInPane) {
-              handlers.onOpenUrlInPane(url);
-            } else {
-              openInBrowser(url);
-            }
-          }),
-        );
-        callback(links.length ? links : undefined);
-      },
-    }),
-  );
-
-  return {
-    dispose: () => {
-      for (const d of disposables) d.dispose();
-    },
-  };
+/** The hover tooltip: the target, then what each click does */
+export function linkHint(
+  kind: "url" | "file",
+  target: string,
+  label = target,
+  mac = IS_MAC,
+): string {
+  const say = (click: LinkClick) => ACTION_LABEL[linkAction(kind, click, target)](mac);
+  const hint = `${label}\nClick: ${say("plain")} · ${editKeys("Cmd+click", mac)}: ${say("mod")}`;
+  if (kind === "url") return hint;
+  return `${hint} · ${editKeys("Cmd+Shift+click", mac)}: ${say("modShift")}`;
 }

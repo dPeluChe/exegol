@@ -1,6 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import type Database from "libsql";
 import { loginShell } from "../agents/spawn-env";
+import { getProject } from "../db/queries/projects";
+import { getAppSettings } from "../db/queries/settings";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,6 +16,16 @@ const IDE_COMMANDS: Record<string, string> = {
 
 function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+/** The user's IDE, else the project's, else VS Code */
+export function resolveIde(db: Database.Database, projectId: string | null | undefined) {
+  const settings = getAppSettings(db);
+  const project = projectId ? getProject(db, projectId) : null;
+  return {
+    ide: settings.defaultIde ?? project?.defaultIde ?? "vscode",
+    customPath: settings.customIdePath ?? undefined,
+  };
 }
 
 export async function openInIde(

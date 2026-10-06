@@ -96,6 +96,9 @@ export function FilePreview({
   onClose,
   revealLine,
   onDirtyChange,
+  readOnly = false,
+  onOpenExternal = () => openExternal(path),
+  onReveal = () => reveal(path),
 }: {
   path: string;
   file: FileContent | undefined;
@@ -105,6 +108,11 @@ export function FilePreview({
   revealLine?: number;
   /** The explorer asks before switching files or closing with unsaved edits */
   onDirtyChange?: (dirty: boolean) => void;
+  /** A file opened from a terminal link: view only */
+  readOnly?: boolean;
+  /** Override the toolbar's Open and Finder (a path outside the project) */
+  onOpenExternal?: () => void;
+  onReveal?: () => void;
 }) {
   const pdfUrl = usePdfUrl(file);
   const { draft, dirty, edit, save, saveError, saving, conflict, setConflict } = useFileDraft(
@@ -128,6 +136,8 @@ export function FilePreview({
         saveError={saveError}
         onClose={onClose}
         onSave={() => save()}
+        onOpenExternal={onOpenExternal}
+        onReveal={onReveal}
       />
       <div className="min-h-0 flex-1 overflow-auto">
         <FileBody
@@ -137,8 +147,9 @@ export function FilePreview({
           pdfUrl={pdfUrl}
           draft={draft}
           revealLine={revealLine}
-          onEdit={edit}
+          onEdit={readOnly ? undefined : edit}
           onSave={save}
+          onOpenExternal={onOpenExternal}
         />
       </div>
       <ConfirmDialog
@@ -164,6 +175,8 @@ function FilePreviewToolbar({
   saveError,
   onClose,
   onSave,
+  onOpenExternal,
+  onReveal,
 }: {
   path: string;
   dirty: boolean;
@@ -171,6 +184,8 @@ function FilePreviewToolbar({
   saveError: string | null;
   onClose: () => void;
   onSave: () => void;
+  onOpenExternal: () => void;
+  onReveal: () => void;
 }) {
   return (
     // Actions on the LEFT: the pane's own hover buttons sit top-right and covered "Close"
@@ -200,19 +215,14 @@ function FilePreviewToolbar({
       {saveError && <span className="min-w-0 truncate text-[9px] text-red-400">{saveError}</span>}
       <button
         type="button"
-        onClick={() => openExternal(path)}
+        onClick={onOpenExternal}
         className={action}
         title="Open with its default app"
       >
         <ExternalLink className="h-3 w-3" />
         Open
       </button>
-      <button
-        type="button"
-        onClick={() => reveal(path)}
-        className={action}
-        title="Reveal in Finder"
-      >
+      <button type="button" onClick={onReveal} className={action} title="Reveal in Finder">
         <FolderSearch className="h-3 w-3" />
         Finder
       </button>
@@ -229,6 +239,7 @@ function FileBody({
   revealLine,
   onEdit,
   onSave,
+  onOpenExternal,
 }: {
   path: string;
   file: FileContent | undefined;
@@ -236,8 +247,9 @@ function FileBody({
   pdfUrl: string | null;
   draft: string | null;
   revealLine?: number;
-  onEdit: (value: string, base: EditBase) => void;
+  onEdit?: (value: string, base: EditBase) => void;
   onSave: () => void;
+  onOpenExternal: () => void;
 }) {
   if (error) {
     return (
@@ -271,7 +283,11 @@ function FileBody({
           content={draft ?? file.content}
           fileName={path}
           revealLine={revealLine}
-          onChange={(value) => onEdit(value, { content: file.content, mtimeMs: file.mtimeMs })}
+          onChange={
+            onEdit
+              ? (value) => onEdit(value, { content: file.content, mtimeMs: file.mtimeMs })
+              : undefined
+          }
           onSave={onSave}
         />
       </Suspense>
@@ -282,11 +298,7 @@ function FileBody({
       {file.kind === "too-large"
         ? `Too large to preview (${formatBytes(file.size)}).`
         : "Binary file, no preview."}
-      <button
-        type="button"
-        onClick={() => openExternal(path)}
-        className="mt-2 text-accent hover:underline"
-      >
+      <button type="button" onClick={onOpenExternal} className="mt-2 text-accent hover:underline">
         Open with its default app
       </button>
     </Message>

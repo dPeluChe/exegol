@@ -27,9 +27,8 @@ import {
 } from "../../db/queries";
 import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
 import { setProjectBrowserEval, setProjectBrowserHosts } from "../../db/queries/projects";
-import { getAppSettings } from "../../db/queries/settings";
 import { runArchiveHook } from "../../hooks/project-hooks";
-import { openInIde } from "../../ide/opener";
+import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
@@ -263,9 +262,7 @@ export const projectRouter = router({
           message: `Project ${input.projectId} not found`,
         });
       }
-      // Read user's IDE preference from settings, fallback to project default
-      const settings = getAppSettings(ctx.db);
-      const ide = input.ide ?? settings.defaultIde ?? project.defaultIde ?? "vscode";
+      const preferred = resolveIde(ctx.db, project.id);
       let target = project.path;
       if (input.file) {
         // Worktree agents print paths relative to their worktree — resolving
@@ -281,8 +278,8 @@ export const projectRouter = router({
       }
       await openInIde(
         target,
-        ide,
-        input.customPath ?? settings.customIdePath ?? undefined,
+        input.ide ?? preferred.ide,
+        input.customPath ?? preferred.customPath,
         input.file ? input.line : undefined,
       );
       return { success: true };
