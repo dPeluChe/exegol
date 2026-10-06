@@ -5,7 +5,7 @@ import { focusPane, useAgentStore } from "../../stores/agents";
 import { peekTerminalFile } from "../../stores/terminal-links";
 import { toastError } from "../../stores/toasts";
 import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
-import { type LinkMatch, linkAction } from "./terminal-links";
+import { type LinkClick, type LinkMatch, linkAction } from "./terminal-links";
 
 /** The session a link was clicked in: a pane, a stopped session or a Dashboard mirror */
 export interface LinkSource {
@@ -64,9 +64,9 @@ function showInPreviewPane(tabId: string, paneId: string, projectId: string, url
   );
 }
 
-export function openTerminalUrl(source: LinkSource, url: string, modifier: boolean): void {
+export function openTerminalUrl(source: LinkSource, url: string, click: LinkClick): void {
   if (!isHttpUrl(url)) return;
-  const target = linkAction("url", modifier) === "pane" ? workspaceTarget(source) : null;
+  const target = linkAction("url", click) === "pane" ? workspaceTarget(source) : null;
   if (!target) {
     openInBrowser(url);
     return;
@@ -74,9 +74,9 @@ export function openTerminalUrl(source: LinkSource, url: string, modifier: boole
   showInPreviewPane(target.tabId, target.paneId, target.projectId, url);
 }
 
-export function openTerminalFile(source: LinkSource, match: LinkMatch, modifier: boolean): void {
+export function openTerminalFile(source: LinkSource, match: LinkMatch, click: LinkClick): void {
   const cwd = sessionCwd(source.agentId);
-  const action = linkAction("file", modifier, match.text);
+  const action = linkAction("file", click, match.text);
   const target = action === "peek" ? workspaceTarget(source) : null;
   if (target) {
     peekTerminalFile(source.agentId, { text: match.text, cwd, line: match.line });
@@ -86,6 +86,7 @@ export function openTerminalFile(source: LinkSource, match: LinkMatch, modifier:
     agentId: source.agentId,
     cwd,
     text: match.text,
-    how: action === "reveal" ? "reveal" : "external",
+    how: action === "reveal" || action === "ide" ? action : "external",
+    line: match.line,
   }).catch(toastError("Could not open the file"));
 }

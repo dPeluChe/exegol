@@ -1,4 +1,4 @@
-import { editKeys, IS_MAC } from "../../lib/keymap";
+import { editKeys, hasClickModifier, IS_MAC } from "../../lib/keymap";
 
 /**
  * What a terminal row links to: http(s) URLs (scheme'd or bare `github.com/x`) and file paths
@@ -21,21 +21,9 @@ export interface LinkMatch {
 const FILE_LINK_RE =
   /(?:^|[\s"'`(<[])((?:\.{1,2}\/|\/)?(?:[\w@~+-][\w.@~+-]*\/)+[\w.@~+-]+\.[A-Za-z][A-Za-z0-9]{0,7}|[\w@~+-][\w.@~+-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d{1,6})(?::(\d{1,4}))?)?(?=$|[\s"'`)>\],:;!?]|\.(?:$|\s))/g;
 
-/** Small allowlist so `foo.ts` / `config.json` never read as domains. */
-const BARE_URL_TLDS = new Set([
-  "com",
-  "org",
-  "net",
-  "io",
-  "dev",
-  "ai",
-  "app",
-  "sh",
-  "co",
-  "me",
-  "gg",
-  "xyz",
-]);
+/** Small allowlist so `foo.ts` / `config.json` never read as domains; no `sh`/`app`, which are
+ *  file extensions (`install.sh`) */
+const BARE_URL_TLDS = new Set(["com", "org", "net", "io", "dev", "ai", "co", "me", "gg", "xyz"]);
 
 const BARE_URL_RE =
   /(?:^|[\s"'`(<[])((?:[\w-]+\.)+([a-z]{2,6})(?::\d{2,5})?(?:\/[\w\-./?=&#%~+@]*)?)(?=$|[\s"'`)>\],;:!?]|\.(?:$|\s))/g;
@@ -75,6 +63,8 @@ export function findUrlMatches(rowText: string): LinkMatch[] {
     const text = m[1];
     const tld = m[2];
     if (!text || !tld || !BARE_URL_TLDS.has(tld)) continue;
+    // A bare domain needs `www.` or a path: `notes.md` style tokens stay files
+    if (!text.startsWith("www.") && !text.includes("/")) continue;
     const index = (m.index ?? 0) + m[0].indexOf(text);
     if (overlaps(out, index, text.length)) continue;
     out.push({ text, index, length: text.length, url: `https://${text}` });
@@ -110,7 +100,7 @@ function overlaps(matches: LinkMatch[], index: number, length: number): boolean 
 }
 
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
-/** Opened by the system app: the peek has nothing useful to show for these */
+/** Opened by the system app: the peek has nothing useful to show for these. Main decides again */
 const SYSTEM_EXT = new Set([
   "pdf",
   "doc",
@@ -122,29 +112,40 @@ const SYSTEM_EXT = new Set([
   "key",
   "numbers",
   "pages",
-  "zip",
-  "gz",
-  "tgz",
-  "tar",
-  "dmg",
   "mp3",
   "wav",
   "mp4",
   "mov",
   "webm",
 ]);
+/** Nothing to show and nothing safe to open: shown in Finder */
+const REVEAL_EXT = new Set(["zip", "gz", "tgz", "tar", "dmg"]);
 
 const extOf = (path: string) => path.slice(path.lastIndexOf(".") + 1).toLowerCase();
 
 export const isImagePath = (path: string) => IMAGE_EXT.has(extOf(path));
 
-export type LinkAction = "pane" | "browser" | "peek" | "system" | "reveal";
+export type LinkAction = "pane" | "browser" | "peek" | "system" | "ide" | "reveal";
+/** `mod`: Cmd+click (Ctrl+click off macOS); `modShift`: Cmd+Shift+click */
+export type LinkClick = "plain" | "mod" | "modShift";
 
-/** Plain click keeps the user in Exegol; the click modifier hands off to the OS */
-export function linkAction(kind: "url" | "file", modifier: boolean, path = ""): LinkAction {
-  if (kind === "url") return modifier ? "browser" : "pane";
-  if (modifier) return "reveal";
-  return SYSTEM_EXT.has(extOf(path)) ? "system" : "peek";
+export function linkClick(
+  e: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean },
+  mac = IS_MAC,
+): LinkClick {
+  if (!hasClickModifier(e, mac)) return "plain";
+  return e.shiftKey ? "modShift" : "mod";
+}
+
+/** Plain click keeps the user in Exegol; the modifier hands a URL to the browser, a file to the
+ *  IDE (Shift: Finder) */
+export function linkAction(kind: "url" | "file", click: LinkClick, path = ""): LinkAction {
+  if (kind === "url") return click === "plain" ? "pane" : "browser";
+  if (click === "mod") return "ide";
+  if (click === "modShift") return "reveal";
+  const ext = extOf(path);
+  if (REVEAL_EXT.has(ext)) return "reveal";
+  return SYSTEM_EXT.has(ext) ? "system" : "peek";
 }
 
 const ACTION_LABEL: Record<LinkAction, (mac: boolean) => string> = {
@@ -152,17 +153,19 @@ const ACTION_LABEL: Record<LinkAction, (mac: boolean) => string> = {
   browser: () => "open in the system browser",
   peek: () => "open here",
   system: () => "open with the default app",
+  ide: () => "open in the IDE",
   reveal: (mac) => (mac ? "reveal in Finder" : "show in the file manager"),
 };
 
-/** The hover tooltip: the target, then what a click and a modifier click do */
+/** The hover tooltip: the target, then what each click does */
 export function linkHint(
   kind: "url" | "file",
   target: string,
   label = target,
   mac = IS_MAC,
 ): string {
-  const click = ACTION_LABEL[linkAction(kind, false, target)](mac);
-  const modified = ACTION_LABEL[linkAction(kind, true, target)](mac);
-  return `${label}\nClick: ${click} · ${editKeys("Cmd+click", mac)}: ${modified}`;
+  const say = (click: LinkClick) => ACTION_LABEL[linkAction(kind, click, target)](mac);
+  const hint = `${label}\nClick: ${say("plain")} · ${editKeys("Cmd+click", mac)}: ${say("mod")}`;
+  if (kind === "url") return hint;
+  return `${hint} · ${editKeys("Cmd+Shift+click", mac)}: ${say("modShift")}`;
 }

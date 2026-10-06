@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { findFileMatches, findUrlMatches, linkAction, linkHint, trimUrl } from "./terminal-links";
+import {
+  findFileMatches,
+  findUrlMatches,
+  linkAction,
+  linkClick,
+  linkHint,
+  trimUrl,
+} from "./terminal-links";
 
 describe("findFileMatches", () => {
   it("matches a relative path with line number", () => {
@@ -74,6 +81,16 @@ describe("findUrlMatches", () => {
     expect(m).toHaveLength(1);
     expect(m[0]?.url).toBe("https://github.com/dPeluChe/exegol");
     expect(findUrlMatches("app at myapp.dev:3000/dash ok")[0]?.text).toBe("myapp.dev:3000/dash");
+    expect(findUrlMatches("go to www.example.com now")[0]?.url).toBe("https://www.example.com");
+  });
+
+  it("needs www. or a path for a bare domain", () => {
+    expect(findUrlMatches("visit github.com for more")).toHaveLength(0);
+  });
+
+  it("reads install.sh and main.app as files, not URLs", () => {
+    expect(findUrlMatches("run install.sh then open main.app")).toHaveLength(0);
+    expect(findFileMatches("run install.sh now").map((m) => m.text)).toEqual(["install.sh"]);
   });
 
   it("ignores file extensions as TLDs", () => {
@@ -90,25 +107,34 @@ describe("trimUrl", () => {
 
 describe("linkAction", () => {
   it("routes URLs: click to the pane, modifier to the system browser", () => {
-    expect(linkAction("url", false)).toBe("pane");
-    expect(linkAction("url", true)).toBe("browser");
+    expect(linkAction("url", "plain")).toBe("pane");
+    expect(linkAction("url", "mod")).toBe("browser");
   });
 
-  it("routes files by kind, modifier reveals", () => {
-    expect(linkAction("file", false, "src/app.ts")).toBe("peek");
-    expect(linkAction("file", false, "shot.png")).toBe("peek");
-    expect(linkAction("file", false, "docs/spec.pdf")).toBe("system");
-    expect(linkAction("file", true, "src/app.ts")).toBe("reveal");
+  it("routes files: click by kind, Cmd to the IDE, Cmd+Shift reveals", () => {
+    expect(linkAction("file", "plain", "src/app.ts")).toBe("peek");
+    expect(linkAction("file", "plain", "shot.png")).toBe("peek");
+    expect(linkAction("file", "plain", "docs/spec.pdf")).toBe("system");
+    expect(linkAction("file", "plain", "dist/build.zip")).toBe("reveal");
+    expect(linkAction("file", "mod", "src/app.ts")).toBe("ide");
+    expect(linkAction("file", "modShift", "src/app.ts")).toBe("reveal");
+  });
+
+  it("reads Cmd on macOS and Ctrl elsewhere", () => {
+    const e = { metaKey: true, ctrlKey: false, shiftKey: true };
+    expect(linkClick(e, true)).toBe("modShift");
+    expect(linkClick(e, false)).toBe("plain");
+    expect(linkClick({ metaKey: false, ctrlKey: true, shiftKey: false }, false)).toBe("mod");
   });
 });
 
 describe("linkHint", () => {
-  it("names the target and the modifier per platform", () => {
+  it("names the target and the modifiers per platform", () => {
     expect(linkHint("url", "https://a.com", "https://a.com", true)).toBe(
       "https://a.com\nClick: open in the preview pane · Cmd+click: open in the system browser",
     );
     expect(linkHint("file", "a/b.ts", "a/b.ts:4", false)).toBe(
-      "a/b.ts:4\nClick: open here · Ctrl+click: show in the file manager",
+      "a/b.ts:4\nClick: open here · Ctrl+click: open in the IDE · Ctrl+Shift+click: show in the file manager",
     );
   });
 });

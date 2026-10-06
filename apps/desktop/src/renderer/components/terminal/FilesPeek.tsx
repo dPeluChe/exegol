@@ -81,7 +81,7 @@ export function PeekFileOverlay({
   );
 }
 
-/** A file clicked in this session's terminal, read-only over it (any folder the session printed) */
+/** A file clicked in this session's terminal, read-only over it (project files only) */
 export function TerminalLinkPeek({ agentId }: { agentId: string }) {
   const peek = useTerminalLinkStore((s) => s.peeks[agentId]);
   if (!peek) return null;

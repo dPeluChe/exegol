@@ -1,5 +1,4 @@
 import type { IDisposable, ILink, ILinkHandler, Terminal } from "@xterm/xterm";
-import { hasClickModifier } from "../../lib/keymap";
 import { trpcInvoke } from "../../lib/trpc-client";
 import {
   type LinkSource,
@@ -8,7 +7,13 @@ import {
   sessionCwd,
 } from "./terminal-link-actions";
 import { LinkPathResolver } from "./terminal-link-resolver";
-import { findFileMatches, findUrlMatches, type LinkMatch, linkHint } from "./terminal-links";
+import {
+  findFileMatches,
+  findUrlMatches,
+  type LinkMatch,
+  linkClick,
+  linkHint,
+} from "./terminal-links";
 
 /** One hint at a time, inside the terminal's element so it scrolls and unmounts with it */
 function createTooltip(terminal: Terminal) {
@@ -54,7 +59,7 @@ function viewportCandidates(terminal: Terminal): string[] {
 
 /**
  * URLs and file paths in a terminal open inside Exegol: URLs in the tab's preview pane, files
- * read-only over the terminal. The click modifier hands them to the OS instead. Scheme'd,
+ * read-only over the terminal. Cmd+click: URL to the browser, file to the IDE; Cmd+Shift: Finder. Scheme'd,
  * bare and OSC 8 URLs all go through `openTerminalUrl`.
  */
 export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSource): IDisposable {
@@ -81,7 +86,7 @@ export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSo
   });
 
   const osc8: ILinkHandler = {
-    activate: (event, uri) => openTerminalUrl(source, uri, hasClickModifier(event)),
+    activate: (event, uri) => openTerminalUrl(source, uri, linkClick(event)),
     hover: (event, uri) => tooltip.show(event, linkHint("url", uri)),
     leave: tooltip.hide,
     allowNonHttpProtocols: false,
@@ -95,7 +100,7 @@ export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSo
         ? findUrlMatches(text).map((m) => {
             const url = m.url ?? m.text;
             return toLink(m, y, linkHint("url", url), (event) =>
-              openTerminalUrl(source, url, hasClickModifier(event)),
+              openTerminalUrl(source, url, linkClick(event)),
             );
           })
         : [];
@@ -120,7 +125,7 @@ export function registerTerminalLinkProviders(terminal: Terminal, source: LinkSo
             .map((m) => {
               const target = m.line ? `${m.text}:${m.line}${m.col ? `:${m.col}` : ""}` : m.text;
               return toLink(m, y, linkHint("file", m.text, target), (event) =>
-                openTerminalFile(source, m, hasClickModifier(event)),
+                openTerminalFile(source, m, linkClick(event)),
               );
             });
           callback(links.length ? links : undefined);
