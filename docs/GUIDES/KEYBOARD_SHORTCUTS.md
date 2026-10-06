@@ -20,8 +20,8 @@ those and this page.
 | `Cmd+2`..`Cmd+9`, `Cmd+0` | `Ctrl+Shift+2`..`9`, `Ctrl+Shift+0` | Live tabs: a number set in Edit project first, then the sidebar's order; tabs whose sessions are all pinned go last |
 | `Cmd+Option+1`..`9` | `Ctrl+Shift+Alt+1`..`9` | This project's workspace tab by position |
 | `Cmd+Shift+]` / `Cmd+Shift+[` | `Ctrl+Shift+Alt+]` / `[` | Next / previous workspace tab |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | same | Next / previous pane of the tab (works from inside a terminal) |
-| `Cmd+]` / `Cmd+[` | `Ctrl+Shift+]` / `[` | Next / previous pane (same as Ctrl+Tab) |
+| `Ctrl+Tab` | same | Quick press: back to the previous pane. Hold Ctrl: switcher over this project's tabs and panes (Tab / Shift+Tab move, release Ctrl to go, Esc cancels; Ctrl+arrows are macOS Mission Control). Works from a terminal or a browser page |
+| `Cmd+]` / `Cmd+[` | `Ctrl+Shift+]` / `[` | Next / previous pane of the tab |
 | `Cmd+J` | `Ctrl+Shift+J` | Next agent waiting on you |
 | `Cmd+B` | `Ctrl+Shift+B` | Toggle the sidebar |
 

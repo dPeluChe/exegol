@@ -332,6 +332,7 @@
     "menu:close-pane",
     "menu:reload",
     "menu:focus-location",
+    "pane-switcher:key",
     "agent:status-changed",
     "agent:follow-ups",
     "agent:pr-watch",

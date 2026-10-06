@@ -65,6 +65,9 @@ interface Window {
     onMenuAction: (
       callback: (action: "new-tab" | "close-pane" | "reload" | "focus-location") => void,
     ) => () => void;
+    onPaneSwitcherKey: (
+      callback: (key: { kind: "tab" | "release"; shift?: boolean }) => void,
+    ) => () => void;
     dialog: {
       showOpenDialog: (
         options: Record<string, unknown>,
