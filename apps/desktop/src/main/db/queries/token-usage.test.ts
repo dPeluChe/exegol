@@ -1,11 +1,13 @@
 import Database from "libsql";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParsedTokenEntry } from "../../tokens/log-parser";
 import { runMigrations } from "../migrations";
 import { getBudgetUsage } from "./budgets";
 import { getProjectTokenUsageSummary, importScannedTokenUsage } from "./token-usage";
 
-const now = Math.floor(Date.now() / 1000);
+// Midday UTC: "an hour ago" must fall inside the daily budget's UTC day
+const NOW_MS = Date.UTC(2026, 9, 5, 12);
+const now = NOW_MS / 1000;
 
 const entry = (key: string, input: number, output: number, cost = 0.5): ParsedTokenEntry => ({
   key,
@@ -19,7 +21,10 @@ const entry = (key: string, input: number, output: number, cost = 0.5): ParsedTo
 });
 
 let db: Database.Database;
+afterEach(() => vi.useRealTimers());
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW_MS);
   db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
   runMigrations(db);
