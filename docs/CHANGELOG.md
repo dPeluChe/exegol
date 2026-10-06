@@ -50,6 +50,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Opening the app with many live sessions: a terminal whose session was still reconnecting showed "Failed to start" until it came back; the app now reconnects several sessions at once, visible ones first, and a terminal says "Reconnecting" until its own session is back
 - Opening the app: a terminal whose session had just reconnected stayed black and ignored typing until something redrew it (its screen was read before the session's history was loaded); it now shows its screen and takes the keyboard as soon as its own session is back
 - Opening the app: the sidebar's Agents list stayed empty until every session had reconnected; it now lists them at once, each marked as reconnecting until it is back, with a "Reconnecting N sessions" note
+- Switching projects: a project's own number (Cmd+n set in Edit project) opened its first tab with a live agent instead of the tab you left it on; it now shows the project as you left it. Coming back to a project also puts the focus back on the pane you last used there, not the tab's first pane
 
 ## [0.5.14] — 2026-10-02 — Projects view and sidebar order, terminals that close cleanly
 

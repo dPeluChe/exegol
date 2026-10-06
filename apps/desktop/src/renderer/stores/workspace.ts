@@ -3,7 +3,13 @@ import { persist } from "zustand/middleware";
 import { useAppStore } from "./app";
 import { createCustomLayoutsSlice } from "./workspace/custom-layouts-slice";
 import { createFloatingPanesSlice } from "./workspace/floating-panes-slice";
-import { collectPaneIds, findFirstPaneId, getPw, layoutHasPane } from "./workspace/helpers";
+import {
+  collectPaneIds,
+  findFirstPaneId,
+  getPw,
+  layoutHasPane,
+  switchProject,
+} from "./workspace/helpers";
 import { migrateWorkspaceState, onWorkspaceRehydrate } from "./workspace/recovery";
 import { createTabsPanesSlice } from "./workspace/tabs-panes-slice";
 import type { Pane, ProjectWorkspace, WorkspaceStore, WorkspaceTab } from "./workspace/types";
@@ -49,9 +55,9 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 // ─── Sync activeProjectId from app store → workspace store ──────────────────
 
 useAppStore.subscribe((state) => {
-  const current = useWorkspaceStore.getState()._activeProjectId;
-  if (state.activeProjectId !== current) {
-    useWorkspaceStore.setState({ _activeProjectId: state.activeProjectId });
+  const ws = useWorkspaceStore.getState();
+  if (state.activeProjectId !== ws._activeProjectId) {
+    useWorkspaceStore.setState(switchProject(ws, state.activeProjectId));
   }
 });
 

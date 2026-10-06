@@ -136,3 +136,26 @@ export function releaseAgentPanes(pw: ProjectWorkspace, agentId: string): Projec
     : (tabs[Math.min(Math.max(at, 0), tabs.length - 1)]?.id ?? null);
   return { ...pw, tabs, panes, activeTabId };
 }
+
+/** The pane a project gets the focus back on: the one it was left on, if its active tab has it */
+export function restoredFocus(pw: ProjectWorkspace | undefined): string | null {
+  const tab = pw?.tabs.find((t) => t.id === pw.activeTabId);
+  if (!tab) return null;
+  const last = pw?.lastFocusedPaneId;
+  return last && layoutHasPane(tab.layout, last) ? last : findFirstPaneId(tab.layout);
+}
+
+/** Leave the active project (remembering its focused pane) for `next`, as it was left */
+export function switchProject(state: WorkspaceStore, next: string | null): Partial<WorkspaceStore> {
+  const prev = state._activeProjectId;
+  const prevPw = prev ? state.projectWorkspaces[prev] : undefined;
+  const projectWorkspaces =
+    prev && prevPw && state.focusedPaneId && prevPw.panes[state.focusedPaneId]
+      ? {
+          ...state.projectWorkspaces,
+          [prev]: { ...prevPw, lastFocusedPaneId: state.focusedPaneId },
+        }
+      : state.projectWorkspaces;
+  const nextPw = next ? projectWorkspaces[next] : undefined;
+  return { _activeProjectId: next, projectWorkspaces, focusedPaneId: restoredFocus(nextPw) };
+}

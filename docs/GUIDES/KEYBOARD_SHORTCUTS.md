@@ -17,7 +17,7 @@ those and this page.
 |-------|-----------------|--------|
 | `Cmd+K` / `Cmd+Shift+P` | `Ctrl+Shift+K` / `Ctrl+Shift+P` | Command palette (`!<cmd>` runs a one-shot shell) |
 | `Cmd+1` | `Ctrl+Shift+1` | Dashboard |
-| `Cmd+2`..`Cmd+9`, `Cmd+0` | `Ctrl+Shift+2`..`9`, `Ctrl+Shift+0` | Live tabs: a number set in Edit project first, then the sidebar's order; tabs whose sessions are all pinned go last |
+| `Cmd+2`..`Cmd+9`, `Cmd+0` | `Ctrl+Shift+2`..`9`, `Ctrl+Shift+0` | A number set in Edit project opens that project as you left it; the others go to live tabs in the sidebar's order, tabs whose sessions are all pinned last |
 | `Cmd+Option+1`..`9` | `Ctrl+Shift+Alt+1`..`9` | This project's workspace tab by position |
 | `Cmd+Shift+]` / `Cmd+Shift+[` | `Ctrl+Shift+Alt+]` / `[` | Next / previous workspace tab |
 | `Ctrl+Tab` | same | Quick press: back to the previous pane. Hold Ctrl: switcher over this project's tabs and panes (Tab / Shift+Tab move, release Ctrl to go, Esc cancels; Ctrl+arrows are macOS Mission Control). Works from a terminal or a browser page |
