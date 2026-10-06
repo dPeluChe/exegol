@@ -1,3 +1,4 @@
+import { PREFERRED_PORTS_KEY } from "@exegol/shared";
 import { z } from "zod";
 import { getProject, listAgents } from "../../db/queries";
 import { getJsonSetting, setJsonSetting } from "../../db/queries/settings";
@@ -15,7 +16,6 @@ import { publicProcedure, router } from "../trpc";
 // ─── Preferred Ports (per-project, stored in settings table) ──────────────
 
 const RUN_PINS_KEY = "project_run_pins";
-const PREFERRED_PORTS_KEY = "project_preferred_ports";
 
 export const resourcesRouter = router({
   system: publicProcedure.query(() => {

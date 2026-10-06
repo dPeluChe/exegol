@@ -26,6 +26,8 @@ interface FloatingPaneConfig {
   projectId?: string;
   /** For browser: the device size the pane showed the page at, "1440x900" */
   viewport?: string;
+  /** Opened for an agent: shown without taking the focus from what the user is doing */
+  inactive?: boolean;
 }
 
 const floatingWindows = new Map<string, BrowserWindow>();
@@ -105,7 +107,7 @@ function openFloatingPane(config: FloatingPaneConfig): void {
   });
 
   win.setAlwaysOnTop(true, "floating");
-  win.on("ready-to-show", () => win.show());
+  win.on("ready-to-show", () => (config.inactive ? win.showInactive() : win.show()));
 
   win.on("closed", () => {
     floatingWindows.delete(config.paneId);

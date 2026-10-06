@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Columns3 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FilterChip } from "./components/common/FilterChip";
+import { AgentBrowserBanner } from "./components/workspace/AgentBrowserBanner";
 import { BrowserAddressBar } from "./components/workspace/BrowserAddressBar";
 import { BrowserQaRecordingBar } from "./components/workspace/BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./components/workspace/BrowserReplayResultBar";
@@ -12,7 +13,9 @@ import { DesignIssueBubble } from "./components/workspace/DesignIssueBubble";
 import { webviewIdOf } from "./components/workspace/use-browser-qa";
 import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
+import { useRegisterBrowserPane } from "./components/workspace/use-register-browser-pane";
 import { useWebviewControls, useWebviewNavState } from "./components/workspace/use-webview";
+import { useMountEffect } from "./hooks/use-mount-effect";
 import type { PortInfo } from "./hooks/use-trpc-scheduler";
 import { focusAddressBar } from "./lib/address-bar";
 import { isPasteTarget } from "./lib/agent-input";
@@ -24,6 +27,7 @@ import {
   toHttpUrl,
 } from "./lib/browser-viewports";
 import { trpcInvoke } from "./lib/trpc-client";
+import { startAgentBrowserPush } from "./stores/agent-browser";
 
 /** Live agents of the project, the targets for design and QA reports. This window has no agent store */
 function useRunningAgentsQuery(projectId: string | undefined) {
@@ -38,10 +42,12 @@ function useRunningAgentsQuery(projectId: string | undefined) {
 }
 
 export function FloatingBrowser({
+  paneId,
   url,
   projectId,
   initialSizeKey,
 }: {
+  paneId: string;
   url: string;
   projectId?: string;
   /** "WxH" of the pane's size: matched to the named size (a preset or yours) when there is one */
@@ -79,6 +85,8 @@ export function FloatingBrowser({
   // What is being typed in the address bar; null shows the page's URL
   const [draft, setDraft] = useState<string | null>(null);
   const runningAgents = useRunningAgentsQuery(projectId);
+  useRegisterBrowserPane(webviewRef, paneId, projectId);
+  useMountEffect(() => startAgentBrowserPush(false));
 
   // The leading webview by id: with several sizes open, "the window's webview" is ambiguous
   const safeExecJs = useCallback(async (code: string): Promise<unknown> => {
@@ -147,6 +155,7 @@ export function FloatingBrowser({
         }
       />
       {compare && <SizeChips selected={compare} onChange={setCompare} />}
+      <AgentBrowserBanner paneId={paneId} />
 
       {/* Webview + floating bubble */}
       <div className="relative flex-1 overflow-hidden bg-white">
@@ -169,9 +178,9 @@ export function FloatingBrowser({
               }
             >
               {i === 0 ? (
-                <PageView ref={webviewRef} src={url} />
+                <PageView ref={webviewRef} src={url} projectId={projectId} />
               ) : (
-                <FollowerView url={documentUrl} />
+                <FollowerView url={documentUrl} projectId={projectId} />
               )}
             </DeviceFrame>
           ))}
@@ -250,7 +259,7 @@ function SizeChips({
 
 /** Another size of the same page: it loads the leader's page on full navigations only (following
  *  every in-page route would reload it each time) */
-function FollowerView({ url }: { url: string }) {
+function FollowerView({ url, projectId }: { url: string; projectId?: string }) {
   const ref = useRef<HTMLElement | null>(null);
   const [src] = useState(url);
   useEffect(() => {
@@ -264,7 +273,7 @@ function FollowerView({ url }: { url: string }) {
       /* not attached yet: its src covers the first load */
     }
   }, [url]);
-  return <PageView ref={ref} src={src} />;
+  return <PageView ref={ref} src={src} projectId={projectId} />;
 }
 
 const NO_PORTS: PortInfo[] = [];

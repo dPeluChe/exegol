@@ -1,3 +1,4 @@
+import { pickDevServerPort } from "@exegol/shared";
 import { useMemo } from "react";
 import { type PortInfo, usePreferredPort, useProjectPorts } from "../../hooks/use-trpc-scheduler";
 
@@ -19,7 +20,6 @@ export function useDevServerPorts(projectPath: string | null, projectId: string 
   const { data: ports } = useProjectPorts(projectPath);
   const { data: preferredPort } = usePreferredPort(projectId);
   const uniquePorts = useMemo(() => dedupePorts(ports), [ports]);
-  const autoPort =
-    preferredPort ?? uniquePorts.find((p) => p.source === "runtime")?.port ?? uniquePorts[0]?.port;
+  const autoPort = pickDevServerPort(uniquePorts, preferredPort);
   return { uniquePorts, preferredPort, autoPort };
 }

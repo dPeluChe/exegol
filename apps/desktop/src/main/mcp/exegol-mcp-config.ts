@@ -110,6 +110,12 @@ function flavorForCli(cliType: string): McpConfigFlavor {
   return "mcp-json";
 }
 
+/** Providers whose CLI reads the config Exegol writes for it. The `.mcp.json` fallback is written
+ *  for every provider but only Claude Code among them is known to load it */
+export function readsExegolMcpConfig(cliType: string): boolean {
+  return cliType === "claude-code" || flavorForCli(cliType) !== "mcp-json";
+}
+
 /** Bundled bins sit beside this file in prod and under mcp/ in dev builds. */
 function resolveBundledBin(fileName: string): string | null {
   const primary = join(__dirname, fileName);

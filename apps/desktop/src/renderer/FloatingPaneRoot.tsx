@@ -67,6 +67,7 @@ export function FloatingPaneRoot() {
         )}
         {params.type === "browser" && params.url && (
           <FloatingBrowser
+            paneId={params.paneId}
             url={params.url}
             projectId={params.projectId}
             initialSizeKey={params.viewport}

@@ -16,3 +16,14 @@ export interface DevServer {
   /** Another process listens on one of these ports too */
   conflict: boolean;
 }
+
+/** Settings key: the port each project's browser pane opens by default */
+export const PREFERRED_PORTS_KEY = "project_preferred_ports";
+
+/** The port a project's browser opens: the preferred one, else a running server, else the first */
+export function pickDevServerPort(
+  ports: readonly { port: number; source?: string }[],
+  preferred?: number | null,
+): number | undefined {
+  return preferred ?? ports.find((p) => p.source === "runtime")?.port ?? ports[0]?.port;
+}

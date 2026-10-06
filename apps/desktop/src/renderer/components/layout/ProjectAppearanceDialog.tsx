@@ -1,4 +1,4 @@
-import type { Project } from "@exegol/shared";
+import { type Project, parseBrowserHosts } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
@@ -8,6 +8,7 @@ import { chordBadge } from "../../lib/keymap";
 import { useProjectShortcuts } from "../../lib/live-tabs";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../../stores/shortcuts";
+import { toastError } from "../../stores/toasts";
 import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
 
 /**
@@ -40,10 +41,23 @@ export function ProjectAppearanceDialog({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
   const [name, setName] = useState(project.name);
-  // Icon and color apply as they are picked; Save commits the name and closes
+  const savedHosts = (project.browserHosts ?? []).join("\n");
+  const [hosts, setHosts] = useState(savedHosts);
+  const [allowEval, setAllowEval] = useState(!!project.browserEval);
+  const saveBrowser = useMutation({
+    mutationFn: (input: { hosts: string[]; allowEval: boolean }) =>
+      trpcMutate("projects.setBrowserHosts", { id: project.id, ...input }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    onError: toastError("Could not save the agent browser settings"),
+  });
+  // Icon and color apply as they are picked; Save commits the name and hosts and closes
   const saveAndClose = () => {
     const trimmed = name.trim();
     if (trimmed && trimmed !== project.name) onRename(trimmed);
+    const list = parseBrowserHosts(hosts);
+    if (list.join("\n") !== savedHosts || allowEval !== !!project.browserEval) {
+      saveBrowser.mutate({ hosts: list, allowEval });
+    }
     onOpenChange(false);
   };
 
@@ -79,6 +93,37 @@ export function ProjectAppearanceDialog({
           </label>
 
           <ShortcutPicker projectId={project.id} />
+
+          <label className="mb-3 block">
+            <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+              Agent browser hosts
+            </span>
+            <textarea
+              value={hosts}
+              onChange={(e) => setHosts(e.target.value)}
+              rows={3}
+              placeholder={"staging.myapp.com\n*.myapp.dev"}
+              className="w-full min-w-0 resize-y rounded border border-border bg-bg-tertiary px-2 py-1 font-mono text-[11px] text-text-primary outline-none focus:border-accent/50"
+            />
+            <span className="mt-1 block text-[10px] text-text-muted">
+              Besides local hosts (localhost, 127.0.0.1, *.localhost), the sites this project's
+              agents may open in its browser pane. One per line; *.domain covers its subdomains;
+              .local names go here too. Your logins for a host you add are copied in.
+            </span>
+          </label>
+
+          <label className="mb-3 flex items-start gap-2 text-[11px] text-text-secondary">
+            <input
+              type="checkbox"
+              checked={allowEval}
+              onChange={(e) => setAllowEval(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Let agents run JavaScript in the page (browser_eval). It runs with this project's
+              logins; while an agent acts, requests outside the hosts above are blocked.
+            </span>
+          </label>
 
           <ProjectIconPicker
             found={found}

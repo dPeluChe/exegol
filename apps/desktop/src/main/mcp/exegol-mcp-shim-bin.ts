@@ -375,8 +375,12 @@ function handleClientMessage(
       const params = msg.params as { name: string; arguments?: Record<string, unknown> };
       callTool(params.name, params.arguments ?? {})
         .then((result) => {
+          // Ready-made content blocks (browser_screenshot's image) go through as they are
+          const blocks = (result as { __mcpContent?: unknown } | null)?.__mcpContent;
           writeToClient(msg.id as number, framed, {
-            content: [{ type: "text", text: JSON.stringify(result) }],
+            content: Array.isArray(blocks)
+              ? blocks
+              : [{ type: "text", text: JSON.stringify(result) }],
           });
         })
         .catch((err: Error) => {

@@ -1,6 +1,6 @@
 import type { AgentActivityLevel } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { X } from "lucide-react";
+import { Globe, X } from "lucide-react";
 import type { Dispatch, DragEvent, Ref, SetStateAction } from "react";
 import type { WorkspaceTab } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
@@ -17,6 +17,8 @@ interface WorkspaceTabItemProps {
   tabActivity: AgentActivityLevel | undefined;
   /** T155.3: the tab's agent has an unread attention item — amber pulse wins */
   tabAttention?: boolean;
+  /** An agent is driving a browser pane in this tab */
+  agentBrowsing?: boolean;
   dragOverTabId: string | null;
   editValue: string;
   setEditValue: Dispatch<SetStateAction<string>>;
@@ -42,6 +44,7 @@ export function WorkspaceTabItem({
   agentCliType,
   tabActivity,
   tabAttention = false,
+  agentBrowsing = false,
   dragOverTabId,
   editValue,
   setEditValue,
@@ -105,6 +108,12 @@ export function WorkspaceTabItem({
             TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />
           )}
           <span className="max-w-[140px] truncate">{displayName}</span>
+          {agentBrowsing && (
+            <Globe
+              className="h-2.5 w-2.5 shrink-0 animate-pulse text-accent"
+              aria-label="An agent is using a browser here"
+            />
+          )}
           {tabAttention ? (
             <span
               className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400"

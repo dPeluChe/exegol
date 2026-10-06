@@ -14,6 +14,7 @@ import type {
 import {
   agentRowSchema,
   diffCommentRowSchema,
+  parseBrowserHosts,
   parseRow,
   projectGroupRowSchema,
   projectRowSchema,
@@ -49,6 +50,16 @@ export function mapPromptRow(row: Record<string, unknown>): Prompt {
   };
 }
 
+function parseHostsColumn(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parseBrowserHosts(parsed.map(String)) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function mapProjectRow(row: Record<string, unknown>): Project {
   const r = parseRow(projectRowSchema, row, "project");
   return {
@@ -65,6 +76,8 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     color: r.color ?? null,
     icon: r.icon ?? null,
     iconImage: r.icon_image ?? null,
+    browserHosts: parseHostsColumn(r.browser_hosts),
+    browserEval: r.browser_eval === 1,
   };
 }
 

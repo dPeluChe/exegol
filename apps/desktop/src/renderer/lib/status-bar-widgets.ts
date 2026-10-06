@@ -90,6 +90,14 @@ export const STATUS_BAR_WIDGETS = [
     defaultSlot: "center",
   },
   {
+    id: "mcp",
+    label: "Exegol tools (MCP)",
+    description:
+      "How many live agents have the Exegol tools (memory, messaging, browser) connected",
+    defaultOn: false,
+    defaultSlot: "right",
+  },
+  {
     id: "app-update",
     label: "Exegol update",
     description: "A new Exegol version is downloading or ready",

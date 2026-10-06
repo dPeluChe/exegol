@@ -20,6 +20,7 @@ import {
   resolveTargetAgent,
   sendAgentMessage,
 } from "../agents/agent-messaging";
+import { callBrowserTool, isBrowserTool } from "../browser/agent-browser-tools";
 import { getProject } from "../db/queries";
 import {
   AGENT_LINK_ROLES,
@@ -43,6 +44,7 @@ import { isPathInside, realpathSafeSync } from "../security/path-guard";
 import {
   EXEGOL_TOOL_NAMES,
   type ExegolToolContext,
+  ExegolToolError,
   type ExegolToolName,
   SEARCH_ONLY_TOOLS,
 } from "./exegol-protocol";
@@ -51,14 +53,7 @@ import {
 // bundle never drags this module's memory/knowledge/db import graph.
 export { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-protocol";
 
-export class ExegolToolError extends Error {
-  constructor(
-    message: string,
-    public code: number,
-  ) {
-    super(message);
-  }
-}
+export { ExegolToolError };
 
 function requireWriteAccess(tool: ExegolToolName, context: ExegolToolContext): void {
   if (SEARCH_ONLY_TOOLS.has(tool)) return;
@@ -418,6 +413,7 @@ export async function callExegolTool(
   }
   const toolName = tool as ExegolToolName;
   requireWriteAccess(toolName, context);
+  if (isBrowserTool(toolName)) return callBrowserTool(db, toolName, args, context);
 
   // Single translation point: messaging throws AgentMessagingError (its own
   // JSON-RPC codes), which the socket layer surfaces to the agent verbatim.

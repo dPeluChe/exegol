@@ -16,12 +16,15 @@ import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
-import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
+import { type AgentStatus, LIVE_STATUSES, type McpAgentState } from "@exegol/shared";
 import type Database from "libsql";
+import { forgetBrowserAgent } from "../browser/agent-browser-tools";
+import { listActiveAgents } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { realpathSafeSync } from "../security/path-guard";
+import { readsExegolMcpConfig } from "./exegol-mcp-config";
 import {
   createNdjsonBuffer,
   EXEGOL_DIR,
@@ -75,6 +78,7 @@ export function registerAgentMcpToken(agentId: string, projectId: string): strin
   if (existing) return existing;
   const token = randomBytes(24).toString("hex");
   bindToken(token, { agentId, projectId });
+  notifyMcpStatus();
   return token;
 }
 
@@ -83,6 +87,7 @@ export function registerAgentMcpToken(agentId: string, projectId: string): strin
  *  a new one would orphan them; restoring keeps identity continuous. */
 export function restoreAgentMcpToken(agentId: string, projectId: string, token: string): void {
   bindToken(token, { agentId, projectId });
+  notifyMcpStatus();
 }
 
 /** Revoke on agent exit — a leaked .mcp.json must not stay a live credential. */
@@ -96,6 +101,56 @@ export function revokeAgentMcpToken(agentId: string): void {
     else tokensBySecret.set(token, rest);
   }
   tokensByAgent.delete(agentId);
+  // Its browser waits and "needs you" alerts die with it
+  forgetBrowserAgent(agentId);
+  notifyMcpStatus();
+}
+
+// ─── Connection state (which agents have a live, authenticated shim) ────────
+
+/** connection id → the agent it authenticated as (list_tools or call_tool, never check_path) */
+const connectedBy = new Map<number, string>();
+let statusListener: (() => void) | null = null;
+let statusQueued = false;
+
+export function setMcpStatusListener(fn: (() => void) | null): void {
+  statusListener = fn;
+}
+
+/** Coalesced: a burst of connects at startup is one push */
+function notifyMcpStatus(): void {
+  if (!statusListener || statusQueued) return;
+  statusQueued = true;
+  queueMicrotask(() => {
+    statusQueued = false;
+    statusListener?.();
+  });
+}
+
+function markConnected(conn: McpConnectionState | undefined, agentId: string): void {
+  if (conn?.id === undefined || connectedBy.get(conn.id) === agentId) return;
+  connectedBy.set(conn.id, agentId);
+  notifyMcpStatus();
+}
+
+function markDisconnected(connId: number): void {
+  if (connectedBy.delete(connId)) notifyMcpStatus();
+}
+
+/** Per live agent: a shim is connected with its token, it has a token but no shim yet, or Exegol
+ *  never wired MCP for it (shells, or a spawn without a config) */
+export function getMcpAgentStates(db: Database.Database): Record<string, McpAgentState> {
+  const connected = new Set(connectedBy.values());
+  const out: Record<string, McpAgentState> = {};
+  for (const a of listActiveAgents(db)) {
+    if (a.cliType === "shell") continue;
+    out[a.id] = connected.has(a.id)
+      ? "connected"
+      : tokensByAgent.has(a.id) && readsExegolMcpConfig(a.cliType)
+        ? "not_connected"
+        : "not_wired";
+  }
+  return out;
 }
 
 /** One `ps` hop. The shim is usually a direct child of the CLI (hop 0 needs no
@@ -214,6 +269,8 @@ function readLiveAccessMode(db: Database.Database, agentId: string): ExegolAcces
  * calls, which is how a reply came back addressed to the sender itself.
  */
 export interface McpConnectionState {
+  /** Socket connection number, for the connected-agents view */
+  id?: number;
   pinnedAgentId?: string;
   /** Cached `ps` walk — the shim's ancestry is fixed for the connection. */
   ancestors?: number[];
@@ -389,6 +446,7 @@ export async function handleRequest(
       agentId: resolved.ok ? resolved.context.agentId : undefined,
       detail: resolved.ok ? undefined : "no valid identity (listing read-mode tools)",
     });
+    if (resolved.ok) markConnected(conn, resolved.context.agentId);
     socket.write(
       encodeResponse(req.id, {
         tools: getToolDefsForAccessMode(resolved.ok ? resolved.context.accessMode : "read"),
@@ -487,10 +545,11 @@ export async function handleRequest(
     return;
   }
   const context = resolved.context;
+  markConnected(conn, context.agentId);
 
   const startedAt = Date.now();
   try {
-    const result = await callExegolTool(db, params.tool, params.args, context);
+    const result = await callExegolTool(db, params.tool, params.args ?? {}, context);
     record({
       kind: "call",
       tool: params.tool,
@@ -519,7 +578,7 @@ function startListening(db: Database.Database): void {
     // Connection churn is the diagnostic that matters: a shim that never
     // reconnects after an app restart shows up here as silence.
     const connId = ++connectionSeq;
-    const conn: McpConnectionState = {};
+    const conn: McpConnectionState = { id: connId };
     // Announced lazily: the claim guard opens a fresh connection per write, and
     // announcing those would evict every real agent call from a 100-entry ring.
     let announced = false;
@@ -546,6 +605,7 @@ function startListening(db: Database.Database): void {
     );
     socket.on("data", feed);
     socket.on("close", () => {
+      markDisconnected(connId);
       if (announced) record({ kind: "disconnect", detail: `shim #${connId}` });
     });
     socket.on("error", () => {
@@ -620,6 +680,7 @@ export function stopExegolMcpServer(): void {
   server = null;
   tokensBySecret.clear();
   tokensByAgent.clear();
+  connectedBy.clear();
   try {
     if (owned && existsSync(MCP_SOCK_PATH)) unlinkSync(MCP_SOCK_PATH);
   } catch {

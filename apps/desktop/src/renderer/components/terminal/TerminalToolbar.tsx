@@ -18,6 +18,7 @@ import {
 import { openInBrowser } from "../../lib/open-in-browser";
 import { trpcMutate } from "../../lib/trpc-client";
 import { AccessModeBadge } from "../common/AccessModeBadge";
+import { McpStatusIndicator } from "../common/McpStatusIndicator";
 import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
 import { WatchToggle } from "../common/WatchToggle";
@@ -66,6 +67,9 @@ export function TerminalToolbar({
     // occupy the right edge and were covering them (verify session 2026-08-11).
     <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
       {agent && agent.cliType !== "shell" && <SessionControls agent={agent} />}
+      {agent && agent.cliType !== "shell" && (
+        <McpStatusIndicator agentId={agent.id} accessMode={accessMode} />
+      )}
       {isolationMode && <IsolationModeBadge mode={isolationMode} branchName={branchName} />}
       {branchName && (
         <span

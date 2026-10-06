@@ -16,6 +16,7 @@
       "rename",
       "reorder",
       "setAppearance",
+      "setBrowserHosts",
       "setGroup"
     ],
     "agents": [
@@ -38,6 +39,7 @@
       "listParallelRuns",
       "listProviders",
       "listResumable",
+      "mcpStatus",
       "preflight",
       "previewSpawn",
       "prWatchStatus",
@@ -361,6 +363,13 @@
     "settings:changed",
     "app:toggle-devtools",
     "terminal:set-visible",
+    "browser:register-pane",
+    "browser:control",
+    "browser:agent-states",
+    "browser:agent-state",
+    "browser:open-request",
+    "browser:open-result",
+    "mcp:status",
     "agent:turn-changes"
   ]
 }

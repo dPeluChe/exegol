@@ -1,5 +1,6 @@
 export * from "./activity";
 export * from "./agent";
+export * from "./agent-browser";
 export * from "./agent-signals";
 export * from "./budget";
 export * from "./dashboard";

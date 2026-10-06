@@ -37,6 +37,7 @@ import { AgentIcon } from "../common/AgentIcon";
 import type { GitState } from "../workspace/SmartGitAction";
 import { formatUptime, thresholdColor } from "../workspace/sections/resource-format";
 import { AgentsWidget } from "./StatusBarAgents";
+import { McpWidget } from "./StatusBarMcp";
 
 const PLAN_POLL_MS = 60_000;
 
@@ -58,6 +59,7 @@ const WIDGETS: Record<StatusBarWidgetId, () => ReactNode> = {
   "git-state": GitStateWidget,
   reconnect: ReconnectWidget,
   "app-update": AppUpdateWidget,
+  mcp: McpWidget,
 };
 
 /** Left shrinks first (its names truncate); center and right keep their content's width */
