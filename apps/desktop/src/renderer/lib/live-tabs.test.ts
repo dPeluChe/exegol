@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assignProjectShortcuts,
   computeLiveTabGroups,
+  groupByProject,
   type LiveTabGroup,
   reorderKeys,
 } from "./live-tabs";
@@ -54,10 +55,58 @@ describe("computeLiveTabGroups", () => {
     ]);
   });
 
-  it("follows the user's drag order, new tabs after it", () => {
-    expect(computeLiveTabGroups(workspaces, agents, ["ex:t3"]).map((g) => g.key)).toEqual([
+  it("follows the user's project order, new projects after it", () => {
+    expect(computeLiveTabGroups(workspaces, agents, ["ex"]).map((g) => g.key)).toEqual([
       "ex:t3",
       "wed:t1",
+    ]);
+  });
+
+  it("an unnamed tab reads as Tab N, by its place in the project", () => {
+    const unnamed = {
+      p: pw([
+        { id: "t1", label: "", panes: { p1: "c" } },
+        { id: "t2", label: "", panes: { p2: "a" } },
+      ]),
+    };
+    expect(computeLiveTabGroups(unnamed, agents, []).map((g) => g.tabLabel)).toEqual(["Tab 2"]);
+  });
+
+  it("a project's tabs stay together in tab order, wherever its project sits", () => {
+    const many = {
+      a: pw([
+        { id: "a1", label: "A1", panes: { p1: "a" } },
+        { id: "a2", label: "A2", panes: { p2: "b" } },
+      ]),
+      b: pw([{ id: "b1", label: "B1", panes: { p3: "d" } }]),
+    };
+    expect(computeLiveTabGroups(many, agents, ["b", "a"]).map((g) => g.key)).toEqual([
+      "b:b1",
+      "a:a1",
+      "a:a2",
+    ]);
+  });
+
+  it("the shortcut numbers follow the project order", () => {
+    const many = {
+      a: pw([{ id: "a1", label: "A1", panes: { p1: "a" } }]),
+      b: pw([{ id: "b1", label: "B1", panes: { p2: "d" } }]),
+    };
+    const map = assignProjectShortcuts(
+      computeLiveTabGroups(many, agents, ["b", "a"]),
+      {},
+      new Set(),
+    );
+    expect([map.get("b"), map.get("a")]).toEqual(["2", "3"]);
+  });
+});
+
+describe("groupByProject", () => {
+  it("one card per project with its tabs, in the groups' order", () => {
+    const cards = groupByProject([group("a1", "a"), group("a2", "a"), group("b1", "b")]);
+    expect(cards.map((c) => [c.projectId, c.tabs.map((t) => t.key)])).toEqual([
+      ["a", ["a1", "a2"]],
+      ["b", ["b1"]],
     ]);
   });
 });
