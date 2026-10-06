@@ -49,6 +49,22 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
 - Clear a project's partition (cookies, storage) when the project is deleted.
 - Follower views of the floating Sizes compare are not registered (only the leading one).
 
+### Verify live (0.5.15, not checked in the app)
+Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, project numbers
+(Cmd+n returns to the tab and pane left), reconnect order on start. Still to exercise:
+- Agent browser: `browser_open("dev")` next to the agent's pane, a login stops it (alert, hand
+  back), Take over, Ask agent with a picked element, a host outside the allowlist is refused,
+  `browser_eval` only with the project opt-in; MCP plug states in toolbar and Dashboard card
+- Terminal links: URL click to the preview pane, Cmd+click system browser; file path click to
+  the viewer at the line, Cmd+click IDE, Cmd+Shift+click Finder; paths outside the project and
+  `~/.ssh` are not links
+- Queue + Steer on a busy Claude session; a second Steer joins the first (no second Esc)
+- Undo turn after a turn that changed files (restored vs skipped list, no commit)
+- Answer a numbered permission prompt from the Dashboard card and the attention queue
+- Watch PR: a failing check reaches the agent at its next turn
+- Scheduled task: a cron run fires, a hung run times out after its limit
+- Monitor: Scan Logs imports Claude usage (first scan re-imports 30 days)
+
 ### Verify live (2026-09-29/30, not checked in the app)
 - **opencode TUI across app quit** (reported 2026-08-11, before the two likely causes changed on
   2026-08-12: interactive CLIs now `exec` (no wrapper shell left behind) and the MCP shim
