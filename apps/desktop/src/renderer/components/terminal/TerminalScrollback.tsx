@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { AgentStopReason } from "./AgentStopReason";
 import { ChatView } from "./ChatView";
+import { TerminalLinkPeek } from "./FilesPeek";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { TerminalViewToggle } from "./TerminalToolbar";
 
@@ -121,6 +122,7 @@ export function TerminalScrollback({
               {floatingButtons}
             </>
           )}
+          <TerminalLinkPeek agentId={agentId} />
         </div>
       )}
     </div>

@@ -33,33 +33,36 @@ function scrollbackFile(agentId: string, ext: "log" | "serialized"): string {
 const getScrollbackPath = (agentId: string) => scrollbackFile(agentId, "log");
 const getSerializedPath = (agentId: string) => scrollbackFile(agentId, "serialized");
 
+/** A session's output: live snapshot > serialized file > raw log */
+export function readSessionOutput(agentId: string): string | null {
+  // T36: Try live headless emulator snapshot first (most up-to-date)
+  const ptyHost = getPtyHost();
+  if (ptyHost.isAlive(agentId)) {
+    const snapshot = ptyHost.getSnapshot(agentId);
+    if (snapshot) return snapshot;
+  }
+
+  // Try serialized state file (renderer-persisted, highest fidelity)
+  const serializedPath = getSerializedPath(agentId);
+  if (existsSync(serializedPath)) {
+    try {
+      return readFileSync(serializedPath, "utf-8");
+    } catch {
+      // Fall through to raw scrollback
+    }
+  }
+
+  // Fall back to raw scrollback log (headless emulator periodic snapshots)
+  const filePath = getScrollbackPath(agentId);
+  if (!existsSync(filePath)) return null;
+  return readFileSync(filePath, "utf-8");
+}
+
 export const scrollbackRouter = router({
   /** Get scrollback content. Prefers: live snapshot > serialized file > raw log. */
-  get: publicProcedure.input(z.object({ agentId: z.string() })).query(({ input }) => {
-    // T36: Try live headless emulator snapshot first (most up-to-date)
-    const ptyHost = getPtyHost();
-    if (ptyHost.isAlive(input.agentId)) {
-      const snapshot = ptyHost.getSnapshot(input.agentId);
-      if (snapshot) return snapshot;
-    }
-
-    // Try serialized state file (renderer-persisted, highest fidelity)
-    const serializedPath = getSerializedPath(input.agentId);
-    if (existsSync(serializedPath)) {
-      try {
-        return readFileSync(serializedPath, "utf-8");
-      } catch {
-        // Fall through to raw scrollback
-      }
-    }
-
-    // Fall back to raw scrollback log (headless emulator periodic snapshots)
-    const filePath = getScrollbackPath(input.agentId);
-    if (!existsSync(filePath)) {
-      return null;
-    }
-    return readFileSync(filePath, "utf-8");
-  }),
+  get: publicProcedure
+    .input(z.object({ agentId: z.string() }))
+    .query(({ input }) => readSessionOutput(input.agentId)),
 
   exists: publicProcedure.input(z.object({ agentId: z.string() })).query(({ input }) => {
     return (

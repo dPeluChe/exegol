@@ -62,7 +62,8 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+←` / `Cmd+→` | `Home` / `End` | Start / end of the line |
 | `Cmd+Backspace`, `Option+Backspace` | `Ctrl+Backspace`, `Alt+Backspace` | Delete the previous word |
 | `Cmd+↓` | `Ctrl+Shift+↓` | Jump to the newest output |
-| `Cmd+click` | `Ctrl+click` | Open a file path or URL from the output |
+| click | same | A URL in the output opens in the tab's preview pane; a file path opens over the terminal (PDFs and documents in their app) |
+| `Cmd+click` | `Ctrl+click` | A URL opens in the system browser; a file path is shown in Finder |
 | `Esc` | same | Close the Files peek before the CLI sees the key |
 
 Right-click a terminal pane for Clear Terminal, split, float and layout actions. Select text to

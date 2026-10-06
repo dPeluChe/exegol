@@ -18,6 +18,11 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   own named layouts (its menu > Layouts...) that start its terminals and agents again. Drag a pane by its left
   edge to move it.
 - **Picture-in-Picture**: a terminal or browser pane detaches into a small always-on-top window.
+- **Terminal links**: URLs and file paths in any terminal (agents, shells, Dashboard cards) are
+  clickable. A URL opens in the tab's link preview pane; a file (`src/app.ts:42:7`, `./a.tsx`,
+  `~/notes.md`, absolute) opens read-only over the terminal at its line, images as pictures, PDFs
+  in their app. Cmd+click (Ctrl+click on Linux and Windows) hands it to the system browser or
+  Finder. Hovering shows the target.
 - **Command palette** (`Cmd+K`): projects, agents, commands, and `!<cmd>` for a one-shot shell.
 - **Keyboard first**: jump to any live tab, pane or waiting agent without the mouse; see
   [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md).

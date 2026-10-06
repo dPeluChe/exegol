@@ -120,6 +120,15 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     window.addEventListener("exegol:reload-pane", onReload);
     return () => window.removeEventListener("exegol:reload-pane", onReload);
   }, [paneId, handleReload]);
+  // A URL clicked in a terminal of this tab: the link preview pane goes there
+  useEffect(() => {
+    const onNavigate = (e: Event) => {
+      const { detail } = e as CustomEvent<{ paneId: string; url: string }>;
+      if (detail.paneId === paneId) goTo(detail.url);
+    };
+    window.addEventListener("exegol:navigate-pane", onNavigate);
+    return () => window.removeEventListener("exegol:navigate-pane", onNavigate);
+  }, [paneId, goTo]);
   const [pendingStop, setPendingStop] = useState<PortInfo | null>(null);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   // A size saved by a dev build before sizes were objects ("mobile") is ignored

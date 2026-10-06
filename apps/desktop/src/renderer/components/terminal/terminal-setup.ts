@@ -1,7 +1,6 @@
 import { CLIPBOARD_IMAGE } from "@exegol/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
-import { WebLinksAddon } from "@xterm/addon-web-links";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { useAgentStore } from "../../stores/agents";
@@ -13,7 +12,7 @@ import {
 } from "./osc-handlers";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
-import { registerTerminalLinkProviders } from "./terminal-links";
+import { registerTerminalLinkProviders } from "./terminal-link-providers";
 import type { TerminalInstanceProps } from "./terminal-types";
 import { tuneWheelSensitivity } from "./tui-wheel";
 
@@ -39,9 +38,7 @@ interface TerminalSessionDeps {
   fontFamily: string;
   theme: ITerminalOptions["theme"];
   onScrollPosition: TerminalInstanceProps["onScrollPosition"];
-  onOpenFileLink?: TerminalInstanceProps["onOpenFileLink"];
   onSelectionChange?: TerminalInstanceProps["onSelectionChange"];
-  onOpenUrlInPane?: TerminalInstanceProps["onOpenUrlInPane"];
   setPaneCwd: (paneId: string, cwd: string) => void;
   setPaneLastExit: (paneId: string, code: number | null) => void;
 }
@@ -78,7 +75,6 @@ export function setupTerminalSession(
 
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
-  terminal.loadAddon(new WebLinksAddon());
   const serializeAddon = new SerializeAddon();
   terminal.loadAddon(serializeAddon);
 
@@ -142,13 +138,8 @@ export function setupTerminalSession(
   const disposables: Array<{ dispose: () => void }> = [];
   let unsubData: (() => void) | null = null;
 
-  // T155: Cmd+click file paths / bare URLs (works in read-only snapshots too)
-  disposables.push(
-    registerTerminalLinkProviders(terminal, {
-      onOpenFile: deps.onOpenFileLink,
-      onOpenUrlInPane: deps.onOpenUrlInPane,
-    }),
-  );
+  // URLs and file paths open in Exegol (read-only snapshots and mirrors too)
+  disposables.push(registerTerminalLinkProviders(terminal, { agentId: deps.agentId }));
 
   if (!deps.readOnly) {
     terminal.attachCustomKeyEventHandler((e) => {

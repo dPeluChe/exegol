@@ -91,6 +91,61 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+/** How the viewer shows a file. `svgAsImage`: a terminal link opens an SVG as a picture, the
+ *  files viewer keeps it as editable text */
+export async function readForViewer(path: string, opts: { svgAsImage?: boolean } = {}) {
+  try {
+    const ext = extname(path).toLowerCase();
+    const { size, mtimeMs } = await stat(path);
+    const mime = PREVIEW_MIME[ext] ?? (opts.svgAsImage && ext === ".svg" ? "image/svg+xml" : null);
+    if (mime) {
+      if (size > MAX_PREVIEW_BYTES)
+        return { kind: "too-large" as const, content: "", language: "", size };
+      const data = await readFile(path);
+      return {
+        kind: mime === "application/pdf" ? ("pdf" as const) : ("image" as const),
+        content: "",
+        language: "",
+        size,
+        mime,
+        base64: data.toString("base64"),
+      };
+    }
+    if (size > MAX_TEXT_BYTES)
+      return { kind: "too-large" as const, content: "", language: "", size };
+    const data = await readFile(path);
+    // A NUL in the first 8KB: not text (zip, sqlite, fonts...)
+    if (data.subarray(0, 8192).includes(0))
+      return { kind: "binary" as const, content: "", language: "", size };
+    const language = EXTENSION_LANGUAGES[ext] ?? "plaintext";
+    return { kind: "text" as const, content: data.toString("utf-8"), language, size, mtimeMs };
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EACCES" || code === "EPERM") {
+      throw new TRPCError({ code: "FORBIDDEN", message: `Permission denied: ${path}` });
+    }
+    throw new TRPCError({ code: "NOT_FOUND", message: `File not found: ${path}` });
+  }
+}
+
+/** Open with the app macOS uses for it (Preview for a PDF, etc.). A cloned repo carries no
+ *  quarantine flag, so "open" on a script or an app would RUN it: those, and anything
+ *  executable, are shown in Finder instead */
+export async function openWithSystemApp(path: string) {
+  const info = await stat(path);
+  const runnable =
+    info.isDirectory() ||
+    (info.mode & 0o111) !== 0 ||
+    RUNNABLE_EXT.has(extname(path).toLowerCase());
+  if (runnable) {
+    shell.showItemInFolder(path);
+    return { opened: false, revealed: true };
+  }
+  const error = await shell.openPath(path);
+  if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error });
+  return { opened: true, revealed: false };
+}
+
 interface DirectoryEntry {
   name: string;
   path: string;
@@ -112,38 +167,7 @@ export const filesRouter = router({
    */
   readFile: publicProcedure.input(z.object({ path: z.string() })).query(async ({ ctx, input }) => {
     await assertPathInsideProject(input.path, ctx);
-    try {
-      const ext = extname(input.path).toLowerCase();
-      const { size, mtimeMs } = await stat(input.path);
-      const mime = PREVIEW_MIME[ext];
-      if (mime) {
-        if (size > MAX_PREVIEW_BYTES)
-          return { kind: "too-large" as const, content: "", language: "", size };
-        const data = await readFile(input.path);
-        return {
-          kind: mime === "application/pdf" ? ("pdf" as const) : ("image" as const),
-          content: "",
-          language: "",
-          size,
-          mime,
-          base64: data.toString("base64"),
-        };
-      }
-      if (size > MAX_TEXT_BYTES)
-        return { kind: "too-large" as const, content: "", language: "", size };
-      const data = await readFile(input.path);
-      // A NUL in the first 8KB: not text (zip, sqlite, fonts...)
-      if (data.subarray(0, 8192).includes(0))
-        return { kind: "binary" as const, content: "", language: "", size };
-      const language = EXTENSION_LANGUAGES[ext] ?? "plaintext";
-      return { kind: "text" as const, content: data.toString("utf-8"), language, size, mtimeMs };
-    } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EACCES" || code === "EPERM") {
-        throw new TRPCError({ code: "FORBIDDEN", message: `Permission denied: ${input.path}` });
-      }
-      throw new TRPCError({ code: "NOT_FOUND", message: `File not found: ${input.path}` });
-    }
+    return readForViewer(input.path);
   }),
 
   /** Show the file or folder selected in Finder */
@@ -153,27 +177,11 @@ export const filesRouter = router({
     return { success: true };
   }),
 
-  /**
-   * Open with the app macOS uses for it (Preview for a PDF, etc.). A cloned repo
-   * carries no quarantine flag, so "open" on a script or an app would RUN it:
-   * those, and anything executable, are shown in Finder instead.
-   */
   openExternal: publicProcedure
     .input(z.object({ path: z.string() }))
     .mutation(async ({ ctx, input }) => {
       await assertPathInsideProject(input.path, ctx);
-      const info = await stat(input.path);
-      const runnable =
-        info.isDirectory() ||
-        (info.mode & 0o111) !== 0 ||
-        RUNNABLE_EXT.has(extname(input.path).toLowerCase());
-      if (runnable) {
-        shell.showItemInFolder(input.path);
-        return { opened: false, revealed: true };
-      }
-      const error = await shell.openPath(input.path);
-      if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error });
-      return { opened: true, revealed: false };
+      return openWithSystemApp(input.path);
     }),
 
   rename: publicProcedure

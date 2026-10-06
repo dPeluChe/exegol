@@ -231,6 +231,16 @@ export function useFileContent(path: string | null) {
   });
 }
 
+/** A file clicked in a terminal: main resolves the printed text and checks the session shows it */
+export function useTerminalLinkFile(input: { agentId: string; text: string; cwd?: string }) {
+  return useQuery({
+    queryKey: ["terminalLinks", "read", input.agentId, input.cwd, input.text],
+    queryFn: () =>
+      trpcInvoke<FileContent & { path: string; inside: boolean }>("terminalLinks.read", input),
+    gcTime: 0,
+  });
+}
+
 export interface DirectoryEntry {
   name: string;
   path: string;
