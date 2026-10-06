@@ -120,7 +120,7 @@ interface ProjectItemProps {
   onToggle: () => void;
   onRename: (id: string, name: string) => void;
   agents: AgentState[];
-  /** Cmd+n to its live tab, as the Agents group shows it */
+  /** Cmd+n to the project, as the Agents group shows it */
   shortcut?: string;
   /** Drag-and-drop index */
   index: number;

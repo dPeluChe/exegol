@@ -36,7 +36,7 @@ interface ProjectListSectionProps {
   activeProjectId: string | null;
   expandedIds: Set<string>;
   agentsById: Record<string, AgentState>;
-  /** Cmd+n that jumps to the project's live tab (lib/live-tabs) */
+  /** Cmd+n that shows the project as it was left (lib/live-tabs) */
   shortcuts: Map<string, ShortcutDigit>;
   draggedProjectIdRef: React.MutableRefObject<string | null>;
   /** Manual order: a drop within the list moves the project there (auto keeps its own order) */

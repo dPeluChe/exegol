@@ -159,7 +159,7 @@ export function ProjectAppearanceDialog({
 }
 
 /** The Cmd+digit this project keeps (lib/live-tabs): the others fill the numbers left. Each
- *  number says who has it now, kept by choice or given for a live tab, so a change is informed */
+ *  number says who has it now, kept by choice or given while live, so a change is informed */
 function ShortcutPicker({ projectId }: { projectId: string }) {
   const assigned = useShortcutStore((s) => s.assigned);
   const assign = useShortcutStore((s) => s.assign);
@@ -174,7 +174,8 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
     const keeper = kept.get(d);
     if (keeper && keeper !== projectId) return ` · ${nameOf.get(keeper) ?? "another project"}`;
     const auto = given.get(d);
-    if (auto && auto !== projectId) return ` · ${nameOf.get(auto) ?? "another project"} (live tab)`;
+    if (auto && auto !== projectId)
+      return ` · ${nameOf.get(auto) ?? "another project"} (while live)`;
     return keeper === projectId || auto === projectId ? " · this project" : " · free";
   };
 
@@ -190,8 +191,8 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
       >
         <option value="">
           {ownAuto
-            ? `Automatic (now ${chordBadge(ownAuto)}, while it has a live tab)`
-            : "Automatic (next free number while it has a live tab)"}
+            ? `Automatic (now ${chordBadge(ownAuto)}, while it has live sessions)`
+            : "Automatic (next free number while it has live sessions)"}
         </option>
         {SHORTCUT_DIGITS.map((d) => (
           <option key={d} value={d}>

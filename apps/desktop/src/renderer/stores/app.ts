@@ -44,7 +44,7 @@ interface AppStore {
   sidebarAgentsView: "agents" | "attention";
   setSidebarAgentsView: (view: "agents" | "attention") => void;
 
-  /** Sidebar order of the live tab groups (Cmd+2..9), by `projectId:tabId` */
+  /** Sidebar order of the live tab groups (sets the Cmd+2..9 project order), by `projectId:tabId` */
   liveTabOrder: string[];
   setLiveTabOrder: (order: string[]) => void;
 

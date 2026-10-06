@@ -82,17 +82,32 @@ describe("switching project", () => {
   it("a project's own Cmd+n shows it as it was left, not its first live tab", () => {
     useShortcutStore.getState().assign("A", "2");
     useAppStore.getState().setActiveProject("B");
-    expect(goToShortcut("2")).toBe("A:a3");
+    expect(goToShortcut("2")).toBe("A:a1");
     const ws = useWorkspaceStore.getState();
     expect(useAppStore.getState().activeProjectId).toBe("A");
     expect(ws.projectWorkspaces.A?.activeTabId).toBe("a3");
     expect(ws.focusedPaneId).toBe("pa3y");
   });
 
-  it("an unassigned Cmd+n still goes to its live group's tab", () => {
+  it("an automatic Cmd+n also shows the project as it was left, not its live tab", () => {
     useAppStore.getState().setActiveProject("B");
     expect(goToShortcut("2")).toBe("A:a1");
-    expect(useWorkspaceStore.getState().projectWorkspaces.A?.activeTabId).toBe("a1");
+    const ws = useWorkspaceStore.getState();
+    expect(useAppStore.getState().activeProjectId).toBe("A");
+    expect(ws.projectWorkspaces.A?.activeTabId).toBe("a3");
+    expect(ws.focusedPaneId).toBe("pa3y");
+  });
+
+  it("flashes the active tab when it is the live one", () => {
+    useWorkspaceStore.getState().setActiveTab("a1");
+    useAppStore.getState().setActiveProject("B");
+    expect(goToShortcut("2")).toBe("A:a1");
     expect(useWorkspaceStore.getState().focusedPaneId).toBe("pa1");
+  });
+
+  it("a digit no project has does nothing", () => {
+    useAppStore.getState().setActiveProject("B");
+    expect(goToShortcut("5")).toBeNull();
+    expect(useAppStore.getState().activeProjectId).toBe("B");
   });
 });

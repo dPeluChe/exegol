@@ -137,7 +137,7 @@ export function useHotkeys() {
 
       const digit = /^[0-9]$/.test(key) ? key : undefined;
 
-      // Cmd+1: Dashboard; Cmd+2-9, 0: a project's own number, else a live tab group (lib/live-tabs)
+      // Cmd+1: Dashboard; Cmd+2-9, 0: a project, as it was left (lib/live-tabs)
       if (digit && !chord.alt && !chord.shift) {
         e.preventDefault();
         if (digit === "1") {

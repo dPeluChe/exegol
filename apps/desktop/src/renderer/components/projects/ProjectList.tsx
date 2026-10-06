@@ -101,7 +101,7 @@ function ProjectCard({
         {shortcut && (
           <kbd
             className="shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
-            title="Jumps to its live tab"
+            title="Opens the project as you left it"
           >
             {shortcut}
           </kbd>

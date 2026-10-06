@@ -50,7 +50,7 @@ const MAC_STEPS: WelcomeTourStep[] = [
       "Cmd+1 opens the Dashboard with every agent across projects.",
       "Pin sessions to Watching to follow them live side by side.",
       "Needs attention in the sidebar lists agents waiting on you; Cmd+J jumps to the next one.",
-      "Cmd+2..9 and Cmd+0 jump to your live tabs (set a project's number in Edit project).",
+      "Cmd+2..9 and Cmd+0 jump to your projects as you left them (set a project's number in Edit project).",
       "Dashboard cards show the messages agents send each other.",
     ],
   },

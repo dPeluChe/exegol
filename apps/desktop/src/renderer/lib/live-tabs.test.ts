@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  assignGroupShortcuts,
+  assignProjectShortcuts,
   computeLiveTabGroups,
   type LiveTabGroup,
-  projectShortcuts,
   reorderKeys,
 } from "./live-tabs";
 
@@ -81,11 +80,11 @@ const group = (key: string, projectId: string, agentIds = [`${key}-agent`]): Liv
   agentIds,
 });
 
-describe("assignGroupShortcuts", () => {
-  it("numbers 2..9 then 0 in the sidebar's order; the tenth group has none", () => {
+describe("assignProjectShortcuts", () => {
+  it("numbers 2..9 then 0 in the sidebar's order; the tenth project has none", () => {
     const groups = "abcdefghij".split("").map((k) => group(k, k));
-    const map = assignGroupShortcuts(groups, {}, new Set());
-    expect(groups.map((g) => map.get(g.key) ?? null)).toEqual([
+    const map = assignProjectShortcuts(groups, {}, new Set());
+    expect(groups.map((g) => map.get(g.projectId) ?? null)).toEqual([
       "2",
       "3",
       "4",
@@ -99,40 +98,38 @@ describe("assignGroupShortcuts", () => {
     ]);
   });
 
-  it("groups whose every session is pinned go last (Cmd+1 already reaches them)", () => {
-    const groups = [group("pinned", "p1"), group("free", "p2")];
-    const map = assignGroupShortcuts(groups, {}, new Set(["pinned-agent"]));
-    expect([map.get("free"), map.get("pinned")]).toEqual(["2", "3"]);
+  it("one number per project, placed at its first group", () => {
+    const groups = [group("a1", "a"), group("a2", "a"), group("b1", "b"), group("a3", "a")];
+    const map = assignProjectShortcuts(groups, {}, new Set());
+    expect([...map]).toEqual([
+      ["a", "2"],
+      ["b", "3"],
+    ]);
   });
 
-  it("a mixed group (one pinned session, one not) keeps its place", () => {
-    const groups = [group("mixed", "p1", ["x", "y"]), group("other", "p2")];
-    const map = assignGroupShortcuts(groups, {}, new Set(["x"]));
-    expect([map.get("mixed"), map.get("other")]).toEqual(["2", "3"]);
+  it("projects whose every session is pinned go last (Cmd+1 already reaches them)", () => {
+    const groups = [group("pinned", "p1"), group("free", "p2")];
+    const map = assignProjectShortcuts(groups, {}, new Set(["pinned-agent"]));
+    expect([map.get("p2"), map.get("p1")]).toEqual(["2", "3"]);
+  });
+
+  it("a project with one unpinned session in any of its tabs keeps its place", () => {
+    const groups = [group("t1", "p1", ["x"]), group("other", "p2"), group("t2", "p1", ["y"])];
+    const map = assignProjectShortcuts(groups, {}, new Set(["x"]));
+    expect([map.get("p1"), map.get("p2")]).toEqual(["2", "3"]);
   });
 
   it("a number given in Edit project stays, even pinned; the rest fill around it", () => {
     const groups = [group("a", "pa"), group("b", "pb"), group("c", "pc")];
-    const map = assignGroupShortcuts(groups, { pc: "2", pb: "8" }, new Set(["b-agent"]));
-    expect([map.get("a"), map.get("b"), map.get("c")]).toEqual(["3", "8", "2"]);
+    const map = assignProjectShortcuts(groups, { pc: "2", pb: "8" }, new Set(["b-agent"]));
+    expect([map.get("pa"), map.get("pb"), map.get("pc")]).toEqual(["3", "8", "2"]);
   });
 
-  it("an assigned number stays reserved while its project is idle", () => {
-    const map = assignGroupShortcuts([group("a", "pa")], { idle: "2" }, new Set());
-    expect(map.get("a")).toBe("3");
-  });
-
-  it("only a project's first live tab takes its number; its other tabs fill free ones", () => {
-    const groups = [group("t1", "p1"), group("t2", "p1")];
-    const map = assignGroupShortcuts(groups, { p1: "5" }, new Set());
-    expect([map.get("t1"), map.get("t2")]).toEqual(["5", "2"]);
-  });
-});
-
-describe("projectShortcuts", () => {
-  it("gives each project the digit of its first live group that has one", () => {
-    const groups = [group("a1", "a"), group("b1", "b"), group("a2", "a")];
-    const map = projectShortcuts(groups, assignGroupShortcuts(groups, {}, new Set()));
-    expect([map.get("a"), map.get("b")]).toEqual(["2", "3"]);
+  it("an assigned number stays with its idle project; idle projects get no automatic one", () => {
+    const map = assignProjectShortcuts([group("a", "pa")], { idle: "2" }, new Set());
+    expect([...map]).toEqual([
+      ["idle", "2"],
+      ["pa", "3"],
+    ]);
   });
 });
