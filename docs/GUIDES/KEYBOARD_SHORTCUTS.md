@@ -17,7 +17,7 @@ those and this page.
 |-------|-----------------|--------|
 | `Cmd+K` / `Cmd+Shift+P` | `Ctrl+Shift+K` / `Ctrl+Shift+P` | Command palette (`!<cmd>` runs a one-shot shell) |
 | `Cmd+1` | `Ctrl+Shift+1` | Dashboard |
-| `Cmd+2`..`Cmd+9`, `Cmd+0` | `Ctrl+Shift+2`..`9`, `Ctrl+Shift+0` | A number set in Edit project opens that project as you left it; the others go to live tabs in the sidebar's order, tabs whose sessions are all pinned last |
+| `Cmd+2`..`Cmd+9`, `Cmd+0` | `Ctrl+Shift+2`..`9`, `Ctrl+Shift+0` | A project, opened on the tab and pane you left it on: numbers set in Edit project first, then one per project with live sessions in the sidebar's order, projects whose sessions are all pinned last |
 | `Cmd+Option+1`..`9` | `Ctrl+Shift+Alt+1`..`9` | This project's workspace tab by position |
 | `Cmd+Shift+]` / `Cmd+Shift+[` | `Ctrl+Shift+Alt+]` / `[` | Next / previous workspace tab |
 | `Ctrl+Tab` | same | Quick press: back to the previous pane. Hold Ctrl: switcher over this project's tabs and panes (Tab / Shift+Tab move, release Ctrl to go, Esc cancels; Ctrl+arrows are macOS Mission Control). Works from a terminal or a browser page |
@@ -49,7 +49,7 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+/` | `Ctrl+Shift+/` | Shortcuts overlay |
 | `Esc`, `Cmd+W` | `Esc`, `Ctrl+Shift+W` | Close the Settings or a floating window (a focused terminal keeps Esc) |
 | `Esc` | same | Leave the Projects view, back to the project or Dashboard it was opened from |
-| `Cmd+Shift+0` | none | Reset zoom (`Cmd+0` is a live tab slot) |
+| `Cmd+Shift+0` | none | Reset zoom (`Cmd+0` is a project slot) |
 | `Cmd+Shift+E` | `Ctrl+Shift+E` | Bring Exegol to the front from any app (global, configurable in Settings) |
 
 ## Inside a terminal

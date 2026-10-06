@@ -47,10 +47,10 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
-    id: "live-tab-n",
-    label: "Live Tab N",
+    id: "project-n",
+    label: "Project N",
     description:
-      "Tabs with live sessions: a number set in Edit project first, then the sidebar's order, pinned sessions last",
+      "A project as you left it: a number set in Edit project first, then projects with live sessions in the sidebar's order, all-pinned last",
     keys: "Cmd+2-9, Cmd+0",
     category: "navigation",
   },

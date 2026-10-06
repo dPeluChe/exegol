@@ -20,8 +20,8 @@ import {
   type LiveTabGroup,
   reorderKeys,
   shortcutLabel,
-  useGroupShortcuts,
   useLiveTabGroups,
+  useProjectShortcuts,
 } from "../../lib/live-tabs";
 import { useSessionRecovery } from "../../lib/session-recovery";
 import {
@@ -115,10 +115,15 @@ export function AttentionSection() {
   // Every live agent, one waiting on you included: its row carries the amber mark, and the
   // attention list is a separate view (the switch), so nothing shows twice
   const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
-  // Grouped by workspace tab (layout), in the user's order: the same list Cmd+2..9 walks.
-  // A session no pane shows falls back to a per-project group with no shortcut.
+  // Grouped by workspace tab (layout), in the user's order; a project's Cmd+n shows on its first
+  // group. A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
-  const groupShortcuts = useGroupShortcuts(groups);
+  const projectShortcuts = useProjectShortcuts();
+  const firstGroupOf = new Set(
+    groups
+      .filter((g, i) => groups.findIndex((o) => o.projectId === g.projectId) === i)
+      .map((g) => g.key),
+  );
   const setOrder = useAppStore((s) => s.setLiveTabOrder);
   const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();
@@ -242,7 +247,11 @@ export function AttentionSection() {
             <TabAgentGroup
               key={group.key}
               group={group}
-              shortcut={shortcutLabel(groupShortcuts.get(group.key))}
+              shortcut={
+                firstGroupOf.has(group.key)
+                  ? shortcutLabel(projectShortcuts.get(group.projectId))
+                  : null
+              }
               agents={group.agentIds.map((id) => agents[id]).filter((a): a is AgentState => !!a)}
               onNavigate={navigateToAgent}
               reorderProps={reorder.itemProps(group.key)}
@@ -296,7 +305,7 @@ function TabAgentGroup({
   /** Its live sessions */
   agents: AgentState[];
   onNavigate: (agentId: string, projectId: string) => void;
-  /** Press anywhere on the group and move to reorder it (Cmd+2..9 follow this order) */
+  /** Press anywhere on the group and move to reorder it (Cmd+2..9 number projects in this order) */
   reorderProps: ReturnType<ReturnType<typeof usePointerReorder>["itemProps"]>;
   dragging: boolean;
   /** Where the dragged group lands: a line above this one (moving up) or below (moving down) */

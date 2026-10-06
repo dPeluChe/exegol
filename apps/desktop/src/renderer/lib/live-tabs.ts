@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { type AgentState, jumpToAgent, showProject, useAgentStore } from "../stores/agents";
+import { type AgentState, showProject, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../stores/shortcuts";
 import { useWatchStore } from "../stores/watch";
@@ -9,7 +9,7 @@ import { chordBadge } from "./keymap";
 
 const LIVE_STATUSES_UI = new Set(["running", "spawning", "waiting_input"]);
 
-/** A workspace tab (layout) with live sessions: what Cmd+2..9 jumps to */
+/** A workspace tab (layout) with live sessions, listed in the sidebar */
 export interface LiveTabGroup {
   key: string;
   projectId: string;
@@ -70,93 +70,60 @@ export function useLiveTabGroups(): LiveTabGroup[] {
 }
 
 /**
- * The digit each live tab group answers to (Cmd+digit). A number the user gave a project goes to
- * its first live group and stays reserved while the project is idle. The others fill the free
- * numbers in the sidebar's order, groups whose every session is pinned last (the Dashboard,
- * Cmd+1, already reaches them). Past the ninth, a group has none.
+ * The digit each project answers to (Cmd+digit). A number the user gave a project is kept, live
+ * or idle. The free numbers go one per project with live tabs, in the sidebar's order (a project
+ * sits where its first group does), projects whose every session is pinned last (the Dashboard,
+ * Cmd+1, already reaches them). Past the ninth, a project has none.
  */
-export function assignGroupShortcuts(
+export function assignProjectShortcuts(
   groups: LiveTabGroup[],
   assigned: Record<string, ShortcutDigit>,
   pinned: ReadonlySet<string>,
 ): Map<string, ShortcutDigit> {
-  const byGroup = new Map<string, ShortcutDigit>();
-  const served = new Set<string>();
-  for (const g of groups) {
-    const digit = assigned[g.projectId];
-    if (digit && !served.has(g.projectId)) {
-      byGroup.set(g.key, digit);
-      served.add(g.projectId);
-    }
-  }
-  const rest = groups.filter((g) => !byGroup.has(g.key));
-  const allPinned = (g: LiveTabGroup) => g.agentIds.every((id) => pinned.has(id));
-  const ordered = [...rest.filter((g) => !allPinned(g)), ...rest.filter(allPinned)];
+  const byProject = new Map<string, ShortcutDigit>(Object.entries(assigned));
+  const agentsOf = new Map<string, string[]>();
+  for (const g of groups)
+    agentsOf.set(g.projectId, [...(agentsOf.get(g.projectId) ?? []), ...g.agentIds]);
+  const rest = [...agentsOf.keys()].filter((id) => !byProject.has(id));
+  const allPinned = (id: string) => (agentsOf.get(id) ?? []).every((a) => pinned.has(a));
+  const ordered = [...rest.filter((id) => !allPinned(id)), ...rest.filter(allPinned)];
   const reserved = new Set(Object.values(assigned));
   const free = SHORTCUT_DIGITS.filter((d) => !reserved.has(d));
-  ordered.forEach((g, i) => {
+  ordered.forEach((id, i) => {
     const digit = free[i];
-    if (digit) byGroup.set(g.key, digit);
+    if (digit) byProject.set(id, digit);
   });
-  return byGroup;
-}
-
-/** Each project's shortcut: the one of its first live group that has one */
-export function projectShortcuts(
-  groups: LiveTabGroup[],
-  byGroup: Map<string, ShortcutDigit>,
-): Map<string, ShortcutDigit> {
-  const byProject = new Map<string, ShortcutDigit>();
-  for (const g of groups) {
-    const digit = byGroup.get(g.key);
-    if (digit && !byProject.has(g.projectId)) byProject.set(g.projectId, digit);
-  }
   return byProject;
 }
 
-export function useGroupShortcuts(groups: LiveTabGroup[]): Map<string, ShortcutDigit> {
+export function useProjectShortcuts(): Map<string, ShortcutDigit> {
+  const live = useLiveTabGroups();
   const assigned = useShortcutStore((s) => s.assigned);
   const watched = useWatchStore((s) => s.watched);
   return useMemo(
-    () => assignGroupShortcuts(groups, assigned, new Set(watched)),
-    [groups, assigned, watched],
+    () => assignProjectShortcuts(live, assigned, new Set(watched)),
+    [live, assigned, watched],
   );
 }
 
-export function useProjectShortcuts(): Map<string, ShortcutDigit> {
-  const groups = useLiveTabGroups();
-  const byGroup = useGroupShortcuts(groups);
-  return useMemo(() => projectShortcuts(groups, byGroup), [groups, byGroup]);
-}
-
-/** The live group Cmd+digit jumps to (for the hotkey, outside React) */
-function groupForDigit(digit: string): LiveTabGroup | undefined {
+/**
+ * Cmd+digit: shows the project as it was left (its tab and pane). Returns the group key to flash:
+ * the project's active tab when it is live, else its first live tab
+ */
+export function goToShortcut(digit: string): string | null {
   const groups = getLiveTabGroups();
-  const byGroup = assignGroupShortcuts(
+  const byProject = assignProjectShortcuts(
     groups,
     useShortcutStore.getState().assigned,
     new Set(useWatchStore.getState().watched),
   );
-  return groups.find((g) => byGroup.get(g.key) === digit);
-}
-
-/**
- * Cmd+digit. A number the user gave a project switches to that project as it was left (its tab
- * and pane); any other goes to its live group's tab. Returns the group key to flash
- */
-export function goToShortcut(digit: string): string | null {
-  const assigned = Object.entries(useShortcutStore.getState().assigned);
-  const projectId = assigned.find(([, d]) => d === digit)?.[0];
-  if (projectId) {
-    showProject(projectId);
-    const tabId = useWorkspaceStore.getState().projectWorkspaces[projectId]?.activeTabId;
-    return tabId ? `${projectId}:${tabId}` : null;
-  }
-  const group = groupForDigit(digit);
-  const first = group?.agentIds[0];
-  if (!group || !first) return null;
-  jumpToAgent(first, group.projectId);
-  return group.key;
+  const projectId = [...byProject].find(([, d]) => d === digit)?.[0];
+  if (!projectId) return null;
+  showProject(projectId);
+  const tabId = useWorkspaceStore.getState().projectWorkspaces[projectId]?.activeTabId;
+  const own = groups.filter((g) => g.projectId === projectId);
+  const key = own.find((g) => g.tabId === tabId)?.key ?? own[0]?.key;
+  return key ?? (tabId ? `${projectId}:${tabId}` : null);
 }
 
 /** How a digit reads next to its group or project */

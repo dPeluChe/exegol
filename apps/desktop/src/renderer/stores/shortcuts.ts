@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-/** Cmd+1 is the Dashboard: live tabs answer to these, in this order */
+/** Cmd+1 is the Dashboard: projects answer to these, in this order */
 export const SHORTCUT_DIGITS = ["2", "3", "4", "5", "6", "7", "8", "9", "0"] as const;
 export type ShortcutDigit = (typeof SHORTCUT_DIGITS)[number];
 
