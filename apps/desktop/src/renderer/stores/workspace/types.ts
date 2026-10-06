@@ -63,6 +63,8 @@ export interface WorkspaceStore {
    * In-memory only — resets on reload. Keyed by paneId.
    */
   floatingPanes: Record<string, { type: "terminal" | "browser"; openedAt: number }>;
+  /** Panes by last focus, per project (the Ctrl+Tab switcher). In-memory only. */
+  paneMru: Record<string, string[]>;
   /** Per-pane current working directory reported via OSC 7 (T112). In-memory only. */
   paneCwd: Record<string, string>;
   /** Per-pane last command exit code reported via OSC 133;D (T112). In-memory only. */

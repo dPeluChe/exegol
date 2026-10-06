@@ -25,6 +25,7 @@ type TabsPanesSlice = Pick<
   | "projectWorkspaces"
   | "_activeProjectId"
   | "focusedPaneId"
+  | "paneMru"
   | "paneCwd"
   | "paneLastExit"
   | "addTab"
@@ -55,6 +56,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
   projectWorkspaces: {},
   _activeProjectId: useAppStore.getState().activeProjectId,
   focusedPaneId: null,
+  paneMru: {},
   paneCwd: {},
   paneLastExit: {},
 

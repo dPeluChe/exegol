@@ -165,7 +165,7 @@ export function setupTerminalSession(
         }
         return false;
       }
-      // Ctrl+Tab cycles panes (use-hotkeys): xterm would send Tab, and Ctrl+Shift+Tab Shift+Tab,
+      // Ctrl+Tab is the pane switcher (lib/pane-switcher-control): xterm would send Tab, and Ctrl+Shift+Tab Shift+Tab,
       // which flips Claude's permission mode
       if (e.ctrlKey && e.key === "Tab") return false;
       if (e.type !== "keydown") return true;

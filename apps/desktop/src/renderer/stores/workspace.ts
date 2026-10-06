@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { touchMru } from "../lib/pane-switcher";
 import { useAppStore } from "./app";
 import { createCustomLayoutsSlice } from "./workspace/custom-layouts-slice";
 import { createFloatingPanesSlice } from "./workspace/floating-panes-slice";
@@ -53,6 +54,16 @@ useAppStore.subscribe((state) => {
   if (state.activeProjectId !== current) {
     useWorkspaceStore.setState({ _activeProjectId: state.activeProjectId });
   }
+});
+
+useWorkspaceStore.subscribe((s, prev) => {
+  const paneId = s.focusedPaneId;
+  const pid = s._activeProjectId;
+  if (!paneId || !pid || paneId === prev.focusedPaneId) return;
+  if (!s.projectWorkspaces[pid]?.panes[paneId]) return;
+  const mru = s.paneMru[pid] ?? [];
+  const next = touchMru(mru, paneId);
+  if (next !== mru) useWorkspaceStore.setState({ paneMru: { ...s.paneMru, [pid]: next } });
 });
 
 // ─── Utility ────────────────────────────────────────────────────────────────
