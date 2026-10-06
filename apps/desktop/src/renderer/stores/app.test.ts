@@ -20,6 +20,24 @@ describe("migrateAppStore", () => {
       "projects",
     );
   });
+
+  it("v3 → v4: the tab-group order becomes a project order, a project's first tab wins", () => {
+    const state = migrateAppStore({ liveTabOrder: ["b:t2", "a:t1", "b:t5", "c:t3", "a:t4"] }, 3);
+    expect(state.liveProjectOrder).toEqual(["b", "a", "c"]);
+    expect("liveTabOrder" in state).toBe(false);
+  });
+
+  it("v3 → v4: no saved order is an empty project order", () => {
+    expect(migrateAppStore({}, 3).liveProjectOrder).toEqual([]);
+  });
+
+  it("v3 → v4: a corrupt saved order migrates to [], non-string entries are dropped", () => {
+    expect(migrateAppStore({ liveTabOrder: "a:t1" }, 3).liveProjectOrder).toEqual([]);
+    expect(migrateAppStore({ liveTabOrder: { a: 1 } }, 3).liveProjectOrder).toEqual([]);
+    expect(
+      migrateAppStore({ liveTabOrder: [1, "a:t1", null, "b:t2"] }, 3).liveProjectOrder,
+    ).toEqual(["a", "b"]);
+  });
 });
 
 describe("Projects view return", () => {

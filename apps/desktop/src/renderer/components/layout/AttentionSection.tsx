@@ -12,13 +12,16 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { shallow } from "zustand/shallow";
 import { useNow } from "../../hooks/use-now";
 import { usePointerReorder } from "../../hooks/use-pointer-reorder";
 import { useProject, useProjects } from "../../hooks/use-trpc";
 import {
+  groupByProject,
+  type LiveProjectGroup,
   type LiveTabGroup,
-  reorderKeys,
+  reorderProjectOrder,
   shortcutLabel,
   useLiveTabGroups,
   useProjectShortcuts,
@@ -28,7 +31,9 @@ import {
   type AgentState,
   type AttentionItem,
   type AttentionLevel,
+  focusPane,
   jumpToAgent,
+  showProject,
   useAgentStore,
 } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
@@ -115,16 +120,27 @@ export function AttentionSection() {
   // Every live agent, one waiting on you included: its row carries the amber mark, and the
   // attention list is a separate view (the switch), so nothing shows twice
   const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
-  // Grouped by workspace tab (layout), in the user's order; a project's Cmd+n shows on its first
-  // group. A session no pane shows falls back to a per-project group with no shortcut.
+  // One card per project in the user's order, its live tabs inside; the card carries its Cmd+n.
+  // A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
-  const projectShortcuts = useProjectShortcuts();
-  const firstGroupOf = new Set(
-    groups
-      .filter((g, i) => groups.findIndex((o) => o.projectId === g.projectId) === i)
-      .map((g) => g.key),
+  const cards = useMemo(() => groupByProject(groups), [groups]);
+  const agentsByProject = useMemo(
+    () =>
+      new Map(
+        cards.map((c) => [
+          c.projectId,
+          Object.fromEntries(
+            c.tabs
+              .flatMap((t) => t.agentIds)
+              .flatMap((id) => (agents[id] ? [[id, agents[id]]] : [])),
+          ) as Record<string, AgentState>,
+        ]),
+      ),
+    [cards, agents],
   );
-  const setOrder = useAppStore((s) => s.setLiveTabOrder);
+  const projectShortcuts = useProjectShortcuts();
+  const setOrder = useAppStore((s) => s.setLiveProjectOrder);
+  const savedOrder = useAppStore((s) => s.liveProjectOrder);
   const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();
   for (const agent of activeAgents) {
@@ -143,30 +159,29 @@ export function AttentionSection() {
   );
 
   const hasRunning = groups.length > 0 || byProject.size > 0;
-  // Dropped on the group below it goes after it (inserting before put it back where it was)
+  // Dropped on the card below it goes after it (inserting before put it back where it was)
   const reorder = usePointerReorder((drag, target) =>
     setOrder(
-      reorderKeys(
-        groups.map((g) => g.key),
+      reorderProjectOrder(
+        cards.map((c) => c.projectId),
+        savedOrder,
         drag,
         target,
       ),
     ),
   );
-  // The same rule reorderKeys applies: dropped on a group below lands after it, above lands before
+  // The same rule reorderKeys applies: dropped on a card below lands after it, above lands before
   const dropSideFor = (key: string): "before" | "after" | null => {
     const { draggingKey, overKey } = reorder;
     if (!draggingKey || overKey !== key || draggingKey === key) return null;
-    const keys = groups.map((g) => g.key);
+    const keys = cards.map((c) => c.projectId);
     return keys.indexOf(draggingKey) < keys.indexOf(key) ? "after" : "before";
   };
-  // The tab on screen stands out, and blinks when a Cmd+n jump lands on it
+  // The project on screen stands out, and blinks when a Cmd+n jump lands on it
   const activeProjectId = useAppStore((s) =>
     s.activeView === "workspace" ? s.activeProjectId : null,
   );
-  const activeTabByProject = useWorkspaceStore((s) =>
-    activeProjectId ? s.projectWorkspaces[activeProjectId]?.activeTabId : null,
-  );
+  const projectWorkspaces = useWorkspaceStore((s) => s.projectWorkspaces);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   useEffect(() => {
     let timer: number | undefined;
@@ -243,22 +258,19 @@ export function AttentionSection() {
 
       {view === "agents" && (
         <div className="space-y-1.5">
-          {groups.map((group) => (
-            <TabAgentGroup
-              key={group.key}
-              group={group}
-              shortcut={
-                firstGroupOf.has(group.key)
-                  ? shortcutLabel(projectShortcuts.get(group.projectId))
-                  : null
-              }
-              agents={group.agentIds.map((id) => agents[id]).filter((a): a is AgentState => !!a)}
+          {cards.map((card) => (
+            <ProjectCard
+              key={card.projectId}
+              card={card}
+              shortcut={shortcutLabel(projectShortcuts.get(card.projectId))}
+              agents={agentsByProject.get(card.projectId) ?? {}}
               onNavigate={navigateToAgent}
-              reorderProps={reorder.itemProps(group.key)}
-              dragging={reorder.draggingKey === group.key}
-              dropSide={dropSideFor(group.key)}
-              active={group.projectId === activeProjectId && group.tabId === activeTabByProject}
-              flashing={flashKey === group.key}
+              itemProps={reorder.itemProps}
+              dragging={reorder.draggingKey === card.projectId}
+              dropSide={dropSideFor(card.projectId)}
+              onScreen={card.projectId === activeProjectId}
+              activeTabId={projectWorkspaces[card.projectId]?.activeTabId ?? null}
+              flashKey={flashKey}
             />
           ))}
           {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
@@ -285,40 +297,69 @@ function RecoveryNotice({ label }: { label: string }) {
   );
 }
 
-// ─── Tab Agent Group ─────────────────────────────────────────────────────
+// ─── Project Card ────────────────────────────────────────────────────────
 
-function TabAgentGroup({
-  group,
+interface ProjectCardProps {
+  card: LiveProjectGroup;
+  shortcut: string | null;
+  /** This project's sessions only */
+  agents: Record<string, AgentState>;
+  onNavigate: (agentId: string, projectId: string) => void;
+  /** Press anywhere on the card and move to reorder it (Cmd+2..9 number projects in this order) */
+  itemProps: ReturnType<typeof usePointerReorder>["itemProps"];
+  dragging: boolean;
+  /** Where the dragged card lands: a line above this one (moving up) or below (moving down) */
+  dropSide: "before" | "after" | null;
+  /** The project is on screen */
+  onScreen: boolean;
+  /** The project's own active tab, marked when it has several live ones */
+  activeTabId: string | null;
+  /** The group key a Cmd+n jump landed on */
+  flashKey: string | null;
+}
+
+// Groups rebuild on every agent push, so the card is compared by content and agents by entry
+const sameCardProps = (a: ProjectCardProps, b: ProjectCardProps) =>
+  (Object.keys(a) as (keyof ProjectCardProps)[]).every((k) =>
+    k === "card"
+      ? JSON.stringify(a.card) === JSON.stringify(b.card)
+      : k === "agents"
+        ? shallow(a.agents, b.agents)
+        : Object.is(a[k], b[k]),
+  );
+
+const ProjectCard = memo(function ProjectCard({
+  card,
   shortcut,
   agents,
   onNavigate,
-  reorderProps,
+  itemProps,
   dragging,
   dropSide,
-  active,
-  flashing,
-}: {
-  group: LiveTabGroup;
-  active: boolean;
-  flashing: boolean;
-  shortcut: string | null;
-  /** Its live sessions */
-  agents: AgentState[];
-  onNavigate: (agentId: string, projectId: string) => void;
-  /** Press anywhere on the group and move to reorder it (Cmd+2..9 number projects in this order) */
-  reorderProps: ReturnType<ReturnType<typeof usePointerReorder>["itemProps"]>;
-  dragging: boolean;
-  /** Where the dragged group lands: a line above this one (moving up) or below (moving down) */
-  dropSide: "before" | "after" | null;
-}) {
-  const { data: project } = useProject(group.projectId);
-  const first = group.agentIds[0];
+  onScreen,
+  activeTabId,
+  flashKey,
+}: ProjectCardProps) {
+  const { data: project } = useProject(card.projectId);
+  const single = card.tabs.length === 1;
+  const flashing = single && card.tabs.some((t) => t.key === flashKey);
+  const rowsOf = (tab: LiveTabGroup) =>
+    tab.agentIds
+      .map((id) => agents[id])
+      .filter((a): a is AgentState => !!a)
+      .map((agent) => (
+        <RunningAgentRow
+          key={agent.id}
+          agent={agent}
+          onClick={() => onNavigate(agent.id, agent.projectId)}
+        />
+      ));
   return (
     <div
-      {...reorderProps}
+      {...itemProps(card.projectId)}
       className={cn(
         "relative select-none rounded-lg border bg-bg-tertiary/30 p-1.5 transition-colors",
-        active ? "border-accent/60" : "border-border/50",
+        onScreen ? "border-accent/60" : "border-border/50",
         flashing && "animate-flash-once",
         dragging && "opacity-50",
         dropSide && "border-accent/60",
@@ -335,9 +376,9 @@ function TabAgentGroup({
       )}
       <button
         type="button"
-        onClick={() => first && onNavigate(first, group.projectId)}
+        onClick={() => showProject(card.projectId)}
         className="mb-1 flex w-full min-w-0 cursor-grab items-center gap-1.5 px-0.5 text-left active:cursor-grabbing"
-        title="Go to this tab; drag to reorder"
+        title="Go to this project; drag to reorder"
       >
         {project ? (
           <ProjectAvatar project={project} className="h-3 w-3" />
@@ -345,27 +386,50 @@ function TabAgentGroup({
           <Cuboid className="h-3 w-3 shrink-0 text-accent/70" />
         )}
         <span className="min-w-0 truncate text-[10px] font-medium text-text-secondary">
-          {project?.name ?? group.projectId.slice(0, 12)}
+          {project?.name ?? card.projectId.slice(0, 12)}
         </span>
-        <span className="min-w-0 truncate text-[9px] text-text-muted">{group.tabLabel}</span>
         {shortcut && (
           <kbd className="ml-auto shrink-0 rounded border border-border px-1 font-mono text-[9px] text-text-muted">
             {shortcut}
           </kbd>
         )}
       </button>
-      <div className="space-y-0.5">
-        {agents.map((agent) => (
-          <RunningAgentRow
-            key={agent.id}
-            agent={agent}
-            onClick={() => onNavigate(agent.id, agent.projectId)}
-          />
-        ))}
-      </div>
+      {single ? (
+        <div className="space-y-0.5">{card.tabs[0] && rowsOf(card.tabs[0])}</div>
+      ) : (
+        <div className="space-y-1">
+          {card.tabs.map((tab) => {
+            const active = tab.tabId === activeTabId;
+            return (
+              <div key={tab.key}>
+                <button
+                  type="button"
+                  onClick={() => focusPane(card.projectId, tab.tabId)}
+                  className={cn(
+                    "flex w-full min-w-0 items-center gap-1 rounded px-1 text-left text-[9px] transition-colors hover:bg-white/5",
+                    active ? "text-text-secondary" : "text-text-muted",
+                    tab.key === flashKey && "animate-flash-once",
+                  )}
+                  title="Go to this tab"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      "h-1 w-1 shrink-0 rounded-full",
+                      active ? "bg-accent" : "bg-transparent",
+                    )}
+                  />
+                  <span className="min-w-0 truncate">{tab.tabLabel}</span>
+                </button>
+                <div className="space-y-0.5 pl-1">{rowsOf(tab)}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
-}
+}, sameCardProps);
 
 // ─── Project Agent Group ─────────────────────────────────────────────────
 

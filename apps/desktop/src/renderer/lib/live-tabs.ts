@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { tabLabel } from "../components/workspace/tab-bar-helpers";
 import { type AgentState, showProject, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../stores/shortcuts";
@@ -21,11 +22,11 @@ export interface LiveTabGroup {
 export function computeLiveTabGroups(
   projectWorkspaces: Record<string, ProjectWorkspace>,
   agents: Record<string, AgentState>,
-  order: string[],
+  projectOrder: string[],
 ): LiveTabGroup[] {
   const groups: LiveTabGroup[] = [];
   for (const [projectId, pw] of Object.entries(projectWorkspaces)) {
-    for (const tab of pw.tabs) {
+    pw.tabs.forEach((tab, index) => {
       const agentIds = collectPaneIds(tab.layout)
         .map((paneId) => pw.panes[paneId]?.agentId)
         .filter((id): id is string => !!id && LIVE_STATUSES_UI.has(agents[id]?.status ?? ""));
@@ -34,35 +35,52 @@ export function computeLiveTabGroups(
           key: `${projectId}:${tab.id}`,
           projectId,
           tabId: tab.id,
-          tabLabel: tab.label,
+          tabLabel: tabLabel(tab, index),
           agentIds,
         });
       }
-    }
+    });
   }
-  // The user's drag order first; new tabs keep their natural place after it
-  const rank = (k: string) => {
-    const i = order.indexOf(k);
-    return i === -1 ? order.length : i;
+  // The user's project drag order first; new projects keep their natural place after it, and a
+  // project's tabs stay together in its tab order
+  const rank = (projectId: string) => {
+    const i = projectOrder.indexOf(projectId);
+    return i === -1 ? projectOrder.length : i;
   };
   return groups
     .map((g, i) => ({ g, i }))
-    .sort((a, b) => rank(a.g.key) - rank(b.g.key) || a.i - b.i)
+    .sort((a, b) => rank(a.g.projectId) - rank(b.g.projectId) || a.i - b.i)
     .map(({ g }) => g);
+}
+
+/** A sidebar card: one project and its live tabs, in the groups' order */
+export interface LiveProjectGroup {
+  projectId: string;
+  tabs: LiveTabGroup[];
+}
+
+export function groupByProject(groups: LiveTabGroup[]): LiveProjectGroup[] {
+  const byProject = new Map<string, LiveProjectGroup>();
+  for (const g of groups) {
+    const entry = byProject.get(g.projectId) ?? { projectId: g.projectId, tabs: [] };
+    entry.tabs.push(g);
+    byProject.set(g.projectId, entry);
+  }
+  return [...byProject.values()];
 }
 
 function getLiveTabGroups(): LiveTabGroup[] {
   return computeLiveTabGroups(
     useWorkspaceStore.getState().projectWorkspaces,
     useAgentStore.getState().agents,
-    useAppStore.getState().liveTabOrder,
+    useAppStore.getState().liveProjectOrder,
   );
 }
 
 export function useLiveTabGroups(): LiveTabGroup[] {
   const projectWorkspaces = useWorkspaceStore((s) => s.projectWorkspaces);
   const agents = useAgentStore((s) => s.agents);
-  const order = useAppStore((s) => s.liveTabOrder);
+  const order = useAppStore((s) => s.liveProjectOrder);
   return useMemo(
     () => computeLiveTabGroups(projectWorkspaces, agents, order),
     [projectWorkspaces, agents, order],
@@ -71,8 +89,8 @@ export function useLiveTabGroups(): LiveTabGroup[] {
 
 /**
  * The digit each project answers to (Cmd+digit). A number the user gave a project is kept, live
- * or idle. The free numbers go one per project with live tabs, in the sidebar's order (a project
- * sits where its first group does), projects whose every session is pinned last (the Dashboard,
+ * or idle. The free numbers go one per project with live tabs, in the sidebar's card order,
+ * projects whose every session is pinned last (the Dashboard,
  * Cmd+1, already reaches them). Past the ninth, a project has none.
  */
 export function assignProjectShortcuts(
@@ -121,9 +139,8 @@ export function goToShortcut(digit: string): string | null {
   if (!projectId) return null;
   showProject(projectId);
   const tabId = useWorkspaceStore.getState().projectWorkspaces[projectId]?.activeTabId;
-  const own = groups.filter((g) => g.projectId === projectId);
-  const key = own.find((g) => g.tabId === tabId)?.key ?? own[0]?.key;
-  return key ?? (tabId ? `${projectId}:${tabId}` : null);
+  const own = groupByProject(groups).find((c) => c.projectId === projectId)?.tabs ?? [];
+  return own.find((g) => g.tabId === tabId)?.key ?? own[0]?.key ?? null;
 }
 
 /** How a digit reads next to its group or project */
@@ -137,4 +154,18 @@ export function reorderKeys(all: string[], drag: string, target: string): string
   const keys = all.filter((k) => k !== drag);
   keys.splice(keys.indexOf(target) + (movingDown ? 1 : 0), 0, drag);
   return keys;
+}
+
+/**
+ * Drag among the visible (live) cards; the saved projects not live now keep their relative order
+ * after them, so an idle project keeps its place and its Cmd+n slot
+ */
+export function reorderProjectOrder(
+  live: string[],
+  saved: string[],
+  drag: string,
+  target: string,
+): string[] {
+  const visible = new Set(live);
+  return [...reorderKeys(live, drag, target), ...saved.filter((id) => !visible.has(id))];
 }

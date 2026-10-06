@@ -44,9 +44,9 @@ interface AppStore {
   sidebarAgentsView: "agents" | "attention";
   setSidebarAgentsView: (view: "agents" | "attention") => void;
 
-  /** Sidebar order of the live tab groups (sets the Cmd+2..9 project order), by `projectId:tabId` */
-  liveTabOrder: string[];
-  setLiveTabOrder: (order: string[]) => void;
+  /** Sidebar order of the live project cards (sets the Cmd+2..9 project order), by project id */
+  liveProjectOrder: string[];
+  setLiveProjectOrder: (order: string[]) => void;
 
   /** T148: first-run onboarding wizard completed (or skipped) */
   onboardingComplete: boolean;
@@ -57,7 +57,15 @@ interface AppStore {
   setWelcomeTourSeen: (seen: boolean) => void;
 }
 
-/** v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour */
+/** The v3 tab-group order (`projectId:tabId`) as a project order: a project's first tab wins */
+export function projectOrderFromTabKeys(keys: string[]): string[] {
+  return [...new Set(keys.map((k) => k.split(":")[0] ?? k))];
+}
+
+/**
+ * v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour.
+ * v4: the sidebar orders projects, not tabs
+ */
 export function migrateAppStore(persisted: unknown, fromVersion: number): AppStore {
   if (!persisted || typeof persisted !== "object") return persisted as AppStore;
   const state = persisted as {
@@ -66,7 +74,16 @@ export function migrateAppStore(persisted: unknown, fromVersion: number): AppSto
     sidebarCollapsed?: boolean;
     onboardingComplete?: boolean;
     welcomeTourSeen?: boolean;
+    liveTabOrder?: unknown;
+    liveProjectOrder?: string[];
   };
+  if (fromVersion < 4) {
+    const keys = Array.isArray(state.liveTabOrder) ? state.liveTabOrder : [];
+    state.liveProjectOrder = projectOrderFromTabKeys(
+      keys.filter((k): k is string => typeof k === "string"),
+    );
+    delete state.liveTabOrder;
+  }
   if (fromVersion < 2 && state.activeView === "settings") {
     state.activeView = state.activeProjectId ? "workspace" : "projects";
   }
@@ -119,8 +136,8 @@ export const useAppStore = create<AppStore>()(
       sidebarAgentsView: "agents",
       setSidebarAgentsView: (view) => set({ sidebarAgentsView: view }),
 
-      liveTabOrder: [],
-      setLiveTabOrder: (order) => set({ liveTabOrder: order }),
+      liveProjectOrder: [],
+      setLiveProjectOrder: (order) => set({ liveProjectOrder: order }),
 
       onboardingComplete: false,
       setOnboardingComplete: (complete) => set({ onboardingComplete: complete }),
@@ -130,7 +147,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "exegol-app-state",
-      version: 3,
+      version: 4,
       migrate: migrateAppStore,
       partialize: (state) => ({
         activeProjectId: state.activeProjectId,
@@ -138,7 +155,7 @@ export const useAppStore = create<AppStore>()(
         sidebarCollapsed: state.sidebarCollapsed,
         onboardingComplete: state.onboardingComplete,
         welcomeTourSeen: state.welcomeTourSeen,
-        liveTabOrder: state.liveTabOrder,
+        liveProjectOrder: state.liveProjectOrder,
         sidebarProjectsHeight: state.sidebarProjectsHeight,
         sidebarAgentsView: state.sidebarAgentsView,
         projectsOrder: state.projectsOrder,
