@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- What's new is easier to scan: filter chips at the top (All, Added, Changed, Fixed, with counts) show one kind of change, each entry reads as a one-line headline that expands on click, and Expand all opens every entry
 - Sidebar Agents: one card per project instead of one block per tab. The card shows the project and its Cmd+n number (click it to go back where you left the project); with several live tabs, each tab gets a small header (click to open that tab, the active one is marked) with its sessions under it. Dragging reorders projects, and your previous order is kept
 
 ## [0.5.15] — 2026-10-06 — Agents in the browser pane, status bar widgets, Ctrl+Tab, queue and steer, undo a turn

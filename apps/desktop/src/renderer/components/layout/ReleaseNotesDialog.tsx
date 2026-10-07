@@ -1,8 +1,18 @@
+import { cn } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, X } from "lucide-react";
-import type { ReactNode } from "react";
-import { parseReleaseNotes } from "../../lib/release-notes";
+import { type ReactNode, useMemo, useState } from "react";
+import {
+  countByKind,
+  filterSections,
+  NOTES_KINDS,
+  type NotesFilter,
+  type NotesKind,
+  noteHeadline,
+  parseReleaseNotes,
+} from "../../lib/release-notes";
+import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 
 interface ReleaseNote {
@@ -42,14 +52,126 @@ function formatDate(iso: string | null): string | null {
     : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+const KIND_STYLE: Record<NotesKind, { label: string; badge: string }> = {
+  added: { label: "Added", badge: SEMANTIC_BADGE.success },
+  changed: { label: "Changed", badge: SEMANTIC_BADGE.info },
+  fixed: { label: "Fixed", badge: SEMANTIC_BADGE.warning },
+};
+
+function FilterChip({
+  active,
+  badge,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  badge: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "rounded-full px-2 py-0.5 text-[10px] font-medium transition-opacity",
+        badge,
+        active ? "ring-1 ring-current" : "opacity-60 hover:opacity-100",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function NoteEntry({
+  text,
+  open,
+  onToggle,
+}: {
+  text: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const headline = noteHeadline(text);
+  if (headline === text) {
+    return (
+      <li>
+        <NoteText text={text} />
+      </li>
+    );
+  }
+  return (
+    <li>
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className={cn(
+          "w-full rounded text-left hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
+          !open && "truncate",
+        )}
+      >
+        <NoteText text={open ? text : headline} />
+      </button>
+    </li>
+  );
+}
+
 /** Newest first: the newest open, the ones before it folded (a user who skipped versions sees
  *  them all, but the latest is what they came for) */
 function NotesList({ notes }: { notes: ReleaseNote[] }) {
+  const [filter, setFilter] = useState<NotesFilter>("all");
+  const [expandAll, setExpandAll] = useState(false);
+  const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
+  const parsed = useMemo(
+    () => notes.map((note) => ({ note, sections: parseReleaseNotes(note.body) })),
+    [notes],
+  );
+  const totals = countByKind(parsed.flatMap((p) => p.sections));
+  const toggle = (key: string) =>
+    setToggled((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
   return (
     <div className="space-y-3">
-      {notes.map((note, i) => {
-        const sections = parseReleaseNotes(note.body);
-        const count = sections.reduce((n, s) => n + s.items.length, 0);
+      <div className="flex flex-wrap items-center gap-1.5">
+        <FilterChip
+          active={filter === "all"}
+          badge={SEMANTIC_BADGE.muted}
+          onClick={() => setFilter("all")}
+        >
+          All
+        </FilterChip>
+        {NOTES_KINDS.filter((kind) => totals[kind] > 0).map((kind) => (
+          <FilterChip
+            key={kind}
+            active={filter === kind}
+            badge={KIND_STYLE[kind].badge}
+            onClick={() => setFilter(kind)}
+          >
+            {KIND_STYLE[kind].label} {totals[kind]}
+          </FilterChip>
+        ))}
+        <button
+          type="button"
+          aria-pressed={expandAll}
+          onClick={() => {
+            setExpandAll((v) => !v);
+            setToggled(new Set());
+          }}
+          className="ml-auto text-[10px] text-text-muted hover:text-text-primary"
+        >
+          {expandAll ? "Collapse all" : "Expand all"}
+        </button>
+      </div>
+      {parsed.map(({ note, sections }, i) => {
+        const shown = filterSections(sections, filter);
+        const count = shown.reduce((n, s) => n + s.items.length, 0);
+        const counts = countByKind(sections);
         return (
           <details key={note.version} open={i === 0} className="group">
             <summary className="mb-1 flex cursor-pointer list-none items-baseline gap-2 text-xs font-semibold text-text-primary">
@@ -60,11 +182,26 @@ function NotesList({ notes }: { notes: ReleaseNote[] }) {
                   {formatDate(note.date)}
                 </span>
               )}
+              {notes.length > 1 &&
+                NOTES_KINDS.filter((kind) => counts[kind] > 0).map((kind) => (
+                  <span
+                    key={kind}
+                    className={cn(
+                      "rounded-full px-1.5 text-[9px] font-medium",
+                      KIND_STYLE[kind].badge,
+                    )}
+                  >
+                    {KIND_STYLE[kind].label} {counts[kind]}
+                  </span>
+                ))}
               <span className="text-[10px] font-normal text-text-muted group-open:hidden">
                 {count} {count === 1 ? "change" : "changes"}
               </span>
             </summary>
-            {sections.map((section) => (
+            {shown.length === 0 && (
+              <p className="pl-5 text-[11px] text-text-muted">Nothing of this kind.</p>
+            )}
+            {shown.map((section) => (
               <div key={section.title ?? "intro"} className="mb-2 pl-5">
                 {section.title && (
                   <p className="mb-0.5 text-[10px] uppercase tracking-wider text-text-muted">
@@ -72,11 +209,17 @@ function NotesList({ notes }: { notes: ReleaseNote[] }) {
                   </p>
                 )}
                 <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-text-secondary">
-                  {section.items.map((item) => (
-                    <li key={item}>
-                      <NoteText text={item} />
-                    </li>
-                  ))}
+                  {section.items.map((item) => {
+                    const key = `${note.version}:${item}`;
+                    return (
+                      <NoteEntry
+                        key={item}
+                        text={item}
+                        open={expandAll !== toggled.has(key)}
+                        onToggle={() => toggle(key)}
+                      />
+                    );
+                  })}
                 </ul>
               </div>
             ))}
