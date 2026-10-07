@@ -1,14 +1,15 @@
-import { type Project, parseBrowserHosts } from "@exegol/shared";
+import { type IdeType, ideLabel, type Project, parseBrowserHosts } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState } from "react";
-import { useProjects } from "../../hooks/use-trpc";
+import { useProjectIde, useProjects, useSettings } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
 import { useProjectShortcuts } from "../../lib/live-tabs";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../../stores/shortcuts";
 import { toastError } from "../../stores/toasts";
+import { IdePicker } from "../settings/IdePicker";
 import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
 
 /**
@@ -66,7 +67,7 @@ export function ProjectAppearanceDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/4 z-50 w-full max-w-sm -translate-x-1/2 rounded-lg border p-4 shadow-2xl"
+          className="fixed left-1/2 top-[10vh] z-50 max-h-[80vh] w-full max-w-sm -translate-x-1/2 overflow-y-auto rounded-lg border p-4 shadow-2xl"
           style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
         >
           <div className="mb-3 flex items-center justify-between">
@@ -93,6 +94,8 @@ export function ProjectAppearanceDialog({
           </label>
 
           <ShortcutPicker projectId={project.id} />
+
+          <ProjectIdePicker projectId={project.id} />
 
           <label className="mb-3 block">
             <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
@@ -202,5 +205,28 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
         ))}
       </select>
     </label>
+  );
+}
+
+/** The IDE this project opens in; applies on pick, like the icon */
+function ProjectIdePicker({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { data: settings } = useSettings();
+  const { data: ide = null } = useProjectIde(projectId);
+  const save = useMutation({
+    mutationFn: (next: IdeType | null) => trpcMutate("ide.setProjectIde", { projectId, ide: next }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ide", "project", projectId] }),
+    onError: toastError("Could not save the project's IDE"),
+  });
+  return (
+    <div className="mb-3">
+      <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">IDE</span>
+      <IdePicker
+        compact
+        value={ide}
+        onChange={(next) => save.mutate(next)}
+        follow={{ label: "Same as Settings", sub: ideLabel(settings?.defaultIde ?? "vscode") }}
+      />
+    </div>
   );
 }

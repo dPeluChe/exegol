@@ -86,7 +86,6 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
         path: folderPath.trim(),
         gitRemote: null,
         defaultBranch: defaultBranch || "main",
-        defaultIde: "vscode",
         appearance: picked ?? undefined,
       });
 

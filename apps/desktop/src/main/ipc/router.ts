@@ -10,6 +10,7 @@ import { filesRouter } from "./procedures/files";
 import { fsSearchRouter } from "./procedures/fs-search";
 import { githubRouter } from "./procedures/github";
 import { historyRouter } from "./procedures/history";
+import { ideRouter } from "./procedures/ide";
 import { indexerRouter } from "./procedures/indexer";
 import { knowledgeRouter } from "./procedures/knowledge";
 import { mcpRouter } from "./procedures/mcp";
@@ -75,6 +76,7 @@ export const appRouter = router({
   terminalLinks: terminalLinksRouter,
   models: modelsRouter,
   storage: storageRouter,
+  ide: ideRouter,
 });
 
 export type AppRouter = typeof appRouter;

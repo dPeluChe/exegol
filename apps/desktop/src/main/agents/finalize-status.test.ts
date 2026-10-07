@@ -28,7 +28,6 @@ describe("finalizeAgentStatus", () => {
       path: "/tmp/p",
       gitRemote: null,
       defaultBranch: "main",
-      defaultIde: "vscode",
     });
     const row = createAgent(db, {
       projectId: project.id,

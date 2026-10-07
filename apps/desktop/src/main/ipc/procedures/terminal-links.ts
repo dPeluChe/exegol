@@ -144,8 +144,8 @@ export const terminalLinksRouter = router({
       if (how === "ide") {
         const { ide, customPath } = resolveIde(ctx.db, getAgent(ctx.db, input.agentId)?.projectId);
         recheck(path);
-        await openInIde(path, ide, customPath, input.line);
-        return { opened: true, revealed: false };
+        const opened = await openInIde(path, ide, customPath, input.line);
+        return { opened: true, revealed: false, ...opened };
       }
       if (how === "reveal") {
         recheck(path);

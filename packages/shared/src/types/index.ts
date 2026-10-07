@@ -8,6 +8,7 @@ export * from "./dev-servers";
 export * from "./diagnostics";
 export * from "./diff-comment";
 export * from "./github-issue";
+export * from "./ide";
 export * from "./mcp";
 export * from "./memory";
 export * from "./models";

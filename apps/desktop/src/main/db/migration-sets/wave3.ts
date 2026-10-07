@@ -238,4 +238,16 @@ export const wave3Migrations: Migration[] = [
     id: "w3_022_project_browser_eval",
     sql: "ALTER TABLE projects ADD COLUMN browser_eval INTEGER NOT NULL DEFAULT 0;",
   },
+  {
+    // Per-project IDE, NULL = Settings' default. Replaces default_ide (NOT NULL, always 'vscode')
+    // and the interim project_ides JSON setting, whose values move here once
+    id: "w3_023_project_ide",
+    sql: `ALTER TABLE projects ADD COLUMN ide TEXT;
+    UPDATE projects SET ide = NULLIF(default_ide, 'vscode');
+    UPDATE projects SET ide = COALESCE(
+      json_extract((SELECT value FROM settings WHERE key = 'project_ides'), '$."' || id || '"'),
+      ide)
+    WHERE EXISTS (SELECT 1 FROM settings WHERE key = 'project_ides' AND json_valid(value));
+    DELETE FROM settings WHERE key = 'project_ides';`,
+  },
 ];

@@ -1,5 +1,6 @@
 import { isHttpUrl } from "../../lib/browser-viewports";
 import { openInBrowser } from "../../lib/open-in-browser";
+import { runIdeResult } from "../../lib/open-in-ide";
 import { trpcMutate } from "../../lib/trpc-client";
 import { findAgentPane, focusPane, useAgentStore } from "../../stores/agents";
 import { peekTerminalFile } from "../../stores/terminal-links";
@@ -71,11 +72,13 @@ export function openTerminalFile(agentId: string, match: LinkMatch, click: LinkC
     peekTerminalFile(agentId, { text: match.text, cwd, line: match.line });
     return;
   }
-  trpcMutate("terminalLinks.open", {
+  trpcMutate<{ terminalCommand?: string }>("terminalLinks.open", {
     agentId,
     cwd,
     text: match.text,
     how: action === "reveal" || action === "ide" ? action : "external",
     line: match.line,
-  }).catch(toastError("Could not open the file"));
+  })
+    .then((result) => runIdeResult(useAgentStore.getState().agents[agentId]?.projectId, result))
+    .catch(toastError("Could not open the file"));
 }
