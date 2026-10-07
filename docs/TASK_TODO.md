@@ -202,6 +202,30 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T201: Local voice dictation `added: 2026-10-07`
+**Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-07. Speech to text that runs
+on the machine (no audio leaves it), typed into the focused pane.
+
+1. ~~Phase 1, models + storage~~: shipped on `feat/models-and-storage` (`TASK_COMPLETED/2610.md`):
+   `main/models/` catalog + resumable verified downloads, Settings > Models and Settings > Storage.
+2. Phase 2, dictation:
+   - sherpa-onnx offline websocket server binary per platform in `extraResources`, signed and
+     notarized with the app; started on demand, bound to 127.0.0.1, stopped when idle
+   - Mic permission: `NSMicrophoneUsageDescription` via electron-builder `extendInfo`, the
+     `com.apple.security.device.audio-input` entitlement, `systemPreferences.askForMediaAccess`
+     before the first recording
+   - Renderer capture at 16 kHz mono (AudioWorklet), streamed to main
+   - A small centered overlay on the active pane while recording (level meter, partial text for
+     streaming models, Esc cancels)
+   - Paste into the focused pane only (terminal input or the focused field), never into other
+     apps: no Accessibility permission
+   - History of dictations (last N, copy again)
+   - Hotkeys inside Exegol: toggle and hold-to-talk
+3. Later:
+   - Whisper through whisper-server (whisper.cpp, Metal) for faster Whisper on Apple Silicon
+   - Apple SpeechAnalyzer on macOS 26+ as a no-download engine
+   - Numbers-as-words post-processing for Parakeet ("twenty five" to "25")
+
 ### T153 — Project Awareness Engine `added: 2026-07-04`
 > Merged from T132 (automations catalog, `added: 2026-07-04`), T186 (Owl Phase 1), T187 (Owl
 > Phase 2) and T159 (embedded inference backend) on 2026-10-04. T153 itself was added 2026-07-07.

@@ -20,6 +20,8 @@ type SettingsTab =
   | "shortcuts"
   | "apikeys"
   | "mcp"
+  | "models"
+  | "storage"
   | "doctor";
 
 let settingsWindow: BrowserWindow | null = null;

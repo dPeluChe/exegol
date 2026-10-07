@@ -125,6 +125,11 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 - **Settings window**: its own window, so you can change themes, fonts or keys while agents run.
 - **Themes**: light, dark, black (OLED) and system. Three Nerd Fonts are bundled.
+- **Speech models** (Settings > Models): local speech-to-text models for voice dictation
+  (coming), downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
+  SHA-256. Each lists what it is best for, languages, size and license.
+- **Storage** (Settings > Storage): Exegol's disk use by kind and the free space, with open
+  folder, clear screenshots, clear old logs, delete a model and clear a project's browser cache.
 - **API keys** are encrypted with the system keychain.
 - **Updates**: the title-bar button checks GitHub releases, installs the new version and shows
   what's new.

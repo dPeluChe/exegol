@@ -10,6 +10,7 @@ export * from "./diff-comment";
 export * from "./github-issue";
 export * from "./mcp";
 export * from "./memory";
+export * from "./models";
 export * from "./pipeline";
 export * from "./project";
 export * from "./project-group";

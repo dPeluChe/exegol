@@ -208,6 +208,13 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:turn-changes", handler as never);
     };
   },
+  onModelProgress: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("models:progress", handler as never);
+    return () => {
+      safe.off("models:progress", handler as never);
+    };
+  },
   onPipelineStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("pipeline:status-changed", handler as never);

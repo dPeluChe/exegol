@@ -1,0 +1,292 @@
+import type { SpeechModelEntry } from "@exegol/shared";
+import { z } from "zod";
+
+// Hashes and sizes checked against the downloaded assets on 2026-10-07 (see TASK_COMPLETED/2610.md)
+const SHERPA_RELEASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
+const SHERPA_CREDIT = "Converted to ONNX by the sherpa-onnx project (k2-fsa, Apache-2.0).";
+
+const PARAKEET_ROOT = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8";
+const WHISPER_ROOT = "sherpa-onnx-whisper-turbo";
+const NEMOTRON_ROOT = "sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-2026-06-11";
+const QWEN_ROOT = "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25";
+const MOONSHINE_EN_ROOT = "sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27";
+const MOONSHINE_ES_ROOT = "sherpa-onnx-moonshine-base-es-quantized-2026-02-27";
+
+const TRANSDUCER_FILES = [
+  "encoder.int8.onnx",
+  "decoder.int8.onnx",
+  "joiner.int8.onnx",
+  "tokens.txt",
+];
+const MOONSHINE_FILES = ["encoder_model.ort", "decoder_model_merged.ort", "tokens.txt"];
+
+export const DEFAULT_MODEL_ID = "parakeet-tdt-0.6b-v3-int8";
+
+export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
+  {
+    id: DEFAULT_MODEL_ID,
+    name: "Parakeet TDT 0.6B v3 int8",
+    engine: "sherpa-onnx",
+    engineAvailable: true,
+    kind: "offline",
+    languages: [
+      "bg",
+      "cs",
+      "da",
+      "de",
+      "el",
+      "en",
+      "es",
+      "et",
+      "fi",
+      "fr",
+      "hr",
+      "hu",
+      "it",
+      "lt",
+      "lv",
+      "mt",
+      "nl",
+      "pl",
+      "pt",
+      "ro",
+      "ru",
+      "sk",
+      "sl",
+      "sv",
+      "uk",
+    ],
+    bestFor: "Default: fast and accurate, 25 European languages incl. Spanish",
+    sizeBytes: 487_170_055,
+    installedBytes: 671_239_000,
+    license: "CC-BY-4.0",
+    attribution: `Parakeet TDT 0.6B v3 by NVIDIA, licensed CC-BY-4.0 (huggingface.co/nvidia/parakeet-tdt-0.6b-v3). ${SHERPA_CREDIT}`,
+    sourceUrl: `${SHERPA_RELEASE}/${PARAKEET_ROOT}.tar.bz2`,
+    sha256: "5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf",
+    archive: "tar.bz2",
+    rootDir: PARAKEET_ROOT,
+    files: TRANSDUCER_FILES,
+    notes: "Writes numbers as words (twenty five, not 25).",
+  },
+  {
+    id: "whisper-large-v3-turbo-int8",
+    name: "Whisper large-v3-turbo int8",
+    engine: "sherpa-onnx",
+    engineAvailable: true,
+    kind: "offline",
+    languages: [],
+    languageSummary: "99 languages",
+    bestFor: "99 languages, writes digits; slower and the largest on disk",
+    sizeBytes: 563_790_207,
+    installedBytes: 1_037_438_452,
+    license: "MIT",
+    attribution: `Whisper large-v3-turbo by OpenAI, MIT. ${SHERPA_CREDIT}`,
+    sourceUrl: `${SHERPA_RELEASE}/${WHISPER_ROOT}.tar.bz2`,
+    sha256: "b11acbbcd660b44a8e0df33724feb5aaa709cf65668f2823d59f656312544f22",
+    archive: "tar.bz2",
+    rootDir: WHISPER_ROOT,
+    files: ["turbo-encoder.int8.onnx", "turbo-decoder.int8.onnx", "turbo-tokens.txt"],
+    notes: "Whisper decodes 30-second windows: fine for dictation, no live partial text.",
+  },
+  {
+    id: "nemotron-3.5-asr-streaming-0.6b-560ms-int8",
+    name: "Nemotron 3.5 ASR streaming 0.6B int8 (560 ms)",
+    engine: "sherpa-onnx",
+    engineAvailable: true,
+    kind: "streaming",
+    languages: [
+      "ar",
+      "bg",
+      "cs",
+      "da",
+      "de",
+      "el",
+      "en",
+      "es",
+      "et",
+      "fi",
+      "fr",
+      "he",
+      "hi",
+      "hr",
+      "hu",
+      "it",
+      "ja",
+      "ko",
+      "lt",
+      "lv",
+      "mt",
+      "nl",
+      "no",
+      "pl",
+      "pt",
+      "ro",
+      "ru",
+      "sk",
+      "sl",
+      "sv",
+      "th",
+      "tr",
+      "uk",
+      "vi",
+      "zh",
+    ],
+    bestFor: "Live partial text while you speak, 35 languages",
+    sizeBytes: 475_271_763,
+    installedBytes: 684_574_872,
+    license: "OpenMDW-1.1",
+    attribution: `Nemotron 3.5 ASR streaming 0.6B by NVIDIA, OpenMDW-1.1 (huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b). ${SHERPA_CREDIT}`,
+    sourceUrl: `${SHERPA_RELEASE}/${NEMOTRON_ROOT}.tar.bz2`,
+    sha256: "c6bf5e0df765f9d5b43bc9e0536d4b4b3e7d40bdf5ecf13e45f134c51c05ae3a",
+    archive: "tar.bz2",
+    rootDir: NEMOTRON_ROOT,
+    files: TRANSDUCER_FILES,
+    notes: "560 ms chunks: the latency and accuracy middle ground of the five exports.",
+  },
+  {
+    id: "qwen3-asr-0.6b-int8",
+    name: "Qwen3-ASR 0.6B int8",
+    engine: "sherpa-onnx",
+    engineAvailable: true,
+    kind: "offline",
+    languages: [
+      "ar",
+      "cs",
+      "da",
+      "de",
+      "el",
+      "en",
+      "es",
+      "fa",
+      "fi",
+      "fil",
+      "fr",
+      "hi",
+      "hu",
+      "id",
+      "it",
+      "ja",
+      "ko",
+      "mk",
+      "ms",
+      "nl",
+      "pl",
+      "pt",
+      "ro",
+      "ru",
+      "sv",
+      "th",
+      "tr",
+      "vi",
+      "yue",
+      "zh",
+    ],
+    bestFor: "30 languages, mixed-language speech; the biggest download",
+    sizeBytes: 878_702_423,
+    installedBytes: 1_000_089_677,
+    license: "Apache-2.0",
+    attribution: `Qwen3-ASR 0.6B by the Qwen team (Alibaba), Apache-2.0. ${SHERPA_CREDIT}`,
+    sourceUrl: `${SHERPA_RELEASE}/${QWEN_ROOT}.tar.bz2`,
+    sha256: "393f8a14e2f5fb96746aaab342997a40641001fbd5bf9592a080a8329178ee96",
+    archive: "tar.bz2",
+    rootDir: QWEN_ROOT,
+    files: [
+      "conv_frontend.onnx",
+      "encoder.int8.onnx",
+      "decoder.int8.onnx",
+      "tokenizer/vocab.json",
+      "tokenizer/merges.txt",
+      "tokenizer/tokenizer_config.json",
+    ],
+    notes: "An LLM-style decoder: slower per second of audio than Parakeet.",
+  },
+  {
+    id: "moonshine-v2-tiny-en",
+    name: "Moonshine v2 tiny (English)",
+    engine: "sherpa-onnx",
+    engineAvailable: true,
+    kind: "offline",
+    languages: ["en"],
+    bestFor: "Tiny and fast, English only",
+    sizeBytes: 29_858_559,
+    installedBytes: 44_441_158,
+    license: "MIT",
+    attribution: `Moonshine by Useful Sensors (Moonshine AI), MIT for English models. ${SHERPA_CREDIT}`,
+    sourceUrl: `${SHERPA_RELEASE}/${MOONSHINE_EN_ROOT}.tar.bz2`,
+    sha256: "9ec31b342d8fa3240c3b81b8f82e1cf7e3ac467c93ca5a999b741d5887164f8d",
+    archive: "tar.bz2",
+    rootDir: MOONSHINE_EN_ROOT,
+    files: MOONSHINE_FILES,
+  },
+  {
+    id: "moonshine-v2-base-es",
+    name: "Moonshine v2 base (Spanish)",
+    engine: "sherpa-onnx",
+    engineAvailable: true,
+    kind: "offline",
+    languages: ["es"],
+    bestFor: "Small and fast, Spanish only; non-commercial license",
+    sizeBytes: 50_846_902,
+    installedBytes: 65_357_006,
+    license: "Moonshine Community License (non-commercial)",
+    attribution: `Moonshine by Useful Sensors (Moonshine AI), Moonshine AI Community License: non-commercial use only. ${SHERPA_CREDIT}`,
+    sourceUrl: `${SHERPA_RELEASE}/${MOONSHINE_ES_ROOT}.tar.bz2`,
+    sha256: "850c3dcc5dfccc8b1feb10bb221b11d6039b6f5c626241729f46863771016383",
+    archive: "tar.bz2",
+    rootDir: MOONSHINE_ES_ROOT,
+    files: MOONSHINE_FILES,
+    notes: "The license text ships inside the archive (LICENSE).",
+  },
+];
+
+const relativeFile = z
+  .string()
+  .min(1)
+  .refine((p) => !p.startsWith("/") && !p.split("/").includes(".."), "must stay inside rootDir");
+
+const entrySchema = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9.-]*$/),
+  name: z.string().min(1),
+  engine: z.literal("sherpa-onnx"),
+  engineAvailable: z.boolean(),
+  kind: z.enum(["offline", "streaming"]),
+  languages: z.array(z.string().regex(/^[a-z]{2,3}$/)),
+  languageSummary: z.string().optional(),
+  bestFor: z.string().min(1),
+  sizeBytes: z.number().int().positive(),
+  installedBytes: z.number().int().positive(),
+  license: z.string().min(1),
+  attribution: z.string().min(1),
+  sourceUrl: z.string().url().startsWith("https://"),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  archive: z.literal("tar.bz2"),
+  rootDir: z.string().regex(/^[A-Za-z0-9._-]+$/),
+  files: z.array(relativeFile).min(1),
+  notes: z.string().optional(),
+});
+
+/** Problems with the catalog data, empty when it is sound */
+export function validateCatalog(entries: readonly SpeechModelEntry[]): string[] {
+  const problems: string[] = [];
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    const parsed = entrySchema.safeParse(entry);
+    if (!parsed.success) {
+      problems.push(`${entry.id}: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
+    }
+    if (ids.has(entry.id)) problems.push(`${entry.id}: duplicate id`);
+    ids.add(entry.id);
+    if (entry.languages.length === 0 && !entry.languageSummary) {
+      problems.push(`${entry.id}: no languages`);
+    }
+    if (!entry.sourceUrl.endsWith(`/${entry.rootDir}.tar.bz2`)) {
+      problems.push(`${entry.id}: sourceUrl does not match rootDir`);
+    }
+  }
+  if (!entries.some((e) => e.id === DEFAULT_MODEL_ID)) problems.push("default model missing");
+  return problems;
+}
+
+export function findModel(id: string): SpeechModelEntry | undefined {
+  return MODEL_CATALOG.find((m) => m.id === id);
+}

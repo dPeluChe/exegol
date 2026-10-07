@@ -318,6 +318,20 @@
       "list",
       "finalOutput",
       "resumableLocal"
+    ],
+    "models": [
+      "cancel",
+      "delete",
+      "download",
+      "list",
+      "setDefault"
+    ],
+    "storage": [
+      "clearBrowserCache",
+      "clearOldLogs",
+      "clearScreenshots",
+      "openFolder",
+      "report"
     ]
   },
   "ipc": [
@@ -376,6 +390,7 @@
     "browser:open-request",
     "browser:open-result",
     "mcp:status",
-    "agent:turn-changes"
+    "agent:turn-changes",
+    "models:progress"
   ]
 }
