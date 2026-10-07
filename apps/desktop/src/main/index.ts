@@ -16,7 +16,11 @@ import { createWindow, showMainWindow } from "./bootstrap/window";
 import { installAgentBrowser, migrateBrowserCookies } from "./browser/electron-host";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
+import { stopEngine } from "./dictation/engine";
+import { forwardDictationKeys } from "./dictation/keys";
+import { applyDictationSettings, dictationSettings } from "./dictation/service";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
+import { registerDictationIpc } from "./ipc/procedures/dictation";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { broadcast } from "./lib/event-bus";
 import { flushLogSync, logger, markShutdown } from "./lib/logger";
@@ -82,6 +86,8 @@ app.whenReady().then(async () => {
   registerIpcHandlers();
   registerFloatingIpcHandlers();
   registerSettingsIpcHandlers();
+  registerDictationIpc();
+  applyDictationSettings(dictationSettings(getDb()));
   installAgentBrowser(getDb());
   registerGlobalHotkey(settings.globalHotkey, showMainWindow);
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
@@ -170,7 +176,10 @@ let stopWorkGuard: (() => void) | null = null;
 
 app.on("web-contents-created", (_event, contents) => {
   captureConsole(contents);
-  if (contents.getType() === "webview") forwardSwitcherKeys(contents);
+  if (contents.getType() === "webview") {
+    forwardSwitcherKeys(contents);
+    forwardDictationKeys(contents);
+  }
   // Every Exegol window (settings and floating ones too, not only main): a link must not open
   // an Electron child window, which would hand the preload's window.api to that page
   if (contents.getType() === "window") {
@@ -217,6 +226,7 @@ function teardownSteps() {
     { name: "globalShortcut", run: () => globalShortcut.unregisterAll() },
     { name: "floatingPanes", run: closeAllFloatingPanes },
     { name: "settingsWindow", run: closeSettingsWindow },
+    { name: "dictationEngine", run: stopEngine },
     // T145: close the MCP socket + revoke all tokens so shim calls fail fast
     // instead of hanging, and the socket file doesn't go stale on disk.
     { name: "mcpServer", run: stopExegolMcpServer },

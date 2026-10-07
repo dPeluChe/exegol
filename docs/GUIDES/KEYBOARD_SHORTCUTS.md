@@ -51,6 +51,7 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Esc` | same | Leave the Projects view, back to the project or Dashboard it was opened from |
 | `Cmd+Shift+0` | none | Reset zoom (`Cmd+0` is a project slot) |
 | `Cmd+Shift+E` | `Ctrl+Shift+E` | Bring Exegol to the front from any app (global, configurable in Settings) |
+| `Cmd+Shift+Space` | `Ctrl+Shift+Space` | Dictation into the focused pane: press to start and again to insert, or hold while you talk; Esc cancels (configurable in Settings > Dictation; works from a browser page too) |
 
 ## Inside a terminal
 

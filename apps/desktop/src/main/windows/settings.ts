@@ -23,6 +23,7 @@ type SettingsTab =
   | "apikeys"
   | "mcp"
   | "models"
+  | "dictation"
   | "storage"
   | "doctor";
 

@@ -76,7 +76,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 
 ### Settings window (T120, 2026-05)
 - Settings live in a standalone BrowserWindow (`main/windows/settings.ts`) so users can tweak themes/API keys/fonts while watching agent output
-- Tabs include **Models** (T201: speech model catalog, download/cancel/delete/default, `models` router + `models:progress` push) and **Storage** (`system/storage.ts`: async walk with a shared fs limiter, cached 30s; open folder, clear screenshots, clear rotated logs, delete a model, clear a project partition's cache; worktrees shown only)
+- Tabs include **Dictation** (T201 phase 2: shortcut recorder, mic status, limits, history) and **Models** (T201: speech model catalog, download/cancel/delete/default, `models` router + `models:progress` push) and **Storage** (`system/storage.ts`: async walk with a shared fs limiter, cached 30s; open folder, clear screenshots, clear rotated logs, delete a model, clear a project partition's cache; worktrees shown only)
 - Renderer routes on `?settings=1` → lazy `<SettingsRoot/>` (own QueryClient + TooltipProvider + useTheme)
 - Lifecycle bound via `mainWindow.on("closed")` — intentionally NO `parent:` (would propagate minimize/hide on macOS) and NO `alwaysOnTop`
 - Cmd+W routed by `app-menu.ts#handleCloseAccelerator`: settings/floating URLs close the window directly; main window receives `menu:close-pane`
@@ -160,6 +160,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 - **Ring-buffer eviction** (T143): global cap with LRU eviction of idle sessions to disk — `RingBuffer.release()` actually frees the 8MB allocation; `reloadIfEvicted` regrows on next write.
 - **Agent messages**: `messages` router is read-only (`list`, `conversation`); the Dashboard card shows each agent's thread with `delivery_state`; only the Exegol MCP tools and PR watch notices send
 - **PR watch** (T142 phase 1): opt-in per agent (`pr_watch` column: 0 off, else the review-feedback cursor that survives a restart; toolbar "Watch PR"). `integrations/github/pr-watch.ts` polls `gh` every 3 min for live watched agents (stops at the wake cap or a merged/closed PR, 15 min backoff with no PR); `integrations/github/gh.ts` holds `execFileAsync`, `detectGhCli` and the default-branch check; `pr-watch-reactions.ts` (pure) turns failing checks, review feedback and conflicts into notices (content dedup per head SHA, 3 per kind, 10 wakes); `sendSystemMessage` delivers them on the agent_send route (boundary, never over a permission prompt) + `agent:pr-watch` attention
+- **Voice dictation** (T201): `main/dictation/engine-entry.ts` runs `sherpa-onnx-node` (N-API, asarUnpacked with its dylibs) in an Electron `utilityProcess`, forked on first use and killed after the idle setting. Renderer: getUserMedia → AudioWorklet resampler (16 kHz, `lib/dictation/resampler.ts`) → `dictation:audio`; `lib/dictation/controller.ts` resolves the target at start (`target.ts`: focused terminal / browser / files pane or an app text field, same project) and confirms it at stop, else clipboard. Chord in `settings.dictation.shortcut` (shared `parseChord`/`matchesChord`), window capture-phase listener, browser pages forward it from main (`dictation/keys.ts`). Dictated text is never logged
 - **Sidebar**: AGENTS shows one card per project (`groupByProject` over `computeLiveTabGroups`, `lib/live-tabs.ts`): header = `showProject` + Cmd+n badge, sessions listed directly for one live tab, a sub-header per tab (`focusPane`, active one marked) for 2+; cards reorder with pointer events (`usePointerReorder`) into `liveProjectOrder` (app store v4 migrates the old `projectId:tabId` order, first tab wins); Projects sits at the bottom with its height persisted as `sidebarProjectsHeight`
 - **Shell skip**: shells bypass scoring, memory extraction, scrollback buffering, status parsing
 - **Shell → agent** (`agents/shell-promotion.ts`): a CLI typed in a plain terminal (any provider) promotes that same row in place: `cli_type` → the provider, `launched_in_shell = 1`, codename alias, output pipeline attached (parser, no hooks). CLI exits → `idle` at the prompt, still the agent (reattached and swept like a live one); toolbar Continue writes the provider's resume command into that shell. One `ps` every 3s while a terminal session is live
@@ -219,6 +220,11 @@ apps/desktop/src/
                     space check), extract (system `tar -xjf`, then an lstat walk refuses links and
                     special files, forces 0644/0755, temp dir then rename), manager
                     (~/.exegol/models/<id>, `models:progress` push, default in settings)
+    dictation/      T201 voice dictation: engine-entry (Electron utilityProcess running
+                    sherpa-onnx-node, reads only under ~/.exegol/models), engine (fork on demand,
+                    idle unload), model-config (catalog id to recognizer config), service
+                    (sessions, model pick), history (dictation_history + retention), mic
+                    (macOS permission), keys (chord forwarded from browser pane pages)
     ide/            catalog (launch facts + line syntax per IDE), detect (installed apps/CLIs, cached 10 min), opener
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)
   renderer/
@@ -236,6 +242,7 @@ apps/desktop/src/
                     lifecycle (WebGL and the dormant pipe follow the live session)
       common/       AgentIcon (glob *.{svg,png}, dark/light), EmptyState, StatusDot, ConfirmDialog
       agents/       AgentLauncher (portal dropdown from registry)
+      dictation/    DictationOverlay (over the target pane: waveform, timer, partial text, no-model offer)
       onboarding/   OnboardingWizard (T148 first-run: CLI detect + keys + doctor), WelcomeTour
       layout/       Sidebar (+ SidebarRail, SidebarHeader, SidebarFooter), ProjectsSection, AttentionSection,
                     TitleBar (AttentionQueue, BugReportDialog, UpdateButton), StatusBar (widget registry `lib/status-bar-widgets.ts`, Settings > Status bar), TabsOverview
@@ -272,7 +279,7 @@ docs/
 
 ## Database
 
-36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_023` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns, PTY size, yolo, mute/suspend, project appearance, launched_in_shell, cli_version, model, pr_watch, token_usage scan key, scheduled runs + task timeout, status_changed_at + its trigger, project browser_hosts, browser_eval, project ide) = 62 total · 35 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_runs, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, sessions, port_registry, host_metrics (last three unused, see T185.4)
+36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_024` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns, PTY size, yolo, mute/suspend, project appearance, launched_in_shell, cli_version, model, pr_watch, token_usage scan key, scheduled runs + task timeout, status_changed_at + its trigger, project browser_hosts, browser_eval, project ide, dictation_history) = 63 total · 36 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_runs, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, dictation_history, sessions, port_registry, host_metrics (last three unused, see T185.4)
 
 **Migration rule**: parallel work groups append ONLY to their own `db/migration-sets/<group>.ts` file (id prefixes `w2a_`/`w2b_`/`w2d_`/`w3_`) — `migrations.ts` spreads them; never edit another group's set.
 

@@ -5,6 +5,7 @@ import { LoadingSpinner } from "./components/common";
 import { CloseConfirmHost } from "./components/common/CloseConfirmHost";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
+import { DictationOverlay } from "./components/dictation/DictationOverlay";
 import { CliUpdatesNotice } from "./components/layout/CliUpdatesNotice";
 import { WhatsNewAfterUpdate } from "./components/layout/ReleaseNotesDialog";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -18,6 +19,7 @@ import { useActiveViewSync } from "./hooks/use-active-view-sync";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useCliRestarts } from "./hooks/use-cli-updates";
 import { useDeepLink } from "./hooks/use-deeplink";
+import { useDictation } from "./hooks/use-dictation";
 import { useFleetSync } from "./hooks/use-fleet-sync";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
@@ -55,6 +57,7 @@ export default function App() {
   const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
 
   useHotkeys();
+  useDictation();
   useToastEvents();
   useTheme();
   useAutoSelectProject();
@@ -122,6 +125,7 @@ export default function App() {
         <StatusBar />
         <ToastStack />
         <PaneSwitcher />
+        <DictationOverlay />
         <Suspense fallback={null}>
           <CommandPalette />
         </Suspense>

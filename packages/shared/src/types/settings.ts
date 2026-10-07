@@ -1,3 +1,4 @@
+import { DEFAULT_DICTATION_SETTINGS, type DictationSettings } from "./dictation";
 import type { IdeType } from "./ide";
 
 export type AgentCliConfig = {
@@ -35,6 +36,8 @@ export type Settings = {
   mcpVerboseLogging: boolean;
   /** Empty: the built-in widgets at their defaults */
   statusBarWidgets: StatusBarWidgetSetting[];
+  /** Local voice dictation (Settings > Dictation) */
+  dictation: DictationSettings;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -57,4 +60,5 @@ export const DEFAULT_SETTINGS: Settings = {
   ollamaModel: "nomic-embed-text",
   mcpVerboseLogging: false,
   statusBarWidgets: [],
+  dictation: DEFAULT_DICTATION_SETTINGS,
 };

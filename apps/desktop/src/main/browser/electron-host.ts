@@ -285,6 +285,23 @@ function registerPane(
   return true;
 }
 
+/** Dictation: types into the focused element of a pane's page. Only a pane registered for that
+ *  project and hosted by the asking window, so a renderer cannot reach another project's page */
+export function insertTextInBrowserPane(
+  sender: WebContents,
+  input: { paneId?: unknown; projectId?: unknown; text?: unknown },
+): boolean {
+  const { paneId, projectId, text } = input;
+  if (typeof paneId !== "string" || typeof text !== "string" || !text) return false;
+  const r = registered.get(paneId);
+  if (!r || r.projectId !== projectId || isAgentActing(r.paneId)) return false;
+  const wc = webContents.fromId(r.wcId);
+  if (!isHostedWebview(wc, sender) || !inProjectPartition(wc, r.projectId)) return false;
+  wc.focus();
+  void wc.insertText(text);
+  return true;
+}
+
 function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
   return {
     paneId: r.paneId,

@@ -17,6 +17,7 @@ import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useNow } from "../../hooks/use-now";
 import { useEnabledProviders } from "../../hooks/use-providers";
 import { useProject, useSettings, useSystemMetrics } from "../../hooks/use-trpc";
+import { useWidgetDefaults } from "../../hooks/use-trpc-dictation";
 import { useUpdateStatus } from "../../hooks/use-update-status";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { sessionName } from "../../lib/agent-label";
@@ -37,6 +38,7 @@ import { AgentIcon } from "../common/AgentIcon";
 import type { GitState } from "../workspace/SmartGitAction";
 import { formatUptime, thresholdColor } from "../workspace/sections/resource-format";
 import { AgentsWidget } from "./StatusBarAgents";
+import { DictationWidget } from "./StatusBarDictation";
 import { McpWidget } from "./StatusBarMcp";
 
 const PLAN_POLL_MS = 60_000;
@@ -60,6 +62,7 @@ const WIDGETS: Record<StatusBarWidgetId, () => ReactNode> = {
   reconnect: ReconnectWidget,
   "app-update": AppUpdateWidget,
   mcp: McpWidget,
+  dictation: DictationWidget,
 };
 
 /** Left shrinks first (its names truncate); center and right keep their content's width */
@@ -72,9 +75,10 @@ const SLOT_CLASS: Record<WidgetSlot, string> = {
 /** The widgets picked in Settings > Status bar, in their slot and order */
 export function StatusBar() {
   const { data: settings } = useSettings();
+  const { dictation } = useWidgetDefaults();
   const layout = useMemo(
-    () => resolveWidgetLayout(settings?.statusBarWidgets),
-    [settings?.statusBarWidgets],
+    () => resolveWidgetLayout(settings?.statusBarWidgets, { dictation }),
+    [settings?.statusBarWidgets, dictation],
   );
 
   return (

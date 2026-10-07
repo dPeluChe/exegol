@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_DICTATION_SETTINGS, parseChord } from "../types/dictation";
 import { IDE_IDS } from "../types/ide";
 import { DEFAULT_SETTINGS } from "../types/settings";
 
@@ -9,6 +10,20 @@ export const agentCliConfigSchema = z.object({
   command: z.string().min(1),
   args: z.array(z.string()),
   env: z.record(z.string(), z.string()),
+});
+
+export const dictationSettingsSchema = z.object({
+  enabled: z.boolean(),
+  shortcut: z
+    .string()
+    .max(40)
+    .refine((s) => parseChord(s) !== null, "a shortcut needs Cmd or Ctrl and one key"),
+  pressEnter: z.boolean(),
+  idleUnloadMinutes: z.number().int().min(1).max(240),
+  maxSeconds: z.number().int().min(10).max(600),
+  autoStopSilenceSec: z.number().int().min(0).max(60),
+  retentionDays: z.number().int().min(1).max(3650),
+  retentionMax: z.number().int().min(10).max(10_000),
 });
 
 export const settingsSchema = z.object({
@@ -35,6 +50,7 @@ export const settingsSchema = z.object({
     )
     .max(50)
     .default([]),
+  dictation: dictationSettingsSchema.default(DEFAULT_DICTATION_SETTINGS),
 });
 
 export type SettingsSchema = z.infer<typeof settingsSchema>;

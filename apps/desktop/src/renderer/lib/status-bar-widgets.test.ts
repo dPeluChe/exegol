@@ -64,6 +64,17 @@ describe("moveWidget", () => {
   });
 });
 
+describe("dictation widget default", () => {
+  it("is off until the mic was allowed, then on in the right slot; a saved choice wins", () => {
+    expect(widgetsIn(resolveWidgetLayout([]), "right")).not.toContain("dictation");
+    expect(widgetsIn(resolveWidgetLayout([], { dictation: true }), "right")).toContain("dictation");
+    const saved = [{ id: "dictation", on: false, slot: "right" as const }];
+    expect(widgetsIn(resolveWidgetLayout(saved, { dictation: true }), "right")).not.toContain(
+      "dictation",
+    );
+  });
+});
+
 describe("updateWidget", () => {
   it("moves a widget to another slot and toggles it", () => {
     const layout = updateWidget(resolveWidgetLayout([]), "clock", { on: true, slot: "center" });

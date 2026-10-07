@@ -95,6 +95,22 @@ interface Window {
       callback: (state: import("@exegol/shared").SessionRecoveryState) => void,
     ) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
+    dictation: {
+      sendAudio: (sessionId: string, samples: Float32Array) => void;
+      insertInBrowser: (input: {
+        paneId: string;
+        projectId: string;
+        text: string;
+      }) => Promise<boolean>;
+      onPartial: (
+        callback: (event: import("@exegol/shared").DictationPartialEvent) => void,
+      ) => () => void;
+      onEngine: (
+        callback: (event: { state: import("@exegol/shared").DictationEngineState }) => void,
+      ) => () => void;
+      onKey: (callback: (event: { kind: "down" | "up" | "escape" }) => void) => () => void;
+      onInsert: (callback: (event: { text: string }) => void) => () => void;
+    };
     onModelProgress: (
       callback: (event: import("@exegol/shared").ModelProgressEvent) => void,
     ) => () => void;
@@ -154,7 +170,16 @@ interface Window {
     // T120: Settings as a separate BrowserWindow
     settings: {
       open: (
-        tab?: "general" | "statusbar" | "clis" | "terminal" | "shortcuts" | "apikeys",
+        tab?:
+          | "general"
+          | "statusbar"
+          | "clis"
+          | "terminal"
+          | "shortcuts"
+          | "apikeys"
+          | "models"
+          | "dictation"
+          | "storage",
       ) => Promise<void>;
       selfClose: () => void;
       showDashboard: () => void;

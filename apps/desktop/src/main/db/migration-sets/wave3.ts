@@ -250,4 +250,18 @@ export const wave3Migrations: Migration[] = [
     WHERE EXISTS (SELECT 1 FROM settings WHERE key = 'project_ides' AND json_valid(value));
     DELETE FROM settings WHERE key = 'project_ides';`,
   },
+  {
+    // T201: local voice dictation history (Settings > Dictation); pruned by its retention setting
+    id: "w3_024_dictation_history",
+    sql: `CREATE TABLE IF NOT EXISTS dictation_history (
+      id TEXT PRIMARY KEY,
+      text TEXT NOT NULL,
+      model_id TEXT NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+      target_kind TEXT NOT NULL CHECK (target_kind IN ('terminal', 'browser', 'editor', 'field', 'clipboard'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_dictation_history_created ON dictation_history(created_at);`,
+  },
 ];

@@ -98,6 +98,14 @@ export const STATUS_BAR_WIDGETS = [
     defaultSlot: "right",
   },
   {
+    id: "dictation",
+    label: "Dictation",
+    description:
+      "A mic button: dictate into the focused pane. On by default once the microphone was allowed",
+    defaultOn: false,
+    defaultSlot: "right",
+  },
+  {
     id: "app-update",
     label: "Exegol update",
     description: "A new Exegol version is downloading or ready",
@@ -123,8 +131,11 @@ export interface PlacedWidget {
 const KNOWN = new Map(STATUS_BAR_WIDGETS.map((w) => [w.id as string, w]));
 
 /** Every widget once, in the saved order: unknown or repeated ids dropped, new ones appended at
- *  their defaults */
-export function resolveWidgetLayout(saved: readonly StatusBarWidgetSetting[] = []): PlacedWidget[] {
+ *  their defaults (`defaultOn` overrides a default that depends on state, like Dictation's) */
+export function resolveWidgetLayout(
+  saved: readonly StatusBarWidgetSetting[] = [],
+  defaultOn: Partial<Record<StatusBarWidgetId, boolean>> = {},
+): PlacedWidget[] {
   const out: PlacedWidget[] = [];
   const seen = new Set<string>();
   for (const s of saved) {
@@ -135,7 +146,9 @@ export function resolveWidgetLayout(saved: readonly StatusBarWidgetSetting[] = [
     out.push({ id: def.id, on: s.on, slot });
   }
   for (const def of STATUS_BAR_WIDGETS) {
-    if (!seen.has(def.id)) out.push({ id: def.id, on: def.defaultOn, slot: def.defaultSlot });
+    if (!seen.has(def.id)) {
+      out.push({ id: def.id, on: defaultOn[def.id] ?? def.defaultOn, slot: def.defaultSlot });
+    }
   }
   return out;
 }
