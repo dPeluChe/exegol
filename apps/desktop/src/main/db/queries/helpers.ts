@@ -68,7 +68,6 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     path: r.path,
     gitRemote: r.git_remote,
     defaultBranch: r.default_branch,
-    defaultIde: r.default_ide,
     createdAt: r.created_at,
     lastOpenedAt: r.last_opened_at,
     groupId: r.group_id,
@@ -78,6 +77,7 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     iconImage: r.icon_image ?? null,
     browserHosts: parseHostsColumn(r.browser_hosts),
     browserEval: r.browser_eval === 1,
+    ide: r.ide ?? null,
   };
 }
 

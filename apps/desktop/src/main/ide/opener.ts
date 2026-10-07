@@ -1,35 +1,17 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { IDE_IDS, type IdeInfo, ideLabel } from "@exegol/shared";
+import { type IdeInfo, ideLabel } from "@exegol/shared";
 import type Database from "libsql";
 import { loginShell } from "../agents/spawn-env";
 import { getProject } from "../db/queries/projects";
-import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { getAppSettings } from "../db/queries/settings";
 import { IDE_LAUNCH, targetArgs } from "./catalog";
 import { detectIdes } from "./detect";
 
 const execFileAsync = promisify(execFile);
 
-const PROJECT_IDES_KEY = "project_ides";
-
 function shellEscape(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`;
-}
-
-export function isIdeId(value: string): boolean {
-  return (IDE_IDS as readonly string[]).includes(value);
-}
-
-export function getProjectIde(db: Database.Database, projectId: string): string | null {
-  return getJsonSetting<Record<string, string>>(db, PROJECT_IDES_KEY, {})[projectId] ?? null;
-}
-
-/** null clears the project's choice: it follows Settings again */
-export function setProjectIde(db: Database.Database, projectId: string, ide: string | null): void {
-  const map = getJsonSetting<Record<string, string>>(db, PROJECT_IDES_KEY, {});
-  if (ide) map[projectId] = ide;
-  else delete map[projectId];
-  setJsonSetting(db, PROJECT_IDES_KEY, map);
 }
 
 /** The project's IDE (Edit project), else the one in Settings */
@@ -37,7 +19,7 @@ export function resolveIde(db: Database.Database, projectId: string | null | und
   const settings = getAppSettings(db);
   const project = projectId ? getProject(db, projectId) : null;
   return {
-    ide: (project && getProjectIde(db, project.id)) ?? settings.defaultIde ?? "vscode",
+    ide: project?.ide ?? settings.defaultIde ?? "vscode",
     customPath: settings.customIdePath ?? undefined,
   };
 }

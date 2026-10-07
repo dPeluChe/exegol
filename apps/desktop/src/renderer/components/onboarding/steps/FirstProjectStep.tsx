@@ -45,7 +45,6 @@ export function FirstProjectStep({ onNext, onBack, onSkip }: FirstProjectStepPro
         path: folderPath.trim(),
         gitRemote: null,
         defaultBranch: "main",
-        defaultIde: "vscode",
       });
       setActiveProject(project.id);
       onNext();

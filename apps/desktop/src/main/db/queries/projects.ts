@@ -19,9 +19,9 @@ export function createProject(db: Database.Database, data: ProjectCreate): Proje
   const now = Math.floor(Date.now() / 1000);
 
   db.prepare(
-    `INSERT INTO projects (id, name, path, git_remote, default_branch, default_ide, created_at, last_opened_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, data.name, data.path, data.gitRemote, data.defaultBranch, data.defaultIde, now, now);
+    `INSERT INTO projects (id, name, path, git_remote, default_branch, created_at, last_opened_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(id, data.name, data.path, data.gitRemote, data.defaultBranch, now, now);
 
   // biome-ignore lint/style/noNonNullAssertion: row was just inserted
   return getProject(db, id)!;
@@ -30,6 +30,11 @@ export function createProject(db: Database.Database, data: ProjectCreate): Proje
 export function updateProjectLastOpened(db: Database.Database, id: string): void {
   const now = Math.floor(Date.now() / 1000);
   db.prepare("UPDATE projects SET last_opened_at = ? WHERE id = ?").run(now, id);
+}
+
+/** null clears the project's choice: it follows Settings again */
+export function setProjectIde(db: Database.Database, id: string, ide: string | null): void {
+  db.prepare("UPDATE projects SET ide = ? WHERE id = ?").run(ide, id);
 }
 
 export function renameProject(db: Database.Database, id: string, name: string): void {

@@ -186,3 +186,19 @@ export function parseDesktopExec(content: string): string[] | null {
 export function plistBundleId(xml: string): string | null {
   return xml.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/)?.[1] ?? null;
 }
+
+/** The first absolute `.app` (cut at the bundle) or `bin/` path a launcher script runs, comments
+ *  and the shebang skipped; null when it names none */
+export function scriptTarget(script: string): string | null {
+  let bin: string | null = null;
+  for (const line of script.split("\n")) {
+    if (line.trimStart().startsWith("#")) continue;
+    for (const m of line.matchAll(/(["'])(\/[^"'\n]*)\1|(?<![\w"'$])(\/[^\s"';|&)]+)/g)) {
+      const path = m[2] ?? m[3] ?? "";
+      const app = path.indexOf(".app");
+      if (app > 0 && /^(\/|$)/.test(path.slice(app + 4))) return path.slice(0, app + 4);
+      if (!bin && /\/bin(\/|$)/.test(path)) bin = path;
+    }
+  }
+  return bin;
+}

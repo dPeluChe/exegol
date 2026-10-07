@@ -28,7 +28,7 @@ import {
 import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
 import { setProjectBrowserEval, setProjectBrowserHosts } from "../../db/queries/projects";
 import { runArchiveHook } from "../../hooks/project-hooks";
-import { openInIde, resolveIde, setProjectIde } from "../../ide/opener";
+import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
@@ -238,7 +238,6 @@ export const projectRouter = router({
       ),
     );
     deleteProject(ctx.db, input.id);
-    setProjectIde(ctx.db, input.id, null);
     return { success: true };
   }),
 

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { closeSync, existsSync, openSync, readSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -15,6 +15,7 @@ import {
   matchDesktopFiles,
   parseDesktopExec,
   plistBundleId,
+  scriptTarget,
 } from "./catalog";
 
 const execFileAsync = promisify(execFile);
@@ -45,7 +46,11 @@ async function scan(): Promise<Map<IdeId, IdeLauncher>> {
     process.platform === "linux" ? await linuxDesktopLaunchers(home) : new Map<IdeId, string[]>();
   const found = new Map<IdeId, IdeLauncher>();
   for (const [id, launch] of Object.entries(IDE_LAUNCH) as [IdeId, IdeLaunch][]) {
-    const launcher = cliLauncher(launch, home) ?? appLauncher(launch, apps.get(id));
+    // A JetBrains script outlives its IDE (Toolbox leaves it behind), so the app is checked first
+    const launcher =
+      launch.line === "jetbrains"
+        ? (appLauncher(launch, apps.get(id)) ?? cliLauncher(launch, home))
+        : (cliLauncher(launch, home) ?? appLauncher(launch, apps.get(id)));
     const exec = desktop.get(id);
     if (launcher) found.set(id, launcher);
     else if (exec) found.set(id, { argv: exec, line: launch.line });
@@ -60,9 +65,28 @@ function cliLauncher(launch: IdeLaunch, home: string): IdeLauncher | null {
       onPath ??
       launch.extraDirs?.map((d) => join(home, d, command)).find((p) => existsSync(p)) ??
       null;
-    if (path) return { argv: [path], line: launch.line };
+    if (path && scriptTargetExists(path)) return { argv: [path], line: launch.line };
   }
   return null;
+}
+
+/** False for a script whose `.app` or `bin/` target is gone; true for a binary or an unparsed one */
+export function scriptTargetExists(path: string): boolean {
+  let head = "";
+  try {
+    const fd = openSync(path, "r");
+    try {
+      const buf = Buffer.alloc(16_384);
+      head = buf.toString("utf8", 0, readSync(fd, buf, 0, buf.length, 0));
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return false;
+  }
+  if (!head.startsWith("#!")) return true;
+  const target = scriptTarget(head);
+  return !target || existsSync(target);
 }
 
 function appLauncher(launch: IdeLaunch, app: string | undefined): IdeLauncher | null {

@@ -1,9 +1,8 @@
 import { type DetectedIde, IDE_IDS, IDE_INFO } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { getProject } from "../../db/queries/projects";
+import { getProject, setProjectIde } from "../../db/queries/projects";
 import { detectIdes } from "../../ide/detect";
-import { getProjectIde, setProjectIde } from "../../ide/opener";
 import { publicProcedure, router } from "../trpc";
 
 /** Installed first, each group in catalog order */
@@ -19,7 +18,7 @@ export const ideRouter = router({
 
   projectIde: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(({ ctx, input }) => getProjectIde(ctx.db, input.projectId)),
+    .query(({ ctx, input }) => getProject(ctx.db, input.projectId)?.ide ?? null),
 
   setProjectIde: publicProcedure
     .input(z.object({ projectId: z.string(), ide: z.enum(IDE_IDS).nullable() }))

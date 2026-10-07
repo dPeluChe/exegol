@@ -37,7 +37,6 @@ export const projectRowSchema = z.object({
   path: z.string(),
   git_remote: optStr,
   default_branch: z.string(),
-  default_ide: z.string(),
   created_at: z.number(),
   last_opened_at: z.number(),
   group_id: optStr,
@@ -47,6 +46,7 @@ export const projectRowSchema = z.object({
   icon_image: optStr,
   browser_hosts: optStr,
   browser_eval: optNum,
+  ide: optStr,
 });
 
 export const projectGroupRowSchema = z.object({

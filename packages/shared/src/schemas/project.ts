@@ -6,7 +6,6 @@ export const projectSchema = z.object({
   path: z.string().min(1, "Project path is required"),
   gitRemote: z.string().nullable(),
   defaultBranch: z.string().min(1).default("main"),
-  defaultIde: z.string().min(1).default("vscode"),
   createdAt: z.number(),
   lastOpenedAt: z.number(),
   groupId: z.string().nullable(),
