@@ -133,9 +133,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Themes**: light, dark, black (OLED) and system. Three Nerd Fonts are bundled.
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation
   (coming), downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
-  SHA-256. Each lists what it is best for, languages, size and license.
+  SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is
+  badged and asks before download or set as default.
 - **Storage** (Settings > Storage): Exegol's disk use by kind and the free space, with open
-  folder, clear screenshots, clear old logs, delete a model and clear a project's browser cache.
+  folder, clear screenshots, clear old logs, delete a model and clear a project's browser cache; Worktrees opens the Dashboard.
 - **API keys** are encrypted with the system keychain.
 - **Updates**: the title-bar button checks GitHub releases, installs the new version and shows
   what's new.

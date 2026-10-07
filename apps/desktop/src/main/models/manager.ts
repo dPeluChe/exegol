@@ -1,6 +1,5 @@
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
-import { Worker } from "node:worker_threads";
 import type { ModelListItem, ModelStatus, SpeechModelEntry } from "@exegol/shared";
 import { net } from "electron";
 import { broadcast } from "../lib/event-bus";
@@ -9,19 +8,20 @@ import { invalidateStorageReport } from "../system/storage";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
 import { findModel, MODEL_CATALOG } from "./catalog";
 import { downloadVerified, fileSize } from "./download";
-import type { extractTarBz2 } from "./extract";
+import { extractTarBz2 } from "./extract";
 
 export const MODELS_DIR = join(EXEGOL_DIR, "models");
 const PARTIAL_DIR = join(MODELS_DIR, ".partial");
 const PROGRESS_INTERVAL_MS = 250;
+const FREE_SPACE_MARGIN = 256 * 1024 * 1024;
 
 export const modelDir = (id: string) => join(MODELS_DIR, id);
 const partialPath = (id: string) => join(PARTIAL_DIR, `${id}.tar.bz2`);
 
 interface Job {
   abort: AbortController;
-  worker: Worker | null;
   status: ModelStatus;
+  done: Promise<void>;
 }
 
 const jobs = new Map<string, Job>();
@@ -60,30 +60,36 @@ export async function listModels(defaultId: string): Promise<ModelListItem[]> {
   );
 }
 
-function extractInWorker(job: Job, data: Parameters<typeof extractTarBz2>[0]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(join(__dirname, "model-extract-worker.js"), { workerData: data });
-    job.worker = worker;
-    worker.once("message", (msg: { ok: boolean; error?: string }) =>
-      msg.ok ? resolve() : reject(new Error(msg.error)),
-    );
-    worker.once("error", reject);
-    worker.once("exit", (code) => {
-      if (code !== 0) reject(new Error("extraction stopped"));
-    });
-  });
+/** Throws when the archive plus the unpacked model would not fit, with a margin */
+async function assertFreeSpace(entry: SpeechModelEntry, partialBytes: number): Promise<void> {
+  const fsInfo = await statfs(MODELS_DIR).catch(() => null);
+  if (!fsInfo) return;
+  const free = fsInfo.bavail * fsInfo.bsize;
+  const needed = entry.sizeBytes - partialBytes + entry.installedBytes + FREE_SPACE_MARGIN;
+  if (free < needed) {
+    const gb = (n: number) => (n / 1024 ** 3).toFixed(1);
+    throw new Error(`not enough disk space: needs ${gb(needed)} GB, ${gb(free)} GB free`);
+  }
 }
 
 /** Starts (or resumes) a download; resolves when it ends, never throws */
-export async function downloadModel(id: string): Promise<void> {
+export function downloadModel(id: string): Promise<void> {
   const entry = findModel(id);
-  if (!entry || !entry.engineAvailable || jobs.has(id)) return;
+  if (!entry || !entry.engineAvailable) return Promise.resolve();
+  const running = jobs.get(id);
+  if (running) return running.done;
   const job: Job = {
     abort: new AbortController(),
-    worker: null,
     status: { state: "downloading", receivedBytes: 0, totalBytes: entry.sizeBytes },
+    done: Promise.resolve(),
   };
   jobs.set(id, job);
+  job.done = runDownload(entry, job);
+  return job.done;
+}
+
+async function runDownload(entry: SpeechModelEntry, job: Job): Promise<void> {
+  const { id } = entry;
   failures.delete(id);
   const set = (status: ModelStatus) => {
     job.status = status;
@@ -93,11 +99,9 @@ export async function downloadModel(id: string): Promise<void> {
   let lastPush = 0;
   try {
     await mkdir(PARTIAL_DIR, { recursive: true });
-    set({
-      state: "downloading",
-      receivedBytes: await fileSize(partialPath(id)),
-      totalBytes: entry.sizeBytes,
-    });
+    const partialBytes = await fileSize(partialPath(id));
+    await assertFreeSpace(entry, partialBytes);
+    set({ state: "downloading", receivedBytes: partialBytes, totalBytes: entry.sizeBytes });
     await downloadVerified({
       url: entry.sourceUrl,
       dest: partialPath(id),
@@ -115,8 +119,9 @@ export async function downloadModel(id: string): Promise<void> {
       onVerifying: () => set({ state: "verifying" }),
     });
     set({ state: "extracting" });
-    await extractInWorker(job, {
+    await extractTarBz2({
       archive: partialPath(id),
+      signal: job.abort.signal,
       tmpDir: join(MODELS_DIR, `.tmp-${id}`),
       destDir: modelDir(id),
       rootDir: entry.rootDir,
@@ -140,17 +145,17 @@ export async function downloadModel(id: string): Promise<void> {
 
 /** Stops a download (the partial file stays for a later resume) or an extraction */
 export function cancelModel(id: string): void {
-  const job = jobs.get(id);
-  if (!job) return;
-  job.abort.abort();
-  void job.worker?.terminate();
+  jobs.get(id)?.abort.abort();
 }
 
 /** Removes the installed model and any partial download */
 export async function deleteModel(id: string): Promise<void> {
   const entry = findModel(id);
   if (!entry) return;
-  cancelModel(id);
+  const job = jobs.get(id);
+  job?.abort.abort();
+  // The job's own cleanup must finish first, or it could write after the rm
+  await job?.done;
   failures.delete(id);
   await rm(modelDir(id), { recursive: true, force: true });
   await rm(partialPath(id), { force: true });

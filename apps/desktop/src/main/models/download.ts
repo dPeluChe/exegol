@@ -22,6 +22,7 @@ export interface DownloadOptions {
 }
 
 export class DownloadError extends Error {}
+class OversizeError extends DownloadError {}
 
 export async function fileSize(path: string): Promise<number> {
   try {
@@ -53,6 +54,10 @@ export async function downloadVerified(opts: DownloadOptions): Promise<void> {
   if (start < opts.expectedBytes) {
     const headers: Record<string, string> = start > 0 ? { Range: `bytes=${start}-` } : {};
     const res = await fetchImpl(opts.url, { headers, signal: opts.signal, redirect: "follow" });
+    const finalUrl = res.url || opts.url;
+    if (!finalUrl.startsWith("https://")) {
+      throw new DownloadError("refused: the download was redirected off https");
+    }
     if (res.status === 416) {
       // Server says the range is past the end: what we hold is the whole file, or garbage
     } else if (res.status !== 200 && res.status !== 206) {
@@ -66,16 +71,25 @@ export async function downloadVerified(opts: DownloadOptions): Promise<void> {
       const counter = new Transform({
         transform(chunk: Buffer, _enc, done) {
           received += chunk.length;
+          if (received > opts.expectedBytes) {
+            done(new OversizeError(`size mismatch: more than ${opts.expectedBytes} bytes`));
+            return;
+          }
           opts.onProgress?.(received, opts.expectedBytes);
           done(null, chunk);
         },
       });
-      await pipeline(
-        Readable.fromWeb(res.body as unknown as WebReadableStream),
-        counter,
-        createWriteStream(opts.dest, { flags: append ? "a" : "w" }),
-        { signal: opts.signal },
-      );
+      try {
+        await pipeline(
+          Readable.fromWeb(res.body as unknown as WebReadableStream),
+          counter,
+          createWriteStream(opts.dest, { flags: append ? "a" : "w" }),
+          { signal: opts.signal },
+        );
+      } catch (err) {
+        if (err instanceof OversizeError) await rm(opts.dest, { force: true });
+        throw err;
+      }
     }
   }
 

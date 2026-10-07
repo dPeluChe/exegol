@@ -10,6 +10,7 @@ import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { readPidFile } from "../terminal/pty-sidecar-discovery";
 import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
+import { duBytes } from "./storage";
 
 const execFileAsync = promisify(execFile);
 
@@ -377,15 +378,9 @@ const WORKTREE_TTL = 30_000;
 async function getDirectorySize(dirPath: string): Promise<number> {
   const cached = dirSizeCache.get(dirPath);
   if (cached && Date.now() < cached.expiresAt) return cached.value;
-  try {
-    const { stdout } = await execFileAsync("du", ["-sk", dirPath], { timeout: 10_000 });
-    const kb = parseInt(stdout.split(/\s/)[0] ?? "0", 10);
-    const bytes = Number.isNaN(kb) ? 0 : kb * 1024;
-    dirSizeCache.set(dirPath, { value: bytes, expiresAt: Date.now() + DIR_SIZE_TTL });
-    return bytes;
-  } catch {
-    return 0;
-  }
+  const bytes = await duBytes(dirPath);
+  if (bytes > 0) dirSizeCache.set(dirPath, { value: bytes, expiresAt: Date.now() + DIR_SIZE_TTL });
+  return bytes;
 }
 
 async function getWorktreeCount(dirPath: string): Promise<number> {

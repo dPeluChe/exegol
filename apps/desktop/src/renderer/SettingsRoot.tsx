@@ -1,5 +1,6 @@
 import { TooltipProvider } from "@exegol/ui";
 import { useEffect, useState } from "react";
+import { ToastStack } from "./components/common/ToastStack";
 import { SettingsPanel, type SettingsTab } from "./components/settings/SettingsPanel";
 import { useTheme } from "./hooks/use-theme";
 import { useWindowCloseKeys } from "./hooks/use-window-close-keys";
@@ -46,6 +47,8 @@ export function SettingsRoot() {
     <TooltipProvider delayDuration={300}>
       <div className="flex h-screen w-screen flex-col bg-bg-primary">
         <SettingsPanel key={tab ?? "default"} initialTab={tab} onClose={closeSettings} />
+        {/* Mutation errors (toastError) need a host in this window too */}
+        <ToastStack />
       </div>
     </TooltipProvider>
   );

@@ -1,5 +1,4 @@
 import type { SpeechModelEntry } from "@exegol/shared";
-import { z } from "zod";
 
 // Hashes and sizes checked against the downloaded assets on 2026-10-07 (see TASK_COMPLETED/2610.md)
 const SHERPA_RELEASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
@@ -229,6 +228,7 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     sizeBytes: 50_846_902,
     installedBytes: 65_357_006,
     license: "Moonshine Community License (non-commercial)",
+    commercialUse: false,
     attribution: `Moonshine by Useful Sensors (Moonshine AI), Moonshine AI Community License: non-commercial use only. ${SHERPA_CREDIT}`,
     sourceUrl: `${SHERPA_RELEASE}/${MOONSHINE_ES_ROOT}.tar.bz2`,
     sha256: "850c3dcc5dfccc8b1feb10bb221b11d6039b6f5c626241729f46863771016383",
@@ -238,54 +238,6 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     notes: "The license text ships inside the archive (LICENSE).",
   },
 ];
-
-const relativeFile = z
-  .string()
-  .min(1)
-  .refine((p) => !p.startsWith("/") && !p.split("/").includes(".."), "must stay inside rootDir");
-
-const entrySchema = z.object({
-  id: z.string().regex(/^[a-z0-9][a-z0-9.-]*$/),
-  name: z.string().min(1),
-  engine: z.literal("sherpa-onnx"),
-  engineAvailable: z.boolean(),
-  kind: z.enum(["offline", "streaming"]),
-  languages: z.array(z.string().regex(/^[a-z]{2,3}$/)),
-  languageSummary: z.string().optional(),
-  bestFor: z.string().min(1),
-  sizeBytes: z.number().int().positive(),
-  installedBytes: z.number().int().positive(),
-  license: z.string().min(1),
-  attribution: z.string().min(1),
-  sourceUrl: z.string().url().startsWith("https://"),
-  sha256: z.string().regex(/^[0-9a-f]{64}$/),
-  archive: z.literal("tar.bz2"),
-  rootDir: z.string().regex(/^[A-Za-z0-9._-]+$/),
-  files: z.array(relativeFile).min(1),
-  notes: z.string().optional(),
-});
-
-/** Problems with the catalog data, empty when it is sound */
-export function validateCatalog(entries: readonly SpeechModelEntry[]): string[] {
-  const problems: string[] = [];
-  const ids = new Set<string>();
-  for (const entry of entries) {
-    const parsed = entrySchema.safeParse(entry);
-    if (!parsed.success) {
-      problems.push(`${entry.id}: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
-    }
-    if (ids.has(entry.id)) problems.push(`${entry.id}: duplicate id`);
-    ids.add(entry.id);
-    if (entry.languages.length === 0 && !entry.languageSummary) {
-      problems.push(`${entry.id}: no languages`);
-    }
-    if (!entry.sourceUrl.endsWith(`/${entry.rootDir}.tar.bz2`)) {
-      problems.push(`${entry.id}: sourceUrl does not match rootDir`);
-    }
-  }
-  if (!entries.some((e) => e.id === DEFAULT_MODEL_ID)) problems.push("default model missing");
-  return problems;
-}
 
 export function findModel(id: string): SpeechModelEntry | undefined {
   return MODEL_CATALOG.find((m) => m.id === id);

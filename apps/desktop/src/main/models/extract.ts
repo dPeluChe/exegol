@@ -1,26 +1,45 @@
-import { createReadStream } from "node:fs";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
-import { pipeline } from "node:stream/promises";
-import { type ReadEntry, x as untar } from "tar";
-import bz2 from "unbzip2-stream";
+import { execFile } from "node:child_process";
+import { chmod, lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const EXTRACT_TIMEOUT_MS = 10 * 60_000;
 
 export class UnsafeArchiveError extends Error {}
 
-/** Why an entry may not be extracted, null when it is a plain file or folder under rootDir */
-export function unsafeEntryReason(path: string, type: string, rootDir: string): string | null {
-  if (type !== "File" && type !== "Directory" && type !== "OldFile") return `${type} entry`;
-  if (isAbsolute(path) || path.startsWith("/") || /^[A-Za-z]:/.test(path)) return "absolute path";
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  if (parts.includes("..")) return "path traversal";
-  if (parts[0] !== rootDir) return "outside the model folder";
+/** Why an extracted entry may not be kept, null for a plain file or folder */
+export function unsafeEntryReason(info: {
+  isFile(): boolean;
+  isDirectory(): boolean;
+  nlink: number;
+}): string | null {
+  if (info.isDirectory()) return null;
+  if (!info.isFile()) return "link or special file";
+  if (info.nlink > 1) return "hard link";
   return null;
 }
 
+/** Walks `dir` without following links: refuses anything but plain files and folders, forces 0644/0755 */
+async function sanitizeTree(dir: string): Promise<void> {
+  const queue = [dir];
+  for (let next = queue.pop(); next !== undefined; next = queue.pop()) {
+    const info = await lstat(next);
+    const reason = unsafeEntryReason(info);
+    if (reason) throw new UnsafeArchiveError(`archive refused (${reason})`);
+    if (info.isDirectory()) {
+      await chmod(next, 0o755);
+      for (const name of await readdir(next)) queue.push(join(next, name));
+    } else {
+      await chmod(next, 0o644);
+    }
+  }
+}
+
 /**
- * Extracts a .tar.bz2 into `tmpDir`, refusing the whole archive on any link,
- * device, absolute or `..` path, then moves `<tmpDir>/<rootDir>` to `destDir`
- * in one rename. Files land as 0644: nothing extracted is executable.
+ * Extracts a .tar.bz2 with the system tar (bsdtar on macOS, GNU tar on Linux: both
+ * refuse absolute and `..` paths without -P) into `tmpDir`, refuses the whole archive
+ * on any link or special file, then moves `<tmpDir>/<rootDir>` to `destDir` in one rename.
  */
 export async function extractTarBz2(opts: {
   archive: string;
@@ -28,29 +47,23 @@ export async function extractTarBz2(opts: {
   destDir: string;
   rootDir: string;
   requiredFiles: readonly string[];
+  signal?: AbortSignal;
 }): Promise<void> {
   await rm(opts.tmpDir, { recursive: true, force: true });
   await mkdir(opts.tmpDir, { recursive: true });
-  let refused: string | null = null;
   try {
-    await pipeline(
-      createReadStream(opts.archive),
-      bz2(),
-      untar({
-        cwd: opts.tmpDir,
-        strict: true,
-        preserveOwner: false,
-        filter: (path, stat) => {
-          const entry = stat as ReadEntry;
-          const reason = unsafeEntryReason(path, entry.type, opts.rootDir);
-          entry.mode = entry.type === "Directory" ? 0o755 : 0o644;
-          if (reason && !refused) refused = `${reason}: ${path}`;
-          return reason === null && refused === null;
-        },
-      }),
-    );
-    if (refused) throw new UnsafeArchiveError(`archive refused (${refused})`);
+    await execFileAsync(
+      "tar",
+      ["-xjf", opts.archive, "-C", opts.tmpDir, "--no-same-owner", "--no-same-permissions"],
+      { signal: opts.signal, timeout: EXTRACT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+    ).catch((err: { stderr?: string; code?: string | number }) => {
+      if (opts.signal?.aborted) throw err;
+      // stderr names archive members; err.message would carry the home path of the command line
+      const detail = err.stderr?.trim().split("\n")[0] || `exit ${err.code ?? "unknown"}`;
+      throw new UnsafeArchiveError(`archive refused (tar: ${detail})`);
+    });
     const extracted = join(opts.tmpDir, opts.rootDir);
+    await sanitizeTree(opts.tmpDir);
     for (const file of opts.requiredFiles) {
       const info = await stat(join(extracted, file)).catch(() => null);
       if (!info?.isFile()) throw new Error(`archive is missing ${file}`);

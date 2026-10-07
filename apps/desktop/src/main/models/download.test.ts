@@ -21,6 +21,7 @@ function server(opts: { honorRange?: boolean; body?: Buffer } = {}) {
   });
 }
 
+const SOURCE = "https://example.test/model.tar.bz2";
 const tmp = () => join(mkdtempSync(join(tmpdir(), "exegol-dl-")), "model.tar.bz2");
 
 describe("downloadVerified", () => {
@@ -28,7 +29,7 @@ describe("downloadVerified", () => {
     const dest = tmp();
     const fetchImpl = server();
     await downloadVerified({
-      url: "u",
+      url: SOURCE,
       dest,
       expectedBytes: PAYLOAD.length,
       sha256: SHA,
@@ -44,7 +45,7 @@ describe("downloadVerified", () => {
     const fetchImpl = server();
     const progress: number[] = [];
     await downloadVerified({
-      url: "u",
+      url: SOURCE,
       dest,
       expectedBytes: PAYLOAD.length,
       sha256: SHA,
@@ -60,7 +61,7 @@ describe("downloadVerified", () => {
     const dest = tmp();
     writeFileSync(dest, PAYLOAD.subarray(0, 700));
     await downloadVerified({
-      url: "u",
+      url: SOURCE,
       dest,
       expectedBytes: PAYLOAD.length,
       sha256: SHA,
@@ -74,7 +75,7 @@ describe("downloadVerified", () => {
     writeFileSync(dest, PAYLOAD);
     const fetchImpl = server();
     await downloadVerified({
-      url: "u",
+      url: SOURCE,
       dest,
       expectedBytes: PAYLOAD.length,
       sha256: SHA,
@@ -89,7 +90,7 @@ describe("downloadVerified", () => {
     tampered[5] = 0x7a;
     await expect(
       downloadVerified({
-        url: "u",
+        url: SOURCE,
         dest,
         expectedBytes: PAYLOAD.length,
         sha256: SHA,
@@ -103,7 +104,7 @@ describe("downloadVerified", () => {
     const dest = tmp();
     await expect(
       downloadVerified({
-        url: "u",
+        url: SOURCE,
         dest,
         expectedBytes: PAYLOAD.length,
         sha256: SHA,
@@ -118,8 +119,48 @@ describe("downloadVerified", () => {
     writeFileSync(dest, PAYLOAD.subarray(0, 300));
     const fetchImpl = vi.fn<FetchLike>(async () => new Response("nope", { status: 503 }));
     await expect(
-      downloadVerified({ url: "u", dest, expectedBytes: PAYLOAD.length, sha256: SHA, fetchImpl }),
+      downloadVerified({
+        url: SOURCE,
+        dest,
+        expectedBytes: PAYLOAD.length,
+        sha256: SHA,
+        fetchImpl,
+      }),
     ).rejects.toThrow(/503/);
     expect(await fileSize(dest)).toBe(300);
+  });
+
+  it("stops and deletes the file once the server sends more than expected", async () => {
+    const dest = tmp();
+    const big = Buffer.concat([PAYLOAD, Buffer.from("extra")]);
+    await expect(
+      downloadVerified({
+        url: SOURCE,
+        dest,
+        expectedBytes: PAYLOAD.length,
+        sha256: SHA,
+        fetchImpl: server({ body: big }),
+      }),
+    ).rejects.toThrow(/more than/);
+    expect(await fileSize(dest)).toBe(0);
+  });
+
+  it("refuses a redirect to plain http", async () => {
+    const dest = tmp();
+    const fetchImpl = vi.fn<FetchLike>(async () => {
+      const res = new Response(new Uint8Array(PAYLOAD), { status: 200 });
+      Object.defineProperty(res, "url", { value: "http://mirror.test/model.tar.bz2" });
+      return res;
+    });
+    await expect(
+      downloadVerified({
+        url: SOURCE,
+        dest,
+        expectedBytes: PAYLOAD.length,
+        sha256: SHA,
+        fetchImpl,
+      }),
+    ).rejects.toThrow(/https/);
+    expect(await fileSize(dest)).toBe(0);
   });
 });

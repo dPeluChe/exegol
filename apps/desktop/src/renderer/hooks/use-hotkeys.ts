@@ -191,6 +191,8 @@ export function useHotkeys() {
         reloadFocusedBrowserOrWindow();
       } else if (action === "focus-location") {
         focusBrowserAddress();
+      } else if (action === "open-dashboard") {
+        useAppStore.getState().openDashboard();
       }
     });
 

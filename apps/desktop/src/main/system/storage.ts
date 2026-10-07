@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import type { Dirent } from "node:fs";
 import { lstat, readdir, rm, statfs } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import type {
   BrowserPartitionUsage,
   StorageCategory,
@@ -17,13 +19,9 @@ export interface StoragePaths {
 
 const CACHE_MS = 30_000;
 const fsLimit = createLimiter(32);
-const PARTITION_CACHE_DIRS = [
-  "Cache",
-  "Code Cache",
-  "GPUCache",
-  "DawnGraphiteCache",
-  "DawnWebGPUCache",
-];
+const execFileAsync = promisify(execFile);
+// Only what clearBrowserCache clears (clearCache, clearCodeCaches): GPU caches stay in use
+const PARTITION_CACHE_DIRS = ["Cache", "Code Cache"];
 const DB_FILES = ["exegol.db", "exegol.db-wal", "exegol.db-shm"];
 const ROTATED_LOG = /^exegol\.\d+\.log$/;
 
@@ -32,22 +30,42 @@ export async function dirSize(
   path: string,
   skip: ReadonlySet<string> = new Set(),
 ): Promise<number> {
-  const info = await fsLimit(() => lstat(path)).catch(() => null);
-  if (!info) return 0;
-  if (!info.isDirectory()) return info.isFile() ? info.size : 0;
-  const entries: Dirent[] = await fsLimit(() => readdir(path, { withFileTypes: true })).catch(
-    () => [],
-  );
-  const sizes = await Promise.all(
-    entries
-      .filter((e) => !skip.has(e.name) && !e.isSymbolicLink())
-      .map((e) => dirSize(join(path, e.name))),
-  );
-  return sizes.reduce((a, b) => a + b, 0);
+  let total = 0;
+  let level: string[] = [path];
+  // Breadth-first queue, one level at a time with bounded concurrency: no recursion, no promise fan-out
+  while (level.length > 0) {
+    const next: string[] = [];
+    await mapWithConcurrency(level, 16, async (current) => {
+      const info = await fsLimit(() => lstat(current)).catch(() => null);
+      if (!info) return;
+      if (info.isFile()) total += info.size;
+      if (!info.isDirectory()) return;
+      const entries: Dirent[] = await fsLimit(() =>
+        readdir(current, { withFileTypes: true }),
+      ).catch(() => []);
+      for (const e of entries) {
+        if (e.isSymbolicLink() || (current === path && skip.has(e.name))) continue;
+        next.push(join(current, e.name));
+      }
+    });
+    level = next;
+  }
+  return total;
 }
 
-async function sumPaths(paths: string[]): Promise<number> {
-  const sizes = await Promise.all(paths.map((p) => dirSize(p)));
+/** Disk use of a large tree via `du -sk` (no links followed), 0 when it fails */
+export async function duBytes(path: string): Promise<number> {
+  try {
+    const { stdout } = await execFileAsync("du", ["-sk", path], { timeout: 10_000 });
+    const kb = Number.parseInt(stdout.split(/\s/)[0] ?? "0", 10);
+    return Number.isNaN(kb) ? 0 : kb * 1024;
+  } catch {
+    return 0;
+  }
+}
+
+async function sumPaths(paths: string[], size = dirSize): Promise<number> {
+  const sizes = await Promise.all(paths.map((p) => size(p)));
   return sizes.reduce((a, b) => a + b, 0);
 }
 
@@ -57,7 +75,7 @@ interface CategorySpec {
   paths: string[];
 }
 
-export function categorySpecs(p: StoragePaths): CategorySpec[] {
+function categorySpecs(p: StoragePaths): CategorySpec[] {
   return [
     { category: "models", label: "Speech models", paths: [join(p.exegolDir, "models")] },
     {
@@ -120,7 +138,8 @@ export async function buildStorageReport(
     return {
       category: spec.category,
       label: spec.label,
-      bytes: await sumPaths(spec.paths),
+      // Worktrees hold whole checkouts (node_modules too): du is far faster there
+      bytes: await sumPaths(spec.paths, spec.category === "worktrees" ? duBytes : dirSize),
       path: await firstExisting(folders),
     };
   });

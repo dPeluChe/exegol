@@ -7,7 +7,7 @@ import { extractTarBz2, unsafeEntryReason } from "./extract";
 
 interface Entry {
   name: string;
-  type?: "0" | "2" | "5";
+  type?: "0" | "1" | "2" | "5";
   body?: string;
   linkname?: string;
 }
@@ -63,17 +63,20 @@ function target() {
 }
 
 describe("unsafeEntryReason", () => {
-  it("accepts plain files and folders under the model folder", () => {
-    expect(unsafeEntryReason("root/tokens.txt", "File", "root")).toBeNull();
-    expect(unsafeEntryReason("root/sub/", "Directory", "root")).toBeNull();
+  const info = (kind: "file" | "dir" | "link", nlink = 1) => ({
+    isFile: () => kind === "file",
+    isDirectory: () => kind === "dir",
+    nlink,
   });
 
-  it("refuses traversal, absolute paths, links and other folders", () => {
-    expect(unsafeEntryReason("root/../../x", "File", "root")).toBe("path traversal");
-    expect(unsafeEntryReason("/etc/passwd", "File", "root")).toBe("absolute path");
-    expect(unsafeEntryReason("C:\\x", "File", "root")).toBe("absolute path");
-    expect(unsafeEntryReason("root/link", "SymbolicLink", "root")).toBe("SymbolicLink entry");
-    expect(unsafeEntryReason("other/x", "File", "root")).toBe("outside the model folder");
+  it("accepts plain files and folders", () => {
+    expect(unsafeEntryReason(info("file"))).toBeNull();
+    expect(unsafeEntryReason(info("dir", 3))).toBeNull();
+  });
+
+  it("refuses links, special files and hard links", () => {
+    expect(unsafeEntryReason(info("link"))).toBe("link or special file");
+    expect(unsafeEntryReason(info("file", 2))).toBe("hard link");
   });
 });
 
@@ -118,7 +121,19 @@ describe.skipIf(!hasBzip2)("extractTarBz2", () => {
     const t = target();
     await expect(
       extractTarBz2({ archive, ...t, rootDir: "root", requiredFiles: ["tokens.txt"] }),
-    ).rejects.toThrow(/SymbolicLink/);
+    ).rejects.toThrow(/refused/);
+    expect(existsSync(t.destDir)).toBe(false);
+  });
+
+  it("refuses a hard link entry", async () => {
+    const archive = tarBz2([
+      { name: "root/tokens.txt", body: "ok" },
+      { name: "root/copy", type: "1", linkname: "root/tokens.txt" },
+    ]);
+    const t = target();
+    await expect(
+      extractTarBz2({ archive, ...t, rootDir: "root", requiredFiles: ["tokens.txt"] }),
+    ).rejects.toThrow(/hard link/);
     expect(existsSync(t.destDir)).toBe(false);
   });
 

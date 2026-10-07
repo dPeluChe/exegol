@@ -47,18 +47,21 @@ describe("storage", () => {
   it("aggregates each category once and the rest as Other", async () => {
     const { paths } = fixture();
     const report = await buildStorageReport(paths, [{ id: "ABC", name: "Proj" }]);
-    const bytes = Object.fromEntries(report.rows.map((r) => [r.category, r.bytes]));
+    const { worktrees, ...bytes } = Object.fromEntries(
+      report.rows.map((r) => [r.category, r.bytes]),
+    );
+    // du counts allocated blocks, so worktrees round up from the 500 bytes written
+    expect(worktrees).toBeGreaterThanOrEqual(500);
     expect(bytes).toEqual({
       models: 1000,
       scrollback: 350,
       screenshots: 200,
       logs: 80,
       database: 560,
-      worktrees: 500,
       browser: 85,
       other: 10,
     });
-    expect(report.totalBytes).toBe(2785);
+    expect(report.totalBytes).toBe(2285 + (worktrees ?? 0));
     // Chromium lowercases partition folders; the project id keeps its case
     expect(report.browserPartitions).toEqual([
       { projectId: "ABC", projectName: "Proj", bytes: 85, cacheBytes: 80 },

@@ -11,6 +11,8 @@
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { BrowserWindow, ipcMain } from "electron";
+import { showMainWindow } from "../bootstrap/window";
+import { getMainWindow } from "./main-window-ref";
 
 type SettingsTab =
   | "general"
@@ -104,6 +106,11 @@ export function closeSettingsWindow(): void {
 export function registerSettingsIpcHandlers(): void {
   ipcMain.handle("settings:open", (_event, tab?: SettingsTab) => {
     openSettingsWindow(tab);
+  });
+  // Settings > Storage points to the Dashboard's Worktrees card
+  ipcMain.on("settings:show-dashboard", () => {
+    showMainWindow();
+    getMainWindow()?.webContents.send("menu:open-dashboard");
   });
   ipcMain.on("settings:self-close", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close();

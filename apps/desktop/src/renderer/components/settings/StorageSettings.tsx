@@ -1,8 +1,7 @@
 import type { StorageCategory, StorageRow } from "@exegol/shared";
-import { FolderOpen, HardDrive, RefreshCw, Trash2 } from "lucide-react";
+import { FolderOpen, HardDrive, LayoutDashboard, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import {
-  useModelAction,
   useModels,
   useRefreshStorage,
   useStorageAction,
@@ -10,18 +9,16 @@ import {
 } from "../../hooks/use-trpc-models";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "../workspace/sections/resource-format";
+import { SMALL_BUTTON } from "./settings-ui";
+import { useConfirmDeleteModel } from "./use-confirm-delete-model";
 
 type Pending =
   | { kind: "clearScreenshots"; bytes: number }
   | { kind: "clearOldLogs" }
-  | { kind: "clearBrowserCache"; projectId: string; projectName: string; bytes: number }
-  | { kind: "deleteModel"; id: string; name: string; bytes: number };
-
-const BUTTON =
-  "flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-white/5 disabled:opacity-50";
+  | { kind: "clearBrowserCache"; projectId: string; projectName: string; bytes: number };
 
 const HINTS: Partial<Record<StorageCategory, string>> = {
-  worktrees: "Clean up worktrees from the Dashboard's Worktrees card: a worktree can hold work.",
+  worktrees: "Clean them up from the Dashboard's Worktrees card: a worktree can hold work.",
   scrollback: "Saved terminal output of agents, kept for their history.",
   database: "Projects, agents, history and settings.",
 };
@@ -31,15 +28,13 @@ export function StorageSettings() {
   const refresh = useRefreshStorage();
   const action = useStorageAction();
   const { data: models } = useModels();
-  const modelAction = useModelAction();
+  const { requestDelete, dialog: deleteDialog } = useConfirmDeleteModel();
   const installed = models?.filter((m) => m.status.state === "ready") ?? [];
   const [pending, setPending] = useState<Pending | null>(null);
 
   const confirm = () => {
     if (!pending) return;
-    if (pending.kind === "deleteModel") {
-      modelAction.mutate({ action: "delete", id: pending.id });
-    } else if (pending.kind === "clearBrowserCache") {
+    if (pending.kind === "clearBrowserCache") {
       action.mutate({ action: "clearBrowserCache", projectId: pending.projectId });
     } else {
       action.mutate({ action: pending.kind });
@@ -53,7 +48,7 @@ export function StorageSettings() {
         <h3 className="text-sm font-semibold text-text-primary">Storage</h3>
         <button
           type="button"
-          className={`${BUTTON} ml-auto`}
+          className={`${SMALL_BUTTON} ml-auto`}
           disabled={refresh.isPending}
           onClick={() => refresh.mutate()}
         >
@@ -101,18 +96,7 @@ export function StorageSettings() {
                     <span className="text-[11px] text-text-muted">
                       {formatBytes(m.installedBytes)}
                     </span>
-                    <button
-                      type="button"
-                      className={BUTTON}
-                      onClick={() =>
-                        setPending({
-                          kind: "deleteModel",
-                          id: m.id,
-                          name: m.name,
-                          bytes: m.installedBytes,
-                        })
-                      }
-                    >
+                    <button type="button" className={SMALL_BUTTON} onClick={() => requestDelete(m)}>
                       <Trash2 className="h-3 w-3" /> Delete
                     </button>
                   </div>
@@ -137,7 +121,7 @@ export function StorageSettings() {
                     </span>
                     <button
                       type="button"
-                      className={BUTTON}
+                      className={SMALL_BUTTON}
                       disabled={p.cacheBytes === 0}
                       onClick={() =>
                         setPending({
@@ -162,10 +146,11 @@ export function StorageSettings() {
         onOpenChange={(open) => !open && setPending(null)}
         title={confirmTitle(pending)}
         description={confirmText(pending)}
-        confirmLabel={pending?.kind === "deleteModel" ? "Delete" : "Clear"}
+        confirmLabel="Clear"
         variant="destructive"
         onConfirm={confirm}
       />
+      {deleteDialog}
     </div>
   );
 }
@@ -173,7 +158,6 @@ export function StorageSettings() {
 function confirmTitle(pending: Pending | null): string {
   if (pending?.kind === "clearScreenshots") return "Clear screenshots?";
   if (pending?.kind === "clearOldLogs") return "Clear old logs?";
-  if (pending?.kind === "deleteModel") return "Delete model?";
   return "Clear browser cache?";
 }
 
@@ -184,9 +168,6 @@ function confirmText(pending: Pending | null): string {
   }
   if (pending.kind === "clearOldLogs") {
     return "Deletes the logs of earlier sessions. This session's log stays. Bug reports include fewer past warnings afterwards.";
-  }
-  if (pending.kind === "deleteModel") {
-    return `Removes ${pending.name} (${formatBytes(pending.bytes)}). You can download it again from the Models tab.`;
   }
   return `Deletes ${formatBytes(pending.bytes)} of cached pages for ${pending.projectName}. Cookies and logins stay.`;
 }
@@ -208,12 +189,21 @@ function StorageRowView({
         {hint && <div className="text-[11px] text-text-muted">{hint}</div>}
       </div>
       <span className="text-xs tabular-nums text-text-secondary">{formatBytes(row.bytes)}</span>
+      {row.category === "worktrees" && (
+        <button
+          type="button"
+          className={SMALL_BUTTON}
+          onClick={() => window.api.settings.showDashboard()}
+        >
+          <LayoutDashboard className="h-3 w-3" /> Show in Dashboard
+        </button>
+      )}
       {onClear && (
-        <button type="button" className={BUTTON} onClick={onClear}>
+        <button type="button" className={SMALL_BUTTON} onClick={onClear}>
           <Trash2 className="h-3 w-3" /> {row.category === "logs" ? "Clear old" : "Clear"}
         </button>
       )}
-      <button type="button" className={BUTTON} disabled={!row.path} onClick={onOpen}>
+      <button type="button" className={SMALL_BUTTON} disabled={!row.path} onClick={onOpen}>
         <FolderOpen className="h-3 w-3" /> Open
       </button>
     </div>

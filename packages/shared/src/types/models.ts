@@ -20,6 +20,8 @@ export interface SpeechModelEntry {
   /** On disk once extracted */
   installedBytes: number;
   license: string;
+  /** False when the license forbids commercial use: warned, confirmed, never the default on its own */
+  commercialUse?: boolean;
   attribution: string;
   sourceUrl: string;
   sha256: string;
@@ -52,15 +54,18 @@ export interface ModelProgressEvent {
 
 export const DEFAULT_SPEECH_MODEL_KEY = "speechDefaultModel";
 
-export type StorageCategory =
-  | "models"
-  | "scrollback"
-  | "screenshots"
-  | "logs"
-  | "database"
-  | "worktrees"
-  | "browser"
-  | "other";
+export const STORAGE_CATEGORIES = [
+  "models",
+  "scrollback",
+  "screenshots",
+  "logs",
+  "database",
+  "worktrees",
+  "browser",
+  "other",
+] as const;
+
+export type StorageCategory = (typeof STORAGE_CATEGORIES)[number];
 
 export interface StorageRow {
   category: StorageCategory;

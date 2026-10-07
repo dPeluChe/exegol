@@ -215,8 +215,9 @@ apps/desktop/src/
                     auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
                     work-guard, diagnostics, project-icons, storage (Settings > Storage)
     models/         T201 local speech-to-text models: catalog (data: verified URL, sha256, sizes,
-                    license), download (HTTP Range resume + sha256), extract (.tar.bz2 in a
-                    worker, links/absolute/`..` refused, temp dir then rename), manager
+                    license, `commercialUse`), download (HTTP Range resume + sha256, https only, free
+                    space check), extract (system `tar -xjf`, then an lstat walk refuses links and
+                    special files, forces 0644/0755, temp dir then rename), manager
                     (~/.exegol/models/<id>, `models:progress` push, default in settings)
     ide/            catalog (launch facts + line syntax per IDE), detect (installed apps/CLIs, cached 10 min), opener
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)

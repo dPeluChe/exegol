@@ -1,14 +1,34 @@
 import type { ModelListItem } from "@exegol/shared";
-import { AudioLines, Download, RotateCcw, Star, Trash2, X } from "lucide-react";
+import { AlertTriangle, AudioLines, Download, RotateCcw, Star, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { useModelAction, useModels } from "../../hooks/use-trpc-models";
+import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "../workspace/sections/resource-format";
+import { SMALL_BUTTON } from "./settings-ui";
+import { useConfirmDeleteModel } from "./use-confirm-delete-model";
+
+type RowAction = "download" | "cancel" | "setDefault";
+type LicensedAction = "download" | "setDefault";
+
+const BADGE = "rounded-full px-2 py-0.5 text-[10px]";
 
 export function ModelsSettings() {
   const { data: models, isLoading } = useModels();
   const action = useModelAction();
-  const [toDelete, setToDelete] = useState<ModelListItem | null>(null);
+  const { requestDelete, dialog: deleteDialog } = useConfirmDeleteModel();
+  const [licenseCheck, setLicenseCheck] = useState<{
+    model: ModelListItem;
+    action: LicensedAction;
+  } | null>(null);
+
+  const run = (model: ModelListItem, name: RowAction) => {
+    if (name !== "cancel" && model.commercialUse === false) {
+      setLicenseCheck({ model, action: name });
+      return;
+    }
+    action.mutate({ action: name, id: model.id });
+  };
 
   return (
     <div className="space-y-4">
@@ -28,23 +48,30 @@ export function ModelsSettings() {
             key={model.id}
             model={model}
             busy={action.isPending}
-            onAction={(name) => action.mutate({ action: name, id: model.id })}
-            onDelete={() => setToDelete(model)}
+            onAction={(name) => run(model, name)}
+            onDelete={() => requestDelete(model)}
           />
         ))}
       </div>
+      {deleteDialog}
       <ConfirmDialog
-        open={toDelete !== null}
-        onOpenChange={(open) => !open && setToDelete(null)}
-        title="Delete model?"
+        open={licenseCheck !== null}
+        onOpenChange={(open) => !open && setLicenseCheck(null)}
+        title="Non-commercial license"
         description={
-          toDelete
-            ? `${toDelete.name} (${formatBytes(toDelete.installedBytes)}) will be removed from disk. You can download it again later.`
+          licenseCheck
+            ? `${licenseCheck.model.name} is under the ${licenseCheck.model.license}: you may not use it for commercial work. ${licenseCheck.action === "download" ? "Download it anyway?" : "Make it the default anyway?"}`
             : ""
         }
-        confirmLabel="Delete"
-        variant="destructive"
-        onConfirm={() => toDelete && action.mutate({ action: "delete", id: toDelete.id })}
+        confirmLabel={licenseCheck?.action === "download" ? "Download" : "Set as default"}
+        onConfirm={() =>
+          licenseCheck &&
+          action.mutate({
+            action: licenseCheck.action,
+            id: licenseCheck.model.id,
+            acceptNonCommercial: true,
+          })
+        }
       />
     </div>
   );
@@ -64,7 +91,7 @@ function ModelRow({
 }: {
   model: ModelListItem;
   busy: boolean;
-  onAction: (action: "download" | "cancel" | "setDefault") => void;
+  onAction: (action: RowAction) => void;
   onDelete: () => void;
 }) {
   const { status } = model;
@@ -75,18 +102,20 @@ function ModelRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-text-primary">{model.name}</span>
             {model.isDefault && (
-              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent">
-                Default
-              </span>
+              <span className={`${BADGE} bg-accent/15 text-accent`}>Default</span>
             )}
             {model.kind === "streaming" && (
-              <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] text-blue-300">
-                Streaming
-              </span>
+              <span className={`${BADGE} ${SEMANTIC_BADGE.info}`}>Streaming</span>
             )}
             {!model.engineAvailable && (
-              <span className="rounded-full bg-zinc-500/15 px-2 py-0.5 text-[10px] text-text-muted">
-                Coming
+              <span className={`${BADGE} ${SEMANTIC_BADGE.muted}`}>Coming</span>
+            )}
+            {model.commercialUse === false && (
+              <span
+                className={`${BADGE} ${SEMANTIC_BADGE.warning} flex items-center gap-1`}
+                title={model.license}
+              >
+                <AlertTriangle className="h-2.5 w-2.5" /> Non-commercial
               </span>
             )}
           </div>
@@ -107,7 +136,7 @@ function ModelRow({
         </div>
       </div>
       {status.state === "downloading" && (
-        <div className="mt-2 h-1 overflow-hidden rounded bg-white/5">
+        <div className="mt-2 h-1 overflow-hidden rounded bg-bg-tertiary">
           <div
             className="h-full bg-accent transition-[width]"
             style={{ width: `${Math.min(100, (status.receivedBytes / status.totalBytes) * 100)}%` }}
@@ -121,9 +150,6 @@ function ModelRow({
   );
 }
 
-const BUTTON =
-  "flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-white/5 disabled:opacity-50";
-
 function ModelStatusActions({
   model,
   busy,
@@ -132,7 +158,7 @@ function ModelStatusActions({
 }: {
   model: ModelListItem;
   busy: boolean;
-  onAction: (action: "download" | "cancel" | "setDefault") => void;
+  onAction: (action: RowAction) => void;
   onDelete: () => void;
 }) {
   const { status } = model;
@@ -145,7 +171,7 @@ function ModelStatusActions({
             {Math.floor((status.receivedBytes / status.totalBytes) * 100)}% of{" "}
             {formatBytes(status.totalBytes)}
           </span>
-          <button type="button" className={BUTTON} onClick={() => onAction("cancel")}>
+          <button type="button" className={SMALL_BUTTON} onClick={() => onAction("cancel")}>
             <X className="h-3 w-3" /> Cancel
           </button>
         </>
@@ -157,7 +183,7 @@ function ModelStatusActions({
           <span className="text-[11px] text-text-muted">
             {status.state === "verifying" ? "Verifying..." : "Unpacking..."}
           </span>
-          <button type="button" className={BUTTON} onClick={() => onAction("cancel")}>
+          <button type="button" className={SMALL_BUTTON} onClick={() => onAction("cancel")}>
             <X className="h-3 w-3" /> Cancel
           </button>
         </>
@@ -165,19 +191,19 @@ function ModelStatusActions({
     case "ready":
       return (
         <>
-          <span className="text-[11px] text-green-400">Ready</span>
+          <span className="text-[11px] text-success">Ready</span>
           <div className="flex gap-1.5">
             {!model.isDefault && (
               <button
                 type="button"
-                className={BUTTON}
+                className={SMALL_BUTTON}
                 disabled={busy}
                 onClick={() => onAction("setDefault")}
               >
                 <Star className="h-3 w-3" /> Set as default
               </button>
             )}
-            <button type="button" className={BUTTON} onClick={onDelete}>
+            <button type="button" className={SMALL_BUTTON} onClick={onDelete}>
               <Trash2 className="h-3 w-3" /> Delete
             </button>
           </div>
@@ -187,7 +213,7 @@ function ModelStatusActions({
       return (
         <button
           type="button"
-          className={BUTTON}
+          className={SMALL_BUTTON}
           disabled={busy}
           onClick={() => onAction("download")}
         >
@@ -199,7 +225,7 @@ function ModelStatusActions({
         <>
           <button
             type="button"
-            className={BUTTON}
+            className={SMALL_BUTTON}
             disabled={busy}
             onClick={() => onAction("download")}
           >

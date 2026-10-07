@@ -1,10 +1,9 @@
-import { browserPartitionFor } from "@exegol/shared";
+import { browserPartitionFor, STORAGE_CATEGORIES } from "@exegol/shared";
 import { app, session, shell } from "electron";
 import { z } from "zod";
 import { listProjects } from "../../db/queries/projects";
 import { LOG_DIR } from "../../lib/logger";
 import {
-  categorySpecs,
   clearOldLogs,
   clearScreenshots,
   getStorageReport,
@@ -20,17 +19,6 @@ const storagePaths = (): StoragePaths => ({
   logDir: LOG_DIR,
 });
 
-const CATEGORIES = [
-  "models",
-  "scrollback",
-  "screenshots",
-  "logs",
-  "database",
-  "worktrees",
-  "browser",
-  "other",
-] as const;
-
 /** Exegol's disk use (Settings > Storage). Folders are chosen here by category, never by a renderer path */
 export const storageRouter = router({
   report: publicProcedure
@@ -38,18 +26,12 @@ export const storageRouter = router({
     .query(({ ctx, input }) => getStorageReport(storagePaths(), listProjects(ctx.db), input.fresh)),
 
   openFolder: publicProcedure
-    .input(z.object({ category: z.enum(CATEGORIES) }))
-    .mutation(async ({ input }) => {
-      const paths = storagePaths();
-      const spec = categorySpecs(paths).find((s) => s.category === input.category);
-      const folder =
-        input.category === "database" || input.category === "browser"
-          ? paths.userData
-          : input.category === "other"
-            ? paths.exegolDir
-            : (spec?.paths[0] ?? paths.exegolDir);
-      const error = await shell.openPath(folder);
-      return { opened: error === "" };
+    .input(z.object({ category: z.enum(STORAGE_CATEGORIES) }))
+    .mutation(async ({ ctx, input }) => {
+      const report = await getStorageReport(storagePaths(), listProjects(ctx.db));
+      const folder = report.rows.find((r) => r.category === input.category)?.path;
+      if (!folder) return { opened: false };
+      return { opened: (await shell.openPath(folder)) === "" };
     }),
 
   clearScreenshots: publicProcedure.mutation(async () => {
