@@ -63,7 +63,9 @@ interface Window {
       getPlatform: () => string;
     };
     onMenuAction: (
-      callback: (action: "new-tab" | "close-pane" | "reload" | "focus-location") => void,
+      callback: (
+        action: "new-tab" | "close-pane" | "reload" | "focus-location" | "open-dashboard",
+      ) => void,
     ) => () => void;
     onPaneSwitcherKey: (
       callback: (key: { kind: "tab" | "release"; shift?: boolean }) => void,
@@ -93,6 +95,9 @@ interface Window {
       callback: (state: import("@exegol/shared").SessionRecoveryState) => void,
     ) => () => void;
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
+    onModelProgress: (
+      callback: (event: import("@exegol/shared").ModelProgressEvent) => void,
+    ) => () => void;
     /** T200.4: an agent's follow-up queue changed */
     onFollowUps: (
       callback: (event: import("@exegol/shared").FollowUpsChangedEvent) => void,
@@ -152,6 +157,7 @@ interface Window {
         tab?: "general" | "statusbar" | "clis" | "terminal" | "shortcuts" | "apikeys",
       ) => Promise<void>;
       selfClose: () => void;
+      showDashboard: () => void;
       onNavigate: (callback: (tab: string) => void) => () => void;
       broadcastChanged: () => void;
       onChanged: (callback: () => void) => () => void;

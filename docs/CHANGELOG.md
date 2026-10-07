@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Settings > Models: local speech-to-text models for the coming voice dictation. Each shows what it is best for, its languages, download and disk size, license and credit. Download (resumes after a dropped connection, checked against a pinned SHA-256 before it is unpacked), cancel, retry, delete and set as default. Parakeet TDT 0.6B v3 is the default; also Whisper large-v3-turbo, Nemotron 3.5 streaming, Qwen3-ASR 0.6B and Moonshine v2 (English, Spanish). Moonshine Spanish is non-commercial: it carries a warning and asks before download or set as default
+- Settings > Storage: what Exegol keeps on disk (models, terminal scrollback, screenshots, logs, database, worktrees, browser panes, other) and the free space left. Open each folder, clear screenshots, clear old logs, delete a model, or clear one project's browser cache (cookies and logins stay). Worktrees are only shown, with a Show in Dashboard button to clean them from its Worktrees card
 - More IDEs, and Exegol knows which ones you have: VS Code Insiders, Antigravity IDE, Sublime Text, Nova, IntelliJ IDEA, WebStorm, PyCharm, GoLand, RustRover, Neovim and Vim join VS Code, Cursor, Zed and Devin Desktop. Settings > General lists the installed ones first; the others are greyed with a "Get it" link to their download page. Files open at their line with each IDE's own syntax, and Neovim or Vim open in a new terminal tab
 - Edit project can pick the IDE for that project ("Same as Settings" by default); Open in IDE, the pane toolbar and Cmd+click on a file path use it
 

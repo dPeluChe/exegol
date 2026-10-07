@@ -323,6 +323,20 @@
       "list",
       "finalOutput",
       "resumableLocal"
+    ],
+    "models": [
+      "cancel",
+      "delete",
+      "download",
+      "list",
+      "setDefault"
+    ],
+    "storage": [
+      "clearBrowserCache",
+      "clearOldLogs",
+      "clearScreenshots",
+      "openFolder",
+      "report"
     ]
   },
   "ipc": [
@@ -342,6 +356,7 @@
     "menu:close-pane",
     "menu:reload",
     "menu:focus-location",
+    "menu:open-dashboard",
     "pane-switcher:key",
     "agent:status-changed",
     "agent:follow-ups",
@@ -369,6 +384,7 @@
     "floating:closed",
     "settings:open",
     "settings:self-close",
+    "settings:show-dashboard",
     "settings:navigate",
     "settings:broadcast-changed",
     "settings:changed",
@@ -381,6 +397,7 @@
     "browser:open-request",
     "browser:open-result",
     "mcp:status",
-    "agent:turn-changes"
+    "agent:turn-changes",
+    "models:progress"
   ]
 }

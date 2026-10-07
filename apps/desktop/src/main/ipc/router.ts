@@ -16,6 +16,7 @@ import { knowledgeRouter } from "./procedures/knowledge";
 import { mcpRouter } from "./procedures/mcp";
 import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
+import { modelsRouter } from "./procedures/models";
 import { oplogRouter } from "./procedures/oplog";
 import { pipelineRouter } from "./procedures/pipeline";
 import { projectGroupsRouter } from "./procedures/project-groups";
@@ -31,6 +32,7 @@ import { searchRouter } from "./procedures/search";
 import { settingsRouter } from "./procedures/settings";
 import { skillInstallerRouter } from "./procedures/skill-installer";
 import { skillsRouter } from "./procedures/skills";
+import { storageRouter } from "./procedures/storage";
 import { terminalLinksRouter } from "./procedures/terminal-links";
 import { tokenUsageRouter } from "./procedures/token-usage";
 import { updatesRouter } from "./procedures/updates";
@@ -72,6 +74,8 @@ export const appRouter = router({
   projectGroups: projectGroupsRouter,
   updates: updatesRouter,
   terminalLinks: terminalLinksRouter,
+  models: modelsRouter,
+  storage: storageRouter,
   ide: ideRouter,
 });
 

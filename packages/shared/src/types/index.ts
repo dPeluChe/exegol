@@ -11,6 +11,7 @@ export * from "./github-issue";
 export * from "./ide";
 export * from "./mcp";
 export * from "./memory";
+export * from "./models";
 export * from "./pipeline";
 export * from "./project";
 export * from "./project-group";

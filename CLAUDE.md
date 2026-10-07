@@ -76,6 +76,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 
 ### Settings window (T120, 2026-05)
 - Settings live in a standalone BrowserWindow (`main/windows/settings.ts`) so users can tweak themes/API keys/fonts while watching agent output
+- Tabs include **Models** (T201: speech model catalog, download/cancel/delete/default, `models` router + `models:progress` push) and **Storage** (`system/storage.ts`: async walk with a shared fs limiter, cached 30s; open folder, clear screenshots, clear rotated logs, delete a model, clear a project partition's cache; worktrees shown only)
 - Renderer routes on `?settings=1` → lazy `<SettingsRoot/>` (own QueryClient + TooltipProvider + useTheme)
 - Lifecycle bound via `mainWindow.on("closed")` — intentionally NO `parent:` (would propagate minimize/hide on macOS) and NO `alwaysOnTop`
 - Cmd+W routed by `app-menu.ts#handleCloseAccelerator`: settings/floating URLs close the window directly; main window receives `menu:close-pane`
@@ -134,7 +135,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 14 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
-- **tRPC over IPC**: 35 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
+- **tRPC over IPC**: 37 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
 - **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
@@ -189,7 +190,7 @@ apps/desktop/src/
                     (driver/take-over/wait), page-scripts, needs-user, log-ring, request-guard
     db/             client, migrations (36 base) + migration-sets/ (per-group wave files),
                     queries/ (22 domain modules + helpers)
-    ipc/            router (35 routers), procedures/ (41 modules incl. history, knowledge, doctor)
+    ipc/            router (37 routers), procedures/ (43 modules incl. history, knowledge, doctor, models, storage)
     history/        T181 session history: merged timeline + per-CLI local store readers
     terminal/       pty-host, sidecar entry/client/discovery/eviction/flusher, ring-buffer,
                     headless-emulator
@@ -212,7 +213,12 @@ apps/desktop/src/
     security/       keystore (safeStorage)
     system/         resources (metrics + threshold alerts), ports (lsof + config), doctor (T148),
                     auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
-                    work-guard, diagnostics, project-icons
+                    work-guard, diagnostics, project-icons, storage (Settings > Storage)
+    models/         T201 local speech-to-text models: catalog (data: verified URL, sha256, sizes,
+                    license, `commercialUse`), download (HTTP Range resume + sha256, https only, free
+                    space check), extract (system `tar -xjf`, then an lstat walk refuses links and
+                    special files, forces 0644/0755, temp dir then rename), manager
+                    (~/.exegol/models/<id>, `models:progress` push, default in settings)
     ide/            catalog (launch facts + line syntax per IDE), detect (installed apps/CLIs, cached 10 min), opener
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)
   renderer/
@@ -223,7 +229,8 @@ apps/desktop/src/
                     PaneContextMenu, sections/ (30 section components + pipeline/, tasks/), diff/
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,
                     YOLO/Active toggles), TerminalSettings (bundled fonts, per-card preview,
-                    family chain badges, promote-on-click), ApiKeysSettings
+                    family chain badges, promote-on-click), ApiKeysSettings, ModelsSettings,
+                    StorageSettings (T201)
       terminal/     TerminalPanel (live/read-only/crashed, snapshot probe on reattach),
                     TerminalInstance (xterm.js + WebGL + Serialize), tui-wheel (trackpad boost for TUIs), use-xterm owns the xterm
                     lifecycle (WebGL and the dormant pipe follow the live session)

@@ -3,6 +3,8 @@ import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft,
+  AudioLines,
+  HardDrive,
   Key,
   Keyboard,
   Monitor,
@@ -19,7 +21,9 @@ import { DoctorSettings } from "./DoctorSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
 import { McpServerSettings } from "./McpServerSettings";
+import { ModelsSettings } from "./ModelsSettings";
 import { StatusBarSettings } from "./StatusBarSettings";
+import { StorageSettings } from "./StorageSettings";
 import { TerminalSettings } from "./TerminalSettings";
 import { useSettingsForm } from "./use-settings-form";
 
@@ -31,6 +35,8 @@ export type SettingsTab =
   | "shortcuts"
   | "apikeys"
   | "mcp"
+  | "models"
+  | "storage"
   | "doctor";
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
@@ -41,6 +47,8 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
   { id: "apikeys", label: "API Keys", icon: Key },
   { id: "mcp", label: "MCP Server", icon: Network },
+  { id: "models", label: "Models", icon: AudioLines },
+  { id: "storage", label: "Storage", icon: HardDrive },
   { id: "doctor", label: "Doctor", icon: Stethoscope },
 ];
 
@@ -57,6 +65,8 @@ const TAB_CONTENT: Record<SettingsTab, (props: TabContentProps) => ReactNode> = 
   shortcuts: () => <KeyboardShortcuts />,
   apikeys: () => <ApiKeysSettings />,
   mcp: () => <McpServerSettings />,
+  models: () => <ModelsSettings />,
+  storage: () => <StorageSettings />,
   doctor: () => <DoctorSettings />,
 };
 

@@ -129,9 +129,12 @@ contextBridge.exposeInMainWorld("api", {
   // Menu-driven actions (macOS app menu routes accelerators via IPC so the
   // renderer can close panes/tabs instead of the whole window on Cmd+W).
   onMenuAction: (
-    callback: (action: "new-tab" | "close-pane" | "reload" | "focus-location") => void,
+    callback: (
+      action: "new-tab" | "close-pane" | "reload" | "focus-location" | "open-dashboard",
+    ) => void,
   ) => {
     const onNewTab = () => callback("new-tab");
+    const onOpenDashboard = () => callback("open-dashboard");
     const onClosePane = () => callback("close-pane");
     const onReload = () => callback("reload");
     const onFocusLocation = () => callback("focus-location");
@@ -139,11 +142,13 @@ contextBridge.exposeInMainWorld("api", {
     safe.on("menu:close-pane", onClosePane as never);
     safe.on("menu:reload", onReload as never);
     safe.on("menu:focus-location", onFocusLocation as never);
+    safe.on("menu:open-dashboard", onOpenDashboard as never);
     return () => {
       safe.off("menu:new-tab", onNewTab as never);
       safe.off("menu:close-pane", onClosePane as never);
       safe.off("menu:reload", onReload as never);
       safe.off("menu:focus-location", onFocusLocation as never);
+      safe.off("menu:open-dashboard", onOpenDashboard as never);
     };
   },
   /** Ctrl+Tab and the Ctrl release from a focused browser pane's page (main forwards them) */
@@ -206,6 +211,13 @@ contextBridge.exposeInMainWorld("api", {
     safe.on("agent:turn-changes", handler as never);
     return () => {
       safe.off("agent:turn-changes", handler as never);
+    };
+  },
+  onModelProgress: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("models:progress", handler as never);
+    return () => {
+      safe.off("models:progress", handler as never);
     };
   },
   onPipelineStatus: (callback: (event: unknown) => void) => {
@@ -300,6 +312,8 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("settings:open", tab),
     /** Close the settings window from inside it */
     selfClose: () => safe.send("settings:self-close"),
+    /** Bring the main window forward on the Dashboard */
+    showDashboard: () => safe.send("settings:show-dashboard"),
     /** Subscribe to tab deep-link events from the main window */
     onNavigate: (callback: (tab: string) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, tab: string) => callback(tab);
