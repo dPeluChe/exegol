@@ -131,6 +131,11 @@
       "read",
       "resolve"
     ],
+    "ide": [
+      "list",
+      "projectIde",
+      "setProjectIde"
+    ],
     "prompts": [
       "create",
       "delete",

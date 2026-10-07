@@ -28,7 +28,7 @@ import {
 import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
 import { setProjectBrowserEval, setProjectBrowserHosts } from "../../db/queries/projects";
 import { runArchiveHook } from "../../hooks/project-hooks";
-import { openInIde, resolveIde } from "../../ide/opener";
+import { openInIde, resolveIde, setProjectIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
@@ -238,6 +238,7 @@ export const projectRouter = router({
       ),
     );
     deleteProject(ctx.db, input.id);
+    setProjectIde(ctx.db, input.id, null);
     return { success: true };
   }),
 
@@ -276,13 +277,13 @@ export const projectRouter = router({
         }
         target = resolved;
       }
-      await openInIde(
+      const opened = await openInIde(
         target,
         input.ide ?? preferred.ide,
         input.customPath ?? preferred.customPath,
         input.file ? input.line : undefined,
       );
-      return { success: true };
+      return { success: true, ...opened };
     }),
 
   open: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {

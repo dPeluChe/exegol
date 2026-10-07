@@ -134,7 +134,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything â
 14 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
-- **tRPC over IPC**: 34 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
+- **tRPC over IPC**: 35 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
 - **Structured errors** (T80): `ExegolError` â†’ `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
@@ -189,7 +189,7 @@ apps/desktop/src/
                     (driver/take-over/wait), page-scripts, needs-user, log-ring, request-guard
     db/             client, migrations (36 base) + migration-sets/ (per-group wave files),
                     queries/ (22 domain modules + helpers)
-    ipc/            router (34 routers), procedures/ (40 modules incl. history, knowledge, doctor)
+    ipc/            router (35 routers), procedures/ (41 modules incl. history, knowledge, doctor)
     history/        T181 session history: merged timeline + per-CLI local store readers
     terminal/       pty-host, sidecar entry/client/discovery/eviction/flusher, ring-buffer,
                     headless-emulator
@@ -213,7 +213,7 @@ apps/desktop/src/
     system/         resources (metrics + threshold alerts), ports (lsof + config), doctor (T148),
                     auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
                     work-guard, diagnostics, project-icons
-    ide/            opener (vscode, cursor, zed, windsurf, custom)
+    ide/            catalog (launch facts + line syntax per IDE), detect (installed apps/CLIs, cached 10 min), opener
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)
   renderer/
     components/

@@ -1,7 +1,8 @@
 import { z } from "zod";
+import { IDE_IDS } from "../types/ide";
 import { DEFAULT_SETTINGS } from "../types/settings";
 
-export const ideTypeSchema = z.enum(["vscode", "cursor", "zed", "windsurf", "custom"]);
+export const ideTypeSchema = z.enum(IDE_IDS);
 
 export const agentCliConfigSchema = z.object({
   cliType: z.string().min(1),
