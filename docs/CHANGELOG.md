@@ -19,6 +19,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Windsurf is now Devin Desktop (renamed by Cognition on 2026-06-02): new name and the Devin mark; it opens with `devin-desktop`, or the old `windsurf` command, or straight from the app when neither is on your PATH. A saved "Windsurf" setting keeps working
 - What's new is easier to scan: filter chips at the top (All, Added, Changed, Fixed, with counts) show one kind of change, each entry reads as a one-line headline that expands on click, and Expand all opens every entry
 - Sidebar Agents: one card per project instead of one block per tab. The card shows the project and its Cmd+n number (click it to go back where you left the project); with several live tabs, each tab gets a small header (click to open that tab, the active one is marked) with its sessions under it. Dragging reorders projects, and your previous order is kept
+- Status bar Resources reads as the whole machine: `CPU 61% · RAM 70%` with labels instead of a gear and "mem". Settings > Status bar can switch it to Values (`RAM 22.4/32 GB`). Its tooltip shows the machine's use, what Exegol and its agents use, and why high RAM only matters with swap
 
 ## [0.5.15] — 2026-10-06 — Agents in the browser pane, status bar widgets, Ctrl+Tab, queue and steer, undo a turn
 

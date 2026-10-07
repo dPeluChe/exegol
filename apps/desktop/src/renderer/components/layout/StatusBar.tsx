@@ -9,6 +9,7 @@ import {
   GitBranch,
   GitPullRequest,
   Loader2,
+  MemoryStick,
   Settings2,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
@@ -21,12 +22,15 @@ import { useUpdateStatus } from "../../hooks/use-update-status";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { sessionName } from "../../lib/agent-label";
 import { formatCost, formatTokens } from "../../lib/format";
+import { IS_MAC } from "../../lib/keymap";
+import { ramText, resourcesTooltip } from "../../lib/resources-widget";
 import { useSessionRecovery } from "../../lib/session-recovery";
 import {
   resolveWidgetLayout,
   type StatusBarWidgetId,
   WIDGET_SLOTS,
   type WidgetSlot,
+  widgetMode,
   widgetsIn,
 } from "../../lib/status-bar-widgets";
 import { trpcInvoke } from "../../lib/trpc-client";
@@ -296,18 +300,23 @@ function ResourcesWidget() {
   const [pushed, setPushed] = useState<SystemMetricsEvent | null>(null);
   useMountEffect(() => window.api.onMetrics(setPushed));
   const { data: queried } = useSystemMetrics();
+  const { data: settings } = useSettings();
   const metrics = pushed ?? queried;
   if (!metrics) return null;
+  const mode = widgetMode(resolveWidgetLayout(settings?.statusBarWidgets), "resources");
   return (
     <span
       className="flex shrink-0 items-center gap-1 tabular-nums"
-      title="CPU and memory of this machine"
+      title={resourcesTooltip(metrics, IS_MAC)}
     >
       <Cpu className="h-3 w-3" />
+      CPU
       <span className={thresholdColor(metrics.cpu.usage)}>{Math.round(metrics.cpu.usage)}%</span>
-      <span>mem</span>
+      <span>·</span>
+      <MemoryStick className="h-3 w-3" />
+      RAM
       <span className={thresholdColor(metrics.memory.usagePercent)}>
-        {Math.round(metrics.memory.usagePercent)}%
+        {ramText(metrics.memory, mode)}
       </span>
     </span>
   );
