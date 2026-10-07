@@ -41,9 +41,7 @@ describe("resourcesTooltip", () => {
     expect(lines[2]).toMatch(/swap/);
   });
   it("skips the Exegol line before the first process reading", () => {
-    expect(resourcesTooltip({ ...metrics, usage: null }, "This machine").split("\n")).toHaveLength(
-      2,
-    );
+    expect(resourcesTooltip({ ...metrics, usage: null }, false).split("\n")).toHaveLength(2);
   });
 });
 
