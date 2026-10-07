@@ -134,7 +134,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 14 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
-- **tRPC over IPC**: 34 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
+- **tRPC over IPC**: 35 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
 - **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
@@ -189,7 +189,7 @@ apps/desktop/src/
                     (driver/take-over/wait), page-scripts, needs-user, log-ring, request-guard
     db/             client, migrations (36 base) + migration-sets/ (per-group wave files),
                     queries/ (22 domain modules + helpers)
-    ipc/            router (34 routers), procedures/ (40 modules incl. history, knowledge, doctor)
+    ipc/            router (35 routers), procedures/ (41 modules incl. history, knowledge, doctor)
     history/        T181 session history: merged timeline + per-CLI local store readers
     terminal/       pty-host, sidecar entry/client/discovery/eviction/flusher, ring-buffer,
                     headless-emulator
@@ -213,7 +213,7 @@ apps/desktop/src/
     system/         resources (metrics + threshold alerts), ports (lsof + config), doctor (T148),
                     auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
                     work-guard, diagnostics, project-icons
-    ide/            opener (vscode, cursor, zed, windsurf, custom)
+    ide/            catalog (launch facts + line syntax per IDE), detect (installed apps/CLIs, cached 10 min), opener
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)
   renderer/
     components/
@@ -265,7 +265,7 @@ docs/
 
 ## Database
 
-36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_022` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns, PTY size, yolo, mute/suspend, project appearance, launched_in_shell, cli_version, model, pr_watch, token_usage scan key, scheduled runs + task timeout, status_changed_at + its trigger, project browser_hosts, browser_eval) = 61 total · 35 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_runs, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, sessions, port_registry, host_metrics (last three unused, see T185.4)
+36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_023` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns, PTY size, yolo, mute/suspend, project appearance, launched_in_shell, cli_version, model, pr_watch, token_usage scan key, scheduled runs + task timeout, status_changed_at + its trigger, project browser_hosts, browser_eval, project ide) = 62 total · 35 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_runs, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, sessions, port_registry, host_metrics (last three unused, see T185.4)
 
 **Migration rule**: parallel work groups append ONLY to their own `db/migration-sets/<group>.ts` file (id prefixes `w2a_`/`w2b_`/`w2d_`/`w3_`) — `migrations.ts` spreads them; never edit another group's set.
 

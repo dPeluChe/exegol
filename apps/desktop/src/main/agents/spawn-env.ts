@@ -347,12 +347,24 @@ export function warmShellPath(): void {
 /** Whether `command` resolves to a file on the login shell's PATH: a stat per PATH dir, no
  *  process. Spawn launches what this finds, so the launcher's "installed" asks the same thing */
 export function commandOnPath(command: string): boolean {
-  if (command.includes("/") || command.includes("\\")) return existsSync(command);
+  return findOnPath(command) !== null;
+}
+
+/** Where `command` resolves on the login shell's PATH, or null */
+export function findOnPath(command: string): string | null {
+  if (command.includes("/") || command.includes("\\")) {
+    return existsSync(command) ? command : null;
+  }
   const exts =
     process.platform === "win32" ? ["", ...(process.env.PATHEXT ?? ".EXE;.CMD").split(";")] : [""];
-  return _getFullPath()
-    .split(delimiter)
-    .some((dir) => dir && exts.some((ext) => existsSync(join(dir, command + ext))));
+  for (const dir of _getFullPath().split(delimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const full = join(dir, command + ext);
+      if (existsSync(full)) return full;
+    }
+  }
+  return null;
 }
 
 /** The binary to launch for a provider command: itself, or the new name it moved to (kilo) */

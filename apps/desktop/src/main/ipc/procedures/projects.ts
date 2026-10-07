@@ -276,13 +276,13 @@ export const projectRouter = router({
         }
         target = resolved;
       }
-      await openInIde(
+      const opened = await openInIde(
         target,
         input.ide ?? preferred.ide,
         input.customPath ?? preferred.customPath,
         input.file ? input.line : undefined,
       );
-      return { success: true };
+      return { success: true, ...opened };
     }),
 
   open: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {

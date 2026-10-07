@@ -4,7 +4,6 @@ export type Project = {
   path: string;
   gitRemote: string | null;
   defaultBranch: string;
-  defaultIde: string;
   createdAt: number;
   lastOpenedAt: number;
   /** T146: sidebar folder grouping — null means ungrouped (root level) */
@@ -17,6 +16,8 @@ export type Project = {
   iconImage?: string | null;
   /** Hosts beyond the local ones its agents may open in the browser pane ("*.app.com") */
   browserHosts?: string[];
+  /** The IDE it opens in; null follows Settings */
+  ide?: string | null;
   /** browser_eval allowed for its agents (off by default) */
   browserEval?: boolean;
 };

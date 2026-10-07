@@ -222,3 +222,25 @@ describe("agents.status_changed_at", () => {
     expect(stamp()).toBeLessThanOrEqual(Date.now() + 1000);
   });
 });
+
+describe("w3_023_project_ide", () => {
+  it("moves project_ides into projects.ide once and clears the legacy 'vscode' default", () => {
+    const db = new Database(":memory:");
+    runMigrations(db);
+    db.exec(`ALTER TABLE projects DROP COLUMN ide;
+      DELETE FROM _migrations WHERE id = 'w3_023_project_ide';
+      INSERT INTO projects (id, name, path) VALUES ('p1', 'One', '/a'), ('p2', 'Two', '/b');
+      INSERT INTO projects (id, name, path, default_ide) VALUES ('p3', 'Three', '/c', 'zed');
+      INSERT INTO settings (key, value) VALUES ('project_ides', '{"p1":"cursor","gone":"zed"}');`);
+
+    runMigrations(db);
+
+    const ides = db.prepare("SELECT id, ide FROM projects ORDER BY id").all();
+    expect(ides).toEqual([
+      { id: "p1", ide: "cursor" },
+      { id: "p2", ide: null },
+      { id: "p3", ide: "zed" },
+    ]);
+    expect(db.prepare("SELECT 1 FROM settings WHERE key = 'project_ides'").get()).toBeUndefined();
+  });
+});

@@ -9,4 +9,8 @@ describe("agent icons", () => {
     );
     expect(missing).toEqual([]);
   });
+
+  it("IDEs with an official mark in assets resolve to it", () => {
+    for (const id of ["vscode", "zed", "devin-desktop", "agy"]) expect(hasAgentIcon(id)).toBe(true);
+  });
 });

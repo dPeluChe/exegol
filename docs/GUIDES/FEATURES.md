@@ -24,6 +24,12 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   in their app. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
   Linux and Windows) opens a URL in the system browser and a file in the IDE at its line;
   Cmd+Shift+click shows the file in Finder. Hovering shows the target and the clicks.
+- **Open in IDE**: Settings > General picks the default IDE among the ones installed (VS Code,
+  VS Code Insiders, Cursor, Devin Desktop (formerly Windsurf), Zed, Antigravity IDE, Sublime Text,
+  Nova, IntelliJ IDEA, WebStorm, PyCharm, GoLand, RustRover, Neovim, Vim, or a custom command);
+  the rest show greyed with a link to their download page. Edit project can pick another IDE for
+  one project. Files open at their line with each IDE's own syntax; Neovim and Vim open in a new
+  terminal tab.
 - **Command palette** (`Cmd+K`): projects, agents, commands, and `!<cmd>` for a one-shot shell.
 - **Keyboard first**: jump to any live tab, pane or waiting agent without the mouse; see
   [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md).

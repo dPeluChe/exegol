@@ -1,4 +1,4 @@
-import type { Project, Worktree } from "@exegol/shared";
+import { ideLabel, type Project, type Worktree } from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,14 +18,15 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import {
-  openInIde,
   type PortInfo,
   useDeleteProject,
+  useProjectIde,
   useProjectPorts,
   useSettings,
   useWorktrees,
 } from "../../hooks/use-trpc";
 import { openInBrowser } from "../../lib/open-in-browser";
+import { openProjectInIde } from "../../lib/open-in-ide";
 import { switchSection } from "../../lib/switch-section";
 import type { AgentState } from "../../stores/agents";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -84,7 +85,8 @@ function PortBadges({ projectPath }: { projectPath: string }) {
 
 function OpenInIdeButton({ projectId }: { projectId: string }) {
   const { data: settings } = useSettings();
-  const ideName = settings?.defaultIde ?? "vscode";
+  const { data: projectIde } = useProjectIde(projectId);
+  const ideName = ideLabel(projectIde ?? settings?.defaultIde ?? "vscode");
 
   return (
     <Tooltip>
@@ -93,11 +95,7 @@ function OpenInIdeButton({ projectId }: { projectId: string }) {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            openInIde({
-              projectId,
-              ide: settings?.defaultIde,
-              customPath: settings?.customIdePath ?? undefined,
-            });
+            openProjectInIde({ projectId });
           }}
           className="rounded p-0.5 text-text-muted hover:bg-white/5 hover:text-text-secondary"
           title={`Open in ${ideName}`}
@@ -159,7 +157,6 @@ export function ProjectItem({
   const menuRef = useRef<HTMLDivElement>(null);
   const menuStyle = useFittedMenu(menuRef, contextMenu);
 
-  const { data: settings } = useSettings();
   const deleteProject = useDeleteProject();
 
   const { data: worktrees = [] } = useWorktrees(project.id, isExpanded);
@@ -334,11 +331,7 @@ export function ProjectItem({
             type="button"
             onClick={() => {
               setContextMenu(null);
-              openInIde({
-                projectId: project.id,
-                ide: settings?.defaultIde,
-                customPath: settings?.customIdePath ?? undefined,
-              });
+              openProjectInIde({ projectId: project.id });
             }}
             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-text-secondary transition-colors hover:bg-white/10"
           >

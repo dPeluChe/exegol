@@ -55,14 +55,14 @@ function buildMap(): Record<string, IconDef> {
   set("crush", s("crush.png"));
   set("factory-droid", s("factory-droid.svg"));
   set("opencode", p("opencode-light.svg", "opencode-dark.svg"));
-  set("windsurf", p("windsurf-light.svg", "windsurf-dark.svg"));
   set("kilocode", p("kilocode-light.svg", "kilocode-dark.svg"));
   set("ollama", p("ollama-light.svg", "ollama-dark.svg"));
 
   // IDEs
   set("vscode", s("vscode.svg"));
   set("zed", p("zed-light.svg", "zed-dark.svg"));
-  // cursor: no SVG available yet — uses text fallback
+  // Devin Desktop (formerly Windsurf) ships the Devin mark as its app icon
+  set("devin-desktop", p("devin-light.svg", "devin-dark.svg"));
 
   // Providers
   set("anthropic", s("claude.svg"));

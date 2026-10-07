@@ -109,7 +109,6 @@ describe("PipelineExecutor", () => {
       path: `/tmp/exegol-test-${Math.random()}`,
       gitRemote: null,
       defaultBranch: "main",
-      defaultIde: "vscode",
     }).id;
     executor = new PipelineExecutor();
     mocks.completionCallbacks.clear();

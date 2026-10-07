@@ -19,6 +19,7 @@ import { useAgent } from "../../hooks/use-trpc";
 import { sizeKey } from "../../lib/browser-viewports";
 import { confirmClosePanes } from "../../lib/close-guard";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -129,9 +130,7 @@ function PaneToolbar({
 
   const handleOpenInIde = useCallback(() => {
     if (!projectId) return;
-    trpcMutate("projects.openInIde", { projectId }).catch((err) => {
-      console.error("[PaneToolbar] Open in IDE failed:", err);
-    });
+    openProjectInIde({ projectId });
   }, [projectId]);
 
   const handleClosePane = useCallback(async () => {

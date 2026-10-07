@@ -1,4 +1,4 @@
-import type { IdeType, Settings } from "@exegol/shared";
+import type { Settings } from "@exegol/shared";
 import { cn, Input } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -18,17 +18,7 @@ import { appKeys, IS_MAC } from "../../lib/keymap";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
-import { AgentIcon } from "../common/AgentIcon";
-
-// ─── IDE options with icon metadata ─────────────────────────────────────────
-
-const IDE_OPTIONS: { value: IdeType; label: string; icon: string; color: string }[] = [
-  { value: "vscode", label: "VS Code", icon: "VS", color: "#007ACC" },
-  { value: "cursor", label: "Cursor", icon: "Cu", color: "#000000" },
-  { value: "zed", label: "Zed", icon: "Ze", color: "#084CCF" },
-  { value: "windsurf", label: "Windsurf", icon: "Wi", color: "#00C4B4" },
-  { value: "custom", label: "Custom", icon: "⚙", color: "#6B7280" },
-];
+import { IdePicker } from "./IdePicker";
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
@@ -195,39 +185,10 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
           Default IDE
         </h3>
-        <div className="grid grid-cols-3 gap-2 xl:grid-cols-6">
-          {IDE_OPTIONS.map((opt) => {
-            const isActive = settings.defaultIde === opt.value;
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => onChange({ defaultIde: opt.value })}
-                className={cn(
-                  "flex flex-col items-center gap-1.5 rounded-xl border p-3 transition-all",
-                  isActive
-                    ? "border-accent bg-accent/10"
-                    : "border-border bg-bg-secondary hover:border-accent/30 hover:bg-white/5",
-                )}
-              >
-                <AgentIcon
-                  provider={opt.value}
-                  size={28}
-                  fallback={opt.icon}
-                  fallbackColor={opt.color}
-                />
-                <span
-                  className={cn(
-                    "text-[10px] font-medium",
-                    isActive ? "text-accent" : "text-text-secondary",
-                  )}
-                >
-                  {opt.label}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <IdePicker
+          value={settings.defaultIde}
+          onChange={(ide) => ide && onChange({ defaultIde: ide })}
+        />
         {settings.defaultIde === "custom" && (
           <div className="mt-2">
             <Input

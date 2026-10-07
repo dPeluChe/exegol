@@ -1,6 +1,7 @@
 import type {
   Agent,
   AgentCreate,
+  DetectedIde,
   Project,
   ProjectCreate,
   Prompt,
@@ -139,11 +140,21 @@ export function useRecentSessions(limit = 10) {
 
 // ─── Open in IDE ─────────────────────────────────────────────────────────────
 
-/** A command, not server state: nothing to cache or invalidate */
-export function openInIde(data: { projectId: string; ide?: string; customPath?: string }) {
-  trpcMutate<{ success: boolean }>("projects.openInIde", data).catch((err) =>
-    console.error("[IDE] Open failed:", err),
-  );
+/** Every IDE Exegol knows, installed first (main caches the scan 10 min) */
+export function useIdes() {
+  return useQuery({
+    queryKey: ["ide", "list"],
+    queryFn: () => trpcInvoke<DetectedIde[]>("ide.list"),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** The IDE chosen in Edit project, null when it follows Settings */
+export function useProjectIde(projectId: string) {
+  return useQuery({
+    queryKey: ["ide", "project", projectId],
+    queryFn: () => trpcInvoke<string | null>("ide.projectIde", { projectId }),
+  });
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
