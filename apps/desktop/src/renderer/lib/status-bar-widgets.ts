@@ -43,7 +43,7 @@ export const STATUS_BAR_WIDGETS = [
   {
     id: "resources",
     label: "Resources",
-    description: "CPU and memory use of this machine",
+    description: "CPU and RAM use of the whole machine, not only Exegol",
     defaultOn: false,
     defaultSlot: "right",
   },
@@ -122,10 +122,13 @@ export const STATUS_BAR_WIDGETS = [
 
 export type StatusBarWidgetId = (typeof STATUS_BAR_WIDGETS)[number]["id"];
 
+export type WidgetMode = NonNullable<StatusBarWidgetSetting["mode"]>;
+
 export interface PlacedWidget {
   id: StatusBarWidgetId;
   on: boolean;
   slot: WidgetSlot;
+  mode?: WidgetMode;
 }
 
 const KNOWN = new Map(STATUS_BAR_WIDGETS.map((w) => [w.id as string, w]));
@@ -143,7 +146,9 @@ export function resolveWidgetLayout(
     if (!def || seen.has(def.id)) continue;
     seen.add(def.id);
     const slot = WIDGET_SLOTS.includes(s.slot) ? s.slot : def.defaultSlot;
-    out.push({ id: def.id, on: s.on, slot });
+    out.push(
+      s.mode ? { id: def.id, on: s.on, slot, mode: s.mode } : { id: def.id, on: s.on, slot },
+    );
   }
   for (const def of STATUS_BAR_WIDGETS) {
     if (!seen.has(def.id)) {
@@ -152,6 +157,9 @@ export function resolveWidgetLayout(
   }
   return out;
 }
+
+export const widgetMode = (layout: PlacedWidget[], id: StatusBarWidgetId): WidgetMode =>
+  layout.find((w) => w.id === id)?.mode ?? "percent";
 
 /** The widgets shown in one slot, in order */
 export const widgetsIn = (layout: PlacedWidget[], slot: WidgetSlot): StatusBarWidgetId[] =>

@@ -13,6 +13,8 @@ export type StatusBarWidgetSetting = {
   id: string;
   on: boolean;
   slot: "left" | "center" | "right";
+  /** Resources widget: percentages, or used/total values for RAM */
+  mode?: "percent" | "values";
 };
 
 export type Settings = {

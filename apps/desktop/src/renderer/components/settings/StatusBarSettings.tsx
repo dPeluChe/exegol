@@ -9,6 +9,7 @@ import {
   STATUS_BAR_WIDGETS,
   updateWidget,
   WIDGET_SLOTS,
+  type WidgetMode,
   type WidgetSlot,
   widgetsIn,
 } from "../../lib/status-bar-widgets";
@@ -16,6 +17,7 @@ import {
 const LABEL = new Map<string, string>(STATUS_BAR_WIDGETS.map((w) => [w.id, w.label]));
 const DESCRIPTION = new Map<string, string>(STATUS_BAR_WIDGETS.map((w) => [w.id, w.description]));
 const SLOT_LABEL: Record<WidgetSlot, string> = { left: "Left", center: "Center", right: "Right" };
+const MODE_LABEL: Record<WidgetMode, string> = { percent: "Percent", values: "Values" };
 
 interface Props {
   settings: Settings;
@@ -74,6 +76,11 @@ export function StatusBarSettings({ settings, onChange }: Props) {
                     last={i === rows.length - 1}
                     onToggle={() => save(updateWidget(layout, w.id, { on: !w.on }))}
                     onSlot={(s) => save(updateWidget(layout, w.id, { slot: s }))}
+                    onMode={
+                      w.id === "resources"
+                        ? (mode) => save(updateWidget(layout, w.id, { mode }))
+                        : undefined
+                    }
                     onMove={(d) => save(moveWidget(layout, w.id, d))}
                   />
                 ))}
@@ -92,6 +99,7 @@ function WidgetRow({
   last,
   onToggle,
   onSlot,
+  onMode,
   onMove,
 }: {
   widget: PlacedWidget;
@@ -99,6 +107,7 @@ function WidgetRow({
   last: boolean;
   onToggle: () => void;
   onSlot: (slot: WidgetSlot) => void;
+  onMode?: (mode: WidgetMode) => void;
   onMove: (delta: -1 | 1) => void;
 }) {
   const arrow =
@@ -134,6 +143,21 @@ function WidgetRow({
         </p>
         <p className="text-[10px] text-text-muted">{DESCRIPTION.get(widget.id)}</p>
       </div>
+      {onMode && (
+        <select
+          value={widget.mode ?? "percent"}
+          onChange={(e) => onMode(e.target.value as WidgetMode)}
+          className="rounded border border-border bg-bg-tertiary px-1.5 py-0.5 text-[11px] text-text-secondary"
+          aria-label="Display"
+          title="Percent: RAM 70%. Values: RAM 22.4/32 GB. CPU is always a percent"
+        >
+          {(Object.keys(MODE_LABEL) as WidgetMode[]).map((m) => (
+            <option key={m} value={m}>
+              {MODE_LABEL[m]}
+            </option>
+          ))}
+        </select>
+      )}
       <select
         value={widget.slot}
         onChange={(e) => onSlot(e.target.value as WidgetSlot)}

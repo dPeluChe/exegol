@@ -27,6 +27,13 @@ interface SystemMetricsEvent {
   memory: { total: number; used: number; free: number; usagePercent: number };
   disk: { total: number; used: number; free: number; usagePercent: number };
   uptime: number;
+  usage?: {
+    exegolCpu: number;
+    exegolMemory: number;
+    agentsCpu: number;
+    agentsMemory: number;
+    agentProcesses: number;
+  } | null;
 }
 
 interface PipelineStatusEvent {
