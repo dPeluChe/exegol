@@ -9,6 +9,7 @@ import {
   NOTES_KINDS,
   type NotesFilter,
   type NotesKind,
+  noteExpands,
   noteHeadline,
   parseReleaseNotes,
 } from "../../lib/release-notes";
@@ -95,7 +96,7 @@ function NoteEntry({
   onToggle: () => void;
 }) {
   const headline = noteHeadline(text);
-  if (headline === text) {
+  if (!noteExpands(text, headline)) {
     return (
       <li>
         <NoteText text={text} />
@@ -107,13 +108,20 @@ function NoteEntry({
       <button
         type="button"
         aria-expanded={open}
+        aria-label={open ? "Collapse" : "Expand"}
         onClick={onToggle}
-        className={cn(
-          "w-full rounded text-left hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent",
-          !open && "truncate",
-        )}
+        className="flex w-full items-start gap-1 rounded text-left hover:text-text-primary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
       >
-        <NoteText text={open ? text : headline} />
+        <span className={cn("min-w-0 flex-1", !open && "truncate")}>
+          <NoteText text={open ? text : headline} />
+        </span>
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            "mt-0.5 h-3 w-3 shrink-0 text-text-muted transition-transform",
+            open && "rotate-90",
+          )}
+        />
       </button>
     </li>
   );
@@ -125,11 +133,13 @@ function NotesList({ notes }: { notes: ReleaseNote[] }) {
   const [filter, setFilter] = useState<NotesFilter>("all");
   const [expandAll, setExpandAll] = useState(false);
   const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
-  const parsed = useMemo(
-    () => notes.map((note) => ({ note, sections: parseReleaseNotes(note.body) })),
-    [notes],
-  );
-  const totals = countByKind(parsed.flatMap((p) => p.sections));
+  const { parsed, totals } = useMemo(() => {
+    const parsed = notes.map((note) => {
+      const sections = parseReleaseNotes(note.body);
+      return { note, sections, counts: countByKind(sections) };
+    });
+    return { parsed, totals: countByKind(parsed.flatMap((p) => p.sections)) };
+  }, [notes]);
   const toggle = (key: string) =>
     setToggled((prev) => {
       const next = new Set(prev);
@@ -168,10 +178,9 @@ function NotesList({ notes }: { notes: ReleaseNote[] }) {
           {expandAll ? "Collapse all" : "Expand all"}
         </button>
       </div>
-      {parsed.map(({ note, sections }, i) => {
+      {parsed.map(({ note, sections, counts }, i) => {
         const shown = filterSections(sections, filter);
         const count = shown.reduce((n, s) => n + s.items.length, 0);
-        const counts = countByKind(sections);
         return (
           <details key={note.version} open={i === 0} className="group">
             <summary className="mb-1 flex cursor-pointer list-none items-baseline gap-2 text-xs font-semibold text-text-primary">
@@ -209,11 +218,11 @@ function NotesList({ notes }: { notes: ReleaseNote[] }) {
                   </p>
                 )}
                 <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-text-secondary">
-                  {section.items.map((item) => {
-                    const key = `${note.version}:${item}`;
+                  {section.items.map((item, j) => {
+                    const key = `${note.version}:${section.title}:${j}`;
                     return (
                       <NoteEntry
-                        key={item}
+                        key={key}
                         text={item}
                         open={expandAll !== toggled.has(key)}
                         onToggle={() => toggle(key)}
