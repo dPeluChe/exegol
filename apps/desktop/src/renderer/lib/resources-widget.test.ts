@@ -35,7 +35,7 @@ describe("ramText", () => {
 
 describe("resourcesTooltip", () => {
   it("names the machine, then Exegol and its agents, then the RAM note", () => {
-    const lines = resourcesTooltip(metrics, "This Mac").split("\n");
+    const lines = resourcesTooltip(metrics, true).split("\n");
     expect(lines[0]).toBe("This Mac: CPU 61% · RAM 22.4 of 32 GB used (70%)");
     expect(lines[1]).toBe("Exegol and its agents: CPU 12% · RAM 3.1 GB");
     expect(lines[2]).toMatch(/swap/);

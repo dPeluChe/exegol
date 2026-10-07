@@ -307,7 +307,7 @@ function ResourcesWidget() {
   return (
     <span
       className="flex shrink-0 items-center gap-1 tabular-nums"
-      title={resourcesTooltip(metrics, IS_MAC ? "This Mac" : "This machine")}
+      title={resourcesTooltip(metrics, IS_MAC)}
     >
       <Cpu className="h-3 w-3" />
       CPU

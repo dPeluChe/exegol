@@ -15,7 +15,8 @@ export function ramText(memory: Metrics["memory"], mode: WidgetMode): string {
     : `${Math.round(memory.usagePercent)}%`;
 }
 
-export function resourcesTooltip(m: Metrics, machine: string): string {
+export function resourcesTooltip(m: Metrics, mac: boolean): string {
+  const machine = mac ? "This Mac" : "This machine";
   const lines = [
     `${machine}: CPU ${Math.round(m.cpu.usage)}% · RAM ${formatGb(m.memory.used)} of ${formatGb(m.memory.total)} GB used (${Math.round(m.memory.usagePercent)}%)`,
   ];
@@ -25,7 +26,7 @@ export function resourcesTooltip(m: Metrics, machine: string): string {
     lines.push(`Exegol and its agents: CPU ${cpu}% · RAM ${ram} GB`);
   }
   lines.push(
-    "RAM counts active, wired and compressed memory (macOS). High RAM alone is fine; high RAM with swap is what slows the machine.",
+    `${mac ? "RAM counts active, wired and compressed memory." : "RAM is what is not available to new programs (reclaimable cache excluded)."} High RAM alone is fine; high RAM with swap is what slows the machine.`,
   );
   return lines.join("\n");
 }
