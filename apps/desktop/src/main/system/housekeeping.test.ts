@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { agentFileTargets, sweepOrphanAgentFiles } from "./housekeeping";
+import { type AgentFileTarget, agentFileTargets, sweepOrphanAgentFiles } from "./housekeeping";
 
 const LIVE = "live".padEnd(21, "0");
 const ARCHIVED = "archived".padEnd(21, "1");
@@ -31,7 +31,15 @@ function file(path: string, old = true) {
 function fixture() {
   root = mkdtempSync(join(tmpdir(), "exegol-housekeeping-"));
   const paths = { exegolDir: join(root, "exegol"), userData: join(root, "userData") };
-  return { paths, targets: agentFileTargets(paths) };
+  // Same labels and suffixes as the real targets, rooted in the temp dir
+  const targets: AgentFileTarget[] = agentFileTargets(paths.userData).map((t) => ({
+    ...t,
+    dir:
+      t.label === "scrollback"
+        ? join(paths.userData, "scrollback")
+        : join(paths.exegolDir, t.label),
+  }));
+  return { paths, targets };
 }
 
 const known = () => new Set([LIVE, ARCHIVED]);
@@ -72,6 +80,18 @@ describe("sweepOrphanAgentFiles", () => {
     const result = await sweepOrphanAgentFiles(targets, known, NOW);
     expect(result.files).toBe(0);
     expect(existsSync(outside)).toBe(true);
+  });
+
+  it("skips when orphaned ids outnumber twice the known ones (reset DB)", async () => {
+    const { paths, targets } = fixture();
+    const ids = ["a", "b", "c", "d", "e", "f"].map((c) => c.repeat(21));
+    const files = ids.map((id) => file(join(paths.exegolDir, "hooks", `${id}.json`)));
+    const reset = await sweepOrphanAgentFiles(targets, () => new Set([LIVE, ids[0] ?? ""]), NOW);
+    expect(reset).toMatchObject({ files: 0, skipped: "db-looks-reset" });
+    for (const p of files) expect(existsSync(p)).toBe(true);
+    const known3 = new Set([LIVE, ARCHIVED, ids[0] ?? ""]);
+    const ok = await sweepOrphanAgentFiles(targets, () => known3, NOW);
+    expect(ok.files).toBe(5);
   });
 
   it("does nothing when the agents table is empty", async () => {

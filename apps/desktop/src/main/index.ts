@@ -47,7 +47,6 @@ import { startMetricsCollector, stopMetricsCollector } from "./system/resources"
 import { destroyTray, initTray } from "./system/tray";
 import { startWorkGuard } from "./system/work-guard";
 import { getPtyHost } from "./terminal/pty-host";
-import { EXEGOL_DIR } from "./terminal/pty-sidecar-protocol";
 import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
@@ -136,7 +135,7 @@ app.whenReady().then(async () => {
   // stopping an interrupted run's agent needs its reattached PTY
   void runStartupRecovery().finally(() => {
     getSchedulerEngine().start(getDb());
-    scheduleHousekeeping(getDb(), { exegolDir: EXEGOL_DIR, userData: app.getPath("userData") });
+    scheduleHousekeeping(getDb(), app.getPath("userData"));
   });
 
   // Background services (non-blocking, start after window)

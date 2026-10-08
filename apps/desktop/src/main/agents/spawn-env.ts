@@ -25,6 +25,7 @@ import {
 } from "./agent-messaging";
 import { COMMAND_ALIASES } from "./cli-catalog";
 import { scoreAgent } from "./scoring";
+import { HOOKS_DIR } from "./wrappers";
 
 export interface AgentContext {
   id: string;
@@ -177,8 +178,6 @@ export function deriveStatusFromSignal(event: string): {
 }
 
 // ─── Claude Code hook injection (T123) ───────────────────────────────────
-
-const HOOKS_DIR = join(homedir(), ".exegol", "hooks");
 
 /** Shell command a Claude Code hook runs to emit an OSC-777 notify signal.
  *  Written to /dev/tty, NOT stdout: Claude Code captures hook stdout (it only

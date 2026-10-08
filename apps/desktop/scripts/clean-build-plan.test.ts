@@ -21,6 +21,11 @@ describe("planDist", () => {
     expect(planDist(locals, "0.5.16", 2).sort()).toEqual(["0.5.15-local", "0.5.16-local.2"]);
   });
 
+  it("orders prerelease parts numerically", () => {
+    const pre = ["0.6.0-beta.2", "0.6.0-beta.10", "0.6.0-beta.9", "0.6.0"].map((n) => at(n));
+    expect(planDist(pre, "0.6.0", 2).sort()).toEqual(["0.6.0-beta.2", "0.6.0-beta.9"]);
+  });
+
   it("ignores names that are not versions", () => {
     expect(planDist([at("latest"), at("0.5")], "0.5.16", 0)).toEqual([]);
   });

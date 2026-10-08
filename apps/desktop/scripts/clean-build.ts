@@ -1,15 +1,17 @@
 // Post-build cleanup. Dry run unless --apply. Every target is listed in docs/GUIDES/RELEASE.md.
+// Always exits 0 (it runs as the postpackage step): a failure removes nothing more, never fails a build.
 //   bun run clean:build                    report what would go
 //   bun run clean:build -- --apply         remove it (repo targets + old test temp dirs)
 //   --repo-only  skip the test temp dirs    --keep N  release folders kept (2)    --days N  age (14)
 //   --root DIR   another checkout of this repo (default: the one holding this script)
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import {
   DAY_MS,
   type Entry,
+  parseVersion,
   planDist,
   planIncremental,
   planTestTmp,
@@ -65,12 +67,21 @@ function human(n: number): string {
   return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
-function run(cmd: string, cmdArgs: string[]): string | null {
-  try {
-    return execFileSync(cmd, cmdArgs, { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch {
-    return null;
-  }
+/** stdout, or null when the command is missing, times out (10 s) or exits outside `okCodes` */
+function run(cmd: string, cmdArgs: string[], okCodes = [0]): string | null {
+  const r = spawnSync(cmd, cmdArgs, {
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 10_000,
+  });
+  return r.error || r.status === null || !okCodes.includes(r.status) ? null : r.stdout;
+}
+
+/** lsof exits 1 when nothing is open; false only when it ran and listed nothing */
+function inUse(dir: string): boolean {
+  if (platform() === "win32") return true;
+  const out = run("lsof", ["+D", dir], [0, 1]);
+  return out === null || out.trim() !== "";
 }
 
 interface Group {
@@ -79,9 +90,8 @@ interface Group {
   skipped: { path: string; reason: string }[];
 }
 
-function distGroup(): Group {
+function distGroup(current: string): Group {
   const dist = join(DESKTOP, "dist");
-  const current = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf-8")).version;
   const group: Group = {
     title: `dist (keeps the newest ${keep} and the current ${current})`,
     paths: [],
@@ -89,7 +99,8 @@ function distGroup(): Group {
   };
   const names = planDist(entries(dist, "dir"), current, keep);
   if (names.length === 0) return group;
-  // A folder still mounted or running (Exegol.app opened from dist) is skipped, never detached
+  // Mounted, running (Exegol.app opened from dist) or with an open file: skipped, never detached.
+  // Windows has no ps/lsof here, so every folder is skipped there
   const processes = run("ps", ["-axww", "-o", "command="]);
   const mounts = platform() === "darwin" ? run("hdiutil", ["info"]) : "";
   for (const name of names) {
@@ -99,8 +110,8 @@ function distGroup(): Group {
       group.skipped.push({ path, reason: "could not check mounts/processes" });
     } else if (mounts.split("\n").some((l) => /^image-path\s*:/.test(l) && l.includes(inside))) {
       group.skipped.push({ path, reason: "DMG mounted" });
-    } else if (processes.includes(inside)) {
-      group.skipped.push({ path, reason: "a running process uses it" });
+    } else if (processes.includes(inside) || inUse(path)) {
+      group.skipped.push({ path, reason: "in use, or lsof could not check" });
     } else {
       group.paths.push(path);
     }
@@ -149,13 +160,23 @@ function show(path: string): string {
   return path;
 }
 
+function currentVersion(): string | null {
+  try {
+    const version = JSON.parse(readFileSync(join(DESKTOP, "package.json"), "utf-8")).version;
+    return typeof version === "string" && parseVersion(version) ? version : null;
+  } catch {
+    return null;
+  }
+}
+
 function main(): void {
-  if (!existsSync(join(DESKTOP, "electron-builder.ts"))) {
-    console.error(`clean:build: ${ROOT} is not the Exegol repo root, nothing done`);
-    process.exit(1);
+  const current = existsSync(join(DESKTOP, "electron-builder.ts")) ? currentVersion() : null;
+  if (!current) {
+    console.log(`clean:build: no Exegol repo with a valid version at ${ROOT}, nothing removed`);
+    return;
   }
   console.log(`clean:build ${apply ? "(apply)" : "(dry run: nothing is removed, pass --apply)"}`);
-  const groups = [distGroup(), turboGroup(), incrementalGroup()];
+  const groups = [distGroup(current), turboGroup(), incrementalGroup()];
   if (!repoOnly) groups.push(testTmpGroup());
   let total = 0;
   let count = 0;
@@ -165,10 +186,16 @@ function main(): void {
     for (const s of group.skipped) console.log(`  skip ${show(s.path)} (${s.reason})`);
     let groupBytes = 0;
     for (const path of group.paths) {
-      const info = lstatSync(path, { throwIfNoEntry: false });
-      if (!info || info.isSymbolicLink()) continue;
-      const size = bytes(path);
-      if (apply) rmSync(path, { recursive: true, force: true });
+      let size: number;
+      try {
+        const info = lstatSync(path, { throwIfNoEntry: false });
+        if (!info || info.isSymbolicLink()) continue;
+        size = bytes(path);
+        if (apply) rmSync(path, { recursive: true, force: true });
+      } catch (err) {
+        console.log(`  skip ${show(path)} (error: ${err instanceof Error ? err.message : err})`);
+        continue;
+      }
       groupBytes += size;
       count++;
       // Thousands of temp dirs: one line each would drown the rest
@@ -198,4 +225,8 @@ function main(): void {
   );
 }
 
-main();
+try {
+  main();
+} catch (err) {
+  console.log(`clean:build stopped: ${err instanceof Error ? err.message : err}`);
+}

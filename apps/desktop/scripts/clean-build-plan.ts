@@ -28,7 +28,20 @@ function compareVersions(a: Version, b: Version): number {
   if (a.pre === b.pre) return 0;
   if (a.pre === null) return 1;
   if (b.pre === null) return -1;
-  return a.pre < b.pre ? -1 : 1;
+  const pa = a.pre.split(".");
+  const pb = b.pre.split(".");
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i];
+    const y = pb[i];
+    if (x === undefined || y === undefined) return x === undefined ? -1 : 1;
+    if (x === y) continue;
+    const nx = /^\d+$/.test(x) ? Number(x) : null;
+    const ny = /^\d+$/.test(y) ? Number(y) : null;
+    if (nx !== null && ny !== null) return nx - ny;
+    if (nx !== null || ny !== null) return nx !== null ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return 0;
 }
 
 const isLocal = (v: Version) => /(^|[.-])local($|[.-])/.test(v.pre ?? "");

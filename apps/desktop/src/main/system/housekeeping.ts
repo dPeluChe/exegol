@@ -1,8 +1,12 @@
 import { lstat, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type Database from "libsql";
+import { MODEL_SETTINGS_DIR } from "../agents/launch-model";
+import { HOOKS_DIR } from "../agents/wrappers";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { logger } from "../lib/logger";
+import { MCP_CONFIG_DIR } from "../mcp/exegol-mcp-config";
+import { scrollbackDir } from "./storage";
 
 const AGENT_ID = /^[A-Za-z0-9_-]{21}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -20,26 +24,22 @@ export interface HousekeepingResult {
   at: number;
   files: number;
   bytes: number;
+  skipped?: "db-looks-reset";
 }
 
-export function agentFileTargets(paths: { exegolDir: string; userData: string }) {
+export function agentFileTargets(userData: string): AgentFileTarget[] {
   return [
     // Claude Code hook settings: written at every spawn, never removed
-    { label: "hooks", dir: join(paths.exegolDir, "hooks"), suffixes: [".json"] },
+    { label: "hooks", dir: HOOKS_DIR, suffixes: [".json"] },
     // Per-agent MCP config: removed on a clean exit only, and it carries the agent's token
-    { label: "mcp", dir: join(paths.exegolDir, "mcp"), suffixes: [".json"] },
-    { label: "model-settings", dir: join(paths.exegolDir, "model-settings"), suffixes: [".json"] },
-    {
-      label: "scrollback",
-      dir: join(paths.userData, "scrollback"),
-      suffixes: [".log", ".serialized"],
-    },
-  ] satisfies AgentFileTarget[];
+    { label: "mcp", dir: MCP_CONFIG_DIR, suffixes: [".json"] },
+    { label: "model-settings", dir: MODEL_SETTINGS_DIR, suffixes: [".json"] },
+    { label: "scrollback", dir: scrollbackDir(userData), suffixes: [".log", ".serialized"] },
+  ];
 }
 
 interface Candidate {
   label: string;
-  name: string;
   path: string;
   id: string;
   bytes: number;
@@ -59,7 +59,7 @@ async function listCandidates(target: AgentFileTarget, cutoff: number): Promise<
     const path = join(target.dir, entry.name);
     const info = await lstat(path).catch(() => null);
     if (!info?.isFile() || info.mtimeMs > cutoff) continue;
-    out.push({ label: target.label, name: entry.name, path, id, bytes: info.size });
+    out.push({ label: target.label, path, id, bytes: info.size });
   }
   return out;
 }
@@ -75,22 +75,32 @@ export async function sweepOrphanAgentFiles(
   minAgeMs = DAY_MS,
 ): Promise<HousekeepingResult> {
   const lists = await Promise.all(targets.map((t) => listCandidates(t, now - minAgeMs)));
-  const candidates = lists.flat();
   const result: HousekeepingResult = { at: now, files: 0, bytes: 0 };
+  const candidates = lists.flat();
   if (candidates.length === 0) return result;
   const ids = knownIds();
-  // An empty agents table more likely means the wrong or a fresh DB than "everything is orphaned"
-  if (ids.size === 0) return result;
-  for (const c of candidates) {
-    if (ids.has(c.id)) continue;
+  const orphans = candidates.filter((c) => !ids.has(c.id));
+  // More orphaned ids than twice the known ones: a reset or swapped DB, not leftovers
+  if (new Set(orphans.map((c) => c.id)).size > 2 * ids.size) {
+    logger.warn("[Housekeeping] skipped: the agents table looks reset");
+    return { ...result, skipped: "db-looks-reset" };
+  }
+  const perLabel = new Map<string, { files: number; bytes: number }>();
+  for (const c of orphans) {
     try {
       await unlink(c.path);
-      result.files++;
-      result.bytes += c.bytes;
-      logger.info(`[Housekeeping] removed ${c.label}/${c.name} (${c.bytes} bytes)`);
     } catch {
-      /* gone already or not ours to remove */
+      continue;
     }
+    const sum = perLabel.get(c.label) ?? { files: 0, bytes: 0 };
+    perLabel.set(c.label, { files: sum.files + 1, bytes: sum.bytes + c.bytes });
+    result.files++;
+    result.bytes += c.bytes;
+  }
+  for (const [label, sum] of perLabel) {
+    logger.info(
+      `[Housekeeping] removed ${sum.files} orphaned ${label} file(s), ${sum.bytes} bytes`,
+    );
   }
   return result;
 }
@@ -100,22 +110,15 @@ function agentIds(db: Database.Database): ReadonlySet<string> {
   return new Set(rows.map((r) => r.id));
 }
 
-/** Once a day at most, a couple of minutes after startup, off the critical path */
-export function scheduleHousekeeping(
-  db: Database.Database,
-  paths: { exegolDir: string; userData: string },
-): void {
-  const timer = setTimeout(() => {
+/** At most once a day: a couple of minutes after startup, then daily while the app stays open */
+export function scheduleHousekeeping(db: Database.Database, userData: string): void {
+  const run = () => {
     const last = getJsonSetting<HousekeepingResult | null>(db, HOUSEKEEPING_KEY, null);
     if (last && Date.now() - last.at < DAY_MS) return;
-    sweepOrphanAgentFiles(agentFileTargets(paths), () => agentIds(db))
-      .then((result) => {
-        setJsonSetting(db, HOUSEKEEPING_KEY, result);
-        if (result.files > 0) {
-          logger.info(`[Housekeeping] ${result.files} orphaned file(s), ${result.bytes} bytes`);
-        }
-      })
+    sweepOrphanAgentFiles(agentFileTargets(userData), () => agentIds(db))
+      .then((result) => setJsonSetting(db, HOUSEKEEPING_KEY, result))
       .catch((err) => logger.warn("[Housekeeping] sweep failed:", err));
-  }, START_DELAY_MS);
-  timer.unref?.();
+  };
+  setTimeout(run, START_DELAY_MS).unref?.();
+  setInterval(run, DAY_MS).unref?.();
 }

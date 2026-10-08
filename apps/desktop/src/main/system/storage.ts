@@ -19,6 +19,8 @@ export interface StoragePaths {
   logDir: string;
 }
 
+export const scrollbackDir = (userData: string) => join(userData, "scrollback");
+
 const CACHE_MS = 30_000;
 const fsLimit = createLimiter(32);
 const execFileAsync = promisify(execFile);
@@ -86,7 +88,7 @@ function categorySpecs(p: StoragePaths): CategorySpec[] {
     {
       category: "scrollback",
       label: "Terminal scrollback",
-      paths: [join(p.userData, "scrollback"), join(p.exegolDir, "ring-evicted")],
+      paths: [scrollbackDir(p.userData), join(p.exegolDir, "ring-evicted")],
     },
     {
       category: "screenshots",
