@@ -2,6 +2,7 @@ import { nanoid } from "nanoid";
 import type {
   ClosedEntry,
   CloseTarget,
+  FilesViewPatch,
   LayoutNode,
   Pane,
   PaneSlot,
@@ -37,6 +38,18 @@ export function setPw(
       [pid]: { ...current, ...updates },
     },
   };
+}
+
+/** A files pane with `patch` applied; another file starts at its own default mode and the top */
+export function applyFilesView(pane: Pane, patch: FilesViewPatch): Pane {
+  const { openFile, ...view } = patch;
+  let files = { ...pane.files, ...view };
+  let next = pane;
+  if (openFile !== undefined && (openFile ?? undefined) !== pane.openFile) {
+    files = { ...files, mode: view.mode, cursor: view.cursor };
+    next = { ...pane, openFile: openFile ?? undefined };
+  }
+  return { ...next, files };
 }
 
 export function removeNodeByPaneId(node: LayoutNode, paneId: string): LayoutNode | null {

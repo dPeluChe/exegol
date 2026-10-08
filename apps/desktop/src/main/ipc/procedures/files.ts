@@ -9,11 +9,20 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { extname, join, relative, sep } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog, shell } from "electron";
 import { z } from "zod";
-import { isProtectedRoot } from "../../security/path-guard";
+import { previewBases } from "../../files-preview/bases";
+import {
+  grantPreview,
+  previewRootFor,
+  previewUrlFor,
+  refusalMessage,
+  resolvePreviewFile,
+} from "../../files-preview/preview-paths";
+import { mimeFor } from "../../lib/mime";
+import { isProtectedRoot, realpathSafe } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 import { allowedBases, assertPathInsideProject } from "./project-paths";
 
@@ -55,17 +64,17 @@ const IGNORED_NAMES = new Set([
 const FILE_CHANGED_ON_DISK = "The file changed on disk since editing began";
 
 /** Shown as an image or PDF instead of text */
-const PREVIEW_MIME: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".bmp": "image/bmp",
-  ".ico": "image/x-icon",
-  ".pdf": "application/pdf",
-};
+const VIEWED_AS_MEDIA = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".avif",
+  ".bmp",
+  ".ico",
+  ".pdf",
+]);
 /** Opening these runs them; the viewer reveals them in Finder instead */
 const RUNNABLE_EXT = new Set([
   ".app",
@@ -113,7 +122,8 @@ export async function readForViewer(
     handle = await (opts.open ?? ((p: string) => open(p, "r")))(path);
     const ext = extname(path).toLowerCase();
     const { size, mtimeMs } = await handle.stat();
-    const mime = PREVIEW_MIME[ext] ?? (opts.svgAsImage && ext === ".svg" ? "image/svg+xml" : null);
+    const asMedia = VIEWED_AS_MEDIA.has(ext) || (opts.svgAsImage && ext === ".svg");
+    const mime = asMedia ? mimeFor(path) : null;
     if (mime) {
       if (size > MAX_PREVIEW_BYTES)
         return { kind: "too-large" as const, content: "", language: "", size };
@@ -188,6 +198,24 @@ export const filesRouter = router({
     await assertPathInsideProject(input.path, ctx);
     return readForViewer(input.path);
   }),
+
+  /** The Files preview URL of an HTML file: served read-only from its project (or worktree) root,
+   *  which main picks; ~/.exegol itself is never a root */
+  previewUrl: publicProcedure
+    .input(z.object({ path: z.string(), scripts: z.boolean() }))
+    .query(async ({ ctx, input }) => {
+      await assertPathInsideProject(input.path, ctx);
+      const root = await previewRootFor(input.path, previewBases(ctx.db));
+      if (!root) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Not inside a project or worktree" });
+      }
+      // Filesystem names as segments: never through a URL decoder (100%.html, a%41.html)
+      const segments = relative(root, await realpathSafe(input.path)).split(sep);
+      const file = await resolvePreviewFile(root, segments);
+      if (!file.ok) throw new TRPCError({ code: "FORBIDDEN", message: refusalMessage(file) });
+      const token = grantPreview(root, input.scripts);
+      return { url: previewUrlFor(token, relative(root, file.path).split(sep)) };
+    }),
 
   /** Show the file or folder selected in Finder */
   reveal: publicProcedure.input(z.object({ path: z.string() })).mutation(async ({ ctx, input }) => {

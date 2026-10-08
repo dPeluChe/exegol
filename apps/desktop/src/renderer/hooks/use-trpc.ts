@@ -257,6 +257,15 @@ export function useFileContent(path: string | null) {
   });
 }
 
+/** The Files HTML preview's URL: main picks the root it serves from and mints its token */
+export function useFilePreviewUrl(path: string, scripts: boolean) {
+  return useQuery({
+    queryKey: ["filePreviewUrl", path, scripts],
+    queryFn: () => trpcInvoke<{ url: string }>("files.previewUrl", { path, scripts }),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+}
+
 /** A file clicked in a terminal: main resolves the printed text, project files only */
 export function useTerminalLinkFile(input: { agentId: string; text: string; cwd?: string }) {
   return useQuery({
