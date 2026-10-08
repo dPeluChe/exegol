@@ -97,7 +97,7 @@ const config: Configuration = {
     darkModeSupport: true,
     extendInfo: {
       NSAppleEventsUsageDescription:
-        "Exegol needs automation access to open IDEs and manage terminals.",
+        "Exegol needs automation access to open IDEs, manage terminals and, if you turn it on, pause your music while you dictate.",
       NSMicrophoneUsageDescription:
         "Exegol uses the microphone only while you dictate. Speech is transcribed on this Mac and never leaves it.",
     },
