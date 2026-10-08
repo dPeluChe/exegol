@@ -27,6 +27,7 @@ import { IS_MAC } from "../../lib/keymap";
 import { ramText, resourcesTooltip } from "../../lib/resources-widget";
 import { useSessionRecovery } from "../../lib/session-recovery";
 import {
+  type PlacedWidget,
   resolveWidgetLayout,
   type StatusBarWidgetId,
   WIDGET_SLOTS,
@@ -76,20 +77,51 @@ const SLOT_CLASS: Record<WidgetSlot, string> = {
   right: "flex-1 justify-end",
 };
 
-/** The widgets picked in Settings > Status bar, in their slot and order */
-export function StatusBar() {
+export function useWidgetLayout(): PlacedWidget[] {
   const { data: settings } = useSettings();
   const { dictation } = useWidgetDefaults();
-  const layout = useMemo(
+  return useMemo(
     () => resolveWidgetLayout(settings?.statusBarWidgets, { dictation }),
     [settings?.statusBarWidgets, dictation],
   );
+}
+
+/** One title bar zone. The bar is a drag region: each widget is no-drag so its clicks and
+ *  tooltips work, the zone's empty space still drags the window */
+export function HeaderWidgets({
+  layout,
+  slot,
+  className,
+}: {
+  layout: PlacedWidget[];
+  slot: WidgetSlot;
+  className?: string;
+}) {
+  const ids = widgetsIn(layout, "header", slot);
+  if (ids.length === 0) return null;
+  return (
+    <div className={cn("flex items-center gap-3 text-[11px] text-text-muted", className)}>
+      {ids.map((id) => {
+        const Widget = WIDGETS[id];
+        return (
+          <div key={id} className="titlebar-no-drag flex min-w-0 items-center empty:hidden">
+            <Widget />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The footer zones picked in Settings > Bars, in their slot and order */
+export function StatusBar() {
+  const layout = useWidgetLayout();
 
   return (
     <div className="flex h-6 shrink-0 items-center gap-3 border-t border-border bg-bg-secondary pl-3 pr-1 text-[11px] text-text-muted">
       {WIDGET_SLOTS.map((slot) => (
         <div key={slot} className={cn("flex items-center gap-3", SLOT_CLASS[slot])}>
-          {widgetsIn(layout, slot).map((id) => {
+          {widgetsIn(layout, "footer", slot).map((id) => {
             const Widget = WIDGETS[id];
             return <Widget key={id} />;
           })}
@@ -99,7 +131,7 @@ export function StatusBar() {
         type="button"
         onClick={() => window.api.settings.open("statusbar")}
         className="flex h-5 w-5 shrink-0 items-center justify-center rounded hover:bg-white/10 hover:text-text-primary"
-        title="Choose what the status bar shows"
+        title="Choose what the status bar and the title bar show"
       >
         <Settings2 className="h-3 w-3" />
       </button>

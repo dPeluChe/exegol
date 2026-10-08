@@ -32,6 +32,10 @@ const GROUP_LABEL: Record<AgentGroup, string> = {
   waiting: "Waiting",
 };
 
+/** Opens away from the bar it sits in: up from the footer, down from the title bar */
+const menuY = (rect: DOMRect) =>
+  rect.top > window.innerHeight / 2 ? rect.top - 4 : rect.bottom + 4;
+
 /** Counts per group; the popover lists the sessions and jumps to one */
 export function AgentsWidget() {
   const agents = useAgentStore((s) => s.agents);
@@ -49,7 +53,7 @@ export function AgentsWidget() {
         type="button"
         onClick={(e) => {
           const rect = e.currentTarget.getBoundingClientRect();
-          setAnchor(anchor ? null : { x: rect.left, y: rect.top - 4 });
+          setAnchor(anchor ? null : { x: rect.left, y: menuY(rect) });
         }}
         className="flex shrink-0 items-center gap-1.5 rounded px-1 tabular-nums hover:bg-white/10 hover:text-text-secondary"
         title="Sessions by state: click for the list"

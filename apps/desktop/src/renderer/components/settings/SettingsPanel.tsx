@@ -44,7 +44,7 @@ export type SettingsTab =
 
 const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "general", label: "General", icon: Settings2 },
-  { id: "statusbar", label: "Status bar", icon: PanelBottom },
+  { id: "statusbar", label: "Bars", icon: PanelBottom },
   { id: "clis", label: "Agent CLIs", icon: Terminal },
   { id: "terminal", label: "Terminal", icon: Monitor },
   { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
