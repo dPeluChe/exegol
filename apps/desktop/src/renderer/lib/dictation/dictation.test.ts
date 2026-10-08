@@ -5,9 +5,9 @@ import { shortcutClash, shortcutsWith } from "../shortcuts";
 import { StreamResampler } from "./resampler";
 import {
   answersPrompt,
-  cancelsOnFocusChange,
   confirmTarget,
   type FocusSnapshot,
+  keptOnCancel,
   resolveTarget,
   sanitizeDictation,
   takesDictation,
@@ -122,6 +122,27 @@ describe("dictation target", () => {
     expect(confirmTarget(start, otherProject).kind).toBe("clipboard");
   });
 
+  it("after a trip to another app: same pane inserts, another pane or an ended session copies", () => {
+    const start = resolveTarget(base);
+    // Away in another app the workspace's focused pane does not change
+    expect(confirmTarget(start, resolveTarget(base))).toBe(start);
+    const moved = resolveTarget({
+      ...base,
+      focusedPaneId: "pane2",
+      pane: { id: "pane2", type: "browser" },
+    });
+    expect(confirmTarget(start, moved).kind).toBe("clipboard");
+    expect(confirmTarget(start, resolveTarget({ ...base, sessionLive: false })).kind).toBe(
+      "clipboard",
+    );
+  });
+
+  it("a cancel keeps 15 s of speech or more, when there is text", () => {
+    expect(keptOnCancel(15_000, "long narration")).toBe("long narration");
+    expect(keptOnCancel(14_999, "short")).toBeNull();
+    expect(keptOnCancel(60_000, "")).toBeNull();
+  });
+
   it("targets a focused Dashboard mirror's pane, else copies with a reason", () => {
     const mirror = { agentId: "a9", projectId: "p9", paneId: "pane9", live: true };
     const dash = { ...base, activeView: "dashboard", mirror };
@@ -142,13 +163,6 @@ describe("dictation target", () => {
     expect(takesDictation({ cliType: "shell", status: "stopped" })).toBe(false);
     expect(takesDictation({ cliType: "claude-code", status: "waiting_input" })).toBe(true);
     expect(takesDictation({ cliType: "claude-code", status: "crashed" })).toBe(false);
-  });
-
-  it("cancels only when Exegol loses the focus while listening", () => {
-    expect(cancelsOnFocusChange(false, "listening")).toBe(true);
-    expect(cancelsOnFocusChange(false, "starting")).toBe(false);
-    expect(cancelsOnFocusChange(false, "transcribing")).toBe(false);
-    expect(cancelsOnFocusChange(true, "listening")).toBe(false);
   });
 
   it("never answers an agent's question", () => {

@@ -14,6 +14,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { DEFAULT_MODEL_ID, findModel, MODEL_CATALOG } from "../models/catalog";
 import { modelStatus } from "../models/manager";
+import { armDictationSession, disarmDictationSession } from "./background";
 import {
   beginSession,
   cancelSession,
@@ -139,6 +140,7 @@ export async function startDictation(db: Database.Database) {
     // The model loads while the user speaks: audio waits in the engine until it is ready
     ensureModel(entry.id).catch(() => {});
     beginSession(id, settings.maxSeconds);
+    armDictationSession(id, settings.maxSeconds);
   } catch (err) {
     media?.release();
     active = null;
@@ -168,6 +170,7 @@ export async function stopDictation(
   }
   const { modelId, cold, media } = active;
   active = null;
+  disarmDictationSession();
   media?.release();
   const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(input.sessionId);
   const phraseLog =
@@ -213,5 +216,6 @@ export function cancelDictation(sessionId: string): void {
   if (active?.id !== sessionId) return;
   active.media?.release();
   active = null;
+  disarmDictationSession();
   cancelSession(sessionId);
 }

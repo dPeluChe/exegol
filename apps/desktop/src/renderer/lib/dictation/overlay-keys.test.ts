@@ -18,6 +18,12 @@ describe("overlayKeyAction", () => {
     expect(overlayKeyAction(key("Enter"), "transcribing")).toBe("swallow");
   });
 
+  it("Enter is the focused pane's once the focus left the dictation's target; Esc still cancels", () => {
+    expect(overlayKeyAction(key("Enter"), "listening", false)).toBeNull();
+    expect(overlayKeyAction(key("Enter"), "transcribing", false)).toBeNull();
+    expect(overlayKeyAction(key("Escape"), "listening", false)).toBe("cancel");
+  });
+
   it("leaves keys alone with the overlay closed or on a panel with buttons", () => {
     expect(overlayKeyAction(key("Enter"), "idle")).toBeNull();
     expect(overlayKeyAction(key("Escape"), "idle")).toBeNull();

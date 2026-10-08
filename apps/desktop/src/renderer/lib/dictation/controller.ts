@@ -21,10 +21,10 @@ import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
 import {
   answersPrompt,
-  cancelsOnFocusChange,
   confirmTarget,
   type DictationTarget,
   type FocusSnapshot,
+  keptOnCancel,
   resolveTarget,
   sanitizeDictation,
   takesDictation,
@@ -44,7 +44,6 @@ interface Run {
   /** Chunks captured before the session id came back */
   early: Float32Array[];
   vad: VadState;
-  maxTimer: ReturnType<typeof setTimeout> | null;
   cancelled: boolean;
   stopWhenReady: boolean;
 }
@@ -117,7 +116,6 @@ function snapshot(): { target: DictationTarget; field: HTMLElement | null; ancho
 
 function finishRun(): void {
   if (!run) return;
-  if (run.maxTimer) clearTimeout(run.maxTimer);
   run.capture?.stop();
   run = null;
 }
@@ -190,7 +188,6 @@ export async function startDictation(): Promise<void> {
     sessionId: null,
     early: [],
     vad: VAD_START,
-    maxTimer: null,
     cancelled: false,
     stopWhenReady: false,
   };
@@ -235,7 +232,7 @@ export async function startDictation(): Promise<void> {
       current.capture.stop();
       return;
     }
-    const started = await trpcMutate<{ sessionId: string; maxSeconds: number }>("dictation.start");
+    const started = await trpcMutate<{ sessionId: string }>("dictation.start");
     patchStatus({ micEverGranted: true });
     if (gone()) {
       void trpcMutate("dictation.cancel", { sessionId: started.sessionId });
@@ -245,14 +242,6 @@ export async function startDictation(): Promise<void> {
     for (const chunk of current.early.splice(0)) {
       window.api.dictation.sendAudio(started.sessionId, chunk);
     }
-    current.maxTimer = setTimeout(() => {
-      toast().addToast({
-        type: "info",
-        title: "Longest dictation reached",
-        body: `Stopped at ${Math.round(started.maxSeconds / 60)} min (Settings > Dictation)`,
-      });
-      void stopDictation();
-    }, started.maxSeconds * 1000);
     store().set({ phase: "listening", sessionId: started.sessionId, startedAt: Date.now() });
     if (current.stopWhenReady) void stopDictation();
   } catch (err) {
@@ -271,7 +260,6 @@ export async function stopDictation(): Promise<void> {
   }
   const sessionId = r.sessionId;
   const durationMs = Date.now() - store().startedAt;
-  if (r.maxTimer) clearTimeout(r.maxTimer);
   r.capture?.stop();
   r.capture = null;
   r.cancelled = true;
@@ -390,14 +378,27 @@ export async function insertDictation(
   );
 }
 
-/** Main's focus relay: Exegol gained or lost the focus to another app */
+/** Main's focus relay. Leaving Exegol never cancels: the user may narrate another app and come
+ *  back to insert. A held chord's release is lost out there, so the press stops being a hold:
+ *  the recording goes on until the next chord press, Enter on the target, or the overlay */
 export function appFocusChanged(focused: boolean): void {
-  if (focused) return;
-  holdCandidate = false;
-  if (cancelsOnFocusChange(focused, store().phase)) {
-    cancelDictation();
-    toast().addToast({ type: "info", title: "Dictation cancelled", body: "Exegol lost the focus" });
-  }
+  if (!focused) holdCandidate = false;
+}
+
+/** Enter inserts only while the start target still has the focus; elsewhere it is that pane's */
+export function focusOnTarget(): boolean {
+  return !!run && finalTarget(run) === run.target;
+}
+
+/** Main's longest-dictation timer fired (main's, so a background window cannot delay it) */
+export function dictationLimitReached(sessionId: string, maxSeconds: number): void {
+  if (!run || run.sessionId !== sessionId) return;
+  toast().addToast({
+    type: "info",
+    title: "Longest dictation reached",
+    body: `Stopped at ${Math.round(maxSeconds / 60)} min (Settings > Dictation)`,
+  });
+  void stopDictation();
 }
 
 /** The shortcut went down: start, or stop a running dictation */
@@ -437,8 +438,11 @@ export function dismissDictation(): void {
       body: "Follow it in Settings > Models",
     });
   }
+  const kept = run ? keptOnCancel(run.vad.speechMs, sanitizeDictation(store().partial)) : null;
   if (run) cancelDictation();
   else reset();
+  // Long speech is not thrown away by one stray Esc
+  if (kept) void copyInstead(kept, "Dictation cancelled, text copied", "Paste it if you need it");
 }
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
