@@ -22,7 +22,7 @@ import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
+import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
 import {
   collectPaneIds,
   type FilesViewPatch,
@@ -361,18 +361,10 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
       .catch((err) => console.error("[PaneRecovery] Could not reopen the shell:", err));
   }, [agent, agentId, paneId]);
 
-  // Agent in terminal state with no live store entry — stale pane from previous session
-  // (store only has agents that were spawned or reattached in this session)
-  // Gated on the store having actually synced: panes mount first, so before
-  // that "not in store" only means "not loaded yet". Converting on it wiped a
-  // crashed session's pane — and its resume card — on every restart.
-  const hasSynced = useAgentStore((s) => s.hasSyncedFromDb);
-  const isStaleFromPreviousSession =
-    hasSynced &&
-    agent &&
-    TERMINAL_STATUSES.has(agent.status) &&
-    !storeAgent &&
-    !(agent.cliType === "shell" && agent.status === "crashed");
+  // Ended and still not in the store once its own project's list landed: archived or closed
+  const isStaleFromPreviousSession = useAgentStore(
+    (s) => agent !== undefined && isPaneAgentStale(agent, s),
+  );
 
   useEffect(() => {
     if (isStaleFromPreviousSession && agent) {
