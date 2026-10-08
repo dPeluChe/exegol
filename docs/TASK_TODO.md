@@ -30,6 +30,10 @@
    files / silent failures~~ (`fix/git-pane-audit`), T138 split modes, ~~T185.11 scheduler
    timeout~~ (`fix/scheduler-timeout`), T193.2 execPath.
 
+Next round (after 0.5.16): **worktree hygiene** (T142 "Worktree hygiene" item: remove worktrees
+whose PR merged or whose agent closed clean and pushed, size warning in Storage and the status
+bar, background delete).
+
 Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI, T144.
 
 > **Docs to review before Wave 3 design** (merged with PR #82, pending review — Antonio 2026-08-11):
@@ -1233,8 +1237,19 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 - (T184.9) **PR body is `--fill`**: body = commit messages, no footer, no link back to the agent
   run. pullfrog's sentinel-delimited footer with strip-before-append makes PR-body updates
   idempotent, and records which model ran and WHY a model was substituted
-- (P2) **Remove worktrees after their PR merges**, proving the work landed: opt-in sweep from the
-  PR state the GitPane polls (openchamber `useMergedWorktreeCleanup.ts`, traycer sweep)
+- (P1, next round) **Worktree hygiene: remove what landed, warn on what piles up.** Evidence
+  (2026-10-08 dev report): 22 agent worktrees, each with its own `node_modules` (~1.2 GB by `du`,
+  ~8 GB real on APFS thanks to clones) were left behind after their PRs merged. The same happens
+  to Exegol's own worktrees under `~/.exegol/worktrees` (worktree agents, pipelines, race mode):
+  - Remove a worktree when its PR is merged (PR state the GitPane and PR watch already poll) or
+    when its agent closes with the worktree clean and its branch pushed (no unpushed commits);
+    proving the work landed first (openchamber `useMergedWorktreeCleanup.ts`, traycer sweep).
+    Never remove a dirty worktree or one with unpushed commits; keep the branch.
+  - Warn when inactive worktrees pass a size threshold (setting, e.g. 5 GB): Storage > Worktrees
+    and an opt-in status bar widget, with "Clean the safe ones" (merged or clean + pushed) listing
+    what goes before acting
+  - Delete in the background (removing a big `node_modules` synchronously blocked Orca's IPC
+    8-35 s)
 - (T174, worktree hygiene) **Symlinked shared directories across worktrees** (one `node_modules`
   serves all) and background worktree deletion: removing a `node_modules` tree synchronously
   blocked Orca's IPC 8-35s
