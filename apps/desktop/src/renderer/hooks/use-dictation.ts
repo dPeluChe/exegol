@@ -18,7 +18,11 @@ import {
   focusOnTarget,
   stopDictation,
 } from "../lib/dictation/controller";
-import { otherDialogOpen, overlayKeyAction } from "../lib/dictation/overlay-keys";
+import {
+  describeOpenDialog,
+  otherDialogOpen,
+  overlayKeyAction,
+} from "../lib/dictation/overlay-keys";
 import {
   dictationChord,
   isDictationChord,
@@ -48,6 +52,14 @@ function runKey(e: Parameters<typeof overlayKeyAction>[0], escSource: DictationC
   });
   if (action === "cancel") dismissDictation(escSource);
   else if (action === "insert") void stopDictation("enter");
+  else if (e.key === "Escape" && phase !== "idle") {
+    // Esc not cancelling was reported live: say why in the log (no dictated text)
+    window.api.reportError?.(
+      "dictation",
+      `Esc (${escSource}) kept: phase=${phase} composing=${!!e.isComposing} keyCode=${e.keyCode ?? "-"} dialog=${describeOpenDialog()}`,
+      "",
+    );
+  }
   return action !== null;
 }
 

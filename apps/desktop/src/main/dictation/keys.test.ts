@@ -96,11 +96,13 @@ describe("forwardDictationEscape", () => {
     expect(toMain).toHaveBeenCalledWith({ kind: "escape" });
   });
 
-  it("leaves the main window's Esc to its renderer, and every Esc alone with no dictation", () => {
+  it("keeps the main window's Esc for its page and relays it; no dictation, no relay", () => {
     const { contents, press } = win();
     const toMain = vi.fn();
     forwardDictationEscape(contents, () => true, toMain);
     expect(press(key("Escape"))).toBe(false);
+    expect(toMain).toHaveBeenCalledWith({ kind: "escape" });
+    toMain.mockClear();
     setDictationListening(() => false);
     const other = win();
     forwardDictationEscape(other.contents, () => false, toMain);
