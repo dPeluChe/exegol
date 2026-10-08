@@ -1252,6 +1252,11 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
     what goes before acting
   - Delete in the background (removing a big `node_modules` synchronously blocked Orca's IPC
     8-35 s)
+  - ~~Orphans~~ done 2026-10-08 (`chore/post-build-cleanup`): daily in-app sweep of rows with a
+    missing folder, archived-over-a-day worktrees and row-less folders under the RELEASE.md rule
+    (async delete); `clean:build` handles `.claude/worktrees/agent-*` whose PR merged or closed. Left:
+    remove on PR merge while the app runs, the size warning, and moving the agent-exit cleanup off
+    the synchronous git2 remove
 - (T174, worktree hygiene) **Symlinked shared directories across worktrees** (one `node_modules`
   serves all) and background worktree deletion: removing a `node_modules` tree synchronously
   blocked Orca's IPC 8-35s

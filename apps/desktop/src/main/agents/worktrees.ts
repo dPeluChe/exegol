@@ -26,8 +26,16 @@ export function getWorktreeName(branchName: string): string {
  *  the checkout they would need gitignore entries in every repo, and a stray
  *  one would look like project content. */
 function worktreeRootFor(projectName: string, rootKind: RootKind = "worktrees"): string {
-  return join(homedir(), ".exegol", rootKind, slugifyProjectName(projectName));
+  return join(WORKTREE_ROOTS[rootKind], slugifyProjectName(projectName));
 }
+
+/** Worktrees the housekeeping sweep is deleting: a spawn must not reuse them meanwhile */
+export const removingWorktrees = new Set<string>();
+
+export const WORKTREE_ROOTS: Record<RootKind, string> = {
+  worktrees: join(homedir(), ".exegol", "worktrees"),
+  pipelines: join(homedir(), ".exegol", "pipelines"),
+};
 
 function buildTargetPath(rootKind: RootKind, projectName: string, worktreeName: string): string {
   return join(worktreeRootFor(projectName, rootKind), worktreeName);

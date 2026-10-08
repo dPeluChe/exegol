@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./spawn-env", () => ({
   slugifyBranchName: (task: string) => `exegol/${task.replace(/\s+/g, "-")}`,
 }));
+const removingWorktrees = vi.hoisted(() => new Set<string>());
 vi.mock("./worktrees", () => ({
+  removingWorktrees,
   // Stands in for the on-disk collision check: "-2" is what a taken name gets.
   previewManagedWorktree: (_project: string, branch: string) => ({
     branchName: branch === "exegol/taken" ? "exegol/taken-2" : branch,
@@ -50,6 +52,20 @@ describe("resolveSpawnTarget", () => {
     expect(
       resolveSpawnTarget(db, project, { useWorktree: true, branchName: "exegol/taken" }),
     ).toEqual({ cwd: "/root/exegol-taken", branchName: "exegol/taken", reused: true });
+  });
+
+  it("never reuses a worktree the housekeeping sweep is removing", () => {
+    db.prepare(
+      `INSERT INTO worktrees (id, project_id, agent_id, path, branch_name)
+       VALUES ('w1', 'p1', NULL, '/root/exegol-taken', 'exegol/taken')`,
+    ).run();
+    removingWorktrees.add("/root/exegol-taken");
+    try {
+      const t = resolveSpawnTarget(db, project, { useWorktree: true, branchName: "exegol/taken" });
+      expect(t.reused).toBe(false);
+    } finally {
+      removingWorktrees.clear();
+    }
   });
 
   it("suffixes when the name is taken on disk but no worktree row claims it", () => {

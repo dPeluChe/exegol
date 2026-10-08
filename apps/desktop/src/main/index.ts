@@ -41,6 +41,7 @@ import { ensureCanonicalPaths } from "./skills/paths";
 import { integrateAppImage } from "./system/appimage-integration";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
+import { scheduleHousekeeping } from "./system/housekeeping";
 import { backfillProjectIcons } from "./system/project-icons";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 import { destroyTray, initTray } from "./system/tray";
@@ -132,7 +133,10 @@ app.whenReady().then(async () => {
 
   // Background: sidecar connection + agent recovery (non-blocking). The scheduler waits for it:
   // stopping an interrupted run's agent needs its reattached PTY
-  void runStartupRecovery().finally(() => getSchedulerEngine().start(getDb()));
+  void runStartupRecovery().finally(() => {
+    getSchedulerEngine().start(getDb());
+    scheduleHousekeeping(getDb());
+  });
 
   // Background services (non-blocking, start after window)
   cleanupOldEvents(getDb());

@@ -41,6 +41,8 @@ function tokenFromEnvBlock(env: Record<string, unknown> | undefined): string | n
   return null;
 }
 
+export const MCP_CONFIG_DIR = join(homedir(), ".exegol", "mcp");
+
 /**
  * T166: per-AGENT MCP config, outside the repo (~/.exegol/mcp/<agentId>.json).
  * The cwd-scoped files are per-DIRECTORY, so two agents working the same repo
@@ -55,9 +57,8 @@ export function writePerAgentMcpConfig(
   accessMode: ExegolAccessMode,
 ): string | null {
   try {
-    const dir = join(homedir(), ".exegol", "mcp");
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const path = join(dir, `${agentId}.json`);
+    mkdirSync(MCP_CONFIG_DIR, { recursive: true, mode: 0o700 });
+    const path = join(MCP_CONFIG_DIR, `${agentId}.json`);
     const body: McpJsonFile = {
       mcpServers: {
         [EXEGOL_SERVER_KEY]: {
@@ -81,7 +82,7 @@ export function writePerAgentMcpConfig(
 
 /** Read an agent's own token — deterministic, no cwd guessing (reattach). */
 export function readPerAgentMcpToken(agentId: string): string | null {
-  const parsed = readMcpJson(join(homedir(), ".exegol", "mcp", `${agentId}.json`));
+  const parsed = readMcpJson(join(MCP_CONFIG_DIR, `${agentId}.json`));
   const entry = parsed?.mcpServers?.[EXEGOL_SERVER_KEY] as
     | { env?: Record<string, unknown> }
     | undefined;
@@ -90,7 +91,7 @@ export function readPerAgentMcpToken(agentId: string): string | null {
 
 export function removePerAgentMcpConfig(agentId: string): void {
   try {
-    const path = join(homedir(), ".exegol", "mcp", `${agentId}.json`);
+    const path = join(MCP_CONFIG_DIR, `${agentId}.json`);
     if (existsSync(path)) unlinkSync(path);
   } catch {
     /* best-effort */

@@ -109,7 +109,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Smart Git button**: one button that knows the next step (commit, push, create PR, merge PR,
   resolve conflicts), with AI commit messages from the diff (Claude Haiku).
 - **Diff viewer**: staged and unstaged, unified or split, with line comments.
-- **Worktrees**: an agent can run in its own branch and worktree, cleaned up when it ends.
+- **Worktrees**: an agent can run in its own branch and worktree, cleaned up when it ends. Its
+  pending work is first committed and pushed to that branch (Settings > General > Worktrees,
+  on by default); if that cannot be done safely the worktree is kept.
 - **Oplog**: snapshots of what agents changed, with undo.
 - **Undo a turn**: after each Claude Code turn that changed files, the terminal toolbar shows
   "N files changed"; it opens that turn's diff and offers Undo turn (with a confirmation). Undo

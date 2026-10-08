@@ -36,6 +36,7 @@ export const settingsSchema = z.object({
   terminalFontFamily: z.string().default("Menlo, Monaco, monospace"),
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
+  saveWorktreeWork: z.boolean().default(true),
   mutedNotificationChannels: z.array(z.string()).default([]),
   ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
   ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),

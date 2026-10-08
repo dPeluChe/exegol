@@ -16,7 +16,7 @@ import { CLAUDE_ATTENTION_NOTIFICATIONS } from "@exegol/shared";
 import { logger } from "../lib/logger";
 
 const EXEGOL_DIR = join(homedir(), ".exegol");
-const HOOKS_DIR = join(EXEGOL_DIR, "hooks");
+export const HOOKS_DIR = join(EXEGOL_DIR, "hooks");
 const EVENTS_DIR = join(EXEGOL_DIR, "events");
 const NOTIFY_SCRIPT = join(HOOKS_DIR, "notify.sh");
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");

@@ -11,6 +11,8 @@ import { z } from "zod";
 import { parseJson } from "../lib/parse-json";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
 
+export const MODEL_SETTINGS_DIR = join(EXEGOL_DIR, "model-settings");
+
 interface LaunchConfig {
   args: string[];
   env: Record<string, string>;
@@ -40,7 +42,7 @@ export function applyLaunchModel(
   model: string | null | undefined,
   agentId: string,
   roles: Record<string, string> | null = null,
-  settingsDir = join(EXEGOL_DIR, "model-settings"),
+  settingsDir = MODEL_SETTINGS_DIR,
 ): LaunchConfig {
   const picks: [ModelLaunch, string][] = [];
   const main = MODEL_LAUNCH[cliType];

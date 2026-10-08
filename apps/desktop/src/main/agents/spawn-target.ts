@@ -12,7 +12,7 @@ import type { Project, Worktree } from "@exegol/shared";
 import type Database from "libsql";
 import { listWorktrees } from "../db/queries";
 import { slugifyBranchName } from "./spawn-env";
-import { previewManagedWorktree } from "./worktrees";
+import { previewManagedWorktree, removingWorktrees } from "./worktrees";
 
 /** The branch a spawn asks for: what the user typed, else the task slug. */
 export function requestedBranchFor(
@@ -28,7 +28,11 @@ export function findReusableWorktree(
   projectId: string,
   branchName: string,
 ): Worktree | null {
-  return listWorktrees(db, projectId).find((w) => w.branchName === branchName) ?? null;
+  return (
+    listWorktrees(db, projectId).find(
+      (w) => w.branchName === branchName && !removingWorktrees.has(w.path),
+    ) ?? null
+  );
 }
 
 interface SpawnTarget {

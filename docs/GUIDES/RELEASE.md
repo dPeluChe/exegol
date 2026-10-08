@@ -42,6 +42,101 @@ Skipping `build:rust` ships no `.node` file and the app falls back to the JS out
 
 Output: `apps/desktop/dist/<version>/Exegol-<version>-<arch>.dmg` (one folder per version) (name from `DMG_NAME` in `electron-builder.ts`), plus the `-mac.zip` and `latest-mac.yml`.
 
+#### Post-build cleanup
+
+Each `package*` script has a `postpackage*` script, `bun run clean:build -- --apply --repo-only`
+(`apps/desktop/scripts/clean-build.ts`). Bun runs it only when packaging succeeded, and flags given
+to packaging still go to electron-builder only (`bun run package:mac -- -c.directories.output=...`
+behaves as before). It always exits 0, so it never fails a build. It removes only:
+
+| Target | Rule | Why |
+|--------|------|-----|
+| `apps/desktop/dist/<version>/` | keeps the newest 2 by semver (`--keep N`), the version in `package.json` always among the kept (older ones live in GitHub releases) | each folder is ~750 MB of DMG + zip |
+| `apps/desktop/dist/<version>-local*/` | keeps the newest by date | local test builds |
+| `.turbo/cache/<hash>*` | all files of a hash older than 14 days (`--days N`) | the local turbo cache never shrinks |
+| `packages/core-rust/target/*/incremental/<crate>-<hash>/` | older than 14 days, skipped while cargo runs | cargo keeps a dir per flag/toolchain set |
+| `$TMPDIR/exegol-<test prefix>-XXXXXX/` | older than a day; only the test suites' mkdtemp prefixes | tests leave thousands behind (skipped with `--repo-only`) |
+
+A dist folder whose DMG is mounted (`hdiutil info`, macOS only), that a running process uses
+(Exegol.app opened from `dist`, `ps`), or with an open file (`lsof +D`) is skipped, never detached;
+each check has a 10 s timeout and a failed check skips the folder. On Linux there is no DMG check
+(ps and lsof still apply; without lsof every dist folder is skipped). On Windows dist cleanup is a
+no-op (no ps/lsof). Nothing runs unless the `package.json` version parses; an error on one path is
+logged as `skip (error: ...)` and the rest continues. It never touches `node_modules`, `apps/desktop/out`, the rest
+of `target/`, or anything under `~/.exegol` or the app data folder; the electron and
+electron-builder download caches are only reported (other Electron projects share them).
+
+Dry run (prints each path and size, removes nothing): `bun run clean:build`. Then
+`bun run clean:build -- --apply`, which also removes the old test temp dirs and orphaned
+worktrees (never in the postpackage run).
+
+#### Orphaned worktrees
+
+One rule everywhere (`main/lib/worktree-safety.ts`, `worktreeSafety`). Git runs with every
+`GIT_*` variable removed from the environment and `-c status.showUntrackedFiles=all`, so no user
+setting hides a file. A worktree may go only when all of these hold; otherwise it is reported and
+kept, and branches are never deleted:
+
+1. git answers for that folder itself (`rev-parse --show-toplevel` is the folder)
+2. no `.gitmodules`
+3. no operation in progress: none of `rebase-merge`, `rebase-apply`, `MERGE_HEAD`,
+   `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG` exists at its `git rev-parse --git-path`
+4. `git status --porcelain --untracked-files=all --ignore-submodules=none --ignored=matching`
+   lists nothing but `.agents/mcp_config.json` and ignored build output: `node_modules`, `dist`,
+   `out`, `build`, `.turbo`, `target`, `.next`, `coverage`, `.vite`, `.cache`, `*.log`,
+   `.DS_Store` (any other ignored file, such as `.env` or a local database, keeps it)
+5. `git rev-list --count HEAD --not --remotes` is 0: every commit is pushed or already in
+   origin/main
+6. not locked (`git worktree list --porcelain`)
+
+- `clean:build` worktrees section (explicit runs only, never the postpackage run):
+  `git worktree prune` (dry run: `--dry-run -v`), then each `.claude/worktrees/agent-*` of the
+  main checkout whose branch's PR is merged or closed with none open (`gh pr list --head <branch>
+  --state all`; gh missing or offline keeps it). A folder that is not a registered worktree is
+  reported, never removed. Also kept: the main checkout, the checkout running the script, and a
+  folder that is the cwd of a running process (`lsof -a -d cwd -Fn`; lsof failing keeps all).
+  Removal: `git checkout -- .agents/mcp_config.json`, then a plain `git worktree remove` (no
+  `--force`, so git checks again; 120 s timeout), then a Finder `.DS_Store` and the empty folder.
+- The app, in the daily housekeeping (`main/system/worktree-housekeeping.ts`), over
+  `~/.exegol/worktrees` and `~/.exegol/pipelines`, for repos that are registered projects:
+  - a `worktrees` row whose folder is gone: row dropped, the repo's registrations pruned
+  - a row whose agents are all archived, the last over a day ago (or with no agent, created over
+    a day ago), and a folder with no row whose `.git` is over a day old: removed under the rule
+  - never while an agent is live in it, a session can still be resumed into it (stopped, crashed
+    or suspended and not archived), an active pipeline (pending, running, paused) has its path,
+    or a race is running or completed with no pick yet
+  - removal: the path joins `removingWorktrees` (a spawn never reuses it meanwhile), the
+    live-agent check runs again, the folder is renamed to `.exegol-trash-<name>-<ts>` beside it,
+    `git worktree prune`, then the trash is deleted off the main thread (a later sweep finishes a
+    trash left behind). One summary log line, no paths
+
+#### Save worktree work
+
+Settings > General > Worktrees, "Save worktree work to its branch when an agent ends" (on by
+default, `saveWorktreeWork`). When an agent in an Exegol worktree ends, and in the daily sweep
+before a kept worktree is checked again, `agents/worktree-save.ts`:
+
+- refuses on a detached HEAD, the repo's default branch (origin/HEAD) or main/master, a branch
+  that is not the worktree row's (no row: not `exegol/*`), submodules or an operation under way
+- stages tracked changes and untracked files git does not ignore (`git add -A`, never `-f`;
+  `.agents/mcp_config.json` excluded); a staged `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`,
+  `credentials*` or a file over 10 MB unstages everything and keeps the worktree
+- commits `wip(exegol): save <alias> work before cleanup` with the repo's configured identity
+  (none: refused, never set), hooks run (a failing hook keeps it)
+- pushes `refs/heads/<branch>` to the same name on origin (`-u`, never `--force`, 60 s); no
+  origin or a failed push keeps it
+- logs one line (alias, branch, commit count) and notifies "Saved <alias>'s work to <branch> and
+  pushed"
+
+A refused save keeps the worktree as it is. `clean:build` never commits or pushes: for a dev
+worktree kept for uncommitted or unpushed work it prints the commands to do it yourself.
+
+The app also sweeps per-agent files once a day, at startup and then daily while open
+(`main/system/housekeeping.ts`): `~/.exegol/hooks/<id>.json`, `~/.exegol/mcp/<id>.json` and
+`~/.exegol/model-settings/<id>.json` older than a day whose agent id is not in the database. It
+skips when the orphaned ids outnumber twice the known ones (a reset or swapped database). Agent
+history (terminal scrollback) is never removed.
+
 ### 4. Install and first launch (unsigned build)
 
 Open the DMG and drag Exegol to Applications. The app is not signed or notarized, so Gatekeeper blocks a double-click on first launch: right-click Exegol in Applications and choose Open, then confirm. A DMG downloaded from GitHub also carries the quarantine flag; clear it with `xattr -dr com.apple.quarantine /Applications/Exegol.app` if Open is not offered.

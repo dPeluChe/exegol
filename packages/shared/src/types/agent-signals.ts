@@ -60,7 +60,8 @@ export type NotificationEventType =
   | "run:failed"
   | "resource:warning" // T143
   | "budget:warning" // T147
-  | "security:warning"; // T166 — a credential written where it could be committed
+  | "security:warning" // T166 — a credential written where it could be committed
+  | "worktree:saved"; // a worktree's pending work committed and pushed to its branch
 
 export interface NotificationEvent {
   type: NotificationEventType;
@@ -91,6 +92,7 @@ export function muteChannelForEvent(type: NotificationEventType): NotificationMu
     case "agent:attention":
       return "agent:attention";
     case "agent:finished":
+    case "worktree:saved":
       return "agent:finished";
     case "agent:failed":
     case "run:failed":
