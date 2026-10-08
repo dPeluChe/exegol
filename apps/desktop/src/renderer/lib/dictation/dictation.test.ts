@@ -5,7 +5,6 @@ import { shortcutClash, shortcutsWith } from "../shortcuts";
 import { StreamResampler } from "./resampler";
 import {
   answersPrompt,
-  cancelsOnFocusChange,
   confirmTarget,
   type FocusSnapshot,
   resolveTarget,
@@ -142,13 +141,6 @@ describe("dictation target", () => {
     expect(takesDictation({ cliType: "shell", status: "stopped" })).toBe(false);
     expect(takesDictation({ cliType: "claude-code", status: "waiting_input" })).toBe(true);
     expect(takesDictation({ cliType: "claude-code", status: "crashed" })).toBe(false);
-  });
-
-  it("cancels only when Exegol loses the focus while listening", () => {
-    expect(cancelsOnFocusChange(false, "listening")).toBe(true);
-    expect(cancelsOnFocusChange(false, "starting")).toBe(false);
-    expect(cancelsOnFocusChange(false, "transcribing")).toBe(false);
-    expect(cancelsOnFocusChange(true, "listening")).toBe(false);
   });
 
   it("never answers an agent's question", () => {

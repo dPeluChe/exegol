@@ -21,7 +21,6 @@ import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
 import {
   answersPrompt,
-  cancelsOnFocusChange,
   confirmTarget,
   type DictationTarget,
   type FocusSnapshot,
@@ -390,14 +389,10 @@ export async function insertDictation(
   );
 }
 
-/** Main's focus relay: Exegol gained or lost the focus to another app */
+/** Main's focus relay. Leaving Exegol never cancels: the user may narrate another app and come
+ *  back to insert. A held chord's release is lost out there, so the press stops being a hold */
 export function appFocusChanged(focused: boolean): void {
-  if (focused) return;
-  holdCandidate = false;
-  if (cancelsOnFocusChange(focused, store().phase)) {
-    cancelDictation();
-    toast().addToast({ type: "info", title: "Dictation cancelled", body: "Exegol lost the focus" });
-  }
+  if (!focused) holdCandidate = false;
 }
 
 /** The shortcut went down: start, or stop a running dictation */

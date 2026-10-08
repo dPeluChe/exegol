@@ -68,12 +68,6 @@ export function takesDictation(a: { cliType: string; status: AgentStatus }): boo
   return a.cliType === "shell" ? LIVE_STATUSES.has(a.status) : isPasteTarget(a);
 }
 
-/** Only Exegol losing the focus to another app cancels (the main process's focus relay): a
- *  browser pane's webview blurs the document without that. Not while starting: the macOS mic
- *  prompt takes the focus then */
-export const cancelsOnFocusChange = (appFocused: boolean, phase: string): boolean =>
-  !appFocused && phase === "listening";
-
 /** A dictation never answers an agent's question: typed text (or its Enter) would pick an
  *  option of a permission dialog */
 export function answersPrompt(a: {
