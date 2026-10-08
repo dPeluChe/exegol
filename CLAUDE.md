@@ -252,7 +252,7 @@ apps/desktop/src/
       dictation/    DictationOverlay (over the target pane: waveform, timer, partial text, no-model offer)
       onboarding/   OnboardingWizard (T148 first-run: CLI detect + keys + doctor), WelcomeTour
       layout/       Sidebar (+ SidebarRail, SidebarHeader, SidebarFooter), ProjectsSection, SidebarViews (AgentsView, AttentionView),
-                    TitleBar (AttentionQueue, BugReportDialog, UpdateButton), StatusBar (widget registry `lib/status-bar-widgets.ts`, Settings > Status bar), TabsOverview
+                    TitleBar (fixed: AttentionQueue, BugReportDialog, UpdateButton, project name; widget zones left/right only, the center is the name), StatusBar (widget registry `lib/status-bar-widgets.ts`: each widget hidden or in one zone, `bar` header/footer + slot, absent `bar` = footer, `BAR_SLOTS`, `placementsFor`; components + `WidgetZone` in `bar-widgets.tsx` for both bars; Settings > Bars), TabsOverview
     FloatingPaneRoot.tsx  (T84 — top-level renderer for floating PiP windows)
     SettingsRoot.tsx      (T120 — top-level renderer for the standalone settings window)
     hooks/          use-hotkeys, use-fitted-menu, use-theme, use-trpc, use-auto-select-project,
