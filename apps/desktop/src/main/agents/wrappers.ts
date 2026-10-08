@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { CLAUDE_ATTENTION_NOTIFICATIONS } from "@exegol/shared";
 import { logger } from "../lib/logger";
 
 const EXEGOL_DIR = join(homedir(), ".exegol");
@@ -152,7 +153,10 @@ function mergeClaudeHooks(): void {
       // never reached the signal pipeline through the file channel.
       {
         event: "Notification",
-        def: { hooks: [{ type: "command", command: `${notifyCmd} permission_needed` }] },
+        def: {
+          matcher: CLAUDE_ATTENTION_NOTIFICATIONS,
+          hooks: [{ type: "command", command: `${notifyCmd} permission_needed` }],
+        },
       },
     ]);
 

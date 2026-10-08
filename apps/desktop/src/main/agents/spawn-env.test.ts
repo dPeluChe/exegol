@@ -81,6 +81,28 @@ describe("buildClaudeCodeHooksFile", () => {
     });
   });
 
+  // Claude's idle reminder ("waiting for your input", 60s after a reply) is no question: read as
+  // one, an idle agent looked like it awaited an answer and dictation went to the clipboard
+  it("signals attention on a question, never on the idle reminder", () => {
+    const matcher = written("a1").Notification?.[0]?.matcher;
+    // Claude's rule for a plain name list: split on | or , and each part equals the type
+    const fires = (type: string) =>
+      matcher === undefined || matcher.split(/[|,]/).some((part) => part.trim() === type);
+    expect(matcher).toMatch(/^[A-Za-z0-9_|, -]+$/);
+    for (const asks of [
+      "permission_prompt",
+      "elicitation_dialog",
+      "elicitation_url_dialog",
+      "agent_needs_input",
+      "worker_permission_prompt",
+    ]) {
+      expect(fires(asks)).toBe(true);
+    }
+    for (const notice of ["idle_prompt", "auth_success", "elicitation_complete"]) {
+      expect(fires(notice)).toBe(false);
+    }
+  });
+
   it("omits the guard when claims cannot collide", () => {
     const hooks = written("a1", { enforceClaims: false });
     expect(hooks.PreToolUse).toHaveLength(1);
