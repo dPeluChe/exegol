@@ -30,6 +30,13 @@ describe("isSessionReconnecting", () => {
     expect(isSessionReconnecting(RECOVERY_DONE, "a")).toBe(false);
   });
 
+  it("a TUI still repainting stays reconnecting after recovery is done", () => {
+    const done: SessionRecoveryState = { ...midway, done: true, ready: ["a", "c"] };
+    expect(isSessionReconnecting(done, "b")).toBe(true);
+    expect(isSessionReconnecting(done, "a")).toBe(false);
+    expect(isSessionReconnecting({ ...unplanned, done: true }, "a")).toBe(false);
+  });
+
   it("no state yet is not a reconnect (the query has not answered)", () => {
     expect(isSessionReconnecting(undefined, "a")).toBe(false);
   });

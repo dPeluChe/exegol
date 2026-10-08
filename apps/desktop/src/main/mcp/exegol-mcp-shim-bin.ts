@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
 import {
-  createNdjsonBuffer,
+  createFrameReader,
   type ExegolAccessMode,
   encodeRequest,
   getToolDefsForAccessMode,
@@ -223,7 +223,7 @@ function connectSocket(): void {
   });
   sock.on(
     "data",
-    createNdjsonBuffer<JsonRpcResponse>((res) => {
+    createFrameReader<JsonRpcResponse>((res) => {
       const waiter = pending.get(res.id);
       if (!waiter) return;
       pending.delete(res.id);

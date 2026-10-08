@@ -41,7 +41,7 @@ export function encodeResponse(
   return `${JSON.stringify({ jsonrpc: "2.0", id, result: result ?? null })}\n`;
 }
 
-export { createNdjsonBuffer, MAX_NDJSON_LINE_CHARS } from "../lib/ndjson";
+export { createFrameReader } from "../lib/frame-reader";
 
 // ─── Exegol tool context — who's calling, and with what access ─────────────
 

@@ -52,6 +52,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Opening the app reconnects the sessions you were looking at first: the focused pane, then the rest of its tab, then its project, then everything else
 
 ### Fixed
+- Reopening Exegol with many live agents is much faster: each agent's history used to take 1 to 3 seconds to come back, one after another (27 agents took 33 seconds); now it is a fraction of a second each (about 5 seconds for 27 in a local test)
+- Right after a reload, an agent pane no longer shows its screen garbled (lines split in two, wrong wrapping) for a few seconds: when the pane's size differs from the agent's last one, the pane stays on "Reconnecting…" until the agent has redrawn at the new size (at most 1.5 seconds)
 - Git pane: the Changes diff showed staged edits too; it now shows only what is not staged. A file with staged and unstaged edits is listed under both, each with its own diff
 - Git pane: renamed files show as `old → new`, and staging or unstaging one moves both paths (before, it passed the arrow text to git and failed)
 - Git pane: a failed stage, unstage, commit or push, or a failed worktree delete, shows git's own error instead of doing nothing; Agent Ops no longer offers Undo on a worktree creation it cannot undo

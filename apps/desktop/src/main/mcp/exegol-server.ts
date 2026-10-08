@@ -26,7 +26,7 @@ import { getNotificationBus } from "../notifications/bus";
 import { realpathSafeSync } from "../security/path-guard";
 import { readsExegolMcpConfig } from "./exegol-mcp-config";
 import {
-  createNdjsonBuffer,
+  createFrameReader,
   EXEGOL_DIR,
   type ExegolAccessMode,
   type ExegolToolCallParams,
@@ -582,7 +582,7 @@ function startListening(db: Database.Database): void {
     // Announced lazily: the claim guard opens a fresh connection per write, and
     // announcing those would evict every real agent call from a 100-entry ring.
     let announced = false;
-    const feed = createNdjsonBuffer<JsonRpcRequest>(
+    const feed = createFrameReader<JsonRpcRequest>(
       (msg) => {
         if (!announced && msg.method !== "check_path") {
           announced = true;

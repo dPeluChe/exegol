@@ -445,8 +445,16 @@ exchange-bus MVP only, no headless council executions. Absorbs:
    - (P2) Renderer-acked, per-session flow control: `OutputGate` pauses every PTY when one socket
      backs up (terax `pty/output.rs`, klaudio 10d1e70).
    - Snapshot only the ring tail (~1 MB) on reattach: needs a sidecar change + SIDECAR_VERSION
-     bump, which restarts every live PTY once; schedule with the user. Today each full 8 MB ring
-     takes ~2s to serve and parse (23 sessions in 15.9s, 0.5.15 log)
+     bump, which restarts every live PTY once; schedule with the user. Measured 2026-10-08
+     (`perf/reattach-repaint`, local harness: real `SidecarClient` + `PtyHost` over a unix socket,
+     27 sessions = 18 x 8 MB coloured TUI rings + 9 x 1 MB shells, pool of 3): the ~2 s per ring
+     was main's NDJSON framing (quadratic on 8 KB macOS socket reads, ~3 s per 12 MB frame), now
+     linear: from 56.9 s to 4.6 s total. What is left per 8 MB ring: fetch ~150 ms (sidecar serve +
+     JSON.parse) and xterm parse ~135 ms (1 MB shell: ~20 ms). A 1 MB tail would cut each heavy
+     session to ~40 ms: from ~4.6 s to ~1.2 s for 27 sessions, and the longest main-thread block
+     (~250 ms, the 12 MB JSON.parse + one xterm write) to ~40 ms. Also: `lib/ndjson` (bundled) has
+     the same quadratic concat; fix it with that bump (main, MCP included, already uses `lib/frame-reader`; its header
+     comment still names the MCP users)
 10. **Polls**: GitPane / SmartGitAction / TerminalPanel poll git status + `gh pr view` every 15s;
     refetch on turn-end / commit / push events instead. The PR poll part is shared with T142.
     > Merged from the "Queue after 0.5.7" performance follow-ups (0.5.3 audit) on 2026-10-04.

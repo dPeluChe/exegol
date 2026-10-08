@@ -26,15 +26,27 @@ import {
 import { scanForMarker } from "./pty-shell-ready";
 import type { SidecarClient } from "./pty-sidecar-client";
 import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
+import { awaitsRepaint, REPAINT_CAP_MS, REPAINT_QUIET_MS } from "./reattach-repaint";
 import { readScreenDialog } from "./screen-dialog";
 
 export type { SessionCallbacks } from "./pty-session-types";
+
+export interface ReattachedSession {
+  snapshot: string | null;
+  fetchMs: number;
+  parseMs: number;
+  /** Set when the pane's size reflowed a TUI's frame: resolves once the CLI repainted it */
+  repainted: Promise<void> | null;
+}
 
 export class PtyHost {
   private sessions = new Map<string, Session>();
   /** A pane can mount (and size itself) before its session is reattached;
    *  that size was dropped, so the PTY kept its old grid until the next resize */
   private pendingSizes = new Map<string, { cols: number; rows: number }>();
+  /** Ring not parsed yet: a resize now would parse the rest of the ring at the wrong grid */
+  private reattaching = new Set<string>();
+  private outputWatchers = new Map<string, () => void>();
   private activeSpawns = 0;
   private spawnQueue: Array<() => void> = [];
   private sidecarClient: SidecarClient | null = null;
@@ -63,6 +75,7 @@ export class PtyHost {
         s.emulator.write(processedData);
         scheduleScrollbackFlush(s);
         s.callbacks.onData(processedData);
+        this.outputWatchers.get(id)?.();
       }
     });
 
@@ -127,8 +140,8 @@ export class PtyHost {
     id: string,
     spawnOpts: { cols: number; rows: number },
     callbacks: SessionCallbacks,
-    options?: { scrollbackPath?: string },
-  ): Promise<string | null> {
+    options?: { scrollbackPath?: string; tui?: boolean },
+  ): Promise<ReattachedSession | null> {
     if (!this.sidecarClient?.isConnected()) return null;
 
     const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
@@ -150,24 +163,52 @@ export class PtyHost {
       shellReadyTimeout: null,
     };
     this.sessions.set(id, session);
+    this.reattaching.add(id);
 
     // The ring rebuilds the model only (replayed through onData it re-fired old status/OSC);
     // the caller seeds its scrollback from the returned snapshot
     let snapshot: string | null = null;
+    const started = performance.now();
+    let fetched = started;
     try {
       snapshot = await this.sidecarClient.snapshot(id);
+      fetched = performance.now();
       if (snapshot) await emulator.writeParsed(snapshot);
     } catch {
       // Snapshot unavailable — session still reattaches, just without scrollback history
+    } finally {
+      this.reattaching.delete(id);
     }
+    const parsed = performance.now();
 
     const pending = this.pendingSizes.get(id);
+    let repainted: Promise<void> | null = null;
     if (pending) {
       this.pendingSizes.delete(id);
+      const kind = { tui: options?.tui ?? false, alternateScreen: emulator.alternateScreen };
+      if (awaitsRepaint(emulator.size, pending, kind)) repainted = this.waitForRepaint(id);
       this.resize(id, pending.cols, pending.rows);
       broadcast("terminal:resized", id, pending.cols, pending.rows);
     }
-    return snapshot;
+    return { snapshot, fetchMs: fetched - started, parseMs: parsed - fetched, repainted };
+  }
+
+  /** Resolves once the CLI's output pauses after the resize, or at the cap */
+  private waitForRepaint(id: string): Promise<void> {
+    return new Promise((resolve) => {
+      let quiet: ReturnType<typeof setTimeout> | undefined;
+      const done = () => {
+        clearTimeout(quiet);
+        clearTimeout(cap);
+        this.outputWatchers.delete(id);
+        resolve();
+      };
+      const cap = setTimeout(done, REPAINT_CAP_MS);
+      this.outputWatchers.set(id, () => {
+        clearTimeout(quiet);
+        quiet = setTimeout(done, REPAINT_QUIET_MS);
+      });
+    });
   }
 
   /** Create a new PTY session — uses sidecar if available, falls back to subprocess */
@@ -272,7 +313,7 @@ export class PtyHost {
 
   resize(id: string, cols: number, rows: number): void {
     const s = this.sessions.get(id);
-    if (!s) {
+    if (!s || this.reattaching.has(id)) {
       this.pendingSizes.set(id, { cols, rows });
       return;
     }

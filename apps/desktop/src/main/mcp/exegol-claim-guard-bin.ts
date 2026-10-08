@@ -21,7 +21,7 @@
 import { connect } from "node:net";
 import { isAbsolute, join } from "node:path";
 import {
-  createNdjsonBuffer,
+  createFrameReader,
   encodeRequest,
   type JsonRpcResponse,
   MCP_SOCK_PATH,
@@ -122,7 +122,7 @@ async function main(): Promise<void> {
       socket.on("error", () => done(null));
       socket.on(
         "data",
-        createNdjsonBuffer<JsonRpcResponse>((res) => {
+        createFrameReader<JsonRpcResponse>((res) => {
           clearTimeout(timer);
           done((res.result as { allowed: boolean; heldBy?: string }) ?? null);
         }),
