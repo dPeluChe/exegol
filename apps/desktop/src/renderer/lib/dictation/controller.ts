@@ -14,6 +14,7 @@ import { useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
 import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import { pasteToAgent, submitToAgent } from "../agent-input";
+import { isClaudeQuestion } from "../claude-question";
 import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
 import { type Capture, startCapture } from "./capture";
@@ -27,7 +28,6 @@ import {
   resolveTarget,
   sanitizeDictation,
   takesDictation,
-  targetLabel,
 } from "./target";
 import { rms, shouldAutoStop, updateVad, VAD_START, type VadState } from "./vad";
 
@@ -173,12 +173,10 @@ async function readSettings(): Promise<DictationSettings> {
 export async function startDictation(): Promise<void> {
   if (run || store().phase === "transcribing") return;
   const { target, field, anchor } = snapshot();
-  const agent = "agentId" in target ? useAgentStore.getState().agents[target.agentId] : undefined;
   store().set({
     phase: "starting",
     anchorPaneId: anchor,
     targetKind: target.kind,
-    targetLabel: targetLabel(target, agent),
     targetAgentId: "agentId" in target ? target.agentId : null,
     targetProjectId: target.projectId,
     partial: "",
@@ -319,7 +317,7 @@ export function cancelDictation(): void {
 function finalTarget(r: Run): DictationTarget {
   const target = confirmTarget(r.target, snapshot().target);
   if (target.kind === "field" && (!r.field?.isConnected || document.activeElement !== r.field)) {
-    return { kind: "clipboard", projectId: target.projectId };
+    return { kind: "clipboard", projectId: target.projectId, why: "The field lost the focus" };
   }
   return target;
 }
@@ -329,23 +327,23 @@ async function copyInstead(text: string, title: string, body: string): Promise<v
   toast().addToast({ type: "info", title, body });
 }
 
-/** The agent's screen holds a question (or the session ended): a dictation must not answer it */
-async function agentAsks(agentId: string): Promise<boolean> {
+/** Why the text must not be typed into the agent: it ended, or a dictation would answer its
+ *  question. Null when it can take it */
+async function terminalRefusal(agentId: string): Promise<string | null> {
   const { agents, attentionItems } = useAgentStore.getState();
   const agent = agents[agentId];
-  if (!agent || !takesDictation(agent)) return true;
-  if (agent.cliType === "shell") return false;
+  if (!agent || !takesDictation(agent)) return "The agent is not running";
+  if (agent.cliType === "shell") return null;
   const dialog = await trpcInvoke<ScreenDialog | null>("agents.screenDialog", {
     id: agentId,
   }).catch(() => null);
-  const item = attentionItems[agentId];
-  return answersPrompt({
+  const asks = answersPrompt({
     status: agent.status,
     dialogOnScreen: !!dialog,
     // Claude's hooks say when it asks; other CLIs' prompts show up as a screen dialog
-    awaitingAnswer:
-      agent.cliType === "claude-code" && item?.level === "action_needed" && !item.paneId,
+    awaitingAnswer: isClaudeQuestion(attentionItems[agentId], agent),
   });
+  return asks ? "The agent is waiting on a question" : null;
 }
 
 export async function insertDictation(
@@ -355,12 +353,9 @@ export async function insertDictation(
   field: HTMLElement | null,
 ): Promise<void> {
   if (target.kind === "terminal") {
-    if (await agentAsks(target.agentId)) {
-      return copyInstead(
-        text,
-        "Dictation copied, not typed",
-        "The agent is waiting on a question or not running: paste it yourself",
-      );
+    const refusal = await terminalRefusal(target.agentId);
+    if (refusal) {
+      return copyInstead(text, "Dictation copied, not typed", `${refusal}: paste it yourself`);
     }
     if (pressEnter) submitToAgent(target.agentId, text, true);
     else pasteToAgent(target.agentId, text, true);

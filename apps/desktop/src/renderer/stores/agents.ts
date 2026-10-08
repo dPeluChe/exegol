@@ -13,6 +13,7 @@ import { persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { MCP_STATUS_KEY } from "../components/common/McpStatusIndicator";
 import { nextActivitySince } from "../lib/busy-time";
+import { isClaudeQuestion } from "../lib/claude-question";
 import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
@@ -540,9 +541,20 @@ export const useAgentStore = create<AgentStore>()(
           // Identity-stable: untouched state when nothing pruned, or this
           // 30s poll re-renders every attention subscriber for no change.
           const dbIds = new Set(dbAgents.map((a) => a.id));
-          const stale = Object.entries(state.attentionItems).filter(
-            ([id, item]) => item.projectId === _projectId && !dbIds.has(id),
-          );
+          // Also Claude's idle reminders kept from before the hook matcher: no question behind them
+          const stale = Object.entries(state.attentionItems).filter(([id, item]) => {
+            if (item.projectId !== _projectId) return false;
+            if (!dbIds.has(id)) return true;
+            const agent = updated[id];
+            return (
+              !!agent &&
+              agent.cliType === "claude-code" &&
+              agent.status === "waiting_input" &&
+              item.level === "action_needed" &&
+              !item.paneId &&
+              !isClaudeQuestion(item, agent)
+            );
+          });
           if (stale.length === 0) return { agents: updated, hasSyncedFromDb };
 
           let unreadAttentionCount = state.unreadAttentionCount;

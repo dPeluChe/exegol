@@ -10,7 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- Dictation into a Claude Code session that had been idle for a minute went to the clipboard instead of the terminal: Claude's "waiting for your input" reminder was read as a question. Only permission prompts and questions now mark a Claude session as waiting on you (this also ends the amber dot on idle Claude sessions). Sessions started before the update keep the old behavior until restarted
+- Dictation into a Claude Code session that had been idle for a minute went to the clipboard instead of the terminal: Claude's "waiting for your input" reminder was read as a question. Only Claude's permission prompts, questions and input requests (forms, links, subagents asking) now mark a session as waiting on you, which also ends the amber dot on idle Claude sessions. Reminders already in the inbox are cleared, and sessions started before the update no longer block dictation either. When dictation copies instead of typing, the toast says why (waiting on a question, not running, or the focus moved)
 
 ### Changed
 - The dictation overlay is easier to read: a recording pill with a pulsing dot and the time, live level bars in the accent color that glow while you speak and settle when you are quiet, larger transcript text with a soft caret while it waits for the next phrase, where the text goes as a chip (the agent's icon, its name and the project) and the shortcuts as keycaps on their own line. Error and microphone states have their own look. Animations stop with the system's reduce motion setting

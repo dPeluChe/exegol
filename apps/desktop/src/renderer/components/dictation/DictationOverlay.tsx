@@ -1,26 +1,13 @@
-import {
-  type DictationTargetKind,
-  dictationSettingsOf,
-  formatChord,
-  type KeyChord,
-} from "@exegol/shared";
+import { dictationSettingsOf, formatChord, type KeyChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import {
-  AlertTriangle,
-  ClipboardCopy,
-  FileCode2,
-  Globe,
-  Loader2,
-  MicOff,
-  TextCursorInput,
-} from "lucide-react";
+import { AlertTriangle, Loader2, MicOff } from "lucide-react";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
 import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation";
 import { currentAnalyser, dismissDictation, stopDictation } from "../../lib/dictation/controller";
 import { dictationChord } from "../../lib/dictation/shortcut";
-import { insertHint } from "../../lib/dictation/target";
+import { insertHint, TARGET_KINDS, targetName } from "../../lib/dictation/target";
 import { IS_MAC } from "../../lib/keymap";
 import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
@@ -157,9 +144,16 @@ function StatePill({ phase }: { phase: DictationPhase }) {
 function Timer() {
   const startedAt = useDictationStore((s) => s.startedAt);
   const [now, setNow] = useState(Date.now());
+  // Ticks on each whole second of the recording, not on a fixed poll
   useMountEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const t = Date.now();
+      setNow(t);
+      id = setTimeout(tick, 1000 - ((t - startedAt) % 1000) + 5);
+    };
+    tick();
+    return () => clearTimeout(id);
   });
   const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
   return (
@@ -169,31 +163,20 @@ function Timer() {
   );
 }
 
-const KIND_ICONS: Record<Exclude<DictationTargetKind, "terminal">, typeof Globe> = {
-  browser: Globe,
-  editor: FileCode2,
-  field: TextCursorInput,
-  clipboard: ClipboardCopy,
-};
-
 /** Where Insert puts the text: the session (its CLI's icon and alias) and its project */
 function TargetChip() {
   const kind = useDictationStore((s) => s.targetKind);
-  const label = useDictationStore((s) => s.targetLabel);
   const agentId = useDictationStore((s) => s.targetAgentId);
   const projectId = useDictationStore((s) => s.targetProjectId);
   const agent = useAgentStore((s) => (agentId ? s.agents[agentId] : undefined));
   const { data: projects } = useProjects();
   const project = projects?.find((p) => p.id === projectId)?.name;
   const pressEnter = dictationSettingsOf(useSettings().data?.dictation).pressEnter;
-  const Icon = kind === "terminal" ? null : KIND_ICONS[kind];
-  const name =
-    kind === "terminal"
-      ? agent?.alias || label || "terminal"
-      : { browser: "Browser", editor: "Editor", field: "This field", clipboard: "Clipboard" }[kind];
+  const Icon = kind === "terminal" ? null : TARGET_KINDS[kind].icon;
+  const name = targetName(kind, agent);
   return (
     <span
-      title={insertHint(kind, label, pressEnter)}
+      title={insertHint(kind, name, pressEnter)}
       className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border/70 bg-bg-tertiary/60 py-0.5 pr-2.5 pl-1 text-[11px] text-text-secondary"
     >
       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-bg-primary/70">
@@ -284,23 +267,24 @@ function Shortcuts({ phase }: { phase: DictationPhase }) {
 
 const BARS = 28;
 
-/** Mounted only while listening: the animation frame loop stops with it. Each bar is the level
- *  of a slice of the last audio frame, held and eased down so speech reads as motion */
+/** Mounted only while listening: the draw loop stops with it. Each bar is the level of a slice
+ *  of the last audio frame, held and eased down so speech reads as motion */
 function LevelBars() {
   const ref = useRef<HTMLCanvasElement>(null);
   const glow = useRef<HTMLDivElement>(null);
   useMountEffect(() => {
     let frame = 0;
-    let last = 0;
+    let glowShown = 0;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const data = new Uint8Array(1024);
     const levels = new Float32Array(BARS);
     const color = ref.current ? getComputedStyle(ref.current).color : "";
-    const draw = (t: number) => {
-      frame = requestAnimationFrame(draw);
-      // Reduced motion: a few still frames a second, no easing or glow
-      if (reduce && t - last < 200) return;
-      last = t;
+    // Reduced motion: a few still frames a second, no easing or glow
+    const next = () => {
+      frame = reduce ? window.setTimeout(draw, 200) : requestAnimationFrame(draw);
+    };
+    const draw = () => {
+      next();
       const canvas = ref.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) return;
@@ -326,8 +310,12 @@ function LevelBars() {
         levels[i] = reduce ? level : Math.max(level, (levels[i] ?? 0) * 0.86);
         total += levels[i] ?? 0;
       }
-      const loud = total / BARS;
-      if (glow.current) glow.current.style.opacity = reduce ? "0" : String(Math.min(1, loud * 2));
+      // Only real moves restyle the blurred layer
+      const glowLevel = reduce ? 0 : Math.min(1, (total / BARS) * 2);
+      if (glow.current && Math.abs(glowLevel - glowShown) > 0.05) {
+        glowShown = glowLevel;
+        glow.current.style.opacity = glowLevel.toFixed(2);
+      }
       ctx.clearRect(0, 0, w, h);
       ctx.fillStyle = color;
       const gap = 3 * dpr;
@@ -345,15 +333,18 @@ function LevelBars() {
       }
       ctx.globalAlpha = 1;
     };
-    frame = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(frame);
+    next();
+    return () => {
+      if (reduce) clearTimeout(frame);
+      else cancelAnimationFrame(frame);
+    };
   });
   return (
     <div className="relative h-10">
       <div
         ref={glow}
         aria-hidden
-        className="pointer-events-none absolute inset-x-6 inset-y-1 rounded-full bg-accent/25 opacity-0 blur-xl transition-opacity duration-150"
+        className="pointer-events-none absolute inset-x-6 inset-y-1 rounded-full bg-accent/25 opacity-0 blur-xl"
       />
       <canvas
         ref={ref}

@@ -85,11 +85,22 @@ describe("buildClaudeCodeHooksFile", () => {
   // one, an idle agent looked like it awaited an answer and dictation went to the clipboard
   it("signals attention on a question, never on the idle reminder", () => {
     const matcher = written("a1").Notification?.[0]?.matcher;
-    const fires = (type: string) => (matcher === undefined ? true : new RegExp(matcher).test(type));
-    expect(fires("permission_prompt")).toBe(true);
-    expect(fires("elicitation_dialog")).toBe(true);
-    expect(fires("idle_prompt")).toBe(false);
-    expect(fires("auth_success")).toBe(false);
+    // Claude's rule for a plain name list: split on | or , and each part equals the type
+    const fires = (type: string) =>
+      matcher === undefined || matcher.split(/[|,]/).some((part) => part.trim() === type);
+    expect(matcher).toMatch(/^[A-Za-z0-9_|, -]+$/);
+    for (const asks of [
+      "permission_prompt",
+      "elicitation_dialog",
+      "elicitation_url_dialog",
+      "agent_needs_input",
+      "worker_permission_prompt",
+    ]) {
+      expect(fires(asks)).toBe(true);
+    }
+    for (const notice of ["idle_prompt", "auth_success", "elicitation_complete"]) {
+      expect(fires(notice)).toBe(false);
+    }
   });
 
   it("omits the guard when claims cannot collide", () => {
