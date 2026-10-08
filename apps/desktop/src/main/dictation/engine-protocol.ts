@@ -21,7 +21,7 @@ export type EngineReply =
       /** Offline models: phrases cut at pauses and decoded while recording */
       phrases: number;
       phraseMs: number;
-      /** The phrases came back empty and everything was decoded again */
+      /** The phrases came back empty or one failed: everything was decoded again */
       fullPass: boolean;
     }
   | { type: "failed"; sessionId: string; error: string };

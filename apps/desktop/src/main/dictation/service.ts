@@ -44,8 +44,9 @@ interface Active {
 }
 
 let active: Active | null = null;
-/** When a warm-up last found the model unloaded: the start that follows is still a cold one */
-let coldWarmAt = 0;
+/** Whether the last warm-up found the model unloaded: the start that follows is a cold one.
+ *  Null until a warm-up, and again once a start consumed it */
+let warmedCold: boolean | null = null;
 
 export const dictationActive = (): boolean => active !== null;
 
@@ -116,8 +117,9 @@ export async function startDictation(db: Database.Database) {
     id,
     modelId: entry.id,
     startedAt: Date.now(),
-    cold: !modelLoaded(entry.id) || Date.now() - coldWarmAt < 60_000,
+    cold: warmedCold ?? !modelLoaded(entry.id),
   };
+  warmedCold = null;
   // The model loads while the user speaks: audio waits in the engine until it is ready
   ensureModel(entry.id).catch(() => {});
   beginSession(id, settings.maxSeconds);
@@ -145,7 +147,6 @@ export async function stopDictation(
   }
   const { modelId, cold } = active;
   active = null;
-  if (cold) coldWarmAt = 0;
   const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(input.sessionId);
   const phraseLog =
     phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
@@ -181,7 +182,7 @@ export async function warmDictation(db: Database.Database): Promise<{ ok: boolea
   if (!dictationSettings(db).enabled || !(await probeEngine()).ok) return { ok: false };
   const { entry, ready } = await pickModel(db);
   if (!ready) return { ok: false };
-  if (!modelLoaded(entry.id)) coldWarmAt = Date.now();
+  warmedCold = !modelLoaded(entry.id);
   ensureModel(entry.id).catch(() => {});
   return { ok: true };
 }

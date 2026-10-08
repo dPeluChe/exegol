@@ -8,7 +8,14 @@ import { DICTATION_SAMPLE_RATE as SAMPLE_RATE } from "@exegol/shared";
 import * as sherpa from "sherpa-onnx-node";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
 import { isInside, type RecognizerSpec, specPaths } from "./model-config";
-import { joinPhrases, SEGMENTER_START, type Segmenter, segment, tailHasSpeech } from "./phrases";
+import {
+  joinPhrases,
+  SEGMENTER_START,
+  type Segmenter,
+  segment,
+  tailHasSpeech,
+  WHISPER_MIN_PHRASE_MS,
+} from "./phrases";
 
 const ROOT_FLAG = "--models-root=";
 const modelsRoot = process.argv.find((a) => a.startsWith(ROOT_FLAG))?.slice(ROOT_FLAG.length);
@@ -32,10 +39,16 @@ interface Session {
   texts: string[];
   decoding: Promise<void>;
   phraseMs: number;
+  /** A phrase decode threw: finish decodes everything in one pass instead */
+  phraseFailed: boolean;
+  /** Cancelled or replaced: its queued phrase decodes do not run */
+  cancelled: boolean;
 }
 
 let loadedId: string | null = null;
 let loaded: Loaded | null = null;
+/** Pauses cut only phrases at least this long (Whisper decodes a 30 s window per phrase) */
+let minPhraseMs = 0;
 let loading: Promise<void> | null = null;
 let session: Session | null = null;
 
@@ -66,6 +79,7 @@ async function load(modelId: string, spec: RecognizerSpec): Promise<void> {
         ? { kind: "offline", recognizer: await sherpa.OfflineRecognizer.createAsync(spec.config) }
         : { kind: "online", recognizer: new sherpa.OnlineRecognizer(spec.config) };
     loadedId = modelId;
+    minPhraseMs = spec.config.modelConfig.whisper ? WHISPER_MIN_PHRASE_MS : 0;
     reply({ type: "loaded", modelId });
   } catch (err) {
     reply({ type: "load-failed", modelId, error: errorText(err) });
@@ -111,21 +125,24 @@ function phraseAudio(s: Session, from: number, to: number): Float32Array {
 function addOffline(s: Session, samples: Float32Array): void {
   s.all.push(samples);
   s.phrase.push({ at: s.seg.end, samples });
-  const { state, cut } = segment(s.seg, samples);
+  const { state, cut } = segment(s.seg, samples, minPhraseMs);
   s.seg = state;
   if (cut) {
     const audio = phraseAudio(s, cut.from, cut.to);
-    s.phrase = [];
     const index = s.texts.push("") - 1;
     s.decoding = s.decoding.then(async () => {
+      if (s.cancelled) return;
       const started = Date.now();
-      s.texts[index] = await decodeOffline(audio).catch(() => "");
+      try {
+        s.texts[index] = await decodeOffline(audio);
+      } catch {
+        s.phraseFailed = true;
+      }
       s.phraseMs += Date.now() - started;
       if (session === s) reply({ type: "partial", sessionId: s.id, text: joinPhrases(s.texts) });
     });
-  } else {
-    s.phrase = s.phrase.filter((c) => c.at + c.samples.length > s.seg.start);
   }
+  s.phrase = s.phrase.filter((c) => c.at + c.samples.length > s.seg.start);
 }
 
 function concat(chunks: Float32Array[], total: number): Float32Array {
@@ -151,14 +168,18 @@ async function finish(s: Session): Promise<Finished> {
   if (loaded.kind === "offline") {
     for (const samples of s.pending.splice(0)) addOffline(s, samples);
     await s.decoding;
-    if (tailHasSpeech(s.seg)) {
-      s.texts.push(await decodeOffline(phraseAudio(s, s.seg.start, s.seg.end)));
+    if (tailHasSpeech(s.seg) && !s.phraseFailed) {
+      const tail = await decodeOffline(phraseAudio(s, s.seg.start, s.seg.end)).catch(() => {
+        s.phraseFailed = true;
+        return "";
+      });
+      s.texts.push(tail);
     }
     const phrases = s.texts.length;
     const joined = joinPhrases(s.texts);
-    if (joined || s.total === 0)
+    if (!s.phraseFailed && (joined || s.total === 0))
       return { text: joined, phrases, phraseMs: s.phraseMs, fullPass: false };
-    // Cuts can split a short utterance badly: one pass over everything before giving up
+    // A phrase failed, or cuts split a short utterance badly: one pass over everything
     const text = await decodeOffline(concat(s.all, s.total));
     return { text, phrases, phraseMs: s.phraseMs, fullPass: true };
   }
@@ -180,6 +201,7 @@ function handle(msg: EngineRequest): void {
       loading = load(msg.modelId, msg.spec);
       return;
     case "begin":
+      if (session) session.cancelled = true;
       session = {
         id: msg.sessionId,
         maxSamples: msg.maxSamples,
@@ -192,6 +214,8 @@ function handle(msg: EngineRequest): void {
         texts: [],
         decoding: Promise.resolve(),
         phraseMs: 0,
+        phraseFailed: false,
+        cancelled: false,
       };
       return;
     case "audio": {
@@ -211,6 +235,7 @@ function handle(msg: EngineRequest): void {
         s.pending.push(samples);
         pump(s);
       } catch (err) {
+        s.cancelled = true;
         session = null;
         reply({ type: "failed", sessionId: s.id, error: errorText(err) });
       }
@@ -230,7 +255,10 @@ function handle(msg: EngineRequest): void {
       return;
     }
     case "cancel":
-      if (session?.id === msg.sessionId) session = null;
+      if (session?.id === msg.sessionId) {
+        session.cancelled = true;
+        session = null;
+      }
       return;
   }
 }

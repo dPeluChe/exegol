@@ -9,7 +9,7 @@ import { invalidateStorageReport } from "../system/storage";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
 import { findModel, MODEL_CATALOG } from "./catalog";
 import { downloadVerified, fileSize } from "./download";
-import { extractTarBz2, pruneToRequired } from "./extract";
+import { extractTarBz2, pruneJunk } from "./extract";
 
 export const MODELS_DIR = join(EXEGOL_DIR, "models");
 const PARTIAL_DIR = join(MODELS_DIR, ".partial");
@@ -32,14 +32,14 @@ const pruned = new Set<string>();
 
 const mb = (bytes: number) => (bytes / 1024 ** 2).toFixed(1);
 
-/** Models installed before extraction kept only the required files lose their extras once */
+/** Models installed before extraction pruned lose their sample audio and READMEs once */
 function pruneInstalled(entry: SpeechModelEntry): void {
   if (pruned.has(entry.id) || jobs.has(entry.id)) return;
   pruned.add(entry.id);
-  pruneToRequired(modelDir(entry.id), entry.files)
+  pruneJunk(modelDir(entry.id))
     .then((removed) => {
       if (removed.length === 0) return;
-      logger.info(`[Models] ${entry.id}: removed ${removed.length} files the engine never reads`);
+      logger.info(`[Models] ${entry.id}: removed ${removed.length} sample/readme files`);
       invalidateStorageReport();
     })
     .catch((err) => logger.warn(`[Models] ${entry.id}: cleanup failed: ${errorText(err)}`));

@@ -1,17 +1,24 @@
 import { DICTATION_SAMPLE_RATE } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { joinPhrases, SEGMENTER_START, type Segmenter, segment, tailHasSpeech } from "./phrases";
+import {
+  joinPhrases,
+  SEGMENTER_START,
+  type Segmenter,
+  segment,
+  tailHasSpeech,
+  WHISPER_MIN_PHRASE_MS,
+} from "./phrases";
 
 const CHUNK = DICTATION_SAMPLE_RATE / 10;
 const speech = () => new Float32Array(CHUNK).fill(0.1);
 const silence = () => new Float32Array(CHUNK);
 
 /** Feeds 100 ms chunks: "s" speech, "." silence. Returns the cuts and the final state */
-function run(pattern: string) {
+function run(pattern: string, minPhraseMs = 0) {
   let state: Segmenter = SEGMENTER_START;
   const cuts: { from: number; to: number }[] = [];
   for (const c of pattern) {
-    const out = segment(state, c === "s" ? speech() : silence());
+    const out = segment(state, c === "s" ? speech() : silence(), minPhraseMs);
     state = out.state;
     if (out.cut) cuts.push(out.cut);
   }
@@ -46,9 +53,26 @@ describe("segment", () => {
   });
 
   it("never lets a phrase grow past the window a model decodes", () => {
-    const { cuts } = run("s".repeat(260));
+    const { cuts, state } = run("s".repeat(260));
     expect(cuts).toHaveLength(1);
-    expect(cuts[0]?.to).toBe(250 * CHUNK);
+    const to = cuts[0]?.to ?? 0;
+    expect(to).toBeLessThanOrEqual(250 * CHUNK);
+    expect(to).toBeGreaterThan(230 * CHUNK);
+    expect(state.start).toBe(to);
+  });
+
+  it("cuts a capped phrase at the quietest moment of its last 2 s", () => {
+    const { cuts } = run(`${"s".repeat(240)}.${"s".repeat(19)}`);
+    expect(cuts).toHaveLength(1);
+    const to = cuts[0]?.to ?? 0;
+    expect(to).toBeGreaterThan(240 * CHUNK);
+    expect(to).toBeLessThan(241 * CHUNK);
+  });
+
+  it("with a minimum phrase length, a pause cuts only a long enough phrase", () => {
+    expect(run("ssss.....", WHISPER_MIN_PHRASE_MS).cuts).toEqual([]);
+    const long = `${"s".repeat(100)}.....`;
+    expect(run(long, WHISPER_MIN_PHRASE_MS).cuts).toEqual([{ from: 0, to: 105 * CHUNK }]);
   });
 
   it("decodes the tail at stop only when it holds speech", () => {
