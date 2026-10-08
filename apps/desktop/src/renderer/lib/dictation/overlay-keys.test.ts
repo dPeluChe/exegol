@@ -56,24 +56,32 @@ describe("overlayKeyAction", () => {
 });
 
 describe("otherDialogOpen", () => {
-  const el = (role: string, opts: { inOverlay?: boolean; shown?: boolean } = {}) => ({
-    role,
+  const el = (
+    role: string,
+    opts: { state?: string; inOverlay?: boolean; shown?: boolean } = {},
+  ) => ({
+    getAttribute: (name: string) =>
+      name === "role" ? role : name === "data-state" ? (opts.state ?? null) : null,
     closest: (sel: string) => (opts.inOverlay && sel === `[${OVERLAY_ATTR}]` ? {} : null),
     getClientRects: () => ({ length: opts.shown === false ? 0 : 1 }),
   });
   const root = (els: ReturnType<typeof el>[]) =>
     ({ querySelectorAll: () => els }) as unknown as ParentNode;
 
+  it("Monaco's find widget (role=dialog, no open state, mounted after one Cmd+F) never blocks Esc", () => {
+    expect(otherDialogOpen(root([el("dialog")]))).toBe(false);
+    expect(otherDialogOpen(root([el("dialog", { state: "closed" })]))).toBe(false);
+  });
+
   it("ignores the overlay itself and a dialog that is not on screen", () => {
-    expect(otherDialogOpen(root([el("dialog", { inOverlay: true })]))).toBe(false);
-    expect(otherDialogOpen(root([el("dialog", { shown: false })]))).toBe(false);
+    expect(otherDialogOpen(root([el("dialog", { state: "open", inOverlay: true })]))).toBe(false);
+    expect(otherDialogOpen(root([el("dialog", { state: "open", shown: false })]))).toBe(false);
     expect(otherDialogOpen(root([]))).toBe(false);
   });
 
-  it("finds a confirm or popover on screen", () => {
-    expect(otherDialogOpen(root([el("dialog", { inOverlay: true }), el("alertdialog")]))).toBe(
-      true,
-    );
+  it("finds an open Radix dialog or popover, or an alert dialog", () => {
+    expect(otherDialogOpen(root([el("dialog", { state: "open" })]))).toBe(true);
+    expect(otherDialogOpen(root([el("dialog"), el("alertdialog")]))).toBe(true);
   });
 });
 

@@ -1,54 +1,87 @@
 import { describe, expect, it } from "vitest";
-import { anchoredBox, DOCK_TOP, dockedBox, freeSpan, overlayBox } from "./overlay-position";
+import type { LayoutNode } from "../../stores/workspace/types";
+import { anchoredBox, dockedPill, freeSpan, overlayMode, paneOnScreen } from "./overlay-position";
 
-const viewport = { width: 1200, height: 800 };
-const pane = { left: 300, top: 100, width: 900, height: 600 };
-const free = () => ({ left: 200, right: 1200 });
+const layout: LayoutNode = {
+  type: "split",
+  direction: "horizontal",
+  sizes: [50, 50],
+  children: [
+    { type: "pane", paneId: "p1" },
+    { type: "pane", paneId: "p2" },
+  ],
+} as LayoutNode;
 
-describe("overlayBox", () => {
-  it("sits over the target pane while it is on screen", () => {
-    expect(overlayBox("pane", true, pane, viewport, 360, free)).toEqual({
-      left: 570,
-      top: 400,
-      width: 360,
-      docked: false,
-    });
+const ws = (floating: Record<string, unknown> = {}) => ({
+  projectWorkspaces: {
+    a: {
+      tabs: [
+        { id: "t1", label: "1", layout },
+        { id: "t2", label: "2", layout: { type: "pane", paneId: "p3" } as LayoutNode },
+      ],
+      activeTabId: "t1",
+    },
+  },
+  floatingPanes: floating,
+});
+const view = { activeView: "workspace", workspaceSection: "agents", activeProjectId: "a" };
+
+describe("paneOnScreen", () => {
+  it("is on screen in its project's active tab of the Agents section", () => {
+    expect(paneOnScreen(view, ws(), "p2")).toBe(true);
   });
 
-  it("docks at the top center when the pane is not on screen (another project, tab or view)", () => {
-    const box = overlayBox("pane", true, null, viewport, 360, free);
-    expect(box).toEqual({ left: 420, top: DOCK_TOP, width: 360, docked: true });
-  });
-
-  it("the title bar setting docks even with the pane on screen", () => {
-    expect(overlayBox("titlebar", true, pane, viewport, 360, free).docked).toBe(true);
-    expect(overlayBox("titlebar", false, null, viewport, 360, free).docked).toBe(true);
-  });
-
-  it("with no pane to go to it centers on the window, as before", () => {
-    const box = overlayBox("pane", false, null, viewport, 360, free);
-    expect(box).toEqual({ left: 420, top: 400, width: 360, docked: false });
+  it("is off screen in another tab, project, section or view, or floated out", () => {
+    expect(paneOnScreen(view, ws(), "p3")).toBe(false);
+    expect(paneOnScreen({ ...view, activeProjectId: "b" }, ws(), "p1")).toBe(false);
+    expect(paneOnScreen({ ...view, workspaceSection: "tasks" }, ws(), "p1")).toBe(false);
+    expect(paneOnScreen({ ...view, activeView: "dashboard" }, ws(), "p1")).toBe(false);
+    expect(paneOnScreen({ ...view, activeView: "projects" }, ws(), "p1")).toBe(false);
+    expect(paneOnScreen(view, ws({ p1: {} }), "p1")).toBe(false);
   });
 });
 
-describe("dockedBox", () => {
-  it("never covers the traffic lights or the title bar's buttons", () => {
-    const span = { left: 200, right: 700 };
-    for (const width of [700, 800, 1000]) {
-      const box = dockedBox(width, 420, span);
-      expect(box.left).toBeGreaterThanOrEqual(span.left);
-      expect(box.left + box.width).toBeLessThanOrEqual(span.right);
-    }
+describe("overlayMode", () => {
+  it("sits over the pane while it is on screen, docks while it is not", () => {
+    expect(overlayMode("pane", true, true, true)).toBe("pane");
+    expect(overlayMode("pane", true, false, true)).toBe("dock");
   });
 
-  it("shrinks to stay centered, then shifts once it would get too narrow", () => {
-    expect(dockedBox(700, 400, { left: 200, right: 700 })).toMatchObject({ left: 208, width: 284 });
-    expect(dockedBox(600, 400, { left: 200, right: 600 })).toMatchObject({ left: 208, width: 280 });
+  it("the title bar setting docks a recording even with the pane on screen", () => {
+    expect(overlayMode("titlebar", true, true, true)).toBe("dock");
+    expect(overlayMode("titlebar", false, false, true)).toBe("dock");
+  });
+
+  it("a panel with buttons, or a dictation with no pane, centers on the window", () => {
+    expect(overlayMode("pane", true, false, false)).toBe("window");
+    expect(overlayMode("titlebar", true, true, false)).toBe("window");
+    expect(overlayMode("pane", false, false, true)).toBe("window");
+  });
+});
+
+describe("dockedPill", () => {
+  const free = { left: 210, right: 1200 };
+
+  it("sits right of the project name, never over it or the title bar's buttons", () => {
+    const pill = dockedPill(free, { left: 560, right: 640 }, 440);
+    expect(pill).toEqual({ left: 652, width: 440 });
+    expect(pill.left + pill.width).toBeLessThanOrEqual(free.right);
+  });
+
+  it("goes left of the name when the right side is too narrow", () => {
+    const pill = dockedPill({ left: 210, right: 760 }, { left: 560, right: 640 }, 440);
+    expect(pill.left + pill.width).toBeLessThanOrEqual(548);
+    expect(pill.left).toBeGreaterThanOrEqual(218);
+  });
+
+  it("with no room beside the name, it is centered over the free span", () => {
+    const pill = dockedPill({ left: 400, right: 800 }, { left: 560, right: 640 }, 440);
+    expect(pill).toEqual({ left: 408, width: 384 });
   });
 });
 
 describe("freeSpan", () => {
-  it("is bounded by the controls on each side; one across the middle is covered", () => {
+  it("is bounded by the controls on each side; one across the middle is ignored", () => {
     const controls = [
       { left: 80, right: 210 },
       { left: 560, right: 640 },

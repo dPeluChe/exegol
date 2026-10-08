@@ -40,10 +40,13 @@ export function overlayKeyAction(
 /** The overlay's root carries this, so it never counts as another dialog */
 export const OVERLAY_ATTR = "data-dictation-overlay";
 
-/** A dialog on screen other than the overlay (a confirm, a popover): Esc is its first */
+/** An open dialog other than the overlay (a confirm, a popover): Esc is its first. Only Radix's
+ *  open state counts: Monaco's find widget is a role=dialog that stays mounted once used */
 export function otherDialogOpen(root: ParentNode = document): boolean {
   for (const el of root.querySelectorAll('[role="dialog"], [role="alertdialog"]')) {
-    if (!el.closest(`[${OVERLAY_ATTR}]`) && el.getClientRects().length > 0) return true;
+    const open =
+      el.getAttribute("role") === "alertdialog" || el.getAttribute("data-state") === "open";
+    if (open && !el.closest(`[${OVERLAY_ATTR}]`) && el.getClientRects().length > 0) return true;
   }
   return false;
 }

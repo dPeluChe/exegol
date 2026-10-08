@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const trpcMutate = vi.fn(async (path: string): Promise<unknown> => {
+const trpcMutate = vi.fn(async (path: string, _input?: unknown): Promise<unknown> => {
   if (path === "dictation.requestMic") return { mic: "granted" };
   if (path === "dictation.start") return { sessionId: "s1" };
   return {};
 });
 vi.mock("../trpc-client", () => ({
   trpcInvoke: vi.fn(async () => ({ dictation: { enabled: true, autoStopSilenceSec: 0 } })),
-  trpcMutate: (path: string) => trpcMutate(path),
+  trpcMutate: (path: string, input?: unknown) => trpcMutate(path, input),
 }));
 vi.mock("../../hooks/use-trpc-dictation", () => ({
   DICTATION_STATUS_KEY: ["dictation", "status"],
@@ -55,7 +55,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  dismissDictation();
+  dismissDictation("button");
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -102,7 +102,7 @@ describe("cancel", () => {
     await startRecording();
     for (let i = 0; i < 16; i++) feed(speech());
     useDictationStore.getState().set({ partial: "a long narration" });
-    dismissDictation();
+    dismissDictation("esc");
     await settle();
     expect(phase()).toBe("idle");
     expect(writeText).toHaveBeenCalledWith("a long narration");
@@ -113,8 +113,35 @@ describe("cancel", () => {
     await startRecording();
     feed(speech());
     useDictationStore.getState().set({ partial: "oops" });
-    dismissDictation();
+    dismissDictation("esc");
     await settle();
     expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe("diagnostics: what ended a dictation reaches main's log (never the text)", () => {
+  const callOf = (path: string) => trpcMutate.mock.calls.find(([p]) => p === path)?.[1];
+
+  it("an Esc cancel says it was Esc", async () => {
+    trpcMutate.mockClear();
+    await startRecording();
+    dismissDictation("esc");
+    expect(callOf("dictation.cancel")).toEqual({ sessionId: "s1", source: "esc" });
+  });
+
+  it("a stop says what stopped it: the shortcut here", async () => {
+    trpcMutate.mockClear();
+    await startRecording();
+    feed(speech());
+    chordDown();
+    await settle();
+    expect(callOf("dictation.stop")).toMatchObject({ sessionId: "s1", by: "chord" });
+  });
+
+  it("a stop with nothing heard is logged as a cancel", async () => {
+    trpcMutate.mockClear();
+    await startRecording();
+    chordDown();
+    expect(callOf("dictation.cancel")).toEqual({ sessionId: "s1", source: "nothing-heard" });
   });
 });

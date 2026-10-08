@@ -8,7 +8,6 @@ import { SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { LoadingSpinner } from "../common";
 import { AgentsSection } from "./sections/AgentsSection";
 import {
-  useActiveSection,
   useAgentNavigationEvents,
   useRefitOnAgentsShown,
   useShortcutsOverlay,
@@ -77,7 +76,8 @@ export function WorkspaceView() {
   // Home = the fleet dashboard (Antonio 2026-08-11): land on the cross-project
   // control center; the Agents tab stays mounted underneath for its terminals.
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
-  const [activeSection, setActiveSection] = useActiveSection(onDashboard);
+  const activeSection = useAppStore((s) => s.workspaceSection);
+  const setActiveSection = useAppStore((s) => s.setWorkspaceSection);
   const spawn = useSpawnModalEvents();
   const { showShortcuts, closeShortcuts } = useShortcutsOverlay();
   useAgentNavigationEvents();

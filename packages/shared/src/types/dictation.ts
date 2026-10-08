@@ -29,6 +29,29 @@ export type DictationTargetKind = (typeof DICTATION_TARGET_KINDS)[number];
 export const DICTATION_OVERLAY_POSITIONS = ["pane", "titlebar"] as const;
 export type DictationOverlayPosition = (typeof DICTATION_OVERLAY_POSITIONS)[number];
 
+/** What ended a dictation, for the log line (never the text): a bug report tells a mis-click from
+ *  a key that never arrived */
+export const DICTATION_STOP_REASONS = [
+  "chord",
+  "enter",
+  "button",
+  "mic",
+  "limit",
+  "silence",
+] as const;
+export type DictationStopReason = (typeof DICTATION_STOP_REASONS)[number];
+
+/** `esc-forwarded`: Esc main forwarded from a page or another Exegol window */
+export const DICTATION_CANCEL_SOURCES = [
+  "esc",
+  "esc-forwarded",
+  "button",
+  "nothing-heard",
+  "superseded",
+  "disabled",
+] as const;
+export type DictationCancelSource = (typeof DICTATION_CANCEL_SOURCES)[number];
+
 export interface DictationSettings {
   enabled: boolean;
   /** macOS notation ("Cmd+Shift+Space"); Cmd reads as Ctrl on Linux and Windows */

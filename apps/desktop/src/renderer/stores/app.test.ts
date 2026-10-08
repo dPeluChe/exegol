@@ -113,3 +113,20 @@ describe("Projects view return", () => {
     expect(useAppStore.getState().activeView).toBe("projects");
   });
 });
+
+describe("workspace section", () => {
+  it("leaving the dashboard lands on Agents; switching within the workspace keeps it", () => {
+    const app = useAppStore.getState();
+    app.setActiveProject("p");
+    app.setWorkspaceSection("tasks");
+    app.setActiveView("workspace");
+    expect(useAppStore.getState().workspaceSection).toBe("tasks");
+    app.openDashboard();
+    app.setActiveProject("q");
+    expect(useAppStore.getState().workspaceSection).toBe("agents");
+    app.setWorkspaceSection("memory");
+    app.openDashboard();
+    app.setActiveView("workspace");
+    expect(useAppStore.getState().workspaceSection).toBe("agents");
+  });
+});

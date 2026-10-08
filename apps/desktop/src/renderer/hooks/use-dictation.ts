@@ -1,4 +1,5 @@
 import {
+  type DictationCancelSource,
   type DictationStatus,
   dictationSettingsOf,
   type KeyChord,
@@ -29,6 +30,27 @@ import { useMountEffect } from "./use-mount-effect";
 import { useSettings } from "./use-trpc";
 import { DICTATION_STATUS_KEY, useDictationStatus } from "./use-trpc-dictation";
 
+/** A key main forwarded (a page's or another window's): plain, no IME */
+const forwardedKey = (key: "Enter" | "Escape") => ({
+  key,
+  metaKey: false,
+  ctrlKey: false,
+  altKey: false,
+  shiftKey: false,
+});
+
+/** One decision for keys typed here and keys main forwarded; true when the key was taken */
+function runKey(e: Parameters<typeof overlayKeyAction>[0], escSource: DictationCancelSource) {
+  const phase = useDictationStore.getState().phase;
+  const action = overlayKeyAction(e, phase, {
+    onTarget: e.key !== "Enter" || focusOnTarget(),
+    dialogOpen: e.key === "Escape" && phase !== "idle" && otherDialogOpen(),
+  });
+  if (action === "cancel") dismissDictation(escSource);
+  else if (action === "insert") void stopDictation("enter");
+  return action !== null;
+}
+
 /** The dictation shortcut (toggle, or hold to talk) and its events. Capture phase: Monaco and
  *  xterm would otherwise take the chord first (Cmd+Shift+Space is Monaco's parameter hints) */
 export function useDictation() {
@@ -56,16 +78,9 @@ export function useDictation() {
         if (!e.repeat) chordDown();
         return;
       }
-      const phase = useDictationStore.getState().phase;
-      const action = overlayKeyAction(e, phase, {
-        onTarget: e.key !== "Enter" || focusOnTarget(),
-        dialogOpen: e.key === "Escape" && phase !== "idle" && otherDialogOpen(),
-      });
-      if (!action) return;
+      if (!runKey(e, "esc")) return;
       e.preventDefault();
       e.stopPropagation();
-      if (action === "cancel") dismissDictation();
-      else if (action === "insert") void stopDictation();
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const chord = dictationChord();
@@ -80,9 +95,7 @@ export function useDictation() {
       if (kind === "limit") dictationLimitReached(event.sessionId, event.maxSeconds);
       else if (kind === "down") chordDown();
       else if (kind === "up") chordUp();
-      else if (kind === "enter") {
-        if (focusOnTarget()) void stopDictation();
-      } else dismissDictation();
+      else runKey(forwardedKey(kind === "enter" ? "Enter" : "Escape"), "esc-forwarded");
     });
     const offPartial = window.api.dictation.onPartial(({ sessionId, text }) => {
       const store = useDictationStore.getState();

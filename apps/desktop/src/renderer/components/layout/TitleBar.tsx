@@ -14,7 +14,9 @@ export function TitleBar() {
   const isMac = platform === "darwin";
 
   return (
+    // data-titlebar*: the docked dictation pill measures the bar, its inset and the name
     <div
+      data-titlebar=""
       className={cn(
         "titlebar-drag flex h-10 shrink-0 items-center justify-between border-b border-border bg-bg-secondary px-3",
         isMac && "pl-20",
@@ -36,7 +38,7 @@ export function TitleBar() {
       </div>
 
       {/* Center: Active project */}
-      <div className="absolute left-1/2 -translate-x-1/2">
+      <div data-titlebar-title="" className="absolute left-1/2 -translate-x-1/2">
         {project ? (
           <span className="flex items-center gap-1.5 text-xs text-text-secondary">
             <ProjectAvatar project={project} />
