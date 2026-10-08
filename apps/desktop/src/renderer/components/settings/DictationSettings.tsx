@@ -11,7 +11,7 @@ import { cn } from "@exegol/ui";
 import { Mic } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation";
-import { IS_MAC } from "../../lib/keymap";
+import { IS_MAC, PLATFORM } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
@@ -25,6 +25,10 @@ interface Props {
 const SECTION = "mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted";
 const SELECT =
   "rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[11px] text-text-primary";
+
+const PAUSE_MEDIA_HINT = IS_MAC
+  ? "Music and Spotify pause while you talk and resume after, unless you changed them meanwhile. macOS asks once per app to let Exegol control it"
+  : "Players that support MPRIS pause while you talk and resume after (needs playerctl)";
 
 const MIC_LABEL: Record<string, { text: string; tone: keyof typeof SEMANTIC_BADGE }> = {
   granted: { text: "Allowed", tone: "success" },
@@ -78,6 +82,14 @@ export function DictationSettings({ settings, onChange }: Props) {
             value={prefs.pressEnter}
             onToggle={() => set({ pressEnter: !prefs.pressEnter })}
           />
+          {PLATFORM !== "win32" && (
+            <SwitchRow
+              label="Pause music while dictating"
+              description={PAUSE_MEDIA_HINT}
+              value={prefs.pauseMedia}
+              onToggle={() => set({ pauseMedia: !prefs.pauseMedia })}
+            />
+          )}
           <SelectRow
             label="Longest dictation"
             value={prefs.maxSeconds}

@@ -29,6 +29,7 @@ import {
 } from "./engine";
 import { addDictation, pruneDictations } from "./history";
 import { setDictationChord } from "./keys";
+import { holdMedia } from "./media-pause";
 import { disarmMic, micStatus } from "./mic";
 import { hasRecognizer } from "./model-config";
 
@@ -41,6 +42,8 @@ interface Active {
   startedAt: number;
   /** The model was not loaded when this dictation started: the log line carries the load split */
   cold: boolean;
+  /** Gives back the players this dictation paused */
+  releaseMedia: () => void;
 }
 
 let active: Active | null = null;
@@ -111,13 +114,20 @@ export async function startDictation(db: Database.Database) {
   if (!(await probeEngine()).ok) throw new Error("the speech engine cannot run on this system");
   const { entry, ready } = await pickModel(db);
   if (!ready) throw new Error("no speech model is downloaded");
-  if (active) cancelDictation(active.id);
+  // A dictation replacing a running one keeps its pause: resuming then pausing again would race
+  let releaseMedia = active?.releaseMedia ?? null;
+  if (active) {
+    cancelSession(active.id);
+    active = null;
+  }
+  releaseMedia ??= settings.pauseMedia ? holdMedia((settings.maxSeconds + 30) * 1000) : () => {};
   const id = nanoid(16);
   active = {
     id,
     modelId: entry.id,
     startedAt: Date.now(),
     cold: warmedCold ?? !modelLoaded(entry.id),
+    releaseMedia,
   };
   warmedCold = null;
   // The model loads while the user speaks: audio waits in the engine until it is ready
@@ -145,8 +155,9 @@ export async function stopDictation(
   if (!active || active.id !== input.sessionId) {
     throw new Error("this dictation is no longer running");
   }
-  const { modelId, cold } = active;
+  const { modelId, cold, releaseMedia } = active;
   active = null;
+  releaseMedia();
   const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(input.sessionId);
   const phraseLog =
     phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
@@ -189,6 +200,7 @@ export async function warmDictation(db: Database.Database): Promise<{ ok: boolea
 
 export function cancelDictation(sessionId: string): void {
   if (active?.id !== sessionId) return;
+  active.releaseMedia();
   active = null;
   cancelSession(sessionId);
 }

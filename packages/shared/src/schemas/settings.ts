@@ -19,6 +19,7 @@ export const dictationSettingsSchema = z.object({
     .max(40)
     .refine((s) => parseChord(s) !== null, "a shortcut needs Cmd or Ctrl and one key"),
   pressEnter: z.boolean(),
+  pauseMedia: z.boolean(),
   idleUnloadMinutes: z.number().int().min(1).max(240),
   maxSeconds: z.number().int().min(10).max(600),
   autoStopSilenceSec: z.number().int().min(0).max(60),
