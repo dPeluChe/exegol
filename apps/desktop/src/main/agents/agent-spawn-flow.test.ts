@@ -4,6 +4,7 @@ import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { createAgent } from "../db/queries";
+import type { LocalSession } from "../history/types";
 import { beforeAgentPrefix, buildPtyInvocation } from "./agent-spawn-flow";
 import type { AgentProviderRegistry } from "./registry";
 
@@ -72,6 +73,18 @@ const registry = {
 } as unknown as AgentProviderRegistry;
 
 const cliConfig = { command: "claude", args: [] as string[], env: { CLI_EXTRA: "1" } };
+
+const session = (sessionId: string): LocalSession => ({
+  provider: "test",
+  sessionId,
+  title: null,
+  cwd: "/tmp/cwd",
+  branch: null,
+  startedAt: null,
+  endedAt: null,
+  version: null,
+  sizeBytes: 0,
+});
 
 describe("buildPtyInvocation", () => {
   let db: Database.Database;
@@ -277,7 +290,7 @@ describe("buildPtyInvocation", () => {
   });
 
   it("marks only an unchecked generic resume as blind (the missed-resume relaunch)", () => {
-    const build = (create: Partial<AgentCreate>, prior: boolean | null) => {
+    const build = (create: Partial<AgentCreate>, prior: LocalSession | null | undefined) => {
       const [agent, config] = makeAgent("claude-code", create);
       return buildPtyInvocation(
         db,
@@ -290,12 +303,12 @@ describe("buildPtyInvocation", () => {
         prior,
       );
     };
-    expect(build({ resumeSession: true }, null).blindResume).toBe(true);
-    expect(build({ resumeSession: true }, true).blindResume).toBe(false);
-    const none = build({ resumeSession: true }, false);
+    expect(build({ resumeSession: true }, undefined).blindResume).toBe(true);
+    expect(build({ resumeSession: true }, session("abc")).blindResume).toBe(false);
+    const none = build({ resumeSession: true }, null);
     expect(none.blindResume).toBe(false);
     expect(none.args[1]).not.toContain("--continue");
-    expect(build({}, null).blindResume).toBe(false);
+    expect(build({}, undefined).blindResume).toBe(false);
   });
 
   // opencode's --continue is project-wide (every worktree) or, outside git, shared by all folders
@@ -310,8 +323,7 @@ describe("buildPtyInvocation", () => {
       registry,
       oc,
       "/tmp/p1",
-      true,
-      "ses_abc",
+      session("ses_abc"),
     );
     expect(inv.stdinCommand).toContain("opencode -s ses_abc");
     expect(inv.stdinCommand).not.toContain("--continue");
@@ -360,7 +372,7 @@ describe("buildPtyInvocation", () => {
       registry,
       cliConfig,
       "/tmp/p1",
-      false,
+      null,
     );
     expect(inv.args[1]).not.toContain("--continue");
     // A resume is not a re-run: the original task must not be sent again

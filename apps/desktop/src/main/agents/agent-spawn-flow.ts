@@ -5,6 +5,7 @@ import {
   createWorktree as dbCreateWorktree,
   setAgentWorktree,
 } from "../db/queries";
+import type { LocalSession } from "../history/types";
 import { runSetupHook } from "../hooks/project-hooks";
 import { childEnv } from "../lib/child-env";
 import { commandShape } from "../lib/command-shape";
@@ -245,10 +246,9 @@ export function buildPtyInvocation(
   registry: AgentProviderRegistry,
   cliConfig: { command: string; args: string[]; env: Record<string, string> },
   projectPath: string,
-  /** From the CLI's own store: false = nothing to continue here, null = unknown */
-  priorSession: boolean | null = null,
-  /** The newest of those sessions, for CLIs whose own "continue last" is not scoped to the folder */
-  priorSessionId: string | null = null,
+  /** The newest session in the CLI's own store (`lastLocalSession`): null = nothing to continue
+   *  here, undefined = unknown */
+  last: LocalSession | null | undefined = undefined,
 ): PtyInvocation {
   const isPlainShell = agent.cliType === "shell";
   const userShell = loginShell();
@@ -340,8 +340,8 @@ export function buildPtyInvocation(
       } else {
         const capabilities = registry.get(agent.cliType)?.capabilities;
         const resumeFlag = capabilities?.resumeFlag;
-        const lastPart = continueLastPart(agent.cliType, capabilities, priorSessionId);
-        if (resumeFlag && priorSession === false) {
+        const lastPart = continueLastPart(agent.cliType, capabilities, last?.sessionId ?? null);
+        if (resumeFlag && last === null) {
           // `claude --continue` with no conversation here exits 1. Open a clean
           // session instead of failing, and don't re-run the old task as a prompt.
           fullCommand = withArgs("");
@@ -350,7 +350,7 @@ export function buildPtyInvocation(
           );
         } else if (lastPart) {
           fullCommand = withArgs(lastPart);
-          blindResume = lastPart === resumeFlag && priorSession === null;
+          blindResume = last === undefined;
         }
       }
     }

@@ -77,8 +77,12 @@ export function resumeSessionInto(
   canResume: boolean,
   spawn: (data: AgentCreate) => Promise<Agent>,
   paneId?: string,
-  /** The name the session keeps (a re-launch otherwise gets a new codename) */
-  keepName?: string,
+  options: {
+    /** The name the session keeps (a re-launch otherwise gets a new codename) */
+    keepName?: string;
+    /** Archive the old row instead of deleting it: its output stays readable */
+    keepOld?: boolean;
+  } = {},
 ): Promise<void> {
   return onceAtATime(agent.id, async () => {
     // A close's stop still running: resuming now ran two processes on one session
@@ -90,7 +94,7 @@ export function resumeSessionInto(
       useWorktree: !!agent.branchName,
       branchName: agent.branchName ?? undefined,
       accessMode: agent.accessMode ?? undefined,
-      name: keepName,
+      name: options.keepName,
       resumeSession: canResume,
       // Always the source: a re-launch (no resume) still inherits its YOLO choice
       resumeFromAgentId: agent.id,
@@ -101,7 +105,9 @@ export function resumeSessionInto(
     useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
     const agents = useAgentStore.getState();
     agents.removeAgent(agent.id);
-    trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
+    trpcMutate(options.keepOld ? "agents.archive" : "agents.delete", { id: agent.id }).catch(
+      () => {},
+    );
     agents.addAgent(toAgentState(newAgent, { activityLevel: "busy" }));
     useTerminalStore.getState().createTerminal(newAgent.id);
     if (pane) setPaneAgent(agent.projectId, pane, newAgent.id);
@@ -165,17 +171,23 @@ export function useRelaunchMissedResume(): void {
   useMountEffect(() =>
     window.api.onResumeMissed(({ agentId, projectId, cliType }) => {
       const agent = useAgentStore.getState().agents[agentId];
-      if (!agent) return;
-      const cli = latest.current.providers.find((p) => p.id === cliType)?.name ?? cliType;
       const pane = findAgentPane(agentId, projectId)?.paneId;
-      useToastStore.getState().addToast({
-        type: "info",
-        title: `No previous ${cli} session here, started a new one`,
-        agentId,
-      });
-      resumeSessionInto(agent, false, latest.current.spawn, pane, agent.alias ?? undefined).catch(
-        toastError(`${cli} did not start`),
-      );
+      // Closed, stopping, archived or only on the Dashboard: nobody is waiting on it
+      if (!agent || !pane) return;
+      const cli = latest.current.providers.find((p) => p.id === cliType)?.name ?? cliType;
+      resumeSessionInto(agent, false, latest.current.spawn, pane, {
+        keepName: agent.alias ?? undefined,
+        keepOld: true,
+      })
+        .then(() => {
+          // Still in the store: the relaunch did not happen and the failure stays on screen
+          if (useAgentStore.getState().agents[agentId]) return;
+          useToastStore.getState().addToast({
+            type: "info",
+            title: `No previous ${cli} session here, started a new one`,
+          });
+        })
+        .catch(toastError(`${cli} did not start`));
     }),
   );
 }

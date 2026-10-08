@@ -59,8 +59,8 @@ export function SpawnSessionPicker({
     enabled: canContinue,
     staleTime: 10_000,
   });
-  // false: the CLI has nothing here and would exit with an error. null: no way to check
-  const showContinue = canContinue && hasSession !== false;
+  // Once known, so it never appears and vanishes. false: nothing here. null: no way to check
+  const showContinue = canContinue && hasSession !== undefined && hasSession !== false;
 
   if (resumableHere.length === 0 && !showContinue) return null;
   return (

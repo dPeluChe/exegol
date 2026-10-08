@@ -1,5 +1,6 @@
 import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
+import { forgetCliListing } from "./cli-list";
 import { claudeCodeHistory } from "./providers/claude-code";
 import { codexHistory } from "./providers/codex";
 import { devinHistory } from "./providers/devin";
@@ -88,10 +89,14 @@ export async function hasLocalSession(provider: string, cwd: string): Promise<bo
   return last === undefined ? null : last !== null;
 }
 
-/** The newest session this CLI recorded in `cwd`: null = none, undefined = can't tell */
+/**
+ * The newest session this CLI recorded in `cwd`: null = none, undefined = can't tell. Sessions in
+ * `claimed` (run by a live agent) are skipped: a by-id resume must never join a sibling's session
+ */
 export async function lastLocalSession(
   provider: string,
   cwd: string,
+  claimed: ReadonlySet<string> = new Set(),
 ): Promise<LocalSession | null | undefined> {
   const adapter = PROVIDERS.find((p) => p.id === provider);
   if (!adapter) return undefined;
@@ -100,10 +105,17 @@ export async function lastLocalSession(
   const since = adapter.sharedStore ? Date.now() / 1000 - RESUME_WINDOW_S : 0;
   const sessions = await listLocal(provider, cwd, since);
   if (!sessions) return undefined;
-  return sessions.reduce<LocalSession | null>(
-    (newest, s) => (newest && (newest.endedAt ?? 0) >= (s.endedAt ?? 0) ? newest : s),
-    null,
-  );
+  return sessions
+    .filter((s) => !claimed.has(s.sessionId))
+    .reduce<LocalSession | null>(
+      (newest, s) => (newest && (newest.endedAt ?? 0) >= (s.endedAt ?? 0) ? newest : s),
+      null,
+    );
+}
+
+/** An agent of this CLI ended in `cwd`: the next check must see the session it just wrote */
+export function forgetLocalSessions(provider: string, cwd: string): void {
+  forgetCliListing(provider, cwd);
 }
 
 /** One provider's sessions in `cwd`; null = no adapter or an unreadable store */

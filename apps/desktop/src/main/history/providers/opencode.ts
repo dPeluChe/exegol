@@ -1,8 +1,9 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import { mapWithConcurrency } from "../../lib/concurrency";
-import { realpathOr, runCliListing } from "../cli-list";
+import { cliListing, realpathOr } from "../cli-list";
 import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
 import {
   type LocalHistoryProvider,
@@ -19,32 +20,30 @@ interface OpencodeSession {
   time?: { created?: number; updated?: number };
 }
 
-interface OpencodeListEntry {
-  id?: string;
-  title?: string;
-  updated?: number;
-  created?: number;
-  directory?: string;
-}
+/** `opencode session list --format json` (verified 2026-10-08); Kilo prints the same */
+const opencodeListSchema = z.array(
+  z.object({
+    id: z.string(),
+    title: z.string().nullish(),
+    updated: z.number().nullish(),
+    created: z.number().nullish(),
+    directory: z.string(),
+  }),
+);
+type OpencodeEntry = z.infer<typeof opencodeListSchema>[number];
 
-/**
- * `opencode session list --format json`: the sessions of the git project the cwd belongs to (all
- * its worktrees), or of the shared "global" project in a folder outside git. Only those recorded
- * in one of the cwds are kept; `real` maps a recorded path (a cwd or its realpath) to its cwd
- */
-export function parseOpencodeList(
-  stdout: string,
+/** Keeps the sessions recorded in one of the cwds; `real` maps a recorded path (a cwd or its
+ *  realpath) to that cwd */
+export function opencodeSessions(
+  entries: OpencodeEntry[],
   real: Map<string, string>,
   since: number,
   provider = "opencode",
 ): LocalSession[] {
-  if (!stdout.trim()) return [];
-  const parsed: unknown = JSON.parse(stdout);
-  if (!Array.isArray(parsed)) return [];
-  return (parsed as OpencodeListEntry[]).flatMap((e) => {
-    const cwd = e.directory ? real.get(e.directory) : undefined;
-    if (!e.id || !cwd) return [];
-    const updated = typeof e.updated === "number" ? Math.floor(e.updated / 1000) : null;
+  return entries.flatMap((e) => {
+    const cwd = real.get(e.directory);
+    if (!cwd) return [];
+    const updated = e.updated != null ? Math.floor(e.updated / 1000) : null;
     if (updated !== null && updated < since) return [];
     return [
       {
@@ -53,7 +52,7 @@ export function parseOpencodeList(
         title: normalizeTitle(e.title),
         cwd,
         branch: null,
-        startedAt: typeof e.created === "number" ? Math.floor(e.created / 1000) : null,
+        startedAt: e.created != null ? Math.floor(e.created / 1000) : null,
         endedAt: updated,
         version: null,
         sizeBytes: 0,
@@ -63,9 +62,12 @@ export function parseOpencodeList(
 }
 
 const LIST_ARGS = ["session", "list", "--format", "json", "--pure"];
-const LIST_CONCURRENCY = 3;
 
-/** Kilo Code is an opencode fork with the same listing (empty stdout when there is none) */
+/**
+ * The listing holds every session of the git project the folder belongs to (all its worktrees),
+ * or outside git of one "global" project: one run, in the first cwd that lists (the project
+ * path), covers every cwd. Kilo Code is an opencode fork with the same listing
+ */
 export async function listViaCli(
   command: string,
   provider: string,
@@ -77,14 +79,16 @@ export async function listViaCli(
     real.set(cwd, cwd);
     real.set(await realpathOr(cwd), cwd);
   }
-  const outputs = await mapWithConcurrency(cwds, LIST_CONCURRENCY, (cwd) =>
-    runCliListing(command, LIST_ARGS, cwd),
-  );
-  const byId = new Map<string, LocalSession>();
-  for (const out of outputs) {
-    for (const s of parseOpencodeList(out, real, since, provider)) byId.set(s.sessionId, s);
+  let lastError: unknown = new StoreUnavailable(`${command}: no folder to list from`);
+  for (const cwd of cwds) {
+    try {
+      const entries = await cliListing(provider, command, LIST_ARGS, cwd, opencodeListSchema);
+      return opencodeSessions(entries, real, since, provider);
+    } catch (err) {
+      lastError = err;
+    }
   }
-  return [...byId.values()];
+  throw lastError;
 }
 
 /**

@@ -1,35 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const listing = vi.hoisted(() => ({
-  run: vi.fn<(cmd: string, args: string[], cwd: string) => Promise<string>>(),
-}));
-vi.mock("../cli-list", () => ({
-  runCliListing: listing.run,
+const listing = vi.hoisted(() => ({ entries: [] as unknown[], calls: [] as string[][] }));
+vi.mock("../cli-list", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../cli-list")>()),
+  cliListing: async (_provider: string, command: string, args: string[], cwd: string) => {
+    listing.calls.push([command, ...args, cwd]);
+    return listing.entries;
+  },
   realpathOr: async (p: string) => p,
 }));
 
-import { devinHistory, parseDevinList } from "./devin";
+import { devinHistory, devinSessions } from "./devin";
 
 const REPO = "/Users/me/code/repo";
 
 // Shape verified against `devin list --format json` (2026-10-08)
-const OUTPUT = JSON.stringify([
+const ENTRIES = [
   {
     id: "legend-fine",
-    short_id: "legend-fine",
     working_directory: REPO,
-    working_directory_display: "./",
     last_activity_at: 1_782_408_760,
-    last_activity_ago: "105d ago",
     title: "Revisión   del proyecto",
   },
   { id: "other", working_directory: "/elsewhere", last_activity_at: 1_782_408_760 },
-]);
+];
 
-describe("parseDevinList", () => {
+describe("devinSessions", () => {
   it("keeps the sessions of this folder with devin's own title and last activity", () => {
-    const sessions = parseDevinList(OUTPUT, REPO, REPO, 0);
-    expect(sessions).toEqual([
+    expect(devinSessions(ENTRIES, REPO, REPO, 0)).toEqual([
       expect.objectContaining({
         provider: "devin",
         sessionId: "legend-fine",
@@ -41,26 +39,23 @@ describe("parseDevinList", () => {
   });
 
   it("matches the realpath devin records for a symlinked cwd", () => {
-    expect(parseDevinList(OUTPUT, "/link/repo", REPO, 0)[0]?.cwd).toBe("/link/repo");
+    expect(devinSessions(ENTRIES, "/link/repo", REPO, 0)[0]?.cwd).toBe("/link/repo");
   });
 
   it("drops sessions older than the window", () => {
-    expect(parseDevinList(OUTPUT, REPO, REPO, 1_782_408_761)).toEqual([]);
-  });
-
-  it("reads an empty folder as no sessions", () => {
-    expect(parseDevinList("[]\n", REPO, REPO, 0)).toEqual([]);
-    expect(parseDevinList("", REPO, REPO, 0)).toEqual([]);
+    expect(devinSessions(ENTRIES, REPO, REPO, 1_782_408_761)).toEqual([]);
   });
 });
 
 describe("devinHistory", () => {
-  beforeEach(() => listing.run.mockReset());
+  beforeEach(() => {
+    listing.calls = [];
+    listing.entries = ENTRIES;
+  });
 
-  it("runs the listing in each cwd", async () => {
-    listing.run.mockResolvedValue(OUTPUT);
+  it("runs devin's listing in each cwd", async () => {
     const sessions = await devinHistory.list([REPO], 0);
-    expect(listing.run).toHaveBeenCalledWith("devin", ["list", "--format", "json"], REPO);
+    expect(listing.calls).toEqual([["devin", "list", "--format", "json", REPO]]);
     expect(sessions.map((s) => s.sessionId)).toEqual(["legend-fine"]);
   });
 });

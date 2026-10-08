@@ -10,7 +10,7 @@ import {
   setAgentYolo,
   stopAgent,
 } from "../db/queries";
-import { lastLocalSession } from "../history";
+import { forgetLocalSessions, lastLocalSession } from "../history";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
@@ -34,7 +34,7 @@ import {
   type ReattachResult,
   reattachSidecarAgents as reattachSidecarAgentsImpl,
 } from "./reattach-sidecar-agents";
-import { recoverLostSessionId } from "./recover-lost-session";
+import { liveSessionIds, recoverLostSessionId } from "./recover-lost-session";
 import { getProviderRegistry } from "./registry";
 import { startShellPromotion } from "./shell-promotion";
 import {
@@ -45,6 +45,7 @@ import {
   DEFAULT_PTY_ROWS,
   resolveCommand,
 } from "./spawn-env";
+import { stripAnsi } from "./status-parser";
 
 // ─── AgentManager Singleton ───────────────────────────────────────────────
 
@@ -185,21 +186,14 @@ export class AgentManager {
         : false;
     const last =
       config.resumeSession && !knownSession
-        ? await lastLocalSession(agent.cliType, cwd)
+        ? await lastLocalSession(
+            agent.cliType,
+            cwd,
+            liveSessionIds(db, agent.projectId, agent.cliType),
+          )
         : undefined;
-    const priorSession = last === undefined ? null : last !== null;
     const { shell, args, env, stdinCommand, enableMarker, isPlainShell, blindResume } =
-      buildPtyInvocation(
-        db,
-        agent,
-        config,
-        cwd,
-        registry,
-        cliConfig,
-        project.path,
-        priorSession,
-        last?.sessionId ?? null,
-      );
+      buildPtyInvocation(db, agent, config, cwd, registry, cliConfig, project.path, last);
 
     if (!isPlainShell) attachOutputPipeline(this.getSessionMaps(), agent);
 
@@ -213,15 +207,20 @@ export class AgentManager {
       (db2, agentId) => cleanupWorktree(db2, agentId, this.worktrees),
       AgentManager.MAX_SCROLLBACK_BYTES,
     );
-    if (blindResume) {
-      noteBlindResume(agent.id);
-      const onExit = callbacks.onExit;
-      callbacks.onExit = (exitCode: number) => {
-        const missed = takeMissedResume(agent.id, exitCode, this.stopRequested.has(agent.id));
-        onExit(exitCode);
-        if (missed) reportMissedResume(agent);
-      };
-    }
+    if (blindResume) noteBlindResume(agent.id);
+    const onExit = callbacks.onExit;
+    callbacks.onExit = (exitCode: number) => {
+      const missed = takeMissedResume(agent.id, {
+        exitCode,
+        stopRequested: this.stopRequested.has(agent.id),
+        cliType: agent.cliType,
+        tail: stripAnsi(this.scrollbackBuffers.get(agent.id)?.join("").slice(-4096) ?? ""),
+      });
+      onExit(exitCode);
+      // The session it ran (or failed to find) changed this folder's list
+      forgetLocalSessions(agent.cliType, cwd);
+      if (missed) reportMissedResume(agent);
+    };
 
     const { pid } = await ptyHost.createSession(
       agent.id,
