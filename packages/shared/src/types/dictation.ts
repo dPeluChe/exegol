@@ -1,5 +1,8 @@
 /** Local voice dictation (T201 phase 2): settings, status, history and the shortcut chord */
 
+/** Mic audio is resampled to this before it leaves the renderer; every model takes it */
+export const DICTATION_SAMPLE_RATE = 16_000;
+
 /** Where a dictation went: a pane kind, a text field of the app, or the clipboard */
 export const DICTATION_TARGET_KINDS = [
   "terminal",
@@ -65,6 +68,10 @@ export interface DictationStatus {
     sizeBytes: number;
   };
   engine: DictationEngineState;
+  /** The speech engine (a native addon) loads on this system; checked once in its process */
+  engineAvailable: boolean;
+  /** Why it does not, for Settings > Dictation */
+  engineError: string | null;
 }
 
 export interface DictationHistoryItem {

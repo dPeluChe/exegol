@@ -1,4 +1,3 @@
-import type { DictationStatus } from "@exegol/shared";
 import { create } from "zustand";
 
 /** idle: nothing on screen. The other phases show the overlay */
@@ -20,8 +19,9 @@ interface DictationStore {
   /** Streaming models: what was understood so far */
   partial: string;
   error: string | null;
-  status: DictationStatus | null;
   modelLoading: boolean;
+  /** The overlay's Download was pressed: dictation starts once the model is ready */
+  downloadRequested: boolean;
   set: (patch: Partial<Omit<DictationStore, "set">>) => void;
 }
 
@@ -32,8 +32,8 @@ export const useDictationStore = create<DictationStore>((set) => ({
   anchorPaneId: null,
   partial: "",
   error: null,
-  status: null,
   modelLoading: false,
+  downloadRequested: false,
   set: (patch) => set(patch),
 }));
 

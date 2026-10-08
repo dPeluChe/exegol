@@ -344,7 +344,6 @@
       "copyHistory",
       "deleteHistory",
       "history",
-      "insertHistory",
       "openMicSettings",
       "requestMic",
       "start",
@@ -413,10 +412,11 @@
     "agent:turn-changes",
     "models:progress",
     "dictation:audio",
+    "dictation:mark-browser",
     "dictation:insert-browser",
     "dictation:partial",
     "dictation:engine",
     "dictation:key",
-    "dictation:insert"
+    "dictation:done"
   ]
 }

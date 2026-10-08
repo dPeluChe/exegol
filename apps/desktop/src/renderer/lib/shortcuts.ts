@@ -1,3 +1,9 @@
+import {
+  type DictationSettings,
+  dictationSettingsOf,
+  formatChord,
+  parseChord,
+} from "@exegol/shared";
 import { appKeys, IS_MAC } from "./keymap";
 /**
  * Every in-app shortcut, one list for Settings > Shortcuts and the Cmd+/ overlay (the three
@@ -213,6 +219,16 @@ export const SHORTCUTS: Shortcut[] = MAC_SHORTCUTS.map((s) => ({
   ...s,
   keys: IS_MAC ? s.keys : (s.otherKeys ?? appKeys(s.keys)),
 }));
+
+/** The list with the dictation chord the user set (Settings > Dictation), without it when off */
+export function shortcutsWith(dictation: Partial<DictationSettings> | undefined): Shortcut[] {
+  const d = dictationSettingsOf(dictation);
+  const chord = d.enabled ? parseChord(d.shortcut) : null;
+  return SHORTCUTS.flatMap((s) => {
+    if (s.id !== "dictation") return [s];
+    return chord ? [{ ...s, keys: formatChord(chord, IS_MAC) }] : [];
+  });
+}
 
 /** "CommandOrControl+Shift+E" as the lists write keys. An Electron accelerator, so plain Ctrl
  *  off macOS (not the app's Ctrl+Shift) */

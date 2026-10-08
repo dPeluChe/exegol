@@ -1,8 +1,14 @@
-import { DEFAULT_DICTATION_SHORTCUT } from "@exegol/shared";
+import { DEFAULT_DICTATION_SETTINGS, DEFAULT_DICTATION_SHORTCUT } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { shortcutClash } from "../shortcuts";
+import { shortcutClash, shortcutsWith } from "../shortcuts";
 import { StreamResampler } from "./resampler";
-import { confirmTarget, type FocusSnapshot, resolveTarget, sanitizeDictation } from "./target";
+import {
+  answersPrompt,
+  confirmTarget,
+  type FocusSnapshot,
+  resolveTarget,
+  sanitizeDictation,
+} from "./target";
 import { rms, shouldAutoStop, updateVad, VAD_START } from "./vad";
 
 const sine = (rate: number, seconds: number, hz = 440, amp = 0.5) =>
@@ -110,6 +116,28 @@ describe("dictation target", () => {
     expect(confirmTarget(start, otherProject).kind).toBe("clipboard");
   });
 
+  it("targets a focused Dashboard mirror's pane, else copies with a reason", () => {
+    const mirror = { agentId: "a9", projectId: "p9", paneId: "pane9", live: true };
+    const dash = { ...base, activeView: "dashboard", mirror };
+    expect(resolveTarget(dash)).toEqual({
+      kind: "terminal",
+      paneId: "pane9",
+      projectId: "p9",
+      agentId: "a9",
+    });
+    const noPane = resolveTarget({ ...dash, mirror: { ...mirror, paneId: null } });
+    expect(noPane.kind).toBe("clipboard");
+    expect(noPane.kind === "clipboard" && noPane.why).toBeTruthy();
+  });
+
+  it("never answers an agent's question", () => {
+    const at = { status: "waiting_input" as const, dialogOnScreen: false, awaitingAnswer: false };
+    expect(answersPrompt(at)).toBe(false);
+    expect(answersPrompt({ ...at, dialogOnScreen: true })).toBe(true);
+    expect(answersPrompt({ ...at, awaitingAnswer: true })).toBe(true);
+    expect(answersPrompt({ ...at, status: "running", awaitingAnswer: true })).toBe(false);
+  });
+
   it("strips escape sequences and control characters", () => {
     expect(sanitizeDictation(" hello\x1b[201~; rm -rf ~\r\n")).toBe("hello[201~; rm -rf ~");
     expect(sanitizeDictation("two\nlines\t")).toBe("two\nlines");
@@ -127,5 +155,11 @@ describe("dictation shortcut", () => {
     expect(shortcutClash("Cmd+5")).toBe("Project N");
     expect(shortcutClash("Cmd+Option+3")).toBe("Workspace Tab N");
     expect(shortcutClash("Cmd+Shift+M")).toBeNull();
+  });
+
+  it("lists the chord the user set, and none with dictation off", () => {
+    const keys = (d: object) => shortcutsWith(d).find((s) => s.id === "dictation")?.keys;
+    expect(keys({ ...DEFAULT_DICTATION_SETTINGS, shortcut: "Cmd+Shift+M" })).toMatch(/Shift\+M$/);
+    expect(keys({ ...DEFAULT_DICTATION_SETTINGS, enabled: false })).toBeUndefined();
   });
 });

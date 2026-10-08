@@ -1,4 +1,4 @@
-import { Copy, CornerDownLeft, Trash2 } from "lucide-react";
+import { Copy, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useDictationHistory, useDictationHistoryAction } from "../../hooks/use-trpc-dictation";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -15,7 +15,7 @@ const when = (ms: number) =>
     minute: "2-digit",
   });
 
-/** The last dictations: copy again, type into the main window's focused pane, delete */
+/** The last dictations: copy again (paste it where it goes: this window cannot see the pane), delete */
 export function DictationHistory() {
   const { data: items, isLoading } = useDictationHistory();
   const action = useDictationHistoryAction();
@@ -63,15 +63,6 @@ export function DictationHistory() {
                 onClick={() => action.mutate({ action: "copyHistory", id: item.id })}
               >
                 <Copy className="h-3 w-3" />
-              </button>
-              <button
-                type="button"
-                title="Insert into the focused pane"
-                aria-label="Insert into the focused pane"
-                className={ICON_BUTTON}
-                onClick={() => action.mutate({ action: "insertHistory", id: item.id })}
-              >
-                <CornerDownLeft className="h-3 w-3" />
               </button>
               <button
                 type="button"

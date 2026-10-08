@@ -19,6 +19,7 @@ import { openInBrowser } from "../../lib/open-in-browser";
 import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { IdePicker } from "./IdePicker";
+import { SwitchRow } from "./settings-ui";
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
@@ -222,50 +223,16 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
               icon: MessageSquare,
               value: settings.toastsEnabled,
             },
-          ].map((opt) => {
-            const Icon = opt.icon;
-            return (
-              <button
-                key={opt.key}
-                type="button"
-                onClick={() => onChange({ [opt.key]: !opt.value })}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-                  opt.value
-                    ? "border-accent bg-accent/10"
-                    : "border-border bg-bg-secondary hover:border-accent/30 hover:bg-white/5",
-                )}
-              >
-                <Icon
-                  className={cn("h-4 w-4 shrink-0", opt.value ? "text-accent" : "text-text-muted")}
-                />
-                <div className="flex-1">
-                  <p
-                    className={cn(
-                      "text-xs font-medium",
-                      opt.value ? "text-accent" : "text-text-secondary",
-                    )}
-                  >
-                    {opt.label}
-                  </p>
-                  <p className="text-[10px] text-text-muted">{opt.description}</p>
-                </div>
-                <div
-                  className={cn(
-                    "flex h-5 w-9 items-center rounded-full px-0.5 transition-colors",
-                    opt.value ? "bg-accent" : "bg-border",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "h-4 w-4 rounded-full bg-white shadow transition-transform",
-                      opt.value ? "translate-x-4" : "translate-x-0",
-                    )}
-                  />
-                </div>
-              </button>
-            );
-          })}
+          ].map((opt) => (
+            <SwitchRow
+              key={opt.key}
+              label={opt.label}
+              description={opt.description}
+              icon={opt.icon}
+              value={opt.value}
+              onToggle={() => onChange({ [opt.key]: !opt.value })}
+            />
+          ))}
         </div>
       </div>
 

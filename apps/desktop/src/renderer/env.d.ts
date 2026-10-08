@@ -104,6 +104,7 @@ interface Window {
     onMetrics: (callback: (metrics: SystemMetricsEvent) => void) => () => void;
     dictation: {
       sendAudio: (sessionId: string, samples: Float32Array) => void;
+      markBrowser: (input: { paneId: string; projectId: string }) => Promise<boolean>;
       insertInBrowser: (input: {
         paneId: string;
         projectId: string;
@@ -116,7 +117,7 @@ interface Window {
         callback: (event: { state: import("@exegol/shared").DictationEngineState }) => void,
       ) => () => void;
       onKey: (callback: (event: { kind: "down" | "up" | "escape" }) => void) => () => void;
-      onInsert: (callback: (event: { text: string }) => void) => () => void;
+      onDone: (callback: () => void) => () => void;
     };
     onModelProgress: (
       callback: (event: import("@exegol/shared").ModelProgressEvent) => void,

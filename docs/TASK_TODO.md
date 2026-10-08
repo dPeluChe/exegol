@@ -211,6 +211,9 @@ on the machine (no audio leaves it), typed into the focused pane.
 2. ~~Phase 2, dictation~~: shipped on `feat/voice-dictation` (`TASK_COMPLETED/2610.md`):
    sherpa-onnx-node in a utilityProcess, mic permission, overlay, focused-pane insert, history,
    toggle and hold-to-talk shortcut, status bar mic. Not checked live yet.
+   - Verify dictation on the real AppImage/.deb before release: the Linux addon's RUNPATH is
+     `$ORIGIN` (the .so files sit beside it in `app.asar.unpacked`, so no `LD_LIBRARY_PATH`),
+     checked on the npm tarball only
 3. Later:
    - Whisper through whisper-server (whisper.cpp, Metal) for faster Whisper on Apple Silicon
    - Apple SpeechAnalyzer on macOS 26+ as a no-download engine

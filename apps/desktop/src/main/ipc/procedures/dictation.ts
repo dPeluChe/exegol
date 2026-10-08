@@ -1,7 +1,7 @@
 import { DICTATION_TARGET_KINDS } from "@exegol/shared";
 import { clipboard, ipcMain } from "electron";
 import { z } from "zod";
-import { insertTextInBrowserPane } from "../../browser/electron-host";
+import { insertTextInBrowserPane, markDictationPage } from "../../browser/electron-host";
 import {
   clearDictations,
   deleteDictation,
@@ -18,7 +18,6 @@ import {
   startDictation,
   stopDictation,
 } from "../../dictation/service";
-import { getMainWindow } from "../../windows/main-window-ref";
 import { publicProcedure, router } from "../trpc";
 
 const sessionId = z.string().regex(/^[A-Za-z0-9_-]{8,32}$/);
@@ -28,6 +27,8 @@ const historyId = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/) });
 export const dictationRouter = router({
   status: publicProcedure.query(({ ctx }) => dictationStatus(ctx.db)),
 
+  /** Every dictation start: the macOS prompt when not asked yet, then arms the main window's
+   *  getUserMedia for a few seconds (media is denied everywhere else) */
   requestMic: publicProcedure.mutation(async () => ({ mic: await askMic() })),
 
   openMicSettings: publicProcedure.mutation(() => {
@@ -73,21 +74,15 @@ export const dictationRouter = router({
     if (item) clipboard.writeText(item.text);
     return { ok: !!item };
   }),
-
-  /** From the Settings window: the main window types it into its own focused pane */
-  insertHistory: publicProcedure.input(historyId).mutation(({ ctx, input }) => {
-    const item = getDictation(ctx.db, input.id);
-    const win = getMainWindow();
-    if (!item || !win || win.isDestroyed()) return { ok: false };
-    win.webContents.send("dictation:insert", { text: item.text });
-    return { ok: true };
-  }),
 });
 
 export function registerDictationIpc(): void {
   setDictationListening(dictationActive);
   ipcMain.on("dictation:audio", (_event, id: unknown, samples: unknown) =>
     dictationAudio(id, samples),
+  );
+  ipcMain.handle("dictation:mark-browser", (event, input) =>
+    markDictationPage(event.sender, input ?? {}),
   );
   ipcMain.handle("dictation:insert-browser", (event, input) =>
     insertTextInBrowserPane(event.sender, input ?? {}),

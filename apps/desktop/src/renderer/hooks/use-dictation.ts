@@ -1,4 +1,5 @@
 import {
+  type DictationStatus,
   dictationSettingsOf,
   type KeyChord,
   parseChord,
@@ -7,10 +8,11 @@ import {
 } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  bindDictationQueries,
   chordDown,
   chordUp,
   dismissDictation,
-  insertFromHistory,
+  leaveWindow,
 } from "../lib/dictation/controller";
 import {
   dictationChord,
@@ -21,19 +23,24 @@ import { IS_MAC } from "../lib/keymap";
 import { useDictationStore } from "../stores/dictation";
 import { useMountEffect } from "./use-mount-effect";
 import { useSettings } from "./use-trpc";
+import { DICTATION_STATUS_KEY, useDictationStatus } from "./use-trpc-dictation";
 
 /** The dictation shortcut (toggle, or hold to talk) and its events. Capture phase: Monaco and
  *  xterm would otherwise take the chord first (Cmd+Shift+Space is Monaco's parameter hints) */
 export function useDictation() {
   const queryClient = useQueryClient();
   useSettings();
+  useDictationStatus();
 
   useMountEffect(() => {
+    bindDictationQueries(queryClient);
     let cached: { key: string; chord: KeyChord | null } = { key: "", chord: null };
     setDictationChordSource(() => {
       const saved = queryClient.getQueryData<Settings>(["settings"])?.dictation;
       const d = dictationSettingsOf(saved);
-      const key = d.enabled ? d.shortcut : "";
+      // No speech engine on this system: the chord stays the app's (or the terminal's)
+      const engine = queryClient.getQueryData<DictationStatus>(DICTATION_STATUS_KEY);
+      const key = d.enabled && engine?.engineAvailable ? d.shortcut : "";
       if (key !== cached.key) cached = { key, chord: key ? parseChord(key) : null };
       return cached.chord;
     });
@@ -57,7 +64,16 @@ export function useDictation() {
     };
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", onKeyUp, true);
-    window.addEventListener("blur", chordUp);
+    // Focus moving into a browser pane's page blurs the window but keeps the document focused
+    const onBlur = () =>
+      setTimeout(() => {
+        if (!document.hasFocus()) leaveWindow();
+      }, 0);
+    const onVisibility = () => {
+      if (document.hidden) leaveWindow();
+    };
+    window.addEventListener("blur", onBlur);
+    document.addEventListener("visibilitychange", onVisibility);
     const offKey = window.api.dictation.onKey(({ kind }) => {
       if (kind === "down") chordDown();
       else if (kind === "up") chordUp();
@@ -70,16 +86,16 @@ export function useDictation() {
     const offEngine = window.api.dictation.onEngine(({ state }) =>
       useDictationStore.getState().set({ modelLoading: state === "loading" }),
     );
-    const offInsert = window.api.dictation.onInsert(({ text }) => insertFromHistory(text));
     return () => {
       setDictationChordSource(() => null);
+      bindDictationQueries(null);
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
-      window.removeEventListener("blur", chordUp);
+      window.removeEventListener("blur", onBlur);
+      document.removeEventListener("visibilitychange", onVisibility);
       offKey();
       offPartial();
       offEngine();
-      offInsert();
     };
   });
 }

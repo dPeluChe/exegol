@@ -15,7 +15,7 @@ import { IS_MAC } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
-import { SMALL_BUTTON } from "./settings-ui";
+import { SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
 interface Props {
   settings: Settings;
@@ -189,7 +189,6 @@ function MicSection() {
   const mic = useMicAction();
   if (!status) return null;
   const label = MIC_LABEL[status.mic] ?? MIC_LABEL.unknown;
-  const mac = status.platform === "darwin";
   return (
     <div>
       <h3 className={SECTION}>Microphone and model</h3>
@@ -203,12 +202,12 @@ function MicSection() {
               {label.text}
             </span>
           )}
-          {mac && status.mic === "not-determined" && (
+          {IS_MAC && status.mic === "not-determined" && (
             <button type="button" className={SMALL_BUTTON} onClick={() => mic.mutate("requestMic")}>
               Allow
             </button>
           )}
-          {mac && (status.mic === "denied" || status.mic === "restricted") && (
+          {IS_MAC && (status.mic === "denied" || status.mic === "restricted") && (
             <button
               type="button"
               className={SMALL_BUTTON}
@@ -218,6 +217,12 @@ function MicSection() {
             </button>
           )}
         </div>
+        {!status.engineAvailable && (
+          <p className="text-[10px] text-error">
+            Dictation cannot run here: {status.engineError ?? "the speech engine did not load"}. The
+            shortcut, the status bar mic and the overlay stay hidden.
+          </p>
+        )}
         {status.platform === "linux" && (
           <p className="text-[10px] text-text-muted">
             Linux has no microphone prompt: the system's default input is used.
@@ -248,51 +253,6 @@ function MicSection() {
         </div>
       </div>
     </div>
-  );
-}
-
-function SwitchRow({
-  label,
-  description,
-  value,
-  onToggle,
-}: {
-  label: string;
-  description: string;
-  value: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={cn(
-        "flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all",
-        value
-          ? "border-accent bg-accent/10"
-          : "border-border bg-bg-secondary hover:border-accent/30 hover:bg-white/5",
-      )}
-    >
-      <div className="flex-1">
-        <p className={cn("text-xs font-medium", value ? "text-accent" : "text-text-secondary")}>
-          {label}
-        </p>
-        <p className="text-[10px] text-text-muted">{description}</p>
-      </div>
-      <div
-        className={cn(
-          "flex h-5 w-9 items-center rounded-full px-0.5 transition-colors",
-          value ? "bg-accent" : "bg-border",
-        )}
-      >
-        <div
-          className={cn(
-            "h-4 w-4 rounded-full bg-white shadow transition-transform",
-            value ? "translate-x-4" : "translate-x-0",
-          )}
-        />
-      </div>
-    </button>
   );
 }
 

@@ -56,7 +56,7 @@ export const settingsRouter = router({
     // channel's 30s cache so mute toggles apply immediately.
     invalidateDesktopChannelCache();
     setMcpVerboseLogging(updated.mcpVerboseLogging === true);
-    applyDictationSettings(dictationSettingsOf(updated.dictation));
+    applyDictationSettings(ctx.db, dictationSettingsOf(updated.dictation));
     return updated;
   }),
 

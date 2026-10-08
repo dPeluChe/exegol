@@ -221,16 +221,18 @@ contextBridge.exposeInMainWorld("api", {
     };
   },
   /** T201 local dictation: 16 kHz audio out, partial text, engine state, chord keys from a
-   *  browser pane's page, and history inserts sent from the Settings window */
+   *  browser pane's page, and a saved dictation (history refresh) */
   dictation: {
     sendAudio: (sessionId: string, samples: Float32Array) =>
       safe.send("dictation:audio", sessionId, samples),
+    markBrowser: (input: { paneId: string; projectId: string }) =>
+      safe.invoke("dictation:mark-browser", input) as Promise<boolean>,
     insertInBrowser: (input: { paneId: string; projectId: string; text: string }) =>
       safe.invoke("dictation:insert-browser", input) as Promise<boolean>,
     onPartial: (callback: (event: unknown) => void) => listen("dictation:partial", callback),
     onEngine: (callback: (event: unknown) => void) => listen("dictation:engine", callback),
     onKey: (callback: (event: unknown) => void) => listen("dictation:key", callback),
-    onInsert: (callback: (event: unknown) => void) => listen("dictation:insert", callback),
+    onDone: (callback: (event: unknown) => void) => listen("dictation:done", callback),
   },
   onModelProgress: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);

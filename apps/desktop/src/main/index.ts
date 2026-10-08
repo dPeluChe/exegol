@@ -18,6 +18,7 @@ import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
 import { stopEngine } from "./dictation/engine";
 import { forwardDictationKeys } from "./dictation/keys";
+import { installMediaPermissions } from "./dictation/mic";
 import { applyDictationSettings, dictationSettings } from "./dictation/service";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerDictationIpc } from "./ipc/procedures/dictation";
@@ -87,7 +88,8 @@ app.whenReady().then(async () => {
   registerFloatingIpcHandlers();
   registerSettingsIpcHandlers();
   registerDictationIpc();
-  applyDictationSettings(dictationSettings(getDb()));
+  applyDictationSettings(getDb(), dictationSettings(getDb()));
+  installMediaPermissions();
   installAgentBrowser(getDb());
   registerGlobalHotkey(settings.globalHotkey, showMainWindow);
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window

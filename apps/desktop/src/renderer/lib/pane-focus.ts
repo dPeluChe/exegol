@@ -5,6 +5,11 @@ import {
   useWorkspaceStore,
 } from "../stores/workspace";
 
+/** The element of a workspace pane (WorkspacePane's data-pane-id) */
+export function paneRoot(paneId: string): Element | null {
+  return document.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`);
+}
+
 /** The pane after `current` (or before it), wrapping around; the first one without a current */
 export function adjacentPane(
   paneIds: string[],

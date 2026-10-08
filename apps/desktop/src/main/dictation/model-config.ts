@@ -1,5 +1,5 @@
 import { isAbsolute, join, relative } from "node:path";
-import type { SpeechModelEntry } from "@exegol/shared";
+import { DICTATION_SAMPLE_RATE, type SpeechModelEntry } from "@exegol/shared";
 
 /** What the engine process builds: an offline recognizer (decode after stop) or an online one
  *  (partial text while listening). `config` is sherpa-onnx-node's recognizer config */
@@ -21,7 +21,7 @@ const offline = (
 ): RecognizerSpec => ({
   kind: "offline",
   config: {
-    featConfig: { sampleRate: 16_000, featureDim },
+    featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim },
     modelConfig: { ...modelConfig, numThreads, provider: "cpu", debug: 0 },
   },
 });
@@ -67,7 +67,7 @@ const BUILDERS: Record<string, Builder> = {
   "nemotron-3.5-asr-streaming-0.6b-560ms-int8": (file, numThreads) => ({
     kind: "online",
     config: {
-      featConfig: { sampleRate: 16_000, featureDim: 128 },
+      featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim: 128 },
       modelConfig: {
         transducer: transducer(file),
         tokens: file("tokens.txt"),

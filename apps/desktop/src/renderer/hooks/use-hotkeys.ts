@@ -3,7 +3,7 @@ import { focusAddressBar } from "../lib/address-bar";
 import { confirmClosePanes } from "../lib/close-guard";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
-import { cyclePane, focusActivePane } from "../lib/pane-focus";
+import { cyclePane, focusActivePane, paneRoot } from "../lib/pane-focus";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
@@ -214,7 +214,7 @@ function focusedBrowserPaneId(): string | null {
 
 function focusBrowserAddress(): boolean {
   const paneId = focusedBrowserPaneId();
-  const root = paneId && document.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`);
+  const root = paneId && paneRoot(paneId);
   return !!root && focusAddressBar(root);
 }
 

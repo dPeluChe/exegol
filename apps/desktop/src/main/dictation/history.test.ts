@@ -1,7 +1,7 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
-import { addDictation, hasDictations, listDictations, pruneDictations } from "./history";
+import { addDictation, listDictations, pruneDictations } from "./history";
 
 const DAY = 86_400_000;
 const NOW = 1_800_000_000_000;
@@ -28,7 +28,6 @@ describe("dictation history", () => {
       ["second", null],
       ["first", "p1"],
     ]);
-    expect(hasDictations(db)).toBe(true);
   });
 
   it("drops entries older than the retention days", () => {

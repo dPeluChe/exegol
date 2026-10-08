@@ -1,14 +1,20 @@
-import { formatChord } from "@exegol/shared";
+import { dictationSettingsOf, formatChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Loader2, Mic } from "lucide-react";
+import { useSettings } from "../../hooks/use-trpc";
+import { useDictationAvailable } from "../../hooks/use-trpc-dictation";
 import { toggleDictation } from "../../lib/dictation/controller";
 import { dictationChord } from "../../lib/dictation/shortcut";
 import { IS_MAC } from "../../lib/keymap";
 import { isRecording, useDictationStore } from "../../stores/dictation";
 
-/** Mic toggle: dictates into the focused pane. mouseDown keeps the focus there */
+/** Mic toggle: dictates into the focused pane. mouseDown keeps the focus there. Hidden with
+ *  dictation off or no speech engine on this system */
 export function DictationWidget() {
   const phase = useDictationStore((s) => s.phase);
+  const available = useDictationAvailable();
+  const { data: settings } = useSettings();
+  if (!available || !dictationSettingsOf(settings?.dictation).enabled) return null;
   const recording = isRecording(phase);
   const chord = dictationChord();
   const title = recording

@@ -1,5 +1,6 @@
 import {
   DEFAULT_SPEECH_MODEL_KEY,
+  DICTATION_SAMPLE_RATE,
   type DictationSettings,
   type DictationStatus,
   type DictationTargetKind,
@@ -9,6 +10,7 @@ import {
 import type Database from "libsql";
 import { nanoid } from "nanoid";
 import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { DEFAULT_MODEL_ID, findModel, MODEL_CATALOG } from "../models/catalog";
 import { modelStatus } from "../models/manager";
@@ -19,17 +21,17 @@ import {
   ensureModel,
   feedAudio,
   finishSession,
+  probeEngine,
   setIdleUnload,
   stopEngine,
 } from "./engine";
-import { addDictation, hasDictations, pruneDictations } from "./history";
+import { addDictation, pruneDictations } from "./history";
 import { setDictationChord } from "./keys";
-import { micStatus } from "./mic";
+import { disarmMic, micStatus } from "./mic";
 import { hasRecognizer } from "./model-config";
 
 /** Set once a recording started here: Linux and Windows have no OS answer to remember */
 const MIC_USED_KEY = "dictation_mic_used";
-const SESSION_ID_RE = /^[A-Za-z0-9_-]{8,32}$/;
 
 interface Active {
   id: string;
@@ -45,9 +47,13 @@ export function dictationSettings(db: Database.Database): DictationSettings {
   return dictationSettingsOf(getAppSettings(db).dictation);
 }
 
-/** Startup and every settings save: the idle timer, the webview chord, off frees the model */
-export function applyDictationSettings(settings: DictationSettings): void {
+/** Startup and every settings save: the idle timer, the webview chord, retention (a lowered one
+ *  applies now), off frees the model */
+export function applyDictationSettings(db: Database.Database, settings: DictationSettings): void {
   setIdleUnload(settings.idleUnloadMinutes);
+  if (pruneDictations(db, { days: settings.retentionDays, max: settings.retentionMax }) > 0) {
+    broadcast("dictation:done", {});
+  }
   setDictationChord(settings.enabled ? parseChord(settings.shortcut) : null);
   if (!settings.enabled) {
     if (active) cancelDictation(active.id);
@@ -70,15 +76,14 @@ async function pickModel(db: Database.Database) {
 }
 
 export async function dictationStatus(db: Database.Database): Promise<DictationStatus> {
-  const { entry, ready } = await pickModel(db);
+  const [{ entry, ready }, engine] = await Promise.all([pickModel(db), probeEngine()]);
   const mic = micStatus();
   return {
     platform: process.platform,
     mic,
     micEverGranted:
       (process.platform === "darwin" && mic === "granted") ||
-      getJsonSetting(db, MIC_USED_KEY, false) ||
-      hasDictations(db),
+      getJsonSetting(db, MIC_USED_KEY, false),
     model: {
       id: entry.id,
       name: entry.name,
@@ -87,12 +92,16 @@ export async function dictationStatus(db: Database.Database): Promise<DictationS
       sizeBytes: entry.sizeBytes,
     },
     engine: engineState(),
+    engineAvailable: engine.ok,
+    engineError: engine.error,
   };
 }
 
 export async function startDictation(db: Database.Database) {
   const settings = dictationSettings(db);
+  disarmMic();
   if (!settings.enabled) throw new Error("dictation is off in Settings > Dictation");
+  if (!(await probeEngine()).ok) throw new Error("the speech engine cannot run on this system");
   const { entry, ready } = await pickModel(db);
   if (!ready) throw new Error("no speech model is downloaded");
   if (active) cancelDictation(active.id);
@@ -107,7 +116,7 @@ export async function startDictation(db: Database.Database) {
 
 export function dictationAudio(sessionId: unknown, samples: unknown): void {
   if (!active || sessionId !== active.id || !(samples instanceof Float32Array)) return;
-  if (samples.length === 0 || samples.length > 16_000) return;
+  if (samples.length === 0 || samples.length > DICTATION_SAMPLE_RATE) return;
   feedAudio(active.id, samples);
 }
 
@@ -120,7 +129,7 @@ export async function stopDictation(
     targetKind: DictationTargetKind;
   },
 ): Promise<{ text: string }> {
-  if (!active || active.id !== input.sessionId || !SESSION_ID_RE.test(input.sessionId)) {
+  if (!active || active.id !== input.sessionId) {
     throw new Error("this dictation is no longer running");
   }
   const { modelId, startedAt } = active;
@@ -140,6 +149,7 @@ export async function stopDictation(
       targetKind: input.targetKind,
     });
     pruneDictations(db, { days: settings.retentionDays, max: settings.retentionMax });
+    broadcast("dictation:done", {});
   }
   return { text };
 }

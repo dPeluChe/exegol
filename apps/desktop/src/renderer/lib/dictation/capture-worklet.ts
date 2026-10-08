@@ -1,4 +1,5 @@
 // AudioWorklet: the mic's first channel, resampled to 16 kHz, posted in ~100 ms chunks
+import { DICTATION_SAMPLE_RATE } from "@exegol/shared";
 import { StreamResampler } from "./resampler";
 
 declare const sampleRate: number;
@@ -7,11 +8,11 @@ declare class AudioWorkletProcessor {
 }
 declare function registerProcessor(name: string, ctor: new () => AudioWorkletProcessor): void;
 
-const TARGET_RATE = 16_000;
-const CHUNK = 1_600;
+/** ~100 ms */
+const CHUNK = DICTATION_SAMPLE_RATE / 10;
 
 class CaptureProcessor extends AudioWorkletProcessor {
-  private readonly resampler = new StreamResampler(sampleRate, TARGET_RATE);
+  private readonly resampler = new StreamResampler(sampleRate, DICTATION_SAMPLE_RATE);
   private pending: Float32Array[] = [];
   private size = 0;
 

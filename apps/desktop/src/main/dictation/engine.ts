@@ -1,17 +1,20 @@
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
-import type { DictationEngineState } from "@exegol/shared";
+import { type DictationEngineState, DICTATION_SAMPLE_RATE as SAMPLE_RATE } from "@exegol/shared";
 import { type UtilityProcess, utilityProcess } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { findModel } from "../models/catalog";
 import { MODELS_DIR, modelDir } from "../models/manager";
+import { getMainWindow } from "../windows/main-window-ref";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
-import { SAMPLE_RATE } from "./engine-protocol";
 import { recognizerSpec } from "./model-config";
 
 const LOAD_TIMEOUT_MS = 120_000;
 const DECODE_TIMEOUT_MS = 180_000;
+const PROBE_TIMEOUT_MS = 20_000;
+/** A crashed engine comes back after these delays; one more crash and it stays down */
+const RESPAWN_DELAYS_MS = [1_000, 5_000, 30_000];
 
 interface Waiter<T> {
   resolve: (value: T) => void;
@@ -28,6 +31,9 @@ const finals = new Map<string, Waiter<string>>();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let idleMs = 10 * 60_000;
 let lastTouch = 0;
+let crashes = 0;
+let respawnTimer: ReturnType<typeof setTimeout> | null = null;
+let probe: Promise<{ ok: boolean; error: string | null }> | null = null;
 
 export const engineState = (): DictationEngineState => state;
 
@@ -59,6 +65,8 @@ function waiter<T>(ms: number, what: string, done: (w: Waiter<T>) => void): Prom
 
 function onReply(msg: EngineReply): void {
   switch (msg.type) {
+    case "ready":
+      return;
     case "loaded":
       setState("ready");
       loadWaiter?.resolve();
@@ -71,10 +79,16 @@ function onReply(msg: EngineReply): void {
       loadWaiter?.reject(new Error(`the model did not load: ${msg.error}`));
       loadWaiter = null;
       return;
-    case "partial":
-      broadcast("dictation:partial", { sessionId: msg.sessionId, text: msg.text });
+    case "partial": {
+      // Dictated words go to the window that dictates, not to every window
+      const win = getMainWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("dictation:partial", { sessionId: msg.sessionId, text: msg.text });
+      }
       return;
+    }
     case "final":
+      crashes = 0;
       finals.get(msg.sessionId)?.resolve(msg.text);
       finals.delete(msg.sessionId);
       return;
@@ -86,19 +100,73 @@ function onReply(msg: EngineReply): void {
   }
 }
 
+const fork = (): UtilityProcess =>
+  utilityProcess.fork(join(__dirname, "dictation-engine.js"), [`--models-root=${MODELS_DIR}`], {
+    serviceName: "Exegol Dictation",
+    stdio: "ignore",
+  });
+
 function spawn(): UtilityProcess {
-  const proc = utilityProcess.fork(
-    join(__dirname, "dictation-engine.js"),
-    [`--models-root=${MODELS_DIR}`],
-    { serviceName: "Exegol Dictation", stdio: "ignore" },
-  );
+  const proc = fork();
   proc.on("message", (msg: EngineReply) => onReply(msg));
   proc.on("exit", (code) => {
     if (child !== proc) return;
-    if (code !== 0) logger.warn(`[Dictation] engine exited with code ${code}`);
+    const wanted = modelId;
     reset();
+    if (code !== 0) onCrash(code, wanted);
   });
   return proc;
+}
+
+/** Back with the same model after a delay; after the last one it stays down until asked again */
+function onCrash(code: number, wanted: string | null): void {
+  if (!wanted) {
+    logger.warn(`[Dictation] engine exited with code ${code}`);
+    return;
+  }
+  const delay = RESPAWN_DELAYS_MS[crashes++];
+  if (delay === undefined) {
+    logger.warn(`[Dictation] engine exited with code ${code} again; not restarted`);
+    setState("failed");
+    return;
+  }
+  logger.warn(`[Dictation] engine exited with code ${code}; restarting in ${delay / 1000}s`);
+  respawnTimer = setTimeout(() => {
+    respawnTimer = null;
+    if (!child) ensureModel(wanted).catch(() => {});
+  }, delay);
+  respawnTimer.unref?.();
+}
+
+/** Loads the addon once in a throwaway engine process: the dictation UI hides when it cannot */
+export function probeEngine(): Promise<{ ok: boolean; error: string | null }> {
+  probe ??= new Promise((resolve) => {
+    let proc: UtilityProcess;
+    try {
+      proc = fork();
+    } catch (err) {
+      resolve({ ok: false, error: err instanceof Error ? err.message : String(err) });
+      return;
+    }
+    const done = (ok: boolean, error: string | null) => {
+      clearTimeout(timer);
+      proc.removeAllListeners();
+      proc.kill();
+      if (!ok) logger.warn(`[Dictation] speech engine unavailable: ${error}`);
+      resolve({ ok, error });
+    };
+    const timer = setTimeout(
+      () => done(false, "the speech engine did not start"),
+      PROBE_TIMEOUT_MS,
+    );
+    proc.on("message", (msg: EngineReply) => {
+      if (msg.type === "ready") done(true, null);
+    });
+    proc.on("exit", (code) =>
+      done(false, `the speech engine could not load on this system (exit ${code})`),
+    );
+  });
+  return probe;
 }
 
 function reset(): void {
@@ -179,6 +247,9 @@ function touch(): void {
 export function stopEngine(): void {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = null;
+  if (respawnTimer) clearTimeout(respawnTimer);
+  respawnTimer = null;
+  crashes = 0;
   const proc = child;
   if (!proc) return;
   reset();

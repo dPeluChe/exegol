@@ -1,20 +1,25 @@
 import {
+  DICTATION_SAMPLE_RATE,
   type DictationSettings,
   type DictationStatus,
   dictationSettingsOf,
-  LIVE_STATUSES,
+  type ScreenDialog,
   type Settings,
 } from "@exegol/shared";
-import { useAgentStore } from "../../stores/agents";
+import type { QueryClient } from "@tanstack/react-query";
+import { DICTATION_STATUS_KEY, fetchDictationStatus } from "../../hooks/use-trpc-dictation";
+import { findAgentPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { pasteToAgent } from "../agent-input";
+import { isPasteTarget, pasteToAgent, submitToAgent } from "../agent-input";
+import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
 import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
 import {
+  answersPrompt,
   confirmTarget,
   type DictationTarget,
   type FocusSnapshot,
@@ -44,6 +49,12 @@ interface Run {
 let run: Run | null = null;
 let pressedAt = 0;
 let holdCandidate = false;
+let queryClient: QueryClient | null = null;
+
+/** The app's query cache: settings and dictation status are read and written there */
+export function bindDictationQueries(client: QueryClient | null): void {
+  queryClient = client;
+}
 
 export const currentAnalyser = (): AnalyserNode | null => run?.capture?.analyser ?? null;
 
@@ -62,7 +73,21 @@ function focusedField(): HTMLElement | null {
   return el.isContentEditable ? el : null;
 }
 
-function snapshot(): { target: DictationTarget; field: HTMLElement | null } {
+/** Dashboard: the watched session whose mirror has the focus, and its pane in its project */
+function focusedMirror(): FocusSnapshot["mirror"] {
+  const card = document.activeElement?.closest<HTMLElement>("[data-mirror-agent-id]");
+  const agentId = card?.dataset.mirrorAgentId;
+  const agent = agentId ? useAgentStore.getState().agents[agentId] : undefined;
+  if (!agentId || !agent) return undefined;
+  return {
+    agentId,
+    projectId: agent.projectId,
+    paneId: findAgentPane(agentId, agent.projectId)?.paneId ?? null,
+    live: isPasteTarget(agent),
+  };
+}
+
+function snapshot(): { target: DictationTarget; field: HTMLElement | null; anchor: string | null } {
   const projectId = useAppStore.getState().activeProjectId;
   const { focusedPaneId, projectWorkspaces } = useWorkspaceStore.getState();
   const pane =
@@ -74,14 +99,15 @@ function snapshot(): { target: DictationTarget; field: HTMLElement | null } {
     projectId,
     focusedPaneId,
     pane,
-    sessionLive: !!agent && LIVE_STATUSES.has(agent.status),
+    sessionLive: !!agent && isPasteTarget(agent),
     editableField: !!field,
+    mirror: focusedMirror(),
   };
-  return { target: resolveTarget(snap), field };
-}
-
-function paneRoot(paneId: string): Element | null {
-  return document.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`);
+  const target = resolveTarget(snap);
+  // A field inside a pane (the browser's address bar): the overlay still centers on the pane
+  const fieldPane = field?.closest<HTMLElement>("[data-pane-id]")?.dataset.paneId ?? null;
+  const anchor = "paneId" in target && snap.activeView === "workspace" ? target.paneId : fieldPane;
+  return { target, field, anchor };
 }
 
 function finishRun(): void {
@@ -94,7 +120,14 @@ function finishRun(): void {
 function reset(): void {
   finishRun();
   holdCandidate = false;
-  store().set({ phase: "idle", sessionId: null, partial: "", error: null, anchorPaneId: null });
+  store().set({
+    phase: "idle",
+    sessionId: null,
+    partial: "",
+    error: null,
+    anchorPaneId: null,
+    downloadRequested: false,
+  });
 }
 
 function fail(message: string): void {
@@ -105,23 +138,37 @@ function fail(message: string): void {
 function onChunk(samples: Float32Array): void {
   const r = run;
   if (!r || r.cancelled) return;
-  r.vad = updateVad(r.vad, rms(samples), (samples.length / 16_000) * 1000);
+  r.vad = updateVad(r.vad, rms(samples), (samples.length / DICTATION_SAMPLE_RATE) * 1000);
   if (r.sessionId) window.api.dictation.sendAudio(r.sessionId, samples);
   else r.early.push(samples);
   if (shouldAutoStop(r.vad, r.settings.autoStopSilenceSec)) void stopDictation();
 }
 
 async function loadStatus(): Promise<DictationStatus> {
-  const status = await trpcInvoke<DictationStatus>("dictation.status");
-  store().set({ status });
+  const status = await fetchDictationStatus();
+  queryClient?.setQueryData(DICTATION_STATUS_KEY, status);
   return status;
+}
+
+const patchStatus = (patch: Partial<DictationStatus>) =>
+  queryClient?.setQueryData<DictationStatus>(DICTATION_STATUS_KEY, (s) =>
+    s ? { ...s, ...patch } : s,
+  );
+
+async function readSettings(): Promise<DictationSettings> {
+  const settings = queryClient
+    ? await queryClient.ensureQueryData({
+        queryKey: ["settings"],
+        queryFn: () => trpcInvoke<Settings>("settings.get"),
+      })
+    : await trpcInvoke<Settings>("settings.get");
+  return dictationSettingsOf(settings.dictation);
 }
 
 export async function startDictation(): Promise<void> {
   if (run || store().phase === "transcribing") return;
-  const { target, field } = snapshot();
-  const anchorPaneId = "paneId" in target ? target.paneId : null;
-  store().set({ phase: "starting", anchorPaneId, partial: "", error: null });
+  const { target, field, anchor } = snapshot();
+  store().set({ phase: "starting", anchorPaneId: anchor, partial: "", error: null });
   const current: Run = {
     settings: dictationSettingsOf(undefined),
     target,
@@ -143,18 +190,21 @@ export async function startDictation(): Promise<void> {
     store().set(patch);
   };
   try {
-    const [settings, status] = await Promise.all([
-      trpcInvoke<Settings>("settings.get"),
-      loadStatus(),
-    ]);
+    const [settings, status] = await Promise.all([readSettings(), loadStatus()]);
     if (gone()) return;
-    current.settings = dictationSettingsOf(settings.dictation);
+    current.settings = settings;
+    if (!status.engineAvailable) return reset();
     if (!current.settings.enabled) throw new Error("Dictation is off in Settings > Dictation");
     if (!status.model.ready) return endWith({ phase: "no-model" });
-    let mic = status.mic;
-    if (mic === "not-determined") {
-      mic = (await trpcMutate<{ mic: DictationStatus["mic"] }>("dictation.requestMic")).mic;
+    if (target.kind === "browser") {
+      await window.api.dictation.markBrowser({
+        paneId: target.paneId,
+        projectId: target.projectId,
+      });
     }
+    // Every start: the macOS prompt if not asked yet, and main lets this window open the mic
+    const { mic } = await trpcMutate<{ mic: DictationStatus["mic"] }>("dictation.requestMic");
+    patchStatus({ mic });
     if (mic === "denied" || mic === "restricted") return endWith({ phase: "mic-denied" });
     if (gone()) return;
     try {
@@ -172,6 +222,7 @@ export async function startDictation(): Promise<void> {
       return;
     }
     const started = await trpcMutate<{ sessionId: string; maxSeconds: number }>("dictation.start");
+    patchStatus({ micEverGranted: true });
     if (gone()) {
       void trpcMutate("dictation.cancel", { sessionId: started.sessionId });
       return;
@@ -180,7 +231,14 @@ export async function startDictation(): Promise<void> {
     for (const chunk of current.early.splice(0)) {
       window.api.dictation.sendAudio(started.sessionId, chunk);
     }
-    current.maxTimer = setTimeout(() => void stopDictation(), started.maxSeconds * 1000);
+    current.maxTimer = setTimeout(() => {
+      toast().addToast({
+        type: "info",
+        title: "Longest dictation reached",
+        body: `Stopped at ${Math.round(started.maxSeconds / 60)} min (Settings > Dictation)`,
+      });
+      void stopDictation();
+    }, started.maxSeconds * 1000);
     store().set({ phase: "listening", sessionId: started.sessionId, startedAt: Date.now() });
     if (current.stopWhenReady) void stopDictation();
   } catch (err) {
@@ -210,7 +268,7 @@ export async function stopDictation(): Promise<void> {
     return;
   }
   store().set({ phase: "transcribing" });
-  const target = await finalTarget(r);
+  const target = finalTarget(r);
   try {
     const { text } = await trpcMutate<{ text: string }>("dictation.stop", {
       sessionId,
@@ -218,6 +276,8 @@ export async function stopDictation(): Promise<void> {
       projectId: target.projectId,
       targetKind: target.kind,
     });
+    // Esc while transcribing: cancelled for real, nothing is inserted
+    if (run !== r) return;
     reset();
     const clean = sanitizeDictation(text);
     if (!clean) {
@@ -226,7 +286,7 @@ export async function stopDictation(): Promise<void> {
     }
     await insertDictation(clean, target, r.settings.pressEnter, r.field);
   } catch (err) {
-    fail(errorText(err));
+    if (run === r) fail(errorText(err));
   }
 }
 
@@ -240,12 +300,35 @@ export function cancelDictation(): void {
 }
 
 /** The start target if the focus never left it and it can still take text */
-async function finalTarget(r: Run): Promise<DictationTarget> {
+function finalTarget(r: Run): DictationTarget {
   const target = confirmTarget(r.target, snapshot().target);
   if (target.kind === "field" && (!r.field?.isConnected || document.activeElement !== r.field)) {
     return { kind: "clipboard", projectId: target.projectId };
   }
   return target;
+}
+
+async function copyInstead(text: string, title: string, body: string): Promise<void> {
+  await navigator.clipboard.writeText(text).catch(() => {});
+  toast().addToast({ type: "info", title, body });
+}
+
+/** The agent's screen holds a question: a dictation must not answer it */
+async function agentAsks(agentId: string): Promise<boolean> {
+  const { agents, attentionItems } = useAgentStore.getState();
+  const agent = agents[agentId];
+  if (!agent || !isPasteTarget(agent)) return true;
+  const dialog = await trpcInvoke<ScreenDialog | null>("agents.screenDialog", {
+    id: agentId,
+  }).catch(() => null);
+  const item = attentionItems[agentId];
+  return answersPrompt({
+    status: agent.status,
+    dialogOnScreen: !!dialog,
+    // Claude's hooks say when it asks; other CLIs' prompts show up as a screen dialog
+    awaitingAnswer:
+      agent.cliType === "claude-code" && item?.level === "action_needed" && !item.paneId,
+  });
 }
 
 export async function insertDictation(
@@ -255,8 +338,15 @@ export async function insertDictation(
   field: HTMLElement | null,
 ): Promise<void> {
   if (target.kind === "terminal") {
-    pasteToAgent(target.agentId, text);
-    if (pressEnter) window.api.terminal.write(target.agentId, "\r");
+    if (await agentAsks(target.agentId)) {
+      return copyInstead(
+        text,
+        "Dictation copied, not typed",
+        "The agent is waiting on a question or not running: paste it yourself",
+      );
+    }
+    if (pressEnter) submitToAgent(target.agentId, text, true);
+    else pasteToAgent(target.agentId, text, true);
     return;
   }
   if (target.kind === "browser") {
@@ -264,6 +354,11 @@ export async function insertDictation(
       .insertInBrowser({ paneId: target.paneId, projectId: target.projectId, text })
       .catch(() => false);
     if (ok) return;
+    return copyInstead(
+      text,
+      "Dictation copied",
+      "The page changed, is outside the project's hosts, or no editable field has the focus",
+    );
   }
   if (target.kind === "editor") {
     const root = paneRoot(target.paneId);
@@ -273,20 +368,24 @@ export async function insertDictation(
     field.focus();
     if (document.execCommand("insertText", false, text)) return;
   }
-  await navigator.clipboard.writeText(text).catch(() => {});
-  toast().addToast({
-    type: "info",
-    title: "Dictation copied",
-    body: "No focused pane could take it: paste it where you need it",
-  });
+  const why = target.kind === "clipboard" ? target.why : undefined;
+  return copyInstead(
+    text,
+    "Dictation copied",
+    why
+      ? `${why}: paste it where you need it`
+      : "No focused pane could take it: paste it where you need it",
+  );
 }
 
-/** History > Insert (from the Settings window): into whatever has the focus now */
-export function insertFromHistory(text: string): void {
-  const clean = sanitizeDictation(text);
-  if (!clean) return;
-  const { target, field } = snapshot();
-  void insertDictation(clean, target, false, field);
+/** The window lost the focus or was hidden: a dictation in progress is cancelled. Not while
+ *  starting: the macOS mic prompt takes the focus then */
+export function leaveWindow(): void {
+  holdCandidate = false;
+  if (store().phase === "listening") {
+    cancelDictation();
+    toast().addToast({ type: "info", title: "Dictation cancelled", body: "Exegol lost the focus" });
+  }
 }
 
 /** The shortcut went down: start, or stop a running dictation */
@@ -316,9 +415,18 @@ export function toggleDictation(): void {
   else if (store().phase !== "transcribing") void startDictation();
 }
 
+/** Esc, Close, Cancel: whatever the phase, nothing gets inserted */
 export function dismissDictation(): void {
+  const { phase, downloadRequested } = store();
+  if (phase === "no-model" && downloadRequested) {
+    toast().addToast({
+      type: "info",
+      title: "The download continues",
+      body: "Follow it in Settings > Models",
+    });
+  }
   if (run) cancelDictation();
-  else if (store().phase !== "transcribing") reset();
+  else reset();
 }
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));

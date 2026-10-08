@@ -10,10 +10,9 @@ export type EngineRequest =
 
 /** Engine process → main. Texts are dictated data: never logged */
 export type EngineReply =
+  | { type: "ready" }
   | { type: "loaded"; modelId: string }
   | { type: "load-failed"; modelId: string; error: string }
   | { type: "partial"; sessionId: string; text: string }
   | { type: "final"; sessionId: string; text: string }
   | { type: "failed"; sessionId: string; error: string };
-
-export const SAMPLE_RATE = 16_000;

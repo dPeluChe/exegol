@@ -4,9 +4,9 @@
  * It only opens files under the models folder main passes at fork.
  */
 import { realpathSync } from "node:fs";
+import { DICTATION_SAMPLE_RATE as SAMPLE_RATE } from "@exegol/shared";
 import * as sherpa from "sherpa-onnx-node";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
-import { SAMPLE_RATE } from "./engine-protocol";
 import { isInside, type RecognizerSpec, specPaths } from "./model-config";
 
 const ROOT_FLAG = "--models-root=";
@@ -159,3 +159,5 @@ function handle(msg: EngineRequest): void {
 }
 
 port.on("message", (event) => handle(event.data as EngineRequest));
+// The addon loaded (a static import): main's availability probe waits for this
+reply({ type: "ready" });

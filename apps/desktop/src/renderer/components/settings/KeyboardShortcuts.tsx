@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { useSettings } from "../../hooks/use-trpc";
 import { IS_MAC } from "../../lib/keymap";
-import { displayAccelerator, SHORTCUTS, type ShortcutCategory } from "../../lib/shortcuts";
+import {
+  displayAccelerator,
+  SHORTCUTS,
+  type ShortcutCategory,
+  shortcutsWith,
+} from "../../lib/shortcuts";
 import { type SegmentedTab, SegmentedTabs } from "../common/SegmentedTabs";
 
 const TABS: SegmentedTab<ShortcutCategory>[] = [
@@ -49,7 +54,9 @@ export function KeyboardShortcuts() {
     keys: displayAccelerator(settings?.globalHotkey ?? "CommandOrControl+Shift+E"),
     category: "navigation" as const,
   };
-  const filtered = [...SHORTCUTS, globalHotkey].filter((s) => s.category === activeTab);
+  const filtered = [...shortcutsWith(settings?.dictation), globalHotkey].filter(
+    (s) => s.category === activeTab,
+  );
 
   return (
     <div className="space-y-4">

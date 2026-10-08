@@ -60,9 +60,6 @@ export function clearDictations(db: Database.Database): void {
   db.prepare("DELETE FROM dictation_history").run();
 }
 
-export const hasDictations = (db: Database.Database): boolean =>
-  !!db.prepare("SELECT 1 FROM dictation_history LIMIT 1").get();
-
 /** Drops what is older than `days` and everything past the newest `max`; returns how many */
 export function pruneDictations(
   db: Database.Database,

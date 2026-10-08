@@ -306,6 +306,7 @@ function WatchCard({
         // clears the attention badge, as reading it in its pane would.
         <div
           className="mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-black/40 p-1"
+          data-mirror-agent-id={agent.id}
           onFocusCapture={() => {
             if (!openedByUser) toggleOpen(agent.id);
             if (needsInput) useAgentStore.getState().markAttentionRead(agent.id);

@@ -2,8 +2,8 @@ import { formatChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Download, Loader2, Mic, MicOff, X } from "lucide-react";
 import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
-import { useLatest } from "../../hooks/use-latest";
 import { useMountEffect } from "../../hooks/use-mount-effect";
+import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation";
 import { useModelAction, useModels } from "../../hooks/use-trpc-models";
 import {
   currentAnalyser,
@@ -13,7 +13,7 @@ import {
 } from "../../lib/dictation/controller";
 import { dictationChord } from "../../lib/dictation/shortcut";
 import { IS_MAC } from "../../lib/keymap";
-import { trpcMutate } from "../../lib/trpc-client";
+import { paneRoot } from "../../lib/pane-focus";
 import { useDictationStore } from "../../stores/dictation";
 import { formatBytes } from "../workspace/sections/resource-format";
 
@@ -33,8 +33,8 @@ export function DictationOverlay() {
 function Positioned({ paneId }: { paneId: string | null }) {
   const [box, setBox] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
+    const el = paneId ? paneRoot(paneId) : null;
     const place = () => {
-      const el = paneId ? document.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`) : null;
       const r = el?.getBoundingClientRect() ?? {
         left: 0,
         top: 0,
@@ -48,8 +48,14 @@ function Positioned({ paneId }: { paneId: string | null }) {
       });
     };
     place();
+    // A split dragged or the sidebar toggled moves the pane without a window resize
+    const observer = new ResizeObserver(place);
+    if (el) observer.observe(el);
     window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", place);
+    };
   }, [paneId]);
   if (!box) return null;
   return (
@@ -78,7 +84,7 @@ function Listening() {
   const phase = useDictationStore((s) => s.phase);
   const partial = useDictationStore((s) => s.partial);
   const modelLoading = useDictationStore((s) => s.modelLoading);
-  const streaming = useDictationStore((s) => s.status?.model.kind === "streaming");
+  const streaming = useDictationStatus().data?.model.kind === "streaming";
   const listening = phase === "listening";
   const chord = dictationChord();
   const label =
@@ -101,7 +107,7 @@ function Listening() {
           {listening && <span className="absolute inset-0 animate-ping rounded-full bg-error/20" />}
           {listening ? <Mic className="h-4 w-4" /> : <Loader2 className="h-4 w-4 animate-spin" />}
         </span>
-        <Waveform active={listening} />
+        {listening ? <Waveform /> : <div className="h-8 min-w-0 flex-1" />}
         {phase === "listening" ? <Timer /> : <span className="w-10" />}
       </div>
       <div className="mt-2 flex items-center justify-between text-[11px]">
@@ -142,12 +148,13 @@ function Timer() {
 
 const BARS = 32;
 
-function Waveform({ active }: { active: boolean }) {
+/** Mounted only while listening: the animation frame loop stops with it */
+function Waveform() {
   const ref = useRef<HTMLCanvasElement>(null);
-  const activeRef = useLatest(active);
   useMountEffect(() => {
     let frame = 0;
     const data = new Uint8Array(1024);
+    const color = ref.current ? getComputedStyle(ref.current).color : "";
     const draw = () => {
       frame = requestAnimationFrame(draw);
       const canvas = ref.current;
@@ -161,8 +168,8 @@ function Waveform({ active }: { active: boolean }) {
         canvas.height = h;
       }
       ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = getComputedStyle(canvas).color;
-      const analyser = activeRef.current ? currentAnalyser() : null;
+      ctx.fillStyle = color;
+      const analyser = currentAnalyser();
       const step = Math.floor(data.length / BARS);
       if (analyser) analyser.getByteTimeDomainData(data);
       const gap = 2 * dpr;
@@ -185,10 +192,19 @@ function Waveform({ active }: { active: boolean }) {
 }
 
 function NoModel() {
-  const status = useDictationStore((s) => s.status);
+  const { data: status } = useDictationStatus();
   const { data: models } = useModels();
   const action = useModelAction();
   const target = status?.model;
+  // Downloaded while the overlay is still open (Download pressed here): start dictating
+  useMountEffect(() =>
+    window.api.onModelProgress((event) => {
+      const s = useDictationStore.getState();
+      if (event.status.state !== "ready" || s.phase !== "no-model" || !s.downloadRequested) return;
+      s.set({ downloadRequested: false });
+      void startDictation();
+    }),
+  );
   const live = models?.find((m) => m.id === target?.id)?.status;
   if (!target) return null;
   const ready = live?.state === "ready";
@@ -229,7 +245,10 @@ function NoModel() {
           <OverlayButton
             primary
             disabled={busy || action.isPending}
-            onClick={() => action.mutate({ action: "download", id: target.id })}
+            onClick={() => {
+              useDictationStore.getState().set({ downloadRequested: true });
+              action.mutate({ action: "download", id: target.id });
+            }}
           >
             {busy ? `Downloading${percent === null ? "" : ` ${percent}%`}` : "Download"}
           </OverlayButton>
@@ -240,18 +259,18 @@ function NoModel() {
 }
 
 function MicDenied() {
-  const mac = useDictationStore((s) => s.status?.platform === "darwin");
+  const mic = useMicAction();
   return (
     <Panel icon={<MicOff className="h-4 w-4" />} title="Exegol cannot use the microphone">
       <p className="text-xs text-text-muted">
-        {mac
+        {IS_MAC
           ? "Allow Exegol in System Settings > Privacy & Security > Microphone, then try again."
           : "The system refused the microphone. Check that one is connected and allowed."}
       </p>
       <div className="mt-3 flex justify-end gap-2">
         <OverlayButton onClick={dismissDictation}>Close</OverlayButton>
-        {mac && (
-          <OverlayButton primary onClick={() => void trpcMutate("dictation.openMicSettings")}>
+        {IS_MAC && (
+          <OverlayButton primary onClick={() => mic.mutate("openMicSettings")}>
             Open System Settings
           </OverlayButton>
         )}
