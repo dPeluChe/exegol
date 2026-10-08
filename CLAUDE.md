@@ -20,6 +20,7 @@ bun run dev              # Build Rust + start Electron (full pipeline)
 bun run dev:fresh        # + restart the PTY sidecar (see below)
 bun run dev:ui           # Electron only (JS fallback, faster)
 bun run kill:dev         # Stop a stuck dev Electron (keeps the sidecar + agent sessions)
+bun run clean:build      # Dry run of the post-build cleanup (old dist versions, caches); -- --apply removes
 bun run build:rust       # Build Rust native module only
 bun run rebuild:native   # Rust + rebuild node-pty for Electron
 
@@ -214,7 +215,8 @@ apps/desktop/src/
     security/       keystore (safeStorage)
     system/         resources (metrics + threshold alerts), ports (lsof + config), doctor (T148),
                     auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
-                    work-guard, diagnostics, project-icons, storage (Settings > Storage)
+                    work-guard, diagnostics, project-icons, storage (Settings > Storage),
+                    housekeeping (daily sweep of orphaned per-agent files)
     models/         T201 local speech-to-text models: catalog (data: verified URL, sha256, sizes,
                     license, `commercialUse`), download (HTTP Range resume + sha256, https only, free
                     space check), extract (system `tar -xjf`, then an lstat walk refuses links and

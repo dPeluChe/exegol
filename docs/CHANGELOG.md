@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Less disk left behind: Exegol removes, once a day, the hook, MCP, model and scrollback files of sessions that no longer exist. For developers, packaging ends by removing old build folders (keeps the newest two and the current version) and stale caches; `bun run clean:build` shows what it would remove
+
 ## [0.5.16] — 2026-10-08 — Voice dictation, model manager and storage, safe Cmd+W with reopen, faster start
 
 ### Added

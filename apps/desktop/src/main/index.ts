@@ -41,11 +41,13 @@ import { ensureCanonicalPaths } from "./skills/paths";
 import { integrateAppImage } from "./system/appimage-integration";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
+import { scheduleHousekeeping } from "./system/housekeeping";
 import { backfillProjectIcons } from "./system/project-icons";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
 import { destroyTray, initTray } from "./system/tray";
 import { startWorkGuard } from "./system/work-guard";
 import { getPtyHost } from "./terminal/pty-host";
+import { EXEGOL_DIR } from "./terminal/pty-sidecar-protocol";
 import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
@@ -132,7 +134,10 @@ app.whenReady().then(async () => {
 
   // Background: sidecar connection + agent recovery (non-blocking). The scheduler waits for it:
   // stopping an interrupted run's agent needs its reattached PTY
-  void runStartupRecovery().finally(() => getSchedulerEngine().start(getDb()));
+  void runStartupRecovery().finally(() => {
+    getSchedulerEngine().start(getDb());
+    scheduleHousekeeping(getDb(), { exegolDir: EXEGOL_DIR, userData: app.getPath("userData") });
+  });
 
   // Background services (non-blocking, start after window)
   cleanupOldEvents(getDb());

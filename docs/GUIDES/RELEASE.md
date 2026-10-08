@@ -42,6 +42,32 @@ Skipping `build:rust` ships no `.node` file and the app falls back to the JS out
 
 Output: `apps/desktop/dist/<version>/Exegol-<version>-<arch>.dmg` (one folder per version) (name from `DMG_NAME` in `electron-builder.ts`), plus the `-mac.zip` and `latest-mac.yml`.
 
+#### Post-build cleanup
+
+A successful `package*` script ends with `bun run clean:build -- --apply --repo-only`
+(`apps/desktop/scripts/clean-build.ts`); it does not run when packaging fails. It removes only:
+
+| Target | Rule | Why |
+|--------|------|-----|
+| `apps/desktop/dist/<version>/` | keeps the newest 2 by semver (`--keep N`) and the version in `package.json` | each folder is ~750 MB of DMG + zip |
+| `apps/desktop/dist/<version>-local*/` | keeps the newest by date | local test builds |
+| `.turbo/cache/<hash>*` | all files of a hash older than 14 days (`--days N`) | the local turbo cache never shrinks |
+| `packages/core-rust/target/*/incremental/<crate>-<hash>/` | older than 14 days, skipped while cargo runs | cargo keeps a dir per flag/toolchain set |
+| `$TMPDIR/exegol-<test prefix>-XXXXXX/` | older than a day; only the test suites' mkdtemp prefixes | tests leave thousands behind (skipped with `--repo-only`) |
+
+A dist folder whose DMG is mounted, or that a running process uses (Exegol.app opened from
+`dist`), is skipped, never detached. It never touches `node_modules`, `apps/desktop/out`, the rest
+of `target/`, worktrees, or anything under `~/.exegol` or the app data folder; the electron and
+electron-builder download caches are only reported (other Electron projects share them).
+
+Dry run (prints each path and size, removes nothing): `bun run clean:build`. Then
+`bun run clean:build -- --apply`, which also removes the old test temp dirs.
+
+The app sweeps its own leftovers once a day (`main/system/housekeeping.ts`): per-agent files
+older than a day whose agent id is not in the database (`~/.exegol/hooks/<id>.json`,
+`~/.exegol/mcp/<id>.json`, `~/.exegol/model-settings/<id>.json`, `scrollback/<id>.log` and
+`.serialized` in the app data folder).
+
 ### 4. Install and first launch (unsigned build)
 
 Open the DMG and drag Exegol to Applications. The app is not signed or notarized, so Gatekeeper blocks a double-click on first launch: right-click Exegol in Applications and choose Open, then confirm. A DMG downloaded from GitHub also carries the quarantine flag; clear it with `xattr -dr com.apple.quarantine /Applications/Exegol.app` if Open is not offered.
