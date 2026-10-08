@@ -14,7 +14,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer), git, and an
   empty pane with the agent launcher. Its "Run in" row opens the chosen folder (root or a
   subfolder) in a terminal, Files, Git, Finder (Explorer on Windows, the file manager on Linux) or
-  the project's IDE.
+  the project's IDE. Its refresh button finds the folders and their commands again; past 12
+  folders a filter and "+N more" keep the row short.
 - **Layouts**: six presets (Single, Split Horizontal, Split Vertical, Three Columns, Bottom
   Terminal 70/30, 2×2 Grid), your own saved layouts, and Equalize splits. A project keeps its
   own named layouts (its menu > Layouts...) that start its terminals and agents again. Drag a pane by its left

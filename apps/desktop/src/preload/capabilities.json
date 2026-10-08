@@ -91,6 +91,7 @@
       "ports",
       "preferredPort",
       "project",
+      "refreshRunTargets",
       "runPins",
       "runTargets",
       "setPreferredPort",
