@@ -1,6 +1,7 @@
-/** Energy voice detection: enough to tell "nothing was said" and to stop after a pause. Mic
- *  capture runs with auto gain, so speech sits well above this RMS and room noise below it */
-export const SPEECH_RMS = 0.008;
+import { SPEECH_RMS } from "@exegol/shared";
+
+export { rms, SPEECH_RMS } from "@exegol/shared";
+
 /** Speech this long in total counts as "heard": a click or a cough does not */
 const HEARD_MS = 150;
 
@@ -12,13 +13,6 @@ export interface VadState {
 }
 
 export const VAD_START: VadState = { speechMs: 0, silenceMs: 0, heard: false };
-
-export function rms(samples: Float32Array): number {
-  if (samples.length === 0) return 0;
-  let sum = 0;
-  for (const s of samples) sum += s * s;
-  return Math.sqrt(sum / samples.length);
-}
 
 export function updateVad(
   state: VadState,

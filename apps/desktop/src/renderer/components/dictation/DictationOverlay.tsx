@@ -1,36 +1,35 @@
-import { formatChord } from "@exegol/shared";
+import { dictationSettingsOf, formatChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { Download, Loader2, Mic, MicOff, X } from "lucide-react";
-import { type MouseEvent, type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import { Loader2, Mic, MicOff, X } from "lucide-react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
+import { useSettings } from "../../hooks/use-trpc";
 import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation";
-import { useModelAction, useModels } from "../../hooks/use-trpc-models";
-import {
-  currentAnalyser,
-  dismissDictation,
-  startDictation,
-  stopDictation,
-} from "../../lib/dictation/controller";
+import { currentAnalyser, dismissDictation, stopDictation } from "../../lib/dictation/controller";
 import { dictationChord } from "../../lib/dictation/shortcut";
+import { insertHint } from "../../lib/dictation/target";
 import { IS_MAC } from "../../lib/keymap";
 import { paneRoot } from "../../lib/pane-focus";
 import { useDictationStore } from "../../stores/dictation";
-import { formatBytes } from "../workspace/sections/resource-format";
+import { ModelChooser } from "./ModelChooser";
+import { keepFocus, OverlayButton } from "./overlay-ui";
 
 const CARD_WIDTH = 340;
-
-/** Buttons keep the focus where it was: the text goes to the pane that had it */
-const keepFocus = (e: MouseEvent) => e.preventDefault();
+const CHOOSER_WIDTH = 420;
 
 /** Centered over the pane the text goes to (the window when there is none) while dictating */
 export function DictationOverlay() {
   const phase = useDictationStore((s) => s.phase);
   const anchorPaneId = useDictationStore((s) => s.anchorPaneId);
   if (phase === "idle") return null;
-  return <Positioned key={anchorPaneId ?? "window"} paneId={anchorPaneId} />;
+  const width = phase === "no-model" ? CHOOSER_WIDTH : CARD_WIDTH;
+  return (
+    <Positioned key={`${anchorPaneId ?? "window"}:${width}`} paneId={anchorPaneId} width={width} />
+  );
 }
 
-function Positioned({ paneId }: { paneId: string | null }) {
+function Positioned({ paneId, width }: { paneId: string | null; width: number }) {
+  const listening = useDictationStore((s) => s.phase === "listening");
   const [box, setBox] = useState<{ left: number; top: number } | null>(null);
   useLayoutEffect(() => {
     const el = paneId ? paneRoot(paneId) : null;
@@ -41,9 +40,9 @@ function Positioned({ paneId }: { paneId: string | null }) {
         width: window.innerWidth,
         height: window.innerHeight,
       };
-      const left = Math.max(8, r.left + r.width / 2 - CARD_WIDTH / 2);
+      const left = Math.max(8, r.left + r.width / 2 - width / 2);
       setBox({
-        left: Math.min(left, window.innerWidth - CARD_WIDTH - 8),
+        left: Math.min(left, window.innerWidth - width - 8),
         top: r.top + r.height / 2,
       });
     };
@@ -56,16 +55,21 @@ function Positioned({ paneId }: { paneId: string | null }) {
       observer.disconnect();
       window.removeEventListener("resize", place);
     };
-  }, [paneId]);
+  }, [paneId, width]);
   if (!box) return null;
   return (
     <div
-      className="fixed z-[220] -translate-y-1/2"
-      style={{ left: box.left, top: box.top, width: CARD_WIDTH }}
+      className="fixed z-[220] -translate-y-1/2 cursor-default select-none"
+      style={{ left: box.left, top: box.top, width }}
       role="dialog"
       aria-label="Voice dictation"
     >
-      <div className="overflow-hidden rounded-2xl border border-border bg-bg-secondary/95 shadow-2xl backdrop-blur">
+      <div
+        className={cn(
+          "overflow-hidden rounded-2xl border border-accent/50 bg-bg-secondary/95 shadow-2xl backdrop-blur transition-shadow",
+          listening && "shadow-[0_0_24px_-6px_var(--color-accent)]",
+        )}
+      >
         <Body />
       </div>
     </div>
@@ -74,7 +78,7 @@ function Positioned({ paneId }: { paneId: string | null }) {
 
 function Body() {
   const phase = useDictationStore((s) => s.phase);
-  if (phase === "no-model") return <NoModel />;
+  if (phase === "no-model") return <ModelChooser />;
   if (phase === "mic-denied") return <MicDenied />;
   if (phase === "error") return <ErrorBody />;
   return <Listening />;
@@ -84,7 +88,10 @@ function Listening() {
   const phase = useDictationStore((s) => s.phase);
   const partial = useDictationStore((s) => s.partial);
   const modelLoading = useDictationStore((s) => s.modelLoading);
+  const targetKind = useDictationStore((s) => s.targetKind);
+  const targetLabel = useDictationStore((s) => s.targetLabel);
   const streaming = useDictationStatus().data?.model.kind === "streaming";
+  const pressEnter = dictationSettingsOf(useSettings().data?.dictation).pressEnter;
   const listening = phase === "listening";
   const chord = dictationChord();
   const label =
@@ -96,7 +103,9 @@ function Listening() {
           ? "Listening (loading model)"
           : "Listening";
   return (
-    <div className="p-3">
+    // A click on the card is a no-op: recording goes on and the pane keeps the focus
+    // biome-ignore lint/a11y/noStaticElementInteractions: swallows focus changes only
+    <div className="p-3" onMouseDown={keepFocus}>
       <div className="flex items-center gap-3">
         <span
           className={cn(
@@ -110,15 +119,23 @@ function Listening() {
         {listening ? <Waveform /> : <div className="h-8 min-w-0 flex-1" />}
         {phase === "listening" ? <Timer /> : <span className="w-10" />}
       </div>
-      <div className="mt-2 flex items-center justify-between text-[11px]">
-        <span className="font-medium text-text-secondary">{label}</span>
-        <span className="text-text-muted">
-          Esc cancels{chord && listening ? ` · ${formatChord(chord, IS_MAC)} inserts` : ""}
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+        <span className="shrink-0 font-medium text-text-secondary">{label}</span>
+        <span className="truncate text-text-muted">
+          Enter{chord ? ` or ${formatChord(chord, IS_MAC)}` : ""} to insert · Esc to cancel
         </span>
       </div>
-      {streaming && partial && (
-        <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-text-primary">{partial}</p>
-      )}
+      <p
+        className={cn(
+          "mt-2 line-clamp-3 min-h-[1.25rem] text-xs leading-relaxed",
+          partial ? "text-text-primary" : "text-text-muted/80",
+        )}
+      >
+        {partial || (streaming ? "Text appears as you speak" : "Text appears when you pause")}
+      </p>
+      <p className="mt-1 truncate text-[11px] text-text-muted">
+        {insertHint(targetKind, targetLabel, pressEnter)}
+      </p>
       {listening && (
         <div className="mt-2 flex justify-end gap-2">
           <OverlayButton onClick={dismissDictation}>Cancel</OverlayButton>
@@ -188,73 +205,8 @@ function Waveform() {
     draw();
     return () => cancelAnimationFrame(frame);
   });
-  return <canvas ref={ref} className="h-8 min-w-0 flex-1 text-accent" />;
-}
-
-function NoModel() {
-  const { data: status } = useDictationStatus();
-  const { data: models } = useModels();
-  const action = useModelAction();
-  const target = status?.model;
-  // Downloaded while the overlay is still open (Download pressed here): start dictating
-  useMountEffect(() =>
-    window.api.onModelProgress((event) => {
-      const s = useDictationStore.getState();
-      if (event.status.state !== "ready" || s.phase !== "no-model" || !s.downloadRequested) return;
-      s.set({ downloadRequested: false });
-      void startDictation();
-    }),
-  );
-  const live = models?.find((m) => m.id === target?.id)?.status;
-  if (!target) return null;
-  const ready = live?.state === "ready";
-  const busy =
-    live?.state === "downloading" || live?.state === "verifying" || live?.state === "extracting";
-  const percent =
-    live?.state === "downloading" && live.totalBytes > 0
-      ? Math.round((live.receivedBytes / live.totalBytes) * 100)
-      : null;
   return (
-    <Panel
-      icon={<Download className="h-4 w-4" />}
-      title={ready ? "Speech model ready" : "Dictation needs a speech model"}
-    >
-      <p className="text-xs text-text-muted">
-        {target.name}, {formatBytes(target.sizeBytes)}. It runs on this machine: audio never leaves
-        it.
-      </p>
-      {busy && (
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-tertiary">
-          <div
-            className={cn(
-              "h-full bg-accent transition-[width]",
-              percent === null && "animate-pulse",
-            )}
-            style={{ width: `${percent ?? 100}%` }}
-          />
-        </div>
-      )}
-      {live?.state === "failed" && <p className="mt-2 text-xs text-error">{live.error}</p>}
-      <div className="mt-3 flex justify-end gap-2">
-        <OverlayButton onClick={dismissDictation}>Close</OverlayButton>
-        {ready ? (
-          <OverlayButton primary onClick={() => void startDictation()}>
-            Start dictating
-          </OverlayButton>
-        ) : (
-          <OverlayButton
-            primary
-            disabled={busy || action.isPending}
-            onClick={() => {
-              useDictationStore.getState().set({ downloadRequested: true });
-              action.mutate({ action: "download", id: target.id });
-            }}
-          >
-            {busy ? `Downloading${percent === null ? "" : ` ${percent}%`}` : "Download"}
-          </OverlayButton>
-        )}
-      </div>
-    </Panel>
+    <canvas ref={ref} aria-hidden className="pointer-events-none h-8 min-w-0 flex-1 text-accent" />
   );
 }
 
@@ -300,34 +252,5 @@ function Panel({ icon, title, children }: { icon: ReactNode; title: string; chil
       </div>
       {children}
     </div>
-  );
-}
-
-function OverlayButton({
-  primary,
-  disabled,
-  onClick,
-  children,
-}: {
-  primary?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onMouseDown={keepFocus}
-      onClick={onClick}
-      className={cn(
-        "rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-50",
-        primary
-          ? "bg-accent text-white hover:bg-accent-hover"
-          : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary",
-      )}
-    >
-      {children}
-    </button>
   );
 }

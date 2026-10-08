@@ -1,3 +1,4 @@
+import type { DictationTargetKind } from "@exegol/shared";
 import { create } from "zustand";
 
 /** idle: nothing on screen. The other phases show the overlay */
@@ -16,7 +17,10 @@ interface DictationStore {
   startedAt: number;
   /** The pane the overlay sits over (the one the text goes to), null = the window */
   anchorPaneId: string | null;
-  /** Streaming models: what was understood so far */
+  /** Where Insert puts the text, for the overlay (insertHint) */
+  targetKind: DictationTargetKind;
+  targetLabel: string;
+  /** What was understood so far: live for streaming models, phrase by phrase for the others */
   partial: string;
   error: string | null;
   modelLoading: boolean;
@@ -30,6 +34,8 @@ export const useDictationStore = create<DictationStore>((set) => ({
   sessionId: null,
   startedAt: 0,
   anchorPaneId: null,
+  targetKind: "clipboard",
+  targetLabel: "",
   partial: "",
   error: null,
   modelLoading: false,

@@ -116,7 +116,9 @@ interface Window {
       onEngine: (
         callback: (event: { state: import("@exegol/shared").DictationEngineState }) => void,
       ) => () => void;
-      onKey: (callback: (event: { kind: "down" | "up" | "escape" }) => void) => () => void;
+      onKey: (
+        callback: (event: { kind: "down" | "up" | "escape" | "enter" }) => void,
+      ) => () => void;
       onDone: (callback: () => void) => () => void;
     };
     onModelProgress: (

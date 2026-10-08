@@ -27,6 +27,7 @@ import {
   resolveTarget,
   sanitizeDictation,
   takesDictation,
+  targetLabel,
 } from "./target";
 import { rms, shouldAutoStop, updateVad, VAD_START, type VadState } from "./vad";
 
@@ -170,7 +171,15 @@ async function readSettings(): Promise<DictationSettings> {
 export async function startDictation(): Promise<void> {
   if (run || store().phase === "transcribing") return;
   const { target, field, anchor } = snapshot();
-  store().set({ phase: "starting", anchorPaneId: anchor, partial: "", error: null });
+  const agent = "agentId" in target ? useAgentStore.getState().agents[target.agentId] : undefined;
+  store().set({
+    phase: "starting",
+    anchorPaneId: anchor,
+    targetKind: target.kind,
+    targetLabel: targetLabel(target, agent),
+    partial: "",
+    error: null,
+  });
   const current: Run = {
     settings: dictationSettingsOf(undefined),
     target,
@@ -198,6 +207,7 @@ export async function startDictation(): Promise<void> {
     if (!status.engineAvailable) return reset();
     if (!current.settings.enabled) throw new Error("Dictation is off in Settings > Dictation");
     if (!status.model.ready) return endWith({ phase: "no-model" });
+    trpcMutate("dictation.warm").catch(() => {});
     if (target.kind === "browser") {
       await window.api.dictation.markBrowser({
         paneId: target.paneId,

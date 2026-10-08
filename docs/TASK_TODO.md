@@ -217,6 +217,7 @@ on the machine (no audio leaves it), typed into the focused pane.
 3. Later:
    - Whisper through whisper-server (whisper.cpp, Metal) for faster Whisper on Apple Silicon
    - Apple SpeechAnalyzer on macOS 26+ as a no-download engine
+   - Silero VAD (sherpa-onnx, verified download) for the phrase cuts; the energy VAD cuts them now
    - Numbers-as-words post-processing for Parakeet ("twenty five" to "25")
    - "Agents that talk": text to speech for agent replies, Kokoro-82M (Apache-2.0, sherpa-onnx
      has it) as the candidate

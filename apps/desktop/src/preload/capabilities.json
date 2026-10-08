@@ -352,6 +352,7 @@
       "requestMic",
       "start",
       "status",
+      "warm",
       "stop"
     ]
   },

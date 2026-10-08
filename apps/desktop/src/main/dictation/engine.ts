@@ -27,13 +27,21 @@ let state: DictationEngineState = "unloaded";
 let modelId: string | null = null;
 let loadWaiter: Waiter<void> | null = null;
 let loadPromise: Promise<void> | null = null;
-const finals = new Map<string, Waiter<string>>();
+type Final = Omit<Extract<EngineReply, { type: "final" }>, "type" | "sessionId">;
+
+const finals = new Map<string, Waiter<Final>>();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let idleMs = 10 * 60_000;
 let lastTouch = 0;
 let crashes = 0;
 let respawnTimer: ReturnType<typeof setTimeout> | null = null;
 let probe: Promise<{ ok: boolean; error: string | null }> | null = null;
+let spawnedAt = 0;
+let loadStartedAt = 0;
+/** The last cold start, for the dictation log line: null while it has not happened */
+let coldStart: { spawnMs: number | null; loadMs: number | null } = { spawnMs: null, loadMs: null };
+
+export const engineTimings = () => ({ ...coldStart });
 
 export const engineState = (): DictationEngineState => state;
 
@@ -66,8 +74,10 @@ function waiter<T>(ms: number, what: string, done: (w: Waiter<T>) => void): Prom
 function onReply(msg: EngineReply): void {
   switch (msg.type) {
     case "ready":
+      coldStart.spawnMs = Date.now() - spawnedAt;
       return;
     case "loaded":
+      coldStart.loadMs = Date.now() - loadStartedAt;
       setState("ready");
       loadWaiter?.resolve();
       loadWaiter = null;
@@ -89,7 +99,7 @@ function onReply(msg: EngineReply): void {
     }
     case "final":
       crashes = 0;
-      finals.get(msg.sessionId)?.resolve(msg.text);
+      finals.get(msg.sessionId)?.resolve(msg);
       finals.delete(msg.sessionId);
       return;
     case "failed":
@@ -107,6 +117,8 @@ const fork = (): UtilityProcess =>
   });
 
 function spawn(): UtilityProcess {
+  spawnedAt = Date.now();
+  coldStart = { spawnMs: null, loadMs: null };
   const proc = fork();
   proc.on("message", (msg: EngineReply) => onReply(msg));
   proc.on("exit", (code) => {
@@ -192,6 +204,8 @@ export function ensureModel(id: string): Promise<void> {
   child ??= spawn();
   modelId = id;
   setState("loading");
+  loadStartedAt = Date.now();
+  coldStart.loadMs = null;
   loadWaiter?.reject(new Error("another model was picked"));
   loadPromise = waiter<void>(LOAD_TIMEOUT_MS, "loading the model", (w) => {
     loadWaiter = w;
@@ -212,15 +226,24 @@ export function feedAudio(sessionId: string, samples: Float32Array): void {
   if (Date.now() - lastTouch > 5_000) touch();
 }
 
-export function finishSession(sessionId: string): Promise<string> {
+/** `decodeMs` counts from stop: with a cold engine it includes what was left of the model load */
+export async function finishSession(sessionId: string): Promise<Final & { decodeMs: number }> {
   touch();
-  if (!child) return Promise.reject(new Error("the speech engine is not running"));
-  const done = waiter<string>(DECODE_TIMEOUT_MS, "transcribing", (w) => {
+  if (!child) throw new Error("the speech engine is not running");
+  const stoppedAt = Date.now();
+  const done = waiter<Final>(DECODE_TIMEOUT_MS, "transcribing", (w) => {
     finals.set(sessionId, w);
   });
   send({ type: "finish", sessionId });
-  return done.finally(touch);
+  try {
+    const { text, phrases, phraseMs, fullPass } = await done;
+    return { text, phrases, phraseMs, fullPass, decodeMs: Date.now() - stoppedAt };
+  } finally {
+    touch();
+  }
 }
+
+export const modelLoaded = (id: string): boolean => modelId === id && state === "ready";
 
 export function cancelSession(sessionId: string): void {
   send({ type: "cancel", sessionId });
