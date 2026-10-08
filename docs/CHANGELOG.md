@@ -18,6 +18,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Edit project can pick the IDE for that project ("Same as Settings" by default); Open in IDE, the pane toolbar and Cmd+click on a file path use it
 
 ### Changed
+- Settings > Storage has tabs. Overview: what Exegol uses and the free space, a bar by category and the list with Open and Clear. Speech models: download, set as default or delete any model from here. Browser: each project's browser size, Clear cache keeps cookies. Worktrees: each one's size, project, branch and whether it has uncommitted changes, with Show in Dashboard to clean up. Other: what "Other" holds, its largest files and folders with sizes and Open. The last tab is kept while Settings stays open
 - Windsurf is now Devin Desktop (renamed by Cognition on 2026-06-02): new name and the Devin mark; it opens with `devin-desktop`, or the old `windsurf` command, or straight from the app when neither is on your PATH. A saved "Windsurf" setting keeps working
 - What's new is easier to scan: filter chips at the top (All, Added, Changed, Fixed, with counts) show one kind of change, each entry reads as a one-line headline that expands on click, and Expand all opens every entry
 - Sidebar Agents: one card per project instead of one block per tab. The card shows the project and its Cmd+n number (click it to go back where you left the project); with several live tabs, each tab gets a small header (click to open that tab, the active one is marked) with its sessions under it. Dragging reorders projects, and your previous order is kept
