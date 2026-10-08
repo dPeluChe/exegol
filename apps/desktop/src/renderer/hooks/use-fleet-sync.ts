@@ -2,7 +2,7 @@ import type { Agent } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { trpcInvoke } from "../lib/trpc-client";
-import { useAgentStore } from "../stores/agents";
+import { FLEET_SYNC, useAgentStore } from "../stores/agents";
 
 /**
  * Every project's live agents in the store, from startup. Only the active project was loaded
@@ -17,7 +17,7 @@ export function useFleetSync<T extends Agent = Agent>(): T[] | undefined {
     refetchInterval: 60_000,
   });
   useEffect(() => {
-    if (data?.length) useAgentStore.getState().syncFromDb("__fleet__", data);
+    if (data?.length) useAgentStore.getState().syncFromDb(FLEET_SYNC, data);
   }, [data]);
   return data;
 }
