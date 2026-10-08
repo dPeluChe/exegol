@@ -10,7 +10,7 @@ import {
 import { cn } from "@exegol/ui";
 import { Mic } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation";
+import { useDictationStatus, useMediaConsent, useMicAction } from "../../hooks/use-trpc-dictation";
 import { IS_MAC, PLATFORM } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
@@ -27,7 +27,7 @@ const SELECT =
   "rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[11px] text-text-primary";
 
 const PAUSE_MEDIA_HINT = IS_MAC
-  ? "Music and Spotify pause while you talk and resume after, unless you changed them meanwhile. macOS asks once per app to let Exegol control it"
+  ? "What is playing (Spotify, Music, a browser tab) pauses while you talk and resumes after, unless you played, paused or skipped it meanwhile"
   : "Players that support MPRIS pause while you talk and resume after (needs playerctl)";
 
 const MIC_LABEL: Record<string, { text: string; tone: keyof typeof SEMANTIC_BADGE }> = {
@@ -90,6 +90,12 @@ export function DictationSettings({ settings, onChange }: Props) {
               onToggle={() => set({ pauseMedia: !prefs.pauseMedia })}
             />
           )}
+          {IS_MAC && prefs.pauseMedia && (
+            <DirectMediaRow
+              value={prefs.pauseMediaDirect}
+              onChange={(pauseMediaDirect) => set({ pauseMediaDirect })}
+            />
+          )}
           <SelectRow
             label="Longest dictation"
             value={prefs.maxSeconds}
@@ -130,6 +136,22 @@ export function DictationSettings({ settings, onChange }: Props) {
         <DictationHistory />
       </div>
     </div>
+  );
+}
+
+/** Turning it on asks macOS for Automation right away, not in the middle of a dictation */
+function DirectMediaRow({ value, onChange }: { value: boolean; onChange: (on: boolean) => void }) {
+  const consent = useMediaConsent();
+  return (
+    <SwitchRow
+      label="Also control Music and Spotify directly"
+      description="Used when macOS does not share what is playing. macOS asks once per app to let Exegol control it: open them before turning this on to answer now"
+      value={value}
+      onToggle={() => {
+        onChange(!value);
+        if (!value) consent.mutate();
+      }}
+    />
   );
 }
 

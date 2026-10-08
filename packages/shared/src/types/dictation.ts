@@ -30,9 +30,11 @@ export interface DictationSettings {
   shortcut: string;
   /** Press Enter after inserting into a terminal */
   pressEnter: boolean;
-  /** Pause the music players that are playing while a dictation records (macOS asks for
-   *  Automation access per player) */
+  /** Pause what is playing while a dictation records, resume it after */
   pauseMedia: boolean;
+  /** macOS: also control Music and Spotify over Apple Events when system Now Playing cannot
+   *  (asks for Automation access per app) */
+  pauseMediaDirect: boolean;
   /** The loaded model is freed after this long without a dictation */
   idleUnloadMinutes: number;
   maxSeconds: number;
@@ -48,7 +50,8 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   enabled: true,
   shortcut: DEFAULT_DICTATION_SHORTCUT,
   pressEnter: false,
-  pauseMedia: false,
+  pauseMedia: true,
+  pauseMediaDirect: false,
   idleUnloadMinutes: 10,
   maxSeconds: 300,
   autoStopSilenceSec: 0,

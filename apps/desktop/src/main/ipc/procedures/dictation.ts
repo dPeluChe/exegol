@@ -9,6 +9,7 @@ import {
   listDictations,
 } from "../../dictation/history";
 import { setDictationListening } from "../../dictation/keys";
+import { askMediaConsent } from "../../dictation/media-pause";
 import { askMic, openMicSettings } from "../../dictation/mic";
 import {
   cancelDictation,
@@ -36,6 +37,9 @@ export const dictationRouter = router({
     openMicSettings();
     return { ok: true };
   }),
+
+  /** Turning on direct Music/Spotify control: the Automation prompt now, not mid-dictation */
+  mediaConsent: publicProcedure.mutation(() => askMediaConsent()),
 
   warm: publicProcedure.mutation(({ ctx }) => warmDictation(ctx.db)),
 

@@ -29,7 +29,7 @@ import {
 } from "./engine";
 import { addDictation, pruneDictations } from "./history";
 import { setDictationChord } from "./keys";
-import { holdMedia } from "./media-pause";
+import { holdMedia, type MediaHold, mediaBackend } from "./media-pause";
 import { disarmMic, micStatus } from "./mic";
 import { hasRecognizer } from "./model-config";
 
@@ -42,8 +42,8 @@ interface Active {
   startedAt: number;
   /** The model was not loaded when this dictation started: the log line carries the load split */
   cold: boolean;
-  /** Gives back the players this dictation paused */
-  releaseMedia: () => void;
+  /** The players this dictation paused; null when the setting is off */
+  media: MediaHold | null;
 }
 
 let active: Active | null = null;
@@ -114,25 +114,36 @@ export async function startDictation(db: Database.Database) {
   if (!(await probeEngine()).ok) throw new Error("the speech engine cannot run on this system");
   const { entry, ready } = await pickModel(db);
   if (!ready) throw new Error("no speech model is downloaded");
-  // A dictation replacing a running one keeps its pause: resuming then pausing again would race
-  let releaseMedia = active?.releaseMedia ?? null;
+  // Past the longest dictation the music comes back even if no end arrives (renderer died)
+  const holdMs = (settings.maxSeconds + 30) * 1000;
+  // A dictation replacing a running one keeps its pause while unreleased: resume then pause races
+  let media = active?.media?.extend(holdMs) ? active.media : null;
   if (active) {
+    if (active.media !== media) active.media?.release();
     cancelSession(active.id);
     active = null;
   }
-  releaseMedia ??= settings.pauseMedia ? holdMedia((settings.maxSeconds + 30) * 1000) : () => {};
+  if (!media && settings.pauseMedia) {
+    media = holdMedia(holdMs, mediaBackend({ direct: settings.pauseMediaDirect }));
+  }
   const id = nanoid(16);
-  active = {
-    id,
-    modelId: entry.id,
-    startedAt: Date.now(),
-    cold: warmedCold ?? !modelLoaded(entry.id),
-    releaseMedia,
-  };
-  warmedCold = null;
-  // The model loads while the user speaks: audio waits in the engine until it is ready
-  ensureModel(entry.id).catch(() => {});
-  beginSession(id, settings.maxSeconds);
+  try {
+    active = {
+      id,
+      modelId: entry.id,
+      startedAt: Date.now(),
+      cold: warmedCold ?? !modelLoaded(entry.id),
+      media,
+    };
+    warmedCold = null;
+    // The model loads while the user speaks: audio waits in the engine until it is ready
+    ensureModel(entry.id).catch(() => {});
+    beginSession(id, settings.maxSeconds);
+  } catch (err) {
+    media?.release();
+    active = null;
+    throw err;
+  }
   if (!getJsonSetting(db, MIC_USED_KEY, false)) setJsonSetting(db, MIC_USED_KEY, true);
   return { sessionId: id, modelId: entry.id, kind: entry.kind, maxSeconds: settings.maxSeconds };
 }
@@ -155,9 +166,9 @@ export async function stopDictation(
   if (!active || active.id !== input.sessionId) {
     throw new Error("this dictation is no longer running");
   }
-  const { modelId, cold, releaseMedia } = active;
+  const { modelId, cold, media } = active;
   active = null;
-  releaseMedia();
+  media?.release();
   const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(input.sessionId);
   const phraseLog =
     phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
@@ -200,7 +211,7 @@ export async function warmDictation(db: Database.Database): Promise<{ ok: boolea
 
 export function cancelDictation(sessionId: string): void {
   if (active?.id !== sessionId) return;
-  active.releaseMedia();
+  active.media?.release();
   active = null;
   cancelSession(sessionId);
 }

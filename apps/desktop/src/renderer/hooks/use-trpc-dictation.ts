@@ -62,6 +62,14 @@ export function useMicAction() {
   });
 }
 
+/** macOS asks for Automation over Music and Spotify now (only those running) */
+export function useMediaConsent() {
+  return useMutation({
+    mutationFn: () => trpcMutate<{ asked: number }>("dictation.mediaConsent"),
+    onError: toastError("Music control"),
+  });
+}
+
 /** The speech engine loads on this system: without it every dictation control hides */
 export function useDictationAvailable(): boolean {
   const { data } = useDictationStatus();
