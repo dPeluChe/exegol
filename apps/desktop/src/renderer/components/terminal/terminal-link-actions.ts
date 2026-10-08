@@ -5,7 +5,12 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { findAgentPane, focusPane, useAgentStore } from "../../stores/agents";
 import { peekTerminalFile } from "../../stores/terminal-links";
 import { toastError } from "../../stores/toasts";
-import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
+import {
+  collectPaneIds,
+  getActivePaneId,
+  getProjectState,
+  useWorkspaceStore,
+} from "../../stores/workspace";
 import { type LinkClick, type LinkMatch, linkAction } from "./terminal-links";
 
 /** A PiP window has no workspace to open a pane or a peek in */
@@ -52,6 +57,16 @@ function showInPreviewPane(tabId: string, paneId: string, projectId: string, url
   window.dispatchEvent(
     new CustomEvent("exegol:navigate-pane", { detail: { paneId: preview, url } }),
   );
+}
+
+/** A link clicked in a pane's own content (a Files preview): the tab's link preview pane */
+export function openUrlBesideActivePane(url: string): void {
+  const projectId = useWorkspaceStore.getState()._activeProjectId;
+  const tabId = getProjectState().activeTabId;
+  const paneId = getActivePaneId();
+  if (!isHttpUrl(url)) return;
+  if (!projectId || !tabId || !paneId || inFloatingWindow()) openInBrowser(url);
+  else showInPreviewPane(tabId, paneId, projectId, url);
 }
 
 export function openTerminalUrl(agentId: string, url: string, click: LinkClick): void {

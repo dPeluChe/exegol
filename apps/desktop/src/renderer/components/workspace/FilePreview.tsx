@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type FileContent, useWriteFile } from "../../hooks/use-trpc";
 import { editKeys } from "../../lib/keymap";
 import { trpcMutate } from "../../lib/trpc-client";
+import type { FilesView } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "./sections/resource-format";
 
@@ -99,6 +100,8 @@ export function FilePreview({
   readOnly = false,
   onOpenExternal = () => openExternal(path),
   onReveal = () => reveal(path),
+  view,
+  onViewChange,
 }: {
   path: string;
   file: FileContent | undefined;
@@ -113,6 +116,9 @@ export function FilePreview({
   /** Override the toolbar's Open and Finder (a path outside the project) */
   onOpenExternal?: () => void;
   onReveal?: () => void;
+  /** A files pane: its saved Code/Preview mode and editor spot */
+  view?: FilesView;
+  onViewChange?: (patch: Partial<FilesView>) => void;
 }) {
   const pdfUrl = usePdfUrl(file);
   const { draft, dirty, edit, save, saveError, saving, conflict, setConflict } = useFileDraft(
@@ -150,6 +156,8 @@ export function FilePreview({
           onEdit={readOnly ? undefined : edit}
           onSave={save}
           onOpenExternal={onOpenExternal}
+          view={view}
+          onViewChange={onViewChange}
         />
       </div>
       <ConfirmDialog
@@ -240,6 +248,8 @@ function FileBody({
   onEdit,
   onSave,
   onOpenExternal,
+  view,
+  onViewChange,
 }: {
   path: string;
   file: FileContent | undefined;
@@ -250,6 +260,8 @@ function FileBody({
   onEdit?: (value: string, base: EditBase) => void;
   onSave: () => void;
   onOpenExternal: () => void;
+  view?: FilesView;
+  onViewChange?: (patch: Partial<FilesView>) => void;
 }) {
   if (error) {
     return (
@@ -289,6 +301,9 @@ function FileBody({
               : undefined
           }
           onSave={onSave}
+          view={view}
+          onViewChange={onViewChange}
+          version={file.mtimeMs}
         />
       </Suspense>
     );

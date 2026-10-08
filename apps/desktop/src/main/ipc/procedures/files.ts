@@ -9,11 +9,18 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { extname, join, relative, sep } from "node:path";
 import { TRPCError } from "@trpc/server";
 import { BrowserWindow, dialog, shell } from "electron";
 import { z } from "zod";
-import { isProtectedRoot } from "../../security/path-guard";
+import { listProjects } from "../../db/queries";
+import {
+  grantPreview,
+  PREVIEW_SCHEME,
+  previewRootFor,
+  resolvePreviewFile,
+} from "../../files-preview/preview-paths";
+import { isProtectedRoot, realpathSafe } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 import { allowedBases, assertPathInsideProject } from "./project-paths";
 
@@ -188,6 +195,24 @@ export const filesRouter = router({
     await assertPathInsideProject(input.path, ctx);
     return readForViewer(input.path);
   }),
+
+  /** The Files preview URL of an HTML file: served read-only from its project (or worktree) root,
+   *  which main picks; ~/.exegol itself is never a root */
+  previewUrl: publicProcedure
+    .input(z.object({ path: z.string(), scripts: z.boolean() }))
+    .query(async ({ ctx, input }) => {
+      await assertPathInsideProject(input.path, ctx);
+      const worktrees = ctx.db.prepare("SELECT path FROM worktrees").all() as { path: string }[];
+      const bases = [...listProjects(ctx.db).map((p) => p.path), ...worktrees.map((w) => w.path)];
+      const root = await previewRootFor(input.path, bases);
+      const real = await realpathSafe(input.path);
+      const file = root ? await resolvePreviewFile(root, relative(root, real)) : null;
+      if (!root || !file) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "This file cannot be previewed" });
+      }
+      const rel = relative(root, file).split(sep).map(encodeURIComponent).join("/");
+      return { url: `${PREVIEW_SCHEME}://${grantPreview(root, input.scripts)}/${rel}` };
+    }),
 
   /** Show the file or folder selected in Finder */
   reveal: publicProcedure.input(z.object({ path: z.string() })).mutation(async ({ ctx, input }) => {

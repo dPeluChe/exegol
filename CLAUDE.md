@@ -57,7 +57,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 ### Pane types
 - `terminal` — agent CLI or plain `$SHELL`
 - `browser` — Electron webview with URL bar + back/forward/reload
-- `files` — FileExplorer + Monaco code viewer
+- `files`: FileExplorer + Monaco code viewer; Code | Preview for Markdown and HTML (HTML: sandboxed iframe on `exegol-preview://<token>/`, `main/files-preview/`: read-only from the project or worktree root, realpath-checked, no dotfiles, CSP + defaultSession request guard keep it offline, scripts off unless "Run scripts", links only open from the link bar; not an agent browser pane). Open file, folders, mode and editor spot persist on the pane (`pane.files`, `setFilesView`)
 - `git` — Changes (with Smart Git Button) + Diff + Oplog (agent operations with undo)
 - `empty` — responsive agent launcher grid (3 breakpoints)
 

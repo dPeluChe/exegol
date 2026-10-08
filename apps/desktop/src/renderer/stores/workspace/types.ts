@@ -19,6 +19,8 @@ export interface Pane {
   filePath?: string;
   /** Files pane: the file it shows (the tree roots at filePath or the project) */
   openFile?: string;
+  /** Files pane: what to restore when it mounts again (a project switch unmounts it) */
+  files?: FilesView;
   /** Browser pane: the size the page is shown at (device toolbar); absent fits the pane */
   viewport?: PageSize;
   /** Browser pane: the tab's one pane that URLs clicked in its terminals open in */
@@ -26,6 +28,27 @@ export interface Pane {
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }
+
+export interface EditorSpot {
+  path: string;
+  line: number;
+  column: number;
+  scrollTop: number;
+}
+
+export interface FilesView {
+  /** Tree folders left open */
+  expanded?: string[];
+  /** Code or the rendered view (Preview, Tree); absent: the file type's default */
+  mode?: "code" | "rendered";
+  /** Where the editor was in `path` */
+  cursor?: EditorSpot;
+  /** HTML preview runs the page's scripts (off by default) */
+  runScripts?: boolean;
+}
+
+/** A files pane's view change; `openFile` null closes the file */
+export type FilesViewPatch = Partial<FilesView> & { openFile?: string | null };
 
 export type LayoutNode =
   | { type: "pane"; paneId: string }
@@ -149,6 +172,8 @@ export interface WorkspaceStore {
   /** The page a browser pane is on: any project's pane, without taking focus (a redirect in a
    *  background pane moved the cursor), and nothing when it did not change */
   setPaneUrl: (paneId: string, url: string) => void;
+  /** A files pane's view, in whichever project holds it: also saved while it unmounts */
+  setFilesView: (paneId: string, patch: FilesViewPatch) => void;
   /** A session ended or was removed: its panes in any project let go of it (releaseAgentPanes) */
   releaseAgent: (agentId: string) => void;
   setFocusedPane: (paneId: string | null) => void;

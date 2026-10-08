@@ -22,6 +22,7 @@ import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcMutate } from "../../lib/trpc-client";
+import type { FilesView, FilesViewPatch } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { FilePreview } from "./FilePreview";
 import { FileSearch } from "./FileSearch";
@@ -196,6 +197,9 @@ interface FileExplorerProps {
   projectId?: string;
   /** Shown beside a terminal: an X in the header closes the panel */
   onClose?: () => void;
+  /** A files pane's saved view (folders seeded from it on mount) and where its changes go */
+  view?: FilesView;
+  onViewChange?: (patch: FilesViewPatch) => void;
 }
 
 interface InlineCreateState {
@@ -209,11 +213,13 @@ export function FileExplorer({
   onOpenFile,
   projectId,
   onClose,
+  view,
+  onViewChange,
 }: FileExplorerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(initialFile ?? null);
   // The initial file's folders start open so it is visible in the tree
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
-    const open = new Set([rootPath]);
+    const open = new Set([rootPath, ...(view?.expanded ?? [])]);
     if (initialFile?.startsWith(`${rootPath}/`)) {
       const parts = initialFile
         .slice(rootPath.length + 1)
@@ -244,12 +250,16 @@ export function FileExplorer({
   const [pendingSelect, setPendingSelect] = useState<{ path: string | null; line?: number } | null>(
     null,
   );
-  const applySelect = useCallback((path: string | null, line?: number) => {
-    dirtyRef.current = false;
-    rootRef.current?.setAttribute("data-unsaved", "false");
-    setSelectedFile(path);
-    setRevealLine(line);
-  }, []);
+  const applySelect = useCallback(
+    (path: string | null, line?: number) => {
+      dirtyRef.current = false;
+      rootRef.current?.setAttribute("data-unsaved", "false");
+      setSelectedFile(path);
+      setRevealLine(line);
+      onViewChange?.({ openFile: path });
+    },
+    [onViewChange],
+  );
   const requestSelect = useCallback(
     (path: string | null, line?: number) => {
       if (dirtyRef.current && path !== selectedFile) setPendingSelect({ path, line });
@@ -275,24 +285,32 @@ export function FileExplorer({
     [rootPath],
   );
 
-  const toggleDir = useCallback((path: string) => {
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
+  const setExpanded = useCallback(
+    (next: Set<string>) => {
+      setExpandedDirs(next);
+      onViewChange?.({ expanded: [...next].filter((dir) => dir !== rootPath) });
+    },
+    [onViewChange, rootPath],
+  );
+
+  const toggleDir = useCallback(
+    (path: string) => {
+      const next = new Set(expandedDirs);
       if (next.has(path)) next.delete(path);
       else next.add(path);
-      return next;
-    });
-  }, []);
+      setExpanded(next);
+    },
+    [expandedDirs, setExpanded],
+  );
 
-  const startInlineCreate = useCallback((parentDir: string, type: "file" | "folder") => {
-    // Ensure parent dir is expanded so the inline input is visible
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      next.add(parentDir);
-      return next;
-    });
-    setInlineCreate({ parentDir, type });
-  }, []);
+  const startInlineCreate = useCallback(
+    (parentDir: string, type: "file" | "folder") => {
+      // Ensure parent dir is expanded so the inline input is visible
+      setExpanded(new Set(expandedDirs).add(parentDir));
+      setInlineCreate({ parentDir, type });
+    },
+    [expandedDirs, setExpanded],
+  );
 
   const handleInlineCreateConfirm = useCallback(
     async (name: string) => {
@@ -402,6 +420,8 @@ export function FileExplorer({
           onClose={closePreview}
           revealLine={revealLine}
           onDirtyChange={setDirty}
+          view={view}
+          onViewChange={onViewChange}
         />
       )}
 
@@ -419,7 +439,10 @@ export function FileExplorer({
         path={renaming}
         onClose={() => setRenaming(null)}
         onRenamed={(from, to) => {
-          if (selectedFile === from) setSelectedFile(to);
+          if (selectedFile === from) {
+            setSelectedFile(to);
+            onViewChange?.({ openFile: to });
+          }
           refreshAll();
         }}
       />

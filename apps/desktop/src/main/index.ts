@@ -20,6 +20,11 @@ import { stopEngine } from "./dictation/engine";
 import { forwardDictationKeys } from "./dictation/keys";
 import { installMediaPermissions } from "./dictation/mic";
 import { applyDictationSettings, dictationSettings } from "./dictation/service";
+import {
+  guardPreviewFrames,
+  installPreviewProtocol,
+  registerPreviewScheme,
+} from "./files-preview/preview-host";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerDictationIpc } from "./ipc/procedures/dictation";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
@@ -59,6 +64,7 @@ app.setName("Exegol");
 app.disableDomainBlockingFor3DAPIs();
 
 installDeepLinkHandling();
+registerPreviewScheme();
 
 app.whenReady().then(async () => {
   startMark("appReady");
@@ -92,6 +98,7 @@ app.whenReady().then(async () => {
   applyDictationSettings(getDb(), dictationSettings(getDb()));
   installMediaPermissions();
   installAgentBrowser(getDb());
+  installPreviewProtocol();
   registerGlobalHotkey(settings.globalHotkey, showMainWindow);
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
@@ -189,6 +196,7 @@ app.on("web-contents-created", (_event, contents) => {
   // Every Exegol window (settings and floating ones too, not only main): a link must not open
   // an Electron child window, which would hand the preload's window.api to that page
   if (contents.getType() === "window") {
+    guardPreviewFrames(contents);
     contents.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//.test(url)) shell.openExternal(url).catch(() => {});
       return { action: "deny" };

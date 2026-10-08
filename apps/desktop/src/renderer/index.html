@@ -11,7 +11,8 @@
       <webview> has its own webContents and is isolated from this renderer's
       JS context, so a wide frame allowlist here does NOT expose the preload
       bridge to those URLs. Do not tighten these without first redesigning
-      the browser pane.
+      the browser pane. `*` never matches a custom scheme: the Files HTML
+      preview (exegol-preview:, served read-only by main) is named.
 
       All external network access (Anthropic API, GitHub API, etc.) happens
       from the main process via node fetch, so `connect-src` here only needs
@@ -27,8 +28,8 @@
         font-src 'self' data:;
         connect-src 'self';
         worker-src 'self' blob:;
-        frame-src * blob:;
-        child-src *;
+        frame-src * blob: exegol-preview:;
+        child-src * exegol-preview:;
         object-src 'none';
         base-uri 'self';
         form-action 'self'

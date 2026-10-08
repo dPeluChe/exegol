@@ -5,6 +5,7 @@ import {
   activateTab,
   activePaneId,
   activeTabOf,
+  applyFilesView,
   collectPaneIds,
   createEmptyPane,
   getPw,
@@ -64,6 +65,7 @@ type TabsPanesSlice = Pick<
   | "splitPane"
   | "updatePane"
   | "setPaneUrl"
+  | "setFilesView"
   | "releaseAgent"
   | "setFocusedPane"
   | "extractPaneToNewTab"
@@ -297,6 +299,17 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
         if (!pane) continue;
         if (pane.url === url) return s;
         const panes = { ...pw.panes, [paneId]: { ...pane, url } };
+        return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
+      }
+      return s;
+    }),
+
+  setFilesView: (paneId, patch) =>
+    set((s) => {
+      for (const [projectId, pw] of Object.entries(s.projectWorkspaces)) {
+        const pane = pw.panes[paneId];
+        if (!pane) continue;
+        const panes = { ...pw.panes, [paneId]: applyFilesView(pane, patch) };
         return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
       }
       return s;

@@ -1,11 +1,14 @@
 import { cn } from "@exegol/ui";
 import Editor, { loader } from "@monaco-editor/react";
-import { Code2, Eye, ListTree } from "lucide-react";
+import { Code2, Eye, ListTree, RefreshCw } from "lucide-react";
 import * as monaco from "monaco-editor";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { useLatest } from "../../hooks/use-latest";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { registerTextEditor } from "../../lib/dictation/editors";
+import type { EditorSpot, FilesView } from "../../stores/workspace";
+import { HtmlPreview } from "./HtmlPreview";
 import { JsonTree } from "./JsonTree";
 
 // Use local monaco-editor instance instead of CDN
@@ -72,6 +75,8 @@ function isMarkdown(fileName: string): boolean {
   return ext === ".md" || ext === ".mdx";
 }
 
+const HTML_EXT = /\.html?$/i;
+
 // ─── Monaco Code Viewer ────────────────────────────────────────────────────
 
 interface EditProps {
@@ -81,6 +86,13 @@ interface EditProps {
   onSave?: () => void;
   /** Scroll to and select this 1-based line (a text search hit) */
   revealLine?: number;
+}
+
+/** Where the editor goes back to, and where it reports leaving from */
+interface SpotProps {
+  path?: string;
+  spot?: EditorSpot;
+  onLeave?: (spot: EditorSpot) => void;
 }
 
 function revealAt(editor: monaco.editor.IStandaloneCodeEditor, line: number | undefined) {
@@ -96,11 +108,20 @@ function MonacoViewer({
   onChange,
   onSave,
   revealLine,
-}: { content: string; language: string } & EditProps) {
+  path,
+  spot,
+  onLeave,
+}: { content: string; language: string } & EditProps & SpotProps) {
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   // Monaco keeps the command from mount: read the latest save through a ref
   const saveRef = useLatest(onSave);
   const readOnly = !onChange;
+  // Kept on every move: the editor may be disposed before this unmounts
+  const spotRef = useRef<EditorSpot | null>(null);
+  const leaveRef = useLatest(onLeave);
+  useMountEffect(() => () => {
+    if (spotRef.current) leaveRef.current?.(spotRef.current);
+  });
 
   useEffect(() => {
     if (editorRef.current) revealAt(editorRef.current, revealLine);
@@ -116,7 +137,21 @@ function MonacoViewer({
       onMount={(editor) => {
         editorRef.current = editor;
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current?.());
+        if (spot && spot.path === path && !revealLine) {
+          editor.setPosition({ lineNumber: spot.line, column: spot.column });
+          editor.setScrollTop(spot.scrollTop);
+        }
         revealAt(editor, revealLine);
+        if (path) {
+          const track = () => {
+            const pos = editor.getPosition();
+            if (!pos) return;
+            const scrollTop = editor.getScrollTop();
+            spotRef.current = { path, line: pos.lineNumber, column: pos.column, scrollTop };
+          };
+          editor.onDidChangeCursorPosition(track);
+          editor.onDidScrollChange(track);
+        }
         const node = editor.getDomNode();
         if (node) {
           const unregister = registerTextEditor({
@@ -178,6 +213,11 @@ function MarkdownViewer({ content }: { content: string }) {
 interface CodeViewerProps extends EditProps {
   content: string;
   fileName: string | null;
+  /** The files pane's saved view: Code/rendered, editor spot, scripts in the HTML preview */
+  view?: FilesView;
+  onViewChange?: (patch: Partial<FilesView>) => void;
+  /** Changes when the file on disk does: the HTML preview reloads */
+  version?: number;
 }
 
 const JSON_EXT = /\.(json|jsonc|geojson|webmanifest)$/i;
@@ -209,21 +249,47 @@ function ModeButton({
   );
 }
 
-export function CodeViewer({ content, fileName, onChange, onSave, revealLine }: CodeViewerProps) {
-  const edit = { onChange, onSave, revealLine };
+export function CodeViewer({
+  content,
+  fileName,
+  onChange,
+  onSave,
+  revealLine,
+  view,
+  onViewChange,
+  version,
+}: CodeViewerProps) {
+  const edit = {
+    onChange,
+    onSave,
+    revealLine,
+    path: fileName ?? undefined,
+    spot: view?.cursor,
+    onLeave: onViewChange ? (cursor: EditorSpot) => onViewChange({ cursor }) : undefined,
+  };
   const language = fileName ? getMonacoLanguage(fileName) : "plaintext";
-  // Files with a rendered view: markdown (Preview) and JSON/JSONL (Tree, shown first)
+  // Files with a rendered view: markdown and HTML (Preview), JSON/JSONL (Tree, shown first)
   const rendered = !fileName
     ? null
     : isMarkdown(fileName)
-      ? ({ label: "Preview", icon: Eye, first: false } as const)
-      : JSON_EXT.test(fileName) || JSONL_EXT.test(fileName)
-        ? ({ label: "Tree", icon: ListTree, first: true } as const)
-        : null;
+      ? ({ kind: "markdown", label: "Preview", icon: Eye, first: false } as const)
+      : HTML_EXT.test(fileName)
+        ? ({ kind: "html", label: "Preview", icon: Eye, first: false } as const)
+        : JSON_EXT.test(fileName) || JSONL_EXT.test(fileName)
+          ? ({ kind: "tree", label: "Tree", icon: ListTree, first: true } as const)
+          : null;
   // Past 1MB the tree starts behind the Code tab: parsing is paid only on request
   const [showRendered, setShowRendered] = useState(
-    (rendered?.first ?? false) && content.length < 1_000_000 && !revealLine,
+    view?.mode && !revealLine
+      ? view.mode === "rendered"
+      : (rendered?.first ?? false) && content.length < 1_000_000 && !revealLine,
   );
+  const [reloads, setReloads] = useState(0);
+  const showMode = (next: boolean) => {
+    setShowRendered(next);
+    onViewChange?.({ mode: next ? "rendered" : "code" });
+  };
+  const [runScripts, setRunScripts] = useState(view?.runScripts ?? false);
 
   if (!fileName || !rendered) {
     return <MonacoViewer content={content} language={language} {...edit} />;
@@ -234,21 +300,55 @@ export function CodeViewer({ content, fileName, onChange, onSave, revealLine }: 
       <div className="flex h-7 shrink-0 items-center gap-1 border-b border-border bg-bg-tertiary px-2">
         <ModeButton
           active={!showRendered}
-          onClick={() => setShowRendered(false)}
+          onClick={() => showMode(false)}
           icon={Code2}
           label="Code"
         />
         <ModeButton
           active={showRendered}
-          onClick={() => setShowRendered(true)}
+          onClick={() => showMode(true)}
           icon={rendered.icon}
           label={rendered.label}
         />
+        {showRendered && rendered.kind === "html" && (
+          <>
+            <label
+              className="ml-auto flex cursor-pointer items-center gap-1 text-[10px] text-text-muted"
+              title="Scripts can only reach this project's files, never the network"
+            >
+              <input
+                type="checkbox"
+                checked={runScripts}
+                onChange={(e) => {
+                  setRunScripts(e.target.checked);
+                  onViewChange?.({ runScripts: e.target.checked });
+                }}
+                className="h-3 w-3"
+              />
+              Run scripts
+            </label>
+            <button
+              type="button"
+              onClick={() => setReloads((n) => n + 1)}
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-secondary"
+              title="Reload the preview"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Reload
+            </button>
+          </>
+        )}
       </div>
       <div className="min-h-0 flex-1">
         {!showRendered ? (
           <MonacoViewer content={content} language={language} {...edit} />
-        ) : rendered.label === "Preview" ? (
+        ) : rendered.kind === "html" ? (
+          <HtmlPreview
+            path={fileName}
+            runScripts={runScripts}
+            reloadKey={`${reloads}:${version ?? ""}`}
+          />
+        ) : rendered.kind === "markdown" ? (
           <MarkdownViewer content={content} />
         ) : (
           <JsonTree content={content} lines={JSONL_EXT.test(fileName)} />

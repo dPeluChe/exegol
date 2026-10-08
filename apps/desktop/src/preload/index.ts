@@ -327,6 +327,8 @@ contextBridge.exposeInMainWorld("api", {
     openResult: (result: { requestId: string; paneId?: string; error?: string }) =>
       safe.invoke("browser:open-result", result),
   },
+  /** An http(s) link clicked in a Files HTML preview (main refused the navigation) */
+  onPreviewLink: (callback: (link: unknown) => void) => listen("files-preview:link", callback),
   onMcpStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("mcp:status", handler as never);

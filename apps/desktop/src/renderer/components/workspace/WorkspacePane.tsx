@@ -25,6 +25,7 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import {
   collectPaneIds,
+  type FilesViewPatch,
   getProjectState,
   type Pane,
   selectPanes,
@@ -416,15 +417,14 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 
 // ─── Files Pane ─────────────────────────────────────────────────────────
 
-function FilesPaneContent({
-  overridePath,
-  openFile,
-}: {
-  overridePath?: string;
-  openFile?: string;
-}) {
+function FilesPaneContent({ pane, paneId }: PaneContentProps) {
   const { project } = useProjectContext();
-  const rootPath = overridePath || project?.path;
+  const setFilesView = useWorkspaceStore((s) => s.setFilesView);
+  const onViewChange = useCallback(
+    (patch: FilesViewPatch) => setFilesView(paneId, patch),
+    [setFilesView, paneId],
+  );
+  const rootPath = pane.filePath || project?.path;
   if (!rootPath) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -432,13 +432,16 @@ function FilesPaneContent({
       </div>
     );
   }
-  // Keyed: the expanded-folder set is seeded from the first root only
+  // Keyed: the expanded-folder set is seeded from the first root only. The open file, folders
+  // and mode live on the pane: a project switch unmounts it and they came back empty
   return (
     <FileExplorer
-      key={`${rootPath}:${openFile ?? ""}`}
+      key={rootPath}
       rootPath={rootPath}
-      initialFile={openFile}
+      initialFile={pane.openFile}
       projectId={project?.id}
+      view={pane.files}
+      onViewChange={onViewChange}
     />
   );
 }
@@ -455,12 +458,8 @@ const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.Reac
       <EmptyPane paneId={paneId} />
     ),
   browser: ({ pane, paneId }) => <BrowserPane pane={pane} paneId={paneId} />,
-  files: ({ pane }) => (
-    <FilesPaneContent
-      key={pane.filePath ?? "default"}
-      overridePath={pane.filePath}
-      openFile={pane.openFile}
-    />
+  files: ({ pane, paneId }) => (
+    <FilesPaneContent key={pane.filePath ?? "default"} pane={pane} paneId={paneId} />
   ),
   git: ({ pane }) => <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />,
   empty: ({ paneId }) => <EmptyPane paneId={paneId} />,

@@ -15,7 +15,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   shows its count; a new attention item never switches the view by itself. The collapsed rail
   has the same three views as icons.
 - **Tabs and panes**: every project has workspace tabs; a tab splits into panes of five types:
-  terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer), git, and an
+  terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer, with a
+  Preview of Markdown and HTML; HTML renders offline from the project's files, scripts off until
+  "Run scripts"), git, and an
   empty pane with the agent launcher. Its "Run in" row opens the chosen folder (root or a
   subfolder) in a terminal, Files, Git, Finder (Explorer on Windows, the file manager on Linux) or
   the project's IDE. Its refresh button finds the folders and their commands again; past 12
