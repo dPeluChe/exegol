@@ -336,7 +336,9 @@
       "clearOldLogs",
       "clearScreenshots",
       "openFolder",
-      "report"
+      "openOther",
+      "report",
+      "worktreeSizes"
     ],
     "dictation": [
       "cancel",

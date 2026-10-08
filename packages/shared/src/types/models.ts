@@ -84,10 +84,23 @@ export interface BrowserPartitionUsage {
   cacheBytes: number;
 }
 
+export const STORAGE_ROOTS = ["exegol", "userData"] as const;
+export type StorageRoot = (typeof STORAGE_ROOTS)[number];
+
+/** A top-level file or folder of ~/.exegol or userData that no category counts */
+export interface StorageOtherEntry {
+  root: StorageRoot;
+  name: string;
+  bytes: number;
+  isDir: boolean;
+}
+
 export interface StorageReport {
   rows: StorageRow[];
   totalBytes: number;
   browserPartitions: BrowserPartitionUsage[];
+  /** What "Other" holds, largest first */
+  otherEntries: StorageOtherEntry[];
   freeBytes: number | null;
   diskBytes: number | null;
   computedAt: number;

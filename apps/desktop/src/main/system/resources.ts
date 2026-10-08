@@ -378,7 +378,7 @@ const WORKTREE_TTL = 30_000;
 async function getDirectorySize(dirPath: string): Promise<number> {
   const cached = dirSizeCache.get(dirPath);
   if (cached && Date.now() < cached.expiresAt) return cached.value;
-  const bytes = await duBytes(dirPath);
+  const bytes = (await duBytes(dirPath)) ?? 0;
   if (bytes > 0) dirSizeCache.set(dirPath, { value: bytes, expiresAt: Date.now() + DIR_SIZE_TTL });
   return bytes;
 }

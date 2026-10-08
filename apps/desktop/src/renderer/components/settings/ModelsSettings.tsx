@@ -15,7 +15,28 @@ type LicensedAction = "download" | "setDefault";
 const BADGE = "rounded-full px-2 py-0.5 text-[10px]";
 
 export function ModelsSettings() {
-  const { data: models, isLoading } = useModels();
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <AudioLines className="h-4 w-4 text-accent" />
+        <h3 className="text-sm font-semibold text-text-primary">Speech models</h3>
+      </div>
+      <p className="text-xs leading-relaxed text-text-muted">
+        Local speech-to-text models for voice dictation. They run on this machine: audio never
+        leaves it. Downloads are checked against a pinned SHA-256 before they are unpacked into
+        ~/.exegol/models.
+      </p>
+      <SpeechModelList />
+    </div>
+  );
+}
+
+/** Every catalog model with its download, default and delete actions; `installedFirst` for Storage */
+export function SpeechModelList({ installedFirst = false }: { installedFirst?: boolean }) {
+  const { data, isLoading } = useModels();
+  const models = installedFirst
+    ? data && [...data].sort((a, b) => installedRank(a) - installedRank(b))
+    : data;
   const action = useModelAction();
   const { requestDelete, dialog: deleteDialog } = useConfirmDeleteModel();
   const [licenseCheck, setLicenseCheck] = useState<{
@@ -32,16 +53,7 @@ export function ModelsSettings() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <AudioLines className="h-4 w-4 text-accent" />
-        <h3 className="text-sm font-semibold text-text-primary">Speech models</h3>
-      </div>
-      <p className="text-xs leading-relaxed text-text-muted">
-        Local speech-to-text models for voice dictation. They run on this machine: audio never
-        leaves it. Downloads are checked against a pinned SHA-256 before they are unpacked into
-        ~/.exegol/models.
-      </p>
+    <>
       {isLoading && <p className="text-xs text-text-muted">Loading models...</p>}
       <div className="space-y-2">
         {models?.map((model) => (
@@ -74,8 +86,13 @@ export function ModelsSettings() {
           })
         }
       />
-    </div>
+    </>
   );
+}
+
+function installedRank(model: ModelListItem): number {
+  if (model.isDefault) return 0;
+  return model.status.state === "ready" ? 1 : 2;
 }
 
 function ModelRow({

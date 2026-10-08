@@ -1,4 +1,4 @@
-import type { ModelListItem, StorageCategory, StorageReport } from "@exegol/shared";
+import type { ModelListItem, StorageCategory, StorageReport, StorageRoot } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { toastError } from "../stores/toasts";
@@ -68,6 +68,7 @@ export function useRefreshStorage() {
 
 type StorageAction =
   | { action: "openFolder"; category: StorageCategory }
+  | { action: "openOther"; root: StorageRoot; name: string }
   | { action: "clearScreenshots" }
   | { action: "clearOldLogs" }
   | { action: "clearBrowserCache"; projectId: string };
@@ -78,7 +79,17 @@ export function useStorageAction() {
     mutationFn: ({ action, ...input }: StorageAction) => trpcMutate(`storage.${action}`, input),
     onError: toastError("Storage action failed"),
     onSuccess: (_data, { action }) => {
-      if (action !== "openFolder") void queryClient.invalidateQueries({ queryKey: STORAGE_KEY });
+      if (action !== "openFolder" && action !== "openOther")
+        void queryClient.invalidateQueries({ queryKey: STORAGE_KEY });
     },
+  });
+}
+
+/** Per worktree id; du over whole checkouts, so only while the Worktrees tab shows */
+export function useWorktreeSizes() {
+  return useQuery({
+    queryKey: ["storage", "worktreeSizes"],
+    queryFn: () => trpcInvoke<Record<string, number | null>>("storage.worktreeSizes"),
+    staleTime: 30_000,
   });
 }
