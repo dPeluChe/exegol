@@ -10,6 +10,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 - **Projects**: any folder or git repo. Each one has its own tabs, name, color or icon, and an
   optional keyboard number (Edit project). Projects can be grouped in the sidebar.
+- **Sidebar views**: a selector under Dashboard switches the sidebar between Agents (live
+  sessions per project, with an "Active only" filter: working or waiting on you), Projects and Needs attention. Each tab
+  shows its count; a new attention item never switches the view by itself. The collapsed rail
+  has the same three views as icons.
 - **Tabs and panes**: every project has workspace tabs; a tab splits into panes of five types:
   terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer), git, and an
   empty pane with the agent launcher. Its "Run in" row opens the chosen folder (root or a

@@ -1,3 +1,4 @@
+import { ACTIVE_STATUSES } from "@exegol/shared";
 import { useMemo } from "react";
 import { tabLabel } from "../components/workspace/tab-bar-helpers";
 import { type AgentState, showProject, useAgentStore } from "../stores/agents";
@@ -7,8 +8,6 @@ import { useWatchStore } from "../stores/watch";
 import { collectPaneIds, useWorkspaceStore } from "../stores/workspace";
 import type { ProjectWorkspace } from "../stores/workspace/types";
 import { chordBadge } from "./keymap";
-
-const LIVE_STATUSES_UI = new Set(["running", "spawning", "waiting_input"]);
 
 /** A workspace tab (layout) with live sessions, listed in the sidebar */
 export interface LiveTabGroup {
@@ -29,7 +28,10 @@ export function computeLiveTabGroups(
     pw.tabs.forEach((tab, index) => {
       const agentIds = collectPaneIds(tab.layout)
         .map((paneId) => pw.panes[paneId]?.agentId)
-        .filter((id): id is string => !!id && LIVE_STATUSES_UI.has(agents[id]?.status ?? ""));
+        .filter((id): id is string => {
+          const status = id ? agents[id]?.status : undefined;
+          return !!status && ACTIVE_STATUSES.has(status);
+        });
       if (agentIds.length > 0) {
         groups.push({
           key: `${projectId}:${tab.id}`,

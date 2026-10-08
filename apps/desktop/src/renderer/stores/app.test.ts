@@ -40,6 +40,39 @@ describe("migrateAppStore", () => {
   });
 });
 
+describe("migrateAppStore v5: sidebar views", () => {
+  it("drops the Projects split height and the old Agents switch, defaulting to Agents", () => {
+    const state = migrateAppStore({ sidebarProjectsHeight: 240, sidebarAgentsView: "agents" }, 4);
+    expect(state.sidebarView).toBe("agents");
+    expect("sidebarProjectsHeight" in state).toBe(false);
+    expect("sidebarAgentsView" in state).toBe(false);
+  });
+
+  it("keeps a picked Needs attention list as that view", () => {
+    expect(migrateAppStore({ sidebarAgentsView: "attention" }, 4).sidebarView).toBe("attention");
+  });
+
+  it("a missing or corrupt old value becomes Agents", () => {
+    expect(migrateAppStore({}, 4).sidebarView).toBe("agents");
+    expect(migrateAppStore({ sidebarAgentsView: 3 }, 4).sidebarView).toBe("agents");
+  });
+
+  it("a v5 state is left alone", () => {
+    expect(migrateAppStore({ sidebarView: "projects" }, 5).sidebarView).toBe("projects");
+  });
+});
+
+describe("openSidebarView", () => {
+  it("expands a collapsed sidebar on the picked view", () => {
+    useAppStore.setState({ sidebarCollapsed: true, sidebarView: "agents" });
+    useAppStore.getState().openSidebarView("attention");
+    expect(useAppStore.getState()).toMatchObject({
+      sidebarCollapsed: false,
+      sidebarView: "attention",
+    });
+  });
+});
+
 describe("Projects view return", () => {
   it("opens over the workspace, keeping the project, and Back returns to that view", () => {
     useAppStore.setState({ activeView: "dashboard", activeProjectId: "p1", projectsFrom: null });

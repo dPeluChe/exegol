@@ -1,4 +1,5 @@
 import { cn } from "@exegol/ui";
+import { tabKeyTarget } from "../../lib/tab-keys";
 
 export interface SegmentedTab<T extends string> {
   id: T;
@@ -15,46 +16,84 @@ export function SegmentedTabs<T extends string>({
   active,
   onChange,
   compact = false,
+  label,
+  panelId,
 }: {
   tabs: SegmentedTab<T>[];
   active: T;
   onChange: (id: T) => void;
   /** Sidebar size */
   compact?: boolean;
+  /** Accessible name of the tablist */
+  label?: string;
+  /** The tabpanel's id: makes it a tablist (roles, roving focus, arrow keys); each tab gets
+   *  `${panelId}-${tab.id}` and points at the panel */
+  panelId?: string;
 }) {
+  const isTablist = panelId !== undefined;
+  const focusIndex = Math.max(
+    0,
+    tabs.findIndex((t) => t.id === active),
+  );
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const next = tabKeyTarget(e.key, index, tabs.length);
+    const tab = next === null ? undefined : tabs[next];
+    if (next === null || !tab) return;
+    e.preventDefault();
+    onChange(tab.id);
+    e.currentTarget
+      .closest('[role="tablist"]')
+      ?.querySelectorAll<HTMLElement>('[role="tab"]')
+      [next]?.focus();
+  };
+
   return (
     <div
+      {...(isTablist && { role: "tablist", "aria-label": label })}
       className={cn(
         "flex gap-1 rounded-lg border border-border bg-bg-tertiary",
         compact ? "p-0.5" : "p-1",
       )}
     >
-      {tabs.map((tab) => (
-        <button
-          type="button"
-          key={tab.id}
-          onClick={() => onChange(tab.id)}
-          className={cn(
-            "flex-1 rounded-md font-medium transition-colors",
-            compact ? "px-2 py-1 text-[10px]" : "px-3 py-1.5 text-xs",
-            active === tab.id
-              ? "bg-bg-secondary text-text-primary shadow-sm"
-              : "text-text-muted hover:text-text-secondary",
-          )}
-        >
-          {tab.label}
-          {tab.count !== undefined && (
-            <span
-              className={cn(
-                "ml-1.5 text-[10px]",
-                tab.alert ? "font-semibold text-amber-400" : "text-text-muted",
-              )}
-            >
-              ({tab.count})
-            </span>
-          )}
-        </button>
-      ))}
+      {tabs.map((tab, index) => {
+        const selected = active === tab.id;
+        return (
+          <button
+            type="button"
+            key={tab.id}
+            {...(isTablist && {
+              role: "tab",
+              id: `${panelId}-${tab.id}`,
+              "aria-selected": selected,
+              "aria-controls": selected ? panelId : undefined,
+              tabIndex: index === focusIndex ? 0 : -1,
+              onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => onKeyDown(e, index),
+            })}
+            title={compact ? tab.label : undefined}
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              "flex min-w-0 flex-1 items-center justify-center rounded-md font-medium transition-colors",
+              compact ? "px-1.5 py-1 text-[10px]" : "px-3 py-1.5 text-xs",
+              selected
+                ? "bg-bg-secondary text-text-primary shadow-sm"
+                : "text-text-muted hover:text-text-secondary",
+            )}
+          >
+            <span className="min-w-0 truncate">{tab.label}</span>
+            {tab.count !== undefined && (
+              <span
+                className={cn(
+                  "shrink-0 text-[10px]",
+                  compact ? "ml-1" : "ml-1.5",
+                  tab.alert ? "font-semibold text-amber-400" : "text-text-muted",
+                )}
+              >
+                ({tab.count})
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

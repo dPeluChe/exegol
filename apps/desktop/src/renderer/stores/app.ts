@@ -4,6 +4,12 @@ import { persist } from "zustand/middleware";
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
 type ActiveView = "projects" | "workspace" | "dashboard";
 
+export const SIDEBAR_VIEWS = ["agents", "projects", "attention"] as const;
+export type SidebarView = (typeof SIDEBAR_VIEWS)[number];
+
+export const isSidebarView = (value: unknown): value is SidebarView =>
+  SIDEBAR_VIEWS.includes(value as SidebarView);
+
 interface AppStore {
   /** Current main view */
   activeView: ActiveView;
@@ -28,10 +34,6 @@ interface AppStore {
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
 
-  /** Height of the sidebar's Projects section dragged by the user (null = sized to content) */
-  sidebarProjectsHeight: number | null;
-  setSidebarProjectsHeight: (height: number | null) => void;
-
   /** Footer reads Claude's plan usage with Claude Code's own login: only once the user asks */
   claudePlanUsage: boolean;
   setClaudePlanUsage: (on: boolean) => void;
@@ -40,9 +42,15 @@ interface AppStore {
   projectsOrder: "auto" | "manual";
   setProjectsOrder: (order: "auto" | "manual") => void;
 
-  /** Sidebar Agents section: the live agents or the Needs attention list */
-  sidebarAgentsView: "agents" | "attention";
-  setSidebarAgentsView: (view: "agents" | "attention") => void;
+  /** The sidebar's view: live agents, projects or the Needs attention list */
+  sidebarView: SidebarView;
+  setSidebarView: (view: SidebarView) => void;
+  /** The rail's view buttons: expand the sidebar on that view */
+  openSidebarView: (view: SidebarView) => void;
+
+  /** Agents view: only the busy sessions */
+  sidebarActiveOnly: boolean;
+  setSidebarActiveOnly: (on: boolean) => void;
 
   /** Sidebar order of the live project cards (sets the Cmd+2..9 project order), by project id */
   liveProjectOrder: string[];
@@ -64,7 +72,7 @@ export function projectOrderFromTabKeys(keys: string[]): string[] {
 
 /**
  * v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour.
- * v4: the sidebar orders projects, not tabs
+ * v4: the sidebar orders projects, not tabs. v5: one sidebar view selector, no Projects split
  */
 export function migrateAppStore(persisted: unknown, fromVersion: number): AppStore {
   if (!persisted || typeof persisted !== "object") return persisted as AppStore;
@@ -76,6 +84,9 @@ export function migrateAppStore(persisted: unknown, fromVersion: number): AppSto
     welcomeTourSeen?: boolean;
     liveTabOrder?: unknown;
     liveProjectOrder?: string[];
+    sidebarAgentsView?: unknown;
+    sidebarProjectsHeight?: unknown;
+    sidebarView?: SidebarView;
   };
   if (fromVersion < 4) {
     const keys = Array.isArray(state.liveTabOrder) ? state.liveTabOrder : [];
@@ -83,6 +94,11 @@ export function migrateAppStore(persisted: unknown, fromVersion: number): AppSto
       keys.filter((k): k is string => typeof k === "string"),
     );
     delete state.liveTabOrder;
+  }
+  if (fromVersion < 5) {
+    state.sidebarView = isSidebarView(state.sidebarAgentsView) ? state.sidebarAgentsView : "agents";
+    delete state.sidebarAgentsView;
+    delete state.sidebarProjectsHeight;
   }
   if (fromVersion < 2 && state.activeView === "settings") {
     state.activeView = state.activeProjectId ? "workspace" : "projects";
@@ -124,17 +140,18 @@ export const useAppStore = create<AppStore>()(
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
 
-      sidebarProjectsHeight: null,
-      setSidebarProjectsHeight: (height) => set({ sidebarProjectsHeight: height }),
-
       claudePlanUsage: false,
       setClaudePlanUsage: (on) => set({ claudePlanUsage: on }),
 
       projectsOrder: "auto",
       setProjectsOrder: (order) => set({ projectsOrder: order }),
 
-      sidebarAgentsView: "agents",
-      setSidebarAgentsView: (view) => set({ sidebarAgentsView: view }),
+      sidebarView: "agents",
+      setSidebarView: (view) => set({ sidebarView: view }),
+      openSidebarView: (view) => set({ sidebarView: view, sidebarCollapsed: false }),
+
+      sidebarActiveOnly: false,
+      setSidebarActiveOnly: (on) => set({ sidebarActiveOnly: on }),
 
       liveProjectOrder: [],
       setLiveProjectOrder: (order) => set({ liveProjectOrder: order }),
@@ -147,7 +164,7 @@ export const useAppStore = create<AppStore>()(
     }),
     {
       name: "exegol-app-state",
-      version: 4,
+      version: 5,
       migrate: migrateAppStore,
       partialize: (state) => ({
         activeProjectId: state.activeProjectId,
@@ -156,8 +173,8 @@ export const useAppStore = create<AppStore>()(
         onboardingComplete: state.onboardingComplete,
         welcomeTourSeen: state.welcomeTourSeen,
         liveProjectOrder: state.liveProjectOrder,
-        sidebarProjectsHeight: state.sidebarProjectsHeight,
-        sidebarAgentsView: state.sidebarAgentsView,
+        sidebarView: state.sidebarView,
+        sidebarActiveOnly: state.sidebarActiveOnly,
         projectsOrder: state.projectsOrder,
         claudePlanUsage: state.claudePlanUsage,
       }),

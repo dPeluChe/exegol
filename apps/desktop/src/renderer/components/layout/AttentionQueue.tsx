@@ -37,7 +37,7 @@ const MUTE_CHANNEL_OPTIONS: { channel: NotificationMuteChannel; label: string }[
 
 /**
  * Global "needs attention" queue (T141) — a TitleBar dropdown mirroring the
- * sidebar's per-project AttentionSection, but flattened across all projects
+ * sidebar's Needs attention view (SidebarViews), but flattened across all projects
  * so a click always jumps straight to the pane regardless of what's active.
  */
 export function AttentionQueue() {
