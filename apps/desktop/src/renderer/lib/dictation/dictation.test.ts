@@ -1,5 +1,6 @@
 import { DEFAULT_DICTATION_SETTINGS, DEFAULT_DICTATION_SHORTCUT } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
+import { isClaudeQuestion } from "../claude-question";
 import { shortcutClash, shortcutsWith } from "../shortcuts";
 import { StreamResampler } from "./resampler";
 import {
@@ -113,7 +114,10 @@ describe("dictation target", () => {
       focusedPaneId: "pane2",
       pane: { id: "pane2", type: "terminal", agentId: "a2" },
     });
-    expect(confirmTarget(start, otherPane).kind).toBe("clipboard");
+    expect(confirmTarget(start, otherPane)).toMatchObject({
+      kind: "clipboard",
+      why: expect.stringMatching(/focus moved/),
+    });
     const otherProject = resolveTarget({ ...base, projectId: "p2" });
     expect(confirmTarget(start, otherProject).kind).toBe("clipboard");
   });
@@ -178,5 +182,29 @@ describe("dictation shortcut", () => {
     const keys = (d: object) => shortcutsWith(d).find((s) => s.id === "dictation")?.keys;
     expect(keys({ ...DEFAULT_DICTATION_SETTINGS, shortcut: "Cmd+Shift+M" })).toMatch(/Shift\+M$/);
     expect(keys({ ...DEFAULT_DICTATION_SETTINGS, enabled: false })).toBeUndefined();
+  });
+});
+
+describe("isClaudeQuestion", () => {
+  const since = 1_000_000;
+  const agent = { cliType: "claude-code", status: "waiting_input" as const, activitySince: since };
+  const item = (after: number) => ({ level: "action_needed", timestamp: since + after });
+
+  it("counts an item raised as Claude started waiting", () => {
+    expect(isClaudeQuestion(item(300), agent)).toBe(true);
+  });
+
+  // The failing case: idle 60s, the reminder raised an item, dictation went to the clipboard
+  it("ignores the idle reminder raised later on the same wait", () => {
+    expect(isClaudeQuestion(item(60_000), agent)).toBe(false);
+    expect(isClaudeQuestion(item(-120_000), agent)).toBe(false);
+  });
+
+  it("only for a waiting Claude session and its own question", () => {
+    expect(isClaudeQuestion(item(0), { ...agent, status: "running" })).toBe(false);
+    expect(isClaudeQuestion(item(0), { ...agent, cliType: "codex" })).toBe(false);
+    expect(isClaudeQuestion({ ...item(0), paneId: "p" }, agent)).toBe(false);
+    expect(isClaudeQuestion({ ...item(0), level: "info" }, agent)).toBe(false);
+    expect(isClaudeQuestion(undefined, agent)).toBe(false);
   });
 });

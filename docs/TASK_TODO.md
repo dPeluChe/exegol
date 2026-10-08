@@ -219,6 +219,8 @@ on the machine (no audio leaves it), typed into the focused pane.
      `$ORIGIN` (the .so files sit beside it in `app.asar.unpacked`, so no `LD_LIBRARY_PATH`),
      checked on the npm tarball only
 3. Later:
+   - The global `~/.claude/settings.json` hooks from `agents/wrappers.ts` fire for every Claude
+     session on the machine, not only Exegol's: scope them or drop them for the per-agent file
    - Whisper through whisper-server (whisper.cpp, Metal) for faster Whisper on Apple Silicon
    - Apple SpeechAnalyzer on macOS 26+ as a no-download engine
    - Silero VAD (sherpa-onnx, verified download) for the phrase cuts; the energy VAD cuts them now

@@ -192,3 +192,12 @@ body {
   to { opacity: 1; }
 }
 .animate-fade-in { animation: fade-in 0.2s ease-out forwards; }
+
+/* Dictation overlay: the soft caret waiting for the next phrase (a still caret under reduced motion) */
+@keyframes caret-breathe {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .animate-caret { animation: caret-breathe 1.2s ease-in-out infinite; }
+}

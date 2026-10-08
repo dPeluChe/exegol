@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { overlayKeyAction } from "./overlay-keys";
-import { insertHint, targetLabel } from "./target";
+import { insertHint, targetName } from "./target";
 
 const key = (k: string, extra: Partial<Parameters<typeof overlayKeyAction>[0]> = {}) => ({
   key: k,
@@ -44,15 +44,12 @@ describe("overlayKeyAction", () => {
 });
 
 describe("insert hint", () => {
-  const terminal = { kind: "terminal", paneId: "p", projectId: "x", agentId: "a" } as const;
-
-  it("names the agent by alias and CLI, a shell as shell", () => {
-    expect(targetLabel(terminal, { alias: "lupus", cliType: "claude-code" })).toBe(
-      "lupus · claude-code",
-    );
-    expect(targetLabel(terminal, { cliType: "codex" })).toBe("codex");
-    expect(targetLabel(terminal, { cliType: "shell" })).toBe("shell");
-    expect(targetLabel({ kind: "browser", paneId: "p", projectId: "x" })).toBe("");
+  it("names the agent by alias, else its CLI, a shell as shell", () => {
+    expect(targetName("terminal", { alias: "lupus", cliType: "claude-code" })).toBe("lupus");
+    expect(targetName("terminal", { cliType: "codex" })).toBe("codex");
+    expect(targetName("terminal", { cliType: "shell" })).toBe("shell");
+    expect(targetName("terminal")).toBe("the terminal");
+    expect(targetName("browser")).toBe("Browser");
   });
 
   it("says whether Enter is sent", () => {
