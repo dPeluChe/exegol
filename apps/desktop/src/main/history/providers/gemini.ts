@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { scanPerCwdDir } from "../pool";
+import { readHead } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 /**
@@ -37,17 +38,104 @@ export const geminiHistory: LocalHistoryProvider = {
   id: "gemini",
 
   async list(cwds: string[], since: number): Promise<LocalSession[]> {
-    const chats = await scanPerCwdDir(cwds, {
-      dirFor: (cwd) => join(homedir(), ".gemini", "tmp", projectDirFor(cwd), "chats"),
-      ext: ".json",
-      read: (path, entry, cwd) => readChat(path, entry, cwd, since),
-    });
+    const tmp = join(homedir(), ".gemini", "tmp");
+    const slugs = await projectSlugs();
+    const [legacy, current] = await Promise.all([
+      scanPerCwdDir(cwds, {
+        dirFor: (cwd) => join(tmp, projectDirFor(cwd), "chats"),
+        ext: ".json",
+        read: (path, entry, cwd) => readChat(path, entry, cwd, since),
+      }),
+      scanPerCwdDir(
+        cwds.filter((cwd) => slugs[cwd]),
+        {
+          dirFor: (cwd) => join(tmp, slugs[cwd] ?? "", "chats"),
+          ext: ".jsonl",
+          read: (path, entry, cwd) => readJsonlChat(path, entry, cwd, since),
+        },
+      ),
+    ]);
+    const chats = [...legacy, ...current];
     // gemini reuses a session id across resumed chats, writing one file per
     // resume. Those are ONE session picked up again, not several — and left
     // separate they collide on the id the timeline keys rows by.
     return collapseResumes(chats);
   },
 };
+
+/**
+ * gemini 0.4x moved new chats to `tmp/<slug>/chats/*.jsonl`, the slug assigned per path in
+ * `projects.json`. Reading only the sha256 layout found no session written since, so "Continue
+ * last" dropped `--resume latest` on every folder that had one
+ */
+async function projectSlugs(): Promise<Record<string, string>> {
+  try {
+    const raw = await readFile(join(homedir(), ".gemini", "projects.json"), "utf-8");
+    const parsed = JSON.parse(raw) as { projects?: Record<string, string> };
+    return parsed.projects ?? {};
+  } catch {
+    return {};
+  }
+}
+
+interface GeminiJsonlLine {
+  sessionId?: string;
+  startTime?: string;
+  type?: string;
+  content?: string | Array<{ text?: string }>;
+}
+
+function lineText(content: GeminiJsonlLine["content"]): string | null {
+  if (typeof content === "string") return content;
+  return content?.find((c) => typeof c.text === "string")?.text ?? null;
+}
+
+/** Line 1 is the session header; a chat with no user line yet is one gemini never resumes */
+async function readJsonlChat(
+  path: string,
+  entry: string,
+  cwd: string,
+  since: number,
+): Promise<LocalSession | null> {
+  try {
+    const { head, sizeBytes, modifiedAt } = await readHead(path);
+    if (modifiedAt < since) return null;
+    let sessionId = entry.replace(/\.jsonl$/, "");
+    let startedAt: number | null = null;
+    let title: string | null = null;
+    for (const raw of head.split("\n")) {
+      if (!raw.startsWith("{")) continue;
+      let line: GeminiJsonlLine;
+      try {
+        line = JSON.parse(raw) as GeminiJsonlLine;
+      } catch {
+        continue; // the cut tail of the head read
+      }
+      if (line.sessionId) sessionId = line.sessionId;
+      if (line.startTime && startedAt === null) {
+        startedAt = Math.floor(Date.parse(line.startTime) / 1000);
+      }
+      if (line.type === "user") {
+        title = normalizeTitle(lineText(line.content)) ?? "";
+        break;
+      }
+    }
+    if (title === null) return null;
+    return {
+      provider: "gemini",
+      sessionId,
+      title: title || null,
+      cwd,
+      branch: null,
+      startedAt,
+      endedAt: modifiedAt,
+      version: null,
+      sizeBytes,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function collapseResumes(sessions: LocalSession[]): LocalSession[] {
   const bySession = new Map<string, LocalSession>();

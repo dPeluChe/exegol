@@ -76,4 +76,26 @@ describe("geminiHistory", () => {
   it("returns nothing for a repo gemini has never seen", async () => {
     expect(await geminiHistory.list(["/other/repo"], 0)).toEqual([]);
   });
+
+  // gemini 0.4x+: `tmp/<slug from projects.json>/chats/*.jsonl`, header on line 1
+  it("reads the slug-dir JSONL layout, skipping a chat with no user message", async () => {
+    const gem = join(home.dir, ".gemini");
+    mkdirSync(join(gem, "tmp", "repo", "chats"), { recursive: true });
+    writeFileSync(join(gem, "projects.json"), JSON.stringify({ projects: { [REPO]: "repo" } }));
+    const header = (id: string) =>
+      JSON.stringify({ sessionId: id, startTime: "2026-06-18T18:38:53.870Z", kind: "main" });
+    writeFileSync(
+      join(gem, "tmp", "repo", "chats", "session-a.jsonl"),
+      `${header("sess-j")}\n${JSON.stringify({ type: "user", content: [{ text: "hola  gemini" }] })}\n`,
+    );
+    writeFileSync(
+      join(gem, "tmp", "repo", "chats", "session-empty.jsonl"),
+      `${header("sess-e")}\n`,
+    );
+
+    const sessions = await geminiHistory.list([REPO], 0);
+    expect(sessions).toEqual([
+      expect.objectContaining({ sessionId: "sess-j", title: "hola gemini", cwd: REPO }),
+    ]);
+  });
 });

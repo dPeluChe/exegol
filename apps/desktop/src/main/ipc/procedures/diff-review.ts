@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import { execFileAsync } from "../../integrations/github/gh";
+import { execFileAsync } from "../../lib/exec-file";
 import { getProjectPorts } from "../../system/ports";
 
 const SENSITIVE_PATTERNS = [

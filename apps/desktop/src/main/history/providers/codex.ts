@@ -124,6 +124,7 @@ export async function dayDirs(root: string, since: number): Promise<string[]> {
 
 export const codexHistory: LocalHistoryProvider = {
   id: "codex",
+  sharedStore: true,
 
   async list(cwds: string[], since: number): Promise<LocalSession[]> {
     const root = join(homedir(), ".codex", "sessions");

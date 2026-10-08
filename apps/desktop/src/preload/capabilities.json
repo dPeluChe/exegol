@@ -324,6 +324,7 @@
     "history": [
       "list",
       "finalOutput",
+      "hasLocalSession",
       "resumableLocal"
     ],
     "models": [
@@ -378,6 +379,7 @@
     "agent:status-changed",
     "agent:follow-ups",
     "agent:pr-watch",
+    "agent:resume-missed",
     "recovery:progress",
     "window:focus-changed",
     "metrics:update",

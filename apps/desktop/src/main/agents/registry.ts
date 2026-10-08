@@ -202,7 +202,9 @@ export const BUILTIN_PROVIDERS: AgentProvider[] = [
     capabilities: {
       supportsWorktree: false,
       supportsResume: true,
-      resumeFlag: "threads continue --last",
+      // No "continue last": `threads continue --last` is the account's last thread, from any
+      // folder. A session Exegol saw resume by its own thread id
+      resumeFlag: "",
       resumeCommandPattern: "amp threads continue ",
       supportsRPC: false,
       supportsVision: false,

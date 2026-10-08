@@ -1,9 +1,5 @@
-import {
-  currentBranch,
-  detectGhCli,
-  execFileAsync,
-  isDefaultBranch,
-} from "../../integrations/github/gh";
+import { currentBranch, detectGhCli, isDefaultBranch } from "../../integrations/github/gh";
+import { execFileAsync } from "../../lib/exec-file";
 import { AsyncLruCache } from "../../lib/lru-cache";
 import { readGitStatus } from "./git-status";
 

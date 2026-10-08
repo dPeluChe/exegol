@@ -34,7 +34,15 @@ export interface LocalHistoryProvider {
    * @param since Epoch seconds; older sessions are skipped without being read.
    */
   list(cwds: string[], since: number): Promise<LocalSession[]>;
+  /**
+   * The store is shared by every repo (codex by day, goose flat), so a scan with no `since` reads
+   * the user's whole history: the resume check then looks at a recent window only
+   */
+  sharedStore?: boolean;
 }
+
+/** The store cannot be read at all (CLI not installed, listing failed): "unknown", not "none" */
+export class StoreUnavailable extends Error {}
 
 /**
  * One spelling for a session title, whatever store it came from.

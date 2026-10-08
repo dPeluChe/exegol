@@ -199,6 +199,14 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:pr-watch", handler as never);
     };
   },
+  /** A "continue last" found no session and exited: the renderer relaunches it fresh */
+  onResumeMissed: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:resume-missed", handler as never);
+    return () => {
+      safe.off("agent:resume-missed", handler as never);
+    };
+  },
   onRecoveryProgress: (callback: (state: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("recovery:progress", handler as never);

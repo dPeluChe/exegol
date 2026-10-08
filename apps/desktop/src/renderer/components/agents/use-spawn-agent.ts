@@ -17,7 +17,8 @@ function resumeInput({ localSessionId, useWorktree, session }: SpawnForm) {
   if (localSessionId && !useWorktree) {
     return { resumeSession: true, resumeLocalSessionId: localSessionId };
   }
-  if (session === "last") return { resumeSession: true };
+  // Hidden while isolated: a new worktree has no session to continue
+  if (session === "last") return useWorktree ? {} : { resumeSession: true };
   if (session) return { resumeSession: true, resumeFromAgentId: session.agentId };
   return {};
 }

@@ -92,6 +92,9 @@ interface Window {
     onPrWatch: (
       callback: (event: { agentId: string; projectId: string; reason?: string }) => void,
     ) => () => void;
+    onResumeMissed: (
+      callback: (event: { agentId: string; projectId: string; cliType: string }) => void,
+    ) => () => void;
     /** Exegol gained or lost the focus (another app took it; not a webview or our own windows) */
     onWindowFocus: (callback: (focused: boolean) => void) => () => void;
     onPipelineStatus: (callback: (event: PipelineStatusEvent) => void) => () => void;

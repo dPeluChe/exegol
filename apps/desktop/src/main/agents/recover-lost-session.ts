@@ -1,9 +1,31 @@
-import type { AgentCliType } from "@exegol/shared";
+import { type AgentCliType, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { findLostSession } from "../history";
 import { logger } from "../lib/logger";
 import { providerSessionId } from "./provider-session-id";
 import { getProviderRegistry } from "./registry";
+
+/** Provider session ids that live agents of this CLI in the project are running */
+export function liveSessionIds(
+  db: Database.Database,
+  projectId: string,
+  cliType: string,
+): Set<string> {
+  const live = [...LIVE_STATUSES];
+  const rows = db
+    .prepare(
+      `SELECT claude_session_id, resume_command FROM agents
+       WHERE project_id = ? AND cli_type = ? AND status IN (${live.map(() => "?").join(",")})
+         AND (claude_session_id IS NOT NULL OR resume_command IS NOT NULL)`,
+    )
+    .all(projectId, cliType, ...live) as {
+    claude_session_id: string | null;
+    resume_command: string | null;
+  }[];
+  return new Set(
+    rows.flatMap((r) => providerSessionId(cliType, r.claude_session_id, r.resume_command) ?? []),
+  );
+}
 
 /**
  * Resume needs the provider's session id. A reboot or crash kills the PTY
