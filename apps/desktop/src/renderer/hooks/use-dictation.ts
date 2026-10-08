@@ -8,11 +8,11 @@ import {
 } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  appFocusChanged,
   bindDictationQueries,
   chordDown,
   chordUp,
   dismissDictation,
-  leaveWindow,
 } from "../lib/dictation/controller";
 import {
   dictationChord,
@@ -64,16 +64,8 @@ export function useDictation() {
     };
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", onKeyUp, true);
-    // Focus moving into a browser pane's page blurs the window but keeps the document focused
-    const onBlur = () =>
-      setTimeout(() => {
-        if (!document.hasFocus()) leaveWindow();
-      }, 0);
-    const onVisibility = () => {
-      if (document.hidden) leaveWindow();
-    };
-    window.addEventListener("blur", onBlur);
-    document.addEventListener("visibilitychange", onVisibility);
+    // App-level focus (main's relay), not the DOM blur: a browser pane's webview blurs the page
+    const offFocus = window.api.onWindowFocus(appFocusChanged);
     const offKey = window.api.dictation.onKey(({ kind }) => {
       if (kind === "down") chordDown();
       else if (kind === "up") chordUp();
@@ -91,8 +83,7 @@ export function useDictation() {
       bindDictationQueries(null);
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
-      window.removeEventListener("blur", onBlur);
-      document.removeEventListener("visibilitychange", onVisibility);
+      offFocus();
       offKey();
       offPartial();
       offEngine();

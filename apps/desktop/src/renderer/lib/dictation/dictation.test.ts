@@ -4,10 +4,12 @@ import { shortcutClash, shortcutsWith } from "../shortcuts";
 import { StreamResampler } from "./resampler";
 import {
   answersPrompt,
+  cancelsOnFocusChange,
   confirmTarget,
   type FocusSnapshot,
   resolveTarget,
   sanitizeDictation,
+  takesDictation,
 } from "./target";
 import { rms, shouldAutoStop, updateVad, VAD_START } from "./vad";
 
@@ -128,6 +130,21 @@ describe("dictation target", () => {
     const noPane = resolveTarget({ ...dash, mirror: { ...mirror, paneId: null } });
     expect(noPane.kind).toBe("clipboard");
     expect(noPane.kind === "clipboard" && noPane.why).toBeTruthy();
+  });
+
+  it("takes live shells and agents that can be pasted into", () => {
+    expect(takesDictation({ cliType: "shell", status: "idle" })).toBe(true);
+    expect(takesDictation({ cliType: "shell", status: "running" })).toBe(true);
+    expect(takesDictation({ cliType: "shell", status: "stopped" })).toBe(false);
+    expect(takesDictation({ cliType: "claude-code", status: "waiting_input" })).toBe(true);
+    expect(takesDictation({ cliType: "claude-code", status: "crashed" })).toBe(false);
+  });
+
+  it("cancels only when Exegol loses the focus while listening", () => {
+    expect(cancelsOnFocusChange(false, "listening")).toBe(true);
+    expect(cancelsOnFocusChange(false, "starting")).toBe(false);
+    expect(cancelsOnFocusChange(false, "transcribing")).toBe(false);
+    expect(cancelsOnFocusChange(true, "listening")).toBe(false);
   });
 
   it("never answers an agent's question", () => {

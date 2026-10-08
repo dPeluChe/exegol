@@ -13,18 +13,20 @@ import { useAppStore } from "../../stores/app";
 import { useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
-import { isPasteTarget, pasteToAgent, submitToAgent } from "../agent-input";
+import { pasteToAgent, submitToAgent } from "../agent-input";
 import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
 import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
 import {
   answersPrompt,
+  cancelsOnFocusChange,
   confirmTarget,
   type DictationTarget,
   type FocusSnapshot,
   resolveTarget,
   sanitizeDictation,
+  takesDictation,
 } from "./target";
 import { rms, shouldAutoStop, updateVad, VAD_START, type VadState } from "./vad";
 
@@ -83,7 +85,7 @@ function focusedMirror(): FocusSnapshot["mirror"] {
     agentId,
     projectId: agent.projectId,
     paneId: findAgentPane(agentId, agent.projectId)?.paneId ?? null,
-    live: isPasteTarget(agent),
+    live: takesDictation(agent),
   };
 }
 
@@ -99,7 +101,7 @@ function snapshot(): { target: DictationTarget; field: HTMLElement | null; ancho
     projectId,
     focusedPaneId,
     pane,
-    sessionLive: !!agent && isPasteTarget(agent),
+    sessionLive: !!agent && takesDictation(agent),
     editableField: !!field,
     mirror: focusedMirror(),
   };
@@ -313,11 +315,12 @@ async function copyInstead(text: string, title: string, body: string): Promise<v
   toast().addToast({ type: "info", title, body });
 }
 
-/** The agent's screen holds a question: a dictation must not answer it */
+/** The agent's screen holds a question (or the session ended): a dictation must not answer it */
 async function agentAsks(agentId: string): Promise<boolean> {
   const { agents, attentionItems } = useAgentStore.getState();
   const agent = agents[agentId];
-  if (!agent || !isPasteTarget(agent)) return true;
+  if (!agent || !takesDictation(agent)) return true;
+  if (agent.cliType === "shell") return false;
   const dialog = await trpcInvoke<ScreenDialog | null>("agents.screenDialog", {
     id: agentId,
   }).catch(() => null);
@@ -378,11 +381,11 @@ export async function insertDictation(
   );
 }
 
-/** The window lost the focus or was hidden: a dictation in progress is cancelled. Not while
- *  starting: the macOS mic prompt takes the focus then */
-export function leaveWindow(): void {
+/** Main's focus relay: Exegol gained or lost the focus to another app */
+export function appFocusChanged(focused: boolean): void {
+  if (focused) return;
   holdCandidate = false;
-  if (store().phase === "listening") {
+  if (cancelsOnFocusChange(focused, store().phase)) {
     cancelDictation();
     toast().addToast({ type: "info", title: "Dictation cancelled", body: "Exegol lost the focus" });
   }

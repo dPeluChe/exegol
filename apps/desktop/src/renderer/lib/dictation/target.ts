@@ -1,4 +1,5 @@
-import type { AgentStatus } from "@exegol/shared";
+import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
+import { isPasteTarget } from "../agent-input";
 
 /** Where a dictation goes. Resolved when recording starts and checked again before inserting:
  *  text only lands in the pane (or field) that had the focus all along */
@@ -14,7 +15,7 @@ export interface FocusSnapshot {
   projectId: string | null;
   focusedPaneId: string | null;
   pane: { id: string; type: string; agentId?: string } | undefined;
-  /** The pane's session can take pasted text (agent-input isPasteTarget) */
+  /** The pane's session can take dictated text (takesDictation) */
   sessionLive: boolean;
   /** A text input of the app itself has the focus (address bar, a form) */
   editableField: boolean;
@@ -57,6 +58,18 @@ const sameTarget = (a: DictationTarget, b: DictationTarget): boolean =>
 export function confirmTarget(start: DictationTarget, now: DictationTarget): DictationTarget {
   return sameTarget(start, now) ? start : { kind: "clipboard", projectId: start.projectId };
 }
+
+/** A live shell, or an agent that can take pasted text (agent-input). The text is always one
+ *  bracketed paste with no Enter for a shell, so it never runs line by line */
+export function takesDictation(a: { cliType: string; status: AgentStatus }): boolean {
+  return a.cliType === "shell" ? LIVE_STATUSES.has(a.status) : isPasteTarget(a);
+}
+
+/** Only Exegol losing the focus to another app cancels (the main process's focus relay): a
+ *  browser pane's webview blurs the document without that. Not while starting: the macOS mic
+ *  prompt takes the focus then */
+export const cancelsOnFocusChange = (appFocused: boolean, phase: string): boolean =>
+  !appFocused && phase === "listening";
 
 /** A dictation never answers an agent's question: typed text (or its Enter) would pick an
  *  option of a permission dialog */
