@@ -50,21 +50,40 @@ export function SpawnSessionPicker({
     staleTime: 10_000,
   });
 
-  if (resumableHere.length === 0 && !resumeFlag) return null;
+  // An isolated worktree is a new folder: there is nothing in it to continue
+  const canContinue = !!resumeFlag && !useWorktree;
+  const { data: hasSession } = useQuery({
+    queryKey: ["history", "hasLocalSession", projectId, providerId],
+    queryFn: () =>
+      trpcInvoke<boolean | null>("history.hasLocalSession", { projectId, provider: providerId }),
+    enabled: canContinue,
+    staleTime: 10_000,
+  });
+  // false: the CLI has nothing here and would exit with an error. null: no way to check
+  const showContinue = canContinue && hasSession !== false;
+
+  if (resumableHere.length === 0 && !showContinue) return null;
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium text-text-muted">Session</span>
       <div className="flex flex-wrap gap-1.5">
-        <SpawnChip selected={session === null && !localSessionId} onClick={() => onSession(null)}>
+        <SpawnChip
+          selected={(session === null || (session === "last" && !showContinue)) && !localSessionId}
+          onClick={() => onSession(null)}
+        >
           New
         </SpawnChip>
         {/* Works without a captured handle: it is the provider's own
             flag, which is what the user would type by hand. */}
-        {resumeFlag && (
+        {showContinue && (
           <SpawnChip
             selected={session === "last"}
             onClick={() => onSession("last")}
-            title={`Launches with ${resumeFlag}`}
+            title={
+              hasSession === null
+                ? `Launches with ${resumeFlag}. Exegol cannot check for a previous session of this CLI here; if it finds none, a new one starts`
+                : `Launches with ${resumeFlag}`
+            }
             className="flex items-center gap-1.5"
           >
             <History className="h-3 w-3" />

@@ -45,6 +45,8 @@ interface PtyInvocation {
   stdinCommand: string | null;
   enableMarker: boolean;
   isPlainShell: boolean;
+  /** Launched with the generic resume flag without knowing a session exists (see missed-resume) */
+  blindResume: boolean;
 }
 
 interface ProjectInfo {
@@ -209,6 +211,28 @@ function captureInitialSnapshot(
 }
 
 /**
+ * `--continue` in opencode and Kilo picks the newest session of the whole git project (all its
+ * worktrees) or, outside git, of one "global" project shared by every such folder. "Continue
+ * last" passes the newest session recorded in this folder instead
+ */
+const RESUME_LAST_BY_ID = new Set(["opencode", "kilocode"]);
+
+/** What "continue the last session" adds to the CLI's command: its resume flag, or for the CLIs
+ *  above the id of the newest session in this folder (`-s <id>`) when one is known */
+export function continueLastPart(
+  cliType: string,
+  capabilities: { resumeFlag?: string; resumeCommandPattern?: string } | undefined,
+  lastSessionId: string | null,
+): string | undefined {
+  const pattern = capabilities?.resumeCommandPattern;
+  if (RESUME_LAST_BY_ID.has(cliType) && pattern && lastSessionId) {
+    // The pattern starts with the registry's binary name; the caller supplies the one it runs
+    return `${pattern.trim().split(/\s+/).slice(1).join(" ")} ${lastSessionId}`;
+  }
+  return capabilities?.resumeFlag || undefined;
+}
+
+/**
  * Build the PTY shell, args, and env for an agent. Handles plain-shell mode,
  * interactive CLIs (which need stdin injection after shell ready), and the
  * shell-readiness marker for prompt detection.
@@ -223,6 +247,8 @@ export function buildPtyInvocation(
   projectPath: string,
   /** From the CLI's own store: false = nothing to continue here, null = unknown */
   priorSession: boolean | null = null,
+  /** The newest of those sessions, for CLIs whose own "continue last" is not scoped to the folder */
+  priorSessionId: string | null = null,
 ): PtyInvocation {
   const isPlainShell = agent.cliType === "shell";
   const userShell = loginShell();
@@ -231,6 +257,7 @@ export function buildPtyInvocation(
   let args: string[];
   let env: Record<string, string>;
   let stdinCommand: string | null = null;
+  let blindResume = false;
 
   // oh-my-zsh's interactive update prompt blocks shell init (no ready marker,
   // frozen pane) — suppress it in every PTY we spawn.
@@ -311,8 +338,9 @@ export function buildPtyInvocation(
         fullCommand = withArgs(`--resume ${row.claude_session_id}`);
         logger.info(`[AgentManager] Resuming Claude via session ID ${row.claude_session_id}`);
       } else {
-        const provider = registry.get(agent.cliType);
-        const resumeFlag = provider?.capabilities?.resumeFlag;
+        const capabilities = registry.get(agent.cliType)?.capabilities;
+        const resumeFlag = capabilities?.resumeFlag;
+        const lastPart = continueLastPart(agent.cliType, capabilities, priorSessionId);
         if (resumeFlag && priorSession === false) {
           // `claude --continue` with no conversation here exits 1. Open a clean
           // session instead of failing, and don't re-run the old task as a prompt.
@@ -320,8 +348,9 @@ export function buildPtyInvocation(
           logger.info(
             `[AgentManager] No prior ${agent.cliType} session in ${cwd}; starting a new one`,
           );
-        } else if (resumeFlag) {
-          fullCommand = withArgs(resumeFlag);
+        } else if (lastPart) {
+          fullCommand = withArgs(lastPart);
+          blindResume = lastPart === resumeFlag && priorSession === null;
         }
       }
     }
@@ -459,7 +488,7 @@ export function buildPtyInvocation(
     }
   }
 
-  return { shell, args, env, stdinCommand, enableMarker, isPlainShell };
+  return { shell, args, env, stdinCommand, enableMarker, isPlainShell, blindResume };
 }
 
 const HOOK_FAILED_MSG =

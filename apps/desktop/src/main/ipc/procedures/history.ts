@@ -5,7 +5,7 @@ import {
   listHistoryCliTypes,
   listSessionHistory,
 } from "../../db/queries/agents";
-import { listLocalSessions } from "../../history";
+import { hasLocalSession, listLocalSessions } from "../../history";
 import { mergeHistory } from "../../history/merge";
 import { publicProcedure, router } from "../trpc";
 
@@ -78,6 +78,16 @@ export const historyRouter = router({
         .filter((s) => s.provider === input.provider && s.cwd === project.path)
         .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
         .slice(0, 15);
+    }),
+
+  /** Whether the launcher's "Continue last" would find a session of this CLI in the project
+   *  folder: false hides it, null (no adapter, CLI missing) shows it with a caveat */
+  hasLocalSession: publicProcedure
+    .input(z.object({ projectId: z.string(), provider: z.string().regex(/^[a-z0-9-]{1,40}$/) }))
+    .query(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) return null;
+      return hasLocalSession(input.provider, project.path);
     }),
 
   /** The tail of what a past Exegol session said. Local sessions have none —

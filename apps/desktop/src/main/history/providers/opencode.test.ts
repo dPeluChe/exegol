@@ -9,13 +9,25 @@ vi.mock("node:os", async (importOriginal) => ({
   homedir: () => home.dir,
 }));
 
-import { opencodeHistory } from "./opencode";
+const listing = vi.hoisted(() => ({
+  run: vi.fn<(cmd: string, args: string[], cwd: string) => Promise<string>>(),
+}));
+vi.mock("../cli-list", async () => {
+  const { StoreUnavailable } = await import("../types");
+  listing.run.mockRejectedValue(new StoreUnavailable("opencode not installed"));
+  return { runCliListing: listing.run, realpathOr: async (p: string) => p };
+});
+
+import { StoreUnavailable } from "../types";
+import { opencodeHistory, parseOpencodeList } from "./opencode";
 
 describe("opencodeHistory", () => {
   const REPO = "/Users/me/code/repo";
 
   beforeEach(() => {
     home.dir = mkdtempSync(join(tmpdir(), "exegol-oc-"));
+    listing.run.mockReset();
+    listing.run.mockRejectedValue(new StoreUnavailable("opencode not installed"));
   });
 
   function writeSession(projectHash: string, file: string, body: object): void {
@@ -60,5 +72,41 @@ describe("opencodeHistory", () => {
 
   it("returns nothing when opencode is not installed", async () => {
     expect(await opencodeHistory.list([REPO], 0)).toEqual([]);
+  });
+
+  // opencode 1.x: SQLite store, read through its own listing (shape verified 2026-10-08)
+  it("reads opencode's own listing when it is installed, keeping this folder's sessions", async () => {
+    listing.run.mockResolvedValue(
+      JSON.stringify([
+        {
+          id: "ses_new",
+          title: "Saludo rápido",
+          updated: 1_790_808_584_874,
+          created: 1_790_808_551_871,
+          projectId: "0d76",
+          directory: REPO,
+        },
+        // Same git project, another worktree: `opencode session list` returns it too
+        { id: "ses_wt", updated: 1_790_808_584_874, projectId: "0d76", directory: "/wt/other" },
+      ]),
+    );
+    const sessions = await opencodeHistory.list([REPO], 0);
+    expect(listing.run).toHaveBeenCalledWith(
+      "opencode",
+      ["session", "list", "--format", "json", "--pure"],
+      REPO,
+    );
+    expect(sessions).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_new",
+        cwd: REPO,
+        startedAt: 1_790_808_551,
+        endedAt: 1_790_808_584,
+      }),
+    ]);
+  });
+
+  it("parses an empty listing as no sessions", () => {
+    expect(parseOpencodeList("[]", new Map([[REPO, REPO]]), 0)).toEqual([]);
   });
 });

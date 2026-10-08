@@ -59,6 +59,13 @@ vi.mock("../terminal/shell-wrappers", () => ({
 const PROVIDERS: Record<string, { capabilities: Record<string, unknown> }> = {
   "claude-code": { capabilities: { supportsPromptArg: true, resumeFlag: "--continue" } },
   gemini: { capabilities: { supportsPromptArg: false, resumeFlag: "" } },
+  opencode: {
+    capabilities: {
+      supportsPromptArg: false,
+      resumeFlag: "--continue",
+      resumeCommandPattern: "opencode -s ",
+    },
+  },
 };
 const registry = {
   get: (cliType: string) => PROVIDERS[cliType],
@@ -267,6 +274,48 @@ describe("buildPtyInvocation", () => {
     const [fresh, freshConfig] = makeAgent("claude-code", { resumeSession: true });
     const flag = buildPtyInvocation(db, fresh, freshConfig, "/tmp/cwd", registry, yolo, "/tmp/p1");
     expect(flag.args[1]).toContain("claude --continue --dangerously-skip-permissions");
+  });
+
+  it("marks only an unchecked generic resume as blind (the missed-resume relaunch)", () => {
+    const build = (create: Partial<AgentCreate>, prior: boolean | null) => {
+      const [agent, config] = makeAgent("claude-code", create);
+      return buildPtyInvocation(
+        db,
+        agent,
+        config,
+        "/tmp/cwd",
+        registry,
+        cliConfig,
+        "/tmp/p1",
+        prior,
+      );
+    };
+    expect(build({ resumeSession: true }, null).blindResume).toBe(true);
+    expect(build({ resumeSession: true }, true).blindResume).toBe(false);
+    const none = build({ resumeSession: true }, false);
+    expect(none.blindResume).toBe(false);
+    expect(none.args[1]).not.toContain("--continue");
+    expect(build({}, null).blindResume).toBe(false);
+  });
+
+  // opencode's --continue is project-wide (every worktree) or, outside git, shared by all folders
+  it("continues opencode by the id of this folder's newest session, not --continue", () => {
+    const oc = { command: "opencode", args: [] as string[], env: {} };
+    const [agent, config] = makeAgent("opencode", { resumeSession: true });
+    const inv = buildPtyInvocation(
+      db,
+      agent,
+      config,
+      "/tmp/cwd",
+      registry,
+      oc,
+      "/tmp/p1",
+      true,
+      "ses_abc",
+    );
+    expect(inv.stdinCommand).toContain("opencode -s ses_abc");
+    expect(inv.stdinCommand).not.toContain("--continue");
+    expect(inv.blindResume).toBe(false);
   });
 
   it("a name from the launcher is the session's alias, even when resuming a named one", () => {

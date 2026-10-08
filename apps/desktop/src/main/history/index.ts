@@ -2,11 +2,13 @@ import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
 import { claudeCodeHistory } from "./providers/claude-code";
 import { codexHistory } from "./providers/codex";
+import { devinHistory } from "./providers/devin";
 import { droidHistory } from "./providers/droid";
 import { geminiHistory } from "./providers/gemini";
 import { gooseHistory } from "./providers/goose";
+import { kilocodeHistory } from "./providers/kilocode";
 import { opencodeHistory } from "./providers/opencode";
-import type { LocalHistoryProvider, LocalSession } from "./types";
+import { type LocalHistoryProvider, type LocalSession, StoreUnavailable } from "./types";
 
 export type { LocalSession } from "./types";
 
@@ -22,6 +24,8 @@ const PROVIDERS: LocalHistoryProvider[] = [
   droidHistory,
   gooseHistory,
   geminiHistory,
+  devinHistory,
+  kilocodeHistory,
 ];
 
 /**
@@ -59,7 +63,10 @@ async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
       try {
         return await provider.list(cwds, since);
       } catch (err) {
-        logger.warn(`[History] ${provider.id} store unreadable:`, err);
+        // A CLI that is not installed has no history: not worth a warning on every refetch
+        if (!(err instanceof StoreUnavailable)) {
+          logger.warn(`[History] ${provider.id} store unreadable:`, err);
+        }
         return [];
       }
     }),
@@ -74,13 +81,29 @@ async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
  * Whether this CLI recorded any session in `cwd`: a generic resume flag
  * (`--continue`, `resume --last`) exits with an error when there is none, which
  * turned "Resume" on a fresh folder into a failed agent. null = no adapter for
- * this CLI, so the caller can't tell and keeps the flag.
+ * this CLI or its store can't be read, so the caller can't tell and keeps the flag.
  */
 export async function hasLocalSession(provider: string, cwd: string): Promise<boolean | null> {
-  // A recent window: codex stores rollouts by day across every repo, and
-  // since=0 read the head of every one of them before each resume spawn
-  const sessions = await listLocal(provider, cwd, Date.now() / 1000 - RESUME_WINDOW_S);
-  return sessions && sessions.length > 0;
+  const last = await lastLocalSession(provider, cwd);
+  return last === undefined ? null : last !== null;
+}
+
+/** The newest session this CLI recorded in `cwd`: null = none, undefined = can't tell */
+export async function lastLocalSession(
+  provider: string,
+  cwd: string,
+): Promise<LocalSession | null | undefined> {
+  const adapter = PROVIDERS.find((p) => p.id === provider);
+  if (!adapter) return undefined;
+  // A resume flag reaches sessions of any age. Only a store shared by every repo is held to a
+  // window: codex files rollouts by day, and since=0 read the head of each one before a spawn
+  const since = adapter.sharedStore ? Date.now() / 1000 - RESUME_WINDOW_S : 0;
+  const sessions = await listLocal(provider, cwd, since);
+  if (!sessions) return undefined;
+  return sessions.reduce<LocalSession | null>(
+    (newest, s) => (newest && (newest.endedAt ?? 0) >= (s.endedAt ?? 0) ? newest : s),
+    null,
+  );
 }
 
 /** One provider's sessions in `cwd`; null = no adapter or an unreadable store */
@@ -94,7 +117,9 @@ async function listLocal(
   try {
     return await adapter.list([cwd], since);
   } catch (err) {
-    logger.warn(`[History] ${provider} store unreadable:`, err);
+    if (!(err instanceof StoreUnavailable)) {
+      logger.warn(`[History] ${provider} store unreadable:`, err);
+    }
     return null;
   }
 }
