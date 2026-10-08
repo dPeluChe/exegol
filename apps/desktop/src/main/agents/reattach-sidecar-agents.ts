@@ -7,7 +7,12 @@ import { logger } from "../lib/logger";
 import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
-import { expectReattach, nextReattach, settleReattach } from "../terminal/reattach-gate";
+import {
+  expectReattach,
+  holdForRepaint,
+  nextReattach,
+  settleReattach,
+} from "../terminal/reattach-gate";
 import { loadActiveView, orderForReattach } from "./active-view";
 import {
   appendScrollback,
@@ -97,11 +102,20 @@ export async function reattachSidecarAgents(
     `[Reattach] order: ${order.activeTab.length} active-tab, ${order.activeProject} active-project, ${order.rest} rest`,
   );
 
+  const ready = (agentId: string): void => {
+    settleReattach(agentId);
+    if (visible.delete(agentId) && visible.size === order.activeTab.length - 1) {
+      logger.info(`[Reattach] first visible ready in ${Date.now() - started}ms`);
+    }
+  };
+
   const reattachOne = async (agentId: string): Promise<void> => {
     const row = rows.get(agentId) as Record<string, unknown>;
     const cliType = row.cli_type as AgentCliType;
     const projectId = row.project_id as string;
     const isShell = cliType === "shell";
+    let repainted: Promise<void> | null = null;
+    let timing = "no snapshot";
 
     const resumePattern = getProviderRegistry().get(cliType)?.capabilities?.resumeCommandPattern;
 
@@ -130,15 +144,21 @@ export async function reattachSidecarAgents(
 
       // The PTY kept its last size in the sidecar; replaying its ring into a
       // model of any other size reflows everything the CLI drew
-      const snapshot = await ptyHost.reattachSession(
+      const reattached = await ptyHost.reattachSession(
         agentId,
         {
           cols: (row.pty_cols as number | null) ?? DEFAULT_PTY_COLS,
           rows: (row.pty_rows as number | null) ?? DEFAULT_PTY_ROWS,
         },
         callbacks,
-        { scrollbackPath },
+        { scrollbackPath, tui: !isShell && !atShellPrompt },
       );
+      const snapshot = reattached?.snapshot ?? null;
+      repainted = reattached?.repainted ?? null;
+      if (reattached) {
+        const kb = snapshot ? Math.round(Buffer.byteLength(snapshot) / 1024) : 0;
+        timing = `fetch ${Math.round(reattached.fetchMs)}ms, ${kb} KB, parse ${Math.round(reattached.parseMs)}ms`;
+      }
       // The ring's end seeds the scrollback that attention tails, final output and scoring read
       if (!isShell && snapshot) {
         appendScrollback(maps, agentId, snapshot.slice(-maxScrollbackBytes), maxScrollbackBytes);
@@ -219,15 +239,23 @@ export async function reattachSidecarAgents(
 
       result.reattached++;
       result.aliveIds.add(agentId);
-      logger.info(`[Reattach] OK — reattached ${agentId} (${cliType}), PTY alive`);
+      logger.info(`[Reattach] OK — reattached ${agentId} (${cliType}), PTY alive (${timing})`);
     } catch (err) {
       detachOutputPipeline(maps, agentId);
       result.failedIds.add(agentId);
       logger.warn(`[Reattach] FAILED ${agentId} (${cliType}): ${err}`);
     } finally {
-      settleReattach(agentId);
-      if (visible.delete(agentId) && visible.size === order.activeTab.length - 1) {
-        logger.info(`[Reattach] first visible ready in ${Date.now() - started}ms`);
+      if (repainted && result.aliveIds.has(agentId)) {
+        // The pane keeps "Reconnecting…" until the CLI redrew at its size; neither the pool nor
+        // the end of recovery waits for it (repainted always resolves, capped)
+        const waitStart = Date.now();
+        holdForRepaint(agentId);
+        void repainted.then(() => {
+          logger.info(`[Reattach] repainted ${agentId} in ${Date.now() - waitStart}ms`);
+          ready(agentId);
+        });
+      } else {
+        ready(agentId);
       }
     }
   };

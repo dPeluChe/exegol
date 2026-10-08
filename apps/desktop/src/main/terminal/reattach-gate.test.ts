@@ -44,6 +44,25 @@ describe("reattach gate", () => {
     });
   });
 
+  it("a session held for its repaint outlives the end of recovery", async () => {
+    vi.resetModules();
+    const gate = await import("./reattach-gate");
+    gate.expectReattach(["tui", "shell"]);
+    gate.holdForRepaint("tui");
+    let tuiReady = false;
+    const tui = gate.whenSessionReady("tui").then(() => {
+      tuiReady = true;
+    });
+    gate.settleAllReattach();
+    await gate.whenSessionReady("shell");
+    await Promise.resolve();
+    expect(tuiReady).toBe(false);
+    expect(gate.getRecoveryState()).toMatchObject({ done: true, ready: ["shell"] });
+    gate.settleReattach("tui");
+    await tui;
+    expect(gate.getRecoveryState().ready).toEqual(["shell", "tui"]);
+  });
+
   it("a session not being reattached answers at once", async () => {
     await expect(whenSessionReady("new-agent")).resolves.toBeUndefined();
   });
