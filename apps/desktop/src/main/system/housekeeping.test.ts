@@ -32,12 +32,9 @@ function fixture() {
   root = mkdtempSync(join(tmpdir(), "exegol-housekeeping-"));
   const paths = { exegolDir: join(root, "exegol"), userData: join(root, "userData") };
   // Same labels and suffixes as the real targets, rooted in the temp dir
-  const targets: AgentFileTarget[] = agentFileTargets(paths.userData).map((t) => ({
+  const targets: AgentFileTarget[] = agentFileTargets().map((t) => ({
     ...t,
-    dir:
-      t.label === "scrollback"
-        ? join(paths.userData, "scrollback")
-        : join(paths.exegolDir, t.label),
+    dir: join(paths.exegolDir, t.label),
   }));
   return { paths, targets };
 }
@@ -45,12 +42,15 @@ function fixture() {
 const known = () => new Set([LIVE, ARCHIVED]);
 
 describe("sweepOrphanAgentFiles", () => {
+  it("never targets agent history (scrollback)", () => {
+    expect(agentFileTargets().map((t) => t.label)).toEqual(["hooks", "mcp", "model-settings"]);
+  });
+
   it("removes only old files of ids missing from the DB", async () => {
     const { paths, targets } = fixture();
     const keep = [
       file(join(paths.exegolDir, "hooks", `${LIVE}.json`)),
       file(join(paths.exegolDir, "mcp", `${ARCHIVED}.json`)),
-      file(join(paths.userData, "scrollback", `${LIVE}.serialized`)),
       file(join(paths.exegolDir, "hooks", "notify.sh")),
       file(join(paths.exegolDir, "hooks", `${GONE}.sh`)),
       file(join(paths.exegolDir, "mcp", "short.json")),
@@ -60,8 +60,6 @@ describe("sweepOrphanAgentFiles", () => {
       file(join(paths.exegolDir, "hooks", `${GONE}.json`)),
       file(join(paths.exegolDir, "mcp", `${GONE}.json`)),
       file(join(paths.exegolDir, "model-settings", `${GONE}.json`)),
-      file(join(paths.userData, "scrollback", `${GONE}.log`)),
-      file(join(paths.userData, "scrollback", `${GONE}.serialized`)),
     ];
     const result = await sweepOrphanAgentFiles(targets, known, NOW);
     expect(result.files).toBe(gone.length);

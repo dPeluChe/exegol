@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { planDist, planIncremental, planTestTmp, planTurbo } from "./clean-build-plan";
+import {
+  parseWorktreeList,
+  planDist,
+  planIncremental,
+  planTestTmp,
+  planTurbo,
+  prVerdict,
+} from "./clean-build-plan";
 
 const at = (name: string, mtimeMs = 0) => ({ name, mtimeMs });
 
@@ -55,6 +62,26 @@ describe("planIncremental", () => {
       at("..", 1),
     ];
     expect(planIncremental(dirs, 10)).toEqual(["exegol_core_rust-0jpkubmnsuar9"]);
+  });
+});
+
+describe("worktrees", () => {
+  it("parses git worktree list --porcelain", () => {
+    const text =
+      "worktree /r\nHEAD 1\nbranch refs/heads/main\n\nworktree /r/.claude/worktrees/agent-a\nHEAD 2\ndetached\nlocked claude\n\nworktree /r/w\nHEAD 3\nbranch refs/heads/feat/x\n";
+    expect(parseWorktreeList(text)).toEqual([
+      { path: "/r", branch: "main", locked: false },
+      { path: "/r/.claude/worktrees/agent-a", branch: null, locked: true },
+      { path: "/r/w", branch: "feat/x", locked: false },
+    ]);
+  });
+
+  it("only a merged or closed PR, with none open, makes an orphan", () => {
+    expect(prVerdict(null)).toBe("unknown");
+    expect(prVerdict([])).toBe("none");
+    expect(prVerdict(["CLOSED", "OPEN"])).toBe("open");
+    expect(prVerdict(["MERGED"])).toBe("done");
+    expect(prVerdict(["CLOSED"])).toBe("done");
   });
 });
 

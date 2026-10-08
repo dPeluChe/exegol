@@ -1,9 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { app } from "electron";
 import { z } from "zod";
 import { isPathInside } from "../../security/path-guard";
-import { scrollbackDir } from "../../system/storage";
 import { getPtyHost } from "../../terminal/pty-host";
 import { publicProcedure, router } from "../trpc";
 
@@ -11,7 +10,7 @@ import { publicProcedure, router } from "../trpc";
 const safeAgentIdPattern = /^[a-zA-Z0-9_-]+$/;
 
 function getScrollbackDir(): string {
-  const dir = scrollbackDir(app.getPath("userData"));
+  const dir = join(app.getPath("userData"), "scrollback");
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }

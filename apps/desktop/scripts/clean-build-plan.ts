@@ -135,3 +135,35 @@ const TEST_TMP_DIR = new RegExp(`^exegol-(?:${TEST_TMP_PREFIXES.join("|")})-[A-Z
 export function planTestTmp(entries: Entry[], cutoff: number): string[] {
   return entries.filter((e) => TEST_TMP_DIR.test(e.name) && e.mtimeMs < cutoff).map((e) => e.name);
 }
+
+export interface RegisteredWorktree {
+  path: string;
+  branch: string | null;
+  locked: boolean;
+}
+
+/** `git worktree list --porcelain` blocks */
+export function parseWorktreeList(text: string): RegisteredWorktree[] {
+  return text.split("\n\n").flatMap((block) => {
+    const lines = block.split("\n");
+    const path = lines.find((l) => l.startsWith("worktree "))?.slice(9);
+    if (!path) return [];
+    const ref = lines.find((l) => l.startsWith("branch "))?.slice(7);
+    return [
+      {
+        path,
+        branch: ref ? ref.replace(/^refs\/heads\//, "") : null,
+        locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
+      },
+    ];
+  });
+}
+
+/** From `gh pr list --head <branch> --state all --json state`; null = gh missing or offline */
+export function prVerdict(states: string[] | null): "unknown" | "open" | "none" | "done" {
+  if (states === null) return "unknown";
+  if (states.includes("OPEN")) return "open";
+  return states.length === 0 ? "none" : "done";
+}
+
+export const AGENT_WORKTREE_DIR = /^agent-[A-Za-z0-9]+$/;

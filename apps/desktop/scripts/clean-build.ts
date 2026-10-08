@@ -1,10 +1,10 @@
 // Post-build cleanup. Dry run unless --apply. Every target is listed in docs/GUIDES/RELEASE.md.
 // Always exits 0 (it runs as the postpackage step): a failure removes nothing more, never fails a build.
 //   bun run clean:build                    report what would go
-//   bun run clean:build -- --apply         remove it (repo targets + old test temp dirs)
-//   --repo-only  skip the test temp dirs    --keep N  release folders kept (2)    --days N  age (14)
+//   bun run clean:build -- --apply         remove it (repo targets, old test temp dirs, worktrees)
+//   --repo-only  build outputs only (the postpackage run): no test temp dirs, no worktrees
+//   --keep N  release folders kept (2)     --days N  age (14)
 //   --root DIR   another checkout of this repo (default: the one holding this script)
-import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir, platform, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
@@ -17,6 +17,8 @@ import {
   planTestTmp,
   planTurbo,
 } from "./clean-build-plan";
+import { duBytes, human, run } from "./clean-exec";
+import { worktreeSection } from "./clean-worktrees";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -55,26 +57,6 @@ function bytes(path: string): number {
   let total = 0;
   for (const name of readdirSync(path)) total += bytes(join(path, name));
   return total;
-}
-
-function human(n: number): string {
-  const units = ["B", "KB", "MB", "GB"];
-  let i = 0;
-  while (n >= 1024 && i < units.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${n.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-/** stdout, or null when the command is missing, times out (10 s) or exits outside `okCodes` */
-function run(cmd: string, cmdArgs: string[], okCodes = [0]): string | null {
-  const r = spawnSync(cmd, cmdArgs, {
-    encoding: "utf-8",
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: 10_000,
-  });
-  return r.error || r.status === null || !okCodes.includes(r.status) ? null : r.stdout;
 }
 
 /** lsof exits 1 when nothing is open; false only when it ran and listed nothing */
@@ -169,7 +151,7 @@ function currentVersion(): string | null {
   }
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const current = existsSync(join(DESKTOP, "electron-builder.ts")) ? currentVersion() : null;
   if (!current) {
     console.log(`clean:build: no Exegol repo with a valid version at ${ROOT}, nothing removed`);
@@ -209,6 +191,7 @@ function main(): void {
     if (groupBytes > 0) console.log(`  subtotal ${human(groupBytes)}`);
     total += groupBytes;
   }
+  if (!repoOnly) total += await worktreeSection(ROOT, apply);
   console.log(`\n${apply ? "Freed" : "Would free"} ${human(total)} in ${count} item(s)`);
 
   const caches =
@@ -217,16 +200,12 @@ function main(): void {
       : [".cache/electron", ".cache/electron-builder"];
   console.log("\nInfo only, never removed (shared with other Electron projects):");
   for (const c of caches) {
-    const kb = Number.parseInt(run("du", ["-sk", join(homedir(), c)])?.split(/\s/)[0] ?? "", 10);
-    if (!Number.isNaN(kb)) console.log(`  ~/${c} ${human(kb * 1024)}`);
+    const size = duBytes(join(homedir(), c));
+    if (size !== null) console.log(`  ~/${c} ${human(size)}`);
   }
-  console.log(
-    "~/.exegol and the app data folder are swept by the app itself (orphaned agent files).",
-  );
+  console.log("~/.exegol is swept by the app itself (orphaned agent files and worktrees).");
 }
 
-try {
-  main();
-} catch (err) {
+main().catch((err) => {
   console.log(`clean:build stopped: ${err instanceof Error ? err.message : err}`);
-}
+});

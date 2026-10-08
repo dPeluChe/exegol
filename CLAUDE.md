@@ -217,7 +217,8 @@ apps/desktop/src/
     system/         resources (metrics + threshold alerts), ports (lsof + config), doctor (T148),
                     auto-updater, tray, cli-installer, scripts, release-notes, shell-clis,
                     work-guard, diagnostics, project-icons, storage (Settings > Storage),
-                    housekeeping (daily sweep of orphaned per-agent files)
+                    housekeeping + worktree-housekeeping (daily sweep of orphaned per-agent files and
+                    worktrees, rule in lib/worktree-safety.ts)
     models/         T201 local speech-to-text models: catalog (data: verified URL, sha256, sizes,
                     license, `commercialUse`), download (HTTP Range resume + sha256, https only, free
                     space check), extract (system `tar -xjf`, then an lstat walk refuses links and

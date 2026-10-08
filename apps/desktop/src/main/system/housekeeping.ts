@@ -2,11 +2,12 @@ import { lstat, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import type Database from "libsql";
 import { MODEL_SETTINGS_DIR } from "../agents/launch-model";
+import { WORKTREE_ROOTS } from "../agents/worktrees";
 import { HOOKS_DIR } from "../agents/wrappers";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { logger } from "../lib/logger";
 import { MCP_CONFIG_DIR } from "../mcp/exegol-mcp-config";
-import { scrollbackDir } from "./storage";
+import { sweepOrphanWorktrees, type WorktreeSweepResult } from "./worktree-housekeeping";
 
 const AGENT_ID = /^[A-Za-z0-9_-]{21}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -25,16 +26,17 @@ export interface HousekeepingResult {
   files: number;
   bytes: number;
   skipped?: "db-looks-reset";
+  worktrees?: WorktreeSweepResult;
 }
 
-export function agentFileTargets(userData: string): AgentFileTarget[] {
+/** Agent history (scrollback) is never swept: it stays as long as the session's row */
+export function agentFileTargets(): AgentFileTarget[] {
   return [
     // Claude Code hook settings: written at every spawn, never removed
     { label: "hooks", dir: HOOKS_DIR, suffixes: [".json"] },
     // Per-agent MCP config: removed on a clean exit only, and it carries the agent's token
     { label: "mcp", dir: MCP_CONFIG_DIR, suffixes: [".json"] },
     { label: "model-settings", dir: MODEL_SETTINGS_DIR, suffixes: [".json"] },
-    { label: "scrollback", dir: scrollbackDir(userData), suffixes: [".log", ".serialized"] },
   ];
 }
 
@@ -111,14 +113,20 @@ function agentIds(db: Database.Database): ReadonlySet<string> {
 }
 
 /** At most once a day: a couple of minutes after startup, then daily while the app stays open */
-export function scheduleHousekeeping(db: Database.Database, userData: string): void {
-  const run = () => {
+export function scheduleHousekeeping(db: Database.Database): void {
+  const run = async () => {
     const last = getJsonSetting<HousekeepingResult | null>(db, HOUSEKEEPING_KEY, null);
     if (last && Date.now() - last.at < DAY_MS) return;
-    sweepOrphanAgentFiles(agentFileTargets(userData), () => agentIds(db))
-      .then((result) => setJsonSetting(db, HOUSEKEEPING_KEY, result))
-      .catch((err) => logger.warn("[Housekeeping] sweep failed:", err));
+    const result = await sweepOrphanAgentFiles(agentFileTargets(), () => agentIds(db));
+    const worktrees = await sweepOrphanWorktrees(db, Object.values(WORKTREE_ROOTS));
+    if (worktrees.removed + worktrees.droppedRows + worktrees.kept > 0) {
+      logger.info(
+        `[Housekeeping] worktrees: removed ${worktrees.removed}, dropped ${worktrees.droppedRows} row(s) of missing dirs, kept ${worktrees.kept} orphan(s) not clean and pushed`,
+      );
+    }
+    setJsonSetting(db, HOUSEKEEPING_KEY, { ...result, worktrees });
   };
-  setTimeout(run, START_DELAY_MS).unref?.();
-  setInterval(run, DAY_MS).unref?.();
+  const safeRun = () => void run().catch((err) => logger.warn("[Housekeeping] sweep failed:", err));
+  setTimeout(safeRun, START_DELAY_MS).unref?.();
+  setInterval(safeRun, DAY_MS).unref?.();
 }

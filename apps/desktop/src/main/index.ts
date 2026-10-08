@@ -135,7 +135,7 @@ app.whenReady().then(async () => {
   // stopping an interrupted run's agent needs its reattached PTY
   void runStartupRecovery().finally(() => {
     getSchedulerEngine().start(getDb());
-    scheduleHousekeeping(getDb(), app.getPath("userData"));
+    scheduleHousekeeping(getDb());
   });
 
   // Background services (non-blocking, start after window)

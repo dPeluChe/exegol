@@ -63,18 +63,39 @@ each check has a 10 s timeout and a failed check skips the folder. On Linux ther
 (ps and lsof still apply; without lsof every dist folder is skipped). On Windows dist cleanup is a
 no-op (no ps/lsof). Nothing runs unless the `package.json` version parses; an error on one path is
 logged as `skip (error: ...)` and the rest continues. It never touches `node_modules`, `apps/desktop/out`, the rest
-of `target/`, worktrees, or anything under `~/.exegol` or the app data folder; the electron and
+of `target/`, or anything under `~/.exegol` or the app data folder; the electron and
 electron-builder download caches are only reported (other Electron projects share them).
 
 Dry run (prints each path and size, removes nothing): `bun run clean:build`. Then
-`bun run clean:build -- --apply`, which also removes the old test temp dirs.
+`bun run clean:build -- --apply`, which also removes the old test temp dirs and orphaned
+worktrees (never in the postpackage run).
 
-The app sweeps its own leftovers once a day, at startup and then daily while open
-(`main/system/housekeeping.ts`): per-agent files older than a day whose agent id is not in the
-database; it skips the sweep when the orphaned ids outnumber twice the known ones (a reset or
-swapped database) (`~/.exegol/hooks/<id>.json`,
-`~/.exegol/mcp/<id>.json`, `~/.exegol/model-settings/<id>.json`, `scrollback/<id>.log` and
-`.serialized` in the app data folder).
+#### Orphaned worktrees
+
+One rule everywhere (`main/lib/worktree-safety.ts`): a worktree is removed only when
+`git status --porcelain` is empty (the always-deleted `.agents/mcp_config.json` aside) and
+`git rev-list HEAD --not --remotes` is empty (its commits are on a remote: pushed, or already in
+origin/main). Anything else is reported and kept. Branches are never deleted.
+
+- `clean:build` worktrees section: `git worktree prune` (dry run: `--dry-run -v`), then each
+  `.claude/worktrees/agent-*` of the main checkout is an orphan when its branch's PR is merged or
+  closed (`gh pr list --head <branch> --state all`; gh missing or offline only reports) or it is
+  not a registered worktree. Removal: `git worktree remove --force`, then a Finder `.DS_Store`
+  and the empty folder. Never the main checkout or the checkout running the script; locked ones
+  are kept.
+- The app, in the same daily housekeeping (`main/system/worktree-housekeeping.ts`), over
+  `~/.exegol/worktrees` and `~/.exegol/pipelines`: a `worktrees` row whose folder is gone is
+  dropped and the repo's registrations pruned; a row whose agents ended over a day ago, or a
+  folder (older than a day) with no row, is removed under the rule above. Never while an agent is
+  live in it, an active pipeline (pending, running, paused) uses its path, or a running race
+  holds its agent; the repo must be a registered project. The folder is deleted off the main
+  thread, then `git worktree prune`. One summary log line.
+
+The app also sweeps per-agent files once a day, at startup and then daily while open
+(`main/system/housekeeping.ts`): `~/.exegol/hooks/<id>.json`, `~/.exegol/mcp/<id>.json` and
+`~/.exegol/model-settings/<id>.json` older than a day whose agent id is not in the database. It
+skips when the orphaned ids outnumber twice the known ones (a reset or swapped database). Agent
+history (terminal scrollback) is never removed.
 
 ### 4. Install and first launch (unsigned build)
 
