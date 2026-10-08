@@ -38,9 +38,9 @@ describe("storageBarSegments", () => {
 });
 
 describe("summarizeOther", () => {
-  it("keeps the largest and folds the rest", () => {
+  it("keeps the first entries in the order given and folds the rest", () => {
     const summary = summarizeOther(
-      [entry("a", 10), entry("b", 300), entry("c", 5), entry("d", 40)],
+      [entry("b", 300), entry("d", 40), entry("a", 10), entry("c", 5)],
       2,
     );
     expect(summary.top.map((e) => e.name)).toEqual(["b", "d"]);

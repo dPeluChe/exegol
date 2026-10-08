@@ -89,7 +89,7 @@ export function useStorageAction() {
 export function useWorktreeSizes() {
   return useQuery({
     queryKey: ["storage", "worktreeSizes"],
-    queryFn: () => trpcInvoke<Record<string, number>>("storage.worktreeSizes"),
+    queryFn: () => trpcInvoke<Record<string, number | null>>("storage.worktreeSizes"),
     staleTime: 30_000,
   });
 }

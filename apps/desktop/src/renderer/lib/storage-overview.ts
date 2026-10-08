@@ -30,12 +30,11 @@ export interface OtherSummary {
   restBytes: number;
 }
 
-/** The `limit` largest entries, the rest folded into one count and size */
+/** The first `limit` entries (main sends them largest first), the rest folded into one count and size */
 export function summarizeOther(entries: readonly StorageOtherEntry[], limit: number): OtherSummary {
-  const sorted = [...entries].sort((a, b) => b.bytes - a.bytes);
-  const rest = sorted.slice(limit);
+  const rest = entries.slice(limit);
   return {
-    top: sorted.slice(0, limit),
+    top: entries.slice(0, limit),
     restCount: rest.length,
     restBytes: rest.reduce((a, e) => a + e.bytes, 0),
   };

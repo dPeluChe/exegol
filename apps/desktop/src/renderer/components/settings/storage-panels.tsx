@@ -4,6 +4,7 @@ import { useAllWorktrees } from "../../hooks/use-trpc";
 import { useStorageAction, useWorktreeSizes } from "../../hooks/use-trpc-models";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { summarizeOther } from "../../lib/storage-overview";
+import { useToastStore } from "../../stores/toasts";
 import { formatBytes } from "../workspace/sections/resource-format";
 import { SMALL_BUTTON } from "./settings-ui";
 
@@ -70,6 +71,19 @@ export function BrowserPanel({
   );
 }
 
+function WorktreeSize({ bytes }: { bytes: number | null | undefined }) {
+  const className = "w-16 text-right text-[11px] tabular-nums text-text-muted";
+  if (bytes === undefined) return <span className={className}>...</span>;
+  if (bytes === null) {
+    return (
+      <span className={className} title="Could not measure this worktree (du failed or timed out)">
+        ?
+      </span>
+    );
+  }
+  return <span className={className}>{formatBytes(bytes)}</span>;
+}
+
 export function WorktreesPanel() {
   const { data: worktrees, isLoading } = useAllWorktrees();
   const { data: sizes } = useWorktreeSizes();
@@ -107,15 +121,21 @@ export function WorktreesPanel() {
               ) : (
                 <span className={`${BADGE} ${SEMANTIC_BADGE.success}`}>clean</span>
               )}
-              <span className="w-16 text-right text-[11px] tabular-nums text-text-muted">
-                {sizes?.[wt.id] !== undefined ? formatBytes(sizes[wt.id] ?? 0) : "..."}
-              </span>
+              <WorktreeSize bytes={sizes?.[wt.id]} />
             </div>
           ))}
         </div>
       )}
     </div>
   );
+}
+
+function toastIfNotOpened(name: string, result: unknown) {
+  const { opened, reason } = (result ?? {}) as { opened?: boolean; reason?: string };
+  if (opened) return;
+  useToastStore
+    .getState()
+    .addToast({ type: "warning", title: `Could not open ${name}`, body: reason });
 }
 
 export function OtherPanel({ entries }: { entries: StorageOtherEntry[] }) {
@@ -141,7 +161,12 @@ export function OtherPanel({ entries }: { entries: StorageOtherEntry[] }) {
               <button
                 type="button"
                 className={SMALL_BUTTON}
-                onClick={() => action.mutate({ action: "openOther", root: e.root, name: e.name })}
+                onClick={() =>
+                  action.mutate(
+                    { action: "openOther", root: e.root, name: e.name },
+                    { onSuccess: (result) => toastIfNotOpened(e.name, result) },
+                  )
+                }
               >
                 <FolderOpen className="h-3 w-3" /> {e.isDir ? "Open" : "Show"}
               </button>

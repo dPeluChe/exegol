@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,6 +7,8 @@ import {
   clearOldLogs,
   clearScreenshots,
   dirSize,
+  duBytes,
+  resolveOtherTarget,
   worktreeSizes,
 } from "./storage";
 
@@ -96,6 +98,39 @@ describe("storage", () => {
     ]);
     expect(sizes.w1).toBeGreaterThanOrEqual(400);
     expect(sizes.w2).toBe(0);
+  });
+
+  it("sizes a worktree null, not 0, when measuring fails", async () => {
+    const { paths } = fixture();
+    const path = join(paths.exegolDir, "worktrees", "proj", "wt");
+    const sizes = await worktreeSizes([{ id: "w1", path }], async () => null);
+    expect(sizes).toEqual({ w1: null });
+    expect(await duBytes(join(paths.exegolDir, "missing"))).toBeNull();
+  });
+
+  it("opens only an Other entry the cached report lists, never a link", async () => {
+    const { paths } = fixture();
+    write(join(paths.exegolDir, "cache", "c"), 4);
+    expect((await resolveOtherTarget(paths, null, "exegol", "hooks")).ok).toBe(false);
+
+    const report = await buildStorageReport(paths, []);
+    expect(await resolveOtherTarget(paths, report, "exegol", "hooks")).toEqual({
+      ok: true,
+      target: join(paths.exegolDir, "hooks"),
+      isDir: true,
+    });
+    expect(await resolveOtherTarget(paths, report, "exegol", "models")).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not listed"),
+    });
+
+    // Swapped for a link after the report was taken
+    rmSync(join(paths.exegolDir, "cache"), { recursive: true });
+    symlinkSync(paths.userData, join(paths.exegolDir, "cache"));
+    expect(await resolveOtherTarget(paths, report, "exegol", "cache")).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("link"),
+    });
   });
 
   it("clears screenshots and only the rotated logs", async () => {

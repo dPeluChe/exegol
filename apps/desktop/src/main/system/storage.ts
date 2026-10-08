@@ -55,20 +55,23 @@ export async function dirSize(
   return total;
 }
 
-/** Disk use of a large tree via `du -sk` (no links followed), 0 when it fails */
-export async function duBytes(path: string): Promise<number> {
+/** Disk use of a large tree via `du -sk` (no links followed), null when it fails or times out */
+export async function duBytes(path: string): Promise<number | null> {
   try {
     const { stdout } = await execFileAsync("du", ["-sk", path], { timeout: 10_000 });
-    const kb = Number.parseInt(stdout.split(/\s/)[0] ?? "0", 10);
-    return Number.isNaN(kb) ? 0 : kb * 1024;
+    const kb = Number.parseInt(stdout.split(/\s/)[0] ?? "", 10);
+    return Number.isNaN(kb) ? null : kb * 1024;
   } catch {
-    return 0;
+    return null;
   }
 }
 
-async function sumPaths(paths: string[], size = dirSize): Promise<number> {
+async function sumPaths(
+  paths: string[],
+  size: (path: string) => Promise<number | null> = dirSize,
+): Promise<number> {
   const sizes = await Promise.all(paths.map((p) => size(p)));
-  return sizes.reduce((a, b) => a + b, 0);
+  return sizes.reduce<number>((a, b) => a + (b ?? 0), 0);
 }
 
 interface CategorySpec {
@@ -152,14 +155,37 @@ async function otherEntries(
     .sort((a, b) => b.bytes - a.bytes);
 }
 
-/** Disk use per worktree id; a missing folder counts 0 */
+/** Disk use per worktree id; a missing folder counts 0, a failed measure is null (unknown) */
 export async function worktreeSizes(
   worktrees: readonly { id: string; path: string }[],
-): Promise<Record<string, number>> {
+  measure: (path: string) => Promise<number | null> = duBytes,
+): Promise<Record<string, number | null>> {
   const sizes = await mapWithConcurrency([...worktrees], 4, async (wt) =>
-    (await lstat(wt.path).catch(() => null)) ? duBytes(wt.path) : 0,
+    (await lstat(wt.path).catch(() => null)) ? measure(wt.path) : 0,
   );
-  return Object.fromEntries(worktrees.map((wt, i) => [wt.id, sizes[i] ?? 0]));
+  return Object.fromEntries(worktrees.map((wt, i) => [wt.id, sizes[i] ?? null]));
+}
+
+export type OtherTarget =
+  | { ok: true; target: string; isDir: boolean }
+  | { ok: false; reason: string };
+
+/** An Other entry to open: listed in `report` (never re-walked) and not a link at open time */
+export async function resolveOtherTarget(
+  paths: StoragePaths,
+  report: StorageReport | null,
+  root: StorageRoot,
+  name: string,
+): Promise<OtherTarget> {
+  if (!report) return { ok: false, reason: "Disk use not measured yet: refresh and try again" };
+  if (!report.otherEntries.some((e) => e.root === root && e.name === name)) {
+    return { ok: false, reason: `${name} is not listed under Other` };
+  }
+  const target = join(storageRootDir(paths, root), name);
+  const info = await lstat(target).catch(() => null);
+  if (!info) return { ok: false, reason: `${name} no longer exists` };
+  if (info.isSymbolicLink()) return { ok: false, reason: `${name} is a link, not opened` };
+  return { ok: true, target, isDir: info.isDirectory() };
 }
 
 async function firstExisting(paths: string[]): Promise<string | null> {
@@ -227,6 +253,11 @@ export function getStorageReport(
       inflight = null;
     });
   return inflight;
+}
+
+/** The last computed report, whatever its age; null before the first one or after an invalidate */
+export function cachedStorageReport(): StorageReport | null {
+  return cached?.report ?? null;
 }
 
 export function invalidateStorageReport(): void {
