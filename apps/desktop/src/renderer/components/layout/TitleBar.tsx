@@ -4,12 +4,12 @@ import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AttentionQueue } from "./AttentionQueue";
 import { BugReportButton } from "./BugReportDialog";
-import { HeaderWidgets, useWidgetLayout } from "./StatusBar";
+import { useWidgetLayout, WidgetZone } from "./bar-widgets";
 import { UpdateButton } from "./UpdateButton";
 
 /** Fixed: traffic-light room, the title bar buttons, the project name, window controls. The
- *  widget zones (Settings > Bars) sit after the buttons, beside the name and before the controls.
- *  Equal side columns keep the name centered on the window, as before the zones */
+ *  widget zones (Settings > Bars) sit after the buttons and before the controls; the center is
+ *  the name only. Side columns never shrink below the fixed items, the name truncates first */
 export function TitleBar() {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const { data: project } = useProject(activeProjectId);
@@ -18,8 +18,8 @@ export function TitleBar() {
   const isMac = platform === "darwin";
 
   return (
-    <div className="titlebar-drag grid h-10 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 border-b border-border bg-bg-secondary px-3">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="titlebar-drag grid h-10 shrink-0 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 border-b border-border bg-bg-secondary px-3 text-[11px] text-text-muted">
+      <div className="flex items-center gap-3">
         {/* pl-20 of the bar before the zones: the traffic lights' room */}
         {isMac && <div className="w-[68px] shrink-0" />}
         <div className="titlebar-no-drag flex shrink-0 items-center gap-2">
@@ -35,10 +35,10 @@ export function TitleBar() {
           <BugReportButton />
           <UpdateButton />
         </div>
-        <HeaderWidgets layout={layout} slot="left" className="min-w-0 flex-1 overflow-hidden" />
+        <WidgetZone layout={layout} bar="header" slot="left" />
       </div>
 
-      <div className="flex min-w-0 max-w-[40vw] items-center justify-center gap-3 overflow-hidden">
+      <div className="flex min-w-0 max-w-[40vw] items-center justify-center overflow-hidden">
         {project ? (
           <span className="flex min-w-0 items-center gap-1.5 text-xs text-text-secondary">
             <ProjectAvatar project={project} />
@@ -47,15 +47,10 @@ export function TitleBar() {
         ) : (
           <span className="truncate text-xs text-text-muted">No project selected</span>
         )}
-        <HeaderWidgets layout={layout} slot="center" className="min-w-0 overflow-hidden" />
       </div>
 
-      <div className="flex min-w-0 items-center justify-end gap-3">
-        <HeaderWidgets
-          layout={layout}
-          slot="right"
-          className="min-w-0 flex-1 justify-end overflow-hidden"
-        />
+      <div className="flex items-center justify-end gap-3">
+        <WidgetZone layout={layout} bar="header" slot="right" />
         {!isMac && (
           <div className="titlebar-no-drag flex shrink-0 items-center gap-1">
             <button

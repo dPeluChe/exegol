@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  BAR_SLOTS,
   moveWidget,
   PLACEMENTS,
   type PlacedWidget,
+  type Placement,
   placementOf,
+  placementsFor,
   placeWidget,
   resolveWidgetLayout,
   STATUS_BAR_WIDGETS,
@@ -148,10 +151,37 @@ describe("placeWidget", () => {
     ]);
   });
 
-  it("lists hidden and the six zones", () => {
-    expect(PLACEMENTS).toHaveLength(7);
-    expect(PLACEMENTS[0]).toBe("hidden");
-    expect(PLACEMENTS).toContain("header:center");
+  it("lists hidden and five zones: the title bar has no center", () => {
+    expect(PLACEMENTS).toEqual([
+      "hidden",
+      "header:left",
+      "header:right",
+      "footer:left",
+      "footer:center",
+      "footer:right",
+    ]);
+    expect(BAR_SLOTS.header).not.toContain("center");
+  });
+
+  it("keeps the project widget out of the title bar", () => {
+    expect(placementsFor("project").some((p) => p.startsWith("header:"))).toBe(false);
+    expect(placementsFor("clock")).toEqual(PLACEMENTS);
+    const layout = resolveWidgetLayout([]);
+    expect(placeWidget(layout, "project", "header:left")).toBe(layout);
+    expect(placeWidget(layout, "clock", "header:center" as Placement)).toBe(layout);
+  });
+});
+
+describe("saved zones that are not offered", () => {
+  it("header center lands in header right, the project widget in its footer slot", () => {
+    const layout = resolveWidgetLayout([
+      { id: "clock", on: true, bar: "header", slot: "center" },
+      { id: "project", on: true, bar: "header", slot: "left" },
+    ]);
+    expect(widgetsIn(layout, "header", "right")).toEqual(["clock"]);
+    expect(widgetsIn(layout, "header", "center")).toEqual([]);
+    expect(widgetsIn(layout, "header", "left")).toEqual([]);
+    expect(widgetsIn(layout, "footer", "left")).toEqual(["project", "branch"]);
   });
 });
 

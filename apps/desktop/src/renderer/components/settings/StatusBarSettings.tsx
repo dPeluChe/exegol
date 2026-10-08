@@ -3,11 +3,12 @@ import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useWidgetDefaults } from "../../hooks/use-trpc-dictation";
 import {
+  BAR_SLOTS,
   moveWidget,
-  PLACEMENTS,
   type PlacedWidget,
   type Placement,
   placementOf,
+  placementsFor,
   placeWidget,
   resolveWidgetLayout,
   STATUS_BAR_WIDGETS,
@@ -18,18 +19,22 @@ import {
   type WidgetMode,
   type WidgetSlot,
   widgetsIn,
+  zoneWidgets,
 } from "../../lib/status-bar-widgets";
 
 const LABEL = new Map<string, string>(STATUS_BAR_WIDGETS.map((w) => [w.id, w.label]));
 const DESCRIPTION = new Map<string, string>(STATUS_BAR_WIDGETS.map((w) => [w.id, w.description]));
 const BAR_LABEL: Record<WidgetBar, string> = { header: "Title bar", footer: "Status bar" };
-const SLOT_LABEL: Record<WidgetSlot, string> = { left: "left", center: "center", right: "right" };
+const SLOT_LABEL: Record<WidgetSlot, string> = { left: "Left", center: "Center", right: "Right" };
 const MODE_LABEL: Record<WidgetMode, string> = { percent: "Percent", values: "Values" };
-
-const placementLabel = (p: Placement) => {
-  if (p === "hidden") return "Hidden";
-  const [bar, slot] = p.split(":") as [WidgetBar, WidgetSlot];
-  return `${BAR_LABEL[bar]} ${SLOT_LABEL[slot]}`;
+const PLACEMENT_LABEL: Record<Placement, string> = {
+  hidden: "Hidden",
+  "header:left": "Title bar left",
+  "header:center": "Title bar center",
+  "header:right": "Title bar right",
+  "footer:left": "Status bar left",
+  "footer:center": "Status bar center",
+  "footer:right": "Status bar right",
 };
 
 interface Props {
@@ -74,27 +79,35 @@ export function StatusBarSettings({ settings, onChange }: Props) {
         </div>
         <p className="mt-1 text-[10px] text-text-muted">
           A widget with nothing to show (no updates, no alerts) hides itself. The title bar keeps
-          its own buttons and the project name; its zones sit around them.
+          its own buttons and the project name in the center; its zones sit left and right.
         </p>
       </div>
 
-      {WIDGET_BARS.flatMap((bar) =>
-        WIDGET_SLOTS.map((slot) => {
-          const list = layout.filter((w) => w.on && w.bar === bar && w.slot === slot);
-          return (
-            <div key={`${bar}:${slot}`}>
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                {BAR_LABEL[bar]} {SLOT_LABEL[slot]}
-              </h3>
-              {list.length === 0 ? (
-                <p className="text-[11px] text-text-muted">Empty</p>
-              ) : (
-                rows(list, true)
-              )}
-            </div>
-          );
-        }),
-      )}
+      {WIDGET_BARS.map((bar) => (
+        <div key={bar}>
+          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+            {BAR_LABEL[bar]}
+          </h3>
+          <div className="space-y-2">
+            {BAR_SLOTS[bar].map((slot) => {
+              const list = zoneWidgets(layout, bar, slot);
+              if (list.length === 0) {
+                return (
+                  <p key={slot} className="text-[11px] text-text-muted">
+                    {SLOT_LABEL[slot]}: empty
+                  </p>
+                );
+              }
+              return (
+                <div key={slot}>
+                  <p className="mb-1 text-[11px] text-text-secondary">{SLOT_LABEL[slot]}</p>
+                  {rows(list, true)}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
 
       {hidden.length > 0 && (
         <div>
@@ -185,9 +198,9 @@ function WidgetRow({
         className="rounded border border-border bg-bg-tertiary px-1.5 py-0.5 text-[11px] text-text-secondary"
         aria-label="Placement"
       >
-        {PLACEMENTS.map((p) => (
+        {placementsFor(widget.id).map((p) => (
           <option key={p} value={p}>
-            {placementLabel(p)}
+            {PLACEMENT_LABEL[p]}
           </option>
         ))}
       </select>
