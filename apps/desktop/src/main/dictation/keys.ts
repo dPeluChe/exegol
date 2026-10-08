@@ -1,5 +1,6 @@
 import { type KeyChord, matchesChord, releasesChord } from "@exegol/shared";
 import type { WebContents } from "electron";
+import { logger } from "../lib/logger";
 import { getMainWindow } from "../windows/main-window-ref";
 
 let chord: KeyChord | null = null;
@@ -68,15 +69,20 @@ export function forwardDictationKeys(
 }
 
 /** Settings and floating windows have no overlay and no dictation keys of their own: their Esc
- *  cancels the main window's dictation. The main window's Esc stays its renderer's, so an open
- *  dialog there takes it first */
+ *  cancels the main window's dictation. The main window keeps its Esc (an open dialog there
+ *  takes it first) and also gets it relayed: its renderer's own listener missed it live */
 export function forwardDictationEscape(
   contents: WebContents,
   isMain: () => boolean = () => contents === getMainWindow()?.webContents,
   toMain = sendToMain,
 ): void {
   contents.on("before-input-event", (event, input) => {
-    if (!isEscapeDown(input) || !isListening() || isMain()) return;
+    if (!isEscapeDown(input) || !isListening()) return;
+    if (isMain()) {
+      logger.info("[Dictation] Esc in the main window while recording");
+      toMain({ kind: "escape" });
+      return;
+    }
     event.preventDefault();
     toMain({ kind: "escape" });
   });
