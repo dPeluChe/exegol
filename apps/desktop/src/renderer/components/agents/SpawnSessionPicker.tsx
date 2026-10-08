@@ -96,14 +96,22 @@ export function SpawnSessionPicker({
             key={past.agentId}
             selected={session !== "last" && session?.agentId === past.agentId}
             onClick={() => onSession(past)}
-            title={past.taskDescription}
-            className="flex items-center gap-1.5"
+            title={[past.alias, past.cliSessionName, past.taskDescription]
+              .filter(Boolean)
+              .join("\n")}
+            className="flex min-w-0 max-w-full items-center gap-1.5"
           >
             <History className="h-3 w-3 shrink-0" />
             {/* The codename is how the user knew it; task text is the fallback. */}
-            <span className="max-w-[150px] truncate">
+            <span className="max-w-[150px] shrink-0 truncate">
               {past.alias ?? past.taskDescription.slice(0, 24)}
             </span>
+            {/* What the CLI itself calls it (Claude's /rename), so it matches its own resume list */}
+            {past.cliSessionName && (
+              <span className="max-w-[160px] truncate font-normal opacity-75">
+                · {past.cliSessionName}
+              </span>
+            )}
             <span className="text-text-muted">{formatTimeAgo(past.endedAt)}</span>
           </SpawnChip>
         ))}

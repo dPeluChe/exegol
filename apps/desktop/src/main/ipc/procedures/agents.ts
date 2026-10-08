@@ -18,6 +18,7 @@ import {
 import { takeLostOnRestart } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
+import { providerSessionId } from "../../agents/provider-session-id";
 import { broadcastAgentStatus, coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
 import { resolveTaskLabel } from "../../agents/task-label";
@@ -28,6 +29,7 @@ import {
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
+  listWorktrees,
   setAgentMuted,
   setAgentSuspended,
   updateAgentStatus,
@@ -47,7 +49,7 @@ import {
   listParallelRuns,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
-import { lastLocalSession } from "../../history";
+import { cliSessionNames, lastLocalSession } from "../../history";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
 import { isPathAllowed } from "../../security/path-guard";
@@ -302,10 +304,11 @@ export const agentRouter = router({
         limit: z.number().int().min(1).max(20).optional(),
       }),
     )
-    .query(({ ctx, input }) => {
+    .query(async ({ ctx, input }) => {
       const rows = ctx.db
         .prepare(
-          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias
+          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias,
+                  claude_session_id, resume_command
            FROM agents
            WHERE project_id = ?
              AND status IN ('completed', 'failed', 'stopped', 'crashed')
@@ -322,7 +325,16 @@ export const agentRouter = router({
         started_at: number | null;
         stopped_at: number | null;
         alias: string | null;
+        claude_session_id: string | null;
+        resume_command: string | null;
       }>;
+      const project = rows.length > 0 ? getProject(ctx.db, input.projectId) : null;
+      const names = project
+        ? await cliSessionNames([
+            project.path,
+            ...listWorktrees(ctx.db, input.projectId).map((w) => w.path),
+          ])
+        : new Map<string, string>();
       return rows.map<ResumableSession>((r) => ({
         agentId: r.id,
         cliType: r.cli_type,
@@ -332,6 +344,10 @@ export const agentRouter = router({
         taskDescription: r.task_description,
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,
+        cliSessionName:
+          names.get(
+            `${r.cli_type}:${providerSessionId(r.cli_type, r.claude_session_id, r.resume_command)}`,
+          ) ?? null,
       }));
     }),
 

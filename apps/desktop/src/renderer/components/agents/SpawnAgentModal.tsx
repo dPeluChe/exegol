@@ -4,14 +4,8 @@ import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useEnabledProviders, useRecheckProviders } from "../../hooks/use-providers";
 import { editKeys } from "../../lib/keymap";
-import { ModelRolesPicker } from "./ModelRolesPicker";
-import {
-  AccessModePicker,
-  InstallHint,
-  ModelAndName,
-  ProviderPicker,
-  SkillPicker,
-} from "./SpawnOptions";
+import { ModelAndName } from "./ModelPicker";
+import { AccessModePicker, InstallHint, ProviderPicker, SkillPicker } from "./SpawnOptions";
 import { SpawnSessionPicker } from "./SpawnSessionPicker";
 import { SpawnWorkLocation } from "./SpawnWorkLocation";
 import { useSpawnAgent } from "./use-spawn-agent";
@@ -118,16 +112,11 @@ export function SpawnAgentModal({
             providerId={form.providerId}
             model={form.model}
             onModel={form.setModel}
-            name={form.name}
-            onName={form.setName}
-          />
-          <ModelRolesPicker
-            key={`roles-${form.providerId}`}
-            providerId={form.providerId}
-            model={form.model}
             roles={form.modelRoles}
             onRole={form.setModelRole}
             onPreset={form.applyPreset}
+            name={form.name}
+            onName={form.setName}
           />
           <SpawnSessionPicker
             projectId={projectId}

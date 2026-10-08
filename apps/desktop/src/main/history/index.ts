@@ -54,6 +54,36 @@ export async function listLocalSessions(
   return cache.getOrCompute(key, () => scan(cwds, since));
 }
 
+/** History's default window, so the launcher and the History view share one cached scan */
+const NAMES_WINDOW_DAYS = 30;
+/** The launcher opens on this: a slow store leaves the names out until the next refetch */
+const NAMES_WAIT_MS = 1_500;
+
+/**
+ * Each session's own name in its CLI (Claude's /rename, else the title), keyed
+ * `provider:sessionId`. Empty when the scan outlasts the wait; it keeps filling the cache.
+ */
+export async function cliSessionNames(cwds: string[]): Promise<Map<string, string>> {
+  const since = Math.floor(Date.now() / 1000) - NAMES_WINDOW_DAYS * 86_400;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const sessions = await Promise.race([
+    listLocalSessions(cwds, since, String(NAMES_WINDOW_DAYS)).catch(() => null),
+    new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), NAMES_WAIT_MS);
+    }),
+  ]).finally(() => clearTimeout(timer));
+  return sessionNameIndex(sessions ?? []);
+}
+
+export function sessionNameIndex(sessions: LocalSession[]): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const s of sessions) {
+    const name = s.name?.trim() || s.title;
+    if (name) names.set(`${s.provider}:${s.sessionId}`, name);
+  }
+  return names;
+}
+
 async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
   // Deliberately NOT filtered by the registry's `enabled` flag. That flag
   // means "hide from the launcher" — gemini carries it, superseded by agy —
