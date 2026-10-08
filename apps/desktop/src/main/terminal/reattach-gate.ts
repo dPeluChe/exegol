@@ -28,6 +28,8 @@ const recovered = deferred();
 const urgent: string[] = [];
 let queue: string[] = [];
 const wanted = new Set<string>();
+/** Reattached, waiting for the CLI's repaint at the pane's size: recovery ends without them */
+const repainting = new Set<string>();
 const state: SessionRecoveryState = { done: false, planned: null, ready: [], crashed: [] };
 
 function publish(): void {
@@ -68,7 +70,13 @@ function prioritize(id: string): void {
   urgent.push(id);
 }
 
+/** The reattach is over but this pane waits for its repaint; settleReattach releases it */
+export function holdForRepaint(id: string): void {
+  if (waiters.has(id)) repainting.add(id);
+}
+
 export function settleReattach(id: string): void {
+  repainting.delete(id);
   const waiter = waiters.get(id);
   if (!waiter) return;
   waiter.resolve();
@@ -80,10 +88,11 @@ export function settleReattach(id: string): void {
 /** Recovery finished (or failed): nothing is waited on any longer */
 export function settleAllReattach(crashed: string[] = []): void {
   for (const [id, waiter] of waiters) {
+    if (repainting.has(id)) continue;
     waiter.resolve();
+    waiters.delete(id);
     state.ready.push(id);
   }
-  waiters.clear();
   urgent.length = 0;
   queue = [];
   planned.resolve();

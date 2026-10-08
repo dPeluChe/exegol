@@ -1,13 +1,17 @@
+import { MAX_NDJSON_LINE_CHARS } from "./ndjson";
+
 /**
- * NDJSON framing for the sidecar socket, on the main side only. lib/ndjson grew one string per
- * chunk and its indexOf flattened it each time: a ring snapshot arrives in 8 KB chunks on macOS,
- * so 12 MB of JSON cost ~3s of main thread per session. Here each chunk is scanned once and a
- * frame is joined once. lib/ndjson stays as is because the sidecar bundles it.
+ * NDJSON framing for the main process: the sidecar client, the MCP server and the MCP shim and
+ * claim-guard bins. lib/ndjson grew one string per chunk and its indexOf flattened it each time:
+ * a ring snapshot arrives in 8 KB chunks on macOS, so 12 MB of JSON cost ~3s of main thread.
+ * Here each chunk is scanned once and a frame is joined once.
+ * lib/ndjson is now used only by the sidecar entry, which bundles it (its header still names the
+ * MCP users: editing it needs a SIDECAR_VERSION bump, so it stays as is).
  */
-export function createFrameBuffer<T>(
+export function createFrameReader<T>(
   onMessage: (msg: T) => void,
-  onOverflow: () => void,
-  maxBytes: number,
+  onOverflow?: () => void,
+  maxBytes: number = MAX_NDJSON_LINE_CHARS,
 ): (chunk: Buffer) => void {
   let parts: Buffer[] = [];
   let held = 0;
@@ -40,7 +44,7 @@ export function createFrameBuffer<T>(
       parts = [];
       held = 0;
       discarding = true;
-      onOverflow();
+      onOverflow?.();
       return;
     }
     parts.push(chunk.subarray(start));

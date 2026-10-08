@@ -7,7 +7,12 @@ import { logger } from "../lib/logger";
 import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
-import { expectReattach, nextReattach, settleReattach } from "../terminal/reattach-gate";
+import {
+  expectReattach,
+  holdForRepaint,
+  nextReattach,
+  settleReattach,
+} from "../terminal/reattach-gate";
 import { loadActiveView, orderForReattach } from "./active-view";
 import {
   appendScrollback,
@@ -103,7 +108,6 @@ export async function reattachSidecarAgents(
       logger.info(`[Reattach] first visible ready in ${Date.now() - started}ms`);
     }
   };
-  const repaints: Promise<void>[] = [];
 
   const reattachOne = async (agentId: string): Promise<void> => {
     const row = rows.get(agentId) as Record<string, unknown>;
@@ -242,14 +246,14 @@ export async function reattachSidecarAgents(
       logger.warn(`[Reattach] FAILED ${agentId} (${cliType}): ${err}`);
     } finally {
       if (repainted && result.aliveIds.has(agentId)) {
-        // The pane keeps "Reconnecting…" until the CLI redrew at its size; the pool moves on
+        // The pane keeps "Reconnecting…" until the CLI redrew at its size; neither the pool nor
+        // the end of recovery waits for it (repainted always resolves, capped)
         const waitStart = Date.now();
-        repaints.push(
-          repainted.then(() => {
-            logger.info(`[Reattach] repainted ${agentId} in ${Date.now() - waitStart}ms`);
-            ready(agentId);
-          }),
-        );
+        holdForRepaint(agentId);
+        void repainted.then(() => {
+          logger.info(`[Reattach] repainted ${agentId} in ${Date.now() - waitStart}ms`);
+          ready(agentId);
+        });
       } else {
         ready(agentId);
       }
@@ -264,7 +268,6 @@ export async function reattachSidecarAgents(
     const id = nextReattach();
     if (id) await reattachOne(id);
   });
-  await Promise.all(repaints);
 
   logger.info(
     `[Reattach] done ${ids.length} in ${Date.now() - started}ms (alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size})`,

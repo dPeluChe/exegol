@@ -2,8 +2,8 @@
 // JSON-RPC over Unix domain socket (NDJSON framing).
 
 import { connect, type Socket } from "node:net";
+import { createFrameReader } from "../lib/frame-reader";
 import { logger } from "../lib/logger";
-import { createFrameBuffer } from "./frame-buffer";
 import {
   type JsonRpcMessage,
   type JsonRpcResponse,
@@ -28,10 +28,10 @@ type ErrorCallback = (id: string, message: string) => void;
 
 export class SidecarClient {
   private socket: Socket | null = null;
-  /** Shared framing: the cap and the multibyte-safe decoder live in one place —
+  /** Main's own linear reader (lib/frame-reader); the sidecar end keeps lib/ndjson. Bounded:
    *  this socket carries far more traffic than the MCP one and runs in the same
    *  main process, so an unbounded buffer here is the same OOM. */
-  private feed = createFrameBuffer<JsonRpcMessage>(
+  private feed = createFrameReader<JsonRpcMessage>(
     (msg) => this.handleMessage(msg),
     () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
     // A session.snapshot answers with the ENTIRE ring buffer in one frame, and
