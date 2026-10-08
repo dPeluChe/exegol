@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { appChord, appKeys, chordBadge, chordKey, editKeys, hasClickModifier } from "./keymap";
+import {
+  appChord,
+  appKeys,
+  chordBadge,
+  chordKey,
+  editKeys,
+  fileManagerLabel,
+  hasClickModifier,
+} from "./keymap";
 
 const ev = (over: Partial<KeyboardEvent>) =>
   ({
@@ -82,5 +90,13 @@ describe("hasClickModifier", () => {
     expect(hasClickModifier(click(false, true), true)).toBe(false);
     expect(hasClickModifier(click(false, true), false)).toBe(true);
     expect(hasClickModifier(click(true, false), false)).toBe(false);
+  });
+});
+
+describe("fileManagerLabel", () => {
+  it("names the file manager per platform", () => {
+    expect(fileManagerLabel("darwin")).toBe("Finder");
+    expect(fileManagerLabel("win32")).toBe("Explorer");
+    expect(fileManagerLabel("linux")).toBe("File manager");
   });
 });

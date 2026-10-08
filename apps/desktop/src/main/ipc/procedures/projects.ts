@@ -3,6 +3,7 @@ import { existsSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
 import { TRPCError } from "@trpc/server";
+import { shell } from "electron";
 import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
@@ -39,6 +40,7 @@ import {
   isIconFile,
 } from "../../system/project-icons";
 import { publicProcedure, router } from "../trpc";
+import { resolveProjectFolder } from "./project-paths";
 
 async function isGitRepo(path: string): Promise<boolean> {
   try {
@@ -283,6 +285,19 @@ export const projectRouter = router({
         input.file ? input.line : undefined,
       );
       return { success: true, ...opened };
+    }),
+
+  /** The project root or one of its folders in Finder, Explorer or the Linux file manager */
+  openFolder: publicProcedure
+    .input(z.object({ projectId: z.string(), path: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) {
+        throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.projectId} not found` });
+      }
+      const error = await shell.openPath(await resolveProjectFolder(project.path, input.path));
+      if (error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error });
+      return { success: true };
     }),
 
   open: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {

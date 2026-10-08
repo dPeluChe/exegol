@@ -12,6 +12,7 @@
       "listAllWorktrees",
       "listWorktrees",
       "open",
+      "openFolder",
       "openInIde",
       "rename",
       "reorder",
