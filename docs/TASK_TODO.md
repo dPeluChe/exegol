@@ -208,23 +208,18 @@ on the machine (no audio leaves it), typed into the focused pane.
 
 1. ~~Phase 1, models + storage~~: shipped on `feat/models-and-storage` (`TASK_COMPLETED/2610.md`):
    `main/models/` catalog + resumable verified downloads, Settings > Models and Settings > Storage.
-2. Phase 2, dictation:
-   - sherpa-onnx offline websocket server binary per platform in `extraResources`, signed and
-     notarized with the app; started on demand, bound to 127.0.0.1, stopped when idle
-   - Mic permission: `NSMicrophoneUsageDescription` via electron-builder `extendInfo`, the
-     `com.apple.security.device.audio-input` entitlement, `systemPreferences.askForMediaAccess`
-     before the first recording
-   - Renderer capture at 16 kHz mono (AudioWorklet), streamed to main
-   - A small centered overlay on the active pane while recording (level meter, partial text for
-     streaming models, Esc cancels)
-   - Paste into the focused pane only (terminal input or the focused field), never into other
-     apps: no Accessibility permission
-   - History of dictations (last N, copy again)
-   - Hotkeys inside Exegol: toggle and hold-to-talk
+2. ~~Phase 2, dictation~~: shipped on `feat/voice-dictation` (`TASK_COMPLETED/2610.md`):
+   sherpa-onnx-node in a utilityProcess, mic permission, overlay, focused-pane insert, history,
+   toggle and hold-to-talk shortcut, status bar mic. Not checked live yet.
+   - Verify dictation on the real AppImage/.deb before release: the Linux addon's RUNPATH is
+     `$ORIGIN` (the .so files sit beside it in `app.asar.unpacked`, so no `LD_LIBRARY_PATH`),
+     checked on the npm tarball only
 3. Later:
    - Whisper through whisper-server (whisper.cpp, Metal) for faster Whisper on Apple Silicon
    - Apple SpeechAnalyzer on macOS 26+ as a no-download engine
    - Numbers-as-words post-processing for Parakeet ("twenty five" to "25")
+   - "Agents that talk": text to speech for agent replies, Kokoro-82M (Apache-2.0, sherpa-onnx
+     has it) as the candidate
 
 ### T153 — Project Awareness Engine `added: 2026-07-04`
 > Merged from T132 (automations catalog, `added: 2026-07-04`), T186 (Owl Phase 1), T187 (Owl

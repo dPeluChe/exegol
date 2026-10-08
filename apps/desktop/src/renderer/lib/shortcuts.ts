@@ -1,3 +1,9 @@
+import {
+  type DictationSettings,
+  dictationSettingsOf,
+  formatChord,
+  parseChord,
+} from "@exegol/shared";
 import { appKeys, IS_MAC } from "./keymap";
 /**
  * Every in-app shortcut, one list for Settings > Shortcuts and the Cmd+/ overlay (the three
@@ -167,12 +173,62 @@ const MAC_SHORTCUTS: Shortcut[] = [
     keys: "Cmd+Shift+D",
     category: "terminal",
   },
+  {
+    id: "dictation",
+    label: "Dictation",
+    description:
+      "Speak into the focused pane: press to start and again to insert, or hold while you talk (Esc cancels). Change it in Settings > Dictation",
+    keys: "Cmd+Shift+Space",
+    otherKeys: "Ctrl+Shift+Space",
+    category: "terminal",
+  },
 ];
+
+/** "Cmd+Shift+D" in any modifier order → one comparable form */
+function normalizeKeys(keys: string): string {
+  const parts = keys.split("+");
+  const key = parts.pop()?.toUpperCase() ?? "";
+  return [...parts.sort(), key].join("+");
+}
+
+/** Every chord an app shortcut uses, ranges ("Cmd+2-9") expanded, macOS notation */
+function appChords(): { chord: string; label: string }[] {
+  return MAC_SHORTCUTS.filter((s) => s.id !== "dictation").flatMap((s) =>
+    s.keys
+      .split(/ \/ |, /)
+      .flatMap((keys) => {
+        const range = /^(.*\+)(\d)-(\d)$/.exec(keys);
+        if (!range) return [keys];
+        const [, prefix = "", from = "0", to = "0"] = range;
+        return Array.from(
+          { length: Number(to) - Number(from) + 1 },
+          (_, i) => `${prefix}${Number(from) + i}`,
+        );
+      })
+      .map((keys) => ({ chord: normalizeKeys(keys), label: s.label })),
+  );
+}
+
+/** The app shortcut a dictation chord (stored notation) would take over, if any */
+export function shortcutClash(keys: string): string | null {
+  const wanted = normalizeKeys(keys);
+  return appChords().find((c) => c.chord === wanted)?.label ?? null;
+}
 
 export const SHORTCUTS: Shortcut[] = MAC_SHORTCUTS.map((s) => ({
   ...s,
   keys: IS_MAC ? s.keys : (s.otherKeys ?? appKeys(s.keys)),
 }));
+
+/** The list with the dictation chord the user set (Settings > Dictation), without it when off */
+export function shortcutsWith(dictation: Partial<DictationSettings> | undefined): Shortcut[] {
+  const d = dictationSettingsOf(dictation);
+  const chord = d.enabled ? parseChord(d.shortcut) : null;
+  return SHORTCUTS.flatMap((s) => {
+    if (s.id !== "dictation") return [s];
+    return chord ? [{ ...s, keys: formatChord(chord, IS_MAC) }] : [];
+  });
+}
 
 /** "CommandOrControl+Shift+E" as the lists write keys. An Electron accelerator, so plain Ctrl
  *  off macOS (not the app's Ctrl+Shift) */

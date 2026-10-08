@@ -337,6 +337,18 @@
       "clearScreenshots",
       "openFolder",
       "report"
+    ],
+    "dictation": [
+      "cancel",
+      "clearHistory",
+      "copyHistory",
+      "deleteHistory",
+      "history",
+      "openMicSettings",
+      "requestMic",
+      "start",
+      "status",
+      "stop"
     ]
   },
   "ipc": [
@@ -398,6 +410,13 @@
     "browser:open-result",
     "mcp:status",
     "agent:turn-changes",
-    "models:progress"
+    "models:progress",
+    "dictation:audio",
+    "dictation:mark-browser",
+    "dictation:insert-browser",
+    "dictation:partial",
+    "dictation:engine",
+    "dictation:key",
+    "dictation:done"
   ]
 }

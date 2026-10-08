@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { SHORTCUTS } from "../../lib/shortcuts";
+import { useSettings } from "../../hooks/use-trpc";
+import { shortcutsWith } from "../../lib/shortcuts";
 import { useAppStore } from "../../stores/app";
 import { ParallelSpawnModal } from "../agents/ParallelSpawnModal";
 import { SpawnAgentModal } from "../agents/SpawnAgentModal";
@@ -177,18 +178,21 @@ function SpawnModals({
 }
 
 function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+  const { data: settings } = useSettings();
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} role="none" />
       <div className="relative z-10 w-[400px] rounded-xl border border-border bg-bg-primary p-4 shadow-2xl">
         <h2 className="mb-3 text-sm font-semibold text-text-primary">Keyboard Shortcuts</h2>
         <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
-          {SHORTCUTS.map((s) => ({ key: s.keys, label: s.label })).map((s) => (
-            <React.Fragment key={s.key}>
-              <span className="text-text-muted">{s.label}</span>
-              <kbd className="text-right font-mono text-text-secondary">{s.key}</kbd>
-            </React.Fragment>
-          ))}
+          {shortcutsWith(settings?.dictation)
+            .map((s) => ({ key: s.keys, label: s.label }))
+            .map((s) => (
+              <React.Fragment key={s.key}>
+                <span className="text-text-muted">{s.label}</span>
+                <kbd className="text-right font-mono text-text-secondary">{s.key}</kbd>
+              </React.Fragment>
+            ))}
         </div>
         <button
           type="button"

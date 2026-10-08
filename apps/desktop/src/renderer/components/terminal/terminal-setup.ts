@@ -2,6 +2,7 @@ import { CLIPBOARD_IMAGE } from "@exegol/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
+import { isDictationChord } from "../../lib/dictation/shortcut";
 import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
 import { useAgentStore } from "../../stores/agents";
@@ -144,6 +145,8 @@ export function setupTerminalSession(
 
   if (!deps.readOnly) {
     terminal.attachCustomKeyEventHandler((e) => {
+      // The dictation shortcut (both phases: its key-up ends hold-to-talk) belongs to the app
+      if (isDictationChord(e)) return false;
       // T155 input QoL: Shift+Enter → newline, not submit. Two traps found
       // live (2026-08-11): (1) Enter fires a legacy keypress that xterm turns
       // into a stray CR unless EVERY phase is swallowed; (2) a pasted lone

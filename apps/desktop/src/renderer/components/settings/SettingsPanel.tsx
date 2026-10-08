@@ -7,6 +7,7 @@ import {
   HardDrive,
   Key,
   Keyboard,
+  Mic,
   Monitor,
   Network,
   PanelBottom,
@@ -17,6 +18,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { ApiKeysSettings } from "./ApiKeysSettings";
 import { CliSettings } from "./CliSettings";
+import { DictationSettings } from "./DictationSettings";
 import { DoctorSettings } from "./DoctorSettings";
 import { GeneralSettings } from "./GeneralSettings";
 import { KeyboardShortcuts } from "./KeyboardShortcuts";
@@ -36,6 +38,7 @@ export type SettingsTab =
   | "apikeys"
   | "mcp"
   | "models"
+  | "dictation"
   | "storage"
   | "doctor";
 
@@ -48,6 +51,7 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: "apikeys", label: "API Keys", icon: Key },
   { id: "mcp", label: "MCP Server", icon: Network },
   { id: "models", label: "Models", icon: AudioLines },
+  { id: "dictation", label: "Dictation", icon: Mic },
   { id: "storage", label: "Storage", icon: HardDrive },
   { id: "doctor", label: "Doctor", icon: Stethoscope },
 ];
@@ -66,6 +70,7 @@ const TAB_CONTENT: Record<SettingsTab, (props: TabContentProps) => ReactNode> = 
   apikeys: () => <ApiKeysSettings />,
   mcp: () => <McpServerSettings />,
   models: () => <ModelsSettings />,
+  dictation: (props) => <DictationSettings {...props} />,
   storage: () => <StorageSettings />,
   doctor: () => <DoctorSettings />,
 };

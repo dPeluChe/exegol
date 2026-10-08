@@ -1,8 +1,9 @@
-import { type Settings, settingsSchema } from "@exegol/shared";
+import { dictationSettingsOf, type Settings, settingsSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { registerGlobalHotkey } from "../../bootstrap/global-hotkey";
 import { getAppSettings, saveAppSettings } from "../../db/queries/settings";
+import { applyDictationSettings } from "../../dictation/service";
 import { setMcpVerboseLogging } from "../../mcp/exegol-server";
 import { invalidateDesktopChannelCache } from "../../notifications/channels/desktop";
 import { MODEL_PRICES, type ModelPrice } from "../../tokens/pricing";
@@ -55,6 +56,7 @@ export const settingsRouter = router({
     // channel's 30s cache so mute toggles apply immediately.
     invalidateDesktopChannelCache();
     setMcpVerboseLogging(updated.mcpVerboseLogging === true);
+    applyDictationSettings(ctx.db, dictationSettingsOf(updated.dictation));
     return updated;
   }),
 

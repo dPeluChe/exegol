@@ -1,6 +1,7 @@
 import type { Settings } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { useWidgetDefaults } from "../../hooks/use-trpc-dictation";
 import {
   moveWidget,
   type PlacedWidget,
@@ -25,7 +26,7 @@ interface Props {
 
 /** Which widgets the footer shows, in which slot and order. Saved as one setting */
 export function StatusBarSettings({ settings, onChange }: Props) {
-  const layout = resolveWidgetLayout(settings.statusBarWidgets);
+  const layout = resolveWidgetLayout(settings.statusBarWidgets, useWidgetDefaults());
   const save = (next: PlacedWidget[]) => onChange({ statusBarWidgets: next });
 
   return (

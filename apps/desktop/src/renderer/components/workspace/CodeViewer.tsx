@@ -5,6 +5,7 @@ import * as monaco from "monaco-editor";
 import { useEffect, useRef, useState } from "react";
 import { Streamdown } from "streamdown";
 import { useLatest } from "../../hooks/use-latest";
+import { registerTextEditor } from "../../lib/dictation/editors";
 import { JsonTree } from "./JsonTree";
 
 // Use local monaco-editor instance instead of CDN
@@ -116,6 +117,23 @@ function MonacoViewer({
         editorRef.current = editor;
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current?.());
         revealAt(editor, revealLine);
+        const node = editor.getDomNode();
+        if (node) {
+          const unregister = registerTextEditor({
+            node,
+            insert: (text) => {
+              if (editor.getOption(monaco.editor.EditorOption.readOnly)) return false;
+              const selections = editor.getSelections() ?? [];
+              editor.executeEdits(
+                "dictation",
+                selections.map((range) => ({ range, text, forceMoveMarkers: true })),
+              );
+              editor.focus();
+              return true;
+            },
+          });
+          editor.onDidDispose(unregister);
+        }
       }}
       loading={
         <div className="flex h-full items-center justify-center text-xs text-text-muted">

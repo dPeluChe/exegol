@@ -3,6 +3,7 @@ import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { budgetsRouter } from "./procedures/budgets";
 import { diagnosticsRouter } from "./procedures/diagnostics";
+import { dictationRouter } from "./procedures/dictation";
 import { diffRouter } from "./procedures/diff";
 import { diffCommentsRouter } from "./procedures/diff-comments";
 import { doctorRouter } from "./procedures/doctor";
@@ -75,6 +76,7 @@ export const appRouter = router({
   updates: updatesRouter,
   terminalLinks: terminalLinksRouter,
   models: modelsRouter,
+  dictation: dictationRouter,
   storage: storageRouter,
   ide: ideRouter,
 });

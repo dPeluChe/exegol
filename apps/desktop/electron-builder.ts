@@ -46,6 +46,10 @@ const config: Configuration = {
     "node_modules/bindings/**",
     "node_modules/file-uri-to-path/**",
     "node_modules/better-sqlite3/**",
+    // Dictation engine (T201): the N-API addon and the onnxruntime/sherpa dylibs (.so) beside it,
+    // loaded by path from the utilityProcess, so they must be real files (and get signed)
+    "node_modules/sherpa-onnx-node/**",
+    "node_modules/sherpa-onnx-*/**",
     // @exegol/core-rust is shipped via extraResources (see below), not
     // asarUnpack, because it's a workspace symlink outside apps/desktop
     // scope that electron-builder doesn't resolve through the usual
@@ -94,6 +98,8 @@ const config: Configuration = {
     extendInfo: {
       NSAppleEventsUsageDescription:
         "Exegol needs automation access to open IDEs and manage terminals.",
+      NSMicrophoneUsageDescription:
+        "Exegol uses the microphone only while you dictate. Speech is transcribed on this Mac and never leaves it.",
     },
   },
 

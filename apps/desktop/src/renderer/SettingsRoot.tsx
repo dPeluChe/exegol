@@ -14,6 +14,7 @@ const VALID_TABS: SettingsTab[] = [
   "apikeys",
   "mcp",
   "models",
+  "dictation",
   "storage",
   "doctor",
 ];
