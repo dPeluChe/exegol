@@ -1,8 +1,10 @@
 import type { StatusBarWidgetSetting } from "@exegol/shared";
 
 export type WidgetSlot = StatusBarWidgetSetting["slot"];
+export type WidgetBar = NonNullable<StatusBarWidgetSetting["bar"]>;
 
 export const WIDGET_SLOTS: WidgetSlot[] = ["left", "center", "right"];
+export const WIDGET_BARS: WidgetBar[] = ["header", "footer"];
 
 export const STATUS_BAR_WIDGETS = [
   {
@@ -127,14 +129,33 @@ export type WidgetMode = NonNullable<StatusBarWidgetSetting["mode"]>;
 export interface PlacedWidget {
   id: StatusBarWidgetId;
   on: boolean;
+  bar: WidgetBar;
   slot: WidgetSlot;
   mode?: WidgetMode;
 }
 
 const KNOWN = new Map(STATUS_BAR_WIDGETS.map((w) => [w.id as string, w]));
 
+/** The title bar has no center zone: the project name and the dictation dock own it */
+export const BAR_SLOTS: Record<WidgetBar, WidgetSlot[]> = {
+  header: ["left", "right"],
+  footer: WIDGET_SLOTS,
+};
+
+/** Widgets the title bar never takes: the project one repeats its name */
+const FOOTER_ONLY = new Set<string>(["project"]);
+
+/** A saved entry in a zone that does not exist (or no longer may hold it) lands somewhere valid:
+ *  header center to header right, a footer-only widget in the header to the footer */
+function validZone(id: string, bar: WidgetBar, slot: WidgetSlot): [WidgetBar, WidgetSlot] {
+  if (bar === "header" && FOOTER_ONLY.has(id)) return ["footer", slot];
+  if (!BAR_SLOTS[bar].includes(slot)) return [bar, "right"];
+  return [bar, slot];
+}
+
 /** Every widget once, in the saved order: unknown or repeated ids dropped, new ones appended at
- *  their defaults (`defaultOn` overrides a default that depends on state, like Dictation's) */
+ *  their defaults (`defaultOn` overrides a default that depends on state, like Dictation's).
+ *  Every default is in the footer, so the title bar's zones start empty */
 export function resolveWidgetLayout(
   saved: readonly StatusBarWidgetSetting[] = [],
   defaultOn: Partial<Record<StatusBarWidgetId, boolean>> = {},
@@ -145,14 +166,22 @@ export function resolveWidgetLayout(
     const def = KNOWN.get(s.id);
     if (!def || seen.has(def.id)) continue;
     seen.add(def.id);
-    const slot = WIDGET_SLOTS.includes(s.slot) ? s.slot : def.defaultSlot;
-    out.push(
-      s.mode ? { id: def.id, on: s.on, slot, mode: s.mode } : { id: def.id, on: s.on, slot },
+    const [bar, slot] = validZone(
+      def.id,
+      s.bar === "header" ? "header" : "footer",
+      WIDGET_SLOTS.includes(s.slot) ? s.slot : def.defaultSlot,
     );
+    const placed: PlacedWidget = { id: def.id, on: s.on, bar, slot };
+    out.push(s.mode ? { ...placed, mode: s.mode } : placed);
   }
   for (const def of STATUS_BAR_WIDGETS) {
     if (!seen.has(def.id)) {
-      out.push({ id: def.id, on: defaultOn[def.id] ?? def.defaultOn, slot: def.defaultSlot });
+      out.push({
+        id: def.id,
+        on: defaultOn[def.id] ?? def.defaultOn,
+        bar: "footer",
+        slot: def.defaultSlot,
+      });
     }
   }
   return out;
@@ -161,17 +190,29 @@ export function resolveWidgetLayout(
 export const widgetMode = (layout: PlacedWidget[], id: StatusBarWidgetId): WidgetMode =>
   layout.find((w) => w.id === id)?.mode ?? "percent";
 
-/** The widgets shown in one slot, in order */
-export const widgetsIn = (layout: PlacedWidget[], slot: WidgetSlot): StatusBarWidgetId[] =>
-  layout.filter((w) => w.on && w.slot === slot).map((w) => w.id);
+const inZone = (w: PlacedWidget, bar: WidgetBar, slot: WidgetSlot) =>
+  w.on && w.bar === bar && w.slot === slot;
 
-/** Move a widget up (-1) or down (+1) past the next widget in its own slot */
+/** The widgets shown in one zone, in order */
+export const zoneWidgets = (
+  layout: PlacedWidget[],
+  bar: WidgetBar,
+  slot: WidgetSlot,
+): PlacedWidget[] => layout.filter((w) => inZone(w, bar, slot));
+
+export const widgetsIn = (
+  layout: PlacedWidget[],
+  bar: WidgetBar,
+  slot: WidgetSlot,
+): StatusBarWidgetId[] => zoneWidgets(layout, bar, slot).map((w) => w.id);
+
+/** Move a widget up (-1) or down (+1) past the next shown widget in its own zone */
 export function moveWidget(layout: PlacedWidget[], id: string, delta: -1 | 1): PlacedWidget[] {
   const from = layout.findIndex((w) => w.id === id);
   const moving = layout[from];
   if (!moving) return layout;
   let to = from + delta;
-  while (layout[to] && layout[to]?.slot !== moving.slot) to += delta;
+  while (layout[to] && !inZone(layout[to] as PlacedWidget, moving.bar, moving.slot)) to += delta;
   const other = layout[to];
   if (!other) return layout;
   const next = [...layout];
@@ -186,4 +227,29 @@ export function updateWidget(
   patch: Partial<Omit<PlacedWidget, "id">>,
 ): PlacedWidget[] {
   return layout.map((w) => (w.id === id ? { ...w, ...patch } : w));
+}
+
+/** One choice of the Settings select: hidden, or a bar and a slot */
+export type Placement = "hidden" | `${WidgetBar}:${WidgetSlot}`;
+
+export const PLACEMENTS: Placement[] = [
+  "hidden",
+  ...WIDGET_BARS.flatMap((bar) => BAR_SLOTS[bar].map((slot) => `${bar}:${slot}` as const)),
+];
+
+/** The choices one widget offers: the project widget stays out of the title bar */
+export const placementsFor = (id: string): Placement[] =>
+  FOOTER_ONLY.has(id) ? PLACEMENTS.filter((p) => !p.startsWith("header:")) : PLACEMENTS;
+
+export const placementOf = (w: PlacedWidget): Placement => (w.on ? `${w.bar}:${w.slot}` : "hidden");
+
+/** Hiding keeps the zone, so showing it there again restores its spot; a move to another zone
+ *  lands at that zone's end, so the widget is in one place only. A zone it may not take: no-op */
+export function placeWidget(layout: PlacedWidget[], id: string, to: Placement): PlacedWidget[] {
+  const w = layout.find((x) => x.id === id);
+  if (!w || !placementsFor(id).includes(to)) return layout;
+  if (to === "hidden") return updateWidget(layout, id, { on: false });
+  const [bar, slot] = to.split(":") as [WidgetBar, WidgetSlot];
+  if (w.bar === bar && w.slot === slot) return updateWidget(layout, id, { on: true });
+  return [...layout.filter((x) => x.id !== id), { ...w, on: true, bar, slot }];
 }

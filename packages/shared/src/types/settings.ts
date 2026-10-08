@@ -8,10 +8,12 @@ export type AgentCliConfig = {
   env: Record<string, string>;
 };
 
-/** One status bar widget's placement; the array order is the bar's order */
+/** One widget's placement; the array order is each zone's order */
 export type StatusBarWidgetSetting = {
   id: string;
   on: boolean;
+  /** Absent: the footer (every entry saved before the title bar had zones) */
+  bar?: "footer" | "header";
   slot: "left" | "center" | "right";
   /** Resources widget: percentages, or used/total values for RAM */
   mode?: "percent" | "values";
