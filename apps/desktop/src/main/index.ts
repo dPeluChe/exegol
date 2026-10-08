@@ -17,7 +17,7 @@ import { installAgentBrowser, migrateBrowserCookies } from "./browser/electron-h
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
 import { stopEngine } from "./dictation/engine";
-import { forwardDictationKeys } from "./dictation/keys";
+import { forwardDictationEscape, forwardDictationKeys } from "./dictation/keys";
 import { releaseMediaNow } from "./dictation/media-pause";
 import { installMediaPermissions } from "./dictation/mic";
 import { applyDictationSettings, dictationSettings } from "./dictation/service";
@@ -193,6 +193,7 @@ app.on("web-contents-created", (_event, contents) => {
   // Every Exegol window (settings and floating ones too, not only main): a link must not open
   // an Electron child window, which would hand the preload's window.api to that page
   if (contents.getType() === "window") {
+    forwardDictationEscape(contents);
     contents.setWindowOpenHandler(({ url }) => {
       if (/^https?:\/\//.test(url)) shell.openExternal(url).catch(() => {});
       return { action: "deny" };

@@ -24,6 +24,11 @@ export const DICTATION_TARGET_KINDS = [
 
 export type DictationTargetKind = (typeof DICTATION_TARGET_KINDS)[number];
 
+/** Where the overlay sits: over the target pane (docked to the title bar while that pane is not
+ *  on screen), or always docked at the top center */
+export const DICTATION_OVERLAY_POSITIONS = ["pane", "titlebar"] as const;
+export type DictationOverlayPosition = (typeof DICTATION_OVERLAY_POSITIONS)[number];
+
 export interface DictationSettings {
   enabled: boolean;
   /** macOS notation ("Cmd+Shift+Space"); Cmd reads as Ctrl on Linux and Windows */
@@ -42,6 +47,7 @@ export interface DictationSettings {
   autoStopSilenceSec: number;
   retentionDays: number;
   retentionMax: number;
+  overlayPosition: DictationOverlayPosition;
 }
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
@@ -57,6 +63,7 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   autoStopSilenceSec: 0,
   retentionDays: 30,
   retentionMax: 500,
+  overlayPosition: "pane",
 };
 
 /** The saved settings over the defaults: a row written before a field existed lacks it */

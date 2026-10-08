@@ -17,7 +17,7 @@ import {
   focusOnTarget,
   stopDictation,
 } from "../lib/dictation/controller";
-import { overlayKeyAction } from "../lib/dictation/overlay-keys";
+import { otherDialogOpen, overlayKeyAction } from "../lib/dictation/overlay-keys";
 import {
   dictationChord,
   isDictationChord,
@@ -57,7 +57,10 @@ export function useDictation() {
         return;
       }
       const phase = useDictationStore.getState().phase;
-      const action = overlayKeyAction(e, phase, e.key !== "Enter" || focusOnTarget());
+      const action = overlayKeyAction(e, phase, {
+        onTarget: e.key !== "Enter" || focusOnTarget(),
+        dialogOpen: e.key === "Escape" && phase !== "idle" && otherDialogOpen(),
+      });
       if (!action) return;
       e.preventDefault();
       e.stopPropagation();

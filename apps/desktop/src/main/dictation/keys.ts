@@ -21,12 +21,22 @@ export const isPlainEnter = (input: Electron.Input) =>
   !input.alt &&
   !input.shift;
 
+const isEscapeDown = (input: Electron.Input) =>
+  input.type === "keyDown" && input.key === "Escape" && !input.isComposing;
+
 const hostIsMain = (host: WebContents) => host === getMainWindow()?.webContents;
 
+type ToMain = (event: { kind: "escape" }) => void;
+const sendToMain: ToMain = (event) => getMainWindow()?.webContents.send("dictation:key", event);
+
 /** A page in a browser pane keeps its keys: the dictation chord (down and up, for hold-to-talk)
- *  goes to the window hosting it; Esc and Enter while a dictation runs only from the main window,
- *  the one with the overlay */
-export function forwardDictationKeys(contents: WebContents, isMain = hostIsMain): void {
+ *  goes to the window hosting it; Enter while a dictation runs only from the main window, the
+ *  one with the overlay. Esc cancels from any window: the recording outlives the focus */
+export function forwardDictationKeys(
+  contents: WebContents,
+  isMain = hostIsMain,
+  toMain = sendToMain,
+): void {
   let held = false;
   contents.on("before-input-event", (event, input) => {
     const host = contents.hostWebContents;
@@ -47,17 +57,27 @@ export function forwardDictationKeys(contents: WebContents, isMain = hostIsMain)
     } else if (input.type === "keyUp" && held && releasesChord(input, chord, mac)) {
       held = false;
       host.send("dictation:key", { kind: "up" });
-    } else if (
-      input.type === "keyDown" &&
-      input.key === "Escape" &&
-      isListening() &&
-      isMain(host)
-    ) {
+    } else if (isEscapeDown(input) && isListening()) {
       event.preventDefault();
-      host.send("dictation:key", { kind: "escape" });
+      toMain({ kind: "escape" });
     } else if (input.type === "keyDown" && isPlainEnter(input) && isListening() && isMain(host)) {
       event.preventDefault();
       host.send("dictation:key", { kind: "enter" });
     }
+  });
+}
+
+/** Settings and floating windows have no overlay and no dictation keys of their own: their Esc
+ *  cancels the main window's dictation. The main window's Esc stays its renderer's, so an open
+ *  dialog there takes it first */
+export function forwardDictationEscape(
+  contents: WebContents,
+  isMain: () => boolean = () => contents === getMainWindow()?.webContents,
+  toMain = sendToMain,
+): void {
+  contents.on("before-input-event", (event, input) => {
+    if (!isEscapeDown(input) || !isListening() || isMain()) return;
+    event.preventDefault();
+    toMain({ kind: "escape" });
   });
 }

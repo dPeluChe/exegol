@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { DEFAULT_DICTATION_SETTINGS, parseChord } from "../types/dictation";
+import {
+  DEFAULT_DICTATION_SETTINGS,
+  DICTATION_OVERLAY_POSITIONS,
+  parseChord,
+} from "../types/dictation";
 import { IDE_IDS } from "../types/ide";
 import { DEFAULT_SETTINGS } from "../types/settings";
 
@@ -26,6 +30,7 @@ export const dictationSettingsSchema = z.object({
   autoStopSilenceSec: z.number().int().min(0).max(60),
   retentionDays: z.number().int().min(1).max(3650),
   retentionMax: z.number().int().min(10).max(10_000),
+  overlayPosition: z.enum(DICTATION_OVERLAY_POSITIONS).default("pane"),
 });
 
 export const settingsSchema = z.object({

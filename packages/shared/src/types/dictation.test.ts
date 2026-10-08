@@ -4,6 +4,7 @@ import {
   chordFromEvent,
   DEFAULT_DICTATION_SETTINGS,
   DEFAULT_DICTATION_SHORTCUT,
+  dictationSettingsOf,
   formatChord,
   matchesChord,
   parseChord,
@@ -77,5 +78,15 @@ describe("dictation chord", () => {
       dictationSettingsSchema.safeParse({ ...DEFAULT_DICTATION_SETTINGS, shortcut: "Space" })
         .success,
     ).toBe(false);
+  });
+
+  it("overlay position: over the pane by default, a row saved before it existed included", () => {
+    const { overlayPosition: _, ...older } = DEFAULT_DICTATION_SETTINGS;
+    expect(dictationSettingsOf(older).overlayPosition).toBe("pane");
+    expect(dictationSettingsSchema.parse(older).overlayPosition).toBe("pane");
+    const docked = { ...DEFAULT_DICTATION_SETTINGS, overlayPosition: "titlebar" };
+    expect(dictationSettingsSchema.safeParse(docked).success).toBe(true);
+    const bad = { ...DEFAULT_DICTATION_SETTINGS, overlayPosition: "corner" };
+    expect(dictationSettingsSchema.safeParse(bad).success).toBe(false);
   });
 });

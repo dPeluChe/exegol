@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { overlayKeyAction } from "./overlay-keys";
+import { OVERLAY_ATTR, otherDialogOpen, overlayKeyAction } from "./overlay-keys";
 import { insertHint, targetName } from "./target";
 
 const key = (k: string, extra: Partial<Parameters<typeof overlayKeyAction>[0]> = {}) => ({
@@ -19,9 +19,15 @@ describe("overlayKeyAction", () => {
   });
 
   it("Enter is the focused pane's once the focus left the dictation's target; Esc still cancels", () => {
-    expect(overlayKeyAction(key("Enter"), "listening", false)).toBeNull();
-    expect(overlayKeyAction(key("Enter"), "transcribing", false)).toBeNull();
-    expect(overlayKeyAction(key("Escape"), "listening", false)).toBe("cancel");
+    const away = { onTarget: false };
+    expect(overlayKeyAction(key("Enter"), "listening", away)).toBeNull();
+    expect(overlayKeyAction(key("Enter"), "transcribing", away)).toBeNull();
+    expect(overlayKeyAction(key("Escape"), "listening", away)).toBe("cancel");
+  });
+
+  it("an open dialog takes Esc first; the next Esc cancels the dictation", () => {
+    expect(overlayKeyAction(key("Escape"), "listening", { dialogOpen: true })).toBeNull();
+    expect(overlayKeyAction(key("Escape"), "listening", { dialogOpen: false })).toBe("cancel");
   });
 
   it("leaves keys alone with the overlay closed or on a panel with buttons", () => {
@@ -46,6 +52,28 @@ describe("overlayKeyAction", () => {
     expect(overlayKeyAction(key("Enter", { shiftKey: true }), "listening")).toBeNull();
     expect(overlayKeyAction(key("Enter", { metaKey: true }), "listening")).toBeNull();
     expect(overlayKeyAction(key("a"), "listening")).toBeNull();
+  });
+});
+
+describe("otherDialogOpen", () => {
+  const el = (role: string, opts: { inOverlay?: boolean; shown?: boolean } = {}) => ({
+    role,
+    closest: (sel: string) => (opts.inOverlay && sel === `[${OVERLAY_ATTR}]` ? {} : null),
+    getClientRects: () => ({ length: opts.shown === false ? 0 : 1 }),
+  });
+  const root = (els: ReturnType<typeof el>[]) =>
+    ({ querySelectorAll: () => els }) as unknown as ParentNode;
+
+  it("ignores the overlay itself and a dialog that is not on screen", () => {
+    expect(otherDialogOpen(root([el("dialog", { inOverlay: true })]))).toBe(false);
+    expect(otherDialogOpen(root([el("dialog", { shown: false })]))).toBe(false);
+    expect(otherDialogOpen(root([]))).toBe(false);
+  });
+
+  it("finds a confirm or popover on screen", () => {
+    expect(otherDialogOpen(root([el("dialog", { inOverlay: true }), el("alertdialog")]))).toBe(
+      true,
+    );
   });
 });
 

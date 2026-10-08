@@ -147,7 +147,7 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   goes only into the focused pane (pasted into a terminal without Enter, a browser page's focused
   field, the code editor's cursor), else it is copied. Overlay with waveform, timer, where the
   text goes and the words so far (live with the streaming model, phrase by phrase at each pause
-  with the others); with no model it offers a choice of three recommended models; Settings > Dictation for the shortcut, mic, limits and history; a mic
+  with the others), docked at the top center while its pane is off screen (or always, with Overlay position: Title bar); with no model it offers a choice of three recommended models; Settings > Dictation for the shortcut, mic, limits and history; a mic
   button in the status bar. "Pause music while dictating" (on by default) pauses what is playing
   through the system's Now Playing on macOS (browser tabs included) or MPRIS players through
   playerctl on Linux, and resumes it after; on macOS, "Also control Music and Spotify directly"

@@ -6,6 +6,14 @@ import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
 import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation";
 import { currentAnalyser, dismissDictation, stopDictation } from "../../lib/dictation/controller";
+import { OVERLAY_ATTR } from "../../lib/dictation/overlay-keys";
+import {
+  freeSpan,
+  type OverlayBox,
+  overlayBox,
+  type Rect,
+  sameBox,
+} from "../../lib/dictation/overlay-position";
 import { dictationChord } from "../../lib/dictation/shortcut";
 import { insertHint, TARGET_KINDS, targetName } from "../../lib/dictation/target";
 import {
@@ -17,60 +25,108 @@ import {
 import { IS_MAC } from "../../lib/keymap";
 import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
+import { useAppStore } from "../../stores/app";
 import { type DictationPhase, isRecording, useDictationStore } from "../../stores/dictation";
+import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import { Kbd } from "../common/Kbd";
 import { ModelChooser } from "./ModelChooser";
 import { keepFocus, OverlayButton } from "./overlay-ui";
 
 const CARD_WIDTH = 360;
+const DOCKED_WIDTH = 400;
 const CHOOSER_WIDTH = 420;
+const TRAFFIC_LIGHTS_WIDTH = 80;
+/** Re-checks whether the pane is still on screen: a section switch hides it with no store change */
+const RECHECK_MS = 400;
 
-/** Centered over the pane the text goes to (the window when there is none) while dictating */
+/** Over the pane the text goes to (the window when there is none) while dictating; docked at
+ *  the top center when that pane is off screen or the setting says so */
 export function DictationOverlay() {
   const phase = useDictationStore((s) => s.phase);
   const anchorPaneId = useDictationStore((s) => s.anchorPaneId);
   if (phase === "idle") return null;
-  const width = phase === "no-model" ? CHOOSER_WIDTH : CARD_WIDTH;
-  return (
-    <Positioned key={`${anchorPaneId ?? "window"}:${width}`} paneId={anchorPaneId} width={width} />
-  );
+  return <Positioned key={anchorPaneId ?? "window"} paneId={anchorPaneId} />;
 }
 
-function Positioned({ paneId, width }: { paneId: string | null; width: number }) {
+/** The pane's rect if some of it is on screen and not under another view (the dashboard covers
+ *  mounted panes; a hidden tab or project has no size) */
+function shownRect(el: Element | null): Rect | null {
+  if (!el?.isConnected) return null;
+  const r = el.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1) return null;
+  for (const [fx, fy] of [
+    [0.5, 0.5],
+    [0.2, 0.2],
+    [0.8, 0.8],
+  ] as const) {
+    const x = r.left + r.width * fx;
+    const y = r.top + r.height * fy;
+    if (x < 0 || y < 0 || x >= window.innerWidth || y >= window.innerHeight) continue;
+    const hit = document.elementsFromPoint(x, y).find((n) => !n.closest(`[${OVERLAY_ATTR}]`));
+    if (hit && el.contains(hit)) return r;
+  }
+  return null;
+}
+
+/** What the title bar leaves free, read from its no-drag controls so its markup stays its own */
+function titleBarSpan(): { left: number; right: number } {
+  const bar = document.querySelector(".titlebar-drag");
+  const controls = bar
+    ? [...bar.querySelectorAll(".titlebar-no-drag")].map((el) => el.getBoundingClientRect())
+    : [];
+  return freeSpan(window.innerWidth, controls, IS_MAC ? TRAFFIC_LIGHTS_WIDTH : 0);
+}
+
+function Positioned({ paneId }: { paneId: string | null }) {
   const phase = useDictationStore((s) => s.phase);
-  const [box, setBox] = useState<{ left: number; top: number } | null>(null);
+  const position = dictationSettingsOf(useSettings().data?.dictation).overlayPosition;
+  const [box, setBox] = useState<OverlayBox | null>(null);
   useLayoutEffect(() => {
-    const el = paneId ? paneRoot(paneId) : null;
+    let frame = 0;
     const place = () => {
-      const r = el?.getBoundingClientRect() ?? {
-        left: 0,
-        top: 0,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      };
-      const left = Math.max(8, r.left + r.width / 2 - width / 2);
-      setBox({
-        left: Math.min(left, window.innerWidth - width - 8),
-        top: r.top + r.height / 2,
-      });
+      frame = 0;
+      // Looked up each time: the pane remounts on a project switch
+      const el = paneId ? paneRoot(paneId) : null;
+      const shown = position === "pane" ? shownRect(el) : null;
+      const docked = position === "titlebar" || (!!paneId && !shown);
+      const width = phase === "no-model" ? CHOOSER_WIDTH : docked ? DOCKED_WIDTH : CARD_WIDTH;
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const next = overlayBox(position, !!paneId, shown, viewport, width, titleBarSpan);
+      setBox((prev) => (sameBox(prev, next) ? prev : next));
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(place);
     };
     place();
     // A split dragged or the sidebar toggled moves the pane without a window resize
-    const observer = new ResizeObserver(place);
+    const observer = new ResizeObserver(schedule);
+    const el = paneId ? paneRoot(paneId) : null;
     if (el) observer.observe(el);
-    window.addEventListener("resize", place);
+    window.addEventListener("resize", schedule);
+    const offApp = useAppStore.subscribe(schedule);
+    const offWorkspace = useWorkspaceStore.subscribe(schedule);
+    const timer = setInterval(schedule, RECHECK_MS);
     return () => {
+      cancelAnimationFrame(frame);
       observer.disconnect();
-      window.removeEventListener("resize", place);
+      window.removeEventListener("resize", schedule);
+      offApp();
+      offWorkspace();
+      clearInterval(timer);
     };
-  }, [paneId, width]);
+  }, [paneId, position, phase]);
   if (!box) return null;
   const failed = phase === "error" || phase === "mic-denied";
   return (
     <div
-      className="fixed z-[220] -translate-y-1/2 cursor-default select-none"
-      style={{ left: box.left, top: box.top, width }}
+      {...{ [OVERLAY_ATTR]: "" }}
+      className={cn(
+        // no-drag: docked over the title bar, the window's drag region would take the clicks
+        "titlebar-no-drag fixed z-[220] cursor-default select-none transition-[left,top,width,transform] duration-300 ease-out motion-reduce:transition-none",
+        !box.docked && "-translate-y-1/2",
+      )}
+      style={{ left: box.left, top: box.top, width: box.width }}
       role="dialog"
       aria-label="Voice dictation"
     >
@@ -81,21 +137,22 @@ function Positioned({ paneId, width }: { paneId: string | null; width: number })
           phase === "listening" && "shadow-[0_8px_40px_-12px_var(--color-accent)]",
         )}
       >
-        <Body />
+        <Body compact={box.docked} />
       </div>
     </div>
   );
 }
 
-function Body() {
+function Body({ compact }: { compact: boolean }) {
   const phase = useDictationStore((s) => s.phase);
   if (phase === "no-model") return <ModelChooser />;
   if (phase === "mic-denied") return <MicDenied />;
   if (phase === "error") return <ErrorBody />;
-  return <Recorder />;
+  return <Recorder compact={compact} />;
 }
 
-function Recorder() {
+/** Compact when docked at the top: no level bars, a shorter transcript */
+function Recorder({ compact }: { compact: boolean }) {
   const phase = useDictationStore((s) => s.phase);
   return (
     // A click on the card is a no-op: recording goes on and the pane keeps the focus
@@ -105,10 +162,12 @@ function Recorder() {
         <StatePill phase={phase} />
         <Commands phase={phase} />
       </div>
-      <div className="px-3.5 pt-2.5">
-        {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
-      </div>
-      <Transcript phase={phase} />
+      {!compact && (
+        <div className="px-3.5 pt-2.5">
+          {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
+        </div>
+      )}
+      <Transcript phase={phase} compact={compact} />
       <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-bg-primary/40 px-3.5 py-1.5">
         <TargetChip />
         <WordCount />
@@ -196,7 +255,7 @@ function TargetChip() {
 /** Pauses this long close a phrase for screen readers: streamed words are not read one by one */
 const ANNOUNCE_AFTER_MS = 1200;
 
-function Transcript({ phase }: { phase: DictationPhase }) {
+function Transcript({ phase, compact }: { phase: DictationPhase; compact: boolean }) {
   const partial = useDictationStore((s) => s.partial);
   const streaming = useDictationStatus().data?.model.kind === "streaming";
   const waiting = phase === "listening" || phase === "transcribing";
@@ -249,14 +308,16 @@ function Transcript({ phase }: { phase: DictationPhase }) {
         ref={box}
         onScroll={onScroll}
         className={cn(
-          "sidebar-scroll max-h-[min(7.25rem,28vh)] overflow-y-auto overscroll-contain",
+          "sidebar-scroll overflow-y-auto overscroll-contain",
+          compact ? "max-h-[3.6rem]" : "max-h-[min(7.25rem,28vh)]",
           clipped && "[mask-image:linear-gradient(to_bottom,transparent,#000_1.5rem)]",
         )}
       >
         <p
           ref={text}
           className={cn(
-            "min-h-[2.75rem] text-sm leading-snug break-words whitespace-pre-wrap",
+            "text-sm leading-snug break-words whitespace-pre-wrap",
+            compact ? "min-h-[1.25rem]" : "min-h-[2.75rem]",
             partial ? "text-text-primary" : "text-text-muted",
           )}
         >
