@@ -52,6 +52,7 @@
       "removeFollowUp",
       "resetProviderArgs",
       "screenDialog",
+      "sessionNames",
       "setActiveView",
       "setAlias",
       "setMuted",

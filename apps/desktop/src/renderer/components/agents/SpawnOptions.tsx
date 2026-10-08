@@ -1,13 +1,5 @@
-import {
-  type AgentAccessMode,
-  type AgentProvider,
-  launchHint,
-  MODEL_ID_PATTERN,
-  MODEL_LAUNCH,
-  MODEL_SUGGESTIONS,
-} from "@exegol/shared";
+import type { AgentAccessMode, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { isLaunchable } from "../../hooks/use-providers";
@@ -16,7 +8,6 @@ import { useSkills } from "../../hooks/use-trpc-skills";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { runCommandInNewTab } from "../../lib/spawn-shell";
-import { trpcInvoke } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 import { CopyCommand } from "../common/CopyCommand";
 
@@ -243,106 +234,5 @@ export function SkillPicker({
   );
 }
 
-const OTHER = "__other__";
-
 export const INPUT_CLASS =
   "w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50";
-
-/** Optional model (for CLIs that take one at launch) and session name; empty keeps the
- *  CLI's default model and a codename */
-export function ModelAndName({
-  providerId,
-  model,
-  onModel,
-  name,
-  onName,
-}: {
-  providerId: string;
-  model: string;
-  onModel: (model: string) => void;
-  name: string;
-  onName: (name: string) => void;
-}) {
-  const launch = MODEL_LAUNCH[providerId];
-  const { data: listed = [] } = useQuery({
-    queryKey: ["cliModels", providerId],
-    queryFn: () => trpcInvoke<string[]>("agents.listModels", { cliType: providerId }),
-    enabled: !!launch,
-    staleTime: 10 * 60 * 1000,
-  });
-  const suggested = MODEL_SUGGESTIONS[providerId] ?? [];
-  const available = listed.filter((m) => !suggested.includes(m));
-  const known = new Set([...suggested, ...available]);
-  // A typed id stays in its own field; "Other..." opens it
-  const [custom, setCustom] = useState(false);
-  const typing = custom || (model.trim() !== "" && !known.has(model));
-  const invalid = model.trim() !== "" && !MODEL_ID_PATTERN.test(model.trim());
-  const label = providerId === "amp" ? "Mode" : "Model";
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {launch && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-medium text-text-muted" htmlFor="spawn-model">
-            {label} <span className="font-mono text-[10px]">{launchHint(launch)}</span>
-          </label>
-          <select
-            id="spawn-model"
-            value={typing ? OTHER : model}
-            onChange={(e) => {
-              const v = e.target.value;
-              setCustom(v === OTHER);
-              onModel(v === OTHER ? "" : v);
-            }}
-            className={cn(INPUT_CLASS, "cursor-pointer")}
-          >
-            <option value="">Default (the CLI's own setting)</option>
-            {suggested.length > 0 && (
-              <optgroup label="Suggested">
-                {suggested.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {available.length > 0 && (
-              <optgroup label="Available to your account">
-                {available.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            <option value={OTHER}>Other (type an id)...</option>
-          </select>
-          {typing && (
-            <input
-              // biome-ignore lint/a11y/noAutofocus: opened by choosing "Other", typing is next
-              autoFocus
-              value={model}
-              onChange={(e) => onModel(e.target.value)}
-              placeholder={`${label} id, e.g. ${suggested[0] ?? available[0] ?? "model-name"}`}
-              aria-label={`${label} id`}
-              aria-invalid={invalid}
-              className={cn(INPUT_CLASS, invalid && "border-red-500/60")}
-            />
-          )}
-        </div>
-      )}
-      <div className={cn("flex flex-col gap-1.5", !launch && "col-span-2")}>
-        <label className="text-[11px] font-medium text-text-muted" htmlFor="spawn-name">
-          Name <span className="text-text-muted">(optional)</span>
-        </label>
-        <input
-          id="spawn-name"
-          value={name}
-          maxLength={40}
-          onChange={(e) => onName(e.target.value)}
-          placeholder="A codename if empty"
-          className={INPUT_CLASS}
-        />
-      </div>
-    </div>
-  );
-}

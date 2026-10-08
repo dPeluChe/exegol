@@ -9,7 +9,7 @@ vi.mock("node:os", async (importOriginal) => ({
   homedir: () => home.dir,
 }));
 
-import { claudeCodeHistory } from "./claude-code";
+import { claudeCodeHistory, claudeSessionName } from "./claude-code";
 
 // The transcript format is Claude Code's, not ours: a silent change here does
 // not throw, it means the repo's history quietly loses a whole provider.
@@ -125,5 +125,22 @@ describe("claudeCodeHistory", () => {
     writeTranscript("old.jsonl", [{ type: "ai-title", aiTitle: "ancient" }]);
     const future = Math.floor(Date.now() / 1000) + 3600;
     expect(await claudeCodeHistory.list([REPO], future)).toEqual([]);
+  });
+
+  it("names one known session by /rename, else AI title, never the first prompt", async () => {
+    const prompt = { type: "user", cwd: REPO, message: { content: "fix the build" } };
+    writeTranscript("renamed.jsonl", [
+      prompt,
+      { type: "ai-title", aiTitle: "Build fix" },
+      { type: "custom-title", customTitle: "X equal Dev" },
+    ]);
+    writeTranscript("titled.jsonl", [prompt, { type: "ai-title", aiTitle: "Build fix" }]);
+    writeTranscript("bare.jsonl", [prompt]);
+
+    expect(await claudeSessionName(REPO, "renamed")).toBe("X equal Dev");
+    expect(await claudeSessionName(REPO, "titled")).toBe("Build fix");
+    expect(await claudeSessionName(REPO, "bare")).toBeNull();
+    expect(await claudeSessionName(REPO, "missing")).toBeNull();
+    expect(await claudeSessionName(REPO, "../escape")).toBeNull();
   });
 });

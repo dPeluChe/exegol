@@ -53,19 +53,33 @@ export const claudeCodeHistory: LocalHistoryProvider = {
 
   list(cwds: string[], since: number): Promise<LocalSession[]> {
     return scanPerCwdDir(cwds, {
-      dirFor: (cwd) => join(homedir(), ".claude", "projects", claudeProjectDir(cwd)),
+      dirFor: projectDirFor,
       ext: ".jsonl",
-      read: (path, entry, cwd) => readTranscript(path, entry, cwd, since),
+      read: async (path, entry, cwd) =>
+        (await parseTranscript(path, entry, cwd, since))?.session ?? null,
     });
   },
 };
 
-async function readTranscript(
+function projectDirFor(cwd: string): string {
+  return join(homedir(), ".claude", "projects", claudeProjectDir(cwd));
+}
+
+/** The /rename name, else the AI title, of one known session: one file, never the first prompt
+ *  (the launcher already shows that as the task) */
+export async function claudeSessionName(cwd: string, sessionId: string): Promise<string | null> {
+  if (!/^[\w-]{1,100}$/.test(sessionId)) return null;
+  const entry = `${sessionId}.jsonl`;
+  const parsed = await parseTranscript(join(projectDirFor(cwd), entry), entry, cwd, 0);
+  return parsed ? (parsed.session.name ?? parsed.aiTitle) : null;
+}
+
+async function parseTranscript(
   path: string,
   entry: string,
   cwd: string,
   since: number,
-): Promise<LocalSession | null> {
+): Promise<{ session: LocalSession; aiTitle: string | null } | null> {
   try {
     const { head, sizeBytes, modifiedAt } = await readHead(path);
     if (modifiedAt < since) return null;
@@ -82,6 +96,7 @@ async function readTranscript(
       sizeBytes,
     };
     let recordedCwd: string | null = null;
+    let aiTitle: string | null = null;
 
     for (const raw of head.split("\n")) {
       if (!raw.trim()) continue;
@@ -92,7 +107,10 @@ async function readTranscript(
         continue; // a truncated final line is expected — we read a prefix
       }
       if (line.cwd && !recordedCwd) recordedCwd = line.cwd;
-      if (line.aiTitle) session.title = normalizeTitle(line.aiTitle);
+      if (line.aiTitle) {
+        aiTitle = normalizeTitle(line.aiTitle);
+        session.title = aiTitle;
+      }
       if (line.gitBranch && !session.branch) session.branch = line.gitBranch;
       if (line.version && !session.version) session.version = line.version;
       if (line.timestamp && session.startedAt === null) {
@@ -118,7 +136,7 @@ async function readTranscript(
 
     // The slug is ambiguous; the transcript is not. A session naming a different
     // cwd belongs to a repo that merely slugs the same way.
-    return recordedCwd && recordedCwd !== cwd ? null : session;
+    return recordedCwd && recordedCwd !== cwd ? null : { session, aiTitle };
   } catch {
     return null; // unreadable transcript — skip rather than fail the listing
   }
