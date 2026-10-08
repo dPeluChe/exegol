@@ -1,35 +1,28 @@
 import { cn, Separator } from "@exegol/ui";
-import { Activity, ArrowDownAZ, Cuboid, GripVertical, LayoutDashboard, Plus } from "lucide-react";
+import { ArrowDownAZ, GripVertical, LayoutDashboard, Plus } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
-import { useAgentStore } from "../../stores/agents";
-import { useAppStore } from "../../stores/app";
-import { AttentionSection } from "./AttentionSection";
+import { useSidebarCounts } from "../../lib/sidebar-views";
+import { type SidebarView, useAppStore } from "../../stores/app";
+import { SegmentedTabs } from "../common/SegmentedTabs";
 import { ProjectsSection } from "./ProjectsSection";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
-import { SidebarSection } from "./SidebarSection";
+import { AgentsView, AttentionView } from "./SidebarViews";
 
-/** Enough for the section header and one row */
-const MIN_PROJECTS_HEIGHT = 56;
+const PANEL_ID = "sidebar-view";
+
+const toolButton =
+  "flex h-5 items-center justify-center gap-1 rounded px-1 text-[9px] text-text-muted transition-colors hover:bg-white/10 hover:text-text-secondary";
 
 export function Sidebar() {
   const { data: projects } = useProjects();
   const projectCount = projects?.length ?? 0;
-  const attentionCount = useAgentStore((s) => s.unreadAttentionCount);
+  const { live: liveCount, attention: attentionCount, unread: unreadCount } = useSidebarCounts();
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const openDashboard = useAppStore((s) => s.openDashboard);
-  const projectsOrder = useAppStore((s) => s.projectsOrder);
-  const setProjectsOrder = useAppStore((s) => s.setProjectsOrder);
-  const runningCount = useAgentStore(
-    (s) =>
-      Object.values(s.agents).filter(
-        (a) => a.status === "running" || a.status === "spawning" || a.status === "waiting_input",
-      ).length,
-  );
-  const projectsHeight = useAppStore((s) => s.sidebarProjectsHeight);
-  const agentBadge =
-    attentionCount > 0 ? attentionCount : runningCount > 0 ? runningCount : undefined;
+  const view = useAppStore((s) => s.sidebarView);
+  const setView = useAppStore((s) => s.setSidebarView);
 
   return (
     // clip, not hidden: focusing a too-wide input scrolled a hidden box sideways and it stayed shifted
@@ -50,76 +43,55 @@ export function Sidebar() {
       >
         <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-accent" />
         <span className="min-w-0 truncate">Dashboard</span>
-        {attentionCount > 0 && (
+        {unreadCount > 0 && (
           <span className="ml-auto shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
-            {attentionCount}
+            {unreadCount}
           </span>
         )}
         {/* Right edge, like the ⌘n of the tab groups */}
         <kbd
           className={cn(
             "shrink-0 rounded border border-border px-1 font-mono text-[9px] font-normal text-text-muted",
-            attentionCount === 0 && "ml-auto",
+            unreadCount === 0 && "ml-auto",
           )}
         >
           {chordBadge("1")}
         </kbd>
       </button>
 
-      {/* Live work first: Agents fills the top; Projects sits at the bottom, above the reference
-          sections (SidebarFooter), sized to its content or to the height the user dragged */}
-      <div className="flex min-h-0 flex-1 flex-col">
-        {/* T57: Agent monitor — running agents + attention inbox */}
-        <SidebarSection
-          title="Agents"
-          icon={Activity}
-          defaultOpen={true}
-          count={agentBadge}
-          size="fill"
-        >
-          <AttentionSection />
-        </SidebarSection>
+      {/* One view at a time, each with the full height; a new attention item never switches
+          the view, its count is the signal */}
+      <div className="mx-3 mt-2 shrink-0">
+        <SegmentedTabs<SidebarView>
+          compact
+          label="Sidebar view"
+          panelId={PANEL_ID}
+          active={view}
+          onChange={setView}
+          tabs={[
+            { id: "agents", label: "Agents", count: liveCount || undefined },
+            { id: "projects", label: "Projects", count: projectCount || undefined },
+            {
+              id: "attention",
+              label: "Needs attention",
+              count: attentionCount || undefined,
+              alert: unreadCount > 0,
+            },
+          ]}
+        />
+      </div>
 
-        <SectionResizeHandle />
+      <ViewToolbar view={view} />
 
-        <SidebarSection
-          title="Projects"
-          icon={Cuboid}
-          defaultOpen={true}
-          count={projectCount}
-          size="cap"
-          height={projectsHeight}
-          action={
-            <>
-              <button
-                type="button"
-                onClick={() => setProjectsOrder(projectsOrder === "auto" ? "manual" : "auto")}
-                className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
-                title={
-                  projectsOrder === "auto"
-                    ? "Auto order: Cmd+n first, then live, then A-Z. Click to order by hand"
-                    : "Ordered by hand (drag). Click for auto order"
-                }
-              >
-                {projectsOrder === "auto" ? (
-                  <ArrowDownAZ className="h-2.5 w-2.5" />
-                ) : (
-                  <GripVertical className="h-2.5 w-2.5" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => useAppStore.getState().openProjects()}
-                className="flex h-4 w-4 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-secondary"
-                title="Add project"
-              >
-                <Plus className="h-2.5 w-2.5" />
-              </button>
-            </>
-          }
-        >
-          <ProjectsSection />
-        </SidebarSection>
+      <div
+        role="tabpanel"
+        id={PANEL_ID}
+        aria-labelledby={`${PANEL_ID}-${view}`}
+        className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-2"
+      >
+        {view === "agents" && <AgentsView />}
+        {view === "projects" && <ProjectsSection />}
+        {view === "attention" && <AttentionView />}
       </div>
 
       <Separator className="bg-border" />
@@ -129,49 +101,64 @@ export function Sidebar() {
   );
 }
 
-/** Drag between Agents and Projects: up makes Projects taller, down shorter; Agents takes the
- *  rest. Double-click (or Enter) sizes Projects to its content again; arrow keys nudge it */
-function SectionResizeHandle() {
-  const setHeight = useAppStore((s) => s.setSidebarProjectsHeight);
-  const projectsBox = (el: HTMLElement) => el.nextElementSibling?.getBoundingClientRect().height;
-  const clamp = (h: number) => Math.max(MIN_PROJECTS_HEIGHT, Math.round(h));
+/** The current view's own actions, right-aligned under the selector */
+function ViewToolbar({ view }: { view: SidebarView }) {
+  const activeOnly = useAppStore((s) => s.sidebarActiveOnly);
+  const setActiveOnly = useAppStore((s) => s.setSidebarActiveOnly);
+  const projectsOrder = useAppStore((s) => s.projectsOrder);
+  const setProjectsOrder = useAppStore((s) => s.setProjectsOrder);
 
-  const startResize = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const startHeight = projectsBox(e.currentTarget);
-    if (startHeight === undefined || e.button !== 0) return;
-    const startY = e.clientY;
-    const move = (ev: PointerEvent) => setHeight(clamp(startHeight - (ev.clientY - startY)));
-    const end = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", end);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", end);
-  };
-  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    const current = projectsBox(e.currentTarget);
-    if (current === undefined) return;
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      e.preventDefault();
-      setHeight(clamp(current + (e.key === "ArrowUp" ? 16 : -16)));
-    }
-  };
-
+  if (view === "attention") return null;
   return (
-    <button
-      type="button"
-      aria-label="Resize Agents and Projects"
-      title="Drag (or arrow keys) to resize Projects; double-click or Enter to fit its content"
-      onPointerDown={startResize}
-      onKeyDown={onKeyDown}
-      onDoubleClick={() => setHeight(null)}
-      onClick={(e) => {
-        // Enter or Space on the focused handle; a mouse click is a drag start, not a reset
-        if (e.detail === 0) setHeight(null);
-      }}
-      className="group mx-3 mt-auto flex h-2 shrink-0 cursor-row-resize items-center focus-visible:outline-none"
-    >
-      <span className="h-px w-full bg-border transition-colors group-hover:bg-accent/60 group-focus-visible:bg-accent" />
-    </button>
+    <div className="mx-3 mt-1 flex shrink-0 items-center justify-end gap-0.5">
+      {view === "agents" && (
+        <button
+          type="button"
+          aria-pressed={activeOnly}
+          onClick={() => setActiveOnly(!activeOnly)}
+          className={cn(toolButton, activeOnly && "bg-accent/15 text-accent hover:text-accent")}
+          title="Show only the sessions working now or waiting on you"
+        >
+          <span
+            aria-hidden="true"
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              activeOnly ? "bg-accent" : "bg-text-muted/50",
+            )}
+          />
+          Active only
+        </button>
+      )}
+      {view === "projects" && (
+        <>
+          <button
+            type="button"
+            onClick={() => setProjectsOrder(projectsOrder === "auto" ? "manual" : "auto")}
+            className={toolButton}
+            aria-label={projectsOrder === "auto" ? "Auto order" : "Ordered by hand"}
+            title={
+              projectsOrder === "auto"
+                ? "Auto order: Cmd+n first, then live, then A-Z. Click to order by hand"
+                : "Ordered by hand (drag). Click for auto order"
+            }
+          >
+            {projectsOrder === "auto" ? (
+              <ArrowDownAZ className="h-3 w-3" />
+            ) : (
+              <GripVertical className="h-3 w-3" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => useAppStore.getState().openProjects()}
+            className={toolButton}
+            aria-label="Add project"
+            title="Add project"
+          >
+            <Plus className="h-3 w-3" />
+          </button>
+        </>
+      )}
+    </div>
   );
 }

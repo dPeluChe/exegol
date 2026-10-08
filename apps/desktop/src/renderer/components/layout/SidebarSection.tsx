@@ -8,10 +8,6 @@ interface SidebarSectionProps {
   defaultOpen?: boolean;
   count?: number;
   action?: React.ReactNode;
-  /** Sizing while open: "cap" = up to a share of the sidebar, "fill" = the rest; both scroll inside */
-  size?: "cap" | "fill";
-  /** A "cap" section the user resized: this height instead of the share */
-  height?: number | null;
   children: React.ReactNode;
 }
 
@@ -21,19 +17,12 @@ export function SidebarSection({
   defaultOpen = true,
   count,
   action,
-  size,
-  height,
   children,
 }: SidebarSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
 
-  // Each section scrolls on its own and its header stays put: one long scroll
-  // pushed Projects (and its "+") out of view behind a long agent list
   return (
-    <div
-      style={open && size === "cap" && height ? { height } : undefined}
-      className={cn("flex min-h-0 flex-col py-1", sectionSizing(open, size, height))}
-    >
+    <div className="flex min-h-0 shrink-0 flex-col py-1">
       <SectionHeader
         title={title}
         icon={Icon}
@@ -44,23 +33,11 @@ export function SidebarSection({
       />
 
       {/* Content — collapsible */}
-      {/* No size: a bottom section; a % cap means nothing inside an auto-height footer */}
       {open && (
-        <div
-          className={cn("sidebar-scroll min-h-0 overflow-y-auto px-3 pt-1", !size && "max-h-56")}
-        >
-          {children}
-        </div>
+        <div className="sidebar-scroll max-h-56 min-h-0 overflow-y-auto px-3 pt-1">{children}</div>
       )}
     </div>
   );
-}
-
-/** How an open section takes the sidebar's height; a closed one keeps just its header */
-function sectionSizing(open: boolean, size: SidebarSectionProps["size"], height?: number | null) {
-  if (!open || !size) return "shrink-0";
-  if (size === "fill") return "flex-1";
-  return height ? "max-h-[calc(100%-4rem)] shrink-0" : "max-h-[45%] shrink-0";
 }
 
 /** The action is a sibling of the toggle so its buttons never nest */
