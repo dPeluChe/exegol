@@ -193,6 +193,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     launchedInShell: agent.launchedInShell ?? false,
     cliVersion: agent.cliVersion ?? null,
     model: agent.model ?? null,
+    modelRoles: agent.modelRoles ?? null,
     yolo: agent.yolo ?? null,
     ...overrides,
   };
@@ -240,6 +241,7 @@ export interface AgentState {
   cliVersion?: string | null;
   /** Launch choices, kept so a saved layout relaunches the same agent */
   model?: string | null;
+  modelRoles?: Record<string, string> | null;
   yolo?: boolean | null;
 }
 
@@ -496,6 +498,7 @@ export const useAgentStore = create<AgentStore>()(
                 launchedInShell: dbAgent.launchedInShell ?? existing.launchedInShell ?? false,
                 cliVersion: dbAgent.cliVersion ?? existing.cliVersion ?? null,
                 model: dbAgent.model ?? existing.model ?? null,
+                modelRoles: dbAgent.modelRoles ?? existing.modelRoles ?? null,
                 yolo: dbAgent.yolo ?? existing.yolo ?? null,
                 claudeSessionId: existing.claudeSessionId ?? dbAgent.claudeSessionId ?? null,
               };
@@ -524,6 +527,7 @@ export const useAgentStore = create<AgentStore>()(
                 launchedInShell: dbAgent.launchedInShell ?? false,
                 cliVersion: dbAgent.cliVersion ?? null,
                 model: dbAgent.model ?? null,
+                modelRoles: dbAgent.modelRoles ?? null,
                 yolo: dbAgent.yolo ?? null,
               };
             }

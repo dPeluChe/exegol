@@ -1,4 +1,4 @@
-import { type Agent, type AgentCreate, YOLO_FLAGS } from "@exegol/shared";
+import { type Agent, type AgentCreate, appliedModelRoles, YOLO_FLAGS } from "@exegol/shared";
 import type Database from "libsql";
 import {
   activateAgent,
@@ -6,6 +6,7 @@ import {
   insertActivity,
   setAgentCliVersion,
   setAgentModel,
+  setAgentModelRoles,
   setAgentYolo,
   stopAgent,
 } from "../db/queries";
@@ -111,10 +112,8 @@ export class AgentManager {
     // args; an explicit value wins for THIS session only, so "just this once,
     // skip the prompts" doesn't mean editing settings and remembering to undo it.
     // A resume or re-launch keeps the choice the session was launched with
-    let yolo = config.yolo;
-    if (yolo === undefined && config.resumeFromAgentId) {
-      yolo = getAgent(db, config.resumeFromAgentId)?.yolo ?? undefined;
-    }
+    const resumed = config.resumeFromAgentId ? getAgent(db, config.resumeFromAgentId) : null;
+    const yolo = config.yolo ?? resumed?.yolo ?? undefined;
     const yoloFlag = YOLO_FLAGS[agent.cliType];
     if (yoloFlag && yolo !== undefined) {
       const has = cliConfig.args.includes(yoloFlag);
@@ -129,13 +128,15 @@ export class AgentManager {
         .catch(() => {});
     }
     // Like YOLO, a resume or re-launch keeps the model the session was launched with
-    const model =
-      config.model ??
-      (config.resumeFromAgentId ? getAgent(db, config.resumeFromAgentId)?.model : undefined);
-    if (model) {
-      Object.assign(cliConfig, applyLaunchModel(cliConfig, agent.cliType, model, agent.id));
-      setAgentModel(db, agent.id, model);
-    }
+    const model = config.model ?? resumed?.model;
+    const modelRoles = config.modelRoles ?? resumed?.modelRoles;
+    Object.assign(
+      cliConfig,
+      applyLaunchModel(cliConfig, agent.cliType, model, agent.id, modelRoles ?? null),
+    );
+    if (model) setAgentModel(db, agent.id, model);
+    const applied = appliedModelRoles(agent.cliType, modelRoles, model ?? "");
+    if (Object.keys(applied).length > 0) setAgentModelRoles(db, agent.id, applied);
 
     const project = db
       .prepare("SELECT path, name FROM projects WHERE id = ?")
