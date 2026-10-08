@@ -5,6 +5,7 @@ import {
   type AgentCliType,
   type AgentStatus,
   classifyActivity,
+  ENDED_STATUSES,
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type { QueryClient } from "@tanstack/react-query";
@@ -268,13 +269,12 @@ interface AgentStore {
   syncFromDb: (projectId: string, dbAgents: Agent[]) => void;
 
   /**
-   * False until the first syncFromDb lands. Panes mount before it does, so
-   * "agent not in store" means "not loaded yet", not "gone" — and acting on
-   * that distinction destructively (converting a pane to empty) threw away
-   * crashed sessions with their resume affordance on every restart.
+   * Projects whose full agent list (listAgents) has landed. Panes mount before it does, so
+   * "agent not in store" only means "gone" once the agent's own project synced. The fleet sync
+   * (live agents only) never counts: it turned stopped/suspended sessions' panes into launchers.
    * Not persisted: a fresh process has not synced, whatever the last one did.
    */
-  hasSyncedFromDb: boolean;
+  syncedProjects: Record<string, true>;
 
   /**
    * Whether an agent is "unread" — derived from attentionItems.
@@ -310,6 +310,25 @@ export function sortAttentionItems(items: AttentionItem[]): AttentionItem[] {
     if (levelDiff !== 0) return levelDiff;
     return b.timestamp - a.timestamp;
   });
+}
+
+/** syncFromDb id of the cross-project live-agent list: it syncs no project */
+export const FLEET_SYNC = "__fleet__";
+
+/**
+ * A pane's session is gone (archived or closed) when it ended and is still missing from the store
+ * after its own project's list landed. A crashed shell is kept: its pane respawns a shell.
+ */
+export function isPaneAgentStale(
+  agent: Pick<Agent, "id" | "projectId" | "status" | "cliType">,
+  state: Pick<AgentStore, "agents" | "syncedProjects">,
+): boolean {
+  return (
+    state.syncedProjects[agent.projectId] === true &&
+    ENDED_STATUSES.has(agent.status) &&
+    !state.agents[agent.id] &&
+    !(agent.cliType === "shell" && agent.status === "crashed")
+  );
 }
 
 /** Locate the workspace tab + pane showing a given agent, across all projects. */
@@ -379,7 +398,7 @@ export const useAgentStore = create<AgentStore>()(
   persist(
     (set, get) => ({
       agents: {},
-      hasSyncedFromDb: false,
+      syncedProjects: {},
       focusedAgentId: null,
       attentionItems: {},
       unreadAttentionCount: 0,
@@ -471,7 +490,10 @@ export const useAgentStore = create<AgentStore>()(
       syncFromDb: (_projectId, dbAgents) =>
         set((state) => {
           const updated = { ...state.agents };
-          const hasSyncedFromDb = true;
+          const syncedProjects =
+            _projectId === FLEET_SYNC || state.syncedProjects[_projectId]
+              ? state.syncedProjects
+              : { ...state.syncedProjects, [_projectId]: true as const };
           let added = 0;
           let merged = 0;
 
@@ -559,7 +581,7 @@ export const useAgentStore = create<AgentStore>()(
               !isClaudeQuestion(item, agent)
             );
           });
-          if (stale.length === 0) return { agents: updated, hasSyncedFromDb };
+          if (stale.length === 0) return { agents: updated, syncedProjects };
 
           let unreadAttentionCount = state.unreadAttentionCount;
           const attentionItems = { ...state.attentionItems };
@@ -570,7 +592,7 @@ export const useAgentStore = create<AgentStore>()(
             delete attentionItems[id];
           }
 
-          return { agents: updated, attentionItems, unreadAttentionCount, hasSyncedFromDb };
+          return { agents: updated, attentionItems, unreadAttentionCount, syncedProjects };
         }),
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────

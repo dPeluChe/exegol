@@ -53,6 +53,7 @@ export const settingsSchema = z.object({
       z.object({
         id: z.string().regex(/^[a-z][a-z-]{0,39}$/),
         on: z.boolean(),
+        bar: z.enum(["footer", "header"]).optional(),
         slot: z.enum(["left", "center", "right"]),
         mode: z.enum(["percent", "values"]).optional(),
       }),

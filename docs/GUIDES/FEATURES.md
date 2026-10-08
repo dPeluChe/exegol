@@ -43,8 +43,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Keyboard first**: jump to any live tab, pane or waiting agent without the mouse; see
   [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md).
 - **Right-click menus** on panes, files, projects, groups and agents, kept inside the window.
-- **Status bar**: widgets you pick in Settings > Status bar (or its gear button), each placed
-  left, center or right in your order: project, branch, agents (need you / working / waiting,
+- **Status bar and title bar**: widgets you pick in Settings > Bars (or the status bar gear), each hidden or placed
+  left, center or right of the status bar, or left or right of the title bar, in your order: project, branch, agents (need you / working / waiting,
   click for the list), plan usage, and opt-in tokens today, resources (the whole machine's CPU and RAM, as percent or GB), CLI and Exegol updates,
   unread alerts, focused session, git state, reconnect progress and a clock.
 

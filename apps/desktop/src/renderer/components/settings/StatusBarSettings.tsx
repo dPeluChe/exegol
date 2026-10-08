@@ -3,31 +3,68 @@ import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useWidgetDefaults } from "../../hooks/use-trpc-dictation";
 import {
+  BAR_SLOTS,
   moveWidget,
   type PlacedWidget,
+  type Placement,
+  placementOf,
+  placementsFor,
+  placeWidget,
   resolveWidgetLayout,
   STATUS_BAR_WIDGETS,
   updateWidget,
+  WIDGET_BARS,
   WIDGET_SLOTS,
+  type WidgetBar,
   type WidgetMode,
   type WidgetSlot,
   widgetsIn,
+  zoneWidgets,
 } from "../../lib/status-bar-widgets";
 
 const LABEL = new Map<string, string>(STATUS_BAR_WIDGETS.map((w) => [w.id, w.label]));
 const DESCRIPTION = new Map<string, string>(STATUS_BAR_WIDGETS.map((w) => [w.id, w.description]));
+const BAR_LABEL: Record<WidgetBar, string> = { header: "Title bar", footer: "Status bar" };
 const SLOT_LABEL: Record<WidgetSlot, string> = { left: "Left", center: "Center", right: "Right" };
 const MODE_LABEL: Record<WidgetMode, string> = { percent: "Percent", values: "Values" };
+const PLACEMENT_LABEL: Record<Placement, string> = {
+  hidden: "Hidden",
+  "header:left": "Title bar left",
+  "header:center": "Title bar center",
+  "header:right": "Title bar right",
+  "footer:left": "Status bar left",
+  "footer:center": "Status bar center",
+  "footer:right": "Status bar right",
+};
 
 interface Props {
   settings: Settings;
   onChange: (updates: Partial<Settings>) => void;
 }
 
-/** Which widgets the footer shows, in which slot and order. Saved as one setting */
+/** Which widgets the title bar and the footer show, in which zone and order. Saved as one setting */
 export function StatusBarSettings({ settings, onChange }: Props) {
   const layout = resolveWidgetLayout(settings.statusBarWidgets, useWidgetDefaults());
   const save = (next: PlacedWidget[]) => onChange({ statusBarWidgets: next });
+  const hidden = layout.filter((w) => !w.on);
+
+  const rows = (list: PlacedWidget[], reorder: boolean) => (
+    <div className="flex flex-col gap-1.5">
+      {list.map((w, i) => (
+        <WidgetRow
+          key={w.id}
+          widget={w}
+          first={!reorder || i === 0}
+          last={!reorder || i === list.length - 1}
+          onPlace={(p) => save(placeWidget(layout, w.id, p))}
+          onMode={
+            w.id === "resources" ? (mode) => save(updateWidget(layout, w.id, { mode })) : undefined
+          }
+          onMove={(d) => save(moveWidget(layout, w.id, d))}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -35,60 +72,77 @@ export function StatusBarSettings({ settings, onChange }: Props) {
         <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
           Preview
         </h3>
-        <div className="flex h-7 items-center gap-3 rounded-lg border border-border bg-bg-secondary px-3 text-[10px] text-text-muted">
-          {WIDGET_SLOTS.map((slot) => (
-            <div
-              key={slot}
-              className={cn(
-                "flex min-w-0 flex-1 gap-1.5 overflow-hidden",
-                slot === "center" ? "justify-center" : slot === "right" ? "justify-end" : "",
-              )}
-            >
-              {widgetsIn(layout, slot).map((id) => (
-                <span key={id} className="shrink-0 rounded bg-white/5 px-1.5 py-0.5">
-                  {LABEL.get(id)}
-                </span>
-              ))}
-            </div>
+        <div className="space-y-1.5">
+          {WIDGET_BARS.map((bar) => (
+            <BarPreview key={bar} layout={layout} bar={bar} />
           ))}
         </div>
         <p className="mt-1 text-[10px] text-text-muted">
-          A widget with nothing to show (no updates, no alerts) hides itself.
+          A widget with nothing to show (no updates, no alerts) hides itself. The title bar keeps
+          its own buttons and the project name in the center; its zones sit left and right.
         </p>
       </div>
 
-      {WIDGET_SLOTS.map((slot) => {
-        const rows = layout.filter((w) => w.slot === slot);
-        return (
-          <div key={slot}>
-            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-              {SLOT_LABEL[slot]}
-            </h3>
-            {rows.length === 0 ? (
-              <p className="text-[11px] text-text-muted">Empty</p>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {rows.map((w, i) => (
-                  <WidgetRow
-                    key={w.id}
-                    widget={w}
-                    first={i === 0}
-                    last={i === rows.length - 1}
-                    onToggle={() => save(updateWidget(layout, w.id, { on: !w.on }))}
-                    onSlot={(s) => save(updateWidget(layout, w.id, { slot: s }))}
-                    onMode={
-                      w.id === "resources"
-                        ? (mode) => save(updateWidget(layout, w.id, { mode }))
-                        : undefined
-                    }
-                    onMove={(d) => save(moveWidget(layout, w.id, d))}
-                  />
-                ))}
-              </div>
-            )}
+      {WIDGET_BARS.map((bar) => (
+        <div key={bar}>
+          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+            {BAR_LABEL[bar]}
+          </h3>
+          <div className="space-y-2">
+            {BAR_SLOTS[bar].map((slot) => {
+              const list = zoneWidgets(layout, bar, slot);
+              if (list.length === 0) {
+                return (
+                  <p key={slot} className="text-[11px] text-text-muted">
+                    {SLOT_LABEL[slot]}: empty
+                  </p>
+                );
+              }
+              return (
+                <div key={slot}>
+                  <p className="mb-1 text-[11px] text-text-secondary">{SLOT_LABEL[slot]}</p>
+                  {rows(list, true)}
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      ))}
+
+      {hidden.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+            Hidden
+          </h3>
+          {rows(hidden, false)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BarPreview({ layout, bar }: { layout: PlacedWidget[]; bar: WidgetBar }) {
+  return (
+    <div className="flex h-7 items-center gap-3 rounded-lg border border-border bg-bg-secondary px-3 text-[10px] text-text-muted">
+      <span className="w-16 shrink-0 text-[9px] uppercase tracking-wider">{BAR_LABEL[bar]}</span>
+      {WIDGET_SLOTS.map((slot) => (
+        <div
+          key={slot}
+          className={cn(
+            "flex min-w-0 flex-1 gap-1.5 overflow-hidden",
+            slot === "center" ? "justify-center" : slot === "right" ? "justify-end" : "",
+          )}
+        >
+          {bar === "header" && slot === "center" && (
+            <span className="shrink-0 px-1.5 py-0.5 text-text-secondary">Project</span>
+          )}
+          {widgetsIn(layout, bar, slot).map((id) => (
+            <span key={id} className="shrink-0 rounded bg-white/5 px-1.5 py-0.5">
+              {LABEL.get(id)}
+            </span>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -97,16 +151,14 @@ function WidgetRow({
   widget,
   first,
   last,
-  onToggle,
-  onSlot,
+  onPlace,
   onMode,
   onMove,
 }: {
   widget: PlacedWidget;
   first: boolean;
   last: boolean;
-  onToggle: () => void;
-  onSlot: (slot: WidgetSlot) => void;
+  onPlace: (to: Placement) => void;
   onMode?: (mode: WidgetMode) => void;
   onMove: (delta: -1 | 1) => void;
 }) {
@@ -119,24 +171,6 @@ function WidgetRow({
         widget.on ? "border-accent/40 bg-accent/5" : "border-border bg-bg-secondary",
       )}
     >
-      <button
-        type="button"
-        role="switch"
-        aria-checked={widget.on}
-        onClick={onToggle}
-        className={cn(
-          "flex h-5 w-9 shrink-0 items-center rounded-full px-0.5 transition-colors",
-          widget.on ? "bg-accent" : "bg-border",
-        )}
-        title={widget.on ? "Hide" : "Show"}
-      >
-        <span
-          className={cn(
-            "h-4 w-4 rounded-full bg-white shadow transition-transform",
-            widget.on ? "translate-x-4" : "translate-x-0",
-          )}
-        />
-      </button>
       <div className="min-w-0 flex-1">
         <p className={cn("text-xs font-medium", widget.on ? "text-accent" : "text-text-secondary")}>
           {LABEL.get(widget.id)}
@@ -159,14 +193,14 @@ function WidgetRow({
         </select>
       )}
       <select
-        value={widget.slot}
-        onChange={(e) => onSlot(e.target.value as WidgetSlot)}
+        value={placementOf(widget)}
+        onChange={(e) => onPlace(e.target.value as Placement)}
         className="rounded border border-border bg-bg-tertiary px-1.5 py-0.5 text-[11px] text-text-secondary"
-        aria-label="Slot"
+        aria-label="Placement"
       >
-        {WIDGET_SLOTS.map((s) => (
-          <option key={s} value={s}>
-            {SLOT_LABEL[s]}
+        {placementsFor(widget.id).map((p) => (
+          <option key={p} value={p}>
+            {PLACEMENT_LABEL[p]}
           </option>
         ))}
       </select>

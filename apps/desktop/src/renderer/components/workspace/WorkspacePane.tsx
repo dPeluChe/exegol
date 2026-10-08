@@ -1,3 +1,4 @@
+import { ENDED_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   AlertTriangle,
@@ -22,7 +23,7 @@ import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
+import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
 import {
   collectPaneIds,
   type FilesViewPatch,
@@ -330,8 +331,6 @@ function InvalidPane({ reason, paneId }: { reason: string; paneId: string }) {
 
 // ─── Recoverable Terminal Pane (validates agent exists) ──────────────────
 
-const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
-
 function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId: string }) {
   const { data: agent, isError } = useAgent(agentId);
   const storeAgent = useAgentStore((s) => s.agents[agentId]);
@@ -361,18 +360,10 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
       .catch((err) => console.error("[PaneRecovery] Could not reopen the shell:", err));
   }, [agent, agentId, paneId]);
 
-  // Agent in terminal state with no live store entry — stale pane from previous session
-  // (store only has agents that were spawned or reattached in this session)
-  // Gated on the store having actually synced: panes mount first, so before
-  // that "not in store" only means "not loaded yet". Converting on it wiped a
-  // crashed session's pane — and its resume card — on every restart.
-  const hasSynced = useAgentStore((s) => s.hasSyncedFromDb);
-  const isStaleFromPreviousSession =
-    hasSynced &&
-    agent &&
-    TERMINAL_STATUSES.has(agent.status) &&
-    !storeAgent &&
-    !(agent.cliType === "shell" && agent.status === "crashed");
+  // Ended and still not in the store once its own project's list landed: archived or closed
+  const isStaleFromPreviousSession = useAgentStore(
+    (s) => agent !== undefined && isPaneAgentStale(agent, s),
+  );
 
   useEffect(() => {
     if (isStaleFromPreviousSession && agent) {
@@ -385,14 +376,13 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 
   // Log unexpected state: agent exists in DB but not in store (no callbacks wired)
   useEffect(() => {
-    if (!agent || storeAgent || TERMINAL_STATUSES.has(agent.status) || agent.status === "idle") {
+    if (!agent || storeAgent || ENDED_STATUSES.has(agent.status) || agent.status === "idle") {
       return;
     }
-    // Panes mount before the store's first syncFromDb lands, so warning
-    // immediately reports the startup race rather than a broken pane — and sent
-    // us reading reattach logs for a non-problem. Only complain if the agent is
-    // STILL missing once the sync has had time to arrive; if it shows up, this
-    // effect re-runs with storeAgent set and the timer is cleared.
+    // Panes mount before their agent's own project list (syncFromDb) lands, so
+    // warning at once reports that startup race, not a broken pane. Only complain
+    // if the agent is STILL missing once that list had time to arrive; if it
+    // shows up, this effect re-runs with storeAgent set and the timer is cleared.
     const timer = setTimeout(() => {
       console.warn(
         `[PaneRecovery] Agent ${agentId} is status=${agent.status} in DB but still NOT in store after sync — this pane will render but the terminal will likely be broken (no callbacks wired). Check main process [Reattach] logs.`,
