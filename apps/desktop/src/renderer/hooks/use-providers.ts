@@ -6,13 +6,15 @@ import { trpcInvoke } from "../lib/trpc-client";
 const KEY = ["enabledProviders"];
 const NONE: AgentProvider[] = [];
 
+export const enabledProvidersQuery = {
+  queryKey: KEY,
+  queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
+  staleTime: 30_000,
+};
+
 /** Enabled providers, each marked installed or not (its command on PATH, checked in main) */
 export function useEnabledProviders(): AgentProvider[] {
-  const { data } = useQuery({
-    queryKey: KEY,
-    queryFn: () => trpcInvoke<AgentProvider[]>("agents.listEnabledProviders"),
-    staleTime: 30_000,
-  });
+  const { data } = useQuery(enabledProvidersQuery);
   return data ?? NONE;
 }
 

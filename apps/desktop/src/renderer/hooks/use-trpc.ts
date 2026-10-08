@@ -13,6 +13,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { useShortcutStore } from "../stores/shortcuts";
+import { useWorkspaceStore } from "../stores/workspace";
 
 // ─── Domain re-exports (barrel) ─────────────────────────────────────────────
 
@@ -66,6 +67,10 @@ export function useDeleteProject() {
     onSuccess: (_, id) => {
       // A removed project's Cmd+n would stay reserved and dead
       useShortcutStore.getState().assign(id, null);
+      // Its closed tabs cannot be reopened anywhere
+      useWorkspaceStore.setState((s) => ({
+        recentlyClosed: s.recentlyClosed.filter((e) => e.projectId !== id),
+      }));
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },
   });

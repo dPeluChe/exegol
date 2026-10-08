@@ -4,6 +4,7 @@ import { useAppStore } from "./app";
 import { createCustomLayoutsSlice } from "./workspace/custom-layouts-slice";
 import { createFloatingPanesSlice } from "./workspace/floating-panes-slice";
 import {
+  activePaneId,
   collectPaneIds,
   findFirstPaneId,
   getPw,
@@ -15,7 +16,15 @@ import { migrateWorkspaceState, onWorkspaceRehydrate } from "./workspace/recover
 import { createTabsPanesSlice } from "./workspace/tabs-panes-slice";
 import type { Pane, ProjectWorkspace, WorkspaceStore, WorkspaceTab } from "./workspace/types";
 
-export type { LayoutNode, Pane, PaneType, WorkspaceTab } from "./workspace/types";
+export type {
+  ClosedEntry,
+  ClosedSession,
+  CloseTarget,
+  LayoutNode,
+  Pane,
+  PaneType,
+  WorkspaceTab,
+} from "./workspace/types";
 
 // ─── Selectors (resolve active project) ─────────────────────────────────────
 
@@ -44,6 +53,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       partialize: (state) => ({
         projectWorkspaces: state.projectWorkspaces,
         customLayouts: state.customLayouts,
+        recentlyClosed: state.recentlyClosed,
       }),
       // Bump version when schema changes to trigger migration
       version: 1,
@@ -75,6 +85,17 @@ export function getProjectState(): ProjectWorkspace {
  */
 export function getFocusedOrFirstPaneId(tab: WorkspaceTab): string | null {
   return paneInTabOrFirst(tab, useWorkspaceStore.getState().focusedPaneId);
+}
+
+/** The pane keyboard actions act on: always one of the active tab (activePaneId) */
+export function getActivePaneId(): string | null {
+  const s = useWorkspaceStore.getState();
+  return activePaneId(getPw(s), s.focusedPaneId);
+}
+
+/** Selector form of getActivePaneId */
+export function selectActivePaneId(s: WorkspaceStore): string | null {
+  return activePaneId(getPw(s), s.focusedPaneId);
 }
 
 export { collectPaneIds, findFirstPaneId, layoutHasPane };

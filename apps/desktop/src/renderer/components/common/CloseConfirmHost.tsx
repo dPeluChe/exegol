@@ -1,14 +1,28 @@
+import { useEffect } from "react";
 import { useCloseConfirmStore } from "../../stores/close-confirm";
 import { ConfirmDialog } from "./ConfirmDialog";
 
-/** The close confirmation asked by `confirmClosePanes` (Cmd+W, pane X, pane menu, tab close).
- *  Enter closes, Esc keeps it open */
+/** The close confirmation asked by `confirmCloseTarget` (Cmd+W, pane X, pane menu, tab close).
+ *  Cancel has the focus; Esc and a click outside cancel */
 export function CloseConfirmHost() {
   const request = useCloseConfirmStore((s) => s.request);
   const answer = useCloseConfirmStore((s) => s.answer);
+  const open = !!request;
+  // Esc cancels even when a key handler below (a terminal, a capture listener) would eat it
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      useCloseConfirmStore.getState().answer(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
   return (
     <ConfirmDialog
-      open={!!request}
+      open={open}
       onOpenChange={(open) => !open && answer(false)}
       title={request?.title ?? ""}
       description={
@@ -20,7 +34,7 @@ export function CloseConfirmHost() {
       }
       confirmLabel="Close"
       variant="destructive"
-      autoFocusConfirm
+      autoFocusCancel
       onConfirm={() => answer(true)}
     />
   );

@@ -347,9 +347,7 @@ export function showProject(projectId: string): void {
 /** Show a project's tab (and pane) */
 export function focusPane(projectId: string, tabId: string, paneId?: string): void {
   showProject(projectId);
-  const ws = useWorkspaceStore.getState();
-  ws.setActiveTab(tabId);
-  if (paneId) ws.setFocusedPane(paneId);
+  useWorkspaceStore.getState().setActiveTab(tabId, paneId);
 }
 
 /**

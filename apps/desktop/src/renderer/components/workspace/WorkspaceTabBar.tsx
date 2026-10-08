@@ -2,8 +2,7 @@ import { cn } from "@exegol/ui";
 import { Plus, Terminal } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { deleteAgent } from "../../hooks/use-delete-agent";
-import { confirmClosePanes } from "../../lib/close-guard";
+import { closeWithConfirm } from "../../lib/close-target";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentBrowserStore } from "../../stores/agent-browser";
@@ -19,6 +18,7 @@ import {
   selectTabs,
   useWorkspaceStore,
 } from "../../stores/workspace";
+import { tabCloseTarget } from "../../stores/workspace/helpers";
 import { LayoutPresets } from "./LayoutPresets";
 import { QuickLaunchBar } from "./QuickLaunchBar";
 import { getTabMeta } from "./tab-bar-helpers";
@@ -30,7 +30,6 @@ export function WorkspaceTabBar() {
   const tabs = useWorkspaceStore(selectTabs);
   const activeTabId = useWorkspaceStore(selectActiveTabId);
   const addTab = useWorkspaceStore((s) => s.addTab);
-  const removeTab = useWorkspaceStore((s) => s.removeTab);
   const setActiveTab = useWorkspaceStore((s) => s.setActiveTab);
   const renameTab = useWorkspaceStore((s) => s.renameTab);
   const reorderTab = useWorkspaceStore((s) => s.reorderTab);
@@ -50,21 +49,8 @@ export function WorkspaceTabBar() {
 
   /** Close a tab, after asking when that ends a session, a terminal or unsaved edits */
   const handleCloseTab = useCallback(
-    async (tabId: string) => {
-      const pw = getProjectState();
-      const tab = pw.tabs.find((t) => t.id === tabId);
-      if (tab) {
-        const paneIds = collectPaneIds(tab.layout);
-        const closing = paneIds.map((pid) => pw.panes[pid]).filter((p) => p !== undefined);
-        if (!(await confirmClosePanes(closing, useAgentStore.getState().agents))) return;
-        // Stop + cleanup all terminal agents in the tab
-        for (const pane of closing) {
-          if (pane.type === "terminal" && pane.agentId) deleteAgent(pane.agentId);
-        }
-      }
-      removeTab(tabId);
-    },
-    [removeTab],
+    (tabId: string) => closeWithConfirm(tabCloseTarget(getProjectState(), tabId)),
+    [],
   );
 
   const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);

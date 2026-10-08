@@ -12,7 +12,7 @@ import { findAgentPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import { pasteToAgent, submitToAgent } from "../agent-input";
 import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
@@ -93,8 +93,10 @@ function focusedMirror(): FocusSnapshot["mirror"] {
 function snapshot(): { target: DictationTarget; field: HTMLElement | null; anchor: string | null } {
   const projectId = useAppStore.getState().activeProjectId;
   const { focusedPaneId, projectWorkspaces } = useWorkspaceStore.getState();
+  // Only a pane of the tab on screen: resolveTarget sends anything else to the clipboard
+  const activePane = getActivePaneId();
   const pane =
-    projectId && focusedPaneId ? projectWorkspaces[projectId]?.panes[focusedPaneId] : undefined;
+    projectId && activePane ? projectWorkspaces[projectId]?.panes[activePane] : undefined;
   const agent = pane?.agentId ? useAgentStore.getState().agents[pane.agentId] : undefined;
   const field = focusedField();
   const snap: FocusSnapshot = {

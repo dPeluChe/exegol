@@ -1,24 +1,26 @@
-import type { Agent } from "@exegol/shared";
+import type { Agent, AgentCreate, AgentProvider } from "@exegol/shared";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { queryClient } from "../lib/query-client";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { findAgentPane, toAgentState, useAgentStore } from "../stores/agents";
 import { useTerminalStore } from "../stores/terminals";
 import { useWatchStore } from "../stores/watch";
 import { useWorkspaceStore } from "../stores/workspace";
-import { isLaunchable, useEnabledProviders } from "./use-providers";
+import { pendingStop } from "./use-delete-agent";
+import { enabledProvidersQuery, isLaunchable, useEnabledProviders } from "./use-providers";
 import { useSpawnAgent } from "./use-trpc";
 
 /** CLI types that can resume a session here: the provider supports it and its CLI is installed
  *  (resuming one that is not ended in a preflight error instead of the install hint) */
+export function resumableFrom(providers: AgentProvider[]): Set<string> {
+  return new Set(
+    providers.filter((p) => p.capabilities?.supportsResume && isLaunchable(p)).map((p) => p.id),
+  );
+}
+
 function useResumableCliTypes(): Set<string> {
   const providers = useEnabledProviders();
-  return useMemo(
-    () =>
-      new Set(
-        providers.filter((p) => p.capabilities?.supportsResume && isLaunchable(p)).map((p) => p.id),
-      ),
-    [providers],
-  );
+  return useMemo(() => resumableFrom(providers), [providers]);
 }
 
 /** updatePane only reaches the active project: a pane in another project (auto-resume after a
@@ -56,6 +58,50 @@ export type ResumeSource = Pick<
   "id" | "projectId" | "cliType" | "taskDescription" | "branchName"
 > & { accessMode?: Agent["accessMode"] | null };
 
+/** Whether each CLI can resume a session here, outside React (Reopen closed tab): the cached
+ *  provider list when fresh, else read now */
+export async function fetchResumableCliTypes(): Promise<Set<string>> {
+  const providers = await queryClient
+    .fetchQuery(enabledProvidersQuery)
+    .catch(() => [] as AgentProvider[]);
+  return resumableFrom(providers);
+}
+
+/** Resume (`canResume`) or re-launch `agent` as a new row that takes its place, in `paneId` or
+ *  the pane that shows it */
+export function resumeSessionInto(
+  agent: ResumeSource,
+  canResume: boolean,
+  spawn: (data: AgentCreate) => Promise<Agent>,
+  paneId?: string,
+): Promise<void> {
+  return onceAtATime(agent.id, async () => {
+    // A close's stop still running: resuming now ran two processes on one session
+    await pendingStop(agent.id);
+    const newAgent = await spawn({
+      projectId: agent.projectId,
+      cliType: agent.cliType,
+      taskDescription: agent.taskDescription,
+      useWorktree: !!agent.branchName,
+      branchName: agent.branchName ?? undefined,
+      accessMode: agent.accessMode ?? undefined,
+      resumeSession: canResume,
+      // Always the source: a re-launch (no resume) still inherits its YOLO choice
+      resumeFromAgentId: agent.id,
+    });
+    if (!newAgent?.id) return;
+
+    const pane = paneId ?? findAgentPane(agent.id, agent.projectId)?.paneId;
+    useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
+    const agents = useAgentStore.getState();
+    agents.removeAgent(agent.id);
+    trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
+    agents.addAgent(toAgentState(newAgent, { activityLevel: "busy" }));
+    useTerminalStore.getState().createTerminal(newAgent.id);
+    if (pane) setPaneAgent(agent.projectId, pane, newAgent.id);
+  });
+}
+
 /**
  * Resume (or re-launch) an ended agent as a new row that takes its place: in
  * its pane when it has one, in the watch list, and in the store. Shared by the
@@ -67,30 +113,12 @@ export function useResumeAgent() {
 
   const resume = useCallback(
     (agent: ResumeSource, paneId?: string) =>
-      onceAtATime(agent.id, async () => {
-        const canResume = resumableCliTypes.has(agent.cliType);
-        const newAgent = await spawnAgent.mutateAsync({
-          projectId: agent.projectId,
-          cliType: agent.cliType,
-          taskDescription: agent.taskDescription,
-          useWorktree: !!agent.branchName,
-          branchName: agent.branchName ?? undefined,
-          accessMode: agent.accessMode ?? undefined,
-          resumeSession: canResume,
-          // Always the source: a re-launch (no resume) still inherits its YOLO choice
-          resumeFromAgentId: agent.id,
-        });
-        if (!newAgent?.id) return;
-
-        const pane = paneId ?? findAgentPane(agent.id, agent.projectId)?.paneId;
-        useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
-        const agents = useAgentStore.getState();
-        agents.removeAgent(agent.id);
-        trpcMutate("agents.delete", { id: agent.id }).catch(() => {});
-        agents.addAgent(toAgentState(newAgent, { activityLevel: "busy" }));
-        useTerminalStore.getState().createTerminal(newAgent.id);
-        if (pane) setPaneAgent(agent.projectId, pane, newAgent.id);
-      }),
+      resumeSessionInto(
+        agent,
+        resumableCliTypes.has(agent.cliType),
+        spawnAgent.mutateAsync,
+        paneId,
+      ),
     [resumableCliTypes, spawnAgent],
   );
 

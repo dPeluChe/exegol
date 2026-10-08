@@ -1,10 +1,11 @@
-import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClientProvider } from "@tanstack/react-query";
 import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { LoadingSpinner } from "./components/common";
 import { TitleTooltips } from "./components/common/TitleTooltips";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { queryClient } from "./lib/query-client";
 import { installRendererErrorReporting } from "./lib/report-error";
 import "./styles/globals.css";
 
@@ -20,16 +21,6 @@ const FloatingPaneRoot = lazy(() =>
 const SettingsRoot = lazy(() =>
   import("./SettingsRoot").then((m) => ({ default: m.SettingsRoot })),
 );
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      retry: 1,
-      staleTime: 5_000,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 // Polls (git status, tokens, scoring...) run only while Exegol has the focus: TanStack's
 // intervals pause when unfocused. Push events keep agent state live meanwhile

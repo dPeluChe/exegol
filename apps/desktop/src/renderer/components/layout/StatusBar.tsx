@@ -37,7 +37,7 @@ import {
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { selectActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import type { GitState } from "../workspace/SmartGitAction";
 import { formatUptime, thresholdColor } from "../workspace/sections/resource-format";
@@ -110,11 +110,10 @@ export function StatusBar() {
 /** The agent in the focused pane of the active project, if any */
 function useFocusedAgentId(): string | undefined {
   const projectId = useAppStore((s) => s.activeProjectId);
-  return useWorkspaceStore((s) =>
-    projectId && s.focusedPaneId
-      ? s.projectWorkspaces[projectId]?.panes[s.focusedPaneId]?.agentId
-      : undefined,
-  );
+  return useWorkspaceStore((s) => {
+    const paneId = selectActivePaneId(s);
+    return projectId && paneId ? s.projectWorkspaces[projectId]?.panes[paneId]?.agentId : undefined;
+  });
 }
 
 function ProjectWidget() {

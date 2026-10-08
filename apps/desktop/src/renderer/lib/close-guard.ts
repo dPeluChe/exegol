@@ -1,9 +1,11 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import type { AgentState } from "../stores/agents";
 import { useCloseConfirmStore } from "../stores/close-confirm";
-import type { Pane } from "../stores/workspace";
+import type { CloseTarget, Pane } from "../stores/workspace";
+import type { ProjectWorkspace } from "../stores/workspace/types";
 import { sessionName } from "./agent-label";
 import { pageLabel } from "./browser-viewports";
+import { appKeys } from "./keymap";
 
 export interface CloseSummary {
   title: string;
@@ -58,12 +60,19 @@ function describePane(
   return null;
 }
 
+/** What a close takes: a whole tab (by its name) or one pane */
+export type CloseScope = { kind: "tab"; label: string } | { kind: "pane" };
+
+/** The line every close confirmation ends with */
+export const reopenHint = () => `You can reopen it with ${appKeys("Cmd+Shift+T")}.`;
+
 /** What closing these panes would end or lose, pane by pane, or null when nothing (empty panes
  *  only). `unsaved`: panes holding a file edit that is not saved */
 export function describeClose(
   panes: Pane[],
   agents: Record<string, AgentState>,
   unsaved: ReadonlySet<string>,
+  scope: CloseScope = { kind: "pane" },
 ): CloseSummary | null {
   const described = panes.flatMap((p) => describePane(p, agents, unsaved.has(p.id)) ?? []);
   const [only] = described;
@@ -77,9 +86,53 @@ export function describeClose(
         : "Their sessions can be resumed from History.",
     );
   }
+  lines.push(reopenHint());
   const title =
-    described.length === 1 ? `Close ${only.name}?` : `Close ${plural(described.length, "pane")}?`;
+    scope.kind === "tab"
+      ? `Close tab ${scope.label}?`
+      : described.length === 1
+        ? `Close pane ${only.name}?`
+        : `Close ${plural(described.length, "pane")}?`;
   return { title, lines };
+}
+
+/** The panes a close target takes and how the dialog names it: one source for asking and closing */
+export function closeTargetPanes(
+  pw: ProjectWorkspace,
+  target: CloseTarget,
+): { panes: Pane[]; scope: CloseScope } {
+  const tab = pw.tabs.find((t) => t.id === target.tabId);
+  const panes = target.paneIds.map((id) => pw.panes[id]).filter((p) => p !== undefined);
+  const scope: CloseScope =
+    target.closesTab && tab ? { kind: "tab", label: tab.label } : { kind: "pane" };
+  return { panes, scope };
+}
+
+/** Each pane's session: a close compares it after its dialog with what the dialog listed */
+export function paneAgents(
+  pw: ProjectWorkspace,
+  paneIds: string[],
+): Map<string, string | undefined> {
+  return new Map(paneIds.map((id) => [id, pw.panes[id]?.agentId]));
+}
+
+export function samePaneAgents(
+  a: Map<string, string | undefined>,
+  b: Map<string, string | undefined>,
+): boolean {
+  return a.size === b.size && [...a].every(([id, agentId]) => b.get(id) === agentId);
+}
+
+/** Ask before closing this tab or pane; resolves true when there is nothing to lose */
+export function confirmCloseTarget(
+  pw: ProjectWorkspace,
+  target: CloseTarget,
+  agents: Record<string, AgentState>,
+): Promise<boolean> {
+  const { panes, scope } = closeTargetPanes(pw, target);
+  const summary = describeClose(panes, agents, panesWithUnsavedEdits(target.paneIds), scope);
+  if (!summary) return Promise.resolve(true);
+  return useCloseConfirmStore.getState().ask(summary);
 }
 
 /** Panes whose Files viewer holds an unsaved edit (FileExplorer marks its root) */
@@ -89,14 +142,4 @@ export function panesWithUnsavedEdits(paneIds: string[]): Set<string> {
       document.querySelector(`[data-pane-id="${CSS.escape(id)}"] [data-unsaved="true"]`),
     ),
   );
-}
-
-/** Ask before closing these panes; resolves true when there is nothing to lose */
-export function confirmClosePanes(
-  panes: Pane[],
-  agents: Record<string, AgentState>,
-): Promise<boolean> {
-  const summary = describeClose(panes, agents, panesWithUnsavedEdits(panes.map((p) => p.id)));
-  if (!summary) return Promise.resolve(true);
-  return useCloseConfirmStore.getState().ask(summary);
 }
