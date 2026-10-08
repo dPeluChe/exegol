@@ -14,6 +14,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { DEFAULT_MODEL_ID, findModel, MODEL_CATALOG } from "../models/catalog";
 import { modelStatus } from "../models/manager";
+import { armDictationSession, disarmDictationSession } from "./background";
 import {
   beginSession,
   cancelSession,
@@ -123,6 +124,7 @@ export async function startDictation(db: Database.Database) {
   // The model loads while the user speaks: audio waits in the engine until it is ready
   ensureModel(entry.id).catch(() => {});
   beginSession(id, settings.maxSeconds);
+  armDictationSession(id, settings.maxSeconds);
   if (!getJsonSetting(db, MIC_USED_KEY, false)) setJsonSetting(db, MIC_USED_KEY, true);
   return { sessionId: id, modelId: entry.id, kind: entry.kind, maxSeconds: settings.maxSeconds };
 }
@@ -147,6 +149,7 @@ export async function stopDictation(
   }
   const { modelId, cold } = active;
   active = null;
+  disarmDictationSession();
   const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(input.sessionId);
   const phraseLog =
     phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
@@ -190,5 +193,6 @@ export async function warmDictation(db: Database.Database): Promise<{ ok: boolea
 export function cancelDictation(sessionId: string): void {
   if (active?.id !== sessionId) return;
   active = null;
+  disarmDictationSession();
   cancelSession(sessionId);
 }

@@ -7,6 +7,7 @@ import {
   answersPrompt,
   confirmTarget,
   type FocusSnapshot,
+  keptOnCancel,
   resolveTarget,
   sanitizeDictation,
   takesDictation,
@@ -119,6 +120,27 @@ describe("dictation target", () => {
     });
     const otherProject = resolveTarget({ ...base, projectId: "p2" });
     expect(confirmTarget(start, otherProject).kind).toBe("clipboard");
+  });
+
+  it("after a trip to another app: same pane inserts, another pane or an ended session copies", () => {
+    const start = resolveTarget(base);
+    // Away in another app the workspace's focused pane does not change
+    expect(confirmTarget(start, resolveTarget(base))).toBe(start);
+    const moved = resolveTarget({
+      ...base,
+      focusedPaneId: "pane2",
+      pane: { id: "pane2", type: "browser" },
+    });
+    expect(confirmTarget(start, moved).kind).toBe("clipboard");
+    expect(confirmTarget(start, resolveTarget({ ...base, sessionLive: false })).kind).toBe(
+      "clipboard",
+    );
+  });
+
+  it("a cancel keeps 15 s of speech or more, when there is text", () => {
+    expect(keptOnCancel(15_000, "long narration")).toBe("long narration");
+    expect(keptOnCancel(14_999, "short")).toBeNull();
+    expect(keptOnCancel(60_000, "")).toBeNull();
   });
 
   it("targets a focused Dashboard mirror's pane, else copies with a reason", () => {

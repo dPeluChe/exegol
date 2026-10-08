@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clippedAbove, shouldFollow, wordCount } from "./transcript-scroll";
+import { clippedAbove, shouldFollow, unannounced, wordCount } from "./transcript-scroll";
 
 const box = (scrollTop: number, scrollHeight = 400, clientHeight = 120) => ({
   scrollTop,
@@ -42,5 +42,17 @@ describe("wordCount", () => {
     expect(wordCount("   ")).toBe(0);
     expect(wordCount("hello")).toBe(1);
     expect(wordCount("  hello  big\nworld ")).toBe(3);
+  });
+});
+
+describe("unannounced", () => {
+  it("reads only the words added since the last announcement", () => {
+    expect(unannounced("", "hello there")).toBe("hello there");
+    expect(unannounced("hello there", "hello there. next phrase")).toBe(". next phrase");
+    expect(unannounced("hello there", "hello there")).toBe("");
+  });
+
+  it("reads it all again when a streaming model rewrote earlier words", () => {
+    expect(unannounced("hello their", "hello there now")).toBe("hello there now");
   });
 });

@@ -12,7 +12,9 @@ import {
   bindDictationQueries,
   chordDown,
   chordUp,
+  dictationLimitReached,
   dismissDictation,
+  focusOnTarget,
   stopDictation,
 } from "../lib/dictation/controller";
 import { overlayKeyAction } from "../lib/dictation/overlay-keys";
@@ -54,7 +56,8 @@ export function useDictation() {
         if (!e.repeat) chordDown();
         return;
       }
-      const action = overlayKeyAction(e, useDictationStore.getState().phase);
+      const phase = useDictationStore.getState().phase;
+      const action = overlayKeyAction(e, phase, e.key !== "Enter" || focusOnTarget());
       if (!action) return;
       e.preventDefault();
       e.stopPropagation();
@@ -69,11 +72,14 @@ export function useDictation() {
     window.addEventListener("keyup", onKeyUp, true);
     // App-level focus (main's relay), not the DOM blur: a browser pane's webview blurs the page
     const offFocus = window.api.onWindowFocus(appFocusChanged);
-    const offKey = window.api.dictation.onKey(({ kind }) => {
-      if (kind === "down") chordDown();
+    const offKey = window.api.dictation.onKey((event) => {
+      const { kind } = event;
+      if (kind === "limit") dictationLimitReached(event.sessionId, event.maxSeconds);
+      else if (kind === "down") chordDown();
       else if (kind === "up") chordUp();
-      else if (kind === "enter") void stopDictation();
-      else dismissDictation();
+      else if (kind === "enter") {
+        if (focusOnTarget()) void stopDictation();
+      } else dismissDictation();
     });
     const offPartial = window.api.dictation.onPartial(({ sessionId, text }) => {
       const store = useDictationStore.getState();

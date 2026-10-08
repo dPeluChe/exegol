@@ -8,7 +8,12 @@ import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation
 import { currentAnalyser, dismissDictation, stopDictation } from "../../lib/dictation/controller";
 import { dictationChord } from "../../lib/dictation/shortcut";
 import { insertHint, TARGET_KINDS, targetName } from "../../lib/dictation/target";
-import { clippedAbove, shouldFollow, wordCount } from "../../lib/dictation/transcript-scroll";
+import {
+  clippedAbove,
+  shouldFollow,
+  unannounced,
+  wordCount,
+} from "../../lib/dictation/transcript-scroll";
 import { IS_MAC } from "../../lib/keymap";
 import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
@@ -95,8 +100,8 @@ function Recorder() {
   return (
     // A click on the card is a no-op: recording goes on and the pane keeps the focus
     // biome-ignore lint/a11y/noStaticElementInteractions: swallows focus changes only
-    <div onMouseDown={keepFocus} className="@container">
-      <div className="flex items-center justify-between gap-2 px-3.5 pt-3">
+    <div onMouseDown={keepFocus}>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 pt-3">
         <StatePill phase={phase} />
         <Commands phase={phase} />
       </div>
@@ -188,12 +193,16 @@ function TargetChip() {
   );
 }
 
+/** Pauses this long close a phrase for screen readers: streamed words are not read one by one */
+const ANNOUNCE_AFTER_MS = 1200;
+
 function Transcript({ phase }: { phase: DictationPhase }) {
   const partial = useDictationStore((s) => s.partial);
   const streaming = useDictationStatus().data?.model.kind === "streaming";
   const waiting = phase === "listening" || phase === "transcribing";
   const box = useRef<HTMLDivElement>(null);
   const text = useRef<HTMLParagraphElement>(null);
+  const live = useRef<HTMLSpanElement>(null);
   const follow = useRef(true);
   const [clipped, setClipped] = useState(false);
   const [detached, setDetached] = useState(false);
@@ -201,15 +210,29 @@ function Transcript({ phase }: { phase: DictationPhase }) {
     const el = box.current;
     if (el) el.scrollTop = el.scrollHeight;
   };
-  // Text grows (a phrase or a streamed word) without a scroll event: pin the newest line
   useMountEffect(() => {
-    const el = text.current;
-    if (!el) return;
+    // Text grows with no scroll event, and a window resize rewraps it: both re-pin the end
     const observer = new ResizeObserver(() => {
       if (follow.current) toEnd();
     });
-    observer.observe(el);
-    return () => observer.disconnect();
+    if (text.current) observer.observe(text.current);
+    if (box.current) observer.observe(box.current);
+    let announced = "";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = useDictationStore.subscribe((s, prev) => {
+      if (s.partial === prev.partial) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const next = unannounced(announced, s.partial);
+        announced = s.partial;
+        if (live.current && next) live.current.textContent = next;
+      }, ANNOUNCE_AFTER_MS);
+    });
+    return () => {
+      observer.disconnect();
+      unsubscribe();
+      clearTimeout(timer);
+    };
   });
   const onScroll = (e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget;
@@ -219,6 +242,9 @@ function Transcript({ phase }: { phase: DictationPhase }) {
   };
   return (
     <div className="relative px-3.5 pt-2 pb-3">
+      <span ref={live} aria-live="polite" className="sr-only" />
+      {/* Not focusable on purpose: the focus stays on the target pane (keepFocus), so wheel and
+          the Latest button scroll it and the live region above reads it out */}
       <div
         ref={box}
         onScroll={onScroll}
@@ -229,7 +255,6 @@ function Transcript({ phase }: { phase: DictationPhase }) {
       >
         <p
           ref={text}
-          aria-live="polite"
           className={cn(
             "min-h-[2.75rem] text-sm leading-snug break-words whitespace-pre-wrap",
             partial ? "text-text-primary" : "text-text-muted",
@@ -285,23 +310,24 @@ const chordKeys = (chord: KeyChord): string[] =>
     .split("+")
     .map((k) => (IS_MAC ? (MAC_GLYPHS[k] ?? k) : k));
 
-/** Keycaps that also click: Insert (Enter or the dictation chord) and Esc cancel. Labels drop
- *  on a narrow card so the keys stay readable */
+/** Keycaps that also click: Insert (Enter or the dictation chord) and Esc cancel */
 function Commands({ phase }: { phase: DictationPhase }) {
   const chord = dictationChord();
   const keys = chord ? chordKeys(chord) : [];
   const enter = IS_MAC ? "↵" : "Enter";
   return (
-    <div className="flex min-w-0 shrink items-center gap-0.5 text-[10px] text-text-muted">
+    <div className="flex shrink-0 items-center gap-0.5">
       {isRecording(phase) && (
-        <CommandButton
-          title={`Insert (${[enter, keys.join("")].filter(Boolean).join(" or ")})`}
+        <OverlayButton
+          variant="keys"
+          label={chord ? `Insert (Enter or ${formatChord(chord, IS_MAC)})` : "Insert (Enter)"}
+          title={`Insert: ${[enter, keys.join("")].filter(Boolean).join(" or ")}`}
           onClick={() => void stopDictation()}
         >
           <KeyCap>{enter}</KeyCap>
           {keys.length > 0 && (
             <>
-              <span className="hidden @[21rem]:inline">or</span>
+              <span>or</span>
               <span className="inline-flex gap-0.5">
                 {keys.map((k) => (
                   <KeyCap key={k}>{k}</KeyCap>
@@ -309,43 +335,25 @@ function Commands({ phase }: { phase: DictationPhase }) {
               </span>
             </>
           )}
-          <span className="hidden @[21rem]:inline">insert</span>
-        </CommandButton>
+          <span>insert</span>
+        </OverlayButton>
       )}
-      <CommandButton title="Cancel (Esc)" onClick={dismissDictation}>
+      <OverlayButton
+        variant="keys"
+        label="Cancel (Esc)"
+        title="Cancel: Esc"
+        onClick={dismissDictation}
+      >
         <KeyCap>Esc</KeyCap>
-        <span className="hidden @[21rem]:inline">cancel</span>
-      </CommandButton>
+        <span>cancel</span>
+      </OverlayButton>
     </div>
   );
 }
 
 const KeyCap = ({ children }: { children: ReactNode }) => (
-  <Kbd className="h-[18px] min-w-[18px] px-1">{children}</Kbd>
+  <Kbd className="h-5 min-w-5 px-1">{children}</Kbd>
 );
-
-function CommandButton({
-  title,
-  onClick,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      onMouseDown={keepFocus}
-      onClick={onClick}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-    >
-      {children}
-    </button>
-  );
-}
 
 const BARS = 28;
 
@@ -449,7 +457,7 @@ function MicDenied() {
       <div className="mt-3 flex justify-end gap-2">
         <OverlayButton onClick={dismissDictation}>Close</OverlayButton>
         {IS_MAC && (
-          <OverlayButton primary onClick={() => mic.mutate("openMicSettings")}>
+          <OverlayButton variant="primary" onClick={() => mic.mutate("openMicSettings")}>
             Open System Settings
           </OverlayButton>
         )}

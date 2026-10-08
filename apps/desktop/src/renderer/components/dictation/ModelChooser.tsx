@@ -116,7 +116,7 @@ export function ModelChooser() {
       <div className="mt-3 flex justify-end gap-2">
         <OverlayButton onClick={dismissDictation}>Not now</OverlayButton>
         <OverlayButton
-          primary
+          variant="primary"
           disabled={!selected || action.isPending}
           onClick={() => void choose().catch(() => {})}
         >
