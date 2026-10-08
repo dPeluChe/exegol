@@ -8,12 +8,21 @@ import {
   type ModelPreset,
   useModelPresetStore,
 } from "../../stores/model-presets";
+import { ModelSelect } from "./ModelSelect";
 import { INPUT_CLASS } from "./SpawnOptions";
 
 /** This CLI's built-in and saved presets */
 export function usePresets(providerId: string): ModelPreset[] {
   const saved = useModelPresetStore((s) => s.saved);
   return [...BUILT_IN_PRESETS, ...saved].filter((p) => p.cliType === providerId);
+}
+
+/** The preset matching the current main model and roles; none and something set = savable */
+function useActivePreset(providerId: string, model: string, roles: Record<string, string>) {
+  const presets = usePresets(providerId);
+  const active = presets.find((p) => p.model === model.trim() && shallow(p.roles, roles));
+  const canSave = !active && (model.trim() !== "" || Object.keys(roles).length > 0);
+  return { presets, active, canSave };
 }
 
 /** "sonnet main · opus advisor · haiku subagents" */
@@ -30,7 +39,7 @@ function presetSummary(providerId: string, preset: Pick<ModelPreset, "model" | "
     .join(" · ");
 }
 
-/** Presets that set the main model and the roles in one click, plus "Save as preset" */
+/** Presets that set the main model and the roles in one click, in an even grid */
 export function PresetCards({
   providerId,
   model,
@@ -43,13 +52,60 @@ export function PresetCards({
   onPreset: (preset: Pick<ModelPreset, "model" | "roles">) => void;
 }) {
   const saved = useModelPresetStore((s) => s.saved);
-  const savePreset = useModelPresetStore((s) => s.save);
   const removePreset = useModelPresetStore((s) => s.remove);
-  const presets = usePresets(providerId);
-  const [naming, setNaming] = useState<string | null>(null);
+  const { presets, active } = useActivePreset(providerId, model, roles);
 
-  const active = presets.find((p) => p.model === model.trim() && shallow(p.roles, roles));
-  const canSave = !active && (model.trim() !== "" || Object.keys(roles).length > 0);
+  if (presets.length === 0) return null;
+  return (
+    <div className="grid grid-cols-3 gap-1.5">
+      {presets.map((p) => {
+        const summary = presetSummary(providerId, p);
+        return (
+          <div key={p.id} className="group relative min-w-0">
+            <button
+              type="button"
+              onClick={() => onPreset(p)}
+              title={`${p.name}: ${summary}`}
+              className={cn(
+                "flex h-full min-h-[52px] w-full flex-col items-start gap-0.5 rounded-lg border px-2.5 py-1.5 text-left transition-all",
+                p === active
+                  ? "border-accent/50 bg-accent/10 text-accent"
+                  : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
+              )}
+            >
+              <span className="w-full truncate pr-3 text-[11px] font-medium">{p.name}</span>
+              <span className="line-clamp-2 text-[10px] opacity-70">{summary}</span>
+            </button>
+            {saved.includes(p) && (
+              <button
+                type="button"
+                onClick={() => removePreset(p.id)}
+                aria-label={`Delete preset ${p.name}`}
+                className="absolute top-1 right-1 rounded p-0.5 text-text-muted opacity-0 hover:text-red-400 focus:opacity-100 group-hover:opacity-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** "Save as preset", then its name field, in the combination picker's header */
+export function SavePresetButton({
+  providerId,
+  model,
+  roles,
+}: {
+  providerId: string;
+  model: string;
+  roles: Record<string, string>;
+}) {
+  const savePreset = useModelPresetStore((s) => s.save);
+  const { canSave } = useActivePreset(providerId, model, roles);
+  const [naming, setNaming] = useState<string | null>(null);
 
   const commitName = () => {
     const name = naming?.trim();
@@ -57,112 +113,79 @@ export function PresetCards({
     setNaming(null);
   };
 
-  if (presets.length === 0 && !canSave && naming === null) return null;
+  if (naming !== null)
+    return (
+      <input
+        // biome-ignore lint/a11y/noAutofocus: opened by "Save as preset", naming is next
+        autoFocus
+        value={naming}
+        maxLength={40}
+        onChange={(e) => setNaming(e.target.value)}
+        onBlur={commitName}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commitName();
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            setNaming(null);
+          }
+        }}
+        placeholder="Preset name"
+        aria-label="Preset name"
+        className={cn(INPUT_CLASS, "w-40 py-0.5")}
+      />
+    );
+  if (!canSave) return null;
   return (
-    <div className="flex flex-wrap items-stretch gap-1.5">
-      {presets.map((p) => (
-        <div key={p.id} className="group relative">
-          <button
-            type="button"
-            onClick={() => onPreset(p)}
-            className={cn(
-              "flex h-full max-w-[200px] flex-col items-start gap-0.5 rounded-lg border px-2.5 py-1.5 text-left transition-all",
-              p === active
-                ? "border-accent/50 bg-accent/10 text-accent"
-                : "border-border bg-bg-secondary text-text-secondary hover:border-accent/30",
-            )}
-          >
-            <span className="text-[11px] font-medium">{p.name}</span>
-            <span className="text-[10px] opacity-70">{presetSummary(providerId, p)}</span>
-          </button>
-          {saved.includes(p) && (
-            <button
-              type="button"
-              onClick={() => removePreset(p.id)}
-              aria-label={`Delete preset ${p.name}`}
-              className="absolute top-1 right-1 rounded p-0.5 text-text-muted opacity-0 hover:text-red-400 focus:opacity-100 group-hover:opacity-100"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-      ))}
-      {canSave && naming === null && (
-        <button
-          type="button"
-          onClick={() => setNaming("")}
-          className="flex items-center gap-1 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-[11px] text-text-muted hover:border-accent/40 hover:text-text-secondary"
-        >
-          <Plus className="h-3 w-3" />
-          Save as preset
-        </button>
-      )}
-      {naming !== null && (
-        <input
-          // biome-ignore lint/a11y/noAutofocus: opened by "Save as preset", naming is next
-          autoFocus
-          value={naming}
-          maxLength={40}
-          onChange={(e) => setNaming(e.target.value)}
-          onBlur={commitName}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitName();
-            if (e.key === "Escape") {
-              e.stopPropagation();
-              setNaming(null);
-            }
-          }}
-          placeholder="Preset name"
-          aria-label="Preset name"
-          className={cn(INPUT_CLASS, "w-40 self-center")}
-        />
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => setNaming("")}
+      className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/5 hover:text-text-secondary"
+    >
+      <Plus className="h-3 w-3" />
+      Save as preset
+    </button>
   );
 }
 
-/** One advisor, subagent, planner or editor model field */
+/** One advisor, subagent, planner or editor model: the main model's dropdown without the models
+ *  this role refuses. Default leaves the role unset */
 export function RoleField({
   providerId,
   role,
   model,
   value,
   onRole,
+  className,
 }: {
   providerId: string;
   role: ModelRole;
   model: string;
   value: string;
   onRole: (roleId: string, value: string) => void;
+  className?: string;
 }) {
   const problem = value ? roleModelProblem(providerId, role.id, value, model) : null;
-  const listId = `role-${role.id}-models`;
+  const id = `role-${role.id}`;
   return (
-    <div className="flex flex-col gap-1">
+    <div className={cn("flex min-w-0 flex-col gap-1", className)}>
       <label
-        className="text-[11px] font-medium text-text-muted"
-        htmlFor={`role-${role.id}`}
-        title={role.hint}
+        className="truncate text-[11px] font-medium text-text-muted"
+        htmlFor={id}
+        title={`${role.hint} (${launchHint(role.launch)})`}
       >
-        {role.label} <span className="font-mono text-[10px]">{launchHint(role.launch)}</span>
+        {role.label}
       </label>
-      <input
-        id={`role-${role.id}`}
-        list={role.suggestions ? listId : undefined}
+      <ModelSelect
+        id={id}
+        providerId={providerId}
+        label={role.label}
         value={value}
-        onChange={(e) => onRole(role.id, e.target.value.trim())}
-        placeholder="Default"
-        title={role.hint}
-        aria-invalid={!!problem}
-        className={cn(INPUT_CLASS, problem && "border-amber-500/60")}
+        onChange={(v) => onRole(role.id, v.trim())}
+        suggestions={role.suggestions}
+        defaultLabel="Default (not set)"
+        accepts={(m) => !roleModelProblem(providerId, role.id, m, model)}
+        invalid={!!problem}
       />
-      {role.suggestions && (
-        <datalist id={listId}>
-          {role.suggestions.map((m) => (
-            <option key={m} value={m} />
-          ))}
-        </datalist>
-      )}
       {problem && <span className="text-[10px] text-amber-400">{problem}: not passed</span>}
     </div>
   );

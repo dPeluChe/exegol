@@ -230,13 +230,13 @@ export const MODEL_ROLES: Record<string, ModelRole[]> = {
   aider: [
     {
       id: "editor",
-      label: "Editor (architect mode)",
+      label: "Editor",
       hint: "Turns on architect mode: the main model plans, this one writes the edits",
       launch: { flag: "--editor-model", with: ["--architect"] },
     },
     {
       id: "weak",
-      label: "Weak model",
+      label: "Weak",
       hint: "Commit messages and chat summaries",
       launch: { flag: "--weak-model" },
     },
