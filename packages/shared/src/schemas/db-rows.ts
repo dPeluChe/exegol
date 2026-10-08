@@ -83,6 +83,7 @@ export const agentRowSchema = z.object({
   launched_in_shell: optNum,
   cli_version: optStr,
   model: optStr,
+  model_roles: optStr,
   claude_session_id: optStr,
   status_changed_at: optNum,
 });

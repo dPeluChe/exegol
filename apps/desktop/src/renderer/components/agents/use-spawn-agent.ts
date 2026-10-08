@@ -34,6 +34,7 @@ function spawnInput(projectId: string, c: SpawnForm) {
     yolo: c.yoloFlag && c.yolo !== null ? c.yolo : undefined,
     baseBranch: c.useWorktree && c.baseBranch ? c.baseBranch : undefined,
     model: MODEL_LAUNCH[c.providerId] && c.model.trim() ? c.model.trim() : undefined,
+    modelRoles: Object.keys(c.modelRoles).length > 0 ? c.modelRoles : undefined,
     name: c.name.trim() || undefined,
     ...resumeInput(c),
   };
