@@ -114,7 +114,7 @@ export function ModelChooser() {
         <p className="mt-2 text-xs text-error">{selected.status.error}</p>
       )}
       <div className="mt-3 flex justify-end gap-2">
-        <OverlayButton onClick={dismissDictation}>Not now</OverlayButton>
+        <OverlayButton onClick={() => dismissDictation("button")}>Not now</OverlayButton>
         <OverlayButton
           variant="primary"
           disabled={!selected || action.isPending}
@@ -263,7 +263,7 @@ function Downloading({ model }: { model: ModelListItem }) {
         is ready.
       </p>
       <div className="mt-3 flex justify-end">
-        <OverlayButton onClick={dismissDictation}>Close</OverlayButton>
+        <OverlayButton onClick={() => dismissDictation("button")}>Close</OverlayButton>
       </div>
     </div>
   );

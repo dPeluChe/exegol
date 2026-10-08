@@ -1,8 +1,10 @@
 import {
   DEFAULT_SPEECH_MODEL_KEY,
   DICTATION_SAMPLE_RATE,
+  type DictationCancelSource,
   type DictationSettings,
   type DictationStatus,
+  type DictationStopReason,
   type DictationTargetKind,
   dictationSettingsOf,
   parseChord,
@@ -67,7 +69,7 @@ export function applyDictationSettings(db: Database.Database, settings: Dictatio
   }
   setDictationChord(settings.enabled ? parseChord(settings.shortcut) : null);
   if (!settings.enabled) {
-    if (active) cancelDictation(active.id);
+    if (active) cancelDictation(active.id, "disabled");
     stopEngine();
   }
 }
@@ -163,6 +165,7 @@ export async function stopDictation(
     durationMs: number;
     projectId: string | null;
     targetKind: DictationTargetKind;
+    by: DictationStopReason;
   },
 ): Promise<{ text: string }> {
   if (!active || active.id !== input.sessionId) {
@@ -177,7 +180,7 @@ export async function stopDictation(
     phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
   // Lengths and timings only: dictated text never goes to the log (bug reports are public)
   logger.info(
-    `[Dictation] ${modelId}: ${Math.round(input.durationMs / 100) / 10}s of audio, ${text.length} chars; ${loadSplit(cold)}${phraseLog}decode after stop ${decodeMs}ms${fullPass ? " (full pass)" : ""}`,
+    `[Dictation] stopped by ${input.by}; ${modelId}: ${Math.round(input.durationMs / 100) / 10}s of audio, ${text.length} chars; ${loadSplit(cold)}${phraseLog}decode after stop ${decodeMs}ms${fullPass ? " (full pass)" : ""}`,
   );
   if (text) {
     const settings = dictationSettings(db);
@@ -212,8 +215,10 @@ export async function warmDictation(db: Database.Database): Promise<{ ok: boolea
   return { ok: true };
 }
 
-export function cancelDictation(sessionId: string): void {
+export function cancelDictation(sessionId: string, source: DictationCancelSource): void {
   if (active?.id !== sessionId) return;
+  const secs = Math.round((Date.now() - active.startedAt) / 100) / 10;
+  logger.info(`[Dictation] cancelled after ${secs}s (${source})`);
   active.media?.release();
   active = null;
   disarmDictationSession();

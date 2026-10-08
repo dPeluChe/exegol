@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { WorkspaceSection } from "../components/workspace/WorkspaceTabs";
 
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
 type ActiveView = "projects" | "workspace" | "dashboard";
@@ -15,6 +16,11 @@ interface AppStore {
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
   openDashboard: () => void;
+
+  /** The workspace section (Agents, a Project or Monitor tab); back to Agents on leaving the
+   *  dashboard. In memory: a reload starts on Agents */
+  workspaceSection: WorkspaceSection;
+  setWorkspaceSection: (section: WorkspaceSection) => void;
 
   /** Currently selected project */
   activeProjectId: string | null;
@@ -110,25 +116,34 @@ export function migrateAppStore(persisted: unknown, fromVersion: number): AppSto
   return state as unknown as AppStore;
 }
 
+/** Picking a project from the dashboard lands on its agents, not on whichever section was open
+ *  before the dashboard */
+const leaving = (s: AppStore, next: ActiveView): Partial<AppStore> =>
+  s.activeView === "dashboard" && next !== "dashboard" ? { workspaceSection: "agents" } : {};
+
 export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
       activeView: "projects",
-      setActiveView: (view) => set({ activeView: view }),
+      setActiveView: (view) => set((s) => ({ activeView: view, ...leaving(s, view) })),
       openDashboard: () => set({ activeView: "dashboard", projectsFrom: null }),
+
+      workspaceSection: "agents",
+      setWorkspaceSection: (section) => set({ workspaceSection: section }),
 
       activeProjectId: null,
       setActiveProject: (id) =>
-        set({
-          activeProjectId: id,
-          activeView: id ? "workspace" : "projects",
-          projectsFrom: null,
+        set((s) => {
+          const view = id ? "workspace" : "projects";
+          return { activeProjectId: id, activeView: view, projectsFrom: null, ...leaving(s, view) };
         }),
 
       projectsFrom: null,
       openProjects: () =>
         set((s) =>
-          s.activeView === "projects" ? {} : { activeView: "projects", projectsFrom: s.activeView },
+          s.activeView === "projects"
+            ? {}
+            : { activeView: "projects", projectsFrom: s.activeView, ...leaving(s, "projects") },
         ),
       closeProjects: () =>
         set((s) => {

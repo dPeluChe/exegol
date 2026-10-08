@@ -118,6 +118,23 @@ export function DictationSettings({ settings, onChange }: Props) {
       </div>
 
       <div>
+        <h3 className={SECTION}>Overlay</h3>
+        <SelectRow
+          label="Overlay position"
+          value={prefs.overlayPosition}
+          options={[
+            ["pane", "Over the target pane"],
+            ["titlebar", "Title bar"],
+          ]}
+          onChange={(overlayPosition) => set({ overlayPosition })}
+        />
+        <p className="mt-1 text-[10px] text-text-muted">
+          Over the target pane, it moves to the top center when that pane is not on screen (another
+          project, tab or view) and comes back with it.
+        </p>
+      </div>
+
+      <div>
         <h3 className={SECTION}>History</h3>
         <div className="mb-3 space-y-2">
           <SelectRow
@@ -290,22 +307,29 @@ function MicSection() {
   );
 }
 
-function SelectRow({
+function SelectRow<T extends string | number>({
   label,
   value,
   options,
   onChange,
 }: {
   label: ReactNode;
-  value: number;
-  options: [number, string][];
-  onChange: (value: number) => void;
+  value: T;
+  options: [T, string][];
+  onChange: (value: T) => void;
 }) {
   const known = options.some(([v]) => v === value);
   return (
     <label className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-2.5 text-xs">
       <span className="flex-1 text-text-secondary">{label}</span>
-      <select className={SELECT} value={value} onChange={(e) => onChange(Number(e.target.value))}>
+      <select
+        className={SELECT}
+        value={value}
+        onChange={(e) => {
+          const picked = options.find(([v]) => String(v) === e.target.value);
+          if (picked) onChange(picked[0]);
+        }}
+      >
         {!known && <option value={value}>{value}</option>}
         {options.map(([v, text]) => (
           <option key={v} value={v}>

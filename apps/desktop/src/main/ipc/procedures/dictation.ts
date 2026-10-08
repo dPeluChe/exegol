@@ -1,4 +1,8 @@
-import { DICTATION_TARGET_KINDS } from "@exegol/shared";
+import {
+  DICTATION_CANCEL_SOURCES,
+  DICTATION_STOP_REASONS,
+  DICTATION_TARGET_KINDS,
+} from "@exegol/shared";
 import { clipboard, ipcMain } from "electron";
 import { z } from "zod";
 import { insertTextInBrowserPane, markDictationPage } from "../../browser/electron-host";
@@ -53,14 +57,17 @@ export const dictationRouter = router({
         durationMs: z.number().min(0).max(3_600_000),
         projectId: z.string().max(64).nullable(),
         targetKind: z.enum(DICTATION_TARGET_KINDS),
+        by: z.enum(DICTATION_STOP_REASONS),
       }),
     )
     .mutation(({ ctx, input }) => stopDictation(ctx.db, input)),
 
-  cancel: publicProcedure.input(z.object({ sessionId })).mutation(({ input }) => {
-    cancelDictation(input.sessionId);
-    return { ok: true };
-  }),
+  cancel: publicProcedure
+    .input(z.object({ sessionId, source: z.enum(DICTATION_CANCEL_SOURCES) }))
+    .mutation(({ input }) => {
+      cancelDictation(input.sessionId, input.source);
+      return { ok: true };
+    }),
 
   history: publicProcedure
     .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }))

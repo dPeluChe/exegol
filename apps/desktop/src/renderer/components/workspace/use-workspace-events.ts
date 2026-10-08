@@ -1,35 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
-import { SWITCH_SECTION_EVENT, switchSection } from "../../lib/switch-section";
+import { switchSection } from "../../lib/switch-section";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
-import type { WorkspaceSection } from "./WorkspaceTabs";
-
-/** The workspace section, switched by sidebar events and reset to Agents on leaving the dashboard */
-export function useActiveSection(onDashboard: boolean) {
-  const [activeSection, setActiveSection] = useState<WorkspaceSection>("agents");
-  // Picking a project from the dashboard lands on its agents, not on
-  // whichever project tab was open before the dashboard
-  const [wasDashboard, setWasDashboard] = useState(onDashboard);
-  if (wasDashboard !== onDashboard) {
-    setWasDashboard(onDashboard);
-    if (!onDashboard) setActiveSection("agents");
-  }
-
-  // Listen for section switch events from sidebar (Rule 4: mount effect for event listener)
-  useMountEffect(() => {
-    const handler = (e: Event) => {
-      const section = (e as CustomEvent).detail?.section as WorkspaceSection;
-      if (section) setActiveSection(section);
-    };
-    window.addEventListener(SWITCH_SECTION_EVENT, handler);
-    return () => window.removeEventListener(SWITCH_SECTION_EVENT, handler);
-  });
-
-  return [activeSection, setActiveSection] as const;
-}
 
 /** Cmd+N / "New agent with same task" and Cmd+Shift+N open the spawn modals */
 export function useSpawnModalEvents() {

@@ -1,3 +1,4 @@
+import { cn } from "@exegol/ui";
 import { Code, Minus, Square, X } from "lucide-react";
 import { useProject } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
@@ -18,10 +19,16 @@ export function TitleBar() {
   const isMac = platform === "darwin";
 
   return (
-    <div className="titlebar-drag grid h-10 shrink-0 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 border-b border-border bg-bg-secondary px-3 text-[11px] text-text-muted">
+    // data-titlebar*: the docked dictation pill measures the bar, its inset (pl-20: the traffic
+    // lights' room) and the name
+    <div
+      data-titlebar=""
+      className={cn(
+        "titlebar-drag grid h-10 shrink-0 grid-cols-[1fr_minmax(0,auto)_1fr] items-center gap-3 border-b border-border bg-bg-secondary px-3 text-[11px] text-text-muted",
+        isMac && "pl-20",
+      )}
+    >
       <div className="flex items-center gap-3">
-        {/* pl-20 of the bar before the zones: the traffic lights' room */}
-        {isMac && <div className="w-[68px] shrink-0" />}
         <div className="titlebar-no-drag flex shrink-0 items-center gap-2">
           <AttentionQueue />
           <button
@@ -38,7 +45,10 @@ export function TitleBar() {
         <WidgetZone layout={layout} bar="header" slot="left" />
       </div>
 
-      <div className="flex min-w-0 max-w-[40vw] items-center justify-center overflow-hidden">
+      <div
+        data-titlebar-title=""
+        className="flex min-w-0 max-w-[40vw] items-center justify-center overflow-hidden"
+      >
         {project ? (
           <span className="flex min-w-0 items-center gap-1.5 text-xs text-text-secondary">
             <ProjectAvatar project={project} />

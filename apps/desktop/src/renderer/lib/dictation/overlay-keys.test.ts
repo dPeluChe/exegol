@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { overlayKeyAction } from "./overlay-keys";
+import { OVERLAY_ATTR, otherDialogOpen, overlayKeyAction } from "./overlay-keys";
 import { insertHint, targetName } from "./target";
 
 const key = (k: string, extra: Partial<Parameters<typeof overlayKeyAction>[0]> = {}) => ({
@@ -19,9 +19,15 @@ describe("overlayKeyAction", () => {
   });
 
   it("Enter is the focused pane's once the focus left the dictation's target; Esc still cancels", () => {
-    expect(overlayKeyAction(key("Enter"), "listening", false)).toBeNull();
-    expect(overlayKeyAction(key("Enter"), "transcribing", false)).toBeNull();
-    expect(overlayKeyAction(key("Escape"), "listening", false)).toBe("cancel");
+    const away = { onTarget: false };
+    expect(overlayKeyAction(key("Enter"), "listening", away)).toBeNull();
+    expect(overlayKeyAction(key("Enter"), "transcribing", away)).toBeNull();
+    expect(overlayKeyAction(key("Escape"), "listening", away)).toBe("cancel");
+  });
+
+  it("an open dialog takes Esc first; the next Esc cancels the dictation", () => {
+    expect(overlayKeyAction(key("Escape"), "listening", { dialogOpen: true })).toBeNull();
+    expect(overlayKeyAction(key("Escape"), "listening", { dialogOpen: false })).toBe("cancel");
   });
 
   it("leaves keys alone with the overlay closed or on a panel with buttons", () => {
@@ -46,6 +52,36 @@ describe("overlayKeyAction", () => {
     expect(overlayKeyAction(key("Enter", { shiftKey: true }), "listening")).toBeNull();
     expect(overlayKeyAction(key("Enter", { metaKey: true }), "listening")).toBeNull();
     expect(overlayKeyAction(key("a"), "listening")).toBeNull();
+  });
+});
+
+describe("otherDialogOpen", () => {
+  const el = (
+    role: string,
+    opts: { state?: string; inOverlay?: boolean; shown?: boolean } = {},
+  ) => ({
+    getAttribute: (name: string) =>
+      name === "role" ? role : name === "data-state" ? (opts.state ?? null) : null,
+    closest: (sel: string) => (opts.inOverlay && sel === `[${OVERLAY_ATTR}]` ? {} : null),
+    getClientRects: () => ({ length: opts.shown === false ? 0 : 1 }),
+  });
+  const root = (els: ReturnType<typeof el>[]) =>
+    ({ querySelectorAll: () => els }) as unknown as ParentNode;
+
+  it("Monaco's find widget (role=dialog, no open state, mounted after one Cmd+F) never blocks Esc", () => {
+    expect(otherDialogOpen(root([el("dialog")]))).toBe(false);
+    expect(otherDialogOpen(root([el("dialog", { state: "closed" })]))).toBe(false);
+  });
+
+  it("ignores the overlay itself and a dialog that is not on screen", () => {
+    expect(otherDialogOpen(root([el("dialog", { state: "open", inOverlay: true })]))).toBe(false);
+    expect(otherDialogOpen(root([el("dialog", { state: "open", shown: false })]))).toBe(false);
+    expect(otherDialogOpen(root([]))).toBe(false);
+  });
+
+  it("finds an open Radix dialog or popover, or an alert dialog", () => {
+    expect(otherDialogOpen(root([el("dialog", { state: "open" })]))).toBe(true);
+    expect(otherDialogOpen(root([el("dialog"), el("alertdialog")]))).toBe(true);
   });
 });
 

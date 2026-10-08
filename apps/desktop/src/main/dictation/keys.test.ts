@@ -1,6 +1,7 @@
 import type { WebContents } from "electron";
 import { describe, expect, it, vi } from "vitest";
 import {
+  forwardDictationEscape,
   forwardDictationKeys,
   isPlainEnter,
   setDictationChord,
@@ -41,18 +42,22 @@ describe("forwardDictationKeys", () => {
 
   it("forwards Enter and Esc while listening when the host is the main window", () => {
     const { host, contents, press } = page();
-    forwardDictationKeys(contents, () => true);
+    const toMain = vi.fn();
+    forwardDictationKeys(contents, () => true, toMain);
     expect(press(key("Enter"))).toBe(true);
     expect(press(key("Escape"))).toBe(true);
-    expect(host.send.mock.calls.map((c) => c[1].kind)).toEqual(["enter", "escape"]);
+    expect(host.send.mock.calls.map((c) => c[1].kind)).toEqual(["enter"]);
+    expect(toMain).toHaveBeenCalledWith({ kind: "escape" });
   });
 
-  it("leaves Enter and Esc to a page hosted by another window", () => {
+  it("leaves Enter to a page hosted by another window, but its Esc still cancels in main", () => {
     const { host, contents, press } = page();
-    forwardDictationKeys(contents, () => false);
+    const toMain = vi.fn();
+    forwardDictationKeys(contents, () => false, toMain);
     expect(press(key("Enter"))).toBe(false);
-    expect(press(key("Escape"))).toBe(false);
+    expect(press(key("Escape"))).toBe(true);
     expect(host.send).not.toHaveBeenCalled();
+    expect(toMain).toHaveBeenCalledWith({ kind: "escape" });
   });
 
   it("leaves Enter alone during an IME composition", () => {
@@ -60,5 +65,47 @@ describe("forwardDictationKeys", () => {
     forwardDictationKeys(contents, () => true);
     expect(press(key("Enter", { isComposing: true }))).toBe(false);
     expect(host.send).not.toHaveBeenCalled();
+  });
+});
+
+describe("forwardDictationEscape", () => {
+  function win() {
+    let handler: (event: { preventDefault(): void }, input: Electron.Input) => void = () => {};
+    const contents = {
+      on: (_name: string, fn: typeof handler) => {
+        handler = fn;
+      },
+    } as unknown as WebContents;
+    const press = (input: Electron.Input) => {
+      const event = { preventDefault: vi.fn() };
+      handler(event, input);
+      return event.preventDefault.mock.calls.length > 0;
+    };
+    return { contents, press };
+  }
+
+  it("Esc in another Exegol window (Settings, a floating pane) cancels the dictation", () => {
+    setDictationListening(() => true);
+    const { contents, press } = win();
+    const toMain = vi.fn();
+    forwardDictationEscape(contents, () => false, toMain);
+    expect(press(key("Escape"))).toBe(true);
+    expect(press(key("Enter"))).toBe(false);
+    expect(press(key("Escape", { type: "keyUp" }))).toBe(false);
+    expect(toMain).toHaveBeenCalledTimes(1);
+    expect(toMain).toHaveBeenCalledWith({ kind: "escape" });
+  });
+
+  it("leaves the main window's Esc to its renderer, and every Esc alone with no dictation", () => {
+    const { contents, press } = win();
+    const toMain = vi.fn();
+    forwardDictationEscape(contents, () => true, toMain);
+    expect(press(key("Escape"))).toBe(false);
+    setDictationListening(() => false);
+    const other = win();
+    forwardDictationEscape(other.contents, () => false, toMain);
+    expect(other.press(key("Escape"))).toBe(false);
+    expect(toMain).not.toHaveBeenCalled();
+    setDictationListening(() => true);
   });
 });

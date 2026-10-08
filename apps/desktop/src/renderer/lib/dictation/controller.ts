@@ -1,7 +1,9 @@
 import {
   DICTATION_SAMPLE_RATE,
+  type DictationCancelSource,
   type DictationSettings,
   type DictationStatus,
+  type DictationStopReason,
   dictationSettingsOf,
   type ScreenDialog,
   type Settings,
@@ -45,7 +47,8 @@ interface Run {
   early: Float32Array[];
   vad: VadState;
   cancelled: boolean;
-  stopWhenReady: boolean;
+  /** Stopped while the mic was opening: stops once it listens, for this reason */
+  stopWhenReady: DictationStopReason | null;
 }
 
 let run: Run | null = null;
@@ -144,7 +147,7 @@ function onChunk(samples: Float32Array): void {
   r.vad = updateVad(r.vad, rms(samples), (samples.length / DICTATION_SAMPLE_RATE) * 1000);
   if (r.sessionId) window.api.dictation.sendAudio(r.sessionId, samples);
   else r.early.push(samples);
-  if (shouldAutoStop(r.vad, r.settings.autoStopSilenceSec)) void stopDictation();
+  if (shouldAutoStop(r.vad, r.settings.autoStopSilenceSec)) void stopDictation("silence");
 }
 
 async function loadStatus(): Promise<DictationStatus> {
@@ -189,7 +192,7 @@ export async function startDictation(): Promise<void> {
     early: [],
     vad: VAD_START,
     cancelled: false,
-    stopWhenReady: false,
+    stopWhenReady: null,
   };
   run = current;
   // Esc (or a new dictation) during an await below: this start must not touch what follows
@@ -235,7 +238,7 @@ export async function startDictation(): Promise<void> {
     const started = await trpcMutate<{ sessionId: string }>("dictation.start");
     patchStatus({ micEverGranted: true });
     if (gone()) {
-      void trpcMutate("dictation.cancel", { sessionId: started.sessionId });
+      void trpcMutate("dictation.cancel", { sessionId: started.sessionId, source: "superseded" });
       return;
     }
     current.sessionId = started.sessionId;
@@ -243,19 +246,19 @@ export async function startDictation(): Promise<void> {
       window.api.dictation.sendAudio(started.sessionId, chunk);
     }
     store().set({ phase: "listening", sessionId: started.sessionId, startedAt: Date.now() });
-    if (current.stopWhenReady) void stopDictation();
+    if (current.stopWhenReady) void stopDictation(current.stopWhenReady);
   } catch (err) {
     if (!gone()) fail(errorText(err));
   }
 }
 
 /** Stops listening, transcribes, and inserts where the focus was when it started */
-export async function stopDictation(): Promise<void> {
+export async function stopDictation(by: DictationStopReason): Promise<void> {
   const r = run;
   if (!r || store().phase === "transcribing") return;
   if (!r.sessionId) {
     // Released or pressed again while the mic was opening: stop once it listens
-    r.stopWhenReady = true;
+    r.stopWhenReady = by;
     return;
   }
   const sessionId = r.sessionId;
@@ -264,7 +267,7 @@ export async function stopDictation(): Promise<void> {
   r.capture = null;
   r.cancelled = true;
   if (!r.vad.heard) {
-    void trpcMutate("dictation.cancel", { sessionId });
+    void trpcMutate("dictation.cancel", { sessionId, source: "nothing-heard" });
     reset();
     toast().addToast({ type: "info", title: "Nothing was heard", body: "Dictation stopped" });
     return;
@@ -277,6 +280,7 @@ export async function stopDictation(): Promise<void> {
       durationMs,
       projectId: target.projectId,
       targetKind: target.kind,
+      by,
     });
     // Esc while transcribing: cancelled for real, nothing is inserted
     if (run !== r) return;
@@ -292,11 +296,11 @@ export async function stopDictation(): Promise<void> {
   }
 }
 
-export function cancelDictation(): void {
+export function cancelDictation(source: DictationCancelSource): void {
   const r = run;
   if (r) {
     r.cancelled = true;
-    if (r.sessionId) void trpcMutate("dictation.cancel", { sessionId: r.sessionId });
+    if (r.sessionId) void trpcMutate("dictation.cancel", { sessionId: r.sessionId, source });
   }
   reset();
 }
@@ -398,7 +402,7 @@ export function dictationLimitReached(sessionId: string, maxSeconds: number): vo
     title: "Longest dictation reached",
     body: `Stopped at ${Math.round(maxSeconds / 60)} min (Settings > Dictation)`,
   });
-  void stopDictation();
+  void stopDictation("limit");
 }
 
 /** The shortcut went down: start, or stop a running dictation */
@@ -406,7 +410,7 @@ export function chordDown(): void {
   const { phase } = store();
   if (phase === "listening" || phase === "starting") {
     holdCandidate = false;
-    void stopDictation();
+    void stopDictation("chord");
     return;
   }
   if (phase === "transcribing") return;
@@ -419,17 +423,17 @@ export function chordDown(): void {
 export function chordUp(): void {
   if (!holdCandidate) return;
   holdCandidate = false;
-  if (Date.now() - pressedAt >= HOLD_MS && run) void stopDictation();
+  if (Date.now() - pressedAt >= HOLD_MS && run) void stopDictation("chord");
 }
 
 /** Status bar mic: a plain toggle */
 export function toggleDictation(): void {
-  if (run) void stopDictation();
+  if (run) void stopDictation("mic");
   else if (store().phase !== "transcribing") void startDictation();
 }
 
 /** Esc, Close, Cancel: whatever the phase, nothing gets inserted */
-export function dismissDictation(): void {
+export function dismissDictation(source: DictationCancelSource): void {
   const { phase, downloadRequested } = store();
   if (phase === "no-model" && downloadRequested) {
     toast().addToast({
@@ -439,7 +443,7 @@ export function dismissDictation(): void {
     });
   }
   const kept = run ? keptOnCancel(run.vad.speechMs, sanitizeDictation(store().partial)) : null;
-  if (run) cancelDictation();
+  if (run) cancelDictation(source);
   else reset();
   // Long speech is not thrown away by one stray Esc
   if (kept) void copyInstead(kept, "Dictation cancelled, text copied", "Paste it if you need it");
