@@ -1,19 +1,9 @@
-import {
-  launchHint,
-  MODEL_ID_PATTERN,
-  MODEL_LAUNCH,
-  MODEL_ROLES,
-  MODEL_SUGGESTIONS,
-} from "@exegol/shared";
+import { launchHint, MODEL_LAUNCH, MODEL_ROLES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { trpcInvoke } from "../../lib/trpc-client";
 import { type ModelMode, type ModelPreset, useModelPresetStore } from "../../stores/model-presets";
-import { PresetCards, RoleField, usePresets } from "./ModelRolesPicker";
+import { PresetCards, RoleField, SavePresetButton, usePresets } from "./ModelRolesPicker";
+import { ModelSelect } from "./ModelSelect";
 import { INPUT_CLASS } from "./SpawnOptions";
-
-const OTHER = "__other__";
 
 const LABEL_CLASS = "text-[11px] font-medium text-text-muted";
 
@@ -53,7 +43,7 @@ export function ModelAndName({
   };
 
   const nameField = (
-    <div className={cn("flex flex-col gap-1.5", !launch && "col-span-2")}>
+    <div className={cn("flex flex-col gap-1.5", (!launch || mode === "combo") && "col-span-2")}>
       <label className={LABEL_CLASS} htmlFor="spawn-name">
         Name <span className="text-text-muted">(optional)</span>
       </label>
@@ -82,7 +72,13 @@ export function ModelAndName({
               </label>
               {hasCombos && <ModelModeToggle mode={mode} onMode={chooseMode} />}
             </div>
-            <ModelSelect providerId={providerId} label={label} model={model} onModel={onModel} />
+            <ModelSelect
+              id="spawn-model"
+              providerId={providerId}
+              label={label}
+              value={model}
+              onChange={onModel}
+            />
           </div>
         )}
         {nameField}
@@ -90,32 +86,46 @@ export function ModelAndName({
     );
   }
 
+  // Odd field count: the last one spans both columns so the grid has no hole
+  const lastSpans = defs.length % 2 === 0;
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <span className={LABEL_CLASS}>{label}</span>
-        <ModelModeToggle mode={mode} onMode={chooseMode} />
-      </div>
-      <PresetCards providerId={providerId} model={model} roles={roles} onPreset={onPreset} />
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2">
-        <div className="flex flex-col gap-1">
-          <label className={LABEL_CLASS} htmlFor="spawn-model">
-            Main <span className="font-mono text-[10px]">{launchHint(launch)}</span>
-          </label>
-          <ModelSelect providerId={providerId} label={label} model={model} onModel={onModel} />
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className={LABEL_CLASS}>{label}</span>
+          <ModelModeToggle mode={mode} onMode={chooseMode} />
+          <div className="ml-auto">
+            <SavePresetButton providerId={providerId} model={model} roles={roles} />
+          </div>
         </div>
-        {defs.map((role) => (
-          <RoleField
-            key={role.id}
-            providerId={providerId}
-            role={role}
-            model={model}
-            value={roles[role.id] ?? ""}
-            onRole={onRole}
-          />
-        ))}
-        {nameField}
+        <PresetCards providerId={providerId} model={model} roles={roles} onPreset={onPreset} />
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+          <div className={cn("flex min-w-0 flex-col gap-1", defs.length === 0 && "col-span-2")}>
+            <label className={LABEL_CLASS} htmlFor="spawn-model" title={launchHint(launch)}>
+              Main
+            </label>
+            <ModelSelect
+              id="spawn-model"
+              providerId={providerId}
+              label={label}
+              value={model}
+              onChange={onModel}
+            />
+          </div>
+          {defs.map((role, i) => (
+            <RoleField
+              key={role.id}
+              providerId={providerId}
+              role={role}
+              model={model}
+              value={roles[role.id] ?? ""}
+              onRole={onRole}
+              className={cn(lastSpans && i === defs.length - 1 && "col-span-2")}
+            />
+          ))}
+        </div>
       </div>
+      {nameField}
     </div>
   );
 }
@@ -143,77 +153,5 @@ function ModelModeToggle({ mode, onMode }: { mode: ModelMode; onMode: (m: ModelM
       {option("single", "Single model", "One model for everything")}
       {option("combo", "Combination", "A main model plus advisor, subagent or planner models")}
     </fieldset>
-  );
-}
-
-function ModelSelect({
-  providerId,
-  label,
-  model,
-  onModel,
-}: {
-  providerId: string;
-  label: string;
-  model: string;
-  onModel: (model: string) => void;
-}) {
-  const { data: listed = [] } = useQuery({
-    queryKey: ["cliModels", providerId],
-    queryFn: () => trpcInvoke<string[]>("agents.listModels", { cliType: providerId }),
-    staleTime: 10 * 60 * 1000,
-  });
-  const suggested = MODEL_SUGGESTIONS[providerId] ?? [];
-  const available = listed.filter((m) => !suggested.includes(m));
-  const known = new Set([...suggested, ...available]);
-  // A typed id stays in its own field; "Other..." opens it
-  const [custom, setCustom] = useState(false);
-  const typing = custom || (model.trim() !== "" && !known.has(model));
-  const invalid = model.trim() !== "" && !MODEL_ID_PATTERN.test(model.trim());
-  return (
-    <>
-      <select
-        id="spawn-model"
-        value={typing ? OTHER : model}
-        onChange={(e) => {
-          const v = e.target.value;
-          setCustom(v === OTHER);
-          onModel(v === OTHER ? "" : v);
-        }}
-        className={cn(INPUT_CLASS, "cursor-pointer")}
-      >
-        <option value="">Default (the CLI's own setting)</option>
-        {suggested.length > 0 && (
-          <optgroup label="Suggested">
-            {suggested.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {available.length > 0 && (
-          <optgroup label="Available to your account">
-            {available.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        <option value={OTHER}>Other (type an id)...</option>
-      </select>
-      {typing && (
-        <input
-          // biome-ignore lint/a11y/noAutofocus: opened by choosing "Other", typing is next
-          autoFocus
-          value={model}
-          onChange={(e) => onModel(e.target.value)}
-          placeholder={`${label} id, e.g. ${suggested[0] ?? available[0] ?? "model-name"}`}
-          aria-label={`${label} id`}
-          aria-invalid={invalid}
-          className={cn(INPUT_CLASS, invalid && "border-red-500/60")}
-        />
-      )}
-    </>
   );
 }
