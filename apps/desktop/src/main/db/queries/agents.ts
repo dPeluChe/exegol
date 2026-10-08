@@ -114,6 +114,14 @@ export function setAgentModel(db: Database.Database, id: string, model: string):
   db.prepare("UPDATE agents SET model = ? WHERE id = ?").run(model, id);
 }
 
+export function setAgentModelRoles(
+  db: Database.Database,
+  id: string,
+  roles: Record<string, string>,
+): void {
+  db.prepare("UPDATE agents SET model_roles = ? WHERE id = ?").run(JSON.stringify(roles), id);
+}
+
 export function setAgentCliVersion(db: Database.Database, id: string, version: string): void {
   db.prepare("UPDATE agents SET cli_version = ? WHERE id = ?").run(version, id);
 }

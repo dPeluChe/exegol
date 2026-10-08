@@ -51,12 +51,16 @@ export interface CustomLayoutSlot {
    *  (agentId) is not saved: applying the layout starts a fresh one */
   cliType?: string;
   model?: string | null;
+  modelRoles?: Record<string, string> | null;
   yolo?: boolean | null;
   accessMode?: string | null;
 }
 
 /** What a terminal pane runs, for capturing it into a layout slot */
-export type SlotAgent = Pick<CustomLayoutSlot, "cliType" | "model" | "yolo" | "accessMode">;
+export type SlotAgent = Pick<
+  CustomLayoutSlot,
+  "cliType" | "model" | "modelRoles" | "yolo" | "accessMode"
+>;
 
 /** User-saved layout snapshot. Template uses indexed slot placeholders. */
 export interface CustomLayoutPreset {

@@ -24,7 +24,11 @@ import {
   tokenUsageRowSchema,
   worktreeRowSchema,
 } from "@exegol/shared";
+import { z } from "zod";
 import { readableStep } from "../../agents/readable-step";
+import { parseJson } from "../../lib/parse-json";
+
+const modelRolesSchema = z.record(z.string(), z.string());
 
 export { nanoid } from "nanoid";
 
@@ -121,6 +125,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     launchedInShell: r.launched_in_shell === 1,
     cliVersion: r.cli_version ?? null,
     model: r.model ?? null,
+    modelRoles: r.model_roles ? parseJson(r.model_roles, modelRolesSchema) : null,
     claudeSessionId: r.claude_session_id ?? null,
     statusChangedAt: r.status_changed_at ?? null,
   };

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { classifyActivity, deriveIsolationMode, isNewerVersion, MODEL_ID_PATTERN } from "./agent";
+import {
+  appliedModelRoles,
+  classifyActivity,
+  deriveIsolationMode,
+  isNewerVersion,
+  MODEL_ID_PATTERN,
+  roleModelProblem,
+} from "./agent";
 
 // ─── classifyActivity ─────────────────────────────────────────────────────
 
@@ -139,5 +146,26 @@ describe("isNewerVersion", () => {
     expect(isNewerVersion("0.0.1769000000-gabc", "0.0.1768000000-gdef")).toBe(true);
     expect(isNewerVersion("3000.11.3 (a1b2)", "3000.12.0")).toBe(false);
     expect(isNewerVersion(null, "1.0.0")).toBe(false);
+  });
+});
+
+describe("roleModelProblem", () => {
+  it("refuses the advisors Claude Code exits on or that bill usage credits", () => {
+    expect(roleModelProblem("claude-code", "advisor", "fable", "sonnet")).toMatch(/usage credits/);
+    expect(roleModelProblem("claude-code", "advisor", "haiku", "")).toMatch(/Haiku/);
+    expect(roleModelProblem("claude-code", "advisor", "opus", "fable")).toMatch(/Fable main/);
+    expect(roleModelProblem("claude-code", "advisor", "opus", "opusplan")).toBeNull();
+  });
+
+  it("appliedModelRoles keeps only this CLI's roles that pass", () => {
+    expect(
+      appliedModelRoles("claude-code", { advisor: "fable", subagents: "haiku", bogus: "x" }, ""),
+    ).toEqual({ subagents: "haiku" });
+    expect(appliedModelRoles("crush", { subagents: "x" }, "")).toEqual({});
+  });
+
+  it("other roles only need a model id", () => {
+    expect(roleModelProblem("claude-code", "subagents", "haiku", "fable")).toBeNull();
+    expect(roleModelProblem("codex", "review", "gpt 5", "")).toBe("Not a model id");
   });
 });

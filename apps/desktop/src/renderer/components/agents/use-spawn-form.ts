@@ -11,6 +11,9 @@ import { isLaunchable } from "../../hooks/use-providers";
  *  specific past session. Two booleans could represent the impossible pair. */
 export type SessionChoice = ResumableSession | "last" | null;
 
+/** Launched with YOLO checked unless the user unticks it (Antonio, 2026-10-08) */
+const YOLO_DEFAULT_ON = new Set(["claude-code"]);
+
 /** Per-project spawn preference. A UI default, deliberately not app config:
  *  it is remembered, never synced, and a wrong value costs one checkbox click. */
 const WORKTREE_PREF_KEY = "exegol.spawn.useWorktree";
@@ -73,6 +76,7 @@ export function useSpawnForm({
   // Claude's own sessions in this folder, by /rename name: --continue only reaches the latest
   const [localSessionId, setLocalSessionId] = useState<string | null>(null);
   const [model, setModel] = useState("");
+  const [modelRoles, setModelRoles] = useState<Record<string, string>>({});
   const [name, setName] = useState("");
 
   // None picked yet: the first enabled provider
@@ -91,6 +95,19 @@ export function useSpawnForm({
     setLocalSessionId(null);
     // A model id belongs to one CLI
     setModel("");
+    setModelRoles({});
+  };
+
+  const setModelRole = (roleId: string, value: string) =>
+    setModelRoles((prev) => {
+      const next = { ...prev, [roleId]: value };
+      if (!value) delete next[roleId];
+      return next;
+    });
+
+  const applyPreset = (preset: { model: string; roles: Record<string, string> }) => {
+    setModel(preset.model);
+    setModelRoles(preset.roles);
   };
 
   const chooseSession = (choice: SessionChoice) => {
@@ -128,6 +145,7 @@ export function useSpawnForm({
     providerId,
     provider,
     yoloFlag: YOLO_FLAGS[providerId],
+
     chooseProvider,
     accessMode,
     setAccessMode,
@@ -144,10 +162,14 @@ export function useSpawnForm({
     chooseSession,
     localSessionId,
     chooseLocalSession,
-    yolo,
+    // A resume keeps the YOLO choice its session was launched with
+    yolo: yolo ?? (YOLO_DEFAULT_ON.has(providerId) && !session && !localSessionId ? true : null),
     setYolo,
     model,
     setModel,
+    modelRoles,
+    setModelRole,
+    applyPreset,
     name,
     setName,
   };

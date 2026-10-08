@@ -9,6 +9,15 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Launch Agent: "Model roles and presets" sets a second model per job for CLIs that take one at launch. Claude Code: an Advisor it consults at key decisions (`--advisor`; Opus or Sonnet, which count toward a subscription's limits; Fable is not offered because it bills usage credits) and a Subagents model; Codex: subagents and review models; OpenCode: plan agent and small-task models; Kilo: plan agent and subagents; Aider: editor model (turns on architect mode) and weak model; Goose: subagents; Droid: spec mode model. A pairing Claude Code would refuse (Fable or Haiku as advisor, any advisor under Fable) is flagged and not passed. Presets set the main model and the roles in one click: three built in for Claude Code (Opus plans and Sonnet builds with `opusplan`, Sonnet with an Opus advisor and Haiku subagents, Opus with Sonnet subagents) and your own with "Save as preset". A resume, a restart and a saved layout keep the roles; `opusplan` joins the suggested Claude models
+
+### Changed
+- Launch Agent: YOLO ("skip this CLI's own confirmations") starts checked for new Claude Code sessions; a resume keeps what its session had
+
+### Fixed
+- Droid: the model picked at launch now goes where Droid reads it (`sessionDefaultSettings.model` in the per-session settings file); it was written as a top-level `model`
+
 ## [0.5.16] — 2026-10-08 — Voice dictation, model manager and storage, safe Cmd+W with reopen, faster start
 
 ### Added
