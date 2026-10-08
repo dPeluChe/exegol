@@ -81,6 +81,16 @@ export function useWorktrees(projectId: string, enabled = true) {
   });
 }
 
+/** Every worktree Exegol owns, across projects (Dashboard card, Settings > Storage) */
+export function useAllWorktrees() {
+  return useQuery({
+    queryKey: ["allWorktrees"],
+    queryFn: () =>
+      trpcInvoke<import("@exegol/shared").FleetWorktree[]>("projects.listAllWorktrees"),
+    staleTime: 15_000,
+  });
+}
+
 // ─── Agents ──────────────────────────────────────────────────────────────────
 
 export function useAgents(projectId: string | null) {
