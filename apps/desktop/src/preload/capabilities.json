@@ -350,6 +350,7 @@
       "copyHistory",
       "deleteHistory",
       "history",
+      "mediaConsent",
       "openMicSettings",
       "requestMic",
       "start",
