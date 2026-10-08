@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentWorktreeAction,
+  cwdInside,
   parseWorktreeList,
   planDist,
   planIncremental,
@@ -74,6 +76,24 @@ describe("worktrees", () => {
       { path: "/r/.claude/worktrees/agent-a", branch: null, locked: true },
       { path: "/r/w", branch: "feat/x", locked: false },
     ]);
+  });
+
+  it("an unregistered folder is report only; locked, open or unknown PRs are kept", () => {
+    const reg = { branch: "feat/x", locked: false };
+    expect(agentWorktreeAction(undefined, null).action).toBe("report");
+    expect(agentWorktreeAction({ ...reg, locked: true }, null).action).toBe("keep");
+    expect(agentWorktreeAction(reg, "unknown").action).toBe("keep");
+    expect(agentWorktreeAction(reg, "open").action).toBe("keep");
+    expect(agentWorktreeAction(reg, "done").action).toBe("candidate");
+  });
+
+  it("matches a process cwd in the folder or below, not a sibling prefix", () => {
+    const out = "p1\nn/r/.claude/worktrees/agent-a/apps\np2\nn/r/.claude/worktrees/agent-ab\n";
+    expect(cwdInside(out, "/r/.claude/worktrees/agent-a")).toBe(true);
+    expect(cwdInside(out, "/r/.claude/worktrees/agent-b")).toBe(false);
+    expect(
+      cwdInside("p1\nn/r/.claude/worktrees/agent-abc\n", "/r/.claude/worktrees/agent-ab"),
+    ).toBe(false);
   });
 
   it("only a merged or closed PR, with none open, makes an orphan", () => {

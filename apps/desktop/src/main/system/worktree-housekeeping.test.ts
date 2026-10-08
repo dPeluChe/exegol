@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   realpathSync,
   rmSync,
   utimesSync,
@@ -13,13 +14,17 @@ import { join } from "node:path";
 import Database from "libsql";
 import { afterEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
+import { createParallelRun } from "../db/queries/parallel-runs";
 import { createWorktree } from "../db/queries/worktrees";
 import { sweepOrphanWorktrees } from "./worktree-housekeeping";
 
 const NOW = Date.now();
 const OLD_S = Math.floor((NOW - 3 * 24 * 60 * 60 * 1000) / 1000);
 let root = "";
-afterEach(() => rmSync(root, { recursive: true, force: true }));
+afterEach(() => {
+  rmSync(root, { recursive: true, force: true });
+  delete process.env.GIT_DIR;
+});
 
 const ENV = {
   ...process.env,
@@ -31,6 +36,12 @@ const ENV = {
 const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, { cwd, env: ENV, encoding: "utf-8", stdio: "pipe" });
 
+function commit(dir: string, file: string) {
+  writeFileSync(join(dir, file), file);
+  git(dir, "add", ".");
+  git(dir, "commit", "-q", "-m", file);
+}
+
 function setup() {
   root = realpathSync(mkdtempSync(join(tmpdir(), "exegol-wt-housekeeping-")));
   const origin = join(root, "origin.git");
@@ -40,9 +51,8 @@ function setup() {
   git(root, "init", "-q", "-b", "main", repo);
   mkdirSync(join(repo, ".agents"));
   writeFileSync(join(repo, ".agents", "mcp_config.json"), "{}");
-  writeFileSync(join(repo, "a.txt"), "a");
-  git(repo, "add", ".");
-  git(repo, "commit", "-q", "-m", "init");
+  writeFileSync(join(repo, ".gitignore"), "node_modules/\n.env\n");
+  commit(repo, "a.txt");
   git(repo, "remote", "add", "origin", origin);
   git(repo, "push", "-q", "origin", "main");
 
@@ -58,96 +68,157 @@ function setup() {
     utimesSync(join(path, ".git"), OLD_S, OLD_S);
     return path;
   };
-  /** A row for it, with one agent in `status` that changed three days ago */
-  const row = (id: string, path: string, status = "completed") => {
+  /** A row for it with one agent; archived three days ago unless `archived` is false */
+  const row = (id: string, path: string, opts: { status?: string; archived?: boolean } = {}) => {
     db.prepare(
-      `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at)
-       VALUES (?, 'p1', 'claude-code', ?, 't', ?)`,
-    ).run(id, status, OLD_S);
+      `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at, archived_at)
+       VALUES (?, 'p1', 'claude-code', ?, 't', ?, ?)`,
+    ).run(id, opts.status ?? "stopped", OLD_S, opts.archived === false ? null : OLD_S);
     const wt = createWorktree(db, { projectId: "p1", agentId: id, path, branchName: id });
     db.prepare("UPDATE worktrees SET created_at = ? WHERE id = ?").run(OLD_S, wt.id);
-    db.prepare("UPDATE agents SET worktree_id = ?, status_changed_at = ? WHERE id = ?").run(
-      wt.id,
-      OLD_S * 1000,
-      id,
-    );
+    db.prepare("UPDATE agents SET worktree_id = ? WHERE id = ?").run(wt.id, id);
     return wt.id;
   };
   const rowExists = (id: string) =>
     db.prepare("SELECT 1 FROM worktrees WHERE id = ?").get(id) !== undefined;
-  return { db, repo, wtRoot, worktree, row, rowExists };
+  const sweep = () => sweepOrphanWorktrees(db, [wtRoot], NOW);
+  return { db, repo, wtRoot, worktree, row, rowExists, sweep };
 }
 
 describe("sweepOrphanWorktrees", () => {
-  it("removes a clean, pushed worktree of an ended agent (the always-deleted mcp config ignored)", async () => {
-    const { db, wtRoot, worktree, row, rowExists } = setup();
+  it("removes a clean, pushed worktree of an archived agent; build output and the mcp config do not count", async () => {
+    const { worktree, row, rowExists, sweep } = setup();
     const path = worktree("clean");
     rmSync(join(path, ".agents", "mcp_config.json"));
+    mkdirSync(join(path, "node_modules", "x"), { recursive: true });
     const id = row("clean", path);
-    const result = await sweepOrphanWorktrees(db, [wtRoot], NOW);
-    expect(result).toMatchObject({ removed: 1, kept: 0 });
+    expect(await sweep()).toMatchObject({ removed: 1, kept: 0 });
     expect(existsSync(path)).toBe(false);
     expect(rowExists(id)).toBe(false);
   });
 
-  it("keeps a dirty worktree", async () => {
-    const { db, wtRoot, worktree, row, rowExists } = setup();
+  it("keeps a worktree with uncommitted work", async () => {
+    const { worktree, row, rowExists, sweep } = setup();
     const path = worktree("dirty");
     writeFileSync(join(path, "work.txt"), "unsaved");
     const id = row("dirty", path);
-    const result = await sweepOrphanWorktrees(db, [wtRoot], NOW);
-    expect(result).toMatchObject({ removed: 0, kept: 1 });
+    expect(await sweep()).toMatchObject({ removed: 0, kept: 1 });
     expect(existsSync(join(path, "work.txt"))).toBe(true);
     expect(rowExists(id)).toBe(true);
   });
 
+  it("sees untracked files even with status.showUntrackedFiles=no in the repo config", async () => {
+    const { repo, worktree, row, sweep } = setup();
+    git(repo, "config", "status.showUntrackedFiles", "no");
+    const path = worktree("hidden");
+    mkdirSync(join(path, "notes"));
+    writeFileSync(join(path, "notes", "todo.md"), "work");
+    row("hidden", path);
+    expect(await sweep()).toMatchObject({ removed: 0, kept: 1 });
+    expect(existsSync(join(path, "notes", "todo.md"))).toBe(true);
+  });
+
+  it("ignores GIT_DIR from the environment", async () => {
+    const { worktree, row, sweep } = setup();
+    const path = worktree("env");
+    row("env", path);
+    process.env.GIT_DIR = join(root, "nowhere");
+    expect(await sweep()).toMatchObject({ removed: 1 });
+  });
+
+  it("keeps a worktree holding ignored files that are not build output (.env)", async () => {
+    const { worktree, row, sweep } = setup();
+    const path = worktree("secrets");
+    writeFileSync(join(path, ".env"), "KEY=1");
+    row("secrets", path);
+    expect(await sweep()).toMatchObject({ removed: 0, kept: 1 });
+    expect(existsSync(join(path, ".env"))).toBe(true);
+  });
+
   it("keeps a worktree with unpushed commits", async () => {
-    const { db, wtRoot, worktree, row } = setup();
+    const { worktree, row, sweep } = setup();
     const path = worktree("ahead");
-    writeFileSync(join(path, "b.txt"), "b");
-    git(path, "add", ".");
-    git(path, "commit", "-q", "-m", "local only");
+    commit(path, "b.txt");
     row("ahead", path);
-    const result = await sweepOrphanWorktrees(db, [wtRoot], NOW);
-    expect(result).toMatchObject({ removed: 0, kept: 1 });
+    expect(await sweep()).toMatchObject({ removed: 0, kept: 1 });
     expect(existsSync(path)).toBe(true);
   });
 
-  it("keeps a clean, pushed worktree while its agent is live", async () => {
-    const { db, wtRoot, worktree, row } = setup();
-    const path = worktree("live");
-    row("live", path, "running");
-    const result = await sweepOrphanWorktrees(db, [wtRoot], NOW);
-    expect(result).toMatchObject({ removed: 0, kept: 0 });
+  it("keeps a worktree with submodules or an operation in progress", async () => {
+    const { worktree, row, sweep } = setup();
+    const sub = worktree("sub");
+    writeFileSync(join(sub, ".gitmodules"), "");
+    git(sub, "add", ".gitmodules");
+    git(sub, "commit", "-q", "-m", "modules");
+    git(sub, "push", "-q", "origin", "sub");
+    row("sub", sub);
+    const merging = worktree("merging");
+    const mergeHead = git(merging, "rev-parse", "--git-path", "MERGE_HEAD").trim();
+    writeFileSync(mergeHead.startsWith("/") ? mergeHead : join(merging, mergeHead), "x");
+    row("merging", merging);
+    expect(await sweep()).toMatchObject({ removed: 0, kept: 2 });
+    expect(existsSync(sub) && existsSync(merging)).toBe(true);
+  });
+
+  it("keeps a locked worktree", async () => {
+    const { repo, worktree, row, sweep } = setup();
+    const path = worktree("locked");
+    git(repo, "worktree", "lock", path);
+    row("locked", path);
+    expect(await sweep()).toMatchObject({ removed: 0, kept: 1 });
+    expect(existsSync(path)).toBe(true);
+  });
+
+  it("never touches a worktree whose agent is live or can still be resumed", async () => {
+    const { worktree, row, sweep } = setup();
+    const live = worktree("live");
+    row("live", live, { status: "running", archived: false });
+    const crashed = worktree("crashed");
+    row("crashed", crashed, { status: "crashed", archived: false });
+    expect(await sweep()).toMatchObject({ removed: 0, kept: 0 });
+    expect(existsSync(live) && existsSync(crashed)).toBe(true);
+  });
+
+  it("keeps the worktrees of a race still waiting for a pick", async () => {
+    const { db, worktree, row, sweep } = setup();
+    const path = worktree("racer");
+    row("racer", path);
+    const run = createParallelRun(db, {
+      projectId: "p1",
+      taskDescription: "t",
+      cliTypes: ["c"],
+      agentIds: ["racer"],
+    });
+    db.prepare("UPDATE parallel_runs SET status = 'completed' WHERE id = ?").run(run.id);
+    expect(await sweep()).toMatchObject({ removed: 0 });
     expect(existsSync(path)).toBe(true);
   });
 
   it("drops the row and prunes the registration of a missing directory", async () => {
-    const { db, repo, wtRoot, worktree, row, rowExists } = setup();
+    const { repo, worktree, row, rowExists, sweep } = setup();
     const path = worktree("gone");
     const id = row("gone", path);
     rmSync(path, { recursive: true });
-    const result = await sweepOrphanWorktrees(db, [wtRoot], NOW);
-    expect(result.droppedRows).toBe(1);
+    expect((await sweep()).droppedRows).toBe(1);
     expect(rowExists(id)).toBe(false);
     expect(git(repo, "worktree", "list")).not.toContain(path);
   });
 
-  it("removes a clean, pushed directory with no row, keeps an unpushed one", async () => {
-    const { db, wtRoot, worktree } = setup();
+  it("removes a clean, pushed folder with no row; keeps unpushed ones, plain folders, and finishes a trash", async () => {
+    const { wtRoot, worktree, sweep } = setup();
     const clean = worktree("norow");
     const ahead = worktree("norow-ahead", { push: false });
-    writeFileSync(join(ahead, "b.txt"), "b");
-    git(ahead, "add", ".");
-    git(ahead, "commit", "-q", "-m", "local only");
+    commit(ahead, "b.txt");
     utimesSync(join(ahead, ".git"), OLD_S, OLD_S);
     // No .git of its own: git would answer for an enclosing repo, so it is never removed
     const plain = join(wtRoot, "proj", "plain");
     mkdirSync(plain);
-    const result = await sweepOrphanWorktrees(db, [wtRoot], NOW);
-    expect(result).toMatchObject({ removed: 1, kept: 2 });
+    mkdirSync(join(wtRoot, "proj", ".exegol-trash-old-1", "x"), { recursive: true });
+    expect(await sweep()).toMatchObject({ removed: 1, kept: 2 });
     expect(existsSync(clean)).toBe(false);
-    expect(existsSync(ahead)).toBe(true);
-    expect(existsSync(plain)).toBe(true);
+    expect(existsSync(ahead) && existsSync(plain)).toBe(true);
+    expect(readdirSync(join(wtRoot, "proj")).some((n) => n.startsWith(".exegol-trash-"))).toBe(
+      false,
+    );
   });
 });

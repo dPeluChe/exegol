@@ -72,24 +72,43 @@ worktrees (never in the postpackage run).
 
 #### Orphaned worktrees
 
-One rule everywhere (`main/lib/worktree-safety.ts`): a worktree is removed only when
-`git status --porcelain` is empty (the always-deleted `.agents/mcp_config.json` aside) and
-`git rev-list HEAD --not --remotes` is empty (its commits are on a remote: pushed, or already in
-origin/main). Anything else is reported and kept. Branches are never deleted.
+One rule everywhere (`main/lib/worktree-safety.ts`, `worktreeSafety`). Git runs with every
+`GIT_*` variable removed from the environment and `-c status.showUntrackedFiles=all`, so no user
+setting hides a file. A worktree may go only when all of these hold; otherwise it is reported and
+kept, and branches are never deleted:
 
-- `clean:build` worktrees section: `git worktree prune` (dry run: `--dry-run -v`), then each
-  `.claude/worktrees/agent-*` of the main checkout is an orphan when its branch's PR is merged or
-  closed (`gh pr list --head <branch> --state all`; gh missing or offline only reports) or it is
-  not a registered worktree. Removal: `git worktree remove --force`, then a Finder `.DS_Store`
-  and the empty folder. Never the main checkout or the checkout running the script; locked ones
-  are kept.
-- The app, in the same daily housekeeping (`main/system/worktree-housekeeping.ts`), over
-  `~/.exegol/worktrees` and `~/.exegol/pipelines`: a `worktrees` row whose folder is gone is
-  dropped and the repo's registrations pruned; a row whose agents ended over a day ago, or a
-  folder (older than a day) with no row, is removed under the rule above. Never while an agent is
-  live in it, an active pipeline (pending, running, paused) uses its path, or a running race
-  holds its agent; the repo must be a registered project. The folder is deleted off the main
-  thread, then `git worktree prune`. One summary log line.
+1. git answers for that folder itself (`rev-parse --show-toplevel` is the folder)
+2. no `.gitmodules`
+3. no operation in progress: none of `rebase-merge`, `rebase-apply`, `MERGE_HEAD`,
+   `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `BISECT_LOG` exists at its `git rev-parse --git-path`
+4. `git status --porcelain --untracked-files=all --ignore-submodules=none --ignored=matching`
+   lists nothing but `.agents/mcp_config.json` and ignored build output: `node_modules`, `dist`,
+   `out`, `build`, `.turbo`, `target`, `.next`, `coverage`, `.vite`, `.cache`, `*.log`,
+   `.DS_Store` (any other ignored file, such as `.env` or a local database, keeps it)
+5. `git rev-list --count HEAD --not --remotes` is 0: every commit is pushed or already in
+   origin/main
+6. not locked (`git worktree list --porcelain`)
+
+- `clean:build` worktrees section (explicit runs only, never the postpackage run):
+  `git worktree prune` (dry run: `--dry-run -v`), then each `.claude/worktrees/agent-*` of the
+  main checkout whose branch's PR is merged or closed with none open (`gh pr list --head <branch>
+  --state all`; gh missing or offline keeps it). A folder that is not a registered worktree is
+  reported, never removed. Also kept: the main checkout, the checkout running the script, and a
+  folder that is the cwd of a running process (`lsof -a -d cwd -Fn`; lsof failing keeps all).
+  Removal: `git checkout -- .agents/mcp_config.json`, then a plain `git worktree remove` (no
+  `--force`, so git checks again; 120 s timeout), then a Finder `.DS_Store` and the empty folder.
+- The app, in the daily housekeeping (`main/system/worktree-housekeeping.ts`), over
+  `~/.exegol/worktrees` and `~/.exegol/pipelines`, for repos that are registered projects:
+  - a `worktrees` row whose folder is gone: row dropped, the repo's registrations pruned
+  - a row whose agents are all archived, the last over a day ago (or with no agent, created over
+    a day ago), and a folder with no row whose `.git` is over a day old: removed under the rule
+  - never while an agent is live in it, a session can still be resumed into it (stopped, crashed
+    or suspended and not archived), an active pipeline (pending, running, paused) has its path,
+    or a race is running or completed with no pick yet
+  - removal: the path joins `removingWorktrees` (a spawn never reuses it meanwhile), the
+    live-agent check runs again, the folder is renamed to `.exegol-trash-<name>-<ts>` beside it,
+    `git worktree prune`, then the trash is deleted off the main thread (a later sweep finishes a
+    trash left behind). One summary log line, no paths
 
 The app also sweeps per-agent files once a day, at startup and then daily while open
 (`main/system/housekeeping.ts`): `~/.exegol/hooks/<id>.json`, `~/.exegol/mcp/<id>.json` and

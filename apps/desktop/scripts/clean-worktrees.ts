@@ -1,11 +1,19 @@
 // clean:build worktrees section: `git worktree prune` and orphaned `.claude/worktrees/agent-*`.
-// Removes only what worktreeSafety allows (clean, nothing unpushed); never branches, never the
-// main checkout or the checkout running this script.
+// Removes only what worktreeSafety allows, with a plain `git worktree remove` so git checks
+// again; never branches, never the main checkout or the checkout running this script.
 import { existsSync, lstatSync, readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { worktreeSafety } from "../src/main/lib/worktree-safety";
-import { AGENT_WORKTREE_DIR, parseWorktreeList, prVerdict } from "./clean-build-plan";
+import { ALWAYS_CHANGED, runGit, worktreeSafety } from "../src/main/lib/worktree-safety";
+import {
+  AGENT_WORKTREE_DIR,
+  agentWorktreeAction,
+  cwdInside,
+  parseWorktreeList,
+  prVerdict,
+} from "./clean-build-plan";
 import { duBytes, human, run } from "./clean-exec";
+
+const REMOVE_TIMEOUT_MS = 120_000;
 
 const real = (p: string) => {
   try {
@@ -14,6 +22,9 @@ const real = (p: string) => {
     return p;
   }
 };
+
+const git = (args: string[], cwd: string, timeoutMs?: number) =>
+  runGit(args, cwd, timeoutMs).catch(() => null);
 
 function prStates(main: string, branch: string): string[] | null {
   const out = run(
@@ -30,40 +41,21 @@ function prStates(main: string, branch: string): string[] | null {
   }
 }
 
-/** Why this agent worktree is an orphan, or null when it is not (or that is unknown) */
-function orphanReason(
-  main: string,
-  registered: { branch: string | null; locked: boolean } | undefined,
-): { orphan: string | null; note: string } {
-  if (!registered) return { orphan: "not a registered worktree", note: "" };
-  if (registered.locked) return { orphan: null, note: "locked" };
-  if (!registered.branch) return { orphan: null, note: "detached HEAD, PR unknown" };
-  const verdict = prVerdict(prStates(main, registered.branch));
-  if (verdict === "done")
-    return { orphan: `PR of ${registered.branch} merged or closed`, note: "" };
-  const note = {
-    unknown: "PR state unknown (gh missing or offline)",
-    open: "PR open",
-    none: "no PR",
-  };
-  return { orphan: null, note: `${registered.branch}: ${note[verdict]}` };
-}
-
 export async function worktreeSection(root: string, apply: boolean): Promise<number> {
   console.log("\nworktrees (--repo-only skips this; branches are never deleted)");
-  const common = run("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], [0], root);
+  const common = await git(["rev-parse", "--path-format=absolute", "--git-common-dir"], root);
   if (common === null) {
     console.log("  git unavailable, skipped");
     return 0;
   }
   const main = dirname(common.trim());
 
-  const prune = run("git", ["worktree", "prune", "-v", ...(apply ? [] : ["--dry-run"])], [0], main);
+  const prune = await git(["worktree", "prune", "-v", ...(apply ? [] : ["--dry-run"])], main);
   for (const line of (prune ?? "").split("\n").filter(Boolean)) {
     console.log(`  ${apply ? "pruned" : "would prune"}: ${line}`);
   }
 
-  const list = parseWorktreeList(run("git", ["worktree", "list", "--porcelain"], [0], main) ?? "");
+  const list = parseWorktreeList((await git(["worktree", "list", "--porcelain"], main)) ?? "");
   const byPath = new Map(list.map((w) => [real(w.path), w]));
   const base = join(main, ".claude/worktrees");
   let names: string[] = [];
@@ -72,6 +64,9 @@ export async function worktreeSection(root: string, apply: boolean): Promise<num
   } catch {
     /* no agent worktrees */
   }
+  if (names.length === 0) console.log("  no agent worktrees");
+  // A shell or agent sitting in a worktree keeps it; no lsof answer keeps them all
+  const cwds = run("lsof", ["-a", "-d", "cwd", "-Fn"], [0, 1]);
   let freed = 0;
   for (const name of names) {
     const dir = join(base, name);
@@ -80,24 +75,33 @@ export async function worktreeSection(root: string, apply: boolean): Promise<num
       console.log(`  skip ${name} (this checkout)`);
       continue;
     }
-    const { orphan, note } = orphanReason(main, byPath.get(real(dir)));
-    if (!orphan) {
-      console.log(`  keep ${name} (${note})`);
+    const reg = byPath.get(real(dir));
+    const pr = reg && !reg.locked && reg.branch ? prVerdict(prStates(main, reg.branch)) : null;
+    const { action, note } = agentWorktreeAction(reg, pr);
+    if (action !== "candidate") {
+      const size = action === "report" ? ` ${human(duBytes(dir) ?? 0)}` : "";
+      console.log(`  ${action} ${name}${size} (${note})`);
+      continue;
+    }
+    if (cwds === null || cwdInside(cwds, real(dir)) || cwdInside(cwds, dir)) {
+      console.log(`  keep ${name} (${cwds === null ? "lsof failed" : "a process runs in it"})`);
       continue;
     }
     const size = duBytes(dir) ?? 0;
     const safety = await worktreeSafety(dir);
     if (!safety.removable) {
-      console.log(`  report ${name} ${human(size)}: ${orphan}, kept (${safety.reason})`);
+      console.log(`  report ${name} ${human(size)}: ${note}, kept (${safety.reason})`);
       continue;
     }
     if (!apply) {
-      console.log(`  would remove ${name} ${human(size)}: ${orphan}`);
+      console.log(`  would remove ${name} ${human(size)}: ${note}`);
       freed += size;
       continue;
     }
-    if (run("git", ["worktree", "remove", "--force", dir], [0], main) === null) {
-      console.log(`  skip ${name} (git worktree remove failed)`);
+    // Restore only the always-deleted file, so the plain remove (git re-checks) accepts the tree
+    await git(["checkout", "--", ALWAYS_CHANGED], dir);
+    if ((await git(["worktree", "remove", dir], main, REMOVE_TIMEOUT_MS)) === null) {
+      console.log(`  skip ${name} (git worktree remove refused or failed)`);
       continue;
     }
     // Finder's .DS_Store keeps the folder after git removed everything it knew
@@ -109,9 +113,8 @@ export async function worktreeSection(root: string, apply: boolean): Promise<num
         console.log(`  ${name}: leftovers kept (not empty)`);
       }
     }
-    console.log(`  removed ${name} ${human(size)}: ${orphan}`);
+    console.log(`  removed ${name} ${human(size)}: ${note}`);
     freed += size;
   }
-  if (names.length === 0) console.log("  no agent worktrees");
   return freed;
 }

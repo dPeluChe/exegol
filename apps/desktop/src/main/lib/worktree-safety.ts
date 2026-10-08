@@ -1,43 +1,161 @@
 import { execFile } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 
 // No electron or logger imports: scripts/clean-build.ts uses this too.
 const execFileAsync = promisify(execFile);
 
 /** Deleted in every checkout by the MCP setup, so it never counts as work */
-const ALWAYS_CHANGED = ".agents/mcp_config.json";
+export const ALWAYS_CHANGED = ".agents/mcp_config.json";
 
-export type GitRunner = (args: string[], cwd: string) => Promise<string>;
+/** Ignored paths a build or install recreates; any other ignored file (.env, a local DB) is work */
+const REGENERABLE_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "out",
+  "build",
+  ".turbo",
+  "target",
+  ".next",
+  "coverage",
+  ".vite",
+  ".cache",
+]);
+const REGENERABLE_FILE = /(^|\/)(\.DS_Store|[^/]+\.log)$/;
 
-export const runGit: GitRunner = async (args, cwd) =>
-  (await execFileAsync("git", args, { cwd, timeout: 10_000, encoding: "utf-8" })).stdout;
+const IN_PROGRESS = [
+  "rebase-merge",
+  "rebase-apply",
+  "MERGE_HEAD",
+  "CHERRY_PICK_HEAD",
+  "REVERT_HEAD",
+  "BISECT_LOG",
+];
+
+export type GitRunner = (args: string[], cwd: string, timeoutMs?: number) => Promise<string>;
+
+/** No GIT_* from the caller (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_PARAMETERS...) and no user
+ *  setting that hides files from status */
+function cleanEnv(): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+}
+
+export const runGit: GitRunner = async (args, cwd, timeoutMs = 10_000) =>
+  (
+    await execFileAsync(
+      "git",
+      ["-c", "status.showUntrackedFiles=all", "-c", "core.fsmonitor=false", ...args],
+      { cwd, timeout: timeoutMs, encoding: "utf-8", env: cleanEnv(), maxBuffer: 64 * 1024 * 1024 },
+    )
+  ).stdout;
+
+export type WorktreeSafetyReason =
+  | "clean and pushed"
+  | "uncommitted changes"
+  | "ignored files that are not build output"
+  | "unpushed commits"
+  | "submodules"
+  | "operation in progress"
+  | "git check failed";
 
 export interface WorktreeSafety {
   removable: boolean;
-  reason: "clean and pushed" | "uncommitted changes" | "unpushed commits" | "git check failed";
+  reason: WorktreeSafetyReason;
 }
 
+export function isRegenerable(ignoredPath: string): boolean {
+  const path = ignoredPath.replace(/\/$/, "");
+  return path.split("/").some((s) => REGENERABLE_DIRS.has(s)) || REGENERABLE_FILE.test(path);
+}
+
+const keep = (reason: WorktreeSafetyReason): WorktreeSafety => ({ removable: false, reason });
+
 /**
- * The one rule for removing a worktree: no uncommitted change and no commit that is not on a
- * remote branch (pushed, or already in origin/main). Any git failure keeps it
+ * The one rule for removing a worktree (docs/GUIDES/RELEASE.md "Orphaned worktrees"): its own
+ * checkout, no submodules, no operation in progress, nothing changed or untracked, ignored files
+ * only build output, every commit on a remote. Any git failure keeps it
  */
 export async function worktreeSafety(dir: string, git = runGit): Promise<WorktreeSafety> {
   try {
     // Without its own .git, git would answer for an enclosing repo (the main checkout)
     const top = (await git(["rev-parse", "--show-toplevel"], dir)).trim();
-    if (realpathSync(top) !== realpathSync(dir))
-      return { removable: false, reason: "git check failed" };
-    const status = await git(["status", "--porcelain"], dir);
-    const changes = status.split("\n").filter((l) => l.trim() && l.slice(3) !== ALWAYS_CHANGED);
-    if (changes.length > 0) return { removable: false, reason: "uncommitted changes" };
-    const unpushed = await git(["rev-list", "--count", "HEAD", "--not", "--remotes"], dir);
-    if (Number.parseInt(unpushed.trim(), 10) !== 0) {
-      return { removable: false, reason: "unpushed commits" };
+    if (realpathSync(top) !== realpathSync(dir)) return keep("git check failed");
+    if (existsSync(join(dir, ".gitmodules"))) return keep("submodules");
+    const markers = (
+      await git(["rev-parse", ...IN_PROGRESS.flatMap((m) => ["--git-path", m])], dir)
+    )
+      .split("\n")
+      .filter(Boolean);
+    if (markers.length !== IN_PROGRESS.length) return keep("git check failed");
+    if (markers.some((m) => existsSync(isAbsolute(m) ? m : join(dir, m)))) {
+      return keep("operation in progress");
     }
+    const status = await git(
+      [
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--ignore-submodules=none",
+        "--ignored=matching",
+      ],
+      dir,
+    );
+    for (const line of status.split("\n").filter((l) => l.trim())) {
+      const path = line.slice(3);
+      if (line.startsWith("!! ")) {
+        if (!isRegenerable(path)) return keep("ignored files that are not build output");
+      } else if (path !== ALWAYS_CHANGED) {
+        return keep("uncommitted changes");
+      }
+    }
+    const unpushed = await git(["rev-list", "--count", "HEAD", "--not", "--remotes"], dir);
+    if (Number.parseInt(unpushed.trim(), 10) !== 0) return keep("unpushed commits");
     return { removable: true, reason: "clean and pushed" };
   } catch {
-    return { removable: false, reason: "git check failed" };
+    return keep("git check failed");
+  }
+}
+
+export interface RegisteredWorktree {
+  path: string;
+  branch: string | null;
+  locked: boolean;
+}
+
+/** `git worktree list --porcelain` blocks */
+export function parseWorktreeList(text: string): RegisteredWorktree[] {
+  return text.split("\n\n").flatMap((block) => {
+    const lines = block.split("\n");
+    const path = lines.find((l) => l.startsWith("worktree "))?.slice(9);
+    if (!path) return [];
+    const ref = lines.find((l) => l.startsWith("branch "))?.slice(7);
+    return [
+      {
+        path,
+        branch: ref ? ref.replace(/^refs\/heads\//, "") : null,
+        locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
+      },
+    ];
+  });
+}
+
+const real = (p: string) => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+};
+
+/** Locked, or unknown because git failed: either way it stays */
+export async function isLockedOrUnknown(repo: string, dir: string, git = runGit): Promise<boolean> {
+  try {
+    const list = parseWorktreeList(await git(["worktree", "list", "--porcelain"], repo));
+    const entry = list.find((w) => real(w.path) === real(dir));
+    return !entry || entry.locked;
+  } catch {
+    return true;
   }
 }
 

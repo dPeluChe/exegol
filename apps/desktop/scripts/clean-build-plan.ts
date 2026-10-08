@@ -136,28 +136,7 @@ export function planTestTmp(entries: Entry[], cutoff: number): string[] {
   return entries.filter((e) => TEST_TMP_DIR.test(e.name) && e.mtimeMs < cutoff).map((e) => e.name);
 }
 
-export interface RegisteredWorktree {
-  path: string;
-  branch: string | null;
-  locked: boolean;
-}
-
-/** `git worktree list --porcelain` blocks */
-export function parseWorktreeList(text: string): RegisteredWorktree[] {
-  return text.split("\n\n").flatMap((block) => {
-    const lines = block.split("\n");
-    const path = lines.find((l) => l.startsWith("worktree "))?.slice(9);
-    if (!path) return [];
-    const ref = lines.find((l) => l.startsWith("branch "))?.slice(7);
-    return [
-      {
-        path,
-        branch: ref ? ref.replace(/^refs\/heads\//, "") : null,
-        locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
-      },
-    ];
-  });
-}
+export { parseWorktreeList } from "../src/main/lib/worktree-safety";
 
 /** From `gh pr list --head <branch> --state all --json state`; null = gh missing or offline */
 export function prVerdict(states: string[] | null): "unknown" | "open" | "none" | "done" {
@@ -167,3 +146,32 @@ export function prVerdict(states: string[] | null): "unknown" | "open" | "none" 
 }
 
 export const AGENT_WORKTREE_DIR = /^agent-[A-Za-z0-9]+$/;
+
+/** True when an `lsof -d cwd -Fn` line names `dir` or a folder inside it */
+export function cwdInside(lsofOutput: string, dir: string): boolean {
+  return lsofOutput
+    .split("\n")
+    .filter((l) => l.startsWith("n"))
+    .some((l) => l.slice(1) === dir || l.slice(1).startsWith(`${dir}/`));
+}
+
+/**
+ * An agent worktree is a removal candidate only when registered, unlocked and its branch's PR
+ * merged or closed; an unregistered folder is reported, never removed
+ */
+export function agentWorktreeAction(
+  registered: { branch: string | null; locked: boolean } | undefined,
+  pr: ReturnType<typeof prVerdict> | null,
+): { action: "candidate" | "report" | "keep"; note: string } {
+  if (!registered) return { action: "report", note: "not a registered worktree, report only" };
+  if (registered.locked) return { action: "keep", note: "locked" };
+  if (!registered.branch) return { action: "keep", note: "detached HEAD, PR unknown" };
+  if (pr === "done")
+    return { action: "candidate", note: `PR of ${registered.branch} merged or closed` };
+  const notes = {
+    unknown: "PR state unknown (gh missing or offline)",
+    open: "PR open",
+    none: "no PR",
+  };
+  return { action: "keep", note: `${registered.branch}: ${notes[pr ?? "unknown"]}` };
+}

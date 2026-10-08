@@ -29,6 +29,9 @@ function worktreeRootFor(projectName: string, rootKind: RootKind = "worktrees"):
   return join(WORKTREE_ROOTS[rootKind], slugifyProjectName(projectName));
 }
 
+/** Worktrees the housekeeping sweep is deleting: a spawn must not reuse them meanwhile */
+export const removingWorktrees = new Set<string>();
+
 export const WORKTREE_ROOTS: Record<RootKind, string> = {
   worktrees: join(homedir(), ".exegol", "worktrees"),
   pipelines: join(homedir(), ".exegol", "pipelines"),
