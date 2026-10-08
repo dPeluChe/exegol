@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.16] — 2026-10-08 — Voice dictation, model manager and storage, safe Cmd+W with reopen, faster start
+
 ### Added
 - Empty-pane launcher: Finder (Explorer on Windows, File manager on Linux) and Open in IDE buttons next to Terminal, Files and Git open the selected "Run in" folder, the root or a subfolder; the Run-in folders sit centered in the launcher's width under a "Run in" heading with a refresh button (finds folders and commands again), and past 12 folders get a filter and a "+N more" toggle
 - Voice dictation, on this machine: press Cmd+Shift+Space (Ctrl+Shift+Space on Linux and Windows) to start and again to insert, or hold it while you talk; Esc cancels. The text goes only into the focused pane: pasted into a terminal (an agent or a shell) without pressing Enter (a setting can press it), typed into a browser page's focused field (never a password field, and only on the page you started on) or at the code editor's cursor; with nothing focused, or while an agent waits on a question, it is copied instead. Switching to another app cancels it. A small overlay over the pane shows a live waveform, the time and, with the Nemotron streaming model, the words as you speak. Audio never leaves the computer and is never saved. Settings > Dictation: shortcut, microphone status (a button to System Settings when macOS denied it), press Enter, longest dictation, stop after a pause, free the model after a while idle, and the history of your dictations (copy, delete, clear, kept 30 days or 500 by default). A Dictation mic button joins the status bar, on by default once the microphone was allowed. With no model downloaded, the overlay offers Parakeet v3 with its size
