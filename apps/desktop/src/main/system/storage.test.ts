@@ -1,8 +1,16 @@
-import { mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildStorageReport, clearOldLogs, clearScreenshots, dirSize } from "./storage";
+import {
+  buildStorageReport,
+  clearOldLogs,
+  clearScreenshots,
+  dirSize,
+  duBytes,
+  resolveOtherTarget,
+  worktreeSizes,
+} from "./storage";
 
 function write(path: string, bytes: number) {
   mkdirSync(join(path, ".."), { recursive: true });
@@ -67,6 +75,62 @@ describe("storage", () => {
       { projectId: "ABC", projectName: "Proj", bytes: 85, cacheBytes: 80 },
     ]);
     expect(report.freeBytes).toBeGreaterThan(0);
+  });
+
+  it("breaks Other down into the uncounted top-level entries of both roots", async () => {
+    const { paths } = fixture();
+    write(join(paths.userData, "GPUCache", "data_0"), 40);
+    mkdirSync(join(paths.exegolDir, "empty"));
+    const report = await buildStorageReport(paths, []);
+    expect(report.otherEntries).toEqual([
+      { root: "userData", name: "GPUCache", bytes: 40, isDir: true },
+      { root: "exegol", name: "hooks", bytes: 7, isDir: true },
+      { root: "userData", name: "Preferences", bytes: 3, isDir: false },
+    ]);
+    expect(report.rows.find((r) => r.category === "other")?.bytes).toBe(50);
+  });
+
+  it("sizes worktrees by id, 0 when the folder is gone", async () => {
+    const { paths } = fixture();
+    const sizes = await worktreeSizes([
+      { id: "w1", path: join(paths.exegolDir, "worktrees", "proj", "wt") },
+      { id: "w2", path: join(paths.exegolDir, "worktrees", "proj", "gone") },
+    ]);
+    expect(sizes.w1).toBeGreaterThanOrEqual(400);
+    expect(sizes.w2).toBe(0);
+  });
+
+  it("sizes a worktree null, not 0, when measuring fails", async () => {
+    const { paths } = fixture();
+    const path = join(paths.exegolDir, "worktrees", "proj", "wt");
+    const sizes = await worktreeSizes([{ id: "w1", path }], async () => null);
+    expect(sizes).toEqual({ w1: null });
+    expect(await duBytes(join(paths.exegolDir, "missing"))).toBeNull();
+  });
+
+  it("opens only an Other entry the cached report lists, never a link", async () => {
+    const { paths } = fixture();
+    write(join(paths.exegolDir, "cache", "c"), 4);
+    expect((await resolveOtherTarget(paths, null, "exegol", "hooks")).ok).toBe(false);
+
+    const report = await buildStorageReport(paths, []);
+    expect(await resolveOtherTarget(paths, report, "exegol", "hooks")).toEqual({
+      ok: true,
+      target: join(paths.exegolDir, "hooks"),
+      isDir: true,
+    });
+    expect(await resolveOtherTarget(paths, report, "exegol", "models")).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("not listed"),
+    });
+
+    // Swapped for a link after the report was taken
+    rmSync(join(paths.exegolDir, "cache"), { recursive: true });
+    symlinkSync(paths.userData, join(paths.exegolDir, "cache"));
+    expect(await resolveOtherTarget(paths, report, "exegol", "cache")).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("link"),
+    });
   });
 
   it("clears screenshots and only the rotated logs", async () => {

@@ -12,6 +12,7 @@
       "listAllWorktrees",
       "listWorktrees",
       "open",
+      "openFolder",
       "openInIde",
       "rename",
       "reorder",
@@ -90,6 +91,7 @@
       "ports",
       "preferredPort",
       "project",
+      "refreshRunTargets",
       "runPins",
       "runTargets",
       "setPreferredPort",
@@ -336,7 +338,9 @@
       "clearOldLogs",
       "clearScreenshots",
       "openFolder",
-      "report"
+      "openOther",
+      "report",
+      "worktreeSizes"
     ],
     "dictation": [
       "cancel",

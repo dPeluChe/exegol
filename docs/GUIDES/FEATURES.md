@@ -12,7 +12,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   optional keyboard number (Edit project). Projects can be grouped in the sidebar.
 - **Tabs and panes**: every project has workspace tabs; a tab splits into panes of five types:
   terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer), git, and an
-  empty pane with the agent launcher.
+  empty pane with the agent launcher. Its "Run in" row opens the chosen folder (root or a
+  subfolder) in a terminal, Files, Git, Finder (Explorer on Windows, the file manager on Linux) or
+  the project's IDE. Its refresh button finds the folders and their commands again; past 12
+  folders a filter and "+N more" keep the row short.
 - **Layouts**: six presets (Single, Split Horizontal, Split Vertical, Three Columns, Bottom
   Terminal 70/30, 2×2 Grid), your own saved layouts, and Equalize splits. A project keeps its
   own named layouts (its menu > Layouts...) that start its terminals and agents again. Drag a pane by its left
@@ -141,8 +144,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is
   badged and asks before download or set as default.
-- **Storage** (Settings > Storage): Exegol's disk use by kind and the free space, with open
-  folder, clear screenshots, clear old logs, delete a model and clear a project's browser cache; Worktrees opens the Dashboard.
+- **Storage** (Settings > Storage): tabs Overview (disk use by kind as a bar and a list, free
+  space, open folder, clear screenshots, clear old logs), Speech models (download, set as default,
+  delete), Browser (per-project size, clear cache), Worktrees (size, project, branch, dirty or
+  clean; cleanup from the Dashboard) and Other (the largest uncounted files and folders, open each).
 - **API keys** are encrypted with the system keychain.
 - **Updates**: the title-bar button checks GitHub releases, installs the new version and shows
   what's new.
