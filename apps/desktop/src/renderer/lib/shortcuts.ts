@@ -31,6 +31,13 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "cycle-sidebar-view",
+    label: "Next Sidebar View",
+    description: "Agents, Projects, Needs attention",
+    keys: "Cmd+Shift+B",
+    category: "navigation",
+  },
+  {
     id: "settings",
     label: "Settings",
     description: "Open the Settings window",

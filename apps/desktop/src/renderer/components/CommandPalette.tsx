@@ -20,6 +20,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appKeys } from "../lib/keymap";
+import { SIDEBAR_VIEW_META } from "../lib/sidebar-views";
 import { runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../stores/agents";
@@ -84,6 +85,21 @@ function useCommands(close: () => void): Command[] {
         shortcut: "⌘B",
         action: run(() => useAppStore.getState().toggleSidebar()),
       },
+      {
+        id: "nav:sidebar-next",
+        label: "Next Sidebar View",
+        category: "navigation",
+        icon: PanelLeft,
+        shortcut: "⌘⇧B",
+        action: run(() => useAppStore.getState().cycleSidebarView()),
+      },
+      ...SIDEBAR_VIEW_META.map(({ id, label, icon }) => ({
+        id: `nav:sidebar-${id}`,
+        label: `Show ${label} in Sidebar`,
+        category: "navigation" as const,
+        icon,
+        action: run(() => useAppStore.getState().openSidebarView(id)),
+      })),
       {
         id: "nav:welcome-tour",
         label: "Show welcome tour",

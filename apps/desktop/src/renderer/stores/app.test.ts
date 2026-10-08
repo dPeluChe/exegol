@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { migrateAppStore, useAppStore } from "./app";
+import { SIDEBAR_VIEW_META } from "../lib/sidebar-views";
+import { migrateAppStore, SIDEBAR_VIEWS, useAppStore } from "./app";
 
 describe("migrateAppStore", () => {
   it("v2 → v3: someone who finished onboarding does not get the welcome tour", () => {
@@ -70,6 +71,22 @@ describe("openSidebarView", () => {
       sidebarCollapsed: false,
       sidebarView: "attention",
     });
+  });
+});
+
+describe("cycleSidebarView", () => {
+  it("SIDEBAR_VIEW_META lists the views in SIDEBAR_VIEWS order", () => {
+    expect(SIDEBAR_VIEW_META.map((v) => v.id)).toEqual([...SIDEBAR_VIEWS]);
+  });
+
+  it("walks Agents, Projects, Needs attention and back, expanding the sidebar", () => {
+    useAppStore.setState({ sidebarCollapsed: true, sidebarView: "agents" });
+    const seen = [1, 2, 3].map(() => {
+      useAppStore.getState().cycleSidebarView();
+      return useAppStore.getState().sidebarView;
+    });
+    expect(seen).toEqual(["projects", "attention", "agents"]);
+    expect(useAppStore.getState().sidebarCollapsed).toBe(false);
   });
 });
 

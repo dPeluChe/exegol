@@ -1,27 +1,11 @@
 import { cn } from "@exegol/ui";
-import {
-  Activity,
-  Bell,
-  Cuboid,
-  LayoutDashboard,
-  type LucideIcon,
-  PanelLeftOpen,
-  Pause,
-  Plus,
-  Settings,
-} from "lucide-react";
+import { LayoutDashboard, PanelLeftOpen, Pause, Plus, Settings } from "lucide-react";
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
-import { isLiveSession, useSidebarCounts } from "../../lib/sidebar-views";
+import { isLiveSession, SIDEBAR_VIEW_META, useSidebarCounts } from "../../lib/sidebar-views";
 import { isLiveAgent, useAgentStore } from "../../stores/agents";
-import { type SidebarView, useAppStore } from "../../stores/app";
+import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
-
-const RAIL_VIEWS: { id: SidebarView; label: string; icon: LucideIcon }[] = [
-  { id: "agents", label: "Agents", icon: Activity },
-  { id: "projects", label: "Projects", icon: Cuboid },
-  { id: "attention", label: "Needs attention", icon: Bell },
-];
 
 /**
  * The collapsed sidebar: icons instead of nothing. Collapsing used to hide the
@@ -87,7 +71,7 @@ export function SidebarRail() {
       </button>
       <div className="my-1 h-px w-6 bg-border" />
       {/* The sidebar's three views: each opens the sidebar on it */}
-      {RAIL_VIEWS.map(({ id, label, icon: Icon }) => {
+      {SIDEBAR_VIEW_META.map(({ id, label, icon: Icon }) => {
         const count = id === "agents" ? liveCount : id === "attention" ? attentionCount : 0;
         return (
           <button

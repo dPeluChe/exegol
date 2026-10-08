@@ -2,7 +2,7 @@ import { cn, Separator } from "@exegol/ui";
 import { ArrowDownAZ, GripVertical, LayoutDashboard, Plus } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
-import { useSidebarCounts } from "../../lib/sidebar-views";
+import { SIDEBAR_VIEW_META, useSidebarCounts } from "../../lib/sidebar-views";
 import { type SidebarView, useAppStore } from "../../stores/app";
 import { SegmentedTabs } from "../common/SegmentedTabs";
 import { ProjectsSection } from "./ProjectsSection";
@@ -68,16 +68,15 @@ export function Sidebar() {
           panelId={PANEL_ID}
           active={view}
           onChange={setView}
-          tabs={[
-            { id: "agents", label: "Agents", count: liveCount || undefined },
-            { id: "projects", label: "Projects", count: projectCount || undefined },
-            {
-              id: "attention",
-              label: "Needs attention",
-              count: attentionCount || undefined,
-              alert: unreadCount > 0,
-            },
-          ]}
+          tabs={SIDEBAR_VIEW_META.map(({ id, label, icon }) => ({
+            id,
+            label,
+            icon,
+            count:
+              { agents: liveCount, projects: projectCount, attention: attentionCount }[id] ||
+              undefined,
+            alert: id === "attention" && unreadCount > 0,
+          }))}
         />
       </div>
 

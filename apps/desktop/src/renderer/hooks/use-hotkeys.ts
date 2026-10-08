@@ -22,10 +22,11 @@ export function useHotkeys() {
       if (!chord) return;
       const key = chordKey(e);
 
-      // Cmd+B: Toggle sidebar
+      // Cmd+B: toggle the sidebar; Cmd+Shift+B: its next view
       if (key === "b") {
         e.preventDefault();
-        toggleSidebar();
+        if (chord.shift) useAppStore.getState().cycleSidebarView();
+        else toggleSidebar();
         return;
       }
 
