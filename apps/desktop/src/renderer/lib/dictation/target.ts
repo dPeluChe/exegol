@@ -1,4 +1,5 @@
 import { type AgentStatus, type DictationTargetKind, LIVE_STATUSES } from "@exegol/shared";
+import { ClipboardCopy, FileCode2, Globe, type LucideIcon, TextCursorInput } from "lucide-react";
 import { isPasteTarget } from "../agent-input";
 
 /** Where a dictation goes. Resolved when recording starts and checked again before inserting:
@@ -56,7 +57,9 @@ const sameTarget = (a: DictationTarget, b: DictationTarget): boolean =>
 
 /** The start target if the focus is still there, else the clipboard */
 export function confirmTarget(start: DictationTarget, now: DictationTarget): DictationTarget {
-  return sameTarget(start, now) ? start : { kind: "clipboard", projectId: start.projectId };
+  return sameTarget(start, now)
+    ? start
+    : { kind: "clipboard", projectId: start.projectId, why: "The focus moved while you spoke" };
 }
 
 /** A live shell, or an agent that can take pasted text (agent-input). The text is always one
@@ -88,21 +91,33 @@ export function sanitizeDictation(text: string): string {
   return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
 }
 
-/** A terminal target in words: the agent's alias and CLI, or "shell" */
-export function targetLabel(
-  target: DictationTarget,
+/** Non-terminal targets: the overlay chip's icon and name (a terminal shows its agent) */
+export const TARGET_KINDS: Record<
+  Exclude<DictationTargetKind, "terminal">,
+  { name: string; icon: LucideIcon }
+> = {
+  browser: { name: "Browser", icon: Globe },
+  editor: { name: "Editor", icon: FileCode2 },
+  field: { name: "This field", icon: TextCursorInput },
+  clipboard: { name: "Clipboard", icon: ClipboardCopy },
+};
+
+/** A target in words: the agent's alias (else its CLI), "shell", or the kind's name */
+export function targetName(
+  kind: DictationTargetKind,
   agent?: { alias?: string | null; cliType: string },
 ): string {
-  if (target.kind !== "terminal") return "";
-  if (!agent || agent.cliType === "shell") return "shell";
-  return agent.alias ? `${agent.alias} · ${agent.cliType}` : agent.cliType;
+  if (kind !== "terminal") return TARGET_KINDS[kind].name;
+  if (!agent) return "the terminal";
+  if (agent.cliType === "shell") return "shell";
+  return agent.alias || agent.cliType;
 }
 
 /** What Insert does, for the overlay */
-export function insertHint(kind: DictationTargetKind, label: string, pressEnter: boolean): string {
+export function insertHint(kind: DictationTargetKind, name: string, pressEnter: boolean): string {
   switch (kind) {
     case "terminal":
-      return `Inserts into ${label || "the terminal"} (${pressEnter ? "then presses Enter" : "no Enter sent"})`;
+      return `Inserts into ${name} (${pressEnter ? "then presses Enter" : "no Enter sent"})`;
     case "browser":
       return "Inserts into the browser field";
     case "editor":

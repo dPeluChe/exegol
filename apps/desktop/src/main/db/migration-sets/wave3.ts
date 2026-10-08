@@ -264,4 +264,9 @@ export const wave3Migrations: Migration[] = [
     );
     CREATE INDEX IF NOT EXISTS idx_dictation_history_created ON dictation_history(created_at);`,
   },
+  {
+    // Advisor, subagent, planner or editor models (MODEL_ROLES) as JSON, kept across a resume
+    id: "w3_025_agent_model_roles",
+    sql: "ALTER TABLE agents ADD COLUMN model_roles TEXT;",
+  },
 ];

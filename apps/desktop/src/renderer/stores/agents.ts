@@ -13,6 +13,7 @@ import { persist } from "zustand/middleware";
 import { shallow } from "zustand/shallow";
 import { MCP_STATUS_KEY } from "../components/common/McpStatusIndicator";
 import { nextActivitySince } from "../lib/busy-time";
+import { isClaudeQuestion } from "../lib/claude-question";
 import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
@@ -192,6 +193,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     launchedInShell: agent.launchedInShell ?? false,
     cliVersion: agent.cliVersion ?? null,
     model: agent.model ?? null,
+    modelRoles: agent.modelRoles ?? null,
     yolo: agent.yolo ?? null,
     ...overrides,
   };
@@ -239,6 +241,7 @@ export interface AgentState {
   cliVersion?: string | null;
   /** Launch choices, kept so a saved layout relaunches the same agent */
   model?: string | null;
+  modelRoles?: Record<string, string> | null;
   yolo?: boolean | null;
 }
 
@@ -495,6 +498,7 @@ export const useAgentStore = create<AgentStore>()(
                 launchedInShell: dbAgent.launchedInShell ?? existing.launchedInShell ?? false,
                 cliVersion: dbAgent.cliVersion ?? existing.cliVersion ?? null,
                 model: dbAgent.model ?? existing.model ?? null,
+                modelRoles: dbAgent.modelRoles ?? existing.modelRoles ?? null,
                 yolo: dbAgent.yolo ?? existing.yolo ?? null,
                 claudeSessionId: existing.claudeSessionId ?? dbAgent.claudeSessionId ?? null,
               };
@@ -523,6 +527,7 @@ export const useAgentStore = create<AgentStore>()(
                 launchedInShell: dbAgent.launchedInShell ?? false,
                 cliVersion: dbAgent.cliVersion ?? null,
                 model: dbAgent.model ?? null,
+                modelRoles: dbAgent.modelRoles ?? null,
                 yolo: dbAgent.yolo ?? null,
               };
             }
@@ -540,9 +545,20 @@ export const useAgentStore = create<AgentStore>()(
           // Identity-stable: untouched state when nothing pruned, or this
           // 30s poll re-renders every attention subscriber for no change.
           const dbIds = new Set(dbAgents.map((a) => a.id));
-          const stale = Object.entries(state.attentionItems).filter(
-            ([id, item]) => item.projectId === _projectId && !dbIds.has(id),
-          );
+          // Also Claude's idle reminders kept from before the hook matcher: no question behind them
+          const stale = Object.entries(state.attentionItems).filter(([id, item]) => {
+            if (item.projectId !== _projectId) return false;
+            if (!dbIds.has(id)) return true;
+            const agent = updated[id];
+            return (
+              !!agent &&
+              agent.cliType === "claude-code" &&
+              agent.status === "waiting_input" &&
+              item.level === "action_needed" &&
+              !item.paneId &&
+              !isClaudeQuestion(item, agent)
+            );
+          });
           if (stale.length === 0) return { agents: updated, hasSyncedFromDb };
 
           let unreadAttentionCount = state.unreadAttentionCount;

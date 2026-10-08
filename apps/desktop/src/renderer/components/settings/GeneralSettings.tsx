@@ -18,6 +18,7 @@ import { appKeys, IS_MAC } from "../../lib/keymap";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
+import { Kbd } from "../common/Kbd";
 import { IdePicker } from "./IdePicker";
 import { SwitchRow } from "./settings-ui";
 
@@ -27,16 +28,6 @@ const THEME_OPTIONS = [
   { value: "light", label: "Light", icon: Sun },
   { value: "system", label: "System", icon: Palette },
 ] as const;
-
-// ─── Keystroke visual component ─────────────────────────────────────────────
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="inline-flex h-6 min-w-6 items-center justify-center rounded-md border border-border/80 bg-bg-tertiary px-1.5 text-[10px] font-medium text-text-secondary shadow-[0_1px_0_1px_rgba(0,0,0,0.3)]">
-      {children}
-    </kbd>
-  );
-}
 
 /** Electron accelerator for a key press, or null while only modifiers are held */
 function acceleratorFor(e: React.KeyboardEvent): string | null {
