@@ -1,10 +1,27 @@
 import { cn } from "@exegol/ui";
-import { LayoutDashboard, PanelLeftOpen, Pause, Plus, Settings } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  Cuboid,
+  LayoutDashboard,
+  type LucideIcon,
+  PanelLeftOpen,
+  Pause,
+  Plus,
+  Settings,
+} from "lucide-react";
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
+import { liveSessionCount, type SidebarView } from "../../lib/sidebar-views";
 import { isLiveAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
+
+const RAIL_VIEWS: { id: SidebarView; label: string; icon: LucideIcon }[] = [
+  { id: "agents", label: "Agents", icon: Activity },
+  { id: "projects", label: "Projects", icon: Cuboid },
+  { id: "attention", label: "Needs attention", icon: Bell },
+];
 
 /**
  * The collapsed sidebar: icons instead of nothing. Collapsing used to hide the
@@ -18,6 +35,10 @@ export function SidebarRail() {
   const unread = useAgentStore((s) => s.unreadAttentionCount);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
+  const sidebarView = useAppStore((s) => s.sidebarView);
+  const openSidebarView = useAppStore((s) => s.openSidebarView);
+  const liveCount = useAgentStore((s) => liveSessionCount(s.agents));
+  const attentionCount = Object.keys(attentionItems).length;
 
   const perProject = useMemo(() => {
     const live = new Map<string, number>();
@@ -67,6 +88,40 @@ export function SidebarRail() {
           </span>
         )}
       </button>
+      <div className="my-1 h-px w-6 bg-border" />
+      {/* The sidebar's three views: each opens the sidebar on it */}
+      {RAIL_VIEWS.map(({ id, label, icon: Icon }) => {
+        const count = id === "agents" ? liveCount : id === "attention" ? attentionCount : 0;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => openSidebarView(id)}
+            className={cn(
+              railButton,
+              "shrink-0",
+              sidebarView === id ? "text-text-secondary" : "text-text-muted",
+              "hover:bg-white/5",
+            )}
+            title={label}
+            aria-label={count > 0 ? `${label} (${count})` : label}
+          >
+            <Icon className="h-4 w-4" />
+            {count > 0 && (
+              <span
+                className={cn(
+                  "absolute -right-0.5 -top-0.5 flex h-3 min-w-3 items-center justify-center rounded-full px-0.5 text-[7px] font-bold",
+                  id === "attention" && unread > 0
+                    ? "bg-amber-500 text-black"
+                    : "bg-accent/80 text-white",
+                )}
+              >
+                {count}
+              </span>
+            )}
+          </button>
+        );
+      })}
       <div className="my-1 h-px w-6 bg-border" />
       <div className="flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto">
         {projects.map((p) => {

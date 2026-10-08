@@ -27,6 +27,7 @@ import {
   useProjectShortcuts,
 } from "../../lib/live-tabs";
 import { useSessionRecovery } from "../../lib/session-recovery";
+import { busyCards, SIDEBAR_SESSION_STATUSES } from "../../lib/sidebar-views";
 import {
   type AgentState,
   type AttentionItem,
@@ -42,7 +43,6 @@ import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
-import { SegmentedTabs } from "../common/SegmentedTabs";
 
 // ─── Level config ────────────────────────────────────────────────────────
 
@@ -88,46 +88,38 @@ function elapsed(startedAt: number | null, now: number): string {
   return timeAgo(startedAt * 1000, now);
 }
 
-// ─── Main Component ──────────────────────────────────────────────────────
+// ─── Views ───────────────────────────────────────────────────────────────
 
-const ACTIVE_STATUSES = new Set(["running", "spawning", "waiting_input"]);
-
-export function AttentionSection() {
-  const agents = useAgentStore((s) => s.agents);
-  // Names alone ("ember", "koi") didn't say which project is waiting
-  const { data: projects } = useProjects();
-  const projectById = useMemo(
-    () => new Map((projects ?? []).map((p) => [p.id, { name: p.name, color: p.color ?? null }])),
-    [projects],
-  );
-  const rawItems = useAgentStore((s) => s.attentionItems);
-  const dismiss = useAgentStore((s) => s.dismissAttention);
-  const togglePin = useAgentStore((s) => s.toggleAttentionPin);
-  const clearRead = useAgentStore((s) => s.clearReadAttention);
+function useNavigateToAgent() {
   const markRead = useAgentStore((s) => s.markAttentionRead);
+  return useCallback(
+    (agentId: string, projectId: string) => {
+      markRead(agentId);
+      jumpToAgent(agentId, projectId);
+    },
+    [markRead],
+  );
+}
 
-  // Memoize sorted items to avoid re-sorting on every render
-  const attentionItems = useMemo(() => {
-    const items = Object.values(rawItems);
-    return items.sort((a, b) => {
-      if (a.read !== b.read) return a.read ? 1 : -1;
-      const ld = ATTENTION_LEVEL_ORDER[a.level] - ATTENTION_LEVEL_ORDER[b.level];
-      if (ld !== 0) return ld;
-      return b.timestamp - a.timestamp;
-    });
-  }, [rawItems]);
-
+/** The Agents view: one card per project with live sessions, in the user's order */
+export function AgentsView() {
+  const agents = useAgentStore((s) => s.agents);
+  const activeOnly = useAppStore((s) => s.sidebarActiveOnly);
   // Every live agent, one waiting on you included: its row carries the amber mark, and the
-  // attention list is a separate view (the switch), so nothing shows twice
-  const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
+  // attention list is a separate view, so nothing shows twice
+  const activeAgents = Object.values(agents).filter((a) => SIDEBAR_SESSION_STATUSES.has(a.status));
   // One card per project in the user's order, its live tabs inside; the card carries its Cmd+n.
   // A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
   const cards = useMemo(() => groupByProject(groups), [groups]);
+  const shownCards = useMemo(
+    () => (activeOnly ? busyCards(cards, agents) : cards),
+    [activeOnly, cards, agents],
+  );
   const agentsByProject = useMemo(
     () =>
       new Map(
-        cards.map((c) => [
+        shownCards.map((c) => [
           c.projectId,
           Object.fromEntries(
             c.tabs
@@ -136,7 +128,7 @@ export function AttentionSection() {
           ) as Record<string, AgentState>,
         ]),
       ),
-    [cards, agents],
+    [shownCards, agents],
   );
   const projectShortcuts = useProjectShortcuts();
   const setOrder = useAppStore((s) => s.setLiveProjectOrder);
@@ -144,21 +136,15 @@ export function AttentionSection() {
   const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();
   for (const agent of activeAgents) {
-    if (inGroups.has(agent.id)) continue;
+    if (inGroups.has(agent.id) || (activeOnly && agent.activityLevel !== "busy")) continue;
     const list = byProject.get(agent.projectId) ?? [];
     list.push(agent);
     byProject.set(agent.projectId, list);
   }
 
-  const navigateToAgent = useCallback(
-    (agentId: string, projectId: string) => {
-      markRead(agentId);
-      jumpToAgent(agentId, projectId);
-    },
-    [markRead],
-  );
+  const navigateToAgent = useNavigateToAgent();
 
-  const hasRunning = groups.length > 0 || byProject.size > 0;
+  // Reorder over every live card, hidden ones too, so "Active only" never moves a Cmd+n.
   // Dropped on the card below it goes after it (inserting before put it back where it was)
   const reorder = usePointerReorder((drag, target) =>
     setOrder(
@@ -196,92 +182,102 @@ export function AttentionSection() {
       window.clearTimeout(timer);
     };
   }, []);
-  const hasAttention = attentionItems.length > 0;
-  const pickedView = useAppStore((s) => s.sidebarAgentsView);
-  const setPickedView = useAppStore((s) => s.setSidebarAgentsView);
-  const hasRead = attentionItems.some((i) => i.read && !i.pinned);
   const recovery = useSessionRecovery();
   const recovering = reconnectingLabel(recovery);
 
-  if (!hasRunning && !hasAttention) {
+  if (shownCards.length === 0 && byProject.size === 0) {
     if (recovering) return <RecoveryNotice label={recovering} />;
-    return <p className="py-2 text-center text-[9px] italic text-text-muted">No agents active</p>;
+    return (
+      <p className="py-2 text-center text-[9px] italic text-text-muted">
+        {activeOnly && activeAgents.length > 0
+          ? "No agent is working right now"
+          : "No agents active"}
+      </p>
+    );
   }
-  // Both have something: the user's pick. Only one does: that one, whatever was picked
-  const showSwitch = hasRunning && hasAttention;
-  const view = showSwitch ? pickedView : hasAttention ? "attention" : "agents";
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {recovering && <RecoveryNotice label={recovering} />}
-      {showSwitch && (
-        <SegmentedTabs
-          compact
-          active={view}
-          onChange={setPickedView}
-          tabs={[
-            { id: "agents", label: "Agents", count: activeAgents.length },
-            {
-              id: "attention",
-              label: "Needs attention",
-              count: attentionItems.length,
-              alert: attentionItems.some((i) => !i.read),
-            },
-          ]}
+      {shownCards.map((card) => (
+        <ProjectCard
+          key={card.projectId}
+          card={card}
+          shortcut={shortcutLabel(projectShortcuts.get(card.projectId))}
+          agents={agentsByProject.get(card.projectId) ?? {}}
+          onNavigate={navigateToAgent}
+          itemProps={reorder.itemProps}
+          dragging={reorder.draggingKey === card.projectId}
+          dropSide={dropSideFor(card.projectId)}
+          onScreen={card.projectId === activeProjectId}
+          activeTabId={projectWorkspaces[card.projectId]?.activeTabId ?? null}
+          flashKey={flashKey}
         />
-      )}
-      {view === "attention" && (
-        <div className="space-y-1">
-          {attentionItems.map((item) => (
-            <AttentionCard
-              key={item.agentId}
-              item={item}
-              name={agents[item.agentId]?.alias ?? item.cliType}
-              project={projectById.get(item.projectId)}
-              onNavigate={() => navigateToAgent(item.agentId, item.projectId)}
-              onDismiss={() => dismiss(item.agentId)}
-              onTogglePin={() => togglePin(item.agentId)}
-            />
-          ))}
-          {hasRead && (
-            <button
-              type="button"
-              onClick={clearRead}
-              className="flex w-full items-center justify-center gap-1 rounded py-1 text-[9px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-secondary"
-            >
-              <Trash2 className="h-2.5 w-2.5" />
-              Clear read
-            </button>
-          )}
-        </div>
-      )}
+      ))}
+      {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
+        <ProjectAgentGroup
+          key={projectId}
+          projectId={projectId}
+          agents={projectAgents}
+          onNavigate={navigateToAgent}
+        />
+      ))}
+    </div>
+  );
+}
 
-      {view === "agents" && (
-        <div className="space-y-1.5">
-          {cards.map((card) => (
-            <ProjectCard
-              key={card.projectId}
-              card={card}
-              shortcut={shortcutLabel(projectShortcuts.get(card.projectId))}
-              agents={agentsByProject.get(card.projectId) ?? {}}
-              onNavigate={navigateToAgent}
-              itemProps={reorder.itemProps}
-              dragging={reorder.draggingKey === card.projectId}
-              dropSide={dropSideFor(card.projectId)}
-              onScreen={card.projectId === activeProjectId}
-              activeTabId={projectWorkspaces[card.projectId]?.activeTabId ?? null}
-              flashKey={flashKey}
-            />
-          ))}
-          {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
-            <ProjectAgentGroup
-              key={projectId}
-              projectId={projectId}
-              agents={projectAgents}
-              onNavigate={navigateToAgent}
-            />
-          ))}
-        </div>
+/** The Needs attention view: unread first, then by level, newest first */
+export function AttentionView() {
+  const agents = useAgentStore((s) => s.agents);
+  // Names alone ("ember", "koi") didn't say which project is waiting
+  const { data: projects } = useProjects();
+  const projectById = useMemo(
+    () => new Map((projects ?? []).map((p) => [p.id, { name: p.name, color: p.color ?? null }])),
+    [projects],
+  );
+  const rawItems = useAgentStore((s) => s.attentionItems);
+  const dismiss = useAgentStore((s) => s.dismissAttention);
+  const togglePin = useAgentStore((s) => s.toggleAttentionPin);
+  const clearRead = useAgentStore((s) => s.clearReadAttention);
+  const navigateToAgent = useNavigateToAgent();
+
+  const attentionItems = useMemo(() => {
+    const items = Object.values(rawItems);
+    return items.sort((a, b) => {
+      if (a.read !== b.read) return a.read ? 1 : -1;
+      const ld = ATTENTION_LEVEL_ORDER[a.level] - ATTENTION_LEVEL_ORDER[b.level];
+      if (ld !== 0) return ld;
+      return b.timestamp - a.timestamp;
+    });
+  }, [rawItems]);
+  const hasRead = attentionItems.some((i) => i.read && !i.pinned);
+
+  if (attentionItems.length === 0) {
+    return <p className="py-2 text-center text-[9px] italic text-text-muted">Nothing needs you</p>;
+  }
+
+  return (
+    <div className="space-y-1">
+      {attentionItems.map((item) => (
+        <AttentionCard
+          key={item.agentId}
+          item={item}
+          name={agents[item.agentId]?.alias ?? item.cliType}
+          project={projectById.get(item.projectId)}
+          onNavigate={() => navigateToAgent(item.agentId, item.projectId)}
+          onDismiss={() => dismiss(item.agentId)}
+          onTogglePin={() => togglePin(item.agentId)}
+        />
+      ))}
+      {hasRead && (
+        <button
+          type="button"
+          onClick={clearRead}
+          className="flex w-full items-center justify-center gap-1 rounded py-1 text-[9px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-secondary"
+        >
+          <Trash2 className="h-2.5 w-2.5" />
+          Clear read
+        </button>
       )}
     </div>
   );

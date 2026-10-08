@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Sidebar: one selector with three views, Agents, Projects and Needs attention, each using the full height and showing its count (Agents counts live sessions). Agents gets an "Active only" filter for the sessions working right now. Projects no longer shares the sidebar with a resizable split. The collapsed rail offers the same three views, and the view you pick is remembered
+
 ## [0.5.16] — 2026-10-08 — Voice dictation, model manager and storage, safe Cmd+W with reopen, faster start
 
 ### Added
