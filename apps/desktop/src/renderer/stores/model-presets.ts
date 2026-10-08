@@ -11,6 +11,9 @@ export interface ModelPreset {
   roles: Record<string, string>;
 }
 
+/** One model, or a main model with role models (advisor, subagents...) */
+export type ModelMode = "single" | "combo";
+
 /** Shipped combinations that stay within a subscription (no Fable, no usage credits) */
 export const BUILT_IN_PRESETS: ModelPreset[] = [
   {
@@ -23,14 +26,14 @@ export const BUILT_IN_PRESETS: ModelPreset[] = [
   {
     id: "builtin-sonnet-advisor",
     cliType: "claude-code",
-    name: "Sonnet + Opus advisor + Haiku subagents",
+    name: "Sonnet with an advisor",
     model: "sonnet",
     roles: { advisor: "opus", subagents: "haiku" },
   },
   {
     id: "builtin-opus-workers",
     cliType: "claude-code",
-    name: "Opus + Sonnet subagents",
+    name: "Opus leads",
     model: "opus",
     roles: { subagents: "sonnet" },
   },
@@ -38,16 +41,21 @@ export const BUILT_IN_PRESETS: ModelPreset[] = [
 
 interface ModelPresetStore {
   saved: ModelPreset[];
+  /** Last mode picked per CLI; absent = single */
+  modes: Record<string, ModelMode>;
   save: (preset: Omit<ModelPreset, "id">) => void;
   remove: (id: string) => void;
+  setMode: (cliType: string, mode: ModelMode) => void;
 }
 
 export const useModelPresetStore = create<ModelPresetStore>()(
   persist(
     (set) => ({
       saved: [],
+      modes: {},
       save: (preset) => set((s) => ({ saved: [...s.saved, { ...preset, id: nanoid(8) }] })),
       remove: (id) => set((s) => ({ saved: s.saved.filter((p) => p.id !== id) })),
+      setMode: (cliType, mode) => set((s) => ({ modes: { ...s.modes, [cliType]: mode } })),
     }),
     { name: "exegol-model-presets" },
   ),
