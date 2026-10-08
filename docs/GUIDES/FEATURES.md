@@ -148,7 +148,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   field, the code editor's cursor), else it is copied. Overlay with waveform, timer, where the
   text goes and the words so far (live with the streaming model, phrase by phrase at each pause
   with the others); with no model it offers a choice of three recommended models; Settings > Dictation for the shortcut, mic, limits and history; a mic
-  button in the status bar.
+  button in the status bar. "Pause music while dictating" (on by default) pauses what is playing
+  through the system's Now Playing on macOS (browser tabs included) or MPRIS players through
+  playerctl on Linux, and resumes it after; on macOS, "Also control Music and Spotify directly"
+  is the fallback that needs Automation access.
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is

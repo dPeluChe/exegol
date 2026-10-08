@@ -18,6 +18,7 @@ import {
 import { takeLostOnRestart } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
+import { providerSessionId } from "../../agents/provider-session-id";
 import { broadcastAgentStatus, coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
 import { resolveTaskLabel } from "../../agents/task-label";
@@ -47,7 +48,7 @@ import {
   listParallelRuns,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
-import { lastLocalSession } from "../../history";
+import { cliSessionNames, lastLocalSession } from "../../history";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
 import { isPathAllowed } from "../../security/path-guard";
@@ -333,6 +334,51 @@ export const agentRouter = router({
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,
       }));
+    }),
+
+  /** The launcher's past-session chips: each agent's session name inside its CLI, by agent id.
+   *  Separate from listResumable so the chips render before any store is read */
+  sessionNames: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        agentIds: z.array(z.string().max(64)).max(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (input.agentIds.length === 0) return {};
+      const rows = ctx.db
+        .prepare(
+          `SELECT a.id, a.cli_type, a.task_description, a.claude_session_id, a.resume_command,
+                  COALESCE(w.path, p.path) AS cwd
+           FROM agents a
+           LEFT JOIN worktrees w ON w.id = a.worktree_id
+           JOIN projects p ON p.id = a.project_id
+           WHERE a.project_id = ? AND a.id IN (${input.agentIds.map(() => "?").join(",")})`,
+        )
+        .all(input.projectId, ...input.agentIds) as Array<{
+        id: string;
+        cli_type: string;
+        task_description: string;
+        claude_session_id: string | null;
+        resume_command: string | null;
+        cwd: string;
+      }>;
+      const refs = rows.flatMap((r) => {
+        const sessionId = providerSessionId(r.cli_type, r.claude_session_id, r.resume_command);
+        return sessionId
+          ? [
+              {
+                agentId: r.id,
+                provider: r.cli_type,
+                sessionId,
+                cwd: r.cwd,
+                task: r.task_description,
+              },
+            ]
+          : [];
+      });
+      return refs.length > 0 ? cliSessionNames(refs) : {};
     }),
 
   /** Where a spawn would actually run — the same resolver the spawn path uses,

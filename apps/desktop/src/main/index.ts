@@ -18,6 +18,7 @@ import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
 import { stopEngine } from "./dictation/engine";
 import { forwardDictationKeys } from "./dictation/keys";
+import { releaseMediaNow } from "./dictation/media-pause";
 import { installMediaPermissions } from "./dictation/mic";
 import { applyDictationSettings, dictationSettings } from "./dictation/service";
 import {
@@ -241,6 +242,7 @@ function teardownSteps() {
     { name: "floatingPanes", run: closeAllFloatingPanes },
     { name: "settingsWindow", run: closeSettingsWindow },
     { name: "dictationEngine", run: stopEngine },
+    { name: "dictationMedia", run: releaseMediaNow },
     // T145: close the MCP socket + revoke all tokens so shim calls fail fast
     // instead of hanging, and the socket file doesn't go stale on disk.
     { name: "mcpServer", run: stopExegolMcpServer },
