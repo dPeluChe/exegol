@@ -20,6 +20,9 @@ interface DictationStore {
   /** Where Insert puts the text, for the overlay (insertHint) */
   targetKind: DictationTargetKind;
   targetLabel: string;
+  /** The terminal target's session and the target's project, for the overlay's chip */
+  targetAgentId: string | null;
+  targetProjectId: string | null;
   /** What was understood so far: live for streaming models, phrase by phrase for the others */
   partial: string;
   error: string | null;
@@ -36,6 +39,8 @@ export const useDictationStore = create<DictationStore>((set) => ({
   anchorPaneId: null,
   targetKind: "clipboard",
   targetLabel: "",
+  targetAgentId: null,
+  targetProjectId: null,
   partial: "",
   error: null,
   modelLoading: false,

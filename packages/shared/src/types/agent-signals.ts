@@ -18,6 +18,10 @@ export const AGENT_SIGNAL_TYPES = [
 
 export type AgentSignalType = (typeof AGENT_SIGNAL_TYPES)[number];
 
+/** Claude Code Notification hook matcher (notification_type): a permission prompt or a question.
+ *  Not idle_prompt, the reminder 60s after every reply, which would mark idle agents as asking */
+export const CLAUDE_ATTENTION_NOTIFICATIONS = "permission_prompt|elicitation_dialog";
+
 /** Boundary validator: PTY-derived strings must be whitelisted before they
  *  flow through the contract as typed AgentSignalEvents. */
 export function isKnownSignalType(value: string): value is AgentSignalType {

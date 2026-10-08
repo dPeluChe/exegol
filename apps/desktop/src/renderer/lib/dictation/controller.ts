@@ -179,6 +179,8 @@ export async function startDictation(): Promise<void> {
     anchorPaneId: anchor,
     targetKind: target.kind,
     targetLabel: targetLabel(target, agent),
+    targetAgentId: "agentId" in target ? target.agentId : null,
+    targetProjectId: target.projectId,
     partial: "",
     error: null,
   });

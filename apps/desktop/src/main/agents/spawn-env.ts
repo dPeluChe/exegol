@@ -6,6 +6,7 @@ import {
   type AgentCliType,
   type AgentSignalType,
   type AgentStatus,
+  CLAUDE_ATTENTION_NOTIFICATIONS,
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type Database from "libsql";
@@ -235,7 +236,7 @@ export function buildClaudeCodeHooksFile(
               ]
             : []),
         ],
-        Notification: [hookEntry("attention")],
+        Notification: [{ matcher: CLAUDE_ATTENTION_NOTIFICATIONS, ...hookEntry("attention") }],
         Stop: [hookEntry("finished")],
       },
     };
