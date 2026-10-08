@@ -7,6 +7,7 @@ import {
   parseCustomActions,
   parseJustRecipes,
   parseMakeTargets,
+  refreshRunTargets,
 } from "./scripts";
 
 // These parsers decide what the launcher offers to RUN, so a false positive is
@@ -108,5 +109,29 @@ describe("detectRunTargets (T197)", () => {
     expect(backend?.git).toBe(true);
     expect(backend?.scripts[0]?.command).toBe("npx convex dev");
     expect(targets.find((t) => t.rel === "apps/web")?.scripts.map((s) => s.name)).toEqual(["dev"]);
+  });
+});
+
+describe("refreshRunTargets", () => {
+  it("drops the cached scripts so a new folder and a new script show up", async () => {
+    const root = mkdtempSync(join(tmpdir(), "exegol-run-refresh-"));
+    mkdirSync(join(root, "api", ".git"), { recursive: true });
+    writeFileSync(join(root, "api", "package.json"), JSON.stringify({ scripts: { dev: "x" } }));
+    expect((await detectRunTargets(root)).find((t) => t.rel === "api")?.scripts).toHaveLength(1);
+
+    writeFileSync(
+      join(root, "api", "package.json"),
+      JSON.stringify({ scripts: { dev: "x", preview: "y" } }),
+    );
+    mkdirSync(join(root, "web", ".git"), { recursive: true });
+    // Cached within the TTL: the new script is not seen yet
+    expect((await detectRunTargets(root)).find((t) => t.rel === "api")?.scripts).toHaveLength(1);
+
+    const fresh = await refreshRunTargets(root);
+    expect(fresh.map((t) => t.rel)).toEqual(["", "api", "web"]);
+    expect(fresh.find((t) => t.rel === "api")?.scripts.map((s) => s.name)).toEqual([
+      "dev",
+      "preview",
+    ]);
   });
 });

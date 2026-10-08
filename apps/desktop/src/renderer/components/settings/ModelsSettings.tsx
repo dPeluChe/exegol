@@ -3,6 +3,7 @@ import { AlertTriangle, AudioLines, Download, RotateCcw, Star, Trash2, X } from 
 import { useState } from "react";
 import { useModelAction, useModels } from "../../hooks/use-trpc-models";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
+import { languagesLabel } from "../../lib/speech-models";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "../workspace/sections/resource-format";
 import { SMALL_BUTTON } from "./settings-ui";
@@ -92,12 +93,6 @@ export function SpeechModelList({ installedFirst = false }: { installedFirst?: b
 function installedRank(model: ModelListItem): number {
   if (model.isDefault) return 0;
   return model.status.state === "ready" ? 1 : 2;
-}
-
-function languagesLabel(model: ModelListItem): string {
-  if (model.languageSummary) return model.languageSummary;
-  if (model.languages.length <= 3) return model.languages.join(", ").toUpperCase();
-  return `${model.languages.length} languages`;
 }
 
 function ModelRow({

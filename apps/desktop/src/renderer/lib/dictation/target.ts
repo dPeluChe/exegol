@@ -1,4 +1,4 @@
-import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
+import { type AgentStatus, type DictationTargetKind, LIVE_STATUSES } from "@exegol/shared";
 import { isPasteTarget } from "../agent-input";
 
 /** Where a dictation goes. Resolved when recording starts and checked again before inserting:
@@ -86,4 +86,30 @@ export function answersPrompt(a: {
 export function sanitizeDictation(text: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
   return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
+}
+
+/** A terminal target in words: the agent's alias and CLI, or "shell" */
+export function targetLabel(
+  target: DictationTarget,
+  agent?: { alias?: string | null; cliType: string },
+): string {
+  if (target.kind !== "terminal") return "";
+  if (!agent || agent.cliType === "shell") return "shell";
+  return agent.alias ? `${agent.alias} · ${agent.cliType}` : agent.cliType;
+}
+
+/** What Insert does, for the overlay */
+export function insertHint(kind: DictationTargetKind, label: string, pressEnter: boolean): string {
+  switch (kind) {
+    case "terminal":
+      return `Inserts into ${label || "the terminal"} (${pressEnter ? "then presses Enter" : "no Enter sent"})`;
+    case "browser":
+      return "Inserts into the browser field";
+    case "editor":
+      return "Inserts at the editor cursor";
+    case "field":
+      return "Inserts into this field";
+    case "clipboard":
+      return "Copies to the clipboard";
+  }
 }

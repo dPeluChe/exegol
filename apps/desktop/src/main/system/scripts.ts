@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { join, sep } from "node:path";
 import { parseFlatConfig } from "../lib/flat-config";
 import { logger } from "../lib/logger";
 import { inspectCommand } from "../security/command-guard";
@@ -321,6 +321,14 @@ async function detectRunActions(projectPath: string): Promise<DetectedScript[]> 
 const SCRIPTS_TTL_MS = 60_000;
 const scriptsCache = new Map<string, { at: number; scripts: DetectedScript[] }>();
 
+/** Drops the cached scripts of a folder and everything under it (the launcher's refresh) */
+export function invalidateScriptsCache(projectPath: string): void {
+  const prefix = projectPath.endsWith(sep) ? projectPath : projectPath + sep;
+  for (const path of scriptsCache.keys()) {
+    if (path === projectPath || path.startsWith(prefix)) scriptsCache.delete(path);
+  }
+}
+
 async function detectProjectScripts(projectPath: string): Promise<DetectedScript[]> {
   const cached = scriptsCache.get(projectPath);
   if (cached && Date.now() - cached.at < SCRIPTS_TTL_MS) return cached.scripts;
@@ -368,6 +376,12 @@ const SKIP_DIRS = new Set([
 const CONTAINER_DIRS = new Set(["apps", "packages", "services", "libs", "projects"]);
 const MAX_SUBFOLDERS = 12;
 
+const exists = (path: string) =>
+  stat(path).then(
+    () => true,
+    () => false,
+  );
+
 async function childDirs(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
@@ -413,7 +427,7 @@ export async function detectRunTargets(projectPath: string): Promise<RunTarget[]
       return {
         rel,
         path,
-        git: existsSync(join(path, ".git")),
+        git: await exists(join(path, ".git")),
         scripts: await detectProjectScripts(path),
       };
     }),
@@ -421,8 +435,14 @@ export async function detectRunTargets(projectPath: string): Promise<RunTarget[]
   const root: RunTarget = {
     rel: "",
     path: projectPath,
-    git: existsSync(join(projectPath, ".git")),
+    git: await exists(join(projectPath, ".git")),
     scripts: await detectProjectScripts(projectPath),
   };
   return [root, ...sub.filter((t) => t.git || t.scripts.length > 0).slice(0, MAX_SUBFOLDERS)];
+}
+
+/** Fresh detection: the cached scripts of the project and its subfolders are dropped first */
+export function refreshRunTargets(projectPath: string): Promise<RunTarget[]> {
+  invalidateScriptsCache(projectPath);
+  return detectRunTargets(projectPath);
 }

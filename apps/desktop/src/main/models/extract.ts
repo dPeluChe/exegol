@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { chmod, lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -36,10 +36,55 @@ async function sanitizeTree(dir: string): Promise<void> {
   }
 }
 
+/** A required file, or a folder on the way to one: everything else in a model folder is an extra */
+export function keepsPath(rel: string, required: readonly string[]): boolean {
+  return required.some((file) => file === rel || file.startsWith(`${rel}/`));
+}
+
+/** License and notice files ship with the weights and always stay */
+export const isLegalFile = (name: string): boolean => /^(licen[cs]e|notice|copying)/i.test(name);
+
+/** What a model archive carries that nothing reads: sample audio and READMEs */
+export const isJunk = (name: string, isDir: boolean): boolean =>
+  isDir ? name === "test_wavs" : /\.wav$/i.test(name) || /^readme/i.test(name);
+
+/** Removes from `dir` every entry `drop` picks, descending into the folders it keeps, without
+ *  following links. Returns the removed paths, relative to `dir` */
+async function pruneTree(
+  dir: string,
+  drop: (rel: string, name: string, isDir: boolean) => boolean,
+  rel = "",
+): Promise<string[]> {
+  const removed: string[] = [];
+  for (const name of await readdir(join(dir, rel)).catch(() => [] as string[])) {
+    const path = rel ? posix.join(rel, name) : name;
+    const info = await lstat(join(dir, path));
+    if (drop(path, name, info.isDirectory())) {
+      await rm(join(dir, path), { recursive: true, force: true });
+      removed.push(path);
+    } else if (info.isDirectory()) {
+      removed.push(...(await pruneTree(dir, drop, path)));
+    }
+  }
+  return removed;
+}
+
+/** Extraction: keeps the catalog files and license/notice files, drops the rest */
+export function pruneToRequired(dir: string, required: readonly string[]): Promise<string[]> {
+  return pruneTree(dir, (rel, name, isDir) =>
+    isDir ? !keepsPath(rel, required) : !(required.includes(rel) || isLegalFile(name)),
+  );
+}
+
+/** An installed model folder: removes only known junk, everything else stays */
+export function pruneJunk(dir: string): Promise<string[]> {
+  return pruneTree(dir, (_rel, name, isDir) => isJunk(name, isDir));
+}
+
 /**
  * Extracts a .tar.bz2 with the system tar (bsdtar on macOS, GNU tar on Linux: both
  * refuse absolute and `..` paths without -P) into `tmpDir`, refuses the whole archive
- * on any link or special file, then moves `<tmpDir>/<rootDir>` to `destDir` in one rename.
+ * on any link or special file, keeps only the required files, then moves `<tmpDir>/<rootDir>` to `destDir` in one rename.
  */
 export async function extractTarBz2(opts: {
   archive: string;
@@ -68,6 +113,7 @@ export async function extractTarBz2(opts: {
       const info = await stat(join(extracted, file)).catch(() => null);
       if (!info?.isFile()) throw new Error(`archive is missing ${file}`);
     }
+    await pruneToRequired(extracted, opts.requiredFiles);
     await rm(opts.destDir, { recursive: true, force: true });
     await rename(extracted, opts.destDir);
   } finally {

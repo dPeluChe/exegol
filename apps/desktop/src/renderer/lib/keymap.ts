@@ -4,8 +4,16 @@
  * the desktop. A macOS Shift or Option variant becomes Ctrl+Shift+Alt there.
  * Shortcuts are written once in macOS notation; `appKeys` renders them for the running platform.
  */
-export const IS_MAC =
-  typeof window === "undefined" || (window.api?.app?.getPlatform?.() ?? "darwin") === "darwin";
+export const PLATFORM =
+  typeof window === "undefined" ? "darwin" : (window.api?.app?.getPlatform?.() ?? "darwin");
+export const IS_MAC = PLATFORM === "darwin";
+
+/** What the OS calls its file manager, for "Open in ..." labels */
+export function fileManagerLabel(platform = PLATFORM): string {
+  if (platform === "darwin") return "Finder";
+  if (platform === "win32") return "Explorer";
+  return "File manager";
+}
 
 interface ChordEvent {
   metaKey: boolean;

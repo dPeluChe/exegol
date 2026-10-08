@@ -17,13 +17,14 @@ export const RECOVERY_DONE: SessionRecoveryState = {
 };
 
 /** A planned session not reattached yet has no PTY to answer for it; one spawned during
- *  recovery is not in the plan and shows its normal start state */
+ *  recovery is not in the plan and shows its normal start state. A TUI waiting for its repaint
+ *  can still be unready once recovery is done */
 export function isSessionReconnecting(
   state: SessionRecoveryState | undefined,
   agentId: string,
 ): boolean {
-  if (!state || state.done) return false;
-  if (state.planned && !state.planned.includes(agentId)) return false;
+  if (!state) return false;
+  if (state.planned ? !state.planned.includes(agentId) : state.done) return false;
   return !state.ready.includes(agentId);
 }
 

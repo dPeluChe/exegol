@@ -28,6 +28,7 @@ const entrySchema = z.object({
   files: z.array(relativeFile).min(1),
   commercialUse: z.boolean().optional(),
   notes: z.string().optional(),
+  featured: z.number().int().positive().optional(),
 });
 
 function validateCatalog(entries: readonly SpeechModelEntry[]): string[] {
@@ -42,6 +43,9 @@ function validateCatalog(entries: readonly SpeechModelEntry[]): string[] {
     ids.add(entry.id);
     if (entry.languages.length === 0 && !entry.languageSummary) {
       problems.push(`${entry.id}: no languages`);
+    }
+    if (entry.featured !== undefined && entry.commercialUse === false) {
+      problems.push(`${entry.id}: a non-commercial model in the recommended list`);
     }
     if (!entry.sourceUrl.endsWith(`/${entry.rootDir}.tar.bz2`)) {
       problems.push(`${entry.id}: sourceUrl does not match rootDir`);
@@ -82,6 +86,16 @@ describe("speech model catalog", () => {
     if (!base) throw new Error("empty catalog");
     const problems = validateCatalog([{ ...base, rootDir: "something-else" }]);
     expect(problems.some((p) => p.includes("sourceUrl"))).toBe(true);
+  });
+
+  it("recommends Parakeet first and never a non-commercial model", () => {
+    const featured = MODEL_CATALOG.filter((m) => m.featured !== undefined).sort(
+      (a, b) => (a.featured ?? 0) - (b.featured ?? 0),
+    );
+    expect(featured[0]?.id).toBe(DEFAULT_MODEL_ID);
+    const base = MODEL_CATALOG.find((m) => m.commercialUse === false);
+    if (!base) throw new Error("no non-commercial model");
+    expect(validateCatalog([{ ...base, featured: 4 }]).join()).toContain("recommended list");
   });
 
   it("never makes a non-commercial model the default", () => {

@@ -6,6 +6,7 @@ import { broadcast } from "../lib/event-bus";
 import { HeadlessEmulator } from "./headless-emulator";
 import { PtyHost } from "./pty-host";
 import type { SidecarClient } from "./pty-sidecar-client";
+import { REPAINT_CAP_MS, REPAINT_QUIET_MS } from "./reattach-repaint";
 
 function fakeSidecar() {
   const resize = vi.fn(async () => {});
@@ -89,7 +90,7 @@ describe("PtyHost reattach", () => {
       onExit: () => {},
     } as never);
     await new Promise((r) => setTimeout(r, 20));
-    expect(snapshot).toBe("old screen\r\n");
+    expect(snapshot?.snapshot).toBe("old screen\r\n");
     expect(onData).not.toHaveBeenCalled();
     expect(host.getSnapshot("r")).toContain("old screen");
   });
@@ -103,6 +104,97 @@ describe("PtyHost reattach", () => {
     host.connectToSidecar(client);
     await host.reattachSession("ready", { cols: 80, rows: 24 }, callbacks);
     expect(host.getLiveSnapshot("ready")).toContain("idle prompt>");
+  });
+});
+
+describe("PtyHost reattach at the pane's size", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function sidecarWithOutput(snapshot: () => Promise<string>) {
+    let emit: (id: string, data: string) => void = () => {};
+    const client = {
+      ...(fakeSidecar().client as object),
+      snapshot,
+      onSessionData: (cb: typeof emit) => {
+        emit = cb;
+      },
+    } as unknown as SidecarClient;
+    return { client, output: (id: string, data: string) => emit(id, data) };
+  }
+
+  it("holds a resize that arrives mid-replay until the ring is parsed at its own grid", async () => {
+    let release: (s: string) => void = () => {};
+    const { client } = sidecarWithOutput(
+      () =>
+        new Promise((r) => {
+          release = r;
+        }),
+    );
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    const done = host.reattachSession("m", { cols: 100, rows: 30 }, callbacks);
+    host.resize("m", 140, 40);
+    expect(host.getSize("m")).toEqual({ cols: 100, rows: 30 });
+    release("history\r\n");
+    await done;
+    expect(host.getSize("m")).toEqual({ cols: 140, rows: 40 });
+  });
+
+  it("a TUI reflowed to the pane's size is ready once its repaint pauses", async () => {
+    const { client, output } = sidecarWithOutput(async () => "frame\r\n");
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    host.resize("t", 140, 40);
+    const result = await host.reattachSession("t", { cols: 100, rows: 30 }, callbacks, {
+      tui: true,
+    });
+    expect(result?.repainted).toBeInstanceOf(Promise);
+    vi.useFakeTimers();
+    let repainted = false;
+    void result?.repainted?.then(() => {
+      repainted = true;
+    });
+    output("t", "\x1b[2J redraw part 1");
+    await vi.advanceTimersByTimeAsync(REPAINT_QUIET_MS - 20);
+    output("t", "redraw part 2");
+    await vi.advanceTimersByTimeAsync(REPAINT_QUIET_MS - 20);
+    expect(repainted).toBe(false);
+    await vi.advanceTimersByTimeAsync(40);
+    expect(repainted).toBe(true);
+  });
+
+  it("a CLI that never repaints is shown at the cap", async () => {
+    // Empty ring: nothing for xterm to parse under fake timers
+    const { client } = sidecarWithOutput(async () => "");
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    host.resize("q", 90, 20);
+    vi.useFakeTimers();
+    const result = await host.reattachSession("q", { cols: 100, rows: 30 }, callbacks, {
+      tui: true,
+    });
+    let repainted = false;
+    void result?.repainted?.then(() => {
+      repainted = true;
+    });
+    await vi.advanceTimersByTimeAsync(REPAINT_CAP_MS - 1);
+    expect(repainted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(repainted).toBe(true);
+  });
+
+  it("a shell, or a pane already at the stored grid, is ready without waiting", async () => {
+    const { client } = sidecarWithOutput(async () => "$ ls\r\n");
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    host.resize("sh", 140, 40);
+    const shell = await host.reattachSession("sh", { cols: 100, rows: 30 }, callbacks);
+    expect(shell?.repainted).toBeNull();
+    host.resize("same", 100, 30);
+    const same = await host.reattachSession("same", { cols: 100, rows: 30 }, callbacks, {
+      tui: true,
+    });
+    expect(same?.repainted).toBeNull();
   });
 });
 

@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  createNdjsonBuffer,
-  encodeRequest,
-  encodeResponse,
-  MAX_NDJSON_LINE_CHARS,
-} from "./exegol-protocol";
+import { createNdjsonBuffer, MAX_NDJSON_LINE_CHARS } from "../lib/ndjson";
+import { encodeRequest, encodeResponse } from "./exegol-protocol";
 
 describe("createNdjsonBuffer", () => {
   it("parses a single complete line", () => {

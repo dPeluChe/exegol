@@ -12,7 +12,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   optional keyboard number (Edit project). Projects can be grouped in the sidebar.
 - **Tabs and panes**: every project has workspace tabs; a tab splits into panes of five types:
   terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer), git, and an
-  empty pane with the agent launcher.
+  empty pane with the agent launcher. Its "Run in" row opens the chosen folder (root or a
+  subfolder) in a terminal, Files, Git, Finder (Explorer on Windows, the file manager on Linux) or
+  the project's IDE. Its refresh button finds the folders and their commands again; past 12
+  folders a filter and "+N more" keep the row short.
 - **Layouts**: six presets (Single, Split Horizontal, Split Vertical, Three Columns, Bottom
   Terminal 70/30, 2×2 Grid), your own saved layouts, and Equalize splits. A project keeps its
   own named layouts (its menu > Layouts...) that start its terminals and agents again. Drag a pane by its left
@@ -132,10 +135,11 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Settings window**: its own window, so you can change themes, fonts or keys while agents run.
 - **Themes**: light, dark, black (OLED) and system. Three Nerd Fonts are bundled.
 - **Voice dictation**: Cmd+Shift+Space (Ctrl+Shift+Space on Linux and Windows) to start and
-  again to insert, or hold it while you talk; Esc cancels. Transcribed on this machine; the text
+  again to insert (or Enter while the overlay is open), or hold it while you talk; Esc cancels. Transcribed on this machine; the text
   goes only into the focused pane (pasted into a terminal without Enter, a browser page's focused
-  field, the code editor's cursor), else it is copied. Overlay with waveform, timer and live words
-  for the streaming model; Settings > Dictation for the shortcut, mic, limits and history; a mic
+  field, the code editor's cursor), else it is copied. Overlay with waveform, timer, where the
+  text goes and the words so far (live with the streaming model, phrase by phrase at each pause
+  with the others); with no model it offers a choice of three recommended models; Settings > Dictation for the shortcut, mic, limits and history; a mic
   button in the status bar.
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
