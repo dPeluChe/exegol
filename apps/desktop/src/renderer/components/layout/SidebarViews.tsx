@@ -1,4 +1,4 @@
-import { isSessionReconnecting, reconnectingLabel } from "@exegol/shared";
+import { ACTIVE_STATUSES, isSessionReconnecting, reconnectingLabel } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   AlertCircle,
@@ -27,7 +27,7 @@ import {
   useProjectShortcuts,
 } from "../../lib/live-tabs";
 import { useSessionRecovery } from "../../lib/session-recovery";
-import { busyCards, SIDEBAR_SESSION_STATUSES } from "../../lib/sidebar-views";
+import { activeCards, isActiveOrWaiting } from "../../lib/sidebar-views";
 import {
   type AgentState,
   type AttentionItem,
@@ -107,14 +107,15 @@ export function AgentsView() {
   const activeOnly = useAppStore((s) => s.sidebarActiveOnly);
   // Every live agent, one waiting on you included: its row carries the amber mark, and the
   // attention list is a separate view, so nothing shows twice
-  const activeAgents = Object.values(agents).filter((a) => SIDEBAR_SESSION_STATUSES.has(a.status));
+  const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
+  const attentionItems = useAgentStore((s) => s.attentionItems);
   // One card per project in the user's order, its live tabs inside; the card carries its Cmd+n.
   // A session no pane shows falls back to a per-project group with no shortcut.
   const groups = useLiveTabGroups();
   const cards = useMemo(() => groupByProject(groups), [groups]);
   const shownCards = useMemo(
-    () => (activeOnly ? busyCards(cards, agents) : cards),
-    [activeOnly, cards, agents],
+    () => (activeOnly ? activeCards(cards, agents, attentionItems) : cards),
+    [activeOnly, cards, agents, attentionItems],
   );
   const agentsByProject = useMemo(
     () =>
@@ -136,7 +137,8 @@ export function AgentsView() {
   const inGroups = new Set(groups.flatMap((g) => g.agentIds));
   const byProject = new Map<string, AgentState[]>();
   for (const agent of activeAgents) {
-    if (inGroups.has(agent.id) || (activeOnly && agent.activityLevel !== "busy")) continue;
+    if (inGroups.has(agent.id) || (activeOnly && !isActiveOrWaiting(agent, attentionItems)))
+      continue;
     const list = byProject.get(agent.projectId) ?? [];
     list.push(agent);
     byProject.set(agent.projectId, list);
@@ -190,7 +192,7 @@ export function AgentsView() {
     return (
       <p className="py-2 text-center text-[9px] italic text-text-muted">
         {activeOnly && activeAgents.length > 0
-          ? "No agent is working right now"
+          ? "No agent is working or waiting on you"
           : "No agents active"}
       </p>
     );

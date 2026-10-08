@@ -2,14 +2,13 @@ import { cn, Separator } from "@exegol/ui";
 import { ArrowDownAZ, GripVertical, LayoutDashboard, Plus } from "lucide-react";
 import { useProjects } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
-import { liveSessionCount, type SidebarView } from "../../lib/sidebar-views";
-import { useAgentStore } from "../../stores/agents";
-import { useAppStore } from "../../stores/app";
+import { useSidebarCounts } from "../../lib/sidebar-views";
+import { type SidebarView, useAppStore } from "../../stores/app";
 import { SegmentedTabs } from "../common/SegmentedTabs";
-import { AgentsView, AttentionView } from "./AttentionSection";
 import { ProjectsSection } from "./ProjectsSection";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
+import { AgentsView, AttentionView } from "./SidebarViews";
 
 const PANEL_ID = "sidebar-view";
 
@@ -19,9 +18,7 @@ const toolButton =
 export function Sidebar() {
   const { data: projects } = useProjects();
   const projectCount = projects?.length ?? 0;
-  const unreadCount = useAgentStore((s) => s.unreadAttentionCount);
-  const attentionCount = useAgentStore((s) => Object.keys(s.attentionItems).length);
-  const liveCount = useAgentStore((s) => liveSessionCount(s.agents));
+  const { live: liveCount, attention: attentionCount, unread: unreadCount } = useSidebarCounts();
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const openDashboard = useAppStore((s) => s.openDashboard);
   const view = useAppStore((s) => s.sidebarView);
@@ -120,7 +117,7 @@ function ViewToolbar({ view }: { view: SidebarView }) {
           aria-pressed={activeOnly}
           onClick={() => setActiveOnly(!activeOnly)}
           className={cn(toolButton, activeOnly && "bg-accent/15 text-accent hover:text-accent")}
-          title="Show only the sessions working right now"
+          title="Show only the sessions working now or waiting on you"
         >
           <span
             aria-hidden="true"

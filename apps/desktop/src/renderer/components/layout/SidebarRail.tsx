@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
-import { liveSessionCount, type SidebarView } from "../../lib/sidebar-views";
+import { isLiveSession, useSidebarCounts } from "../../lib/sidebar-views";
 import { isLiveAgent, useAgentStore } from "../../stores/agents";
-import { useAppStore } from "../../stores/app";
+import { type SidebarView, useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 
 const RAIL_VIEWS: { id: SidebarView; label: string; icon: LucideIcon }[] = [
@@ -32,21 +32,18 @@ export function SidebarRail() {
   const { data: projects = [] } = useProjects();
   const agents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
-  const unread = useAgentStore((s) => s.unreadAttentionCount);
+  const { live: liveCount, attention: attentionCount, unread } = useSidebarCounts();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const sidebarView = useAppStore((s) => s.sidebarView);
   const openSidebarView = useAppStore((s) => s.openSidebarView);
-  const liveCount = useAgentStore((s) => liveSessionCount(s.agents));
-  const attentionCount = Object.keys(attentionItems).length;
 
   const perProject = useMemo(() => {
     const live = new Map<string, number>();
     const paused = new Set<string>();
     for (const a of Object.values(agents)) {
-      if (!isLiveAgent(a)) continue;
-      if (a.suspended) paused.add(a.projectId);
-      else live.set(a.projectId, (live.get(a.projectId) ?? 0) + 1);
+      if (isLiveSession(a)) live.set(a.projectId, (live.get(a.projectId) ?? 0) + 1);
+      else if (isLiveAgent(a)) paused.add(a.projectId);
     }
     const waiting = new Set(
       Object.values(attentionItems)

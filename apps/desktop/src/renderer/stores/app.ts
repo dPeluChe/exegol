@@ -1,9 +1,14 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { isSidebarView, type SidebarView } from "../lib/sidebar-views";
 
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
 type ActiveView = "projects" | "workspace" | "dashboard";
+
+export const SIDEBAR_VIEWS = ["agents", "projects", "attention"] as const;
+export type SidebarView = (typeof SIDEBAR_VIEWS)[number];
+
+export const isSidebarView = (value: unknown): value is SidebarView =>
+  SIDEBAR_VIEWS.includes(value as SidebarView);
 
 interface AppStore {
   /** Current main view */
@@ -83,17 +88,17 @@ export function migrateAppStore(persisted: unknown, fromVersion: number): AppSto
     sidebarProjectsHeight?: unknown;
     sidebarView?: SidebarView;
   };
-  if (fromVersion < 5) {
-    state.sidebarView = isSidebarView(state.sidebarAgentsView) ? state.sidebarAgentsView : "agents";
-    delete state.sidebarAgentsView;
-    delete state.sidebarProjectsHeight;
-  }
   if (fromVersion < 4) {
     const keys = Array.isArray(state.liveTabOrder) ? state.liveTabOrder : [];
     state.liveProjectOrder = projectOrderFromTabKeys(
       keys.filter((k): k is string => typeof k === "string"),
     );
     delete state.liveTabOrder;
+  }
+  if (fromVersion < 5) {
+    state.sidebarView = isSidebarView(state.sidebarAgentsView) ? state.sidebarAgentsView : "agents";
+    delete state.sidebarAgentsView;
+    delete state.sidebarProjectsHeight;
   }
   if (fromVersion < 2 && state.activeView === "settings") {
     state.activeView = state.activeProjectId ? "workspace" : "projects";

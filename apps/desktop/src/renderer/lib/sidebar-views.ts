@@ -1,28 +1,51 @@
-import type { AgentState } from "../stores/agents";
+import { type AgentState, type AttentionItem, isLiveAgent, useAgentStore } from "../stores/agents";
 import type { LiveProjectGroup } from "./live-tabs";
 
-export const SIDEBAR_VIEWS = ["agents", "projects", "attention"] as const;
-export type SidebarView = (typeof SIDEBAR_VIEWS)[number];
+/** A session the sidebar counts as live: no shells, suspended ones apart (the rail's own rule) */
+export const isLiveSession = (a: Pick<AgentState, "cliType" | "status" | "suspended">) =>
+  isLiveAgent(a) && !a.suspended;
 
-export const isSidebarView = (value: unknown): value is SidebarView =>
-  SIDEBAR_VIEWS.includes(value as SidebarView);
+export const isBusy = (a: Pick<AgentState, "activityLevel"> | undefined) =>
+  a?.activityLevel === "busy";
 
-/** The sessions the Agents view lists (shells included) */
-export const SIDEBAR_SESSION_STATUSES = new Set(["running", "spawning", "waiting_input"]);
+/** "Active only": working now, or waiting on the user with an unread attention item */
+export const isActiveOrWaiting = (
+  a: AgentState | undefined,
+  attention: Record<string, AttentionItem>,
+) => !!a && (isBusy(a) || attention[a.id]?.read === false);
 
-export const liveSessionCount = (agents: Record<string, Pick<AgentState, "status">>) =>
-  Object.values(agents).filter((a) => SIDEBAR_SESSION_STATUSES.has(a.status)).length;
-
-/** "Active only": the cards keep their busy sessions; a tab or card left empty is dropped */
-export function busyCards(
+/** "Active only": the cards keep their active sessions; a tab or card left empty is dropped */
+export function activeCards(
   cards: LiveProjectGroup[],
   agents: Record<string, AgentState>,
+  attention: Record<string, AttentionItem>,
 ): LiveProjectGroup[] {
   return cards.flatMap((card) => {
     const tabs = card.tabs.flatMap((tab) => {
-      const agentIds = tab.agentIds.filter((id) => agents[id]?.activityLevel === "busy");
+      const agentIds = tab.agentIds.filter((id) => isActiveOrWaiting(agents[id], attention));
       return agentIds.length > 0 ? [{ ...tab, agentIds }] : [];
     });
     return tabs.length > 0 ? [{ ...card, tabs }] : [];
   });
+}
+
+export function liveSessionCount(agents: Record<string, AgentState>): number {
+  let n = 0;
+  for (const id in agents) {
+    const a = agents[id];
+    if (a && isLiveSession(a)) n++;
+  }
+  return n;
+}
+
+/** The badges of the sidebar's views, shared by the sidebar and the collapsed rail */
+export function useSidebarCounts() {
+  const live = useAgentStore((s) => liveSessionCount(s.agents));
+  const attention = useAgentStore((s) => {
+    let n = 0;
+    for (const id in s.attentionItems) if (s.attentionItems[id]) n++;
+    return n;
+  });
+  const unread = useAgentStore((s) => s.unreadAttentionCount);
+  return { live, attention, unread };
 }
