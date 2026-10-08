@@ -1,11 +1,28 @@
+import { ideLabel } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Folder, FolderGit2, FolderTree, GitBranch, Play, Star, Terminal, Zap } from "lucide-react";
+import {
+  Code2,
+  Folder,
+  FolderGit2,
+  FolderOpen,
+  FolderTree,
+  GitBranch,
+  Play,
+  RefreshCw,
+  Star,
+  Terminal,
+  Zap,
+} from "lucide-react";
 import { useState } from "react";
+import { useProjectIde, useSettings } from "../../hooks/use-trpc";
 import type { DetectedScript } from "../../hooks/use-trpc-scheduler";
+import { fileManagerLabel } from "../../lib/keymap";
+import { openProjectInIde } from "../../lib/open-in-ide";
+import { pickRunTarget, runTargetLabel, visibleRunTargets } from "../../lib/run-targets";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { useToastStore } from "../../stores/toasts";
+import { toastError, useToastStore } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
 
 interface RunTarget {
@@ -29,7 +46,7 @@ function runnerLabel(s: DetectedScript): string | null {
 /**
  * T197: where to run and what. A workspace of repos has nothing to run at its
  * root, so the launcher showed no commands; each folder is a chip, and the
- * row below it opens that folder's Terminal, Files and Git, then its commands
+ * row below it opens that folder's Terminal, Files, Git, file manager and IDE, then its commands
  * (pinned first, the rest behind "+N"). Always shown, so those three stay.
  */
 export function RunTargets({
@@ -57,19 +74,31 @@ export function RunTargets({
     mutationFn: (key: string) => trpcMutate<string[]>("resources.toggleRunPin", { projectId, key }),
     onSuccess: (next) => queryClient.setQueryData(["resources", "runPins", projectId], next),
   });
+  const refresh = useMutation({
+    mutationFn: () => trpcMutate<RunTarget[]>("resources.refreshRunTargets", { projectId }),
+    onSuccess: (next) => queryClient.setQueryData(["resources", "runTargets", projectId], next),
+    onError: toastError("Could not refresh the folders"),
+  });
   const [chosen, setChosen] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [showAllFolders, setShowAllFolders] = useState(false);
+  const [folderQuery, setFolderQuery] = useState("");
   const [launching, setLaunching] = useState<string | null>(null);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
+  const { data: settings } = useSettings();
+  const { data: projectIde } = useProjectIde(projectId);
+  const ideName = ideLabel(projectIde ?? settings?.defaultIde ?? "vscode");
+  const fileManager = fileManagerLabel();
 
   // Default: a folder holding a pin, else the root when it has commands, else the first repo
   const pinnedRel = pins[0]?.split("\u0000")[0];
-  const selected =
-    targets.find((t) => t.rel === chosen) ??
-    targets.find((t) => t.rel === pinnedRel) ??
-    targets.find((t) => t.rel !== "" || t.scripts.length > 0) ??
-    targets[0];
+  const selected = pickRunTarget(targets, chosen, pinnedRel);
   if (!selected) return null;
+  const folders = visibleRunTargets(targets, {
+    query: folderQuery,
+    expanded: showAllFolders,
+    selectedRel: selected.rel,
+  });
   const inFolder = selected.rel !== "";
 
   const isPinnedScript = (s: { command: string }) => pins.includes(pinKey(selected.rel, s.command));
@@ -105,11 +134,40 @@ export function RunTargets({
   const size = compact ? "px-2 py-1 text-[9px]" : "px-2.5 py-1 text-[11px]";
 
   return (
-    <div className={cn("flex w-full flex-col items-center gap-1.5", compact ? "mt-1.5" : "mt-3")}>
+    <div
+      className={cn(
+        "flex w-full max-w-sm flex-col items-center gap-1.5",
+        compact ? "mt-1.5" : "mt-3",
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="text-[9px] font-medium uppercase tracking-wide text-text-muted">
+          Run in
+        </span>
+        <button
+          type="button"
+          disabled={refresh.isPending}
+          onClick={() => refresh.mutate()}
+          className="text-text-muted hover:text-text-secondary disabled:opacity-60"
+          title="Find the folders and their commands again"
+          aria-label="Refresh folders"
+        >
+          <RefreshCw className={cn("h-2.5 w-2.5", refresh.isPending && "animate-spin")} />
+        </button>
+        {folders.filterable && (
+          <input
+            type="text"
+            value={folderQuery}
+            onChange={(e) => setFolderQuery(e.target.value)}
+            placeholder="Filter folders"
+            aria-label="Filter folders"
+            className="w-28 rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[10px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
+          />
+        )}
+      </div>
       {targets.length > 1 && (
         <div className="flex flex-wrap justify-center gap-1">
-          {!compact && <span className="self-center text-[9px] text-text-muted">Run in</span>}
-          {targets.map((t) => {
+          {folders.shown.map((t) => {
             const active = t.rel === selected.rel;
             const Icon = t.git ? FolderGit2 : Folder;
             return (
@@ -130,13 +188,39 @@ export function RunTargets({
                 title={t.path}
               >
                 <Icon className="h-3 w-3" />
-                {t.rel || "root"}
+                {runTargetLabel(t)}
                 {t.scripts.some((s) => s.source === "convex") && (
                   <Zap className="h-2.5 w-2.5 text-amber-400" />
                 )}
               </button>
             );
           })}
+          {folders.hidden > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowAllFolders(true)}
+              className={cn(
+                chip,
+                size,
+                "border-dashed border-border text-text-muted hover:text-text-secondary",
+              )}
+            >
+              +{folders.hidden} more
+            </button>
+          )}
+          {showAllFolders && folders.filterable && !folderQuery && (
+            <button
+              type="button"
+              onClick={() => setShowAllFolders(false)}
+              className={cn(
+                chip,
+                size,
+                "border-transparent text-text-muted hover:text-text-secondary",
+              )}
+            >
+              Show fewer
+            </button>
+          )}
         </div>
       )}
 
@@ -192,6 +276,38 @@ export function RunTargets({
             Git
           </button>
         )}
+        <button
+          type="button"
+          onClick={() =>
+            trpcMutate("projects.openFolder", { projectId, path: selected.path }).catch(
+              toastError(`Could not open ${fileManager}`),
+            )
+          }
+          className={cn(
+            chip,
+            size,
+            "border-border bg-bg-secondary text-text-secondary hover:border-accent/50",
+          )}
+          title={`Open ${selected.path} in ${fileManager}`}
+        >
+          <FolderOpen className="h-3 w-3" />
+          {fileManager}
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openProjectInIde({ projectId, file: inFolder ? selected.path : undefined })
+          }
+          className={cn(
+            chip,
+            size,
+            "border-border bg-bg-secondary text-text-secondary hover:border-accent/50",
+          )}
+          title={`Open ${selected.path} in ${ideName}`}
+        >
+          <Code2 className="h-3 w-3" />
+          {ideName}
+        </button>
         {selected.scripts.length > 0 && <span className="mx-0.5 w-px self-stretch bg-border" />}
         {[...pinned, ...shown].map((s) => {
           const key = pinKey(selected.rel, s.command);

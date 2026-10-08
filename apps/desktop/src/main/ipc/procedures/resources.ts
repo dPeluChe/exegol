@@ -10,7 +10,7 @@ import {
   getSidecarMemoryMetrics,
   getSystemMetrics,
 } from "../../system/resources";
-import { detectRunTargets } from "../../system/scripts";
+import { detectRunTargets, refreshRunTargets } from "../../system/scripts";
 import { publicProcedure, router } from "../trpc";
 
 // ─── Preferred Ports (per-project, stored in settings table) ──────────────
@@ -86,6 +86,14 @@ export const resourcesRouter = router({
     .query(async ({ ctx, input }) => {
       const project = getProject(ctx.db, input.projectId);
       return project ? detectRunTargets(project.path) : [];
+    }),
+
+  /** The launcher's refresh: re-detects folders and scripts, cache bypassed */
+  refreshRunTargets: publicProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      return project ? refreshRunTargets(project.path) : [];
     }),
 
   /** Pinned run commands per project, as "rel\u0000command" keys */
