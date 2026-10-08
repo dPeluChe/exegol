@@ -1,4 +1,5 @@
 import { cn } from "@exegol/ui";
+import type { LucideIcon } from "lucide-react";
 import { tabKeyTarget } from "../../lib/tab-keys";
 
 export interface SegmentedTab<T extends string> {
@@ -8,6 +9,8 @@ export interface SegmentedTab<T extends string> {
   count?: number;
   /** The count asks for the user (e.g. unread attention): shown in amber */
   alert?: boolean;
+  /** Compact tabs with an icon show their label only while selected */
+  icon?: LucideIcon;
 }
 
 /** Settings-style segmented control (originally inline in KeyboardShortcuts). */
@@ -57,6 +60,8 @@ export function SegmentedTabs<T extends string>({
     >
       {tabs.map((tab, index) => {
         const selected = active === tab.id;
+        const Icon = tab.icon;
+        const iconOnly = compact && !!Icon && !selected;
         return (
           <button
             type="button"
@@ -70,22 +75,29 @@ export function SegmentedTabs<T extends string>({
               onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => onKeyDown(e, index),
             })}
             title={compact ? tab.label : undefined}
+            aria-label={iconOnly ? tab.label : undefined}
             onClick={() => onChange(tab.id)}
             className={cn(
-              "flex min-w-0 flex-1 items-center justify-center rounded-md font-medium transition-colors",
+              "flex min-w-0 items-center justify-center rounded-md font-medium transition-colors",
+              iconOnly ? "flex-none" : "flex-1",
               compact ? "px-1.5 py-1 text-[10px]" : "px-3 py-1.5 text-xs",
               selected
                 ? "bg-bg-secondary text-text-primary shadow-sm"
                 : "text-text-muted hover:text-text-secondary",
             )}
           >
-            <span className="min-w-0 truncate">{tab.label}</span>
+            {Icon && <Icon className={cn("h-3.5 w-3.5 shrink-0", !iconOnly && "mr-1")} />}
+            {!iconOnly && <span className="min-w-0 truncate">{tab.label}</span>}
             {tab.count !== undefined && (
               <span
                 className={cn(
                   "shrink-0 text-[10px]",
                   compact ? "ml-1" : "ml-1.5",
-                  tab.alert ? "font-semibold text-amber-400" : "text-text-muted",
+                  tab.alert
+                    ? "font-semibold text-amber-400"
+                    : compact
+                      ? "font-semibold text-accent"
+                      : "text-text-muted",
                 )}
               >
                 ({tab.count})

@@ -47,6 +47,8 @@ interface AppStore {
   setSidebarView: (view: SidebarView) => void;
   /** The rail's view buttons: expand the sidebar on that view */
   openSidebarView: (view: SidebarView) => void;
+  /** Cmd+Shift+B: the next view, expanding the sidebar */
+  cycleSidebarView: () => void;
 
   /** Agents view: only the busy sessions */
   sidebarActiveOnly: boolean;
@@ -149,6 +151,13 @@ export const useAppStore = create<AppStore>()(
       sidebarView: "agents",
       setSidebarView: (view) => set({ sidebarView: view }),
       openSidebarView: (view) => set({ sidebarView: view, sidebarCollapsed: false }),
+      cycleSidebarView: () =>
+        set((s) => ({
+          sidebarView:
+            SIDEBAR_VIEWS[(SIDEBAR_VIEWS.indexOf(s.sidebarView) + 1) % SIDEBAR_VIEWS.length] ??
+            "agents",
+          sidebarCollapsed: false,
+        })),
 
       sidebarActiveOnly: false,
       setSidebarActiveOnly: (on) => set({ sidebarActiveOnly: on }),

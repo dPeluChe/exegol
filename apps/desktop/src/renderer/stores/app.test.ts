@@ -73,6 +73,18 @@ describe("openSidebarView", () => {
   });
 });
 
+describe("cycleSidebarView", () => {
+  it("walks Agents, Projects, Needs attention and back, expanding the sidebar", () => {
+    useAppStore.setState({ sidebarCollapsed: true, sidebarView: "agents" });
+    const seen = [1, 2, 3].map(() => {
+      useAppStore.getState().cycleSidebarView();
+      return useAppStore.getState().sidebarView;
+    });
+    expect(seen).toEqual(["projects", "attention", "agents"]);
+    expect(useAppStore.getState().sidebarCollapsed).toBe(false);
+  });
+});
+
 describe("Projects view return", () => {
   it("opens over the workspace, keeping the project, and Back returns to that view", () => {
     useAppStore.setState({ activeView: "dashboard", activeProjectId: "p1", projectsFrom: null });
