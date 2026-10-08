@@ -68,11 +68,12 @@ export function takesDictation(a: { cliType: string; status: AgentStatus }): boo
   return a.cliType === "shell" ? LIVE_STATUSES.has(a.status) : isPasteTarget(a);
 }
 
-/** Only Exegol losing the focus to another app cancels (the main process's focus relay): a
- *  browser pane's webview blurs the document without that. Not while starting: the macOS mic
- *  prompt takes the focus then */
-export const cancelsOnFocusChange = (appFocused: boolean, phase: string): boolean =>
-  !appFocused && phase === "listening";
+/** Speech past this is kept on cancel (clipboard): a stray Esc must not lose a long dictation */
+export const KEEP_ON_CANCEL_MS = 15_000;
+
+/** The text a cancel copies instead of discarding, null when there is little to lose */
+export const keptOnCancel = (speechMs: number, text: string): string | null =>
+  speechMs >= KEEP_ON_CANCEL_MS && text ? text : null;
 
 /** A dictation never answers an agent's question: typed text (or its Enter) would pick an
  *  option of a permission dialog */

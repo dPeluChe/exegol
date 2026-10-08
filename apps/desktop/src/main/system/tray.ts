@@ -72,12 +72,26 @@ function buildContextMenu(agents: RunningAgent[]): Menu {
   ]);
 }
 
+let shownCount = 0;
+/** "● REC 0:42" while a dictation records with no Exegol window focused; wins over the count */
+let recording: string | null = null;
+
 function updateTrayBadge(count: number): void {
+  shownCount = count;
   if (!tray) return;
-  tray.setToolTip(count > 0 ? `Exegol — ${count} agent${count > 1 ? "s" : ""} running` : "Exegol");
-  if (process.platform === "darwin") {
-    tray.setTitle(count > 0 ? `${count}` : "", { fontType: "monospacedDigit" });
+  const agents = count > 0 ? `Exegol — ${count} agent${count > 1 ? "s" : ""} running` : "Exegol";
+  tray.setToolTip(recording ? `Exegol — dictation recording (${recording})` : agents);
+  // setTitle shows on macOS and on Linux app indicators; Windows keeps the tooltip
+  if (process.platform !== "win32") {
+    const title = recording ?? (process.platform === "darwin" && count > 0 ? `${count}` : "");
+    tray.setTitle(title, { fontType: "monospacedDigit" });
   }
+}
+
+export function setTrayRecording(label: string | null): void {
+  if (label === recording) return;
+  recording = label;
+  updateTrayBadge(shownCount);
 }
 
 export function initTray(): void {
