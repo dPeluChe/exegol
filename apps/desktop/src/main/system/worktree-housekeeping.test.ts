@@ -54,6 +54,8 @@ function setup() {
   writeFileSync(join(repo, ".gitignore"), "node_modules/\n.env\n");
   commit(repo, "a.txt");
   git(repo, "remote", "add", "origin", origin);
+  git(repo, "config", "user.name", "t");
+  git(repo, "config", "user.email", "t@t");
   git(repo, "push", "-q", "origin", "main");
 
   const db = new Database(":memory:");
@@ -62,7 +64,7 @@ function setup() {
 
   /** A worktree on its own branch, pushed unless `push` is false */
   const worktree = (name: string, opts: { push?: boolean } = {}) => {
-    const path = join(wtRoot, "proj", name);
+    const path = join(wtRoot, "proj", name.replace(/\//g, "-"));
     git(repo, "worktree", "add", "-q", "-b", name, path);
     if (opts.push !== false) git(path, "push", "-q", "origin", name);
     utimesSync(join(path, ".git"), OLD_S, OLD_S);
@@ -81,7 +83,8 @@ function setup() {
   };
   const rowExists = (id: string) =>
     db.prepare("SELECT 1 FROM worktrees WHERE id = ?").get(id) !== undefined;
-  const sweep = () => sweepOrphanWorktrees(db, [wtRoot], NOW);
+  // The removal rule alone; the save step has its own tests below
+  const sweep = (saveWork = false) => sweepOrphanWorktrees(db, [wtRoot], NOW, undefined, saveWork);
   return { db, repo, wtRoot, worktree, row, rowExists, sweep };
 }
 
@@ -220,5 +223,28 @@ describe("sweepOrphanWorktrees", () => {
     expect(readdirSync(join(wtRoot, "proj")).some((n) => n.startsWith(".exegol-trash-"))).toBe(
       false,
     );
+  });
+
+  it("saves dirty work to its branch and pushes it, then removes the worktree", async () => {
+    const { repo, worktree, row, rowExists, sweep } = setup();
+    const path = worktree("exegol/save-me");
+    writeFileSync(join(path, "work.txt"), "unsaved");
+    const id = row("exegol/save-me", path);
+    expect(await sweep(true)).toMatchObject({ removed: 1 });
+    expect(existsSync(path)).toBe(false);
+    expect(rowExists(id)).toBe(false);
+    expect(git(repo, "show", "origin/exegol/save-me:work.txt")).toBe("unsaved");
+    expect(git(repo, "log", "-1", "--format=%s", "exegol/save-me")).toContain("wip(exegol): save");
+  });
+
+  it("with the setting off, nothing is committed and the dirty worktree stays", async () => {
+    const { repo, worktree, row, sweep } = setup();
+    const path = worktree("exegol/off");
+    writeFileSync(join(path, "work.txt"), "unsaved");
+    row("exegol/off", path);
+    const before = git(repo, "rev-parse", "exegol/off");
+    expect(await sweep(false)).toMatchObject({ removed: 0, kept: 1 });
+    expect(git(repo, "rev-parse", "exegol/off")).toBe(before);
+    expect(existsSync(join(path, "work.txt"))).toBe(true);
   });
 });

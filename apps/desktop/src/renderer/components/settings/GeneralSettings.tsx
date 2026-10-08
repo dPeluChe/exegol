@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Bell,
   Check,
+  GitBranch,
   Loader2,
   MessageSquare,
   Monitor,
@@ -225,6 +226,19 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             />
           ))}
         </div>
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+          Worktrees
+        </h3>
+        <SwitchRow
+          label="Save worktree work to its branch when an agent ends"
+          description="Commits what is pending (never ignored files, likely secrets or files over 10 MB) and pushes the agent's own branch to origin, so the work is on the remote before any cleanup. Also used by the daily worktree sweep"
+          icon={GitBranch}
+          value={settings.saveWorktreeWork}
+          onToggle={() => onChange({ saveWorktreeWork: !settings.saveWorktreeWork })}
+        />
       </div>
 
       {/* Ollama / Project Indexing status */}

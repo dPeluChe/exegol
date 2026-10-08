@@ -175,3 +175,15 @@ export function agentWorktreeAction(
   };
   return { action: "keep", note: `${registered.branch}: ${notes[pr ?? "unknown"]}` };
 }
+
+const shellQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
+
+/** What the user could run to put a kept worktree's work on its branch (the script never does) */
+export function saveCommands(dir: string, branch: string | null, reason: string): string | null {
+  if (!branch) return null;
+  const g = `git -C ${shellQuote(dir)}`;
+  const push = `${g} push -u origin ${shellQuote(branch)}`;
+  if (reason === "unpushed commits") return push;
+  if (reason !== "uncommitted changes") return null;
+  return `${g} add -A && ${g} commit -m 'wip: save work' && ${push}`;
+}

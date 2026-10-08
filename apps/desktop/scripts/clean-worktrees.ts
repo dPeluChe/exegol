@@ -10,6 +10,7 @@ import {
   cwdInside,
   parseWorktreeList,
   prVerdict,
+  saveCommands,
 } from "./clean-build-plan";
 import { duBytes, human, run } from "./clean-exec";
 
@@ -91,6 +92,8 @@ export async function worktreeSection(root: string, apply: boolean): Promise<num
     const safety = await worktreeSafety(dir);
     if (!safety.removable) {
       console.log(`  report ${name} ${human(size)}: ${note}, kept (${safety.reason})`);
+      const steps = saveCommands(dir, reg?.branch ?? null, safety.reason);
+      if (steps) console.log(`    to save it to its branch yourself: ${steps}`);
       continue;
     }
     if (!apply) {

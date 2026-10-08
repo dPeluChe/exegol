@@ -35,10 +35,15 @@ const IN_PROGRESS = [
 
 export type GitRunner = (args: string[], cwd: string, timeoutMs?: number) => Promise<string>;
 
-/** No GIT_* from the caller (GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_PARAMETERS...) and no user
- *  setting that hides files from status */
+/** Push credentials helpers survive; every other GIT_* (GIT_DIR, GIT_WORK_TREE,
+ *  GIT_CONFIG_PARAMETERS...) is dropped, and git never waits on a terminal prompt */
+const GIT_ENV_KEPT = new Set(["GIT_SSH", "GIT_SSH_COMMAND", "GIT_ASKPASS"]);
+
 function cleanEnv(): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_")));
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_") || GIT_ENV_KEPT.has(k)),
+  );
+  return { ...env, GIT_TERMINAL_PROMPT: "0" };
 }
 
 export const runGit: GitRunner = async (args, cwd, timeoutMs = 10_000) =>
@@ -71,6 +76,25 @@ export function isRegenerable(ignoredPath: string): boolean {
 
 const keep = (reason: WorktreeSafetyReason): WorktreeSafety => ({ removable: false, reason });
 
+/** Own checkout, no submodules, no rebase/merge/cherry-pick/revert/bisect under way. Null = ok */
+export async function checkoutBlocker(
+  dir: string,
+  git = runGit,
+): Promise<"git check failed" | "submodules" | "operation in progress" | null> {
+  // Without its own .git, git would answer for an enclosing repo (the main checkout)
+  const top = (await git(["rev-parse", "--show-toplevel"], dir)).trim();
+  if (realpathSync(top) !== realpathSync(dir)) return "git check failed";
+  if (existsSync(join(dir, ".gitmodules"))) return "submodules";
+  const markers = (await git(["rev-parse", ...IN_PROGRESS.flatMap((m) => ["--git-path", m])], dir))
+    .split("\n")
+    .filter(Boolean);
+  if (markers.length !== IN_PROGRESS.length) return "git check failed";
+  if (markers.some((m) => existsSync(isAbsolute(m) ? m : join(dir, m)))) {
+    return "operation in progress";
+  }
+  return null;
+}
+
 /**
  * The one rule for removing a worktree (docs/GUIDES/RELEASE.md "Orphaned worktrees"): its own
  * checkout, no submodules, no operation in progress, nothing changed or untracked, ignored files
@@ -78,19 +102,8 @@ const keep = (reason: WorktreeSafetyReason): WorktreeSafety => ({ removable: fal
  */
 export async function worktreeSafety(dir: string, git = runGit): Promise<WorktreeSafety> {
   try {
-    // Without its own .git, git would answer for an enclosing repo (the main checkout)
-    const top = (await git(["rev-parse", "--show-toplevel"], dir)).trim();
-    if (realpathSync(top) !== realpathSync(dir)) return keep("git check failed");
-    if (existsSync(join(dir, ".gitmodules"))) return keep("submodules");
-    const markers = (
-      await git(["rev-parse", ...IN_PROGRESS.flatMap((m) => ["--git-path", m])], dir)
-    )
-      .split("\n")
-      .filter(Boolean);
-    if (markers.length !== IN_PROGRESS.length) return keep("git check failed");
-    if (markers.some((m) => existsSync(isAbsolute(m) ? m : join(dir, m)))) {
-      return keep("operation in progress");
-    }
+    const blocker = await checkoutBlocker(dir, git);
+    if (blocker) return keep(blocker);
     const status = await git(
       [
         "status",

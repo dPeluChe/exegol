@@ -2,9 +2,11 @@ import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type Database from "libsql";
+import { announceSave, type SaveTarget, saveWorktreeWork } from "../agents/worktree-save";
 import { removingWorktrees } from "../agents/worktrees";
 import { removeWorktree as dbRemoveWorktree } from "../db/queries";
 import { countLiveAgentsInWorktree } from "../db/queries/agents";
+import { getAppSettings } from "../db/queries/settings";
 import {
   type GitRunner,
   isLockedOrUnknown,
@@ -27,6 +29,8 @@ export interface WorktreeSweepResult {
 interface Row {
   id: string;
   path: string;
+  branch_name: string;
+  alias: string | null;
   repo: string;
   created_at: number;
   agents: number;
@@ -93,10 +97,13 @@ async function removeIfSafe(
   repos: Set<string>,
   stillFree: () => boolean,
   git: GitRunner,
+  save: Omit<SaveTarget, "dir"> | null,
 ): Promise<boolean> {
   const repo = repoOf(path);
   if (!repo || !repos.has(norm(repo))) return false;
   if (await isLockedOrUnknown(repo, path, git)) return false;
+  // Dirty or unpushed work goes to its branch's remote first, then the rule is checked again
+  if (save && stillFree()) announceSave(await saveWorktreeWork({ dir: path, ...save }, git), save);
   if (!(await worktreeSafety(path, git)).removable) return false;
   removingWorktrees.add(path);
   try {
@@ -124,12 +131,14 @@ export async function sweepOrphanWorktrees(
   roots: readonly string[],
   now = Date.now(),
   git: GitRunner = runGit,
+  saveWork = getAppSettings(db).saveWorktreeWork,
 ): Promise<WorktreeSweepResult> {
   const result: WorktreeSweepResult = { removed: 0, droppedRows: 0, kept: 0 };
   const busy = inUse(db);
   const rows = db
     .prepare(
-      `SELECT w.id, w.path, w.created_at, p.path AS repo,
+      `SELECT w.id, w.path, w.branch_name, w.created_at, p.path AS repo,
+              MAX(a.alias) AS alias,
               COUNT(a.id) AS agents, COUNT(a.archived_at) AS archived,
               MAX(a.archived_at) AS last_archived,
               SUM(CASE WHEN a.id IN (${[...busy.agents].map(() => "?").join(",") || "NULL"}) THEN 1 ELSE 0 END) AS racing
@@ -156,7 +165,10 @@ export async function sweepOrphanWorktrees(
     const since = row.agents > 0 ? (row.last_archived ?? 0) * 1000 : row.created_at * 1000;
     if (now - since < DAY_MS) continue;
     const free = () => countLiveAgentsInWorktree(db, row.id) === 0;
-    if (await removeIfSafe(row.path, projectRepos, free, git)) {
+    const save = saveWork
+      ? { expectedBranch: row.branch_name, alias: row.alias || row.branch_name }
+      : null;
+    if (await removeIfSafe(row.path, projectRepos, free, git, save)) {
       dbRemoveWorktree(db, row.id);
       result.removed++;
     } else {
@@ -182,7 +194,8 @@ export async function sweepOrphanWorktrees(
         // A day old at least: a spawn creates the directory a moment before its row
         if (gitFile && now - gitFile.mtimeMs < DAY_MS) continue;
         const free = () => !db.prepare("SELECT 1 FROM worktrees WHERE path = ?").get(path);
-        if (await removeIfSafe(path, projectRepos, free, git)) result.removed++;
+        const save = saveWork ? { expectedBranch: null, alias: name } : null;
+        if (await removeIfSafe(path, projectRepos, free, git, save)) result.removed++;
         else result.kept++;
       }
     }

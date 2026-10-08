@@ -2,13 +2,16 @@ import type Database from "libsql";
 import {
   clearAgentWorktree,
   removeWorktree as dbRemoveWorktree,
+  getAgent,
   getWorktreeByAgentId,
 } from "../db/queries";
 import { countLiveAgentsInWorktree } from "../db/queries/agents";
+import { getAppSettings } from "../db/queries/settings";
 import { runNative } from "../lib/concurrency";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig, runLifecycleScript } from "../lifecycle/loader";
 import { coreRust } from "./spawn-env";
+import { announceSave, saveWorktreeWork } from "./worktree-save";
 import { getWorktreeName, removeManagedWorktree } from "./worktrees";
 
 export interface WorktreeRecord {
@@ -56,6 +59,21 @@ export async function cleanupWorktree(
     return;
   }
   try {
+    if (getAppSettings(db).saveWorktreeWork) {
+      const agent = getAgent(db, agentId);
+      const alias = agent?.alias || agent?.cliType || "agent";
+      const outcome = await saveWorktreeWork({
+        dir: wt.worktreePath,
+        expectedBranch: getWorktreeByAgentId(db, agentId)?.branchName ?? null,
+        alias,
+      });
+      announceSave(outcome, { alias, agentId, projectId: agent?.projectId });
+      // Not saved (push failed, secret, hook...): the worktree is the only copy, keep it
+      if (outcome.status === "refused") {
+        worktrees.delete(agentId);
+        return;
+      }
+    }
     const hasChanges = await runNative(() => rust.worktreeHasChangesAsync(wt.worktreePath));
     if (hasChanges) {
       logger.info(

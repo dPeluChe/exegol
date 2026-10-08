@@ -8,6 +8,7 @@ import {
   planTestTmp,
   planTurbo,
   prVerdict,
+  saveCommands,
 } from "./clean-build-plan";
 
 const at = (name: string, mtimeMs = 0) => ({ name, mtimeMs });
@@ -94,6 +95,15 @@ describe("worktrees", () => {
     expect(
       cwdInside("p1\nn/r/.claude/worktrees/agent-abc\n", "/r/.claude/worktrees/agent-ab"),
     ).toBe(false);
+  });
+
+  it("prints save commands only for uncommitted or unpushed work on a branch", () => {
+    expect(saveCommands("/w/a", "feat/x", "unpushed commits")).toBe(
+      "git -C '/w/a' push -u origin 'feat/x'",
+    );
+    expect(saveCommands("/w/a", "feat/x", "uncommitted changes")).toContain("add -A");
+    expect(saveCommands("/w/a", null, "uncommitted changes")).toBeNull();
+    expect(saveCommands("/w/a", "feat/x", "submodules")).toBeNull();
   });
 
   it("only a merged or closed PR, with none open, makes an orphan", () => {

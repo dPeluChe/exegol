@@ -27,6 +27,8 @@ export type Settings = {
   terminalFontFamily: string;
   notificationsEnabled: boolean;
   toastsEnabled: boolean;
+  /** Commit and push a worktree's pending work to its branch when its agent ends or before a sweep */
+  saveWorktreeWork: boolean;
   /** T155.7: per-channel notification kill switches (NotificationMuteChannel ids) */
   mutedNotificationChannels: string[];
   /** Ollama server URL for local embeddings */
@@ -57,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   terminalFontFamily: "Menlo, Monaco, monospace",
   notificationsEnabled: true,
   toastsEnabled: true,
+  saveWorktreeWork: true,
   mutedNotificationChannels: [],
   ollamaUrl: "http://localhost:11434",
   ollamaModel: "nomic-embed-text",

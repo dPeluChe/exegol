@@ -110,6 +110,27 @@ kept, and branches are never deleted:
     `git worktree prune`, then the trash is deleted off the main thread (a later sweep finishes a
     trash left behind). One summary log line, no paths
 
+#### Save worktree work
+
+Settings > General > Worktrees, "Save worktree work to its branch when an agent ends" (on by
+default, `saveWorktreeWork`). When an agent in an Exegol worktree ends, and in the daily sweep
+before a kept worktree is checked again, `agents/worktree-save.ts`:
+
+- refuses on a detached HEAD, the repo's default branch (origin/HEAD) or main/master, a branch
+  that is not the worktree row's (no row: not `exegol/*`), submodules or an operation under way
+- stages tracked changes and untracked files git does not ignore (`git add -A`, never `-f`;
+  `.agents/mcp_config.json` excluded); a staged `.env*`, `*.pem`, `*.key`, `id_rsa*`, `*.p12`,
+  `credentials*` or a file over 10 MB unstages everything and keeps the worktree
+- commits `wip(exegol): save <alias> work before cleanup` with the repo's configured identity
+  (none: refused, never set), hooks run (a failing hook keeps it)
+- pushes `refs/heads/<branch>` to the same name on origin (`-u`, never `--force`, 60 s); no
+  origin or a failed push keeps it
+- logs one line (alias, branch, commit count) and notifies "Saved <alias>'s work to <branch> and
+  pushed"
+
+A refused save keeps the worktree as it is. `clean:build` never commits or pushes: for a dev
+worktree kept for uncommitted or unpushed work it prints the commands to do it yourself.
+
 The app also sweeps per-agent files once a day, at startup and then daily while open
 (`main/system/housekeeping.ts`): `~/.exegol/hooks/<id>.json`, `~/.exegol/mcp/<id>.json` and
 `~/.exegol/model-settings/<id>.json` older than a day whose agent id is not in the database. It
