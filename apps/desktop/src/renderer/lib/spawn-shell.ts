@@ -67,6 +67,7 @@ export async function fillLayoutSlots(
       cliType: slot.cliType,
       ...(slot.accessMode ? { accessMode: slot.accessMode } : {}),
       ...(slot.model ? { model: slot.model } : {}),
+      ...(slot.modelRoles ? { modelRoles: slot.modelRoles } : {}),
       ...(slot.yolo != null ? { yolo: slot.yolo } : {}),
     });
     useAgentStore.getState().addAgent(toAgentState(agent, { activityLevel: "busy" }));
@@ -78,5 +79,13 @@ export async function fillLayoutSlots(
 /** What a terminal pane runs, for saving it into a layout slot */
 export function slotAgentOf(agentId: string): SlotAgent | undefined {
   const a = useAgentStore.getState().agents[agentId];
-  return a && { cliType: a.cliType, model: a.model, yolo: a.yolo, accessMode: a.accessMode };
+  return (
+    a && {
+      cliType: a.cliType,
+      model: a.model,
+      modelRoles: a.modelRoles,
+      yolo: a.yolo,
+      accessMode: a.accessMode,
+    }
+  );
 }

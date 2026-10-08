@@ -54,6 +54,10 @@ export const agentCreateSchema = z.object({
   baseBranch: z.string().optional(),
   /** Model for this launch, passed the way MODEL_LAUNCH says for its CLI */
   model: z.string().regex(MODEL_ID_PATTERN).optional(),
+  /** Role models for this launch, keyed by MODEL_ROLES id */
+  modelRoles: z
+    .record(z.string().regex(/^[a-z]{1,20}$/), z.string().regex(MODEL_ID_PATTERN))
+    .optional(),
   /** The session's name (alias); empty picks a codename */
   name: z.string().trim().max(40).optional(),
 });

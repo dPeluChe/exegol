@@ -1,10 +1,10 @@
 import {
   type AgentAccessMode,
   type AgentProvider,
+  launchHint,
   MODEL_ID_PATTERN,
   MODEL_LAUNCH,
   MODEL_SUGGESTIONS,
-  type ModelLaunch,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -245,7 +245,7 @@ export function SkillPicker({
 
 const OTHER = "__other__";
 
-const INPUT_CLASS =
+export const INPUT_CLASS =
   "w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50";
 
 /** Optional model (for CLIs that take one at launch) and session name; empty keeps the
@@ -345,10 +345,4 @@ export function ModelAndName({
       </div>
     </div>
   );
-}
-
-function launchHint(launch: ModelLaunch): string {
-  if ("flag" in launch) return launch.flag;
-  if ("env" in launch) return launch.env;
-  return "--settings";
 }
