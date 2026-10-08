@@ -3,7 +3,7 @@
 
 import { connect, type Socket } from "node:net";
 import { logger } from "../lib/logger";
-import { createNdjsonBuffer } from "../lib/ndjson";
+import { createFrameBuffer } from "./frame-buffer";
 import {
   type JsonRpcMessage,
   type JsonRpcResponse,
@@ -31,7 +31,7 @@ export class SidecarClient {
   /** Shared framing: the cap and the multibyte-safe decoder live in one place —
    *  this socket carries far more traffic than the MCP one and runs in the same
    *  main process, so an unbounded buffer here is the same OOM. */
-  private feed = createNdjsonBuffer<JsonRpcMessage>(
+  private feed = createFrameBuffer<JsonRpcMessage>(
     (msg) => this.handleMessage(msg),
     () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
     // A session.snapshot answers with the ENTIRE ring buffer in one frame, and

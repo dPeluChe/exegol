@@ -125,6 +125,10 @@ export class HeadlessEmulator {
       .join("");
   }
 
+  get alternateScreen(): boolean {
+    return this._modes.alternateScreen;
+  }
+
   get size(): { cols: number; rows: number } {
     return { cols: this.terminal.cols, rows: this.terminal.rows };
   }
