@@ -108,6 +108,21 @@ export function closeTargetPanes(
   return { panes, scope };
 }
 
+/** Each pane's session: a close compares it after its dialog with what the dialog listed */
+export function paneAgents(
+  pw: ProjectWorkspace,
+  paneIds: string[],
+): Map<string, string | undefined> {
+  return new Map(paneIds.map((id) => [id, pw.panes[id]?.agentId]));
+}
+
+export function samePaneAgents(
+  a: Map<string, string | undefined>,
+  b: Map<string, string | undefined>,
+): boolean {
+  return a.size === b.size && [...a].every(([id, agentId]) => b.get(id) === agentId);
+}
+
 /** Ask before closing this tab or pane; resolves true when there is nothing to lose */
 export function confirmCloseTarget(
   pw: ProjectWorkspace,

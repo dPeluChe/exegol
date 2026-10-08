@@ -1,24 +1,26 @@
 import type { Agent, AgentCreate, AgentProvider } from "@exegol/shared";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { queryClient } from "../lib/query-client";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { findAgentPane, toAgentState, useAgentStore } from "../stores/agents";
 import { useTerminalStore } from "../stores/terminals";
 import { useWatchStore } from "../stores/watch";
 import { useWorkspaceStore } from "../stores/workspace";
-import { isLaunchable, useEnabledProviders } from "./use-providers";
+import { pendingStop } from "./use-delete-agent";
+import { enabledProvidersQuery, isLaunchable, useEnabledProviders } from "./use-providers";
 import { useSpawnAgent } from "./use-trpc";
 
 /** CLI types that can resume a session here: the provider supports it and its CLI is installed
  *  (resuming one that is not ended in a preflight error instead of the install hint) */
+export function resumableFrom(providers: AgentProvider[]): Set<string> {
+  return new Set(
+    providers.filter((p) => p.capabilities?.supportsResume && isLaunchable(p)).map((p) => p.id),
+  );
+}
+
 function useResumableCliTypes(): Set<string> {
   const providers = useEnabledProviders();
-  return useMemo(
-    () =>
-      new Set(
-        providers.filter((p) => p.capabilities?.supportsResume && isLaunchable(p)).map((p) => p.id),
-      ),
-    [providers],
-  );
+  return useMemo(() => resumableFrom(providers), [providers]);
 }
 
 /** updatePane only reaches the active project: a pane in another project (auto-resume after a
@@ -56,14 +58,13 @@ export type ResumeSource = Pick<
   "id" | "projectId" | "cliType" | "taskDescription" | "branchName"
 > & { accessMode?: Agent["accessMode"] | null };
 
-/** Whether each CLI can resume a session here, read now (outside React: Reopen closed tab) */
+/** Whether each CLI can resume a session here, outside React (Reopen closed tab): the cached
+ *  provider list when fresh, else read now */
 export async function fetchResumableCliTypes(): Promise<Set<string>> {
-  const providers = await trpcInvoke<AgentProvider[]>("agents.listEnabledProviders").catch(
-    () => [] as AgentProvider[],
-  );
-  return new Set(
-    providers.filter((p) => p.capabilities?.supportsResume && isLaunchable(p)).map((p) => p.id),
-  );
+  const providers = await queryClient
+    .fetchQuery(enabledProvidersQuery)
+    .catch(() => [] as AgentProvider[]);
+  return resumableFrom(providers);
 }
 
 /** Resume (`canResume`) or re-launch `agent` as a new row that takes its place, in `paneId` or
@@ -75,6 +76,8 @@ export function resumeSessionInto(
   paneId?: string,
 ): Promise<void> {
   return onceAtATime(agent.id, async () => {
+    // A close's stop still running: resuming now ran two processes on one session
+    await pendingStop(agent.id);
     const newAgent = await spawn({
       projectId: agent.projectId,
       cliType: agent.cliType,

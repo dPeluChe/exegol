@@ -12,6 +12,7 @@ vi.stubGlobal("window", {
 
 const { useWorkspaceStore } = await import("./workspace");
 const { useAppStore } = await import("./app");
+const { onWorkspaceRehydrate } = await import("./workspace/recovery");
 const { focusInActiveTab, getPw, layoutHasPane, resolveCloseTarget } = await import(
   "./workspace/helpers"
 );
@@ -143,6 +144,51 @@ describe("every change of the active tab moves the focus with it", () => {
     const live = pw().tabs.find((t) => t.id === "live");
     expect(live?.layout).toEqual({ type: "pane", paneId: "besalt" });
     expect(Object.keys(pw().panes)).toHaveLength(4);
+  });
+});
+
+describe("focus only moves when asked", () => {
+  it("a spawn finishing in pane B does not take the focus from pane A in the same tab", () => {
+    ws().setActiveTab("blank");
+    ws().setFocusedPane("l1");
+    ws().updatePane("l2", { type: "terminal", agentId: "late-agent" });
+    expect(ws().focusedPaneId).toBe("l1");
+  });
+
+  it("setFocusedPane takes null or a pane of the active tab, nothing else", () => {
+    ws().setFocusedPane("nowhere");
+    expect(ws().focusedPaneId).toBe("besalt");
+    ws().setFocusedPane(null);
+    expect(ws().focusedPaneId).toBeNull();
+  });
+
+  it("setActiveTab(tab, pane) activates and focuses in one step", () => {
+    ws().setActiveTab("blank", "l2");
+    expect(pw().activeTabId).toBe("blank");
+    expect(ws().focusedPaneId).toBe("l2");
+  });
+
+  it("a project switch comes back to the pane its active tab was left on", () => {
+    ws().setActiveTab("blank", "l2");
+    useAppStore.getState().setActiveProject("Q");
+    expect(ws().focusedPaneId).toBeNull();
+    useAppStore.getState().setActiveProject("P");
+    expect(ws().focusedPaneId).toBe("l2");
+    expect(pw().tabs.find((t) => t.id === "blank")?.lastFocusedPaneId).toBe("l2");
+  });
+
+  it("a persisted per-project focus moves to its active tab on load", () => {
+    const base = project();
+    // A launcher-only split collapses on load: l2 holds a terminal to stay
+    const panes = { ...base.panes, l2: { id: "l2", type: "terminal" as const, agentId: "a" } };
+    const legacy = { ...base, panes, activeTabId: "blank", lastFocusedPaneId: "l2" };
+    const state = { projectWorkspaces: { P: legacy } } as unknown as Parameters<
+      typeof onWorkspaceRehydrate
+    >[0];
+    onWorkspaceRehydrate(state);
+    const loaded = state?.projectWorkspaces.P;
+    expect(loaded && "lastFocusedPaneId" in loaded).toBe(false);
+    expect(loaded?.tabs.find((t) => t.id === "blank")?.lastFocusedPaneId).toBe("l2");
   });
 });
 

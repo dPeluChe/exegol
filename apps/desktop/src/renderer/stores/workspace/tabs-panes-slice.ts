@@ -4,6 +4,7 @@ import { useTerminalStore } from "../terminals";
 import {
   activateTab,
   activePaneId,
+  activeTabOf,
   collectPaneIds,
   createEmptyPane,
   getPw,
@@ -136,7 +137,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       };
     }),
 
-  setActiveTab: (tabId) => set((s) => withFocus(s, {}, tabId)),
+  setActiveTab: (tabId, paneId) => set((s) => withFocus(s, {}, tabId, paneId)),
 
   renameTab: (tabId, label) =>
     set((s) => {
@@ -285,13 +286,8 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       const pw = getPw(s);
       const existing = pw.panes[paneId];
       if (!existing) return s;
-      const panes = { ...pw.panes, [paneId]: { ...existing, ...updates } };
-      // Focus follows only inside the active tab: a spawn landing in a background tab's pane
-      // moved the focus there, and Cmd+W then closed that pane
-      const active = pw.tabs.find((t) => t.id === pw.activeTabId);
-      return active && layoutHasPane(active.layout, paneId)
-        ? { ...setPw(s, { panes }), focusedPaneId: paneId }
-        : setPw(s, { panes });
+      // Never moves the focus: a spawn finishing in another pane took it (Cmd+W then closed it)
+      return setPw(s, { panes: { ...pw.panes, [paneId]: { ...existing, ...updates } } });
     }),
 
   setPaneUrl: (paneId, url) =>
@@ -328,11 +324,10 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
 
   setFocusedPane: (paneId) =>
     set((s) => {
-      const pw = getPw(s);
-      // A pane of another tab never takes the focus: its tab is activated first (setActiveTab)
-      const inOtherTab =
-        !!paneId && pw.tabs.some((t) => t.id !== pw.activeTabId && layoutHasPane(t.layout, paneId));
-      return inOtherTab ? s : { focusedPaneId: paneId };
+      if (paneId === null) return { focusedPaneId: null };
+      // Only a pane of the active tab: another tab's is focused through setActiveTab(tab, pane)
+      const tab = activeTabOf(getPw(s));
+      return tab && layoutHasPane(tab.layout, paneId) ? { focusedPaneId: paneId } : s;
     }),
 
   extractPaneToNewTab: (sourceTabId, paneId) =>

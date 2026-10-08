@@ -154,12 +154,6 @@ export function paneInTabOrFirst(
   return paneId && layoutHasPane(tab.layout, paneId) ? paneId : findFirstPaneId(tab.layout);
 }
 
-/** The pane a project gets the focus back on: the one it was left on, if its active tab has it */
-export function restoredFocus(pw: ProjectWorkspace | undefined): string | null {
-  const tab = pw?.tabs.find((t) => t.id === pw.activeTabId);
-  return tab ? paneInTabOrFirst(tab, pw?.lastFocusedPaneId) : null;
-}
-
 export function activeTabOf(pw: ProjectWorkspace): WorkspaceTab | null {
   return pw.tabs.find((t) => t.id === pw.activeTabId) ?? null;
 }
@@ -180,6 +174,21 @@ export function focusInActiveTab(pw: ProjectWorkspace, focusedPaneId: string | n
   return !!focusedPaneId && layoutHasPane(tab.layout, focusedPaneId);
 }
 
+/** The active tab remembers `focusedPaneId` (when it holds it): a tab or project switch back
+ *  restores it */
+export function rememberFocus(
+  pw: ProjectWorkspace,
+  focusedPaneId: string | null,
+): ProjectWorkspace {
+  const tab = activeTabOf(pw);
+  if (!tab || !focusedPaneId || tab.lastFocusedPaneId === focusedPaneId) return pw;
+  if (!layoutHasPane(tab.layout, focusedPaneId)) return pw;
+  const tabs = pw.tabs.map((t) =>
+    t.id === tab.id ? { ...t, lastFocusedPaneId: focusedPaneId } : t,
+  );
+  return { ...pw, tabs };
+}
+
 /** Make `tabId` the active tab with the focus on `paneId` (else the tab's last focused or first
  *  pane), remembering the pane the old active tab was left on */
 export function activateTab(
@@ -188,23 +197,14 @@ export function activateTab(
   tabId: string | null,
   paneId?: string | null,
 ): { pw: ProjectWorkspace; focusedPaneId: string | null } {
-  const tabs = pw.tabs.map((t) =>
-    t.id === pw.activeTabId &&
-    t.id !== tabId &&
-    focusedPaneId &&
-    layoutHasPane(t.layout, focusedPaneId)
-      ? { ...t, lastFocusedPaneId: focusedPaneId }
-      : t,
-  );
-  const tab = tabs.find((t) => t.id === tabId);
-  if (!tab) return { pw: { ...pw, tabs, activeTabId: null }, focusedPaneId: null };
+  const remembered = rememberFocus(pw, focusedPaneId);
+  const tab = remembered.tabs.find((t) => t.id === tabId);
+  if (!tab) return { pw: { ...remembered, activeTabId: null }, focusedPaneId: null };
   const focus =
     paneId && layoutHasPane(tab.layout, paneId)
       ? paneId
-      : tab.id === pw.activeTabId && focusedPaneId && layoutHasPane(tab.layout, focusedPaneId)
-        ? focusedPaneId
-        : paneInTabOrFirst(tab, tab.lastFocusedPaneId);
-  return { pw: { ...pw, tabs, activeTabId: tab.id }, focusedPaneId: focus };
+      : paneInTabOrFirst(tab, tab.lastFocusedPaneId);
+  return { pw: { ...remembered, activeTabId: tab.id }, focusedPaneId: focus };
 }
 
 /** Close one pane of a tab; `wholeTabIfLast`: its last pane takes the tab with it (Cmd+W) */
@@ -314,17 +314,19 @@ export function restoreClosedInto(
   };
 }
 
-/** Leave the active project (remembering its focused pane) for `next`, as it was left */
+/** Leave the active project (its active tab remembering the focused pane) for `next`, as left */
 export function switchProject(state: WorkspaceStore, next: string | null): Partial<WorkspaceStore> {
   const prev = state._activeProjectId;
   const prevPw = prev ? state.projectWorkspaces[prev] : undefined;
+  const leftPw = prevPw ? rememberFocus(prevPw, state.focusedPaneId) : undefined;
   const projectWorkspaces =
-    prev && prevPw && state.focusedPaneId && prevPw.panes[state.focusedPaneId]
-      ? {
-          ...state.projectWorkspaces,
-          [prev]: { ...prevPw, lastFocusedPaneId: state.focusedPaneId },
-        }
+    prev && leftPw && leftPw !== prevPw
+      ? { ...state.projectWorkspaces, [prev]: leftPw }
       : state.projectWorkspaces;
   const nextPw = next ? projectWorkspaces[next] : undefined;
-  return { _activeProjectId: next, projectWorkspaces, focusedPaneId: restoredFocus(nextPw) };
+  return {
+    _activeProjectId: next,
+    projectWorkspaces,
+    focusedPaneId: nextPw ? activePaneId(nextPw, null) : null,
+  };
 }

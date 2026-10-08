@@ -10,7 +10,7 @@ import {
   useWorkspaceStore,
 } from "../stores/workspace";
 import { closeTargetValid, resolveCloseTarget } from "../stores/workspace/helpers";
-import { confirmCloseTarget } from "./close-guard";
+import { confirmCloseTarget, paneAgents, samePaneAgents } from "./close-guard";
 import { closedEntryFor, closedTitle, freshOnly } from "./closed-entry";
 import { focusActivePane } from "./pane-focus";
 import { spawnShellIntoPane } from "./spawn-shell";
@@ -24,11 +24,20 @@ export async function closeWithConfirm(target: CloseTarget | null): Promise<void
   const projectId = useWorkspaceStore.getState()._activeProjectId;
   if (!target || !projectId) return;
   const asked = getProjectState();
+  const listed = paneAgents(asked, target.paneIds);
   if (!(await confirmCloseTarget(asked, target, useAgentStore.getState().agents))) return;
   const ws = useWorkspaceStore.getState();
   const pw = getProjectState();
   // The workspace moved while the dialog asked: close nothing rather than something else
   if (ws._activeProjectId !== projectId || !closeTargetValid(pw, target)) return;
+  // A restart or auto-resume put another session in a pane meanwhile: the dialog did not list it
+  if (!samePaneAgents(listed, paneAgents(pw, target.paneIds))) {
+    useToastStore.getState().addToast({
+      type: "warning",
+      title: "A session in this pane changed: confirm again",
+    });
+    return closeWithConfirm(target);
+  }
 
   const entry = closedEntryFor(projectId, pw, target, useAgentStore.getState().agents, ws.paneCwd);
   // Layout first: stopping a session first released its pane and could close its tab, which
@@ -63,14 +72,21 @@ async function announceClosed(entry: ClosedEntry): Promise<void> {
   });
 }
 
-/** Cmd+Shift+T: put a closed tab or pane back (the newest of this project, else the newest) and
+/** Cmd+Shift+T: put this project's newest closed tab or pane back (the toast: its own entry) and
  *  resume its sessions in place; shells start again in their folder */
 export async function reopenClosed(entryId?: string): Promise<void> {
   const ws = useWorkspaceStore.getState();
   const entry = entryId
     ? ws.recentlyClosed.find((e) => e.id === entryId)
-    : (ws.recentlyClosed.find((e) => e.projectId === ws._activeProjectId) ?? ws.recentlyClosed[0]);
-  if (!entry) return;
+    : ws.recentlyClosed.find((e) => e.projectId === ws._activeProjectId);
+  if (!entry) {
+    if (!entryId) {
+      useToastStore
+        .getState()
+        .addToast({ type: "info", title: "Nothing to reopen in this project" });
+    }
+    return;
+  }
   showProject(entry.projectId);
   const placed = useWorkspaceStore.getState().restoreClosed(entry.id);
   if (!placed) return;

@@ -1,5 +1,5 @@
 import { useAppStore } from "../app";
-import { collectPaneIds } from "./helpers";
+import { collectPaneIds, layoutHasPane } from "./helpers";
 import type { Pane, WorkspaceStore } from "./types";
 
 // ─── Persist recovery (migrate + rehydrate cleanup) ─────────────────────────
@@ -42,5 +42,18 @@ export function onWorkspaceRehydrate(state: WorkspaceStore | undefined): void {
       return tab;
     });
     pw.panes = cleaned;
+
+    // Before per-tab focus the project kept one; its active tab takes it
+    const legacy = pw as typeof pw & { lastFocusedPaneId?: string | null };
+    const focus = legacy.lastFocusedPaneId;
+    delete legacy.lastFocusedPaneId;
+    pw.tabs = pw.tabs.map((tab) =>
+      focus &&
+      tab.id === pw.activeTabId &&
+      !tab.lastFocusedPaneId &&
+      layoutHasPane(tab.layout, focus)
+        ? { ...tab, lastFocusedPaneId: focus }
+        : tab,
+    );
   }
 }

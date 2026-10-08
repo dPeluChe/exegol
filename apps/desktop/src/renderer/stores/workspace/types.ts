@@ -92,8 +92,6 @@ export interface ProjectWorkspace {
   tabs: WorkspaceTab[];
   activeTabId: string | null;
   panes: Record<string, Pane>;
-  /** The pane focused when the user left this project: switching back restores it */
-  lastFocusedPaneId?: string | null;
 }
 
 // ─── Store interface ────────────────────────────────────────────────────────
@@ -120,7 +118,8 @@ export interface WorkspaceStore {
   // Tab actions
   addTab: (label?: string) => string;
   removeTab: (tabId: string) => void;
-  setActiveTab: (tabId: string) => void;
+  /** Activate a tab, the focus on `paneId` when given (else its last focused pane) */
+  setActiveTab: (tabId: string, paneId?: string) => void;
   renameTab: (tabId: string, label: string) => void;
   reorderTab: (fromIndex: number, toIndex: number) => void;
   mergeTabIntoSplit: (
