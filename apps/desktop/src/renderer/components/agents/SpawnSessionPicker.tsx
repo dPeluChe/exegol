@@ -14,6 +14,8 @@ interface LocalSession {
   endedAt: number | null;
 }
 
+const CHIP_COUNT = 5;
+
 /** T161: start fresh, continue the CLI's own last session, or pick one */
 export function SpawnSessionPicker({
   projectId,
@@ -41,6 +43,15 @@ export function SpawnSessionPicker({
   });
   // Only this provider's sessions: `claude --resume` cannot open a codex session.
   const resumableHere = resumable.filter((r) => r.cliType === providerId);
+  const chipIds = resumableHere.slice(0, CHIP_COUNT).map((r) => r.agentId);
+  // A second query: the chips show at once, names fill in once the CLI's store is read
+  const { data: cliNames = {} } = useQuery({
+    queryKey: ["resumableSessionNames", projectId, chipIds],
+    queryFn: () =>
+      trpcInvoke<Record<string, string>>("agents.sessionNames", { projectId, agentIds: chipIds }),
+    enabled: chipIds.length > 0,
+    staleTime: 30_000,
+  });
 
   const { data: localSessions = [] } = useQuery({
     queryKey: ["history", "resumableLocal", projectId],
@@ -91,12 +102,12 @@ export function SpawnSessionPicker({
             <code className="text-text-muted">{resumeFlag}</code>
           </SpawnChip>
         )}
-        {resumableHere.slice(0, 5).map((past) => (
+        {resumableHere.slice(0, CHIP_COUNT).map((past) => (
           <SpawnChip
             key={past.agentId}
             selected={session !== "last" && session?.agentId === past.agentId}
             onClick={() => onSession(past)}
-            title={[past.alias, past.cliSessionName, past.taskDescription]
+            title={[past.alias, cliNames[past.agentId], past.taskDescription]
               .filter(Boolean)
               .join("\n")}
             className="flex min-w-0 max-w-full items-center gap-1.5"
@@ -107,9 +118,9 @@ export function SpawnSessionPicker({
               {past.alias ?? past.taskDescription.slice(0, 24)}
             </span>
             {/* What the CLI itself calls it (Claude's /rename), so it matches its own resume list */}
-            {past.cliSessionName && (
+            {cliNames[past.agentId] && (
               <span className="max-w-[160px] truncate font-normal opacity-75">
-                · {past.cliSessionName}
+                · {cliNames[past.agentId]}
               </span>
             )}
             <span className="text-text-muted">{formatTimeAgo(past.endedAt)}</span>

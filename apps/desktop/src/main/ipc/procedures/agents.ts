@@ -29,7 +29,6 @@ import {
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
-  listWorktrees,
   setAgentMuted,
   setAgentSuspended,
   updateAgentStatus,
@@ -304,11 +303,10 @@ export const agentRouter = router({
         limit: z.number().int().min(1).max(20).optional(),
       }),
     )
-    .query(async ({ ctx, input }) => {
+    .query(({ ctx, input }) => {
       const rows = ctx.db
         .prepare(
-          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias,
-                  claude_session_id, resume_command
+          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias
            FROM agents
            WHERE project_id = ?
              AND status IN ('completed', 'failed', 'stopped', 'crashed')
@@ -325,16 +323,7 @@ export const agentRouter = router({
         started_at: number | null;
         stopped_at: number | null;
         alias: string | null;
-        claude_session_id: string | null;
-        resume_command: string | null;
       }>;
-      const project = rows.length > 0 ? getProject(ctx.db, input.projectId) : null;
-      const names = project
-        ? await cliSessionNames([
-            project.path,
-            ...listWorktrees(ctx.db, input.projectId).map((w) => w.path),
-          ])
-        : new Map<string, string>();
       return rows.map<ResumableSession>((r) => ({
         agentId: r.id,
         cliType: r.cli_type,
@@ -344,11 +333,52 @@ export const agentRouter = router({
         taskDescription: r.task_description,
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,
-        cliSessionName:
-          names.get(
-            `${r.cli_type}:${providerSessionId(r.cli_type, r.claude_session_id, r.resume_command)}`,
-          ) ?? null,
       }));
+    }),
+
+  /** The launcher's past-session chips: each agent's session name inside its CLI, by agent id.
+   *  Separate from listResumable so the chips render before any store is read */
+  sessionNames: publicProcedure
+    .input(
+      z.object({
+        projectId: z.string(),
+        agentIds: z.array(z.string().max(64)).max(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      if (input.agentIds.length === 0) return {};
+      const rows = ctx.db
+        .prepare(
+          `SELECT a.id, a.cli_type, a.task_description, a.claude_session_id, a.resume_command,
+                  COALESCE(w.path, p.path) AS cwd
+           FROM agents a
+           LEFT JOIN worktrees w ON w.id = a.worktree_id
+           JOIN projects p ON p.id = a.project_id
+           WHERE a.project_id = ? AND a.id IN (${input.agentIds.map(() => "?").join(",")})`,
+        )
+        .all(input.projectId, ...input.agentIds) as Array<{
+        id: string;
+        cli_type: string;
+        task_description: string;
+        claude_session_id: string | null;
+        resume_command: string | null;
+        cwd: string;
+      }>;
+      const refs = rows.flatMap((r) => {
+        const sessionId = providerSessionId(r.cli_type, r.claude_session_id, r.resume_command);
+        return sessionId
+          ? [
+              {
+                agentId: r.id,
+                provider: r.cli_type,
+                sessionId,
+                cwd: r.cwd,
+                task: r.task_description,
+              },
+            ]
+          : [];
+      });
+      return refs.length > 0 ? cliSessionNames(refs) : {};
     }),
 
   /** Where a spawn would actually run — the same resolver the spawn path uses,

@@ -17,7 +17,7 @@ export function usePresets(providerId: string): ModelPreset[] {
 }
 
 /** "sonnet main · opus advisor · haiku subagents" */
-export function presetSummary(providerId: string, preset: Pick<ModelPreset, "model" | "roles">) {
+function presetSummary(providerId: string, preset: Pick<ModelPreset, "model" | "roles">) {
   const defs = MODEL_ROLES[providerId] ?? [];
   return [
     preset.model && `${preset.model} main`,

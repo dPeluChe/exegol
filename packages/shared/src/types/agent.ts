@@ -720,8 +720,6 @@ export type ResumableSession = {
   taskDescription: string;
   status: string;
   endedAt: number | null;
-  /** The session's name inside its CLI (Claude's /rename, else its title), from the local store */
-  cliSessionName?: string | null;
 };
 
 /** Where a spawn WOULD run, resolved by the same code that will create it —

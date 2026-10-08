@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
 import { forgetCliListing } from "./cli-list";
-import { claudeCodeHistory } from "./providers/claude-code";
+import { claudeCodeHistory, claudeSessionName } from "./providers/claude-code";
 import { codexHistory } from "./providers/codex";
 import { devinHistory } from "./providers/devin";
 import { droidHistory } from "./providers/droid";
@@ -54,34 +54,57 @@ export async function listLocalSessions(
   return cache.getOrCompute(key, () => scan(cwds, since));
 }
 
-/** History's default window, so the launcher and the History view share one cached scan */
-const NAMES_WINDOW_DAYS = 30;
-/** The launcher opens on this: a slow store leaves the names out until the next refetch */
-const NAMES_WAIT_MS = 1_500;
-
-/**
- * Each session's own name in its CLI (Claude's /rename, else the title), keyed
- * `provider:sessionId`. Empty when the scan outlasts the wait; it keeps filling the cache.
- */
-export async function cliSessionNames(cwds: string[]): Promise<Map<string, string>> {
-  const since = Math.floor(Date.now() / 1000) - NAMES_WINDOW_DAYS * 86_400;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const sessions = await Promise.race([
-    listLocalSessions(cwds, since, String(NAMES_WINDOW_DAYS)).catch(() => null),
-    new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), NAMES_WAIT_MS);
-    }),
-  ]).finally(() => clearTimeout(timer));
-  return sessionNameIndex(sessions ?? []);
+/** A past agent whose provider session id is known, and the folder it ran in */
+export interface NamedSessionRef {
+  agentId: string;
+  provider: string;
+  sessionId: string;
+  cwd: string;
+  task: string;
 }
 
-export function sessionNameIndex(sessions: LocalSession[]): Map<string, string> {
-  const names = new Map<string, string>();
-  for (const s of sessions) {
-    const name = s.name?.trim() || s.title;
-    if (name) names.set(`${s.provider}:${s.sessionId}`, name);
+/**
+ * Each agent's session name inside its CLI, by agent id. Claude reads the one transcript by id;
+ * other CLIs list once per provider and folder (a shared store only within the resume window, so
+ * an older codex or goose session gets no name). Titles that only repeat the task are dropped.
+ */
+export async function cliSessionNames(refs: NamedSessionRef[]): Promise<Record<string, string>> {
+  const names: Record<string, string> = {};
+  const claude = refs.filter((r) => r.provider === "claude-code");
+  await Promise.all(
+    claude.map(async (r) => {
+      const name = await claudeSessionName(r.cwd, r.sessionId);
+      if (name && !repeatsTask(name, r.task)) names[r.agentId] = name;
+    }),
+  );
+  const groups = new Map<string, NamedSessionRef[]>();
+  for (const r of refs) {
+    if (r.provider === "claude-code") continue;
+    const key = `${r.provider}\0${r.cwd}`;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
   }
+  await Promise.all(
+    [...groups.values()].map(async (group) => {
+      const [{ provider, cwd }] = group as [NamedSessionRef];
+      const shared = PROVIDERS.find((p) => p.id === provider)?.sharedStore;
+      const since = shared ? Date.now() / 1000 - RESUME_WINDOW_S : 0;
+      const sessions = await listLocal(provider, cwd, since);
+      for (const r of group) {
+        const s = sessions?.find((x) => x.sessionId === r.sessionId);
+        const name = s?.name?.trim() || s?.title;
+        if (name && !repeatsTask(name, r.task)) names[r.agentId] = name;
+      }
+    }),
+  );
   return names;
+}
+
+/** A CLI that titles a session by its first prompt only repeats what the chip already shows */
+export function repeatsTask(name: string, task: string): boolean {
+  const norm = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+  const n = norm(name);
+  const t = norm(task);
+  return t !== "" && n.startsWith(t);
 }
 
 async function scan(cwds: string[], since: number): Promise<LocalSession[]> {
