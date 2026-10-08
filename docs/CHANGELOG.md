@@ -51,6 +51,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Opening the app reconnects the sessions you were looking at first: the focused pane, then the rest of its tab, then its project, then everything else
 
 ### Fixed
+- Cmd+W closes only what is on screen: on an empty tab it could stop a live session in another tab (after a launch finished in that tab, the focus stayed there). Every tab switch now moves the focus with it, and Cmd+W, Cmd+D, Cmd+., the status bar and dictation act only on the tab you see. The close confirmation says what closes ("Close tab api?", "Close pane besalt (claude-code)?"), lists each pane and what stops, has Cancel focused, and Esc or a click outside cancels; an empty tab closes without asking
+- Closing never loses a session for good: closing a tab or pane that stops sessions shows a toast for 10 s with Reopen, and Cmd+Shift+T (Ctrl+Shift+Alt+T on Linux and Windows, or Reopen Closed Tab in the command palette) puts back the last 10 closed tabs or panes in their place. Agent sessions resume with their model, YOLO, access mode and name; a shell starts again in its folder; a CLI that cannot resume starts fresh and the toast says so
 - Git pane: the Changes diff showed staged edits too; it now shows only what is not staged. A file with staged and unstaged edits is listed under both, each with its own diff
 - Git pane: renamed files show as `old → new`, and staging or unstaging one moves both paths (before, it passed the arrow text to git and failed)
 - Git pane: a failed stage, unstage, commit or push, or a failed worktree delete, shows git's own error instead of doing nothing; Agent Ops no longer offers Undo on a worktree creation it cannot undo

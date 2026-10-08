@@ -40,6 +40,51 @@ export interface WorkspaceTab {
   id: string;
   label: string;
   layout: LayoutNode;
+  /** The pane focused when the user left this tab: going back to it restores it */
+  lastFocusedPaneId?: string | null;
+}
+
+/** What a close removes: `paneIds` from tab `tabId`, the whole tab when `closesTab` */
+export interface CloseTarget {
+  tabId: string;
+  paneId: string;
+  paneIds: string[];
+  closesTab: boolean;
+}
+
+/** Where a closed pane sat in its tab */
+export interface PaneSlot {
+  tabId: string;
+  siblingPaneId: string;
+  direction: "horizontal" | "vertical";
+  before: boolean;
+}
+
+/** A live session a close stopped, enough to resume it (or a shell, to start one in its cwd) */
+export interface ClosedSession {
+  paneId: string;
+  agentId: string;
+  cliType: string;
+  name: string;
+  taskDescription: string;
+  branchName: string | null;
+  accessMode: string | null;
+  cwd?: string;
+}
+
+/** A closed tab or pane, kept for Reopen (Cmd+Shift+T) */
+export interface ClosedEntry {
+  id: string;
+  projectId: string;
+  closedAt: number;
+  kind: "tab" | "pane";
+  label: string;
+  /** A closed tab: its layout and where it was in the tab bar */
+  tab?: { id: string; layout: LayoutNode; index: number };
+  /** A closed pane: the pane it sat beside */
+  slot?: PaneSlot | null;
+  panes: Pane[];
+  sessions: ClosedSession[];
 }
 
 /** Per-project workspace state */
@@ -110,7 +155,14 @@ export interface WorkspaceStore {
   setFocusedPane: (paneId: string | null) => void;
 
   extractPaneToNewTab: (sourceTabId: string, paneId: string) => void;
+  /** Close exactly this tab or pane (resolveCloseTarget / closeTargetFor) */
+  closeTarget: (target: CloseTarget) => void;
   closeFocusedPane: () => void;
+  /** Closed tabs and panes, newest first (MAX_RECENTLY_CLOSED), persisted */
+  recentlyClosed: ClosedEntry[];
+  rememberClosed: (entry: ClosedEntry) => void;
+  /** Put a closed entry back in the active project and drop it from the list */
+  restoreClosed: (entryId: string) => { tabId: string; paneId: string } | null;
   splitFocusedPane: (direction: "horizontal" | "vertical") => void;
 
   // Derived

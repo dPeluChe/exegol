@@ -1,13 +1,13 @@
 import { useEffect } from "react";
 import { focusAddressBar } from "../lib/address-bar";
-import { confirmClosePanes } from "../lib/close-guard";
+import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
 import { cyclePane, focusActivePane, paneRoot } from "../lib/pane-focus";
+import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
-import { collectPaneIds, getProjectState, useWorkspaceStore } from "../stores/workspace";
-import { deleteAgent } from "./use-delete-agent";
+import { getActivePaneId, getProjectState, useWorkspaceStore } from "../stores/workspace";
 
 export function useHotkeys() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
@@ -29,10 +29,11 @@ export function useHotkeys() {
         return;
       }
 
-      // Cmd+T: New workspace tab
+      // Cmd+Shift+T: reopen the last closed tab or pane; Cmd+T: new workspace tab
       if (key === "t") {
         e.preventDefault();
-        useWorkspaceStore.getState().addTab();
+        if (chord.shift) void reopenClosed();
+        else useWorkspaceStore.getState().addTab();
         return;
       }
 
@@ -51,7 +52,7 @@ export function useHotkeys() {
       // Cmd+W: Close focused pane (or tab if last pane) + stop terminal agents
       if (key === "w") {
         e.preventDefault();
-        cleanupAndCloseFocusedPane();
+        void closeActivePane();
         return;
       }
 
@@ -101,7 +102,7 @@ export function useHotkeys() {
       // Cmd+.: Stop focused agent
       if (key === ".") {
         e.preventDefault();
-        useAgentStore.getState().stopFocusedAgent();
+        stopActiveAgent();
         return;
       }
 
@@ -186,7 +187,7 @@ export function useHotkeys() {
       if (action === "new-tab") {
         useWorkspaceStore.getState().addTab();
       } else if (action === "close-pane") {
-        cleanupAndCloseFocusedPane();
+        void closeActivePane();
       } else if (action === "reload") {
         reloadFocusedBrowserOrWindow();
       } else if (action === "focus-location") {
@@ -203,10 +204,21 @@ export function useHotkeys() {
   }, [toggleSidebar, setActiveView]);
 }
 
+/** Cmd+.: the session in the active tab's focused pane, never one in a tab not on screen */
+function stopActiveAgent(): void {
+  if (useAppStore.getState().activeView !== "workspace") {
+    useAgentStore.getState().stopFocusedAgent();
+    return;
+  }
+  const paneId = getActivePaneId();
+  const agentId = paneId ? getProjectState().panes[paneId]?.agentId : undefined;
+  if (agentId) trpcMutate("agents.stop", { id: agentId }).catch(() => {});
+}
+
 /** The browser pane on screen with focus, if that is what has it */
 function focusedBrowserPaneId(): string | null {
-  const { focusedPaneId } = useWorkspaceStore.getState();
-  const pane = focusedPaneId ? getProjectState().panes[focusedPaneId] : undefined;
+  const paneId = getActivePaneId();
+  const pane = paneId ? getProjectState().panes[paneId] : undefined;
   return useAppStore.getState().activeView === "workspace" && pane?.type === "browser"
     ? pane.id
     : null;
@@ -226,40 +238,6 @@ function reloadFocusedBrowserOrWindow(): void {
     return;
   }
   window.location.reload();
-}
-
-/** Stop agents in terminal panes, then close the focused pane/tab, after asking when that ends
- *  a session, a terminal or unsaved edits */
-export async function cleanupAndCloseFocusedPane(): Promise<void> {
-  const ws = useWorkspaceStore.getState();
-  const pw = getProjectState();
-  const { focusedPaneId } = ws;
-  const { activeTabId, tabs, panes } = pw;
-  if (!focusedPaneId || !activeTabId) return;
-
-  const tab = tabs.find((t) => t.id === activeTabId);
-  if (!tab) return;
-
-  const allPaneIds = collectPaneIds(tab.layout);
-  const isLastPane = allPaneIds.length <= 1;
-
-  // Collect panes to clean up: if last pane → all panes in tab, otherwise just the focused one
-  const paneIdsToClean = isLastPane ? allPaneIds : [focusedPaneId];
-  const closing = paneIdsToClean.map((pid) => panes[pid]).filter((p) => p !== undefined);
-  if (!(await confirmClosePanes(closing, useAgentStore.getState().agents))) return;
-  // The focus may have moved while the dialog was open: close what was asked about
-  if (useWorkspaceStore.getState().focusedPaneId !== focusedPaneId) {
-    ws.setFocusedPane(focusedPaneId);
-  }
-
-  for (const pid of paneIdsToClean) {
-    const pane = panes[pid];
-    if (pane?.type === "terminal" && pane.agentId) {
-      deleteAgent(pane.agentId);
-    }
-  }
-
-  ws.closeFocusedPane();
 }
 
 /**

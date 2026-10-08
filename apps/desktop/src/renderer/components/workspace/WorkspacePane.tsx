@@ -14,10 +14,9 @@ import {
 import { nanoid } from "nanoid";
 import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { deleteAgent } from "../../hooks/use-delete-agent";
 import { useAgent } from "../../hooks/use-trpc";
 import { sizeKey } from "../../lib/browser-viewports";
-import { confirmClosePanes } from "../../lib/close-guard";
+import { closeWithConfirm } from "../../lib/close-target";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
@@ -26,11 +25,13 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import {
   collectPaneIds,
+  getProjectState,
   type Pane,
   selectPanes,
   selectTabs,
   useWorkspaceStore,
 } from "../../stores/workspace";
+import { closeTargetFor } from "../../stores/workspace/helpers";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ErrorBoundary, paneFallback } from "../ErrorBoundary";
 import { FileExplorer } from "../workspace/FileExplorer";
@@ -90,11 +91,9 @@ function PaneToolbar({
   isSplitPane: boolean;
 }) {
   const splitPane = useWorkspaceStore((s) => s.splitPane);
-  const removePane = useWorkspaceStore((s) => s.removePane);
   const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);
   const markPaneFloating = useWorkspaceStore((s) => s.markPaneFloating);
   const panes = useWorkspaceStore(selectPanes);
-  const removeAgent = useAgentStore((s) => s.removeAgent);
   const { projectId, project } = useProjectContext();
   // A terminal offers a browser beside it and a browser a terminal
   const companion =
@@ -133,19 +132,10 @@ function PaneToolbar({
     openProjectInIde({ projectId });
   }, [projectId]);
 
-  const handleClosePane = useCallback(async () => {
-    const pane = panes[paneId];
-    if (pane && !(await confirmClosePanes([pane], useAgentStore.getState().agents))) return;
-    // Stop the agent when closing a terminal pane
-    if (pane?.type === "terminal" && pane.agentId) {
-      const agentId = pane.agentId;
-      trpcMutate("agents.stop", { id: agentId })
-        .catch(() => {})
-        .then(() => trpcMutate("agents.delete", { id: agentId }).catch(() => {}));
-      removeAgent(agentId);
-    }
-    removePane(tabId, paneId);
-  }, [tabId, paneId, panes, removePane, removeAgent]);
+  const handleClosePane = useCallback(
+    () => closeWithConfirm(closeTargetFor(getProjectState(), tabId, paneId, false)),
+    [tabId, paneId],
+  );
 
   const handleDragStart = useCallback(
     (e: React.DragEvent) => {
@@ -657,14 +647,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
                 )
             : undefined
         }
-        onClose={async () => {
-          if (!(await confirmClosePanes([pane], useAgentStore.getState().agents))) return;
-          if (pane.type === "terminal" && pane.agentId) {
-            deleteAgent(pane.agentId);
-          } else {
-            useWorkspaceStore.getState().removePane(tabId, paneId);
-          }
-        }}
+        onClose={() => closeWithConfirm(closeTargetFor(getProjectState(), tabId, paneId, false))}
       >
         <div className="flex-1 overflow-hidden">
           <PaneBody pane={pane} paneId={paneId} isFloating={isFloating} />

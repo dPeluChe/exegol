@@ -2,23 +2,48 @@ import { nanoid } from "nanoid";
 import { useAppStore } from "../app";
 import { useTerminalStore } from "../terminals";
 import {
+  activateTab,
+  activePaneId,
   collectPaneIds,
   createEmptyPane,
-  findFirstPaneId,
   getPw,
   layoutHasPane,
+  paneInTabOrFirst,
+  pushClosed,
   releaseAgentPanes,
   removeNodeByPaneId,
+  resolveCloseTarget,
+  restoreClosedInto,
   setPw,
   splitNodeByPaneId,
 } from "./helpers";
 import type {
   LayoutNode,
   Pane,
+  ProjectWorkspace,
   WorkspaceSliceCreator,
   WorkspaceStore,
   WorkspaceTab,
 } from "./types";
+
+/** The active project's workspace with `updates`, its focus kept in its active tab (or moved to
+ *  `tabId` and `paneId`): every change of the active tab goes through here */
+function withFocus(
+  s: WorkspaceStore,
+  updates: Partial<ProjectWorkspace>,
+  tabId?: string | null,
+  paneId?: string | null,
+): Partial<WorkspaceStore> {
+  if (!s._activeProjectId) return { focusedPaneId: null };
+  const pw = { ...getPw(s), ...updates };
+  const next = activateTab(
+    pw,
+    s.focusedPaneId,
+    tabId === undefined ? pw.activeTabId : tabId,
+    paneId,
+  );
+  return { ...setPw(s, next.pw), focusedPaneId: next.focusedPaneId };
+}
 
 type TabsPanesSlice = Pick<
   WorkspaceStore,
@@ -41,7 +66,11 @@ type TabsPanesSlice = Pick<
   | "releaseAgent"
   | "setFocusedPane"
   | "extractPaneToNewTab"
+  | "closeTarget"
   | "closeFocusedPane"
+  | "recentlyClosed"
+  | "rememberClosed"
+  | "restoreClosed"
   | "splitFocusedPane"
   | "getActiveTab"
   | "ensureDefaultTab"
@@ -57,6 +86,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
   focusedPaneId: null,
   paneCwd: {},
   paneLastExit: {},
+  recentlyClosed: [],
 
   addTab: (label) => {
     const pane = createEmptyPane();
@@ -66,14 +96,9 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       label: label ?? `Tab ${pw.tabs.length + 1}`,
       layout: { type: "pane", paneId: pane.id },
     };
-    set((s) => ({
-      ...setPw(s, {
-        tabs: [...pw.tabs, tab],
-        activeTabId: tab.id,
-        panes: { ...pw.panes, [pane.id]: pane },
-      }),
-      focusedPaneId: pane.id,
-    }));
+    set((s) =>
+      withFocus(s, { tabs: [...pw.tabs, tab], panes: { ...pw.panes, [pane.id]: pane } }, tab.id),
+    );
     return tab.id;
   },
 
@@ -105,21 +130,13 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       }
 
       return {
-        ...setPw(s, { tabs: newTabs, activeTabId: newActiveTabId, panes: newPanes }),
+        ...withFocus(s, { tabs: newTabs, activeTabId: newActiveTabId, panes: newPanes }),
         paneCwd: cwd,
         paneLastExit: exit,
       };
     }),
 
-  setActiveTab: (tabId) => {
-    const pw = getPw(get());
-    const tab = pw.tabs.find((t) => t.id === tabId);
-    const firstPane = tab ? findFirstPaneId(tab.layout) : null;
-    set((s) => ({
-      ...setPw(s, { activeTabId: tabId }),
-      focusedPaneId: firstPane,
-    }));
-  },
+  setActiveTab: (tabId) => set((s) => withFocus(s, {}, tabId)),
 
   renameTab: (tabId, label) =>
     set((s) => {
@@ -158,7 +175,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
         .filter((t) => t.id !== sourceTabId)
         .map((t) => (t.id === targetTabId ? { ...t, layout: mergedLayout } : t));
 
-      return setPw(s, { tabs: newTabs, activeTabId: targetTabId });
+      return withFocus(s, { tabs: newTabs }, targetTabId);
     }),
 
   removePane: (tabId, paneId) =>
@@ -184,7 +201,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       if (!newLayout) {
         const emptyPane = createEmptyPane();
         return {
-          ...setPw(s, {
+          ...withFocus(s, {
             tabs: pw.tabs.map((t) =>
               t.id === tabId
                 ? { ...t, layout: { type: "pane" as const, paneId: emptyPane.id } }
@@ -198,7 +215,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       }
 
       return {
-        ...setPw(s, {
+        ...withFocus(s, {
           tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
           panes: restPanes,
         }),
@@ -213,8 +230,8 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       const tab = pw.tabs.find((t) => t.id === tabId);
       if (!tab) return s;
 
-      // T95: Fall back to focusedPaneId, then first pane in layout
-      const targetId = paneId || s.focusedPaneId || findFirstPaneId(tab.layout);
+      // T95: Fall back to the focused pane, but only one of this tab
+      const targetId = paneInTabOrFirst(tab, paneId || s.focusedPaneId);
       if (!targetId) return s;
 
       const newPane: Pane = {
@@ -268,12 +285,13 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       const pw = getPw(s);
       const existing = pw.panes[paneId];
       if (!existing) return s;
-      return {
-        ...setPw(s, {
-          panes: { ...pw.panes, [paneId]: { ...existing, ...updates } },
-        }),
-        focusedPaneId: paneId,
-      };
+      const panes = { ...pw.panes, [paneId]: { ...existing, ...updates } };
+      // Focus follows only inside the active tab: a spawn landing in a background tab's pane
+      // moved the focus there, and Cmd+W then closed that pane
+      const active = pw.tabs.find((t) => t.id === pw.activeTabId);
+      return active && layoutHasPane(active.layout, paneId)
+        ? { ...setPw(s, { panes }), focusedPaneId: paneId }
+        : setPw(s, { panes });
     }),
 
   setPaneUrl: (paneId, url) =>
@@ -304,12 +322,18 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
           delete exit[pid];
         }
       }
-      return projectWorkspaces === s.projectWorkspaces
-        ? s
-        : { projectWorkspaces, paneCwd: cwd, paneLastExit: exit };
+      if (projectWorkspaces === s.projectWorkspaces) return s;
+      return { ...withFocus({ ...s, projectWorkspaces }, {}), paneCwd: cwd, paneLastExit: exit };
     }),
 
-  setFocusedPane: (paneId) => set({ focusedPaneId: paneId }),
+  setFocusedPane: (paneId) =>
+    set((s) => {
+      const pw = getPw(s);
+      // A pane of another tab never takes the focus: its tab is activated first (setActiveTab)
+      const inOtherTab =
+        !!paneId && pw.tabs.some((t) => t.id !== pw.activeTabId && layoutHasPane(t.layout, paneId));
+      return inOtherTab ? s : { focusedPaneId: paneId };
+    }),
 
   extractPaneToNewTab: (sourceTabId, paneId) =>
     set((s) => {
@@ -336,37 +360,42 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       newTabs[sourceIdx] = { ...sourceTab, layout: newLayout };
       newTabs.splice(sourceIdx + 1, 0, newTab);
 
-      return {
-        ...setPw(s, { tabs: newTabs, activeTabId: newTab.id }),
-        focusedPaneId: paneId,
-      };
+      return withFocus(s, { tabs: newTabs }, newTab.id, paneId);
     }),
 
-  closeFocusedPane: () => {
-    const pw = getPw(get());
-    const { focusedPaneId } = get();
-    if (!focusedPaneId || !pw.activeTabId) return;
-
-    const tab = pw.tabs.find((t) => t.id === pw.activeTabId);
+  closeTarget: (target) => {
+    const tab = getPw(get()).tabs.find((t) => t.id === target.tabId);
     if (!tab) return;
-
-    const allPaneIds = collectPaneIds(tab.layout);
-    if (allPaneIds.length <= 1) {
-      get().removeTab(pw.activeTabId);
-    } else {
-      get().removePane(pw.activeTabId, focusedPaneId);
-      const updatedPw = getPw(get());
-      const updatedTab = updatedPw.tabs.find((t) => t.id === pw.activeTabId);
-      if (updatedTab) {
-        const nextPaneId = findFirstPaneId(updatedTab.layout);
-        set({ focusedPaneId: nextPaneId });
-      }
+    if (target.closesTab) {
+      get().removeTab(target.tabId);
+      return;
     }
+    if (layoutHasPane(tab.layout, target.paneId)) get().removePane(target.tabId, target.paneId);
+  },
+
+  closeFocusedPane: () => {
+    const target = resolveCloseTarget(getPw(get()), get().focusedPaneId);
+    if (target) get().closeTarget(target);
+  },
+
+  rememberClosed: (entry) => set((s) => ({ recentlyClosed: pushClosed(s.recentlyClosed, entry) })),
+
+  restoreClosed: (entryId) => {
+    const entry = get().recentlyClosed.find((e) => e.id === entryId);
+    if (!entry || entry.projectId !== get()._activeProjectId) return null;
+    const restored = restoreClosedInto(getPw(get()), entry);
+    set((s) => ({
+      ...withFocus(s, restored.pw, restored.tabId, restored.paneId),
+      recentlyClosed: s.recentlyClosed.filter((e) => e.id !== entryId),
+    }));
+    return { tabId: restored.tabId, paneId: restored.paneId };
   },
 
   splitFocusedPane: (direction) => {
-    const { activeTabId } = getPw(get());
-    if (activeTabId) get().splitPane(activeTabId, get().focusedPaneId, direction, "empty");
+    const pw = getPw(get());
+    if (pw.activeTabId) {
+      get().splitPane(pw.activeTabId, activePaneId(pw, get().focusedPaneId), direction, "empty");
+    }
   },
 
   getActiveTab: () => {

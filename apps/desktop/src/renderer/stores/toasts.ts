@@ -11,6 +11,10 @@ export interface Toast {
   title: string;
   body?: string;
   agentId?: string;
+  /** A button on the toast (Reopen after a close) */
+  action?: { label: string; run: () => void };
+  /** How long it stays, TOAST_AUTO_DISMISS_MS when absent */
+  durationMs?: number;
   createdAt: number;
 }
 

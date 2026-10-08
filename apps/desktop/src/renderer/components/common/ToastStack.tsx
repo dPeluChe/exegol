@@ -61,9 +61,12 @@ function ToastItem({ toast }: { toast: Toast }) {
   // (the effect re-runs with a fresh timer when `hovered` flips back).
   useEffect(() => {
     if (hovered) return;
-    const timer = setTimeout(() => removeToast(toast.id), TOAST_AUTO_DISMISS_MS);
+    const timer = setTimeout(
+      () => removeToast(toast.id),
+      toast.durationMs ?? TOAST_AUTO_DISMISS_MS,
+    );
     return () => clearTimeout(timer);
-  }, [hovered, toast.id, removeToast]);
+  }, [hovered, toast.id, toast.durationMs, removeToast]);
 
   const config = TOAST_CONFIG[toast.type];
   const Icon = config.icon;
@@ -101,6 +104,18 @@ function ToastItem({ toast }: { toast: Toast }) {
           </div>
         </div>
       </button>
+      {toast.action && (
+        <button
+          type="button"
+          onClick={() => {
+            toast.action?.run();
+            removeToast(toast.id);
+          }}
+          className="mr-8 self-center rounded px-2 py-1 text-xs font-semibold text-accent hover:bg-bg-tertiary"
+        >
+          {toast.action.label}
+        </button>
+      )}
       {/* T155.7: X-dismiss only removes the toast — it never marks the
           related attention item read (that's pane activation / inbox click). */}
       <button

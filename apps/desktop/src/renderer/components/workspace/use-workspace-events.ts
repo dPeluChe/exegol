@@ -4,7 +4,7 @@ import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { SWITCH_SECTION_EVENT, switchSection } from "../../lib/switch-section";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../../stores/agents";
-import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../../stores/workspace";
+import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import type { WorkspaceSection } from "./WorkspaceTabs";
 
 /** The workspace section, switched by sidebar events and reset to Agents on leaving the dashboard */
@@ -142,10 +142,7 @@ async function openDiffForAgent(agentId: string): Promise<void> {
     /* no worktree row — fall back to project root */
   }
   const ws = useWorkspaceStore.getState();
-  const pw = getProjectState();
-  const activeTab = pw.tabs.find((t) => t.id === pw.activeTabId);
-  if (!activeTab) return;
-  const paneId = ws.focusedPaneId ?? findFirstPaneId(activeTab.layout);
+  const paneId = getActivePaneId();
   if (!paneId) return;
   ws.updatePane(paneId, { type: "git", agentId, filePath: worktreePath });
   ws.setFocusedPane(paneId);

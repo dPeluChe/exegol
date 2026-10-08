@@ -9,6 +9,7 @@ import {
   type LucideIcon,
   PanelLeft,
   Plus,
+  RotateCcw,
   Search,
   Settings,
   Split,
@@ -17,7 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { cleanupAndCloseFocusedPane } from "../hooks/use-hotkeys";
+import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appKeys } from "../lib/keymap";
 import { runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
@@ -107,7 +108,15 @@ function useCommands(close: () => void): Command[] {
         icon: X,
         shortcut: "⌘W",
         // Same as Cmd+W: the pane's agent is stopped and archived, not left running unseen
-        action: run(cleanupAndCloseFocusedPane),
+        action: run(closeActivePane),
+      },
+      {
+        id: "ws:reopen-closed",
+        label: "Reopen Closed Tab",
+        category: "workspace",
+        icon: RotateCcw,
+        shortcut: "⌘⇧T",
+        action: run(() => reopenClosed()),
       },
       {
         id: "ws:split-h",

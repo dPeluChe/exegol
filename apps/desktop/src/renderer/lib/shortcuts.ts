@@ -146,6 +146,13 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "terminal",
   },
   {
+    id: "reopen-closed",
+    label: "Reopen Closed Tab",
+    description: "Put the last closed tab or pane back and resume its sessions",
+    keys: "Cmd+Shift+T",
+    category: "terminal",
+  },
+  {
     id: "browser-address",
     label: "Browser: Address Bar",
     description: "Select the focused browser pane's address (the floating browser's too)",

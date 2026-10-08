@@ -9,8 +9,8 @@ interface ConfirmDialogProps {
   title: string;
   description: ReactNode;
   confirmLabel?: string;
-  /** Enter confirms (the confirm button takes focus) instead of the close button */
-  autoFocusConfirm?: boolean;
+  /** Cancel takes the focus: Enter keeps things as they are (a destructive close) */
+  autoFocusCancel?: boolean;
   cancelLabel?: string;
   variant?: "default" | "destructive";
   onConfirm: () => void;
@@ -25,9 +25,9 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   variant = "default",
   onConfirm,
-  autoFocusConfirm = false,
+  autoFocusCancel = false,
 }: ConfirmDialogProps) {
-  const confirmRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const handleConfirm = () => {
     onConfirm();
     onOpenChange(false);
@@ -39,9 +39,11 @@ export function ConfirmDialog({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
           onOpenAutoFocus={(e) => {
-            if (!autoFocusConfirm) return;
+            if (!autoFocusCancel) return;
             e.preventDefault();
-            confirmRef.current?.focus();
+            // A focused webview keeps the keys (Esc included) unless it lets go first
+            (document.activeElement as HTMLElement | null)?.blur();
+            cancelRef.current?.focus();
           }}
           className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6 shadow-2xl"
           style={{
@@ -77,6 +79,7 @@ export function ConfirmDialog({
 
           <div className="flex justify-end gap-2">
             <Button
+              ref={cancelRef}
               variant="outline"
               onClick={() => onOpenChange(false)}
               className="border"
@@ -88,7 +91,6 @@ export function ConfirmDialog({
               {cancelLabel}
             </Button>
             <Button
-              ref={confirmRef}
               onClick={handleConfirm}
               className={cn("text-white", variant === "destructive" && "hover:opacity-90")}
               style={{
