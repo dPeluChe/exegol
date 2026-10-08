@@ -3,7 +3,7 @@ import { type AgentState, type AttentionItem, isLiveAgent, useAgentStore } from 
 import type { SidebarView } from "../stores/app";
 import type { LiveProjectGroup } from "./live-tabs";
 
-/** The sidebar's views, in selector and Cmd+Shift+B order */
+/** Label and icon per sidebar view, in SIDEBAR_VIEWS order (the selector, the rail, the palette) */
 export const SIDEBAR_VIEW_META: { id: SidebarView; label: string; icon: LucideIcon }[] = [
   { id: "agents", label: "Agents", icon: Activity },
   { id: "projects", label: "Projects", icon: Cuboid },

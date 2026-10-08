@@ -85,9 +85,17 @@ function useCommands(close: () => void): Command[] {
         shortcut: "⌘B",
         action: run(() => useAppStore.getState().toggleSidebar()),
       },
+      {
+        id: "nav:sidebar-next",
+        label: "Next Sidebar View",
+        category: "navigation",
+        icon: PanelLeft,
+        shortcut: "⌘⇧B",
+        action: run(() => useAppStore.getState().cycleSidebarView()),
+      },
       ...SIDEBAR_VIEW_META.map(({ id, label, icon }) => ({
         id: `nav:sidebar-${id}`,
-        label: `Sidebar: ${label}`,
+        label: `Show ${label} in Sidebar`,
         category: "navigation" as const,
         icon,
         action: run(() => useAppStore.getState().openSidebarView(id)),

@@ -75,7 +75,11 @@ export function SegmentedTabs<T extends string>({
               onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => onKeyDown(e, index),
             })}
             title={compact ? tab.label : undefined}
-            aria-label={iconOnly ? tab.label : undefined}
+            aria-label={
+              iconOnly
+                ? `${tab.label}${tab.count !== undefined ? ` (${tab.count})` : ""}`
+                : undefined
+            }
             onClick={() => onChange(tab.id)}
             className={cn(
               "flex min-w-0 items-center justify-center rounded-md font-medium transition-colors",

@@ -73,7 +73,7 @@ export function Sidebar() {
             label,
             icon,
             count:
-              (id === "agents" ? liveCount : id === "projects" ? projectCount : attentionCount) ||
+              { agents: liveCount, projects: projectCount, attention: attentionCount }[id] ||
               undefined,
             alert: id === "attention" && unreadCount > 0,
           }))}
