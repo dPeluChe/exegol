@@ -162,7 +162,9 @@ interface Window {
       ) => () => void;
       openResult: (result: { requestId: string; paneId?: string; error?: string }) => Promise<void>;
     };
-    onPreviewLink: (callback: (link: { url: string; from: string }) => void) => () => void;
+    onPreviewLink: (
+      callback: (link: { from: string; url: string; host: string; dropped: boolean }) => void,
+    ) => () => void;
     onMcpStatus: (callback: (event: import("@exegol/shared").McpStatusEvent) => void) => () => void;
     floating: {
       open: (config: {

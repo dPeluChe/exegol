@@ -1,45 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { stat } from "node:fs/promises";
-import { extname, join, relative, sep } from "node:path";
+import { basename, join, relative, sep } from "node:path";
 import { isPathInside, isSensitivePath, realpathSafe } from "../security/path-guard";
 
 export const PREVIEW_SCHEME = "exegol-preview";
 
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".map": "application/json; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".md": "text/plain; charset=utf-8",
-  ".xml": "application/xml; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".bmp": "image/bmp",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".otf": "font/otf",
-  ".wasm": "application/wasm",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".ogg": "audio/ogg",
-  ".pdf": "application/pdf",
-};
+export const isPreviewUrl = (url: string | undefined): url is string =>
+  !!url?.startsWith(`${PREVIEW_SCHEME}://`);
 
-export function previewMime(path: string): string {
-  return MIME[extname(path).toLowerCase()] ?? "application/octet-stream";
+/** The token (host) of a preview URL, "" for anything else */
+export function previewTokenOf(url: string | undefined): string {
+  return isPreviewUrl(url) ? (url.slice(PREVIEW_SCHEME.length + 3).split(/[/?#]/)[0] ?? "") : "";
 }
 
 /** Only this scheme is reachable: a preview never phones home, scripts or not */
@@ -61,7 +32,8 @@ export function previewCsp(scripts: boolean): string {
   ].join("; ");
 }
 
-/** A token names one project root (and whether scripts may run); the renderer never sends a root */
+// ─── Grants: a token names one root (and whether scripts may run) ────────────
+
 interface PreviewGrant {
   root: string;
   scripts: boolean;
@@ -82,6 +54,10 @@ export function previewGrant(token: string): PreviewGrant | null {
   return grants.get(token) ?? null;
 }
 
+export function dropPreviewGrant(token: string): void {
+  grants.delete(token);
+}
+
 /** The registered base (project or worktree) that holds `file`, most specific first */
 export async function previewRootFor(file: string, bases: string[]): Promise<string | null> {
   const target = await realpathSafe(file);
@@ -90,28 +66,125 @@ export async function previewRootFor(file: string, bases: string[]): Promise<str
   return holding.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
-const hidden = (segments: string[]) => segments.some((s) => s.startsWith("."));
+/** A grant's root is served only while it is still one of the bases */
+export async function isLiveRoot(root: string, bases: string[]): Promise<boolean> {
+  const roots = await Promise.all(bases.map(realpathSafe));
+  return roots.includes(root);
+}
 
-/**
- * The file a preview URL's path names under `root`, or null. Refused: traversal, a symlink out
- * of the root, dotfiles and dot-folders (.env, .git), credential files, directories.
- */
-export async function resolvePreviewFile(root: string, urlPath: string): Promise<string | null> {
-  let segments: string[];
+// ─── URL <-> file ────────────────────────────────────────────────────────────
+
+/** Path segments of a preview URL, decoded; null when one does not decode */
+export function segmentsFromUrlPath(pathname: string): string[] | null {
   try {
-    segments = urlPath.split("/").filter(Boolean).map(decodeURIComponent);
+    return pathname.split("/").filter(Boolean).map(decodeURIComponent);
   } catch {
     return null;
   }
-  if (segments.length === 0) return null;
-  if (segments.some((s) => s === ".." || s.includes("\0") || s.includes("\\") || s.includes("/")))
-    return null;
-  if (hidden(segments)) return null;
+}
+
+export function previewUrlFor(token: string, segments: string[]): string {
+  return `${PREVIEW_SCHEME}://${token}/${segments.map(encodeURIComponent).join("/")}`;
+}
+
+export type PreviewRefusal = "bad-path" | "hidden" | "sensitive" | "outside-root" | "not-a-file";
+
+export type PreviewResolution =
+  | { ok: true; path: string }
+  | { ok: false; reason: PreviewRefusal; name?: string };
+
+export function refusalMessage(r: { reason: PreviewRefusal; name?: string }): string {
+  switch (r.reason) {
+    case "bad-path":
+      return "Not a valid path inside the project";
+    case "hidden":
+      return `Hidden files and folders are never served (${r.name})`;
+    case "sensitive":
+      return `Credential and key files are never served (${r.name})`;
+    case "outside-root":
+      return "It leads outside the project (a symlink)";
+    case "not-a-file":
+      return "Not a file";
+  }
+}
+
+const firstHidden = (segments: string[]) => segments.find((s) => s.startsWith("."));
+
+/**
+ * The file `segments` name under `root`, or why not. Refused: traversal, a symlink out of the
+ * root, dotfiles and dot-folders (.env, .git), credential files, directories (no listing).
+ */
+export async function resolvePreviewFile(
+  root: string,
+  segments: string[],
+): Promise<PreviewResolution> {
+  const bad = (s: string) =>
+    !s || s === "." || s === ".." || s.includes("/") || s.includes("\\") || s.includes("\0");
+  if (segments.length === 0 || segments.some(bad)) return { ok: false, reason: "bad-path" };
+  const hidden = firstHidden(segments);
+  if (hidden) return { ok: false, reason: "hidden", name: hidden };
   const realRoot = await realpathSafe(root);
   const real = await realpathSafe(join(realRoot, ...segments));
-  if (!isPathInside(realRoot, real) || real === realRoot) return null;
+  if (!isPathInside(realRoot, real) || real === realRoot) {
+    return { ok: false, reason: "outside-root" };
+  }
   // A symlink inside the root may still point at a dotfile or a key in it
-  if (hidden(relative(realRoot, real).split(sep)) || isSensitivePath(real)) return null;
+  const hiddenTarget = firstHidden(relative(realRoot, real).split(sep));
+  if (hiddenTarget) return { ok: false, reason: "hidden", name: hiddenTarget };
+  if (isSensitivePath(real)) return { ok: false, reason: "sensitive", name: basename(real) };
   const info = await stat(real).catch(() => null);
-  return info?.isFile() ? real : null;
+  return info?.isFile() ? { ok: true, path: real } : { ok: false, reason: "not-a-file" };
+}
+
+// ─── Range requests (media seeking) ──────────────────────────────────────────
+
+/** One `bytes=` range of a `size`-byte file: null = whole file, "unsatisfiable" = 416 */
+export function parseRange(
+  header: string | null,
+  size: number,
+): { start: number; end: number } | "unsatisfiable" | null {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (!m[1] && !m[2])) return null;
+  let start: number;
+  let end: number;
+  if (!m[1]) {
+    const suffix = Number(m[2]);
+    if (suffix === 0) return "unsatisfiable";
+    start = Math.max(0, size - suffix);
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  }
+  if (start >= size || start > end) return "unsatisfiable";
+  return { start, end };
+}
+
+// ─── Links a preview asked to open ───────────────────────────────────────────
+
+/** What the link bar shows: the host, and the URL without its query and fragment */
+export function linkNotice(raw: string): { url: string; host: string; dropped: boolean } | null {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  const dropped = !!u.search || !!u.hash;
+  u.search = "";
+  u.hash = "";
+  return { url: u.toString(), host: u.host, dropped };
+}
+
+/** A click or Enter in the preview this recently counts as the user asking for the link */
+export const GESTURE_WINDOW_MS = 1_000;
+
+export function isRecentGesture(lastGestureAt: number | undefined, now: number): boolean {
+  return (
+    lastGestureAt !== undefined &&
+    now - lastGestureAt >= 0 &&
+    now - lastGestureAt <= GESTURE_WINDOW_MS
+  );
 }

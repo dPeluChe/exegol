@@ -4,6 +4,7 @@ import {
   hostOf,
   isOutsideAllowlist,
   PREFERRED_PORTS_KEY,
+  PREVIEW_PARTITION,
   pickDevServerPort,
   projectIdFromPartition,
 } from "@exegol/shared";
@@ -12,6 +13,11 @@ import type Database from "libsql";
 import { queueFollowUp } from "../agents/follow-up-queue";
 import { getProject, listProjects } from "../db/queries/projects";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import {
+  attachPreviewWebview,
+  guardPreviewContents,
+  isPreviewSession,
+} from "../files-preview/preview-host";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { ExegolToolError } from "../mcp/exegol-protocol";
@@ -542,7 +548,9 @@ export function installAgentBrowser(db: Database.Database): void {
   dbRef = db;
   app.on("web-contents-created", (_e, contents) => {
     if (contents.getType() === "webview") {
-      trackWebview(contents);
+      // A Files preview: its own session and guard, never an agent browser pane
+      if (isPreviewSession(contents.session)) guardPreviewContents(contents);
+      else trackWebview(contents);
       return;
     }
     contents.on("will-attach-webview", (event, webPreferences, params) => {
@@ -551,6 +559,10 @@ export function installAgentBrowser(db: Database.Database): void {
       webPreferences.nodeIntegration = false;
       webPreferences.contextIsolation = true;
       if (!params.partition) return;
+      if (params.partition === PREVIEW_PARTITION) {
+        attachPreviewWebview(event, webPreferences, params);
+        return;
+      }
       const projectId = projectIdFromPartition(params.partition);
       if (!projectId) {
         event.preventDefault();

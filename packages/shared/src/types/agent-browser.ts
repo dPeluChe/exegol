@@ -3,6 +3,9 @@
 /** Each project's browser panes share one persistent session (logins), no other project's */
 export const browserPartitionFor = (projectId: string): string => `persist:project-${projectId}`;
 
+/** The Files HTML preview's own in-memory session: no project's, never an agent's */
+export const PREVIEW_PARTITION = "exegol-preview";
+
 const PARTITION_RE = /^persist:project-([A-Za-z0-9_-]{1,64})$/;
 
 export function projectIdFromPartition(partition: string | undefined | null): string | null {

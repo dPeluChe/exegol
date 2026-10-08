@@ -90,7 +90,7 @@ function recheck(path: string): void {
 
 /** Pins the checked file: no symlink at the end (O_NOFOLLOW), no FIFO to block on, and the open
  *  fd must be the same inode the realpath names now */
-async function openPinned(path: string) {
+export async function openPinned(path: string) {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const [held, now, real] = await Promise.all([handle.stat(), stat(path), realpath(path)]);

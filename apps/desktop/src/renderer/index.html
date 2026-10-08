@@ -12,7 +12,7 @@
       JS context, so a wide frame allowlist here does NOT expose the preload
       bridge to those URLs. Do not tighten these without first redesigning
       the browser pane. `*` never matches a custom scheme: the Files HTML
-      preview (exegol-preview:, served read-only by main) is named.
+      preview webview (exegol-preview:, served only in its own session) is named.
 
       All external network access (Anthropic API, GitHub API, etc.) happens
       from the main process via node fetch, so `connect-src` here only needs
