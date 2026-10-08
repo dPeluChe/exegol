@@ -18,9 +18,11 @@ import {
   beginSession,
   cancelSession,
   engineState,
+  engineTimings,
   ensureModel,
   feedAudio,
   finishSession,
+  modelLoaded,
   probeEngine,
   setIdleUnload,
   stopEngine,
@@ -37,9 +39,13 @@ interface Active {
   id: string;
   modelId: string;
   startedAt: number;
+  /** The model was not loaded when this dictation started: the log line carries the load split */
+  cold: boolean;
 }
 
 let active: Active | null = null;
+/** When a warm-up last found the model unloaded: the start that follows is still a cold one */
+let coldWarmAt = 0;
 
 export const dictationActive = (): boolean => active !== null;
 
@@ -106,7 +112,12 @@ export async function startDictation(db: Database.Database) {
   if (!ready) throw new Error("no speech model is downloaded");
   if (active) cancelDictation(active.id);
   const id = nanoid(16);
-  active = { id, modelId: entry.id, startedAt: Date.now() };
+  active = {
+    id,
+    modelId: entry.id,
+    startedAt: Date.now(),
+    cold: !modelLoaded(entry.id) || Date.now() - coldWarmAt < 60_000,
+  };
   // The model loads while the user speaks: audio waits in the engine until it is ready
   ensureModel(entry.id).catch(() => {});
   beginSession(id, settings.maxSeconds);
@@ -132,12 +143,15 @@ export async function stopDictation(
   if (!active || active.id !== input.sessionId) {
     throw new Error("this dictation is no longer running");
   }
-  const { modelId, startedAt } = active;
+  const { modelId, cold } = active;
   active = null;
-  const text = await finishSession(input.sessionId);
+  if (cold) coldWarmAt = 0;
+  const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(input.sessionId);
+  const phraseLog =
+    phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
   // Lengths and timings only: dictated text never goes to the log (bug reports are public)
   logger.info(
-    `[Dictation] ${modelId}: ${Math.round(input.durationMs / 100) / 10}s of audio, ${text.length} chars in ${Date.now() - startedAt}ms`,
+    `[Dictation] ${modelId}: ${Math.round(input.durationMs / 100) / 10}s of audio, ${text.length} chars; ${loadSplit(cold)}${phraseLog}decode after stop ${decodeMs}ms${fullPass ? " (full pass)" : ""}`,
   );
   if (text) {
     const settings = dictationSettings(db);
@@ -152,6 +166,24 @@ export async function stopDictation(
     broadcast("dictation:done", {});
   }
   return { text };
+}
+
+function loadSplit(cold: boolean): string {
+  if (!cold) return "model warm, ";
+  const { spawnMs, loadMs } = engineTimings();
+  const ms = (n: number | null) => (n === null ? "pending" : `${n}ms`);
+  return `engine spawn ${ms(spawnMs)}, model load ${ms(loadMs)}, `;
+}
+
+/** Called as a dictation starts in the renderer, before the mic prompt and capture: the engine
+ *  spawns and loads the model while the user is still getting ready to speak */
+export async function warmDictation(db: Database.Database): Promise<{ ok: boolean }> {
+  if (!dictationSettings(db).enabled || !(await probeEngine()).ok) return { ok: false };
+  const { entry, ready } = await pickModel(db);
+  if (!ready) return { ok: false };
+  if (!modelLoaded(entry.id)) coldWarmAt = Date.now();
+  ensureModel(entry.id).catch(() => {});
+  return { ok: true };
 }
 
 export function cancelDictation(sessionId: string): void {

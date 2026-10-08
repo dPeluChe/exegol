@@ -17,6 +17,7 @@ import {
   dictationStatus,
   startDictation,
   stopDictation,
+  warmDictation,
 } from "../../dictation/service";
 import { publicProcedure, router } from "../trpc";
 
@@ -35,6 +36,8 @@ export const dictationRouter = router({
     openMicSettings();
     return { ok: true };
   }),
+
+  warm: publicProcedure.mutation(({ ctx }) => warmDictation(ctx.db)),
 
   /** Audio then arrives on `dictation:audio`; partial text on `dictation:partial` */
   start: publicProcedure.mutation(({ ctx }) => startDictation(ctx.db)),

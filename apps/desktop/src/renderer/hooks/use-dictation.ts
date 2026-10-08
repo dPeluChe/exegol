@@ -13,7 +13,9 @@ import {
   chordDown,
   chordUp,
   dismissDictation,
+  stopDictation,
 } from "../lib/dictation/controller";
+import { overlayKeyAction } from "../lib/dictation/overlay-keys";
 import {
   dictationChord,
   isDictationChord,
@@ -52,11 +54,12 @@ export function useDictation() {
         if (!e.repeat) chordDown();
         return;
       }
-      if (e.key === "Escape" && useDictationStore.getState().phase !== "idle") {
-        e.preventDefault();
-        e.stopPropagation();
-        dismissDictation();
-      }
+      const action = overlayKeyAction(e, useDictationStore.getState().phase);
+      if (!action) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (action === "cancel") dismissDictation();
+      else if (action === "insert") void stopDictation();
     };
     const onKeyUp = (e: KeyboardEvent) => {
       const chord = dictationChord();
@@ -69,6 +72,7 @@ export function useDictation() {
     const offKey = window.api.dictation.onKey(({ kind }) => {
       if (kind === "down") chordDown();
       else if (kind === "up") chordUp();
+      else if (kind === "enter") void stopDictation();
       else dismissDictation();
     });
     const offPartial = window.api.dictation.onPartial(({ sessionId, text }) => {

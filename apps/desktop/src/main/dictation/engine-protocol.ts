@@ -14,5 +14,14 @@ export type EngineReply =
   | { type: "loaded"; modelId: string }
   | { type: "load-failed"; modelId: string; error: string }
   | { type: "partial"; sessionId: string; text: string }
-  | { type: "final"; sessionId: string; text: string }
+  | {
+      type: "final";
+      sessionId: string;
+      text: string;
+      /** Offline models: phrases cut at pauses and decoded while recording */
+      phrases: number;
+      phraseMs: number;
+      /** The phrases came back empty and everything was decoded again */
+      fullPass: boolean;
+    }
   | { type: "failed"; sessionId: string; error: string };

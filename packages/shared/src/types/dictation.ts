@@ -3,6 +3,16 @@
 /** Mic audio is resampled to this before it leaves the renderer; every model takes it */
 export const DICTATION_SAMPLE_RATE = 16_000;
 
+/** Energy voice detection: enough to tell "nothing was said" and to stop after a pause. Mic
+ *  capture runs with auto gain, so speech sits well above this RMS and room noise below it */
+export const SPEECH_RMS = 0.008;
+export function rms(samples: Float32Array): number {
+  if (samples.length === 0) return 0;
+  let sum = 0;
+  for (const s of samples) sum += s * s;
+  return Math.sqrt(sum / samples.length);
+}
+
 /** Where a dictation went: a pane kind, a text field of the app, or the clipboard */
 export const DICTATION_TARGET_KINDS = [
   "terminal",

@@ -1,9 +1,17 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { extractTarBz2, unsafeEntryReason } from "./extract";
+import { extractTarBz2, keepsPath, pruneToRequired, unsafeEntryReason } from "./extract";
 
 interface Entry {
   name: string;
@@ -80,7 +88,58 @@ describe("unsafeEntryReason", () => {
   });
 });
 
+describe("keepsPath", () => {
+  const required = ["tokens.txt", "tokenizer/vocab.json"];
+
+  it("keeps required files and the folders that lead to them", () => {
+    expect(keepsPath("tokens.txt", required)).toBe(true);
+    expect(keepsPath("tokenizer", required)).toBe(true);
+    expect(keepsPath("tokenizer/vocab.json", required)).toBe(true);
+  });
+
+  it("drops extras, including look-alike prefixes", () => {
+    expect(keepsPath("test_wavs", required)).toBe(false);
+    expect(keepsPath("test_wavs/0.wav", required)).toBe(false);
+    expect(keepsPath("tokenizer/extra.json", required)).toBe(false);
+    expect(keepsPath("tokens", required)).toBe(false);
+  });
+});
+
+describe("pruneToRequired", () => {
+  it("removes extras and links, keeps required files, never follows a link out", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "exegol-prune-"));
+    const outside = mkdtempSync(join(tmpdir(), "exegol-outside-"));
+    writeFileSync(join(outside, "keep.txt"), "x");
+    writeFileSync(join(dir, "tokens.txt"), "t");
+    writeFileSync(join(dir, "README.md"), "r");
+    mkdirSync(join(dir, "test_wavs"));
+    writeFileSync(join(dir, "test_wavs", "0.wav"), "w");
+    mkdirSync(join(dir, "tokenizer"));
+    writeFileSync(join(dir, "tokenizer", "vocab.json"), "{}");
+    writeFileSync(join(dir, "tokenizer", "extra.json"), "{}");
+    symlinkSync(outside, join(dir, "linked"));
+    const removed = await pruneToRequired(dir, ["tokens.txt", "tokenizer/vocab.json"]);
+    expect(removed.sort()).toEqual(["README.md", "linked", "test_wavs", "tokenizer/extra.json"]);
+    expect(existsSync(join(dir, "tokens.txt"))).toBe(true);
+    expect(existsSync(join(dir, "tokenizer", "vocab.json"))).toBe(true);
+    expect(existsSync(join(outside, "keep.txt"))).toBe(true);
+  });
+});
+
 describe.skipIf(!hasBzip2)("extractTarBz2", () => {
+  it("keeps only the required files", async () => {
+    const archive = tarBz2([
+      { name: "root/tokens.txt", body: "a" },
+      { name: "root/test_wavs/0.wav", body: "wav" },
+      { name: "root/README.md", body: "r" },
+    ]);
+    const t = target();
+    await extractTarBz2({ archive, ...t, rootDir: "root", requiredFiles: ["tokens.txt"] });
+    expect(existsSync(join(t.destDir, "tokens.txt"))).toBe(true);
+    expect(existsSync(join(t.destDir, "test_wavs"))).toBe(false);
+    expect(existsSync(join(t.destDir, "README.md"))).toBe(false);
+  });
+
   it("unpacks into the model folder with nothing executable, and cleans the temp dir", async () => {
     const archive = tarBz2([
       { name: "root/", type: "5" },

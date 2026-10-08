@@ -15,6 +15,8 @@ export interface SpeechModelEntry {
   languageSummary?: string;
   /** One line for the picker: what this model is good at */
   bestFor: string;
+  /** Position in the dictation overlay's short list of recommended models (1 = recommended) */
+  featured?: number;
   /** The archive as downloaded */
   sizeBytes: number;
   /** On disk once extracted */

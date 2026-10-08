@@ -4,11 +4,12 @@ import type { ModelListItem, ModelStatus, SpeechModelEntry } from "@exegol/share
 import { net } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { redact } from "../system/diagnostics";
 import { invalidateStorageReport } from "../system/storage";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
 import { findModel, MODEL_CATALOG } from "./catalog";
 import { downloadVerified, fileSize } from "./download";
-import { extractTarBz2 } from "./extract";
+import { extractTarBz2, pruneToRequired } from "./extract";
 
 export const MODELS_DIR = join(EXEGOL_DIR, "models");
 const PARTIAL_DIR = join(MODELS_DIR, ".partial");
@@ -26,6 +27,25 @@ interface Job {
 
 const jobs = new Map<string, Job>();
 const failures = new Map<string, string>();
+/** Installed models whose folder was checked for extras this run */
+const pruned = new Set<string>();
+
+const mb = (bytes: number) => (bytes / 1024 ** 2).toFixed(1);
+
+/** Models installed before extraction kept only the required files lose their extras once */
+function pruneInstalled(entry: SpeechModelEntry): void {
+  if (pruned.has(entry.id) || jobs.has(entry.id)) return;
+  pruned.add(entry.id);
+  pruneToRequired(modelDir(entry.id), entry.files)
+    .then((removed) => {
+      if (removed.length === 0) return;
+      logger.info(`[Models] ${entry.id}: removed ${removed.length} files the engine never reads`);
+      invalidateStorageReport();
+    })
+    .catch((err) => logger.warn(`[Models] ${entry.id}: cleanup failed: ${errorText(err)}`));
+}
+
+const errorText = (err: unknown) => redact(err instanceof Error ? err.message : String(err));
 
 function push(id: string, status: ModelStatus): void {
   broadcast("models:progress", { id, status });
@@ -42,7 +62,10 @@ async function isInstalled(entry: SpeechModelEntry): Promise<boolean> {
 export async function modelStatus(entry: SpeechModelEntry): Promise<ModelStatus> {
   const job = jobs.get(entry.id);
   if (job) return job.status;
-  if (await isInstalled(entry)) return { state: "ready", diskBytes: entry.installedBytes };
+  if (await isInstalled(entry)) {
+    pruneInstalled(entry);
+    return { state: "ready", diskBytes: entry.installedBytes };
+  }
   const partialBytes = await fileSize(partialPath(entry.id));
   const error = failures.get(entry.id);
   return error
@@ -101,6 +124,11 @@ async function runDownload(entry: SpeechModelEntry, job: Job): Promise<void> {
     await mkdir(PARTIAL_DIR, { recursive: true });
     const partialBytes = await fileSize(partialPath(id));
     await assertFreeSpace(entry, partialBytes);
+    logger.info(
+      `[Models] download ${id}: ${mb(entry.sizeBytes)} MB${partialBytes > 0 ? `, resuming at ${mb(partialBytes)} MB` : ""}`,
+    );
+    const downloadStart = Date.now();
+    let verifyStart = 0;
     set({ state: "downloading", receivedBytes: partialBytes, totalBytes: entry.sizeBytes });
     await downloadVerified({
       url: entry.sourceUrl,
@@ -116,9 +144,19 @@ async function runDownload(entry: SpeechModelEntry, job: Job): Promise<void> {
         lastPush = now;
         push(id, job.status);
       },
-      onVerifying: () => set({ state: "verifying" }),
+      onVerifying: () => {
+        verifyStart = Date.now();
+        const secs = Math.max(0.001, (verifyStart - downloadStart) / 1000);
+        const fetched = entry.sizeBytes - partialBytes;
+        logger.info(
+          `[Models] ${id}: downloaded ${mb(fetched)} MB in ${secs.toFixed(1)}s (${mb(fetched / secs)} MB/s)`,
+        );
+        set({ state: "verifying" });
+      },
     });
+    logger.info(`[Models] ${id}: sha256 ok in ${Date.now() - verifyStart}ms`);
     set({ state: "extracting" });
+    const extractStart = Date.now();
     await extractTarBz2({
       archive: partialPath(id),
       signal: job.abort.signal,
@@ -128,12 +166,17 @@ async function runDownload(entry: SpeechModelEntry, job: Job): Promise<void> {
       requiredFiles: entry.files,
     });
     await rm(partialPath(id), { force: true });
-    logger.info(`[Models] installed ${id}`);
+    pruned.add(id);
+    logger.info(
+      `[Models] installed ${id}: extracted in ${Date.now() - extractStart}ms, ${((Date.now() - downloadStart) / 1000).toFixed(1)}s in all`,
+    );
   } catch (err) {
-    if (!job.abort.signal.aborted) {
+    if (job.abort.signal.aborted) {
+      logger.info(`[Models] ${id}: cancelled`);
+    } else {
       const message = err instanceof Error ? err.message : String(err);
       failures.set(id, message);
-      logger.warn(`[Models] ${id} failed: ${message}`);
+      logger.warn(`[Models] ${id} failed: ${errorText(err)}`);
     }
   } finally {
     jobs.delete(id);

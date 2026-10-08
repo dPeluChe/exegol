@@ -12,6 +12,9 @@ export function setDictationListening(check: () => boolean): void {
   isListening = check;
 }
 
+const isPlainEnter = (input: Electron.Input) =>
+  input.key === "Enter" && !input.meta && !input.control && !input.alt && !input.shift;
+
 /** A page in a browser pane keeps its keys: the dictation chord (down and up, for hold-to-talk)
  *  and Esc while a dictation runs go to the window hosting it */
 export function forwardDictationKeys(contents: WebContents): void {
@@ -38,6 +41,9 @@ export function forwardDictationKeys(contents: WebContents): void {
     } else if (input.type === "keyDown" && input.key === "Escape" && isListening()) {
       event.preventDefault();
       host.send("dictation:key", { kind: "escape" });
+    } else if (input.type === "keyDown" && isPlainEnter(input) && isListening()) {
+      event.preventDefault();
+      host.send("dictation:key", { kind: "enter" });
     }
   });
 }

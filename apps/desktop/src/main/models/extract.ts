@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { chmod, lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -36,10 +36,36 @@ async function sanitizeTree(dir: string): Promise<void> {
   }
 }
 
+/** A required file, or a folder on the way to one: everything else in a model folder is an extra */
+export function keepsPath(rel: string, required: readonly string[]): boolean {
+  return required.some((file) => file === rel || file.startsWith(`${rel}/`));
+}
+
+/** Removes what the engine never reads (test_wavs/, READMEs) from `dir`, without following links.
+ *  Returns the removed paths, relative to `dir` */
+export async function pruneToRequired(
+  dir: string,
+  required: readonly string[],
+  rel = "",
+): Promise<string[]> {
+  const removed: string[] = [];
+  for (const name of await readdir(join(dir, rel)).catch(() => [] as string[])) {
+    const path = rel ? posix.join(rel, name) : name;
+    const info = await lstat(join(dir, path));
+    if (info.isDirectory() && keepsPath(path, required)) {
+      removed.push(...(await pruneToRequired(dir, required, path)));
+    } else if (!(info.isFile() && required.includes(path))) {
+      await rm(join(dir, path), { recursive: true, force: true });
+      removed.push(path);
+    }
+  }
+  return removed;
+}
+
 /**
  * Extracts a .tar.bz2 with the system tar (bsdtar on macOS, GNU tar on Linux: both
  * refuse absolute and `..` paths without -P) into `tmpDir`, refuses the whole archive
- * on any link or special file, then moves `<tmpDir>/<rootDir>` to `destDir` in one rename.
+ * on any link or special file, keeps only the required files, then moves `<tmpDir>/<rootDir>` to `destDir` in one rename.
  */
 export async function extractTarBz2(opts: {
   archive: string;
@@ -68,6 +94,7 @@ export async function extractTarBz2(opts: {
       const info = await stat(join(extracted, file)).catch(() => null);
       if (!info?.isFile()) throw new Error(`archive is missing ${file}`);
     }
+    await pruneToRequired(extracted, opts.requiredFiles);
     await rm(opts.destDir, { recursive: true, force: true });
     await rename(extracted, opts.destDir);
   } finally {
