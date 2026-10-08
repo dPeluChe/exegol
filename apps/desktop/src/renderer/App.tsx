@@ -24,7 +24,7 @@ import { useFleetSync } from "./hooks/use-fleet-sync";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { usePanelessAgentSweep } from "./hooks/use-paneless-agent-sweep";
-import { useAutoResumeLost } from "./hooks/use-resume-agent";
+import { useAutoResumeLost, useRelaunchMissedResume } from "./hooks/use-resume-agent";
 import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
@@ -67,6 +67,7 @@ export default function App() {
   useSettingsSync();
   useUpdateStatusSync();
   useAutoResumeLost();
+  useRelaunchMissedResume();
   useCliRestarts();
   useFleetSync();
   useActiveViewSync();

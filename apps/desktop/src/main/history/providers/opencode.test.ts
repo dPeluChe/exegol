@@ -9,6 +9,20 @@ vi.mock("node:os", async (importOriginal) => ({
   homedir: () => home.dir,
 }));
 
+/** null = opencode not installed */
+const listing = vi.hoisted(() => ({ entries: null as unknown[] | null, calls: [] as string[][] }));
+vi.mock("../cli-list", async () => {
+  const { StoreUnavailable } = await import("../types");
+  return {
+    cliListing: async (_provider: string, command: string, args: string[], cwd: string) => {
+      listing.calls.push([command, ...args, cwd]);
+      if (!listing.entries) throw new StoreUnavailable("opencode not installed");
+      return listing.entries;
+    },
+    realpathOr: async (p: string) => p,
+  };
+});
+
 import { opencodeHistory } from "./opencode";
 
 describe("opencodeHistory", () => {
@@ -16,6 +30,8 @@ describe("opencodeHistory", () => {
 
   beforeEach(() => {
     home.dir = mkdtempSync(join(tmpdir(), "exegol-oc-"));
+    listing.entries = null;
+    listing.calls = [];
   });
 
   function writeSession(projectHash: string, file: string, body: object): void {
@@ -60,5 +76,33 @@ describe("opencodeHistory", () => {
 
   it("returns nothing when opencode is not installed", async () => {
     expect(await opencodeHistory.list([REPO], 0)).toEqual([]);
+  });
+
+  // opencode 1.x: SQLite store, read through its own listing (shape verified 2026-10-08)
+  it("reads opencode's own listing when it is installed, keeping this folder's sessions", async () => {
+    listing.entries = [
+      {
+        id: "ses_new",
+        title: "Saludo rápido",
+        updated: 1_790_808_584_874,
+        created: 1_790_808_551_871,
+        directory: REPO,
+      },
+      // Same git project, a worktree Exegol did not ask about
+      { id: "ses_wt", updated: 1_790_808_584_874, directory: "/wt/other" },
+    ];
+    const sessions = await opencodeHistory.list([REPO, "/wt/mine"], 0);
+    // One run covers the project's worktrees too
+    expect(listing.calls).toEqual([
+      ["opencode", "session", "list", "--format", "json", "--pure", REPO],
+    ]);
+    expect(sessions).toEqual([
+      expect.objectContaining({
+        sessionId: "ses_new",
+        cwd: REPO,
+        startedAt: 1_790_808_551,
+        endedAt: 1_790_808_584,
+      }),
+    ]);
   });
 });

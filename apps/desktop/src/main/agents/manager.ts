@@ -10,8 +10,9 @@ import {
   setAgentYolo,
   stopAgent,
 } from "../db/queries";
-import { hasLocalSession } from "../history";
+import { forgetLocalSessions, lastLocalSession } from "../history";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
 import { installedCliVersion } from "../system/cli-versions";
@@ -26,13 +27,14 @@ import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { inheritClaudeTrust } from "./claude-trust";
 import { applyLaunchModel } from "./launch-model";
+import { noteAgentInput, noteBlindResume, takeMissedResume } from "./missed-resume";
 import { attachOutputPipeline } from "./output-pipeline";
 import { runPreflight } from "./preflight";
 import {
   type ReattachResult,
   reattachSidecarAgents as reattachSidecarAgentsImpl,
 } from "./reattach-sidecar-agents";
-import { recoverLostSessionId } from "./recover-lost-session";
+import { liveSessionIds, recoverLostSessionId } from "./recover-lost-session";
 import { getProviderRegistry } from "./registry";
 import { startShellPromotion } from "./shell-promotion";
 import {
@@ -43,6 +45,7 @@ import {
   DEFAULT_PTY_ROWS,
   resolveCommand,
 } from "./spawn-env";
+import { stripAnsi } from "./status-parser";
 
 // ─── AgentManager Singleton ───────────────────────────────────────────────
 
@@ -56,6 +59,16 @@ export function getAgentManager(): AgentManager {
 }
 
 const STOP_TIMEOUT_MS = 5_000;
+
+/** The renderer relaunches it fresh in the same pane (Re-launch keeps model, YOLO, access mode) */
+function reportMissedResume(agent: Agent): void {
+  logger.info(`[AgentManager] ${agent.cliType} had no session to continue; started a new one`);
+  broadcast("agent:resume-missed", {
+    agentId: agent.id,
+    projectId: agent.projectId,
+    cliType: agent.cliType,
+  });
+}
 
 export class AgentManager {
   private outputProcessors: Map<string, OutputProcessor> = new Map();
@@ -171,18 +184,16 @@ export class AgentManager {
       : config.resumeSession
         ? await recoverLostSessionId(db, config.resumeFromAgentId ?? agent.id, cwd)
         : false;
-    const priorSession =
-      config.resumeSession && !knownSession ? await hasLocalSession(agent.cliType, cwd) : null;
-    const { shell, args, env, stdinCommand, enableMarker, isPlainShell } = buildPtyInvocation(
-      db,
-      agent,
-      config,
-      cwd,
-      registry,
-      cliConfig,
-      project.path,
-      priorSession,
-    );
+    const last =
+      config.resumeSession && !knownSession
+        ? await lastLocalSession(
+            agent.cliType,
+            cwd,
+            liveSessionIds(db, agent.projectId, agent.cliType),
+          )
+        : undefined;
+    const { shell, args, env, stdinCommand, enableMarker, isPlainShell, blindResume } =
+      buildPtyInvocation(db, agent, config, cwd, registry, cliConfig, project.path, last);
 
     if (!isPlainShell) attachOutputPipeline(this.getSessionMaps(), agent);
 
@@ -196,6 +207,20 @@ export class AgentManager {
       (db2, agentId) => cleanupWorktree(db2, agentId, this.worktrees),
       AgentManager.MAX_SCROLLBACK_BYTES,
     );
+    if (blindResume) noteBlindResume(agent.id);
+    const onExit = callbacks.onExit;
+    callbacks.onExit = (exitCode: number) => {
+      const missed = takeMissedResume(agent.id, {
+        exitCode,
+        stopRequested: this.stopRequested.has(agent.id),
+        cliType: agent.cliType,
+        tail: stripAnsi(this.scrollbackBuffers.get(agent.id)?.join("").slice(-4096) ?? ""),
+      });
+      onExit(exitCode);
+      // The session it ran (or failed to find) changed this folder's list
+      forgetLocalSessions(agent.cliType, cwd);
+      if (missed) reportMissedResume(agent);
+    };
 
     const { pid } = await ptyHost.createSession(
       agent.id,
@@ -298,6 +323,7 @@ export class AgentManager {
   }
 
   write(agentId: string, data: string): void {
+    noteAgentInput(agentId, data);
     getPtyHost().write(agentId, data);
   }
 

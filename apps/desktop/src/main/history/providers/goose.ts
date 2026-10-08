@@ -18,6 +18,7 @@ interface GooseHeader {
 
 export const gooseHistory: LocalHistoryProvider = {
   id: "goose",
+  sharedStore: true,
 
   async list(cwds: string[], since: number): Promise<LocalSession[]> {
     const dir = join(homedir(), ".local", "share", "goose", "sessions");

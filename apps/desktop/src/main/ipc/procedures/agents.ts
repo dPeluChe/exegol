@@ -5,6 +5,7 @@ import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
+import { continueLastPart } from "../../agents/agent-spawn-flow";
 import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
 import {
   FOLLOW_UP_MAX_CHARS,
@@ -34,6 +35,7 @@ import {
 import {
   archiveAgent,
   archiveEndedAgents,
+  getAgentCwd,
   listActiveAgents,
   setAgentAlias,
   setAgentPrWatch,
@@ -45,6 +47,7 @@ import {
   listParallelRuns,
   updateParallelRunStatus,
 } from "../../db/queries/parallel-runs";
+import { lastLocalSession } from "../../history";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
 import { isPathAllowed } from "../../security/path-guard";
@@ -241,7 +244,7 @@ export const agentRouter = router({
    *  its last conversation (the provider's resume flag), in the same shell and cwd */
   continueInShell: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const agent = getAgent(ctx.db, input.id);
       if (!agent?.launchedInShell || agent.status !== "idle") {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Not at its shell prompt" });
@@ -250,7 +253,12 @@ export const agentRouter = router({
       if (!provider?.command || provider.command.startsWith("__")) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "No command for this CLI" });
       }
-      const command = [provider.command, provider.capabilities?.resumeFlag]
+      const cwd = getAgentCwd(ctx.db, agent.id);
+      const last = cwd ? await lastLocalSession(agent.cliType, cwd) : undefined;
+      const command = [
+        provider.command,
+        continueLastPart(agent.cliType, provider.capabilities, last?.sessionId ?? null),
+      ]
         .filter(Boolean)
         .join(" ");
       ctx.agentManager.write(agent.id, `${command}\r`);

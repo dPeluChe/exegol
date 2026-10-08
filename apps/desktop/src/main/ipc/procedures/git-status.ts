@@ -1,4 +1,4 @@
-import { execFileAsync } from "../../integrations/github/gh";
+import { execFileAsync } from "../../lib/exec-file";
 
 export interface GitFileStatus {
   /** One letter: M A D R C T, "?" untracked, "U" conflict */

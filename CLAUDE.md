@@ -194,6 +194,9 @@ apps/desktop/src/
                     queries/ (22 domain modules + helpers)
     ipc/            router (37 routers), procedures/ (43 modules incl. history, knowledge, doctor, models, storage)
     history/        T181 session history: merged timeline + per-CLI local store readers
+                    (claude-code, codex, droid, goose, gemini) and CLI listings run in the
+                    folder (devin, opencode, kilocode: `cli-list.ts`); `hasLocalSession` /
+                    `lastLocalSession` guard the launcher's "Continue last"
     terminal/       pty-host, sidecar entry/client/discovery/eviction/flusher, ring-buffer,
                     headless-emulator
     indexer/        project indexer (Ollama embeddings), chunker

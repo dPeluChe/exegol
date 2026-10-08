@@ -9,9 +9,10 @@ import {
   type PrWatchedAgent,
 } from "../../db/queries/agents";
 import { broadcast } from "../../lib/event-bus";
+import { execFileAsync } from "../../lib/exec-file";
 import { logger } from "../../lib/logger";
 import { getNotificationBus } from "../../notifications/bus";
-import { currentBranch, detectGhCli, execFileAsync, isDefaultBranch } from "./gh";
+import { currentBranch, detectGhCli, isDefaultBranch } from "./gh";
 import {
   computeReactions,
   MAX_WAKES,

@@ -5,8 +5,9 @@ import {
   listHistoryCliTypes,
   listSessionHistory,
 } from "../../db/queries/agents";
-import { listLocalSessions } from "../../history";
+import { hasLocalSession, listLocalSessions } from "../../history";
 import { mergeHistory } from "../../history/merge";
+import { claudeCodeHistory } from "../../history/providers/claude-code";
 import { publicProcedure, router } from "../trpc";
 
 /** The base view is the last 30 days; older sessions stay for reference behind
@@ -73,11 +74,22 @@ export const historyRouter = router({
       const project = getProject(ctx.db, input.projectId);
       if (!project) return [];
       const since = Math.floor(Date.now() / 1000) - DEFAULT_WINDOW_DAYS * 86_400;
-      const local = await listLocalSessions([project.path], since, String(DEFAULT_WINDOW_DAYS));
+      // Claude's store alone: the full scan also runs every CLI's listing (seconds) to drop them
+      const local = await claudeCodeHistory.list([project.path], since).catch(() => []);
       return local
-        .filter((s) => s.provider === input.provider && s.cwd === project.path)
+        .filter((s) => s.cwd === project.path)
         .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
         .slice(0, 15);
+    }),
+
+  /** Whether the launcher's "Continue last" would find a session of this CLI in the project
+   *  folder: false hides it, null (no adapter, CLI missing) shows it with a caveat */
+  hasLocalSession: publicProcedure
+    .input(z.object({ projectId: z.string(), provider: z.string().regex(/^[a-z0-9-]{1,40}$/) }))
+    .query(async ({ ctx, input }) => {
+      const project = getProject(ctx.db, input.projectId);
+      if (!project) return null;
+      return hasLocalSession(input.provider, project.path);
     }),
 
   /** The tail of what a past Exegol session said. Local sessions have none —

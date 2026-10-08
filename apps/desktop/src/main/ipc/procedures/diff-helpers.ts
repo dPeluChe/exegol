@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import type Database from "libsql";
 import { coreRust } from "../../agents/spawn-env";
-import { execFileAsync } from "../../integrations/github/gh";
+import { execFileAsync } from "../../lib/exec-file";
 import { AsyncLruCache } from "../../lib/lru-cache";
 
 export { coreRust };
