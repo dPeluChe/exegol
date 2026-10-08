@@ -2,7 +2,13 @@ import { mkdirSync, mkdtempSync, readdirSync, symlinkSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildStorageReport, clearOldLogs, clearScreenshots, dirSize } from "./storage";
+import {
+  buildStorageReport,
+  clearOldLogs,
+  clearScreenshots,
+  dirSize,
+  worktreeSizes,
+} from "./storage";
 
 function write(path: string, bytes: number) {
   mkdirSync(join(path, ".."), { recursive: true });
@@ -67,6 +73,29 @@ describe("storage", () => {
       { projectId: "ABC", projectName: "Proj", bytes: 85, cacheBytes: 80 },
     ]);
     expect(report.freeBytes).toBeGreaterThan(0);
+  });
+
+  it("breaks Other down into the uncounted top-level entries of both roots", async () => {
+    const { paths } = fixture();
+    write(join(paths.userData, "GPUCache", "data_0"), 40);
+    mkdirSync(join(paths.exegolDir, "empty"));
+    const report = await buildStorageReport(paths, []);
+    expect(report.otherEntries).toEqual([
+      { root: "userData", name: "GPUCache", bytes: 40, isDir: true },
+      { root: "exegol", name: "hooks", bytes: 7, isDir: true },
+      { root: "userData", name: "Preferences", bytes: 3, isDir: false },
+    ]);
+    expect(report.rows.find((r) => r.category === "other")?.bytes).toBe(50);
+  });
+
+  it("sizes worktrees by id, 0 when the folder is gone", async () => {
+    const { paths } = fixture();
+    const sizes = await worktreeSizes([
+      { id: "w1", path: join(paths.exegolDir, "worktrees", "proj", "wt") },
+      { id: "w2", path: join(paths.exegolDir, "worktrees", "proj", "gone") },
+    ]);
+    expect(sizes.w1).toBeGreaterThanOrEqual(400);
+    expect(sizes.w2).toBe(0);
   });
 
   it("clears screenshots and only the rotated logs", async () => {

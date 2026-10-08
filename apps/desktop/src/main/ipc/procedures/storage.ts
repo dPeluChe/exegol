@@ -1,7 +1,9 @@
-import { browserPartitionFor, STORAGE_CATEGORIES } from "@exegol/shared";
+import { join } from "node:path";
+import { browserPartitionFor, STORAGE_CATEGORIES, STORAGE_ROOTS } from "@exegol/shared";
 import { app, session, shell } from "electron";
 import { z } from "zod";
 import { listProjects } from "../../db/queries/projects";
+import { listAllWorktreeRows } from "../../db/queries/worktrees";
 import { LOG_DIR } from "../../lib/logger";
 import {
   clearOldLogs,
@@ -9,6 +11,8 @@ import {
   getStorageReport,
   invalidateStorageReport,
   type StoragePaths,
+  storageRootDir,
+  worktreeSizes,
 } from "../../system/storage";
 import { EXEGOL_DIR } from "../../terminal/pty-sidecar-protocol";
 import { publicProcedure, router } from "../trpc";
@@ -33,6 +37,24 @@ export const storageRouter = router({
       if (!folder) return { opened: false };
       return { opened: (await shell.openPath(folder)) === "" };
     }),
+
+  /** Only a name the current report lists under Other: the renderer never picks a path */
+  openOther: publicProcedure
+    .input(z.object({ root: z.enum(STORAGE_ROOTS), name: z.string().min(1).max(255) }))
+    .mutation(async ({ ctx, input }) => {
+      const paths = storagePaths();
+      const report = await getStorageReport(paths, listProjects(ctx.db));
+      const entry = report.otherEntries.find((e) => e.root === input.root && e.name === input.name);
+      if (!entry) return { opened: false };
+      const target = join(storageRootDir(paths, entry.root), entry.name);
+      if (!entry.isDir) {
+        shell.showItemInFolder(target);
+        return { opened: true };
+      }
+      return { opened: (await shell.openPath(target)) === "" };
+    }),
+
+  worktreeSizes: publicProcedure.query(({ ctx }) => worktreeSizes(listAllWorktreeRows(ctx.db))),
 
   clearScreenshots: publicProcedure.mutation(async () => {
     await clearScreenshots(EXEGOL_DIR);

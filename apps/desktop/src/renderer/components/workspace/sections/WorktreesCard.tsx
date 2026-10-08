@@ -1,9 +1,10 @@
 import type { FleetWorktree } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, FolderGit2, Loader2, Trash2 } from "lucide-react";
 import { useCallback, useState } from "react";
-import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
+import { useAllWorktrees } from "../../../hooks/use-trpc";
+import { trpcMutate } from "../../../lib/trpc-client";
 import { toastError } from "../../../stores/toasts";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 
@@ -18,11 +19,7 @@ import { ConfirmDialog } from "../../common/ConfirmDialog";
 export function WorktreesCard() {
   const queryClient = useQueryClient();
 
-  const { data: worktrees = [], isLoading } = useQuery({
-    queryKey: ["allWorktrees"],
-    queryFn: () => trpcInvoke<FleetWorktree[]>("projects.listAllWorktrees"),
-    staleTime: 15_000,
-  });
+  const { data: worktrees = [], isLoading } = useAllWorktrees();
 
   const remove = useMutation({
     mutationFn: (wt: FleetWorktree) =>

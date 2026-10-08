@@ -6,7 +6,9 @@ import { promisify } from "node:util";
 import type {
   BrowserPartitionUsage,
   StorageCategory,
+  StorageOtherEntry,
   StorageReport,
+  StorageRoot,
   StorageRow,
 } from "@exegol/shared";
 import { createLimiter, mapWithConcurrency } from "../lib/concurrency";
@@ -121,6 +123,45 @@ async function partitionUsage(
     .sort((a, b) => b.bytes - a.bytes);
 }
 
+export function storageRootDir(paths: StoragePaths, root: StorageRoot): string {
+  return root === "exegol" ? paths.exegolDir : paths.userData;
+}
+
+/** Top-level children of both roots that no category counted, largest first; empty ones dropped */
+async function otherEntries(
+  paths: StoragePaths,
+  counted: ReadonlySet<string>,
+): Promise<StorageOtherEntry[]> {
+  const roots: StorageRoot[] = ["exegol", "userData"];
+  const lists = await Promise.all(
+    roots.map(async (root) => {
+      const dir = storageRootDir(paths, root);
+      const entries: Dirent[] = await readdir(dir, { withFileTypes: true }).catch(() => []);
+      const kept = entries.filter((e) => !e.isSymbolicLink() && !counted.has(e.name));
+      return mapWithConcurrency(kept, 4, async (e) => ({
+        root,
+        name: e.name,
+        isDir: e.isDirectory(),
+        bytes: await dirSize(join(dir, e.name)),
+      }));
+    }),
+  );
+  return lists
+    .flat()
+    .filter((e) => e.bytes > 0)
+    .sort((a, b) => b.bytes - a.bytes);
+}
+
+/** Disk use per worktree id; a missing folder counts 0 */
+export async function worktreeSizes(
+  worktrees: readonly { id: string; path: string }[],
+): Promise<Record<string, number>> {
+  const sizes = await mapWithConcurrency([...worktrees], 4, async (wt) =>
+    (await lstat(wt.path).catch(() => null)) ? duBytes(wt.path) : 0,
+  );
+  return Object.fromEntries(worktrees.map((wt, i) => [wt.id, sizes[i] ?? 0]));
+}
+
 async function firstExisting(paths: string[]): Promise<string | null> {
   for (const path of paths) {
     if (await lstat(path).catch(() => null)) return path;
@@ -146,15 +187,20 @@ export async function buildStorageReport(
 
   // Everything else under the two roots: the children the rows above already counted are skipped
   const counted = new Set(specs.flatMap((s) => s.paths).map((p) => p.split(/[\\/]/).pop() ?? ""));
-  const other =
-    (await dirSize(paths.exegolDir, counted)) + (await dirSize(paths.userData, counted));
-  rows.push({ category: "other", label: "Other", bytes: other, path: paths.exegolDir });
+  const others = await otherEntries(paths, counted);
+  rows.push({
+    category: "other",
+    label: "Other",
+    bytes: others.reduce((a, e) => a + e.bytes, 0),
+    path: paths.exegolDir,
+  });
 
   const fsInfo = await statfs(paths.exegolDir).catch(() => null);
   return {
     rows,
     totalBytes: rows.reduce((a, r) => a + r.bytes, 0),
     browserPartitions: await partitionUsage(join(paths.userData, "Partitions"), projects),
+    otherEntries: others,
     freeBytes: fsInfo ? fsInfo.bavail * fsInfo.bsize : null,
     diskBytes: fsInfo ? fsInfo.blocks * fsInfo.bsize : null,
     computedAt: Date.now(),
