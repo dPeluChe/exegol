@@ -1,7 +1,6 @@
+import { ENDED_STATUSES } from "@exegol/shared";
 import { useEffect, useRef, useState } from "react";
 import { useScrollback } from "../../hooks/use-trpc";
-
-const STOPPED_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 
 /**
  * Track first-data arrival on a freshly mounted terminal pane. The PTY may
@@ -20,7 +19,7 @@ export function useTerminalLifecycle({
   reconnecting?: boolean;
   startTimeoutMs?: number;
 }) {
-  const rawIsStopped = status ? STOPPED_STATUSES.has(status) : false;
+  const rawIsStopped = status ? ENDED_STATUSES.has(status) : false;
   const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
     rawIsStopped ? agentId : null,
   );

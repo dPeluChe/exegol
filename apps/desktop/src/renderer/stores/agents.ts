@@ -5,6 +5,7 @@ import {
   type AgentCliType,
   type AgentStatus,
   classifyActivity,
+  ENDED_STATUSES,
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type { QueryClient } from "@tanstack/react-query";
@@ -313,8 +314,6 @@ export function sortAttentionItems(items: AttentionItem[]): AttentionItem[] {
 
 /** syncFromDb id of the cross-project live-agent list: it syncs no project */
 export const FLEET_SYNC = "__fleet__";
-
-const ENDED_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 
 /**
  * A pane's session is gone (archived or closed) when it ended and is still missing from the store

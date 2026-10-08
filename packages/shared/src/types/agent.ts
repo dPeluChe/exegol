@@ -40,6 +40,13 @@ export const LIVE_STATUSES = new Set<AgentStatus>([
   "waiting_input",
   "paused",
 ]);
+/** Statuses of a session that ended (no PTY left); string-keyed so DB rows check directly */
+export const ENDED_STATUSES: ReadonlySet<string> = new Set<AgentStatus>([
+  "completed",
+  "failed",
+  "stopped",
+  "crashed",
+]);
 
 // ─── Activity Classification (T70) ─────────────────────────────────────────
 
