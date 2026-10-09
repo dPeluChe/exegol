@@ -103,9 +103,9 @@ interface HookDef {
   hooks: HookAction[];
 }
 
-/** Check if a hook definition was created by Exegol */
-function isExegolHook(def: HookDef): boolean {
-  return !!def.hooks?.some((h) => h.command?.includes("exegol"));
+/** Ours runs the notify script; "exegol" alone also matches user hooks in a path like labs-exegol */
+export function isExegolHook(def: HookDef): boolean {
+  return !!def.hooks?.some((h) => h.command?.includes(NOTIFY_SCRIPT));
 }
 
 /** Merge managed hooks into an existing settings object (preserves user hooks) */

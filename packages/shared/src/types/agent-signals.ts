@@ -25,10 +25,10 @@ export type AgentSignalType = (typeof AGENT_SIGNAL_TYPES)[number];
 export const CLAUDE_ATTENTION_NOTIFICATIONS =
   "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input|worker_permission_prompt";
 
-/** Claude Code hooks that mean "at the prompt, no turn running": a fresh, resumed or cleared
- *  session, and idle_prompt, the only signal after a turn the user interrupted (Stop does not
- *  fire then). Not compact: an auto-compact runs mid-turn */
-export const CLAUDE_SESSION_READY_SOURCES = "startup|resume|clear";
+/** Claude Code hooks that mean "at the prompt, no turn running": a cleared session, and
+ *  idle_prompt (~60s after any idle start, and after an interrupted turn, which sends no Stop).
+ *  Not startup|resume: they fire before a CLI-arg prompt is submitted. Not compact: mid-turn */
+export const CLAUDE_SESSION_READY_SOURCES = "clear";
 export const CLAUDE_IDLE_NOTIFICATIONS = "idle_prompt";
 
 /** Boundary validator: PTY-derived strings must be whitelisted before they

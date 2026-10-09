@@ -111,22 +111,30 @@ describe("buildClaudeCodeHooksFile", () => {
       /;a1;([a-z_]+)\\007/,
     )?.[1];
 
-  // Spawn and resume write running and an interrupted turn sends no Stop: these are the only
-  // ways a session at its prompt leaves running
-  it("signals idle on session start and the idle reminder, never on compact", () => {
+  // startup|resume fire before a CLI-arg prompt is submitted; idle_prompt covers idle starts
+  it("signals idle on clear and the idle reminder, never on startup, resume or compact", () => {
     const hooks = written("a1");
     const start = hooks.SessionStart?.[0];
     expect(signalOf(start)).toBe("idle");
-    for (const source of ["startup", "resume", "clear"]) {
-      expect(fires(start?.matcher, source)).toBe(true);
+    expect(fires(start?.matcher, "clear")).toBe(true);
+    for (const source of ["startup", "resume", "compact"]) {
+      expect(fires(start?.matcher, source)).toBe(false);
     }
-    expect(fires(start?.matcher, "compact")).toBe(false);
 
     const reminder = hooks.Notification?.[1];
     expect(signalOf(reminder)).toBe("idle");
     expect(fires(reminder?.matcher, "idle_prompt")).toBe(true);
     expect(fires(reminder?.matcher, "permission_prompt")).toBe(false);
     expect(signalOf(hooks.Notification?.[0])).toBe("attention");
+  });
+
+  // Claude adds SessionStart stdout to the model context
+  it("never falls back to stdout on SessionStart", () => {
+    const hooks = written("a1");
+    const command = (entry: { hooks: unknown[] } | undefined) =>
+      String((entry?.hooks[0] as { command?: string } | undefined)?.command);
+    expect(command(hooks.SessionStart?.[0])).toMatch(/> \/dev\/tty 2>\/dev\/null \|\| true$/);
+    expect(command(hooks.Stop?.[0])).toMatch(/\|\| printf '/);
   });
 
   it("omits the guard when claims cannot collide", () => {

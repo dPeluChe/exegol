@@ -10,7 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- Claude Code sessions sitting at their prompt no longer show as running: a session just started, resumed or cleared now reads as waiting for input, and so does a turn you interrupted with Esc (a minute later, when Claude sends its idle reminder). The idle reminder still never counts as a question, so dictation into an idle session keeps working
+- Claude Code sessions sitting at their prompt no longer show as running: a cleared session now reads as waiting for input at once, and a session started or resumed without a prompt, or a turn you interrupted with Esc, a minute later (when Claude sends its idle reminder). The idle reminder still never counts as a question, so dictation into an idle session keeps working
 - A terminal closed while a mouse button was held in a TUI (vim, htop, Claude's mouse mode) no longer leaves "Cannot read properties of undefined (reading 'dimensions')" errors on every later click
 - The quit log line now says how many agent sessions were open and how many were working, instead of calling every open session "working"
 - A pane whose session was deleted (a closed shell, for example) showed "Cannot read properties of null" after a restart instead of its launcher; since 0.5.17

@@ -193,10 +193,12 @@ export function deriveStatusFromSignal(event: string): {
  *  Written to /dev/tty, NOT stdout: Claude Code captures hook stdout (it only
  *  surfaces it in transcript mode), so bytes on stdout never reach the PTY
  *  stream our FSM scans. /dev/tty is the controlling terminal = our PTY.
- *  Falls back to stdout for environments without a controlling tty. */
-function oscNotifyCommand(agentId: string, event: AgentSignalType): string {
+ *  Falls back to stdout for environments without a controlling tty, except
+ *  where Claude adds hook stdout to the model context (SessionStart). */
+function oscNotifyCommand(agentId: string, event: AgentSignalType, stdoutFallback = true): string {
   const seq = `\\033]777;notify;Exegol;${agentId};${event}\\007`;
-  return `printf '${seq}' > /dev/tty 2>/dev/null || printf '${seq}'`;
+  const tty = `printf '${seq}' > /dev/tty 2>/dev/null`;
+  return stdoutFallback ? `${tty} || printf '${seq}'` : `${tty} || true`;
 }
 
 /**
@@ -213,8 +215,8 @@ export function buildClaudeCodeHooksFile(
   try {
     mkdirSync(HOOKS_DIR, { recursive: true });
     const path = join(HOOKS_DIR, `${agentId}.json`);
-    const hookEntry = (event: AgentSignalType) => ({
-      hooks: [{ type: "command", command: oscNotifyCommand(agentId, event) }],
+    const hookEntry = (event: AgentSignalType, stdoutFallback = true) => ({
+      hooks: [{ type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) }],
     });
     // T175: the claim guard runs on write-shaped tools only, and BEFORE the
     // write — the one moment where "which agent touched this" is still known.
@@ -248,7 +250,7 @@ export function buildClaudeCodeHooksFile(
           { matcher: CLAUDE_ATTENTION_NOTIFICATIONS, ...hookEntry("attention") },
           { matcher: CLAUDE_IDLE_NOTIFICATIONS, ...hookEntry("idle") },
         ],
-        SessionStart: [{ matcher: CLAUDE_SESSION_READY_SOURCES, ...hookEntry("idle") }],
+        SessionStart: [{ matcher: CLAUDE_SESSION_READY_SOURCES, ...hookEntry("idle", false) }],
         Stop: [hookEntry("finished")],
       },
     };
