@@ -1,6 +1,13 @@
-import { type CliUpdateStatus, isNewerVersion, LIVE_STATUSES } from "@exegol/shared";
+import {
+  type CliInstallCopy,
+  type CliInstallInfo,
+  type CliUpdateStatus,
+  isNewerVersion,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
+import { queryClient } from "../lib/query-client";
 import { suspendAgent } from "../lib/session-quiet";
 import { runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
@@ -12,7 +19,11 @@ import {
   useAgentStore,
 } from "../stores/agents";
 import { useCliRestartStore } from "../stores/cli-restarts";
+import { useCliSelfUpdateStore } from "../stores/cli-self-updates";
 import { toastError, useToastStore } from "../stores/toasts";
+import { useLatest } from "./use-latest";
+import { useMountEffect } from "./use-mount-effect";
+import { useEnabledProviders } from "./use-providers";
 import { useResumeAgent } from "./use-resume-agent";
 
 const CHECK_MS = 10 * 60 * 1000;
@@ -107,4 +118,55 @@ export function useCliRestarts(): void {
       })().catch(toastError(`${agent.alias ?? agent.cliType} did not restart`));
     }
   }, [pending, agents, statuses, resume]);
+}
+
+/** Every copy of each installed CLI on PATH (first = the one that runs): Settings > CLIs and the
+ *  launcher's duplicate badge. One `which -a` per CLI, versions cached in main */
+export function useCliInstalls(): Map<string, CliInstallCopy[]> {
+  const { data } = useQuery({
+    queryKey: ["cliInstalls"],
+    queryFn: () => trpcInvoke<CliInstallInfo[]>("doctor.cliInstalls"),
+    staleTime: 5 * 60 * 1000,
+  });
+  return useMemo(() => new Map((data ?? []).map((i) => [i.cliType, i.copies])), [data]);
+}
+
+/** "Codex updated to 0.162.1": what an ended session says when its CLI updated itself */
+export const selfUpdateTitle = (cliName: string, to: string) => `${cliName} updated to ${to}`;
+
+/** A CLI updated itself and exited (codex: "Please restart Codex"): mark the session as updated
+ *  (its pane offers Restart session instead of a plain end) and offer the restart in a toast.
+ *  No auto-restart setting exists, so it is one click. Mounted once, in App */
+export function useCliSelfUpdates(): void {
+  const providers = useEnabledProviders();
+  const { resume } = useResumeAgent();
+  const latest = useLatest({ providers, resume });
+
+  useMountEffect(() =>
+    window.api.onCliSelfUpdated((update) => {
+      useCliSelfUpdateStore.getState().add(update);
+      // The installed version moved: the notice, the toolbar and Settings read it again
+      void queryClient.invalidateQueries({ queryKey: ["cliUpdates"] });
+      void queryClient.invalidateQueries({ queryKey: ["cliInstalls"] });
+      const agent = useAgentStore.getState().agents[update.agentId];
+      if (!agent) return;
+      const name = latest.current.providers.find((p) => p.id === update.cliType)?.name;
+      useToastStore.getState().addToast({
+        type: "success",
+        title: selfUpdateTitle(name ?? update.cliType, update.to),
+        body: `${agent.alias ?? update.cliType} ended to finish the update`,
+        agentId: agent.id,
+        durationMs: 15_000,
+        action: {
+          label: "Restart session",
+          run: () => {
+            const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
+            latest.current
+              .resume(agent, pane)
+              .catch(toastError(`${agent.alias ?? agent.cliType} did not restart`));
+          },
+        },
+      });
+    }),
+  );
 }

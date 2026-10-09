@@ -199,6 +199,14 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:pr-watch", handler as never);
     };
   },
+  /** A session's CLI updated itself and exited: the pane offers Restart session */
+  onCliSelfUpdated: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:cli-self-updated", handler as never);
+    return () => {
+      safe.off("agent:cli-self-updated", handler as never);
+    };
+  },
   /** A "continue last" found no session and exited: the renderer relaunches it fresh */
   onResumeMissed: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);

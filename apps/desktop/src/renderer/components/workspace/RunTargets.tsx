@@ -22,7 +22,7 @@ import type { DetectedScript } from "../../hooks/use-trpc-scheduler";
 import { focusedField } from "../../lib/focused-field";
 import { fileManagerLabel } from "../../lib/keymap";
 import { openProjectInIde } from "../../lib/open-in-ide";
-import { paneRoot } from "../../lib/pane-focus";
+import { dropPaneFocus, focusNewPane, paneRoot } from "../../lib/pane-focus";
 import { pickRunTarget, runTargetLabel, visibleRunTargets } from "../../lib/run-targets";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { isQuickTerminalKey } from "../../lib/split-terminal";
@@ -137,6 +137,7 @@ export function RunTargets({
 
   const run = async (label: string, command?: string) => {
     setLaunching(label);
+    focusNewPane(paneId);
     try {
       // The root keeps the normal start folder rules (worktrees included)
       // Named by where it runs: what it runs is its live step, gone once the command exits
@@ -148,6 +149,7 @@ export function RunTargets({
       );
       if (command) window.api.terminal.write(agentId, `${command}\n`);
     } catch (err) {
+      dropPaneFocus(paneId);
       useToastStore.getState().addToast({
         type: "error",
         title: `Could not start ${label}`,

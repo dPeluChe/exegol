@@ -92,6 +92,9 @@ interface Window {
     onPrWatch: (
       callback: (event: { agentId: string; projectId: string; reason?: string }) => void,
     ) => () => void;
+    onCliSelfUpdated: (
+      callback: (event: import("./stores/cli-self-updates").CliSelfUpdate) => void,
+    ) => () => void;
     onResumeMissed: (
       callback: (event: { agentId: string; projectId: string; cliType: string }) => void,
     ) => () => void;

@@ -19,6 +19,8 @@ const status = (cliType: string, installed: string, latest: string | null, cmd: 
   latest,
   updateAvailable: !!latest && latest !== installed,
   updateCommand: cmd,
+  installMethod: null,
+  updateNote: null,
 });
 
 describe("cliUpdateRows", () => {

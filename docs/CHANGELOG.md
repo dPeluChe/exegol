@@ -9,6 +9,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Settings > CLIs shows how each CLI is installed (Homebrew, Homebrew cask, npm, bun, pnpm, yarn, pipx, uv, official installer) and its version. When a CLI is installed more than once, the card says which copy runs (the first on PATH), lists every copy with its method and version, and gives the command to remove each extra copy. Nothing is uninstalled for you. The launcher marks such a CLI with a small badge
+- When a CLI updates itself and exits (Codex: "Update ran successfully! Please restart Codex."), the pane now says "Codex updated to 0.162.1" with a Restart session button that resumes the conversation in the same pane with the same model, YOLO, access mode and name, instead of looking like the session failed
+
+### Fixed
+- The update Exegol offers for a CLI now matches how the copy you run was installed: `brew upgrade --cask codex` for the Homebrew cask, `npm install -g @openai/codex@latest` for npm, the official installer for a standalone install. Before, Codex always got the official installer, which added a second copy next to a Homebrew one
+- Codex sessions failed to start (exit 1 at once) after the Codex app rewrote `~/.codex/config.toml`: Exegol added its MCP entry again on every launch and Codex refused the duplicate. Exegol now keeps exactly one entry and removes the copies, wherever the Codex app moved them
+- A closed session no longer lingers in the sidebar's Agents view as "Waiting for input" under a second card for the same project. Each project now has one card; a live session no pane shows is listed in it under "No pane"
+- Opening a pane now leaves the keyboard in it: Cmd+Y, Split with Terminal, the new terminal button, T in an empty pane, launching an agent, and Split with Browser (the address bar) no longer lose the focus once the terminal starts
+
 ## [0.5.18] — 2026-10-09 — Split with Terminal, terminals that stop answering, idle Claude sessions
 
 ### Added

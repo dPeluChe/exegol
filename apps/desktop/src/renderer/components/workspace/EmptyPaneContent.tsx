@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Cpu, Globe, History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useCliInstalls } from "../../hooks/use-cli-updates";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
@@ -257,6 +258,7 @@ function AgentGrid({
   layout: SizeLayout;
   onLaunch: (cli: AgentProvider) => void;
 }) {
+  const installs = useCliInstalls();
   return (
     <div className={cn("grid w-full gap-1.5", layout.gridCols, layout.maxWidth)}>
       {options.map((cli) => (
@@ -265,7 +267,7 @@ function AgentGrid({
           type="button"
           onClick={() => onLaunch(cli)}
           className={cn(
-            "flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
+            "relative flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
             layout.card,
           )}
         >
@@ -275,6 +277,7 @@ function AgentGrid({
             fallback={cli.icon}
             fallbackColor={cli.color}
           />
+          <DuplicateInstallsBadge count={installs.get(cli.id)?.length ?? 0} />
           {!layout.isMini && (
             <span
               className={cn(
@@ -288,6 +291,19 @@ function AgentGrid({
         </button>
       ))}
     </div>
+  );
+}
+
+/** 2+ copies of the CLI on PATH: the details and remove commands are in Settings > CLIs */
+function DuplicateInstallsBadge({ count }: { count: number }) {
+  if (count < 2) return null;
+  return (
+    <span
+      className="absolute right-1 top-1 rounded bg-amber-500/15 px-1 text-[8px] font-medium text-amber-400"
+      title={`${count} installs on PATH: the first one runs and an update may land in another. See Settings > CLIs`}
+    >
+      {count}x
+    </span>
   );
 }
 

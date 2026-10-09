@@ -132,7 +132,7 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
             )
           }
           className={`${chip} text-text-muted hover:text-text-primary`}
-          title={`${status.latest} is out (installed: ${status.installed}). Runs \`${cmd}\` in a new tab, then restarts the sessions you choose on it as each one is free (the conversation, model, YOLO and mode carry over)`}
+          title={`${status.latest} is out (installed: ${status.installed}). Runs \`${cmd}\` in a new tab, then restarts the sessions you choose on it as each one is free (the conversation, model, YOLO and mode carry over)${status.updateNote ? `. ${status.updateNote}` : ""}`}
         >
           <ArrowUpCircle className="h-2.5 w-2.5" />
           Update {status.latest}
