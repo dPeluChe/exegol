@@ -603,8 +603,15 @@ export const agentRouter = router({
   getWorktreePath: publicProcedure
     .input(z.object({ agentId: z.string() }))
     .query(({ ctx, input }) => {
-      const wt = getWorktreeByAgentId(ctx.db, input.agentId);
-      return wt?.path ?? null;
+      const owned = getWorktreeByAgentId(ctx.db, input.agentId)?.path;
+      if (owned) return owned;
+      // An agent that joined another's worktree (a reuse, a terminal beside it) links it here
+      const joined = ctx.db
+        .prepare(
+          "SELECT w.path FROM agents a JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?",
+        )
+        .get(input.agentId) as { path: string } | undefined;
+      return joined?.path ?? null;
     }),
 
   // ─── T65: Parallel Multi-Agent ────────────────────────────────────────

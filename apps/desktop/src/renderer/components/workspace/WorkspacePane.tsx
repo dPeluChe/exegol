@@ -106,16 +106,10 @@ function PaneToolbar({
   const addCompanion = useCallback(
     async (direction: "horizontal" | "vertical") => {
       setAddOpen(false);
-      const id = nanoid(8);
-      if (companion === "browser") {
-        const url = await projectBrowserUrl(projectId, project?.path);
-        splitPane(tabId, paneId, direction, "browser", { id, url });
-      } else if (companion === "terminal" && projectId) {
-        splitPane(tabId, paneId, direction, "empty", { id });
-        await spawnShellIntoPane(projectId, id).catch((err) =>
-          console.error("[PaneToolbar] Shell spawn failed:", err),
-        );
-      }
+      if (companion === "terminal") return splitWithTerminal(tabId, paneId, direction);
+      if (companion !== "browser") return;
+      const url = await projectBrowserUrl(projectId, project?.path);
+      splitPane(tabId, paneId, direction, "browser", { id: nanoid(8), url });
       dispatchRefitTerminals();
     },
     [companion, projectId, project?.path, splitPane, tabId, paneId],

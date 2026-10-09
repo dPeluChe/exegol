@@ -19,6 +19,7 @@ import { useLatest } from "../../hooks/use-latest";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjectIde, useSettings } from "../../hooks/use-trpc";
 import type { DetectedScript } from "../../hooks/use-trpc-scheduler";
+import { focusedField } from "../../lib/focused-field";
 import { fileManagerLabel } from "../../lib/keymap";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { paneRoot } from "../../lib/pane-focus";
@@ -39,11 +40,6 @@ interface RunTarget {
 
 const VISIBLE_COMMANDS = 4;
 
-const isTypingField = (el: Element | null) =>
-  el instanceof HTMLInputElement ||
-  el instanceof HTMLTextAreaElement ||
-  el instanceof HTMLSelectElement ||
-  (el instanceof HTMLElement && el.isContentEditable);
 const pinKey = (rel: string, command: string) => `${rel}\u0000${command}`;
 
 function runnerLabel(s: DetectedScript): string | null {
@@ -113,7 +109,11 @@ export function RunTargets({
       if (useAppStore.getState().activeView !== "workspace") return;
       const active = document.activeElement;
       const inPane = !active || active === document.body || !!paneRoot(paneId)?.contains(active);
-      if (!inPane || !isQuickTerminalKey(e, isTypingField(active))) return;
+      if (
+        !inPane ||
+        !isQuickTerminalKey(e, !!focusedField() || active instanceof HTMLSelectElement)
+      )
+        return;
       e.preventDefault();
       quickTerminal.current();
     };

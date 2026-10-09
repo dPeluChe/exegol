@@ -52,8 +52,8 @@ export async function cleanupWorktree(
   const wt = worktrees.get(agentId);
   const rust = coreRust;
   if (!wt || !rust) return;
-  // A shell (rows are deleted on close) only borrows a worktree: it never saves or removes it,
-  // a resumable session may still need it; the daily sweep handles a real orphan
+  // A shell only borrows a worktree and its row is deleted on close (agents are archived, so no
+  // row means a shell): it never saves or removes it; the daily sweep handles a real orphan
   const agent = getAgent(db, agentId);
   if (!agent || agent.cliType === "shell") {
     worktrees.delete(agentId);
