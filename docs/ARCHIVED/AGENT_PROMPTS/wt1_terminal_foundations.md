@@ -33,7 +33,7 @@ Then read these Terax files (full paths in your worktree clone of terax-ai):
 - `terax-ai/src/modules/terminal/lib/osc-handlers.ts` (`1-86`) — the frontend OSC parser + SSH spoofing guard
 - `terax-ai/src/modules/terminal/lib/dormantRing.ts` (`1-71`) — the bounded chunk ring
 
-Terax repo path on disk: `/Users/peluche/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/crynta/terax-ai`
+Terax repo path on disk: `<repos-dir>/github.com/crynta/terax-ai`
 
 ## Implementation plan
 
@@ -231,7 +231,7 @@ These apply to every change you make. Most are codified in the project's `CLAUDE
 
 ### 2. Read before you write
 - Before editing any file, read it end-to-end (or at least the section + surrounding context). The harness Read tool is cheap; bad assumptions are expensive.
-- Read the Terax source pointers (`/Users/peluche/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/crynta/terax-ai/...`) — they are the reference impl. Lift patterns, don't reinvent.
+- Read the Terax source pointers (`<repos-dir>/github.com/crynta/terax-ai/...`) — they are the reference impl. Lift patterns, don't reinvent.
 
 ### 3. TypeScript discipline
 - No `any` unless absolutely unavoidable (and then add a one-line comment why).

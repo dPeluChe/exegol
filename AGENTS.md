@@ -12,6 +12,7 @@ bun run dev                              # run the app
 bun run lint                             # pinned Biome 2.4.7, fails on warnings
 bun run typecheck
 bun run test && bun run test:shared
+cd packages/core-rust && cargo check && cargo test && cargo clippy   # if you touched Rust
 cd apps/desktop && npx vitest run src/path/file.test.ts   # one test file
 npx -y @biomejs/biome@2.4.7 check --write apps/ packages/shared/src   # format (pinned only)
 ```
@@ -25,7 +26,7 @@ React health: CI runs react-doctor@0.9.14 on the PR's changes; errors fail; fix 
   add a dated entry to `docs/TASK_COMPLETED/YYMM.md` (what and why), one user-facing line in
   `docs/CHANGELOG.md` `[Unreleased]`; a new feature or shortcut also goes in
   `docs/GUIDES/FEATURES.md` or `KEYBOARD_SHORTCUTS.md`.
-- One task per branch and PR.
+- One task per branch and PR; conventional commit titles (`fix(terminal): …`).
 
 ## Hard rules
 

@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in Exegol does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fastest route: the **bug button in Exegol's title bar** collects redacted diagnostics
+        (versions, Doctor, recent warnings) and files this issue for you after you review it.
+
+        **Issues are public.** Never paste prompts, agent output, API keys, tokens or private
+        paths. A security problem goes through [SECURITY.md](https://github.com/dPeluChe/exegol/blob/main/SECURITY.md), not here.
+
+        En español también está bien.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what you saw instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project
+        2. Launch Codex in a split pane
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Exegol version
+      description: Exegol > About Exegol on macOS, or the version of the file you installed.
+      placeholder: "0.5.18"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple Silicon)
+        - Linux (AppImage)
+        - Linux (.deb)
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: cli
+    attributes:
+      label: Agent CLI and version, if it matters
+      placeholder: "claude 2.x, codex 0.x..."
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics or log lines
+      description: |
+        Optional. Exegol's logs are in ~/.exegol/logs/. Read before pasting and remove anything
+        private: Exegol's own lines carry no prompts, but other text can.
+      render: text

@@ -35,7 +35,7 @@
 
 ## Writing rules
 
-1. **No .md files at project root** except `README.md` (+ its Spanish copy `README.es.md`, kept in step), `CLAUDE.md`, `AGENTS.md` and `CONTRIBUTING.md`
+1. **No .md files at project root** except `README.md` (+ its Spanish copy `README.es.md`, kept in step), `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md`, `SECURITY.md` and `CODE_OF_CONDUCT.md` (plus `LICENSE`)
 2. **UPPERCASE** doc subfolders (`RESEARCH/`, not `research/`); UPPERCASE_SNAKE_CASE for new doc files
 3. **TASK_TODO.md is pending-only** — completed tasks move to `TASK_COMPLETED/YYMM.md` (dated sessions), user-facing changes to `CHANGELOG.md` per version
 4. **Archive, don't delete** — obsolete docs go to `ARCHIVED/` with a note in `ARCHIVED/README.md`

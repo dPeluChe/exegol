@@ -47,7 +47,7 @@ Then read these Terax references (their Tauri-based equivalent — same crates, 
 - `terax-ai/src-tauri/Cargo.toml` — see how they declare the crates.
 - `terax-ai/src-tauri/src/modules/fs/search.rs` and `terax-ai/src-tauri/src/modules/fs/grep.rs` — the canonical implementations.
 
-Terax repo path on disk: `/Users/peluche/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/crynta/terax-ai`
+Terax repo path on disk: `<repos-dir>/github.com/crynta/terax-ai`
 
 ## Implementation plan
 

@@ -145,7 +145,7 @@ const config: Configuration = {
     ],
     category: "Development",
     artifactName: APPIMAGE_NAME,
-    maintainer: "Antonio <antonio@iteris.tech>",
+    maintainer: "Antonio <antonio@dpeluche.dev>",
     synopsis: "Orchestrate AI coding agents",
     description:
       "Run Claude Code, Codex, Gemini or any CLI coding agent side by side, each in its own terminal, with live status and one place to see which agent needs you.",

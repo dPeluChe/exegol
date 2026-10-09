@@ -37,7 +37,7 @@ Then read these Terax files:
 - `terax-ai/src-tauri/capabilities/default.json` (`9-28`) — capability allowlist pattern.
 - `terax-ai/src-tauri/tauri.conf.json` (around line 27) — the strict CSP they ship.
 
-Terax repo path on disk: `/Users/peluche/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn/github.com/crynta/terax-ai`
+Terax repo path on disk: `<repos-dir>/github.com/crynta/terax-ai`
 
 ## Implementation plan
 
