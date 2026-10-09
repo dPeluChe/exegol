@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.17] — 2026-10-08 — Model roles and presets, sidebar views, HTML preview, dictation pauses music, title bar widgets
+
 ### Added
 - Settings > Dictation > Overlay position: "Over the target pane" (default) or "Title bar", which always shows a recording as a one-line pill in the title bar
 - Title bar widgets: the title bar now has a left and a right zone for status bar widgets (the center stays the project name). Settings > Bars (was Status bar) gives each widget one placement, hidden or a zone of either bar (the project widget stays in the status bar), with up/down to order it inside its zone. Nothing moves on update: your status bar stays as it was and the title bar zones start empty. The title bar's own buttons, the project name and the window controls stay where they are; widgets in it stay clickable while the empty space still drags the window
