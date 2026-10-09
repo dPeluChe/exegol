@@ -8,7 +8,7 @@ import {
   useWorkspaceStore,
 } from "../stores/workspace";
 import { dispatchRefitTerminals } from "./dispatch-refit";
-import { focusActivePane } from "./pane-focus";
+import { dropPaneFocus, focusNewPane } from "./pane-focus";
 import { spawnShellIntoPane } from "./spawn-shell";
 import { trpcInvoke } from "./trpc-client";
 
@@ -59,11 +59,15 @@ export function isQuickTerminalKey(
 /** A shell in `paneId`, in `cwd`; the project root when main refuses that folder (a shell that
  *  cd'd out of the project) */
 async function shellInPane(projectId: string, paneId: string, cwd: string | undefined) {
+  focusNewPane(paneId);
   try {
-    await spawnShellIntoPane(projectId, paneId, "Terminal", cwd);
+    await spawnShellIntoPane(projectId, paneId, "Terminal", cwd).catch((err) => {
+      if (!cwd) throw err;
+      return spawnShellIntoPane(projectId, paneId, "Terminal");
+    });
   } catch (err) {
-    if (!cwd) throw err;
-    await spawnShellIntoPane(projectId, paneId, "Terminal");
+    dropPaneFocus(paneId);
+    throw err;
   }
 }
 
@@ -79,7 +83,6 @@ export async function splitWithTerminal(
   const id = nanoid(8);
   useWorkspaceStore.getState().splitPane(tabId, paneId, direction, "empty", { id });
   dispatchRefitTerminals();
-  focusActivePane(id);
   await shellInPane(projectId, id, cwd).catch(toastError("Could not open a terminal"));
 }
 
@@ -94,7 +97,6 @@ export async function openTerminalHere(): Promise<void> {
   const paneId = activeEmptyPaneId();
   const projectId = useWorkspaceStore.getState()._activeProjectId;
   if (!paneId || !projectId) return;
-  focusActivePane(paneId);
   await shellInPane(projectId, paneId, undefined).catch(toastError("Could not open a terminal"));
 }
 

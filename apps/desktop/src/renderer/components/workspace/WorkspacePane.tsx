@@ -20,6 +20,7 @@ import { sizeKey } from "../../lib/browser-viewports";
 import { closeWithConfirm } from "../../lib/close-target";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { openProjectInIde } from "../../lib/open-in-ide";
+import { focusNewPane } from "../../lib/pane-focus";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { splitWithTerminal } from "../../lib/split-terminal";
@@ -109,7 +110,9 @@ function PaneToolbar({
       if (companion === "terminal") return splitWithTerminal(tabId, paneId, direction);
       if (companion !== "browser") return;
       const url = await projectBrowserUrl(projectId, project?.path);
-      splitPane(tabId, paneId, direction, "browser", { id: nanoid(8), url });
+      const id = nanoid(8);
+      focusNewPane(id);
+      splitPane(tabId, paneId, direction, "browser", { id, url });
       dispatchRefitTerminals();
     },
     [companion, projectId, project?.path, splitPane, tabId, paneId],
@@ -615,9 +618,15 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         paneType={pane.type}
         agentId={pane.agentId}
         isSplitPane={isSplitPane}
-        onSplit={(dir, newType) =>
-          useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty")
-        }
+        onSplit={(dir, newType) => {
+          if (newType !== "browser") {
+            useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty");
+            return;
+          }
+          const id = nanoid(8);
+          focusNewPane(id);
+          useWorkspaceStore.getState().splitPane(tabId, paneId, dir, "browser", { id });
+        }}
         onSplitTerminal={() => void splitWithTerminal(tabId, paneId)}
         onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}

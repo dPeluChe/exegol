@@ -38,10 +38,32 @@ export function focusActivePane(paneId?: string): void {
       if (!target) return;
       useWorkspaceStore.getState().setFocusedPane(target);
       // The previous terminal would keep typing otherwise when the target is not a terminal
-      (document.activeElement as HTMLElement | null)?.blur();
+      const active = document.activeElement as HTMLElement | null;
+      if (active && !paneRoot(target)?.contains(active)) active.blur();
       window.dispatchEvent(new CustomEvent("exegol:focus-pane", { detail: { paneId: target } }));
     }),
   );
+}
+
+const focusOnMount = new Set<string>();
+
+/**
+ * A pane just opened for the user (split, launcher, new terminal): it gets the keyboard now, and
+ * its view takes it again once it mounts (a shell or agent attaches after this call returns)
+ */
+export function focusNewPane(paneId: string): void {
+  focusOnMount.add(paneId);
+  focusActivePane(paneId);
+}
+
+/** A pane's view asks once it can take the keyboard: true once per focusNewPane */
+export function claimPaneFocus(paneId: string): boolean {
+  return focusOnMount.delete(paneId);
+}
+
+/** The pane will not mount a view (its spawn failed) */
+export function dropPaneFocus(paneId: string): void {
+  focusOnMount.delete(paneId);
 }
 
 /** Cmd+] / Cmd+[: the next or previous pane of the active tab */

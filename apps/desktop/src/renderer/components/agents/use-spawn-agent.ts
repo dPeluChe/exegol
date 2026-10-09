@@ -1,5 +1,6 @@
 import { type Agent, type AgentCliType, MODEL_LAUNCH } from "@exegol/shared";
 import { useCallback, useState } from "react";
+import { focusNewPane } from "../../lib/pane-focus";
 import { switchSection } from "../../lib/switch-section";
 import { trpcMutate } from "../../lib/trpc-client";
 import { toAgentState, useAgentStore } from "../../stores/agents";
@@ -52,26 +53,21 @@ export function resumedAgentId(form: Pick<SpawnForm, "session" | "localSessionId
   return match?.id ?? null;
 }
 
-// T95: Reuse focused empty pane, otherwise create a new tab
-function placeInWorkspace(agentId: string, targetPaneId: string | undefined) {
+// T95: Reuse focused empty pane, otherwise create a new tab. Returns the pane it landed in
+function placeInWorkspace(agentId: string, targetPaneId: string | undefined): string | null {
   const store = useWorkspaceStore.getState();
-  if (targetPaneId) {
-    store.updatePane(targetPaneId, { type: "terminal", agentId });
-    return;
-  }
   const freshPw = getProjectState();
   const activeTab = freshPw.tabs.find((t) => t.id === freshPw.activeTabId);
   const focusedId = activeTab ? getFocusedOrFirstPaneId(activeTab) : null;
-  const focusedPane = focusedId ? freshPw.panes[focusedId] : null;
-
-  if (focusedPane?.type === "empty" && focusedId) {
-    store.updatePane(focusedId, { type: "terminal", agentId });
-    return;
+  let paneId = targetPaneId ?? null;
+  if (!paneId && focusedId && freshPw.panes[focusedId]?.type === "empty") paneId = focusedId;
+  if (!paneId) {
+    const newTabId = store.addTab();
+    const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
+    paneId = newTab ? findFirstPaneId(newTab.layout) : null;
   }
-  const newTabId = store.addTab();
-  const newTab = getProjectState().tabs.find((t) => t.id === newTabId);
-  const paneId = newTab ? findFirstPaneId(newTab.layout) : null;
   if (paneId) store.updatePane(paneId, { type: "terminal", agentId });
+  return paneId;
 }
 
 /** Spawns the agent, registers it in the stores and shows it in a pane. */
@@ -107,7 +103,8 @@ export function useSpawnAgent({
         setFocusedAgent(agent.id);
         // Switch to Agents section
         switchSection("agents");
-        placeInWorkspace(agent.id, targetPaneId);
+        const paneId = placeInWorkspace(agent.id, targetPaneId);
+        if (paneId) focusNewPane(paneId);
         onClose();
       } catch (err) {
         console.error("[SpawnAgentModal] Spawn failed:", err);

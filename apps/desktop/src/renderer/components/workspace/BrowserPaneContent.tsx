@@ -2,9 +2,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
 import { isPasteTarget } from "../../lib/agent-input";
 import { isHttpUrl, toHttpUrl } from "../../lib/browser-viewports";
+import { claimPaneFocus } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
@@ -148,6 +150,14 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
 
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFocused = focusedPaneId === paneId;
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Opened for the user (Split with Browser): the address bar takes the typing
+  useMountEffect(() => {
+    if (!claimPaneFocus(paneId)) return;
+    const input = rootRef.current?.querySelector<HTMLInputElement>("[data-address-bar]");
+    input?.focus();
+    input?.select();
+  });
   useRegisterBrowserPane(webviewRef, paneId, projectId);
   const [asking, setAsking] = useState(false);
   const showAsk = asking && runningAgents.length > 0;
@@ -159,7 +169,12 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   };
 
   return (
-    <div role="none" className="flex h-full flex-col" onMouseDown={() => setFocusedPane(paneId)}>
+    <div
+      ref={rootRef}
+      role="none"
+      className="flex h-full flex-col"
+      onMouseDown={() => setFocusedPane(paneId)}
+    >
       <BrowserAddressBar
         urlInput={urlInput}
         currentUrl={currentUrl}
