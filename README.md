@@ -196,7 +196,7 @@ architecture is in [CLAUDE.md](CLAUDE.md). Please read the
 
 ## License and credits
 
-[MIT](LICENSE) © Antonio Martinez Quintero.
+[MIT](LICENSE) © Antonio Martinez Quintero ([antonio@dpeluche.dev](mailto:antonio@dpeluche.dev)), team member at Iteris Tech.
 
 Built with Electron, React, xterm.js, Monaco, libSQL, tRPC and Rust (napi-rs, git2). Speech
 recognition by [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); each speech model lists its

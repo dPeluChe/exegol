@@ -2,7 +2,7 @@
   "name": "@exegol/core-rust",
   "version": "0.1.0",
   "private": true,
-  "author": "Antonio <antonio@iteris.tech>",
+  "author": "Antonio <antonio@dpeluche.dev>",
   "main": "index.js",
   "types": "index.d.ts",
   "napi": {

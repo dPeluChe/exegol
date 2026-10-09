@@ -8,7 +8,7 @@
 > 19 tasks across 5 agent clusters. Each agent works in isolation (worktree).
 > Each task includes **which repo to study** and **which files to read** before implementing.
 >
-> **GHQ root**: `/Users/peluche/dPeluCheData/PROJECTS/dPeluChe/_code_/_repos_2_learn`
+> **GHQ root**: `<repos-dir>`
 >
 > **Quality gate before PR**:
 > - `npx @biomejs/biome check --fix apps/ packages/shared/src/ packages/ui/src/`

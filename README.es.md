@@ -207,7 +207,7 @@ vulnerabilidades en privado como dice [SECURITY.md](SECURITY.md).
 
 ## Licencia y créditos
 
-[MIT](LICENSE) © Antonio Martinez Quintero.
+[MIT](LICENSE) © Antonio Martinez Quintero ([antonio@dpeluche.dev](mailto:antonio@dpeluche.dev)), miembro del equipo de Iteris Tech.
 
 Hecho con Electron, React, xterm.js, Monaco, libSQL, tRPC y Rust (napi-rs, git2). Reconocimiento
 de voz con [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); cada modelo de voz muestra su

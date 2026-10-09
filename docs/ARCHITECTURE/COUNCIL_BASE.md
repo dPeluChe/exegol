@@ -32,6 +32,6 @@ A per-project execution and exchange base inside Exegol:
 
 ## Trade-off (accepted 2026-07-28)
 
-This couples Antonio's personal workflow infra to a product evolving toward market. Accepted
-because: the MCP daemon is a small module, always extractable later, and it removes an
+This ties Exegol to the wider development ecosystem it is part of, still under construction:
+the IDE, the factory and the runner, among other pieces. Accepted because: the MCP daemon is a small module, always extractable later, and it removes an
 entire second project (council-MCP standalone) from the roadmap.

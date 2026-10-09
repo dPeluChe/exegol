@@ -44,4 +44,12 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+
+# Agent CLI local state (per machine, may hold tokens or local paths)
+.agents/
+.claude/
+.devin/
 .factory/
+.cursor/
+.windsurf/
+.mcp.json
