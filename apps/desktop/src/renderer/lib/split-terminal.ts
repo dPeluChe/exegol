@@ -110,3 +110,15 @@ export async function splitActiveWithTerminal(): Promise<void> {
 export function terminalForActivePane(): Promise<void> {
   return activeEmptyPaneId() ? openTerminalHere() : splitActiveWithTerminal();
 }
+
+/** Split `paneId` with a browser pane that takes the typing (its address bar) once mounted */
+export function splitWithBrowser(
+  tabId: string,
+  paneId: string,
+  direction: "horizontal" | "vertical",
+  url?: string,
+): void {
+  const id = nanoid(8);
+  focusNewPane(id);
+  useWorkspaceStore.getState().splitPane(tabId, paneId, direction, "browser", { id, url });
+}

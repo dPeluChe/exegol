@@ -4,6 +4,7 @@ import {
   getProjectState,
   useWorkspaceStore,
 } from "../stores/workspace";
+import { focusedField } from "./focused-field";
 
 /** The element of a workspace pane (WorkspacePane's data-pane-id) */
 export function paneRoot(paneId: string): Element | null {
@@ -56,9 +57,12 @@ export function focusNewPane(paneId: string): void {
   focusActivePane(paneId);
 }
 
-/** A pane's view asks once it can take the keyboard: true once per focusNewPane */
+/** A pane's view asks once it can take the keyboard: true once per focusNewPane, unless the user
+ *  started typing in another field (a commit message, the palette) while the pane was opening */
 export function claimPaneFocus(paneId: string): boolean {
-  return focusOnMount.delete(paneId);
+  if (!focusOnMount.delete(paneId)) return false;
+  const field = typeof document === "undefined" ? null : focusedField();
+  return !field || !!paneRoot(paneId)?.contains(field);
 }
 
 /** The pane will not mount a view (its spawn failed) */
