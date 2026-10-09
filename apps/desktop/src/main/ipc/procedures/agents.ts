@@ -29,6 +29,7 @@ import {
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
+  listWorktrees,
   setAgentMuted,
   setAgentSuspended,
   updateAgentStatus,
@@ -413,10 +414,14 @@ export const agentRouter = router({
     }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {
-    // A renderer-chosen start folder (the launcher's "run in") stays inside the project
+    // A renderer-chosen start folder (the launcher's "run in", a terminal beside a session)
+    // stays inside the project or one of its worktrees
     if (input.cwdOverride) {
       const project = getProject(ctx.db, input.projectId);
-      if (!project || !(await isPathAllowed(input.cwdOverride, [project.path]))) {
+      const bases = project
+        ? [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)]
+        : [];
+      if (!project || !(await isPathAllowed(input.cwdOverride, bases))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Start folder is outside the project" });
       }
     }
@@ -598,8 +603,15 @@ export const agentRouter = router({
   getWorktreePath: publicProcedure
     .input(z.object({ agentId: z.string() }))
     .query(({ ctx, input }) => {
-      const wt = getWorktreeByAgentId(ctx.db, input.agentId);
-      return wt?.path ?? null;
+      const owned = getWorktreeByAgentId(ctx.db, input.agentId)?.path;
+      if (owned) return owned;
+      // An agent that joined another's worktree (a reuse, a terminal beside it) links it here
+      const joined = ctx.db
+        .prepare(
+          "SELECT w.path FROM agents a JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?",
+        )
+        .get(input.agentId) as { path: string } | undefined;
+      return joined?.path ?? null;
     }),
 
   // ─── T65: Parallel Multi-Agent ────────────────────────────────────────

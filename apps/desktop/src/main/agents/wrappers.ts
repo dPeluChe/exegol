@@ -12,7 +12,11 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CLAUDE_ATTENTION_NOTIFICATIONS } from "@exegol/shared";
+import {
+  CLAUDE_ATTENTION_NOTIFICATIONS,
+  CLAUDE_IDLE_NOTIFICATIONS,
+  CLAUDE_SESSION_READY_SOURCES,
+} from "@exegol/shared";
 import { logger } from "../lib/logger";
 
 const EXEGOL_DIR = join(homedir(), ".exegol");
@@ -99,9 +103,9 @@ interface HookDef {
   hooks: HookAction[];
 }
 
-/** Check if a hook definition was created by Exegol */
-function isExegolHook(def: HookDef): boolean {
-  return !!def.hooks?.some((h) => h.command?.includes("exegol"));
+/** Ours runs the notify script; "exegol" alone also matches user hooks in a path like labs-exegol */
+export function isExegolHook(def: HookDef): boolean {
+  return !!def.hooks?.some((h) => h.command?.includes(NOTIFY_SCRIPT));
 }
 
 /** Merge managed hooks into an existing settings object (preserves user hooks) */
@@ -114,15 +118,17 @@ function mergeHooksIntoSettings(
   }
   const hooks = settings.hooks as Record<string, unknown>;
 
+  // Strip ours once per event: an event can carry several managed defs (Notification)
+  const stripped = new Set<string>();
   for (const { event, def } of events) {
     const existing = hooks[event];
-    if (Array.isArray(existing)) {
-      const filtered = existing.filter((d: HookDef) => !isExegolHook(d));
-      filtered.push(def);
-      hooks[event] = filtered;
-    } else {
-      hooks[event] = [def];
+    if (!stripped.has(event)) {
+      stripped.add(event);
+      hooks[event] = Array.isArray(existing)
+        ? existing.filter((d: HookDef) => !isExegolHook(d))
+        : [];
     }
+    (hooks[event] as HookDef[]).push(def);
   }
 }
 
@@ -156,6 +162,20 @@ function mergeClaudeHooks(): void {
         def: {
           matcher: CLAUDE_ATTENTION_NOTIFICATIONS,
           hooks: [{ type: "command", command: `${notifyCmd} permission_needed` }],
+        },
+      },
+      {
+        event: "Notification",
+        def: {
+          matcher: CLAUDE_IDLE_NOTIFICATIONS,
+          hooks: [{ type: "command", command: `${notifyCmd} session_ready` }],
+        },
+      },
+      {
+        event: "SessionStart",
+        def: {
+          matcher: CLAUDE_SESSION_READY_SOURCES,
+          hooks: [{ type: "command", command: `${notifyCmd} session_ready` }],
         },
       },
     ]);

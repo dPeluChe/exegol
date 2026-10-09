@@ -10,6 +10,7 @@ import {
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
+import { trackMousePress } from "./mouse-release";
 import {
   fitAndSyncSize,
   fitMirror,
@@ -192,6 +193,7 @@ export function useXterm({
     onReady?.();
 
     const resizeObserver = observeContainerSize(container, mirror, refit);
+    const mousePress = trackMousePress(container);
 
     return () => {
       clearTimeout(settleTimer);
@@ -203,6 +205,12 @@ export function useXterm({
       // next.dispose() unsubscribes onData/onScroll/OSC handlers + the
       // dormant ring pipe (T115) before xterm's own teardown runs.
       next.dispose();
+      // After next.dispose(): the release xterm reports goes nowhere, but its listeners go
+      try {
+        mousePress.release();
+      } catch {
+        // xterm's own mouseup handler: a throw must not skip terminal.dispose()
+      }
       // Disposes every loaded addon too (T143 audit: not a leak)
       next.terminal.dispose();
       terminalRef.current = null;

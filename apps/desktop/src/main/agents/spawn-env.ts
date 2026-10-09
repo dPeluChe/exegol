@@ -7,6 +7,8 @@ import {
   type AgentSignalType,
   type AgentStatus,
   CLAUDE_ATTENTION_NOTIFICATIONS,
+  CLAUDE_IDLE_NOTIFICATIONS,
+  CLAUDE_SESSION_READY_SOURCES,
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type Database from "libsql";
@@ -54,6 +56,8 @@ interface AgentStatusEvent {
   turnEnded?: number;
   /** True when the agent is waiting on the user (T123 `attention` signal / T141 inbox). */
   needsAttention?: boolean;
+  /** At its prompt without having finished a turn (`idle` signal): delivers messages, fires no links */
+  idleOnly?: boolean;
   /** Pending question text extracted from an `attention` signal's detail, if any. */
   attentionDetail?: string;
   /** Set when a terminal's session became an agent (or went back to its prompt) */
@@ -131,7 +135,7 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
     try {
       const db = getDb();
       deliverPendingAgentMessages(db, event.agentId);
-      fireAgentLinks(db, event.agentId);
+      if (!event.idleOnly) fireAgentLinks(db, event.agentId);
     } catch (err) {
       // db not ready during early startup — non-fatal, but never silent: a
       // swallowed delivery failure looks exactly like "nobody wrote to me".
@@ -151,6 +155,7 @@ export function deriveStatusFromSignal(event: string): {
   turnStarted?: number;
   turnEnded?: number;
   needsAttention?: boolean;
+  idleOnly?: boolean;
 } {
   const now = Date.now();
   switch (event as AgentSignalType) {
@@ -171,6 +176,10 @@ export function deriveStatusFromSignal(event: string): {
       // here would ping the user once per reply (and double-notify on exit,
       // where finalizeAgentStatus already emits agent:finished).
       return { status: "waiting_input", turnEnded: now };
+    case "idle":
+      // Spawn and resume set running, and an interrupted turn sends no Stop: without this the
+      // session stays running at its prompt. No turn ended, so no snapshot and no link
+      return { status: "waiting_input", idleOnly: true };
     case "exited":
       return {};
     default:
@@ -184,15 +193,17 @@ export function deriveStatusFromSignal(event: string): {
  *  Written to /dev/tty, NOT stdout: Claude Code captures hook stdout (it only
  *  surfaces it in transcript mode), so bytes on stdout never reach the PTY
  *  stream our FSM scans. /dev/tty is the controlling terminal = our PTY.
- *  Falls back to stdout for environments without a controlling tty. */
-function oscNotifyCommand(agentId: string, event: AgentSignalType): string {
+ *  Falls back to stdout for environments without a controlling tty, except
+ *  where Claude adds hook stdout to the model context (SessionStart). */
+function oscNotifyCommand(agentId: string, event: AgentSignalType, stdoutFallback = true): string {
   const seq = `\\033]777;notify;Exegol;${agentId};${event}\\007`;
-  return `printf '${seq}' > /dev/tty 2>/dev/null || printf '${seq}'`;
+  const tty = `printf '${seq}' > /dev/tty 2>/dev/null`;
+  return stdoutFallback ? `${tty} || printf '${seq}'` : `${tty} || true`;
 }
 
 /**
  * Write a per-agent Claude Code hooks settings file that emits OSC-777 notify
- * signals on Stop/Notification/PreToolUse so the PTY stream carries
+ * signals on Stop/Notification/PreToolUse/SessionStart so the PTY stream carries
  * deterministic lifecycle events instead of relying on scraped output.
  * Returns the settings file path, or null if it couldn't be written
  * (non-fatal — the scraping parser remains the fallback).
@@ -204,8 +215,8 @@ export function buildClaudeCodeHooksFile(
   try {
     mkdirSync(HOOKS_DIR, { recursive: true });
     const path = join(HOOKS_DIR, `${agentId}.json`);
-    const hookEntry = (event: AgentSignalType) => ({
-      hooks: [{ type: "command", command: oscNotifyCommand(agentId, event) }],
+    const hookEntry = (event: AgentSignalType, stdoutFallback = true) => ({
+      hooks: [{ type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) }],
     });
     // T175: the claim guard runs on write-shaped tools only, and BEFORE the
     // write — the one moment where "which agent touched this" is still known.
@@ -235,7 +246,11 @@ export function buildClaudeCodeHooksFile(
               ]
             : []),
         ],
-        Notification: [{ matcher: CLAUDE_ATTENTION_NOTIFICATIONS, ...hookEntry("attention") }],
+        Notification: [
+          { matcher: CLAUDE_ATTENTION_NOTIFICATIONS, ...hookEntry("attention") },
+          { matcher: CLAUDE_IDLE_NOTIFICATIONS, ...hookEntry("idle") },
+        ],
+        SessionStart: [{ matcher: CLAUDE_SESSION_READY_SOURCES, ...hookEntry("idle", false) }],
         Stop: [hookEntry("finished")],
       },
     };

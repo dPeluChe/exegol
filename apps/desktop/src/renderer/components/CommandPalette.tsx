@@ -22,10 +22,11 @@ import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appKeys } from "../lib/keymap";
 import { SIDEBAR_VIEW_META } from "../lib/sidebar-views";
 import { runCommandInNewTab } from "../lib/spawn-shell";
+import { openTerminalHere, splitActiveWithTerminal } from "../lib/split-terminal";
 import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
-import { useWorkspaceStore } from "../stores/workspace";
+import { selectActivePaneId, selectPanes, useWorkspaceStore } from "../stores/workspace";
 
 // ─── Types ────────���─────────────────────────────────────────────────────────
 
@@ -52,6 +53,10 @@ const CATEGORY_LABELS: Record<CommandCategory, string> = {
 
 function useCommands(close: () => void): Command[] {
   const agents = useAgentStore((s) => s.agents);
+  const emptyPane = useWorkspaceStore((s) => {
+    const paneId = selectActivePaneId(s);
+    return !!paneId && selectPanes(s)[paneId]?.type === "empty";
+  });
 
   return useMemo(() => {
     const run = (fn: () => void) => () => {
@@ -151,6 +156,26 @@ function useCommands(close: () => void): Command[] {
         action: run(() => useWorkspaceStore.getState().splitFocusedPane("vertical")),
       },
 
+      {
+        id: "ws:split-terminal",
+        label: "New Terminal in Split",
+        category: "workspace",
+        icon: Terminal,
+        shortcut: "⌘Y",
+        action: run(() => void splitActiveWithTerminal()),
+      },
+      ...(emptyPane
+        ? [
+            {
+              id: "ws:terminal-here",
+              label: "Open Terminal Here",
+              category: "workspace" as const,
+              icon: Terminal,
+              action: run(() => void openTerminalHere()),
+            },
+          ]
+        : []),
+
       // Agent commands
       {
         id: "agent:new",
@@ -183,7 +208,7 @@ function useCommands(close: () => void): Command[] {
     ];
 
     return cmds;
-  }, [agents, close]);
+  }, [agents, close, emptyPane]);
 }
 
 // ─── Fuzzy Filter ────────��──────────────────────────────────────────────────
