@@ -60,6 +60,7 @@ export function forwardDictationKeys(
       host.send("dictation:key", { kind: "up" });
     } else if (isEscapeDown(input) && isListening()) {
       event.preventDefault();
+      logger.info("[Dictation] Esc in a browser page while recording");
       toMain({ kind: "escape" });
     } else if (input.type === "keyDown" && isPlainEnter(input) && isListening() && isMain(host)) {
       event.preventDefault();

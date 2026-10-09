@@ -5,6 +5,7 @@ const setTrayRecording = vi.fn();
 let focused: object | null = null;
 vi.mock("electron", () => ({ BrowserWindow: { getFocusedWindow: () => focused } }));
 vi.mock("../system/tray", () => ({ setTrayRecording: (l: string | null) => setTrayRecording(l) }));
+vi.mock("../lib/logger", () => ({ logger: { info: vi.fn() } }));
 vi.mock("../windows/main-window-ref", () => ({ getMainWindow: () => ({ webContents: { send } }) }));
 
 const { armDictationSession, disarmDictationSession, recordingLabel } = await import(

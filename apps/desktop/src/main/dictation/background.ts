@@ -1,4 +1,6 @@
 import { BrowserWindow } from "electron";
+import { execFileAsync } from "../lib/exec-file";
+import { logger } from "../lib/logger";
 import { setTrayRecording } from "../system/tray";
 import { getMainWindow } from "../windows/main-window-ref";
 
@@ -22,11 +24,37 @@ export function armDictationSession(sessionId: string, maxSeconds: number, now =
   const limit = setTimeout(() => {
     getMainWindow()?.webContents.send("dictation:key", { kind: "limit", sessionId, maxSeconds });
   }, maxSeconds * 1000);
+  let wasFocused = true;
   const tick = setInterval(() => {
     const focused = BrowserWindow.getFocusedWindow() !== null;
     setTrayRecording(focused ? null : recordingLabel(Date.now() - now));
+    if (focused !== wasFocused) logFocus(focused, Date.now() - now);
+    wasFocused = focused;
   }, 1000);
   armed = { limit, tick };
+}
+
+// An Esc that never reached any Exegol window was reported live: say where the focus went
+function logFocus(focused: boolean, elapsedMs: number): void {
+  const at = `${Math.round(elapsedMs / 1000)}s`;
+  if (focused) {
+    logger.info(`[Dictation] Exegol has the focus again at ${at}`);
+    return;
+  }
+  void frontApp().then((app) =>
+    logger.info(`[Dictation] Exegol lost the focus at ${at} while recording (front: ${app})`),
+  );
+}
+
+async function frontApp(): Promise<string> {
+  if (process.platform !== "darwin") return "unknown";
+  try {
+    const { stdout: asn } = await execFileAsync("lsappinfo", ["front"]);
+    const { stdout } = await execFileAsync("lsappinfo", ["info", "-only", "name", asn.trim()]);
+    return stdout.match(/"LSDisplayName"="([^"]*)"/)?.[1] ?? "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 export function disarmDictationSession(): void {
