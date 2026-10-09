@@ -355,15 +355,28 @@ function ensureCodexGlobalConfig(shimPath: string): void {
     CODEX_MARK_END,
   ].join("\n");
   const existing = existsSync(configPath) ? readFileSync(configPath, "utf-8") : "";
-  const start = existing.indexOf(CODEX_MARK_START);
-  const end = existing.indexOf(CODEX_MARK_END);
-  let updated: string;
-  if (start !== -1 && end !== -1) {
-    updated = existing.slice(0, start) + block + existing.slice(end + CODEX_MARK_END.length);
-  } else {
-    updated = existing.trimEnd() ? `${existing.trimEnd()}\n\n${block}\n` : `${block}\n`;
-  }
+  const updated = withCodexExegolBlock(existing, block);
   if (updated !== existing) writeFileSync(configPath, updated, "utf-8");
+}
+
+/**
+ * The config with exactly one Exegol block, at the end. The Codex app rewrites this file: it
+ * moved the table among the other mcp_servers (env as its own `.env` table) and left a stray
+ * end marker before our start, which made every launch append a copy; codex then refused the
+ * duplicate key. So drop every marker line and every `mcp_servers.exegol` table wherever it is.
+ */
+export function withCodexExegolBlock(existing: string, block: string): string {
+  const header = new RegExp(`^\\[mcp_servers\\.${EXEGOL_SERVER_KEY}(\\]|\\.)`);
+  const kept: string[] = [];
+  let inExegolTable = false;
+  for (const line of existing.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed === CODEX_MARK_START || trimmed === CODEX_MARK_END) continue;
+    if (trimmed.startsWith("[")) inExegolTable = header.test(trimmed);
+    if (!inExegolTable) kept.push(line);
+  }
+  const rest = kept.join("\n").trimEnd();
+  return rest ? `${rest}\n\n${block}\n` : `${block}\n`;
 }
 
 /**
