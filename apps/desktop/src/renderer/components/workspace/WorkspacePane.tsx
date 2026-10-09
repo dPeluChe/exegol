@@ -356,17 +356,17 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
   }, [agent, agentId, paneId]);
 
   // Ended and still not in the store once its own project's list landed: archived or closed
+  // null: the row is gone (a closed shell is deleted); waiting on it ended in "Failed to start"
   const isStaleFromPreviousSession = useAgentStore(
-    (s) => agent != null && isPaneAgentStale(agent, s),
+    (s) => agent === null || (agent !== undefined && isPaneAgentStale(agent, s)),
   );
 
   useEffect(() => {
-    if (isStaleFromPreviousSession && agent) {
-      console.log(
-        `[PaneRecovery] Stale agent ${agentId} (status=${agent.status}, notInStore) — converting pane ${paneId} to empty`,
-      );
-      updatePane(paneId, { type: "empty", agentId: undefined });
-    }
+    if (!isStaleFromPreviousSession) return;
+    console.log(
+      `[PaneRecovery] Stale agent ${agentId} (${agent ? `status=${agent.status}, notInStore` : "deleted"}) — converting pane ${paneId} to empty`,
+    );
+    updatePane(paneId, { type: "empty", agentId: undefined });
   }, [isStaleFromPreviousSession, agent, agentId, paneId, updatePane]);
 
   // Log unexpected state: agent exists in DB but not in store (no callbacks wired)
