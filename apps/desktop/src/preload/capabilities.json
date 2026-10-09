@@ -295,6 +295,7 @@
     "doctor": [
       "run",
       "cliUpdates",
+      "cliInstalls",
       "planUsage"
     ],
     "diagnostics": [
@@ -388,6 +389,7 @@
     "agent:follow-ups",
     "agent:pr-watch",
     "agent:resume-missed",
+    "agent:cli-self-updated",
     "recovery:progress",
     "window:focus-changed",
     "metrics:update",

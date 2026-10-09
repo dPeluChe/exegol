@@ -19,6 +19,9 @@ interface CliEntry {
   binaryAliases?: string[];
   /** The key that interrupts a turn and returns to the prompt (Steer) */
   interrupt?: string;
+  /** Where its official installer puts it, relative to home: a copy there is "standalone" and
+   *  updates with `update` (or `install`). Brew/npm/pipx/uv copies are told by their path */
+  standalone?: string[];
 }
 
 const CURL = (url: string, sh = "bash") => `curl -fsSL ${url} | ${sh}`;
@@ -36,6 +39,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     docs: "https://code.claude.com/docs/en/setup",
     latest: { npm: "@anthropic-ai/claude-code" },
     interrupt: "\x1b",
+    standalone: [".local/share/claude/", ".claude/local/", ".local/bin/claude"],
   },
   codex: {
     install: {
@@ -45,6 +49,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     docs: "https://github.com/openai/codex",
     latest: { npm: "@openai/codex" },
     interrupt: "\x1b",
+    standalone: [".codex/packages/standalone/", ".local/bin/codex"],
   },
   gemini: {
     install: "npm install -g @google/gemini-cli",
@@ -59,6 +64,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
       win: IRM("https://antigravity.google/cli/install.ps1"),
     },
     docs: "https://antigravity.google/docs/cli/install/",
+    standalone: [".local/bin/agy"],
   },
   devin: {
     install: {
@@ -66,6 +72,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
       win: IRM("https://static.devin.ai/cli/setup.ps1"),
     },
     docs: "https://docs.devin.ai/cli",
+    standalone: [".local/share/devin/", ".local/bin/devin"],
   },
   aider: {
     install: {
@@ -83,12 +90,14 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     },
     update: "goose update",
     docs: "https://goose-docs.ai/docs/getting-started/installation/",
+    standalone: [".local/bin/goose"],
   },
   opencode: {
     install: { unix: CURL("https://opencode.ai/install"), win: "scoop install opencode" },
     update: "opencode upgrade",
     docs: "https://opencode.ai/docs/",
     latest: { npm: "opencode-ai" },
+    standalone: [".opencode/"],
   },
   // Windows only through WSL
   amp: {
@@ -96,6 +105,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     update: "amp update",
     docs: "https://ampcode.com/docs/cli",
     latest: { npm: "@sourcegraph/amp" },
+    standalone: [".amp/", ".local/bin/amp"],
   },
   kiro: {
     install: {
@@ -106,6 +116,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     },
     update: "kiro-cli update",
     docs: "https://kiro.dev/docs/cli/installation/",
+    standalone: [".local/bin/kiro-cli"],
   },
   kilocode: {
     install: "npm install -g @kilocode/cli",
@@ -136,6 +147,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     },
     update: "droid update",
     docs: "https://docs.factory.ai/droid-cli/quickstart",
+    standalone: [".factory/", ".local/bin/droid"],
   },
 };
 
