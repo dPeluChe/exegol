@@ -55,6 +55,37 @@ export function computeLiveTabGroups(
     .map(({ g }) => g);
 }
 
+/** The tabId of a card's live sessions no pane shows (a headless spawn) */
+export const PANELESS_TAB = "";
+
+/** No pane shows it, and it is still worth listing: live, not archived, suspended or a shell */
+const listedWithoutPane = (a: AgentState) =>
+  ACTIVE_STATUSES.has(a.status) && !a.archived && !a.suspended && a.cliType !== "shell";
+
+/**
+ * The groups plus, per project, one group of the live sessions no pane shows, after that
+ * project's tabs: grouped by project, they join its card instead of making a second one
+ */
+export function withPanelessSessions(
+  groups: LiveTabGroup[],
+  agents: Record<string, AgentState>,
+): LiveTabGroup[] {
+  const shown = new Set(groups.flatMap((g) => g.agentIds));
+  const byProject = new Map<string, string[]>();
+  for (const a of Object.values(agents)) {
+    if (shown.has(a.id) || !listedWithoutPane(a)) continue;
+    byProject.set(a.projectId, [...(byProject.get(a.projectId) ?? []), a.id]);
+  }
+  const paneless = [...byProject].map(([projectId, agentIds]) => ({
+    key: `${projectId}:paneless`,
+    projectId,
+    tabId: PANELESS_TAB,
+    tabLabel: "No pane",
+    agentIds,
+  }));
+  return [...groups, ...paneless];
+}
+
 /** A sidebar card: one project and its live tabs, in the groups' order */
 export interface LiveProjectGroup {
   projectId: string;

@@ -3,8 +3,9 @@ import { cn } from "@exegol/ui";
 import { useCallback, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useLaunchableProviders } from "../../hooks/use-providers";
+import { focusNewPane } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
+import { findAgentPane, useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
 import {
   findFirstPaneId,
@@ -105,6 +106,8 @@ export function QuickLaunchBar() {
             }
           }
         }
+        const placed = findAgentPane(agent.id, projectId);
+        if (placed) focusNewPane(placed.paneId);
       } catch (err) {
         console.error("[QuickLaunchBar] Spawn failed:", err);
       } finally {

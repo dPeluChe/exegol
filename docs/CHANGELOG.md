@@ -16,6 +16,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - The update Exegol offers for a CLI now matches how the copy you run was installed: `brew upgrade --cask codex` for the Homebrew cask, `npm install -g @openai/codex@latest` for npm, the official installer for a standalone install. Before, Codex always got the official installer, which added a second copy next to a Homebrew one
 - Codex sessions failed to start (exit 1 at once) after the Codex app rewrote `~/.codex/config.toml`: Exegol added its MCP entry again on every launch and Codex refused the duplicate. Exegol now keeps exactly one entry and removes the copies, wherever the Codex app moved them
+- A closed session no longer lingers in the sidebar's Agents view as "Waiting for input" under a second card for the same project. Each project now has one card; a live session no pane shows is listed in it under "No pane"
+- Opening a pane now leaves the keyboard in it: Cmd+Y, Split with Terminal, the new terminal button, T in an empty pane, launching an agent, and Split with Browser (the address bar) no longer lose the focus once the terminal starts
 
 ## [0.5.18] — 2026-10-09 — Split with Terminal, terminals that stop answering, idle Claude sessions
 

@@ -4,6 +4,7 @@ import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { closeWithConfirm } from "../../lib/close-target";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { focusNewPane } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentBrowserStore } from "../../stores/agent-browser";
 import { useAgentStore } from "../../stores/agents";
@@ -178,6 +179,7 @@ export function WorkspaceTabBar() {
       // Convert the target pane to terminal
       if (targetPaneId) {
         updatePane(targetPaneId, { type: "terminal", agentId: agent.id });
+        focusNewPane(targetPaneId);
       }
     } catch {
       // Spawn failed — tab stays with empty pane

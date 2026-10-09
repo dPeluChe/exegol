@@ -4,8 +4,10 @@ import {
   computeLiveTabGroups,
   groupByProject,
   type LiveTabGroup,
+  PANELESS_TAB,
   reorderKeys,
   reorderProjectOrder,
+  withPanelessSessions,
 } from "./live-tabs";
 
 const pane = (paneId: string) => ({ type: "pane" as const, paneId });
@@ -109,6 +111,46 @@ describe("groupByProject", () => {
       ["a", ["a1", "a2"]],
       ["b", ["b1"]],
     ]);
+  });
+});
+
+describe("withPanelessSessions", () => {
+  const live = (id: string, projectId: string, extra: object = {}) => ({
+    id,
+    projectId,
+    status: "waiting_input",
+    cliType: "devin",
+    ...extra,
+  });
+
+  it("a live session no pane shows joins its project's card, never a second one", () => {
+    const tabs = [group("t1", "p", ["a"])];
+    const all = {
+      a: live("a", "p"),
+      orphan: live("orphan", "p"),
+      other: live("other", "q"),
+    } as never;
+    const cards = groupByProject(withPanelessSessions(tabs, all));
+    expect(cards.map((c) => [c.projectId, c.tabs.map((t) => [t.tabId, t.agentIds])])).toEqual([
+      [
+        "p",
+        [
+          ["t1", ["a"]],
+          [PANELESS_TAB, ["orphan"]],
+        ],
+      ],
+      ["q", [[PANELESS_TAB, ["other"]]]],
+    ]);
+  });
+
+  it("archived, suspended, ended sessions and shells without a pane are not listed", () => {
+    const all = {
+      archived: live("archived", "p", { archived: true }),
+      suspended: live("suspended", "p", { suspended: true }),
+      stopped: live("stopped", "p", { status: "stopped" }),
+      shell: live("shell", "p", { cliType: "shell" }),
+    } as never;
+    expect(withPanelessSessions([], all)).toEqual([]);
   });
 });
 
