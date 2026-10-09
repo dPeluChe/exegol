@@ -16,7 +16,7 @@ vi.mock("./worktrees", () => ({
 }));
 
 import { runMigrations } from "../db/migrations";
-import { resolveSpawnTarget } from "./spawn-target";
+import { findWorktreeHolding, resolveSpawnTarget } from "./spawn-target";
 
 const project = { id: "p1", name: "proj", path: "/repo" } as Project;
 
@@ -71,5 +71,30 @@ describe("resolveSpawnTarget", () => {
   it("suffixes when the name is taken on disk but no worktree row claims it", () => {
     const t = resolveSpawnTarget(db, project, { useWorktree: true, branchName: "exegol/taken" });
     expect(t).toEqual({ cwd: "/root/exegol-taken-2", branchName: "exegol/taken-2", reused: false });
+  });
+});
+
+describe("findWorktreeHolding", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = new Database(":memory:");
+    runMigrations(db);
+    db.prepare("INSERT INTO projects (id, name, path) VALUES ('p1', 'proj', '/repo')").run();
+    db.prepare(
+      `INSERT INTO worktrees (id, project_id, agent_id, path, branch_name)
+       VALUES ('w1', 'p1', NULL, '/root/wt', 'exegol/wt')`,
+    ).run();
+  });
+
+  it("finds the worktree a folder is in, or is the worktree itself", () => {
+    expect(findWorktreeHolding(db, "p1", "/root/wt")?.id).toBe("w1");
+    expect(findWorktreeHolding(db, "p1", "/root/wt/src/lib")?.id).toBe("w1");
+  });
+
+  it("is null outside any worktree, for a sibling with the same prefix, or another project", () => {
+    expect(findWorktreeHolding(db, "p1", "/repo/src")).toBeNull();
+    expect(findWorktreeHolding(db, "p1", "/root/wt-2")).toBeNull();
+    expect(findWorktreeHolding(db, "p2", "/root/wt")).toBeNull();
   });
 });

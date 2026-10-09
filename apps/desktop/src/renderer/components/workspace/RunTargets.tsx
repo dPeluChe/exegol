@@ -15,13 +15,18 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
+import { useLatest } from "../../hooks/use-latest";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjectIde, useSettings } from "../../hooks/use-trpc";
 import type { DetectedScript } from "../../hooks/use-trpc-scheduler";
 import { fileManagerLabel } from "../../lib/keymap";
 import { openProjectInIde } from "../../lib/open-in-ide";
+import { paneRoot } from "../../lib/pane-focus";
 import { pickRunTarget, runTargetLabel, visibleRunTargets } from "../../lib/run-targets";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
+import { isQuickTerminalKey } from "../../lib/split-terminal";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { useAppStore } from "../../stores/app";
 import { toastError, useToastStore } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
 
@@ -33,6 +38,12 @@ interface RunTarget {
 }
 
 const VISIBLE_COMMANDS = 4;
+
+const isTypingField = (el: Element | null) =>
+  el instanceof HTMLInputElement ||
+  el instanceof HTMLTextAreaElement ||
+  el instanceof HTMLSelectElement ||
+  (el instanceof HTMLElement && el.isContentEditable);
 const pinKey = (rel: string, command: string) => `${rel}\u0000${command}`;
 
 function runnerLabel(s: DetectedScript): string | null {
@@ -93,6 +104,22 @@ export function RunTargets({
   // Default: a folder holding a pin, else the root when it has commands, else the first repo
   const pinnedRel = pins[0]?.split("\u0000")[0];
   const selected = pickRunTarget(targets, chosen, pinnedRel);
+  const quickTerminal = useLatest(() => {
+    if (selected && !launching) void run(terminalName);
+  });
+  useMountEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (useWorkspaceStore.getState().focusedPaneId !== paneId) return;
+      if (useAppStore.getState().activeView !== "workspace") return;
+      const active = document.activeElement;
+      const inPane = !active || active === document.body || !!paneRoot(paneId)?.contains(active);
+      if (!inPane || !isQuickTerminalKey(e, isTypingField(active))) return;
+      e.preventDefault();
+      quickTerminal.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   if (!selected) return null;
   const folders = visibleRunTargets(targets, {
     query: folderQuery,
@@ -100,6 +127,7 @@ export function RunTargets({
     selectedRel: selected.rel,
   });
   const inFolder = selected.rel !== "";
+  const terminalName = inFolder ? (selected.rel.split("/").pop() ?? "Terminal") : "Terminal";
 
   const isPinnedScript = (s: { command: string }) => pins.includes(pinKey(selected.rel, s.command));
   const pinned = selected.scripts.filter(isPinnedScript);
@@ -115,7 +143,7 @@ export function RunTargets({
       const agentId = await spawnShellIntoPane(
         projectId,
         paneId,
-        inFolder ? (selected.rel.split("/").pop() ?? "Terminal") : "Terminal",
+        terminalName,
         inFolder ? selected.path : undefined,
       );
       if (command) window.api.terminal.write(agentId, `${command}\n`);
@@ -229,16 +257,19 @@ export function RunTargets({
         <button
           type="button"
           disabled={!!launching}
-          onClick={() => run(inFolder ? (selected.rel.split("/").pop() ?? "Terminal") : "Terminal")}
+          onClick={() => run(terminalName)}
           className={cn(
             chip,
             size,
             "border-border bg-bg-secondary text-text-secondary hover:border-accent/50",
           )}
-          title={`Terminal in ${selected.path}`}
+          title={`Terminal in ${selected.path} (T)`}
         >
           <Terminal className="h-3 w-3" />
           Terminal
+          <kbd className="rounded border border-border px-1 font-sans text-[9px] text-text-muted">
+            T
+          </kbd>
         </button>
         <button
           type="button"

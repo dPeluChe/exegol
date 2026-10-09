@@ -29,6 +29,7 @@ import {
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
+  listWorktrees,
   setAgentMuted,
   setAgentSuspended,
   updateAgentStatus,
@@ -413,10 +414,14 @@ export const agentRouter = router({
     }),
 
   spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input }) => {
-    // A renderer-chosen start folder (the launcher's "run in") stays inside the project
+    // A renderer-chosen start folder (the launcher's "run in", a terminal beside a session)
+    // stays inside the project or one of its worktrees
     if (input.cwdOverride) {
       const project = getProject(ctx.db, input.projectId);
-      if (!project || !(await isPathAllowed(input.cwdOverride, [project.path]))) {
+      const bases = project
+        ? [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)]
+        : [];
+      if (!project || !(await isPathAllowed(input.cwdOverride, bases))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Start folder is outside the project" });
       }
     }

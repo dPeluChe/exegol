@@ -38,6 +38,8 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+W` | `Ctrl+Shift+W` | Close the focused pane (the tab if it is the last) and stop its agent |
 | `Cmd+Shift+T` | `Ctrl+Shift+Alt+T` | Reopen the last closed tab or pane and resume its sessions |
 | `Cmd+D` / `Cmd+Shift+D` | `Ctrl+Shift+D` / `Ctrl+Shift+Alt+D` | New pane to the right / below |
+| `Cmd+Y` | `Ctrl+Shift+Y` | Terminal beside the focused pane, in the folder it works in (in the pane itself when it is empty) |
+| `T` | same | In an empty pane's launcher (no field focused): terminal in the selected Run in folder |
 | `Cmd+L` | `Ctrl+Shift+L` | Browser pane (or floating browser): select its address bar |
 | `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere on macOS Cmd+R reloads the window |
 | `Cmd+Enter` | `Ctrl+Enter` | Launch from the spawn dialogs, send a diff comment |

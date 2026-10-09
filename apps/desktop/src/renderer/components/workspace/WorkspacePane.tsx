@@ -22,6 +22,7 @@ import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
+import { splitWithTerminal } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
 import {
@@ -623,6 +624,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         onSplit={(dir, newType) =>
           useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty")
         }
+        onSplitTerminal={() => void splitWithTerminal(tabId, paneId)}
         onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}
         onFloat={
