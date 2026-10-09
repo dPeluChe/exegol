@@ -1,36 +1,37 @@
-// Sidecar health watch: an unanswered write/resize/kill starts pings with backoff, a stall is
-// logged (with the sidecar's CPU and RSS) and pushed on `sidecar:health`. Main's own event-loop
-// lag is logged too, to tell a stuck main from a stuck sidecar.
-import { execFile } from "node:child_process";
+// Sidecar health watch: calls left unanswered start pings with backoff, a stall is logged (with
+// the sidecar's CPU and RSS) and pushed on `sidecar:health`. Main's own event-loop lag is logged
+// too, to tell a stuck main from a stuck sidecar.
 import { monitorEventLoopDelay } from "node:perf_hooks";
-import { promisify } from "node:util";
 import { SIDECAR_HEALTHY, type SidecarHealth } from "@exegol/shared";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { withTimeout } from "../lib/timeout";
+import { readProcessMetrics } from "../system/process-metrics";
 import type { SidecarClient } from "./pty-sidecar-client";
 import { readPidFile } from "./pty-sidecar-discovery";
 import {
+  CallTracker,
   describeProcess,
   FAILURE_LOG_MS,
   LOOP_LAG_MS,
   LOOP_SAMPLE_MS,
   PING_TIMEOUT_MS,
+  type PingResult,
+  pingResult,
   RateLimiter,
   STALL_AFTER_MS,
   type StallEvent,
   StallWatch,
   seconds,
-  stalledCall,
 } from "./sidecar-health";
-
-const execFileAsync = promisify(execFile);
 
 let clientSource: (() => SidecarClient | null) | null = null;
 const watch = new StallWatch();
+const calls = new CallTracker();
 const failureLog = new RateLimiter(FAILURE_LOG_MS);
-const loopLog = new RateLimiter(FAILURE_LOG_MS);
-const outstanding = new Map<number, number>();
-let seq = 0;
+let lastLoopLog = 0;
+/** Snapshot replies are megabytes: calls queued behind one are slow, not stalled */
+let bulkInFlight = 0;
 let checkTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setTimeout> | null = null;
 let loopTimer: ReturnType<typeof setInterval> | null = null;
@@ -46,75 +47,82 @@ function setHealth(next: SidecarHealth): void {
   broadcast("sidecar:health", next);
 }
 
-/** A sidecar RPC from PtyHost. `current`: false once Retry replaced that client, so its
- *  rejected calls are not a new stall */
+const onCallAnswered = (): void => calls.settle(true, Date.now());
+
+/** A sidecar RPC from PtyHost. A rejection from a client Retry already replaced is no new stall */
 export function trackSidecarCall(
   method: string,
   sessionId: string,
   call: Promise<unknown>,
-  current: () => boolean,
+  client: SidecarClient,
 ): void {
-  const token = ++seq;
   const started = Date.now();
-  outstanding.set(token, started);
+  calls.start(started);
   scheduleCheck(STALL_AFTER_MS);
-  call.then(
-    () => outstanding.delete(token),
-    (err: unknown) => {
-      outstanding.delete(token);
-      if (!current()) return;
-      const now = Date.now();
-      if (failureLog.allow(method, now)) {
-        const reason =
-          err instanceof Error && /timeout/i.test(err.message) ? "timed out" : "failed";
-        const detail = err instanceof Error && reason === "failed" ? ` (${err.message})` : "";
-        logger.warn(
-          `[Sidecar] ${method} to ${sessionId} ${reason} after ${seconds(now - started)}${detail}`,
-        );
-      }
-      suspect(started);
-    },
-  );
+  call.then(onCallAnswered, (err: unknown) => {
+    const now = Date.now();
+    calls.settle(false, now);
+    if (clientSource?.() !== client) return;
+    if (failureLog.allow(method, now)) {
+      const reason = err instanceof Error && /timeout/i.test(err.message) ? "timed out" : "failed";
+      const detail = err instanceof Error && reason === "failed" ? ` (${err.message})` : "";
+      logger.warn(
+        `[Sidecar] ${method} to ${sessionId} ${reason} after ${seconds(now - started)}${detail}`,
+      );
+    }
+    suspect(started);
+  });
+}
+
+/** A snapshot RPC: no stall is suspected while one is in flight */
+export async function whileSidecarBulk<T>(call: Promise<T>): Promise<T> {
+  bulkInFlight++;
+  try {
+    return await call;
+  } finally {
+    bulkInFlight--;
+  }
 }
 
 function scheduleCheck(ms: number): void {
   if (checkTimer || !clientSource) return;
   checkTimer = setTimeout(() => {
     checkTimer = null;
-    if (outstanding.size === 0) return;
+    if (calls.inFlight === 0) return;
     const now = Date.now();
-    const stalled = stalledCall(outstanding.values(), now);
-    if (stalled !== null) suspect(stalled);
-    else scheduleCheck(STALL_AFTER_MS - (now - Math.min(...outstanding.values())));
+    const since = calls.stalledSince(now);
+    if (since !== null) suspect(since);
+    else scheduleCheck(calls.untilStall(now));
   }, ms);
   checkTimer.unref?.();
 }
 
 function suspect(startedAt: number): void {
-  if (!clientSource || !watch.suspect(startedAt)) return;
-  void ping();
+  if (!clientSource) return;
+  if (bulkInFlight > 0) {
+    scheduleCheck(STALL_AFTER_MS);
+    return;
+  }
+  if (watch.suspect(startedAt)) void ping();
 }
 
 async function ping(): Promise<void> {
   pingTimer = null;
   const client = clientSource?.();
-  let ok = false;
+  let result: PingResult = "failed";
   if (client?.isConnected()) {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const expired = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error("ping timed out")), PING_TIMEOUT_MS);
-    });
-    ok = await Promise.race([client.ping(), expired]).then(
+    const sent = performance.now();
+    const answered = await withTimeout(client.ping(), PING_TIMEOUT_MS, "ping").then(
       () => true,
       () => false,
     );
-    clearTimeout(timer);
+    result = pingResult(answered, performance.now() - sent - PING_TIMEOUT_MS);
   }
-  onPingResult(ok, Date.now());
+  onPingResult(result, Date.now());
 }
 
-function onPingResult(ok: boolean, now: number): void {
-  const { event, next } = watch.onPing(ok, now);
+function onPingResult(result: PingResult, now: number): void {
+  const { event, next } = watch.onPing(result, now);
   if (event) void report(event);
   if (next !== null) {
     pingTimer = setTimeout(() => void ping(), next);
@@ -136,22 +144,21 @@ async function report(event: StallEvent): Promise<void> {
 async function processInfo(): Promise<string> {
   const pid = readPidFile()?.pid;
   if (!pid) return "no pid file";
-  try {
-    const { stdout } = await execFileAsync("ps", ["-o", "pcpu=,rss=", "-p", String(pid)], {
-      timeout: 3_000,
-    });
-    return `pid ${pid}, ${describeProcess(stdout) ?? "no stats"}`;
-  } catch {
-    return `pid ${pid}, process gone`;
-  }
+  const metrics = await readProcessMetrics([pid]).then(
+    (m) => m.get(pid),
+    () => undefined,
+  );
+  return metrics ? `pid ${pid}, ${describeProcess(metrics)}` : `pid ${pid}, process gone`;
 }
 
-/** Retry swapped in a fresh client that answered a ping */
+/** Retry swapped in a fresh client that answered a ping: clear at once, no second ping */
 export function markSidecarAnswering(): void {
-  outstanding.clear();
   if (pingTimer) clearTimeout(pingTimer);
   pingTimer = null;
-  onPingResult(true, Date.now());
+  const now = Date.now();
+  calls.answered(now);
+  const event = watch.clear(now);
+  if (event) void report(event);
 }
 
 export function startSidecarHealthWatch(source: () => SidecarClient | null): void {
@@ -162,7 +169,9 @@ export function startSidecarHealthWatch(source: () => SidecarClient | null): voi
   loopTimer = setInterval(() => {
     const maxMs = loop.max / 1e6;
     loop.reset();
-    if (maxMs > LOOP_LAG_MS && loopLog.allow("loop", Date.now())) {
+    const now = Date.now();
+    if (maxMs > LOOP_LAG_MS && now - lastLoopLog >= FAILURE_LOG_MS) {
+      lastLoopLog = now;
       logger.warn(`[Main] event loop blocked for ${seconds(maxMs)}`);
     }
   }, LOOP_SAMPLE_MS);

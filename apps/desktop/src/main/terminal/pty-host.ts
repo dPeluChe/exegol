@@ -28,7 +28,7 @@ import type { SidecarClient } from "./pty-sidecar-client";
 import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
 import { awaitsRepaint, REPAINT_CAP_MS, REPAINT_QUIET_MS } from "./reattach-repaint";
 import { readScreenDialog } from "./screen-dialog";
-import { trackSidecarCall } from "./sidecar-health-watch";
+import { trackSidecarCall, whileSidecarBulk } from "./sidecar-health-watch";
 
 export type { SessionCallbacks } from "./pty-session-types";
 
@@ -74,6 +74,7 @@ export class PtyHost {
 
       if (processedData.length > 0) {
         s.emulator.write(processedData);
+        s.resyncTail?.push(processedData);
         scheduleScrollbackFlush(s);
         s.callbacks.onData(processedData);
         this.outputWatchers.get(id)?.();
@@ -98,11 +99,43 @@ export class PtyHost {
     logger.info("[PtyHost] Connected to sidecar");
   }
 
-  /** Retry: the new client takes over before the old socket closes, so no output is missed */
-  swapSidecarClient(client: SidecarClient): void {
+  /** Retry: the new client takes over before the old socket closes. Both carried the same
+   *  output, unevenly (the old one was stuck), so each live model is rebuilt from the ring */
+  swapSidecarClient(client: SidecarClient): Promise<void> {
     const old = this.sidecarClient;
     this.connectToSidecar(client);
     old?.disconnect();
+    const live = [...this.sessions.values()].filter(
+      (s) => s.mode === "sidecar" && s.alive && !this.reattaching.has(s.id),
+    );
+    return Promise.all(live.map((s) => this.resyncSession(s, client))).then(() => {});
+  }
+
+  /** Output read before the ring's reply is in it; output after it is replayed on top. Views
+   *  reset (RIS) and repaint in the same stream, as the visibility repaint does */
+  private async resyncSession(s: Session, client: SidecarClient): Promise<void> {
+    const ring = await whileSidecarBulk(client.snapshot(s.id)).catch(() => null);
+    if (ring === null || this.sessions.get(s.id) !== s || s.resyncTail) return;
+    const tail: string[] = [];
+    s.resyncTail = tail;
+    const { cols, rows } = s.emulator.size;
+    const fresh = new HeadlessEmulator(cols, rows);
+    try {
+      await fresh.writeParsed(ring);
+    } finally {
+      s.resyncTail = undefined;
+    }
+    if (this.sessions.get(s.id) !== s) {
+      fresh.dispose();
+      return;
+    }
+    const size = s.emulator.size;
+    if (size.cols !== cols || size.rows !== rows) fresh.resize(size.cols, size.rows);
+    const snapshot = (fresh.snapshot() ?? "") + fresh.modeSequence();
+    for (const chunk of tail) fresh.write(chunk);
+    s.emulator.dispose();
+    s.emulator = fresh;
+    broadcast("terminal:data", s.id, `\x1bc${snapshot}${tail.join("")}`);
   }
 
   getSidecarClient(): SidecarClient | null {
@@ -117,7 +150,7 @@ export class PtyHost {
   ): void {
     const client = this.sidecarClient;
     if (!client) return;
-    trackSidecarCall(method, id, call(client), () => this.sidecarClient === client);
+    trackSidecarCall(method, id, call(client), client);
   }
 
   disconnectSidecar(): void {
@@ -194,7 +227,7 @@ export class PtyHost {
     const started = performance.now();
     let fetched = started;
     try {
-      snapshot = await this.sidecarClient.snapshot(id);
+      snapshot = await whileSidecarBulk(this.sidecarClient.snapshot(id));
       fetched = performance.now();
       if (snapshot) await emulator.writeParsed(snapshot);
     } catch {

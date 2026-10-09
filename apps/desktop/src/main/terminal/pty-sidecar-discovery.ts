@@ -14,6 +14,7 @@ import {
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { LOG_DIR, logger } from "../lib/logger";
+import { withTimeout } from "../lib/timeout";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
@@ -167,14 +168,6 @@ export async function ensureSidecar(): Promise<SidecarClient> {
   }
 
   return client;
-}
-
-function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const expired = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} timed out`)), ms);
-  });
-  return Promise.race([p, expired]).finally(() => clearTimeout(timer));
 }
 
 /** Retry: a fresh socket to the sidecar already running. Never spawns one (that ends every

@@ -13,9 +13,10 @@ export const sidecarRouter = router({
   /** A new socket to the same sidecar; every session keeps running */
   retry: publicProcedure.mutation(async () => {
     try {
-      getPtyHost().swapSidecarClient(await reconnectSidecar());
+      const repainted = getPtyHost().swapSidecarClient(await reconnectSidecar());
       logger.info("[Sidecar] Retry: reconnected to the running sidecar");
       markSidecarAnswering();
+      await repainted;
       return { ok: true };
     } catch (err) {
       logger.warn(`[Sidecar] Retry failed: ${err instanceof Error ? err.message : String(err)}`);

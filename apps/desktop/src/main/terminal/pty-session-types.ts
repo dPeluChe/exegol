@@ -28,6 +28,8 @@ export interface Session {
   markerMatchPos: number;
   markerHeldBytes: string;
   shellReadyTimeout: ReturnType<typeof setTimeout> | null;
+  /** Set while Retry rebuilds the model from the ring: output that came after the ring's copy */
+  resyncTail?: string[];
 }
 
 export const MAX_CONCURRENT_SPAWNS = 3;

@@ -10,6 +10,7 @@ import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { readPidFile } from "../terminal/pty-sidecar-discovery";
 import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
+import { readProcessMetrics } from "./process-metrics";
 import { duBytes } from "./storage";
 
 const execFileAsync = promisify(execFile);
@@ -438,23 +439,7 @@ async function getAgentProcessMetrics(
       }),
     );
 
-    // Get metrics for all PIDs in one ps call
-    const pidList = Array.from(allPids).join(",");
-    const { stdout } = await execFileAsync("ps", ["-o", "pid=,pcpu=,rss=", "-p", pidList], {
-      timeout: 3_000,
-    });
-
-    const metricsMap = new Map<number, { cpu: number; memory: number }>();
-    for (const line of stdout.trim().split("\n")) {
-      const parts = line.trim().split(/\s+/);
-      if (parts.length < 3) continue;
-      const pid = parseInt(parts[0] ?? "0", 10);
-      const cpu = parseFloat(parts[1] ?? "0");
-      const rss = parseInt(parts[2] ?? "0", 10) * 1024; // RSS in KB → bytes
-      if (pid > 0) {
-        metricsMap.set(pid, { cpu, memory: rss });
-      }
-    }
+    const metricsMap = await readProcessMetrics(Array.from(allPids));
 
     // Aggregate: for each agent PID, sum shell + its specific children
     const results: { pid: number; cpu: number; memory: number }[] = [];
