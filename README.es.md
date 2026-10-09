@@ -10,16 +10,7 @@ vivo, un solo lugar para ver quién te necesita y herramientas para pasar trabaj
 ![Plataformas](https://img.shields.io/badge/plataformas-macOS%20%7C%20Linux-informational)
 ![Licencia](https://img.shields.io/badge/Licencia-MIT-green)
 
-<!--
-Capturas: guárdalas en docs/assets/screenshots/ con estos nombres y descomenta las líneas de abajo.
-Son las mismas imágenes que usa README.md.
-  workspace.png   espacio de trabajo con dos o tres agentes en paneles divididos, uno esperándote
-  launcher.png    Launch Agent con "Combination" abierto (roles de modelo y una tarjeta de preset)
-  dashboard.png   Dashboard con sesiones fijadas en Watching
-  dictation.png   el overlay de dictado sobre un panel de terminal, con texto visible
-  preview.png     un panel Files con un archivo HTML en Preview
--->
-<!-- ![Agentes en paneles divididos](docs/assets/screenshots/workspace.png) -->
+![Claude Code, Codex y Antigravity lado a lado en un mismo workspace de Exegol](docs/assets/screenshots/workspace.jpg)
 
 ## Qué es
 
@@ -87,10 +78,11 @@ La lista completa está en [docs/GUIDES/FEATURES.md](docs/GUIDES/FEATURES.md) y 
 [docs/GUIDES/KEYBOARD_SHORTCUTS.md](docs/GUIDES/KEYBOARD_SHORTCUTS.md) (en inglés). Las teclas
 están escritas para macOS; en Linux y Windows `Cmd` es `Ctrl+Shift`.
 
-<!-- ![Launch Agent con roles de modelo](docs/assets/screenshots/launcher.png) -->
-<!-- ![Dashboard con sesiones fijadas](docs/assets/screenshots/dashboard.png) -->
-<!-- ![Overlay de dictado](docs/assets/screenshots/dictation.png) -->
-<!-- ![Preview de HTML en un panel Files](docs/assets/screenshots/preview.png) -->
+![Dashboard siguiendo dos sesiones de proyectos distintos](docs/assets/screenshots/dashboard.jpg)
+
+| Modelos de voz locales | Uso de disco | Fuentes de la terminal |
+|---|---|---|
+| ![Settings > Models](docs/assets/screenshots/settings-models.png) | ![Settings > Storage](docs/assets/screenshots/settings-storage.png) | ![Settings > Terminal](docs/assets/screenshots/settings-terminal.png) |
 
 ## CLIs soportados
 

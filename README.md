@@ -10,15 +10,7 @@ who needs you, and tools to hand work between them.
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux-informational)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-<!--
-Screenshots: save them in docs/assets/screenshots/ with these names and uncomment the lines below.
-  workspace.png   workspace with two or three agents in split panes, one waiting on you
-  launcher.png    Launch Agent with "Combination" open (model roles and a preset card)
-  dashboard.png   Dashboard with pinned sessions in Watching
-  dictation.png   the dictation overlay over a terminal pane, words showing
-  preview.png     a Files pane with an HTML file in Preview
--->
-<!-- ![Workspace with agents in split panes](docs/assets/screenshots/workspace.png) -->
+![Claude Code, Codex and Antigravity side by side in one Exegol workspace](docs/assets/screenshots/workspace.jpg)
 
 ## What it is
 
@@ -81,10 +73,11 @@ The full list is in [docs/GUIDES/FEATURES.md](docs/GUIDES/FEATURES.md) and the k
 [docs/GUIDES/KEYBOARD_SHORTCUTS.md](docs/GUIDES/KEYBOARD_SHORTCUTS.md). Keys are written for
 macOS; on Linux and Windows `Cmd` is `Ctrl+Shift`.
 
-<!-- ![Launch Agent with model roles](docs/assets/screenshots/launcher.png) -->
-<!-- ![Dashboard watching pinned sessions](docs/assets/screenshots/dashboard.png) -->
-<!-- ![Dictation overlay](docs/assets/screenshots/dictation.png) -->
-<!-- ![HTML preview in a Files pane](docs/assets/screenshots/preview.png) -->
+![Dashboard watching two sessions from different projects](docs/assets/screenshots/dashboard.jpg)
+
+| Local speech models | Disk usage | Terminal fonts |
+|---|---|---|
+| ![Settings > Models](docs/assets/screenshots/settings-models.png) | ![Settings > Storage](docs/assets/screenshots/settings-storage.png) | ![Settings > Terminal](docs/assets/screenshots/settings-terminal.png) |
 
 ## Supported CLIs
 
