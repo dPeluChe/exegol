@@ -30,6 +30,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Launch Agent: for a CLI with model roles or presets, the Model field starts with a choice, "Single model" or "Combination". Combination shows the presets as cards with what each sets ("sonnet main · opus advisor · haiku subagents"), then the main model and every role field, and "Save as preset"; Single model is the plain model select and clears the roles. The choice is remembered per CLI. Past-session chips also show the session's own name inside its CLI (Claude Code's /rename name or its AI title; Codex, OpenCode, Kilo, Devin, Droid, Gemini and Goose titles), for example "raven · X equal Dev"
 
 ### Fixed
+- Dictation: the log says when Exegol loses or regains the focus during a recording, and which app took it, to track down an Esc that never reached Exegol
 - Dictation: Esc in the main window also reaches the dictation through the main process while recording (it was missed live with the overlay open); an Esc that does not cancel now writes why to the log (phase, IME, open dialog; never the text)
 - Esc in the Settings window, a floating pane or a browser page inside one now cancels a running dictation too (before, only the main window's Esc did). In the main window an open confirm or popover takes Esc first, and the next one cancels
 - The dictation's Insert and Esc keycaps are set apart and look different (Insert in the accent color, Esc plain), so one is not clicked for the other
