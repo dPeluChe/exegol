@@ -5,6 +5,8 @@ export interface ClassifiedInstall {
   method: CliInstallMethod;
   /** The brew formula/cask, npm/pypi package, as the path names it */
   pkg: string | null;
+  /** npm's global prefix this copy lives under: a bare `-g` acts on the npm first on PATH */
+  prefix?: string;
 }
 
 const NPM_PKG = "(@[^/]+/[^/]+|[^/@][^/]*)";
@@ -38,7 +40,11 @@ export function classifyInstall(
   const real = norm(realPath);
   for (const { re, method } of RULES) {
     const m = real.match(re);
-    if (m?.[1]) return { method, pkg: m[1] };
+    if (!m?.[1]) continue;
+    if (method === "npm") {
+      return { method, pkg: m[1], prefix: real.slice(0, real.indexOf("/lib/node_modules/")) };
+    }
+    return { method, pkg: m[1] };
   }
   const onPath = norm(path);
   // Windows npm shims (%APPDATA%\npm\codex.cmd) do not link into node_modules
@@ -59,6 +65,8 @@ export const npmPackageOf = (cliType: string): string | null => {
 
 const q = (p: string) => (/^[\w./~@+-]+$/.test(p) ? p : `'${p.replace(/'/g, "'\\''")}'`);
 
+const npmPrefixArg = ({ prefix }: ClassifiedInstall) => (prefix ? ` --prefix ${q(prefix)}` : "");
+
 /** The command that updates THIS copy: updating another one leaves the running copy old */
 export function updateCommandFor(
   cliType: string,
@@ -73,7 +81,7 @@ export function updateCommandFor(
       case "brew-cask":
         return { command: `brew upgrade --cask ${pkg}`, note: null };
       case "npm":
-        return { command: `npm install -g ${pkg}@latest`, note: null };
+        return { command: `npm install -g${npmPrefixArg(install)} ${pkg}@latest`, note: null };
       case "bun":
         return { command: `bun add -g ${pkg}@latest`, note: null };
       case "pnpm":
@@ -104,7 +112,7 @@ export function uninstallCommandFor(install: ClassifiedInstall, path: string): s
       case "brew-cask":
         return `brew uninstall --cask ${pkg}`;
       case "npm":
-        return `npm uninstall -g ${pkg}`;
+        return `npm uninstall -g${npmPrefixArg(install)} ${pkg}`;
       case "bun":
         return `bun remove -g ${pkg}`;
       case "pnpm":
@@ -120,11 +128,20 @@ export function uninstallCommandFor(install: ClassifiedInstall, path: string): s
   return `rm ${q(path)}`;
 }
 
-/** The session's CLI is another version after it exited: it updated itself (codex: "Update ran
- *  successfully! Please restart Codex.") */
-export function selfUpdatedVersion(
-  recorded: string | null | undefined,
-  current: string | null | undefined,
-): string | null {
-  return recorded && current && recorded !== current ? current : null;
+/** started_at is whole seconds: a binary changed within this window may predate the session */
+const SELF_UPDATE_MARGIN_MS = 2_000;
+
+/** The session's CLI updated itself (codex: "Update ran successfully! Please restart Codex."):
+ *  a clean exit, another version, and the running binary rewritten after the session started.
+ *  Without the last two an unrelated upgrade followed by `/exit` would look like one */
+export function selfUpdatedVersion(s: {
+  exitCode: number;
+  recorded: string | null | undefined;
+  current: string | null | undefined;
+  binaryChangedAtMs: number | null;
+  startedAtMs: number | null;
+}): string | null {
+  if (s.exitCode !== 0 || !s.recorded || !s.current || s.recorded === s.current) return null;
+  if (s.binaryChangedAtMs == null || s.startedAtMs == null) return null;
+  return s.binaryChangedAtMs > s.startedAtMs + SELF_UPDATE_MARGIN_MS ? s.current : null;
 }

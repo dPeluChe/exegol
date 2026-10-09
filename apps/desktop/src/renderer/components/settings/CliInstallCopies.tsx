@@ -1,8 +1,5 @@
-import { type CliInstallCopy, INSTALL_METHOD_LABEL } from "@exegol/shared";
+import { type CliInstallCopy, describeInstallCopy as describe } from "@exegol/shared";
 import { CopyCommand } from "../common/CopyCommand";
-
-const describe = (c: CliInstallCopy) =>
-  [INSTALL_METHOD_LABEL[c.method], c.version && `v${c.version}`].filter(Boolean).join(" · ");
 
 /** How this CLI is installed. With 2+ copies on PATH: which one runs and how to remove the
  *  others (an update can land in a copy that never runs). Commands are shown, never run */

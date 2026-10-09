@@ -64,7 +64,10 @@ export function TerminalScrollback({
   }, [agent, paneId, pending, resume]);
 
   const canResume = agent ? resumableCliTypes.has(agent.cliType) : false;
-  const selfUpdate = useCliSelfUpdateStore((s) => s.byAgent[agentId]);
+  const updated = useCliSelfUpdateStore((s) => s.byAgent[agentId]);
+  // A failed or crashed session keeps its exit card, whatever the CLI version did
+  const selfUpdate =
+    agent && agent.status !== "failed" && agent.status !== "crashed" ? updated : undefined;
 
   return (
     <div className="relative flex h-full flex-col">

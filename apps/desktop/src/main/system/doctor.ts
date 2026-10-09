@@ -9,7 +9,7 @@ import {
   type DoctorCheck,
   type DoctorReport,
   type DoctorStatus,
-  INSTALL_METHOD_LABEL,
+  describeInstallCopy,
 } from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
@@ -125,8 +125,7 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
       // self-update loops: the update lands in one path while the other
       // wins PATH resolution (live incidents 2026-07-09, 2026-10-09).
       const duplicated = copies.length > 1;
-      const label = (c: CliInstallCopy) =>
-        `${c.path} (${[INSTALL_METHOD_LABEL[c.method], c.version && `v${c.version}`].filter(Boolean).join(", ")})`;
+      const label = (c: CliInstallCopy) => `${c.path} (${describeInstallCopy(c)})`;
       let detail: string;
       if (duplicated) {
         const [first, ...rest] = copies.map(label);

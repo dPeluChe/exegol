@@ -423,6 +423,10 @@ export interface CliInstallCopy {
   uninstallCommand: string;
 }
 
+/** "npm global · v0.162.1", for Settings > CLIs and Doctor */
+export const describeInstallCopy = (c: Pick<CliInstallCopy, "method" | "version">): string =>
+  [INSTALL_METHOD_LABEL[c.method], c.version && `v${c.version}`].filter(Boolean).join(" · ");
+
 /** Every copy of a CLI on PATH, in PATH order: the first one is what runs */
 export interface CliInstallInfo {
   cliType: string;

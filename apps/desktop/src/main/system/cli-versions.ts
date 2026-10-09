@@ -51,12 +51,22 @@ function runVersion(binPath: string): Promise<string | null> {
   });
 }
 
+/** `where` ends lines with CRLF: a kept \r breaks stat and realpath */
+export const parsePathHits = (stdout: string): string[] => [
+  ...new Set(
+    stdout
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean),
+  ),
+];
+
 /** All PATH hits for a command (`which -a` / `where` both list every match). */
 export function findAllOnPath(command: string): Promise<string[]> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which -a "${command}"`;
   return new Promise((resolve) =>
     exec(cmd, { env: shellEnv(), timeout: 3_000 }, (err, stdout) =>
-      resolve(err ? [] : [...new Set(stdout.trim().split("\n").filter(Boolean))]),
+      resolve(err ? [] : parsePathHits(stdout)),
     ),
   );
 }
@@ -146,16 +156,36 @@ export async function allCliInstalls(): Promise<CliInstallInfo[]> {
   return infos.filter((i) => i.copies.length > 0);
 }
 
-/** The installed version of a provider's CLI (the copy that runs). `fresh` re-runs `--version`:
- *  right after an exit the binary may have just been replaced */
-export async function installedCliVersion(cliType: string, fresh = false): Promise<string | null> {
-  return (await installedCli(cliType, fresh)).version;
+/** The installed version of a provider's CLI (the copy that runs) */
+export async function installedCliVersion(cliType: string): Promise<string | null> {
+  return (await installedCli(cliType)).version;
+}
+
+/** Only the copy that runs, its version read fresh, and when its binary changed. ctime, not
+ *  mtime: npm extracts with the tarball's fixed 1985 mtime, the write still bumps ctime */
+export async function runningCliBinary(
+  cliType: string,
+): Promise<{ version: string | null; changedAtMs: number } | null> {
+  const provider = getProviderRegistry().get(cliType);
+  if (!provider || cliType === "shell") return null;
+  for (const cmd of providerBinaries(provider.command)) {
+    for (const path of await findAllOnPath(cmd)) {
+      let changedAtMs: number;
+      try {
+        changedAtMs = statSync(realpathSync(path)).ctimeMs;
+      } catch {
+        continue;
+      }
+      return { version: await readBinaryVersion(path, true), changedAtMs };
+    }
+  }
+  return null;
 }
 
 /** The running copy's version, how it was installed and when its binary was written (an update
  *  rewrites it, or moves the symlink to a new versions/ file; stat follows the link) */
-async function installedCli(cliType: string, fresh = false) {
-  const [first] = await cliInstalls(cliType, fresh);
+async function installedCli(cliType: string) {
+  const [first] = await cliInstalls(cliType);
   if (!first) return { version: null, installedAt: null, copy: null };
   let installedAt: number | null = null;
   try {

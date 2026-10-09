@@ -423,7 +423,7 @@ export function createSpawnCallbacks(
       const stoppedByUser = maps.stopRequested.delete(agent.id);
       finalizeAgentStatus(db, agent, exitCode, stoppedByUser);
       if (!isShell && !stoppedByUser && !agent.launchedInShell) {
-        detectCliSelfUpdate(db, agent).catch(() => {});
+        detectCliSelfUpdate(db, agent, exitCode).catch(() => {});
       }
 
       // T145: dead agents must not stay live credentials — revoke the MCP

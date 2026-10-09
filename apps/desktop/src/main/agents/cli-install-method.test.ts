@@ -27,7 +27,7 @@ describe("classifyInstall", () => {
       "codex",
       "/opt/homebrew/bin/codex",
       "/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js",
-      { method: "npm", pkg: "@openai/codex" },
+      { method: "npm", pkg: "@openai/codex", prefix: "/opt/homebrew" },
     ],
     [
       "crush",
@@ -46,7 +46,7 @@ describe("classifyInstall", () => {
       "opencode",
       "/opt/homebrew/bin/opencode",
       "/opt/homebrew/lib/node_modules/opencode-ai/bin/opencode",
-      { method: "npm", pkg: "opencode-ai" },
+      { method: "npm", pkg: "opencode-ai", prefix: "/opt/homebrew" },
     ],
     [
       "opencode",
@@ -64,7 +64,11 @@ describe("classifyInstall", () => {
       "claude-code",
       "/Users/me/.nvm/versions/node/v22.1.0/bin/claude",
       "/Users/me/.nvm/versions/node/v22.1.0/lib/node_modules/@anthropic-ai/claude-code/cli.js",
-      { method: "npm", pkg: "@anthropic-ai/claude-code" },
+      {
+        method: "npm",
+        pkg: "@anthropic-ai/claude-code",
+        prefix: "/Users/me/.nvm/versions/node/v22.1.0",
+      },
     ],
     [
       "codex",
@@ -114,6 +118,13 @@ describe("updateCommandFor", () => {
     expect(updateCommandFor("codex", { method: "npm", pkg: "@openai/codex" }, mac).command).toBe(
       "npm install -g @openai/codex@latest",
     );
+    expect(
+      updateCommandFor(
+        "codex",
+        { method: "npm", pkg: "@openai/codex", prefix: "/Users/me/.nvm/versions/node/v22.1.0" },
+        mac,
+      ).command,
+    ).toBe("npm install -g --prefix /Users/me/.nvm/versions/node/v22.1.0 @openai/codex@latest");
     expect(updateCommandFor("aider", { method: "uv", pkg: "aider-chat" }, mac).command).toBe(
       "uv tool upgrade aider-chat",
     );
@@ -141,6 +152,12 @@ describe("uninstallCommandFor", () => {
     expect(uninstallCommandFor({ method: "npm", pkg: "@openai/codex" }, "/x")).toBe(
       "npm uninstall -g @openai/codex",
     );
+    expect(
+      uninstallCommandFor(
+        { method: "npm", pkg: "@openai/codex", prefix: "/Users/a b/.npm-global" },
+        "/x",
+      ),
+    ).toBe("npm uninstall -g --prefix '/Users/a b/.npm-global' @openai/codex");
     expect(uninstallCommandFor({ method: "brew-cask", pkg: "codex" }, "/x")).toBe(
       "brew uninstall --cask codex",
     );
@@ -153,13 +170,45 @@ describe("uninstallCommandFor", () => {
   });
 });
 
+describe("classifyInstall npm prefix", () => {
+  it("is the realpath part before /lib/node_modules/", () => {
+    expect(
+      classifyInstall(
+        "codex",
+        "/Users/me/.nvm/versions/node/v22.1.0/bin/codex",
+        "/Users/me/.nvm/versions/node/v22.1.0/lib/node_modules/@openai/codex/bin/codex.js",
+        HOME,
+      ),
+    ).toEqual({
+      method: "npm",
+      pkg: "@openai/codex",
+      prefix: "/Users/me/.nvm/versions/node/v22.1.0",
+    });
+  });
+});
+
 describe("selfUpdatedVersion", () => {
-  it("is the new version when it changed since spawn", () => {
-    expect(selfUpdatedVersion("0.161.0", "0.162.1")).toBe("0.162.1");
+  const base = {
+    exitCode: 0,
+    recorded: "0.161.0",
+    current: "0.162.1",
+    startedAtMs: 1_000_000,
+    binaryChangedAtMs: 1_060_000,
+  };
+  it("is the new version after a clean exit with the binary rewritten during the session", () => {
+    expect(selfUpdatedVersion(base)).toBe("0.162.1");
+  });
+  it("is null for a non-zero exit (a crash is never an update)", () => {
+    expect(selfUpdatedVersion({ ...base, exitCode: 1 })).toBeNull();
+  });
+  it("is null when the binary changed before the session (an unrelated upgrade, then /exit)", () => {
+    expect(selfUpdatedVersion({ ...base, binaryChangedAtMs: 900_000 })).toBeNull();
+    expect(selfUpdatedVersion({ ...base, binaryChangedAtMs: 1_001_500 })).toBeNull();
+    expect(selfUpdatedVersion({ ...base, binaryChangedAtMs: null })).toBeNull();
   });
   it("is null when unchanged or unknown", () => {
-    expect(selfUpdatedVersion("0.162.1", "0.162.1")).toBeNull();
-    expect(selfUpdatedVersion(null, "0.162.1")).toBeNull();
-    expect(selfUpdatedVersion("0.162.1", null)).toBeNull();
+    expect(selfUpdatedVersion({ ...base, current: "0.161.0" })).toBeNull();
+    expect(selfUpdatedVersion({ ...base, recorded: null })).toBeNull();
+    expect(selfUpdatedVersion({ ...base, current: null })).toBeNull();
   });
 });
