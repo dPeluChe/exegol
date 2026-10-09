@@ -357,7 +357,7 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 
   // Ended and still not in the store once its own project's list landed: archived or closed
   const isStaleFromPreviousSession = useAgentStore(
-    (s) => agent !== undefined && isPaneAgentStale(agent, s),
+    (s) => agent != null && isPaneAgentStale(agent, s),
   );
 
   useEffect(() => {

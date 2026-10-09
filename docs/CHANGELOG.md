@@ -13,6 +13,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Split with Terminal: a pane's right-click menu opens a plain shell beside it, in the folder that pane works in: a shell's current folder, an agent's worktree, the folder of the file open in Files, or the project root. Cmd+Y (Ctrl+Shift+Y on Linux and Windows) does the same for the focused pane, or opens the shell in it when it is an empty pane; the command palette has "New Terminal in Split" and, on an empty pane, "Open Terminal Here"
 - Quick terminal from the launcher: press T in an empty pane (nothing typed into a field) to open a terminal in the selected "Run in" folder; the Terminal button shows the key
 
+### Fixed
+- A pane whose session was deleted (a closed shell, for example) showed "Cannot read properties of null" after a restart instead of its launcher; since 0.5.17
+
 ## [0.5.17] — 2026-10-08 — Model roles and presets, sidebar views, HTML preview, dictation pauses music, title bar widgets
 
 ### Added
