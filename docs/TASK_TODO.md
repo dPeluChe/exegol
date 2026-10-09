@@ -206,6 +206,25 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T202: Sidecar flow control and lighter reattach `added: 2026-10-09`
+**Priority**: P1 | **Effort**: M | **Source**: the 2026-10-09 log audit after every terminal ignored
+the keyboard during a `spark pull all` (only a reboot fixed it). Needs a `SIDECAR_VERSION` bump:
+installing it ends every live terminal (sessions return crashed, history kept, resumable), so ship
+it when the user has cleaned up to the sessions they need and says go.
+
+1. Pause per session: `OutputGate` in `pty-sidecar-entry.ts` pauses ALL PTYs once main's socket
+   queue passes 16 KB, so one flooding terminal freezes every session's echo. Pause only the
+   session(s) whose output fills the queue
+2. Sequence numbers on output frames so the #346 Retry socket swap is exact (today a few ms of
+   output at the swap can repeat or drop)
+3. Lighter reattach: 9 of 20 Claude rings were full 8 MB (104 MB as JSON, 5.5 s for 35 sessions,
+   shells queued behind them). Cap the hidden-session snapshot (about 1 MB of tail, or from the
+   last screen clear) and reattach hidden panes lazily
+4. Sidecar logs to `sidecar.log` (empty today): gate pauses over 1 s, its own exit cause and
+   signal, the pid file state at discovery
+5. Verify live: a heavy command in one terminal, the others keep typing; the health watch (#346)
+   stays quiet
+
 ### T201: Local voice dictation `added: 2026-10-07`
 **Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-07. Speech to text that runs
 on the machine (no audio leaves it), typed into the focused pane.

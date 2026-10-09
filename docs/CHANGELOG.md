@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.18] — 2026-10-09 — Split with Terminal, terminals that stop answering, idle Claude sessions
+
 ### Added
 - Terminals that stop answering are now noticed: if keystrokes get no reply from the terminal process for a few seconds, Exegol checks on it and shows "Terminals are not responding" with **Retry** (reconnects to the same terminal process, every session keeps running) and **Restart terminals** (last resort, after a confirmation: every live session ends, Exegol restarts and the sessions come back as crashed with their history, ready to resume). The banner goes away by itself once the terminals answer again. Keys typed during the stall are not re-sent. The log now records the stall, how long it lasted, the terminal process's CPU and memory, and when Exegol's own main process was blocked for over a second
 - Split with Terminal: a pane's right-click menu opens a plain shell beside it, in the folder that pane works in: a shell's current folder, an agent's worktree, the folder of the file open in Files, or the project root. Cmd+Y (Ctrl+Shift+Y on Linux and Windows) does the same for the focused pane, or opens the shell in it when it is an empty pane; the command palette has "New Terminal in Split" and, on an empty pane, "Open Terminal Here"
