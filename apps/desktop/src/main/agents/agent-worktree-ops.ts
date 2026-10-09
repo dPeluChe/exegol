@@ -52,6 +52,13 @@ export async function cleanupWorktree(
   const wt = worktrees.get(agentId);
   const rust = coreRust;
   if (!wt || !rust) return;
+  // A shell only borrows a worktree and its row is deleted on close (agents are archived, so no
+  // row means a shell): it never saves or removes it; the daily sweep handles a real orphan
+  const agent = getAgent(db, agentId);
+  if (!agent || agent.cliType === "shell") {
+    worktrees.delete(agentId);
+    return;
+  }
   // findReusableWorktree lets agents share a branch's worktree; never pull it out from under one
   if (countLiveAgentsInWorktree(db, wt.dbId, agentId) > 0) {
     logger.info(`[AgentManager] Worktree '${wt.worktreeName}' still in use — keeping it`);
@@ -60,14 +67,13 @@ export async function cleanupWorktree(
   }
   try {
     if (getAppSettings(db).saveWorktreeWork) {
-      const agent = getAgent(db, agentId);
-      const alias = agent?.alias || agent?.cliType || "agent";
+      const alias = agent.alias || agent.cliType;
       const outcome = await saveWorktreeWork({
         dir: wt.worktreePath,
         expectedBranch: getWorktreeByAgentId(db, agentId)?.branchName ?? null,
         alias,
       });
-      announceSave(outcome, { alias, agentId, projectId: agent?.projectId });
+      announceSave(outcome, { alias, agentId, projectId: agent.projectId });
       // Not saved (push failed, secret, hook...): the worktree is the only copy, keep it
       if (outcome.status === "refused") {
         worktrees.delete(agentId);

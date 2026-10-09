@@ -4,6 +4,7 @@ import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
 import { cyclePane, focusActivePane, paneRoot } from "../lib/pane-focus";
+import { terminalForActivePane } from "../lib/split-terminal";
 import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -83,6 +84,13 @@ export function useHotkeys() {
       if (key === "d") {
         e.preventDefault();
         useWorkspaceStore.getState().splitFocusedPane("horizontal");
+        return;
+      }
+
+      // Cmd+Y: a shell beside the focused pane, in its folder (in it when it is an empty launcher)
+      if (key === "y" && !chord.shift) {
+        e.preventDefault();
+        void terminalForActivePane();
         return;
       }
 

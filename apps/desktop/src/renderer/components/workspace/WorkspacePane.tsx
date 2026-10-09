@@ -22,6 +22,7 @@ import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
+import { splitWithTerminal } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
 import {
@@ -105,16 +106,10 @@ function PaneToolbar({
   const addCompanion = useCallback(
     async (direction: "horizontal" | "vertical") => {
       setAddOpen(false);
-      const id = nanoid(8);
-      if (companion === "browser") {
-        const url = await projectBrowserUrl(projectId, project?.path);
-        splitPane(tabId, paneId, direction, "browser", { id, url });
-      } else if (companion === "terminal" && projectId) {
-        splitPane(tabId, paneId, direction, "empty", { id });
-        await spawnShellIntoPane(projectId, id).catch((err) =>
-          console.error("[PaneToolbar] Shell spawn failed:", err),
-        );
-      }
+      if (companion === "terminal") return splitWithTerminal(tabId, paneId, direction);
+      if (companion !== "browser") return;
+      const url = await projectBrowserUrl(projectId, project?.path);
+      splitPane(tabId, paneId, direction, "browser", { id: nanoid(8), url });
       dispatchRefitTerminals();
     },
     [companion, projectId, project?.path, splitPane, tabId, paneId],
@@ -623,6 +618,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         onSplit={(dir, newType) =>
           useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty")
         }
+        onSplitTerminal={() => void splitWithTerminal(tabId, paneId)}
         onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}
         onFloat={

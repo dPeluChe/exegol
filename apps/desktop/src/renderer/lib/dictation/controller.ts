@@ -17,6 +17,7 @@ import { useToastStore } from "../../stores/toasts";
 import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import { pasteToAgent, submitToAgent } from "../agent-input";
 import { isClaudeQuestion } from "../claude-question";
+import { focusedField } from "../focused-field";
 import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
 import { type Capture, startCapture } from "./capture";
@@ -65,18 +66,6 @@ export const currentAnalyser = (): AnalyserNode | null => run?.capture?.analyser
 
 const store = () => useDictationStore.getState();
 const toast = useToastStore.getState;
-
-/** The app's own text input with the focus (not a terminal's or Monaco's hidden textarea) */
-function focusedField(): HTMLElement | null {
-  const el = document.activeElement;
-  if (!(el instanceof HTMLElement) || el.closest(".xterm, .monaco-editor")) return null;
-  if (el instanceof HTMLTextAreaElement) return el.readOnly || el.disabled ? null : el;
-  if (el instanceof HTMLInputElement) {
-    const textual = ["text", "search", "url", "email", ""].includes(el.type);
-    return textual && !el.readOnly && !el.disabled ? el : null;
-  }
-  return el.isContentEditable ? el : null;
-}
 
 /** Dashboard: the watched session whose mirror has the focus, and its pane in its project */
 function focusedMirror(): FocusSnapshot["mirror"] {
