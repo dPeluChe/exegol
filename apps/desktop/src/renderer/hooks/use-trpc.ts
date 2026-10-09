@@ -110,7 +110,7 @@ export function useAgents(projectId: string | null) {
 export function useAgent(id: string | null) {
   return useQuery({
     queryKey: ["agent", id],
-    queryFn: () => trpcInvoke<Agent>("agents.get", { id }),
+    queryFn: () => trpcInvoke<Agent | null>("agents.get", { id }),
     enabled: !!id,
     refetchInterval: 30_000, // Fallback only — push events (T17) handle real-time updates
     staleTime: 10_000,

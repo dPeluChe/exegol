@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- A pane whose session was deleted (a closed shell, for example) showed "Cannot read properties of null" after a restart instead of its launcher; since 0.5.17
+
 ## [0.5.17] — 2026-10-08 — Model roles and presets, sidebar views, HTML preview, dictation pauses music, title bar widgets
 
 ### Added
