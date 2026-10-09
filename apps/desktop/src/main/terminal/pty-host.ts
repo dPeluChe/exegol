@@ -186,8 +186,11 @@ export class PtyHost {
     if (pending) {
       this.pendingSizes.delete(id);
       const kind = { tui: options?.tui ?? false, alternateScreen: emulator.alternateScreen };
-      if (awaitsRepaint(emulator.size, pending, kind)) repainted = this.waitForRepaint(id);
+      const repaint = awaitsRepaint(emulator.size, pending, kind);
+      if (repaint) repainted = this.waitForRepaint(id);
       this.resize(id, pending.cols, pending.rows);
+      // The PTY may already be at this size (a stale saved grid): no SIGWINCH, no repaint
+      if (repaint) this.redraw(id);
       broadcast("terminal:resized", id, pending.cols, pending.rows);
     }
     return { snapshot, fetchMs: fetched - started, parseMs: parsed - fetched, repainted };

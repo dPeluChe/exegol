@@ -96,13 +96,14 @@ export function setTrayRecording(label: string | null): void {
 
 export function initTray(): void {
   // Packaged: shipped via extraResources; dev: __dirname is out/main
+  const mac = process.platform === "darwin";
   const iconPath = app.isPackaged
-    ? join(process.resourcesPath, "tray-icon.png")
-    : join(__dirname, "../../src/resources/build/icons/icon.png");
-  const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
-  if (process.platform === "darwin") {
-    icon.setTemplateImage(true);
-  }
+    ? join(process.resourcesPath, mac ? "trayTemplate.png" : "tray-icon.png")
+    : join(__dirname, "../../src/resources/build/icons", mac ? "trayTemplate.png" : "icon.png");
+  // The template's @2x sibling loads with it; the color icon is scaled down
+  const loaded = nativeImage.createFromPath(iconPath);
+  const icon = mac ? loaded : loaded.resize({ width: 18, height: 18 });
+  if (mac) icon.setTemplateImage(true);
 
   tray = new Tray(icon);
   refreshTray();

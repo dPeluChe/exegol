@@ -69,6 +69,9 @@ const config: Configuration = {
       filter: ["*.node", "index.js", "index.d.ts", "package.json"],
     },
     { from: "src/resources/build/icons/icon.png", to: "tray-icon.png" },
+    // macOS menu bar: a template image is drawn from its alpha only; the app icon is an opaque square
+    { from: "src/resources/build/icons/trayTemplate.png", to: "trayTemplate.png" },
+    { from: "src/resources/build/icons/trayTemplate@2x.png", to: "trayTemplate@2x.png" },
     // T155.6: `exegol` CLI opener script, symlinked onto PATH via the app menu
     {
       from: "resources/bin",
