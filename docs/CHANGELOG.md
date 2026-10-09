@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Codex sessions failed to start (exit 1 at once) after the Codex app rewrote `~/.codex/config.toml`: Exegol added its MCP entry again on every launch and Codex refused the duplicate. Exegol now keeps exactly one entry and removes the copies, wherever the Codex app moved them
+
 ## [0.5.18] — 2026-10-09 — Split with Terminal, terminals that stop answering, idle Claude sessions
 
 ### Added
