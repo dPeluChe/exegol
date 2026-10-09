@@ -31,6 +31,7 @@ import { scoringRouter } from "./procedures/scoring";
 import { scrollbackRouter } from "./procedures/scrollback";
 import { searchRouter } from "./procedures/search";
 import { settingsRouter } from "./procedures/settings";
+import { sidecarRouter } from "./procedures/sidecar";
 import { skillInstallerRouter } from "./procedures/skill-installer";
 import { skillsRouter } from "./procedures/skills";
 import { storageRouter } from "./procedures/storage";
@@ -79,6 +80,7 @@ export const appRouter = router({
   dictation: dictationRouter,
   storage: storageRouter,
   ide: ideRouter,
+  sidecar: sidecarRouter,
 });
 
 export type AppRouter = typeof appRouter;

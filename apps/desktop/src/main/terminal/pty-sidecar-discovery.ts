@@ -1,6 +1,6 @@
 // Sidecar discovery: find running sidecar, or spawn a new one.
 
-import { spawn as cpSpawn } from "node:child_process";
+import { spawn as cpSpawn, execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -12,7 +12,9 @@ import {
   unlinkSync,
 } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { LOG_DIR, logger } from "../lib/logger";
+import { withTimeout } from "../lib/timeout";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
@@ -166,4 +168,51 @@ export async function ensureSidecar(): Promise<SidecarClient> {
   }
 
   return client;
+}
+
+/** Retry: a fresh socket to the sidecar already running. Never spawns one (that ends every
+ *  session); dropping the old socket also lets the sidecar resume PTYs it paused for it */
+export async function reconnectSidecar(): Promise<SidecarClient> {
+  const pidFile = readPidFile();
+  if (!pidFile || !isProcessAlive(pidFile.pid)) throw new Error("No sidecar is running");
+  const client = new SidecarClient();
+  try {
+    await client.connect(pidFile.sock);
+    const ping = await withTimeout(client.ping(), 5_000, "Sidecar ping");
+    if (ping.version !== SIDECAR_VERSION) throw new Error("Sidecar version changed");
+    return client;
+  } catch (err) {
+    client.disconnect();
+    throw err;
+  }
+}
+
+/** The pid file's process, if it still runs our sidecar entry (a pid can be recycled) */
+async function runsSidecar(pid: number): Promise<boolean> {
+  try {
+    const { stdout } = await promisify(execFile)("ps", ["-o", "args=", "-p", String(pid)], {
+      timeout: 3_000,
+    });
+    return stdout.includes(SIDECAR_ENTRY);
+  } catch {
+    return false;
+  }
+}
+
+/** Restart terminals: what `kill:sidecar` does, from the app. Asks first, then signals; every
+ *  PTY it holds ends. The next ensureSidecar spawns a fresh one */
+export async function stopSidecarProcess(client: SidecarClient | null): Promise<void> {
+  const pidFile = readPidFile();
+  if (client) await withTimeout(client.shutdown(), 1_000, "Sidecar shutdown").catch(() => {});
+  client?.disconnect();
+  if (pidFile && isProcessAlive(pidFile.pid) && (await runsSidecar(pidFile.pid))) {
+    process.kill(pidFile.pid, "SIGTERM");
+    await waitForExit(pidFile.pid);
+    if (isProcessAlive(pidFile.pid)) process.kill(pidFile.pid, "SIGKILL");
+  }
+  try {
+    unlinkSync(SIDECAR_PID_PATH);
+  } catch {
+    /* */
+  }
 }

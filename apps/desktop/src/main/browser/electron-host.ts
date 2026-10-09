@@ -20,6 +20,7 @@ import {
 } from "../files-preview/preview-host";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { withTimeout } from "../lib/timeout";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getNotificationBus } from "../notifications/bus";
 import { getProjectPorts } from "../system/ports";
@@ -69,21 +70,8 @@ const registrationWaiters = new Map<string, () => void>();
 const pendingOpens = new Map<string, (r: { paneId?: string; error?: string }) => void>();
 let dbRef: Database.Database | null = null;
 
-function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new ExegolToolError(`${what} timed out`, -32027)), ms);
-    p.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      },
-    );
-  });
-}
+const toolTimeout = <T>(p: Promise<T>, ms: number, what: string): Promise<T> =>
+  withTimeout(p, ms, () => new ExegolToolError(`${what} timed out`, -32027));
 
 const projectSession = (projectId: string) => session.fromPartition(browserPartitionFor(projectId));
 
@@ -357,7 +345,7 @@ export async function insertTextInBrowserPane(
   if (!started || originOf(started) === null || originOf(started) !== originOf(url)) return false;
   if (!/^https?:/i.test(url) || isOutsideAllowlist(url, allowedHostsOf(r.projectId))) return false;
   wc.focus();
-  const editable = await withTimeout(
+  const editable = await toolTimeout(
     wc.executeJavaScriptInIsolatedWorld(AGENT_WORLD_ID, [{ code: EDITABLE_FOCUS }], true),
     ISOLATED_TIMEOUT_MS,
     "The page check",
@@ -374,13 +362,13 @@ function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
     getUrl: () => wc.getURL(),
     getTitle: () => wc.getTitle(),
     runIsolated: (code) =>
-      withTimeout(
+      toolTimeout(
         wc.executeJavaScriptInIsolatedWorld(AGENT_WORLD_ID, [{ code }], true),
         ISOLATED_TIMEOUT_MS,
         "The page script",
       ),
     runMain: (code, timeoutMs) =>
-      withTimeout(wc.executeJavaScript(code, true), timeoutMs, "browser_eval"),
+      toolTimeout(wc.executeJavaScript(code, true), timeoutMs, "browser_eval"),
     loadUrl: async (url) => {
       try {
         await wc.loadURL(url);
@@ -428,7 +416,7 @@ function livePanes(projectId: string): BrowserPaneHandle[] {
 function waitForRegistration(paneId: string, projectId: string): Promise<BrowserPaneHandle> {
   const now = livePanes(projectId).find((p) => p.paneId === paneId);
   if (now) return Promise.resolve(now);
-  return withTimeout(
+  return toolTimeout(
     new Promise<BrowserPaneHandle>((resolve) => {
       registrationWaiters.set(paneId, () => {
         const p = livePanes(projectId).find((x) => x.paneId === paneId);
@@ -448,7 +436,7 @@ async function openPane(req: { projectId: string; agentId: string; url: string }
     throw new ExegolToolError("Exegol's window is closed: no browser pane can open", -32603);
   }
   const requestId = randomUUID();
-  const result = await withTimeout(
+  const result = await toolTimeout(
     new Promise<{ paneId?: string; error?: string }>((resolve) => {
       pendingOpens.set(requestId, resolve);
       win.webContents.send("browser:open-request", { requestId, ...req });

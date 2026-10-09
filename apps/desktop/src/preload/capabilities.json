@@ -345,6 +345,11 @@
       "report",
       "worktreeSizes"
     ],
+    "sidecar": [
+      "health",
+      "restart",
+      "retry"
+    ],
     "dictation": [
       "cancel",
       "clearHistory",
@@ -428,6 +433,7 @@
     "dictation:partial",
     "dictation:engine",
     "dictation:key",
-    "dictation:done"
+    "dictation:done",
+    "sidecar:health"
   ]
 }

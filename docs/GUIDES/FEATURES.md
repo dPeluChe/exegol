@@ -56,7 +56,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   Amp, Kiro, Kilo Code, Crush, Factory Droid and a plain shell, plus your own custom CLI.
   Settings enables, configures or installs each one.
 - **Sessions that survive**: terminals run in a detached PTY process, so a reload, a crash or an
-  update does not kill your agents; the app reattaches and replays the screen.
+  update does not kill your agents; the app reattaches and replays the screen. If the terminals
+  stop answering, a banner offers Retry (reconnect, sessions keep running) and Restart terminals
+  (sessions end and come back as crashed, resumable).
 - **Live status**: running, waiting on you, done, failed, crashed. Claude Code reports it through
   hooks; the others through output parsing. A pulsing dot on the tab shows who is busy.
 - **Attention**: agents waiting on you show in the sidebar (Needs attention), the title bar queue
