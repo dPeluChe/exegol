@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a change or a new feature
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [FEATURES.md](https://github.com/dPeluChe/exegol/blob/main/docs/GUIDES/FEATURES.md)
+        and the [task board](https://github.com/dPeluChe/exegol/blob/main/docs/TASK_TODO.md)
+        first: it may exist or be planned. En español también está bien.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How it could work. Screenshots or sketches help.
+    validations:
+      required: true
+  - type: input
+    id: cli
+    attributes:
+      label: Agent CLIs involved, if any
+      placeholder: "Claude Code, OpenCode..."
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I would like to open a PR for this (see CONTRIBUTING.md)
