@@ -163,6 +163,26 @@ describe("PtyHost reattach at the pane's size", () => {
     expect(repainted).toBe(true);
   });
 
+  it("jiggles a reflowed TUI: the PTY may already be at the pane's size, so no SIGWINCH", async () => {
+    const resize = vi.fn(async (_id: string, _cols: number, _rows: number) => {});
+    const client = {
+      // Empty ring: nothing for xterm to parse under fake timers
+      ...(sidecarWithOutput(async () => "").client as object),
+      resize,
+    } as unknown as SidecarClient;
+    const host = new PtyHost();
+    host.connectToSidecar(client);
+    host.resize("j", 140, 40);
+    vi.useFakeTimers();
+    await host.reattachSession("j", { cols: 100, rows: 30 }, callbacks, { tui: true });
+    expect(resize.mock.calls.map((c) => [c[1], c[2]])).toEqual([
+      [140, 40],
+      [139, 40],
+    ]);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(resize).toHaveBeenLastCalledWith("j", 140, 40);
+  });
+
   it("a CLI that never repaints is shown at the cap", async () => {
     // Empty ring: nothing for xterm to parse under fake timers
     const { client } = sidecarWithOutput(async () => "");
