@@ -108,6 +108,7 @@ message from the current diff via Claude Haiku (reuses Anthropic API key).
 - **Discovery**: PID file at `~/.exegol/pty-sidecar.pid`, reuse existing or spawn new
 - **Fallback**: if sidecar fails, falls back to legacy per-session subprocess mode transparently
 - **Reconnection**: on app restart, `reattachSidecarAgents()` rebuilds callbacks + replays ring buffer snapshot
+- **Health watch** (`sidecar-health-watch.ts`, pure parts in `sidecar-health.ts`): a write/resize/kill unanswered 3 s or failed starts pings (0, 2, 5, 10 s backoff), logs the stall with the sidecar's CPU/RSS and main's event-loop lag, pushes `sidecar:health`; the banner's Retry swaps in a new socket to the same sidecar (`reconnectSidecar`), Restart terminals stops it (`stopSidecarProcess`) and relaunches into crash recovery
 
 ### Agent lifecycle
 1. User clicks agent in launcher/grid/quick-bar (all read from provider registry)

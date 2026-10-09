@@ -28,6 +28,7 @@ import type { SidecarClient } from "./pty-sidecar-client";
 import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
 import { awaitsRepaint, REPAINT_CAP_MS, REPAINT_QUIET_MS } from "./reattach-repaint";
 import { readScreenDialog } from "./screen-dialog";
+import { trackSidecarCall } from "./sidecar-health-watch";
 
 export type { SessionCallbacks } from "./pty-session-types";
 
@@ -95,6 +96,28 @@ export class PtyHost {
     });
 
     logger.info("[PtyHost] Connected to sidecar");
+  }
+
+  /** Retry: the new client takes over before the old socket closes, so no output is missed */
+  swapSidecarClient(client: SidecarClient): void {
+    const old = this.sidecarClient;
+    this.connectToSidecar(client);
+    old?.disconnect();
+  }
+
+  getSidecarClient(): SidecarClient | null {
+    return this.sidecarClient;
+  }
+
+  /** The calls a keystroke or pane depends on: the health watch sees each one */
+  private callSidecar(
+    method: string,
+    id: string,
+    call: (client: SidecarClient) => Promise<void>,
+  ): void {
+    const client = this.sidecarClient;
+    if (!client) return;
+    trackSidecarCall(method, id, call(client), () => this.sidecarClient === client);
   }
 
   disconnectSidecar(): void {
@@ -304,7 +327,7 @@ export class PtyHost {
       return;
     }
     if (s.mode === "sidecar") {
-      this.sidecarClient?.write(id, data).catch(() => {});
+      this.callSidecar("session.write", id, (c) => c.write(id, data));
       return;
     }
     try {
@@ -351,7 +374,7 @@ export class PtyHost {
 
   private resizePty(s: Session, cols: number, rows: number): void {
     if (s.mode === "sidecar") {
-      this.sidecarClient?.resize(s.id, cols, rows).catch(() => {});
+      this.callSidecar("session.resize", s.id, (c) => c.resize(s.id, cols, rows));
       return;
     }
     try {
@@ -377,7 +400,7 @@ export class PtyHost {
   private killPty(s: Session): void {
     const id = s.id;
     if (s.mode === "sidecar") {
-      this.sidecarClient?.kill(id).catch(() => {});
+      this.callSidecar("session.kill", id, (c) => c.kill(id));
       return;
     }
     try {
@@ -390,7 +413,7 @@ export class PtyHost {
   /** Kill a sidecar session that has no local `sessions` entry (orphan sweep).
    *  `kill()` no-ops for unmapped ids, which left zombies alive across restarts. */
   killUnclaimed(id: string): void {
-    this.sidecarClient?.kill(id).catch(() => {});
+    this.callSidecar("session.kill", id, (c) => c.kill(id));
   }
 
   /** The PTY's real grid; mirrors render at this size instead of resizing it. */
@@ -522,7 +545,7 @@ export class PtyHost {
     session.preReadyStdinQueue = [];
     for (const data of queue) {
       if (session.mode === "sidecar") {
-        this.sidecarClient?.write(session.id, data).catch(() => {});
+        this.callSidecar("session.write", session.id, (c) => c.write(session.id, data));
       } else {
         try {
           session.child?.stdin?.write(encodeString(FRAME_WRITE, data));

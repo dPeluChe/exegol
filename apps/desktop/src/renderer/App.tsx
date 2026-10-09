@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { LoadingSpinner } from "./components/common";
 import { CloseConfirmHost } from "./components/common/CloseConfirmHost";
+import { SidecarHealthBanner } from "./components/common/SidecarHealthBanner";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
 import { DictationOverlay } from "./components/dictation/DictationOverlay";
@@ -84,6 +85,7 @@ export default function App() {
         <CliUpdatesNotice />
         <CloseConfirmHost />
         <UpdateBanner />
+        <SidecarHealthBanner />
 
         <div className="relative flex-1 overflow-hidden">
           {showWorkspace && (

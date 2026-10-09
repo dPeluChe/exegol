@@ -50,6 +50,7 @@ import { destroyTray, initTray } from "./system/tray";
 import { startWorkGuard } from "./system/work-guard";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
+import { startSidecarHealthWatch, stopSidecarHealthWatch } from "./terminal/sidecar-health-watch";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
 import { forwardSwitcherKeys } from "./windows/pane-switcher-keys";
@@ -157,6 +158,7 @@ app.whenReady().then(async () => {
     }
   });
   startMetricsCollector();
+  startSidecarHealthWatch(() => getPtyHost().getSidecarClient());
   getQueueExecutor().start(getDb());
   getAgentManager().startShellPromotion(getDb());
   startPrWatch();
@@ -260,6 +262,7 @@ function teardownSteps() {
     { name: "scheduler", run: () => getSchedulerEngine().stop() },
     { name: "queueExecutor", run: () => getQueueExecutor().stop() },
     { name: "metrics", run: stopMetricsCollector },
+    { name: "sidecarHealth", run: stopSidecarHealthWatch },
     { name: "messageSweep", run: stopSweep },
     { name: "prWatch", run: stopPrWatch },
     { name: "database", run: closeDatabase },

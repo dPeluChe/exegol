@@ -249,6 +249,8 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("models:progress", handler as never);
     };
   },
+  /** Terminals not answering (the PTY sidecar's health watch) and back */
+  onSidecarHealth: (callback: (event: unknown) => void) => listen("sidecar:health", callback),
   onPipelineStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("pipeline:status-changed", handler as never);

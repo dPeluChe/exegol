@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Terminals that stop answering are now noticed: if keystrokes get no reply from the terminal process for a few seconds, Exegol checks on it and shows "Terminals are not responding" with **Retry** (reconnects to the same terminal process, every session keeps running) and **Restart terminals** (last resort, after a confirmation: every live session ends, Exegol restarts and the sessions come back as crashed with their history, ready to resume). The banner goes away by itself once the terminals answer again. Keys typed during the stall are not re-sent. The log now records the stall, how long it lasted, the terminal process's CPU and memory, and when Exegol's own main process was blocked for over a second
+
 ### Fixed
 - A pane whose session was deleted (a closed shell, for example) showed "Cannot read properties of null" after a restart instead of its launcher; since 0.5.17
 
