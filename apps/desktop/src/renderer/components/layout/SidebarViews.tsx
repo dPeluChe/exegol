@@ -21,13 +21,15 @@ import {
   groupByProject,
   type LiveProjectGroup,
   type LiveTabGroup,
+  PANELESS_TAB,
   reorderProjectOrder,
   shortcutLabel,
   useLiveTabGroups,
   useProjectShortcuts,
+  withPanelessSessions,
 } from "../../lib/live-tabs";
 import { useSessionRecovery } from "../../lib/session-recovery";
-import { activeCards, isActiveOrWaiting } from "../../lib/sidebar-views";
+import { activeCards } from "../../lib/sidebar-views";
 import {
   type AgentState,
   type AttentionItem,
@@ -110,9 +112,12 @@ export function AgentsView() {
   const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
   const attentionItems = useAgentStore((s) => s.attentionItems);
   // One card per project in the user's order, its live tabs inside; the card carries its Cmd+n.
-  // A session no pane shows falls back to a per-project group with no shortcut.
+  // A live session no pane shows joins its project's card
   const groups = useLiveTabGroups();
-  const cards = useMemo(() => groupByProject(groups), [groups]);
+  const cards = useMemo(
+    () => groupByProject(withPanelessSessions(groups, agents)),
+    [groups, agents],
+  );
   const shownCards = useMemo(
     () => (activeOnly ? activeCards(cards, agents, attentionItems) : cards),
     [activeOnly, cards, agents, attentionItems],
@@ -134,15 +139,6 @@ export function AgentsView() {
   const projectShortcuts = useProjectShortcuts();
   const setOrder = useAppStore((s) => s.setLiveProjectOrder);
   const savedOrder = useAppStore((s) => s.liveProjectOrder);
-  const inGroups = new Set(groups.flatMap((g) => g.agentIds));
-  const byProject = new Map<string, AgentState[]>();
-  for (const agent of activeAgents) {
-    if (inGroups.has(agent.id) || (activeOnly && !isActiveOrWaiting(agent, attentionItems)))
-      continue;
-    const list = byProject.get(agent.projectId) ?? [];
-    list.push(agent);
-    byProject.set(agent.projectId, list);
-  }
 
   const navigateToAgent = useNavigateToAgent();
 
@@ -187,7 +183,7 @@ export function AgentsView() {
   const recovery = useSessionRecovery();
   const recovering = reconnectingLabel(recovery);
 
-  if (shownCards.length === 0 && byProject.size === 0) {
+  if (shownCards.length === 0) {
     if (recovering) return <RecoveryNotice label={recovering} />;
     return (
       <p className="py-2 text-center text-[9px] italic text-text-muted">
@@ -214,14 +210,6 @@ export function AgentsView() {
           onScreen={card.projectId === activeProjectId}
           activeTabId={projectWorkspaces[card.projectId]?.activeTabId ?? null}
           flashKey={flashKey}
-        />
-      ))}
-      {Array.from(byProject.entries()).map(([projectId, projectAgents]) => (
-        <ProjectAgentGroup
-          key={projectId}
-          projectId={projectId}
-          agents={projectAgents}
-          onNavigate={navigateToAgent}
         />
       ))}
     </div>
@@ -400,25 +388,29 @@ const ProjectCard = memo(function ProjectCard({
             const active = tab.tabId === activeTabId;
             return (
               <div key={tab.key}>
-                <button
-                  type="button"
-                  onClick={() => focusPane(card.projectId, tab.tabId)}
-                  className={cn(
-                    "flex w-full min-w-0 items-center gap-1 rounded px-1 text-left text-[9px] transition-colors hover:bg-white/5",
-                    active ? "text-text-secondary" : "text-text-muted",
-                    tab.key === flashKey && "animate-flash-once",
-                  )}
-                  title="Go to this tab"
-                >
-                  <span
-                    aria-hidden="true"
+                {tab.tabId === PANELESS_TAB ? (
+                  <span className="block px-1 pl-2 text-[9px] text-text-muted">{tab.tabLabel}</span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => focusPane(card.projectId, tab.tabId)}
                     className={cn(
-                      "h-1 w-1 shrink-0 rounded-full",
-                      active ? "bg-accent" : "bg-transparent",
+                      "flex w-full min-w-0 items-center gap-1 rounded px-1 text-left text-[9px] transition-colors hover:bg-white/5",
+                      active ? "text-text-secondary" : "text-text-muted",
+                      tab.key === flashKey && "animate-flash-once",
                     )}
-                  />
-                  <span className="min-w-0 truncate">{tab.tabLabel}</span>
-                </button>
+                    title="Go to this tab"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "h-1 w-1 shrink-0 rounded-full",
+                        active ? "bg-accent" : "bg-transparent",
+                      )}
+                    />
+                    <span className="min-w-0 truncate">{tab.tabLabel}</span>
+                  </button>
+                )}
                 <div className="space-y-0.5 pl-1">{rowsOf(tab)}</div>
               </div>
             );
@@ -428,46 +420,6 @@ const ProjectCard = memo(function ProjectCard({
     </div>
   );
 }, sameCardProps);
-
-// ─── Project Agent Group ─────────────────────────────────────────────────
-
-function ProjectAgentGroup({
-  projectId,
-  agents,
-  onNavigate,
-}: {
-  projectId: string;
-  agents: AgentState[];
-  onNavigate: (agentId: string, projectId: string) => void;
-}) {
-  const { data: project } = useProject(projectId);
-
-  return (
-    <div className="rounded-lg border border-border/50 bg-bg-tertiary/30 p-1.5">
-      {/* Project header */}
-      <div className="mb-1 flex items-center gap-1.5 px-0.5">
-        <Cuboid className="h-3 w-3 text-accent/70" />
-        <span className="text-[10px] font-medium text-text-secondary">
-          {project?.name ?? projectId.slice(0, 12)}
-        </span>
-        <span className="text-[9px] text-text-muted">
-          {agents.length} agent{agents.length !== 1 ? "s" : ""}
-        </span>
-      </div>
-
-      {/* Agent rows */}
-      <div className="space-y-0.5">
-        {agents.map((agent) => (
-          <RunningAgentRow
-            key={agent.id}
-            agent={agent}
-            onClick={() => onNavigate(agent.id, agent.projectId)}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── Running Agent Row ───────────────────────────────────────────────────
 

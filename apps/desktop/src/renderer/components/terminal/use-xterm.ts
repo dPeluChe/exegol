@@ -4,6 +4,7 @@ import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
+import { claimPaneFocus } from "../../lib/pane-focus";
 import { useTerminalStore } from "../../stores/terminals";
 import {
   getFocusedOrFirstPaneId,
@@ -132,6 +133,11 @@ export function useXterm({
     // A pane mounted at startup waits for its reattach; nothing gave it the keyboard meanwhile
     const takeKeyboard = () => {
       if (readOnly || mirror || !paneId) return;
+      // Opened for the user: the menu or button that started it may hold the focus by now
+      if (claimPaneFocus(paneId)) {
+        terminalRef.current?.focus();
+        return;
+      }
       const active = document.activeElement;
       if (active && active !== document.body) return;
       const { tabs, activeTabId } = getProjectState();

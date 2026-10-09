@@ -12,7 +12,6 @@ import {
   TerminalSquare,
   X,
 } from "lucide-react";
-import { nanoid } from "nanoid";
 import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAgent } from "../../hooks/use-trpc";
@@ -22,7 +21,7 @@ import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
-import { splitWithTerminal } from "../../lib/split-terminal";
+import { splitWithBrowser, splitWithTerminal } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
 import {
@@ -109,10 +108,10 @@ function PaneToolbar({
       if (companion === "terminal") return splitWithTerminal(tabId, paneId, direction);
       if (companion !== "browser") return;
       const url = await projectBrowserUrl(projectId, project?.path);
-      splitPane(tabId, paneId, direction, "browser", { id: nanoid(8), url });
+      splitWithBrowser(tabId, paneId, direction, url);
       dispatchRefitTerminals();
     },
-    [companion, projectId, project?.path, splitPane, tabId, paneId],
+    [companion, projectId, project?.path, tabId, paneId],
   );
 
   const showIdeButton = paneType === "terminal" || paneType === "files";
@@ -615,9 +614,13 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         paneType={pane.type}
         agentId={pane.agentId}
         isSplitPane={isSplitPane}
-        onSplit={(dir, newType) =>
-          useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty")
-        }
+        onSplit={(dir, newType) => {
+          if (newType !== "browser") {
+            useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty");
+            return;
+          }
+          splitWithBrowser(tabId, paneId, dir);
+        }}
         onSplitTerminal={() => void splitWithTerminal(tabId, paneId)}
         onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}

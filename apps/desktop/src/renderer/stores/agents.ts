@@ -312,6 +312,14 @@ export function sortAttentionItems(items: AttentionItem[]): AttentionItem[] {
   });
 }
 
+/**
+ * A list fetched before an exit can land after its push: an ended session never goes back to a
+ * live status from a list (a revived one is a new row, or a status push)
+ */
+export function syncedStatus(current: AgentStatus, listed: AgentStatus): AgentStatus {
+  return ENDED_STATUSES.has(current) && LIVE_STATUSES.has(listed) ? current : listed;
+}
+
 /** syncFromDb id of the cross-project live-agent list: it syncs no project */
 export const FLEET_SYNC = "__fleet__";
 
@@ -498,8 +506,11 @@ export const useAgentStore = create<AgentStore>()(
           let merged = 0;
 
           const listed = new Set(dbAgents.map((a) => a.id));
-          // Gone from the DB's list too (archived or deleted): the close has landed
-          for (const id of removedIds) if (!listed.has(id)) removedIds.delete(id);
+          // Gone from the project's list too (archived or deleted): the close has landed. The
+          // fleet lists live rows only, so a session it omits may still be mid-archive
+          if (_projectId !== FLEET_SYNC) {
+            for (const id of removedIds) if (!listed.has(id)) removedIds.delete(id);
+          }
 
           for (const dbAgent of dbAgents) {
             if (removedIds.has(dbAgent.id)) continue;
@@ -509,7 +520,7 @@ export const useAgentStore = create<AgentStore>()(
               // Merge: keep live runtime state (currentStep from parser), update DB state
               updated[dbAgent.id] = {
                 ...existing,
-                status: dbAgent.status as AgentStatus,
+                status: syncedStatus(existing.status, dbAgent.status as AgentStatus),
                 branchName: dbAgent.branchName ?? existing.branchName ?? null,
                 alias: dbAgent.alias ?? existing.alias ?? null,
                 currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
