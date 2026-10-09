@@ -71,7 +71,7 @@ export function startWorkGuard(db: Database.Database): () => void {
     shown
       .then(({ response }) => {
         logger.info(
-          `[WorkGuard] quit with ${n} working agent(s): ${response === 1 ? "confirmed" : "kept"}`,
+          `[WorkGuard] quit with ${n} open agent session(s), ${working} working: ${response === 1 ? "confirmed" : "kept"}`,
         );
         if (response === 1) {
           quitAllowed = true;
