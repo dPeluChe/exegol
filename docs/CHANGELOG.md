@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.19] — 2026-10-09 — CLI install health, Codex launch fix, cleaner sidebar and focus
+
 ### Added
 - Settings > CLIs shows how each CLI is installed (Homebrew, Homebrew cask, npm, bun, pnpm, yarn, pipx, uv, official installer) and its version. When a CLI is installed more than once, the card says which copy runs (the first on PATH), lists every copy with its method and version, and gives the command to remove each extra copy. Nothing is uninstalled for you. The launcher marks such a CLI with a small badge
 - When a CLI updates itself and exits (Codex: "Update ran successfully! Please restart Codex."), the pane now says "Codex updated to 0.162.1" with a Restart session button that resumes the conversation in the same pane with the same model, YOLO, access mode and name, instead of looking like the session failed
