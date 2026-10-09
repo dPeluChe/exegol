@@ -4,7 +4,7 @@ const fs = vi.hoisted(() => ({ mkdirSync: vi.fn(), writeFileSync: vi.fn() }));
 vi.mock("node:fs", () => fs);
 vi.mock("../mcp/exegol-mcp-config", () => ({ resolveClaimGuardPath: () => "/bundle/guard.js" }));
 
-import { buildClaudeCodeHooksFile, slugifyBranchName } from "./spawn-env";
+import { buildClaudeCodeHooksFile, deriveStatusFromSignal, slugifyBranchName } from "./spawn-env";
 
 describe("slugifyBranchName", () => {
   it("should slugify a simple description", () => {
@@ -69,7 +69,7 @@ describe("buildClaudeCodeHooksFile", () => {
   it("keeps the OSC signal entries and adds an anchored, time-boxed guard", () => {
     const hooks = written("a1", { enforceClaims: true });
 
-    expect(hooks.Notification).toHaveLength(1);
+    expect(hooks.Notification).toHaveLength(2);
     expect(hooks.Stop).toHaveLength(1);
     const [signal, guard] = hooks.PreToolUse ?? [];
     expect(signal?.matcher).toBeUndefined(); // matcher-less = every tool
@@ -103,8 +103,54 @@ describe("buildClaudeCodeHooksFile", () => {
     }
   });
 
+  // Claude's rule for a plain name list: split on | or , and each part equals the value
+  const fires = (matcher: string | undefined, value: string) =>
+    matcher === undefined || matcher.split(/[|,]/).some((part) => part.trim() === value);
+  const signalOf = (entry: { hooks: unknown[] } | undefined) =>
+    String((entry?.hooks[0] as { command?: string } | undefined)?.command).match(
+      /;a1;([a-z_]+)\\007/,
+    )?.[1];
+
+  // startup|resume fire before a CLI-arg prompt is submitted; idle_prompt covers idle starts
+  it("signals idle on clear and the idle reminder, never on startup, resume or compact", () => {
+    const hooks = written("a1");
+    const start = hooks.SessionStart?.[0];
+    expect(signalOf(start)).toBe("idle");
+    expect(fires(start?.matcher, "clear")).toBe(true);
+    for (const source of ["startup", "resume", "compact"]) {
+      expect(fires(start?.matcher, source)).toBe(false);
+    }
+
+    const reminder = hooks.Notification?.[1];
+    expect(signalOf(reminder)).toBe("idle");
+    expect(fires(reminder?.matcher, "idle_prompt")).toBe(true);
+    expect(fires(reminder?.matcher, "permission_prompt")).toBe(false);
+    expect(signalOf(hooks.Notification?.[0])).toBe("attention");
+  });
+
+  // Claude adds SessionStart stdout to the model context
+  it("never falls back to stdout on SessionStart", () => {
+    const hooks = written("a1");
+    const command = (entry: { hooks: unknown[] } | undefined) =>
+      String((entry?.hooks[0] as { command?: string } | undefined)?.command);
+    expect(command(hooks.SessionStart?.[0])).toMatch(/> \/dev\/tty 2>\/dev\/null \|\| true$/);
+    expect(command(hooks.Stop?.[0])).toMatch(/\|\| printf '/);
+  });
+
   it("omits the guard when claims cannot collide", () => {
     const hooks = written("a1", { enforceClaims: false });
     expect(hooks.PreToolUse).toHaveLength(1);
+  });
+});
+
+describe("deriveStatusFromSignal", () => {
+  it("idle is waiting_input with no turn end and no attention", () => {
+    expect(deriveStatusFromSignal("idle")).toEqual({ status: "waiting_input", idleOnly: true });
+  });
+
+  it("finished ends a turn and attention asks", () => {
+    expect(deriveStatusFromSignal("finished")).toMatchObject({ status: "waiting_input" });
+    expect(deriveStatusFromSignal("finished").turnEnded).toBeTypeOf("number");
+    expect(deriveStatusFromSignal("attention").needsAttention).toBe(true);
   });
 });

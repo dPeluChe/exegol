@@ -82,6 +82,7 @@ function applyAgentSignals(
   let turnStarted: number | undefined;
   let turnEnded: number | undefined;
   let needsAttention: boolean | undefined;
+  let idleOnly = false;
 
   for (const sig of signals) {
     if (sig.agentId !== agent.id) continue;
@@ -99,6 +100,8 @@ function applyAgentSignals(
     if (derived.turnStarted) turnStarted = derived.turnStarted;
     if (derived.turnEnded) turnEnded = derived.turnEnded;
     if (derived.needsAttention) needsAttention = true;
+    // The batch's last status wins: idle followed by turn_started is a running turn
+    if (derived.status) idleOnly = derived.idleOnly === true;
     // A permission prompt ends a turn too — latching on it would let an
     // attention signal disable the delivery fallback.
     if (derived.turnEnded && !derived.needsAttention) noteAgentBoundarySignal(agent.id);
@@ -118,9 +121,9 @@ function applyAgentSignals(
       updateAgentStatus(db, agent.id, signalStatus, currentStep ?? undefined);
     }
     // Turn boundaries and attention only: a "running" per tool call was most of the log
-    if (turnStarted || turnEnded || needsAttention) {
+    if (turnStarted || turnEnded || needsAttention || idleOnly) {
       logger.info(
-        `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}`,
+        `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}${idleOnly ? " idle" : ""}`,
       );
     }
     // Muted or suspended sessions stay quiet
@@ -156,6 +159,7 @@ function applyAgentSignals(
         needsAttention,
         turnStarted,
         turnEnded,
+        ...(idleOnly && !turnEnded ? { idleOnly } : {}),
       });
     } else {
       broadcast("agent:turn-boundary", {
@@ -198,6 +202,7 @@ const FILE_EVENT_SIGNALS: Record<string, string> = {
   tool_use: "working",
   permission_needed: "attention",
   stop: "finished",
+  session_ready: "idle",
 };
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);

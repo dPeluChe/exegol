@@ -69,6 +69,13 @@ describe("dispatchAgentFileEvent", () => {
     expect(status(db, "a3")).toBe("waiting_input");
   });
 
+  // Spawn and resume write running; an interrupted turn sends no stop
+  it("maps session_ready to idle → waiting_input status", () => {
+    insertAgent(db, "a10", "claude-code", "running");
+    dispatchAgentFileEvent(db, emptyMaps(), { type: "session_ready", agentId: "a10" });
+    expect(status(db, "a10")).toBe("waiting_input");
+  });
+
   it("never resurrects a terminal agent", () => {
     insertAgent(db, "a4", "claude-code", "completed");
     dispatchAgentFileEvent(db, emptyMaps(), { type: "tool_use", agentId: "a4" });
