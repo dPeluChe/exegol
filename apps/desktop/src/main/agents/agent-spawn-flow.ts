@@ -1,4 +1,4 @@
-import type { Agent, AgentCreate } from "@exegol/shared";
+import type { Agent, AgentCreate, Worktree } from "@exegol/shared";
 import type Database from "libsql";
 import {
   createOplogEntry,
@@ -35,7 +35,7 @@ import {
   coreRust,
   loginShell,
 } from "./spawn-env";
-import { findReusableWorktree, requestedBranchFor } from "./spawn-target";
+import { findReusableWorktree, findWorktreeHolding, requestedBranchFor } from "./spawn-target";
 import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
 
 interface PtyInvocation {
@@ -53,6 +53,22 @@ interface PtyInvocation {
 interface ProjectInfo {
   path: string;
   name: string;
+}
+
+function joinWorktree(
+  db: Database.Database,
+  agentId: string,
+  wt: Worktree,
+  repoPath: string,
+  worktrees: Map<string, WorktreeRecord>,
+): void {
+  setAgentWorktree(db, agentId, wt.id);
+  worktrees.set(agentId, {
+    dbId: wt.id,
+    worktreeName: getWorktreeName(wt.branchName),
+    worktreePath: wt.path,
+    repoPath,
+  });
 }
 
 /**
@@ -75,7 +91,10 @@ export function setupAgentCwd(
     logger.info("[AgentManager] Using cwdOverride:", { cwd });
     // A folder of the checkout itself (the launcher's "run in") is not a pipeline worktree
     const inCheckout = cwd === project.path || cwd.startsWith(`${project.path}/`);
-    setIsolationMode(db, agent.id, inCheckout ? "project-root" : "pipeline");
+    // Joined like a reuse: the owner's exit cleanup keeps the worktree while this one lives
+    const shared = inCheckout ? null : findWorktreeHolding(db, agent.projectId, cwd);
+    if (shared) joinWorktree(db, agent.id, shared, project.path, worktrees);
+    setIsolationMode(db, agent.id, inCheckout ? "project-root" : shared ? "isolated" : "pipeline");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
     return cwd;
   }
@@ -96,13 +115,7 @@ export function setupAgentCwd(
   const reuseWt = findReusableWorktree(db, agent.projectId, requestedBranchName);
   if (reuseWt) {
     cwd = reuseWt.path;
-    setAgentWorktree(db, agent.id, reuseWt.id);
-    worktrees.set(agent.id, {
-      dbId: reuseWt.id,
-      worktreeName: getWorktreeName(reuseWt.branchName),
-      worktreePath: reuseWt.path,
-      repoPath: project.path,
-    });
+    joinWorktree(db, agent.id, reuseWt, project.path, worktrees);
     logger.info("[AgentManager] Reusing existing worktree:", {
       branch: requestedBranchName,
       path: reuseWt.path,

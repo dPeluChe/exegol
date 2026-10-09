@@ -12,6 +12,7 @@ import {
   PictureInPicture2,
   RefreshCw,
   Rows,
+  TerminalSquare,
   Trash2,
 } from "lucide-react";
 import { useContextMenu } from "../../hooks/use-context-menu";
@@ -26,6 +27,8 @@ interface PaneContextMenuProps {
   agentId?: string;
   isSplitPane: boolean;
   onSplit: (direction: "horizontal" | "vertical", newType?: PaneType) => void;
+  /** A shell beside this pane, in the folder it works in (lib/split-terminal) */
+  onSplitTerminal: () => void;
   onExtractToTab: () => void;
   onEqualize: () => void;
   onClose: () => void;
@@ -118,6 +121,7 @@ function terminalActionsSection({ agentId, onScrollTop, onScrollBottom }: MenuAc
 function splitSection({
   isSplitPane,
   onSplit,
+  onSplitTerminal,
   onFloat,
   onEqualize,
   onExtractToTab,
@@ -131,6 +135,7 @@ function splitSection({
     },
     { label: "Split Vertically", icon: Rows, shortcut: "⌘⇧D", action: () => onSplit("vertical") },
     { label: "Split with Browser", icon: Globe, action: () => onSplit("horizontal", "browser") },
+    { label: "Split with Terminal", icon: TerminalSquare, shortcut: "⌘Y", action: onSplitTerminal },
     ...(onFloat ? [{ label: "Float to Window", icon: PictureInPicture2, action: onFloat }] : []),
     ...(isSplitPane
       ? [

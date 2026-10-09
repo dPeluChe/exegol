@@ -188,6 +188,14 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "terminal",
   },
   {
+    id: "split-terminal",
+    label: "Split with Terminal",
+    description:
+      "A shell beside the focused pane, in the folder it works in (in the pane itself when it is empty). In an empty pane's launcher, T opens a terminal in the selected Run in folder",
+    keys: "Cmd+Y",
+    category: "terminal",
+  },
+  {
     id: "dictation",
     label: "Dictation",
     description:

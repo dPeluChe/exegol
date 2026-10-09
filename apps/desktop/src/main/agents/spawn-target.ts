@@ -35,6 +35,19 @@ export function findReusableWorktree(
   );
 }
 
+/** The project worktree a folder lies in (a terminal opened beside a session in it) */
+export function findWorktreeHolding(
+  db: Database.Database,
+  projectId: string,
+  dir: string,
+): Worktree | null {
+  return (
+    listWorktrees(db, projectId).find(
+      (w) => (dir === w.path || dir.startsWith(`${w.path}/`)) && !removingWorktrees.has(w.path),
+    ) ?? null
+  );
+}
+
 interface SpawnTarget {
   cwd: string;
   branchName: string | null;
