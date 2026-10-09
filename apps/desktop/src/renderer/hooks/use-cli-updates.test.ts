@@ -8,6 +8,8 @@ const status = (installed: string | null, installedAt: number | null = null) => 
   latest: null,
   updateAvailable: false,
   updateCommand: null,
+  installMethod: null,
+  updateNote: null,
 });
 
 describe("restartNeeded", () => {

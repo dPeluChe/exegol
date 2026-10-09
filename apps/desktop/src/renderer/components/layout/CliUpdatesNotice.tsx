@@ -1,4 +1,4 @@
-import { type CliUpdateStatus, LIVE_STATUSES } from "@exegol/shared";
+import { type CliUpdateStatus, INSTALL_METHOD_LABEL, LIVE_STATUSES } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useState } from "react";
@@ -134,6 +134,15 @@ export function CliUpdatesNotice() {
                       : `${r.sessions.length} session${r.sessions.length > 1 ? "s" : ""}`}
                   </span>
                 </div>
+                {r.status.updateAvailable && r.status.updateCommand && (
+                  <p className="mt-0.5 truncate pl-6 font-mono text-[10px] text-text-muted">
+                    {r.status.installMethod && `${INSTALL_METHOD_LABEL[r.status.installMethod]}: `}
+                    {r.status.updateCommand}
+                  </p>
+                )}
+                {r.status.updateAvailable && r.status.updateNote && (
+                  <p className="pl-6 text-[10px] text-amber-400">{r.status.updateNote}</p>
+                )}
                 <div className="mt-1 pl-6">
                   <SessionChips
                     sessions={(r.behind.length > 0 ? r.behind : r.sessions).flatMap((id) =>

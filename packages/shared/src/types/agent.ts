@@ -380,7 +380,53 @@ export interface CliUpdateStatus {
   installedAt: number | null;
   latest: string | null;
   updateAvailable: boolean;
+  /** Matches how the copy that runs (first on PATH) was installed */
   updateCommand: string | null;
+  installMethod: CliInstallMethod | null;
+  /** Why the command may not fit (install method not recognized) */
+  updateNote: string | null;
+}
+
+export type CliInstallMethod =
+  | "brew"
+  | "brew-cask"
+  | "npm"
+  | "bun"
+  | "pnpm"
+  | "yarn"
+  | "pipx"
+  | "uv"
+  | "standalone"
+  | "unknown";
+
+export const INSTALL_METHOD_LABEL: Record<CliInstallMethod, string> = {
+  brew: "Homebrew",
+  "brew-cask": "Homebrew cask",
+  npm: "npm global",
+  bun: "bun global",
+  pnpm: "pnpm global",
+  yarn: "yarn global",
+  pipx: "pipx",
+  uv: "uv tool",
+  standalone: "official installer",
+  unknown: "unknown install",
+};
+
+/** One copy of a CLI on PATH */
+export interface CliInstallCopy {
+  path: string;
+  method: CliInstallMethod;
+  /** Brew formula/cask or package name, read from the install path */
+  pkg: string | null;
+  version: string | null;
+  updateCommand: string | null;
+  uninstallCommand: string;
+}
+
+/** Every copy of a CLI on PATH, in PATH order: the first one is what runs */
+export interface CliInstallInfo {
+  cliType: string;
+  copies: CliInstallCopy[];
 }
 
 function versionParts(v: string | null | undefined): number[] | null {

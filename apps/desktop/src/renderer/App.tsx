@@ -18,7 +18,7 @@ import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
 import { useActiveViewSync } from "./hooks/use-active-view-sync";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
-import { useCliRestarts } from "./hooks/use-cli-updates";
+import { useCliRestarts, useCliSelfUpdates } from "./hooks/use-cli-updates";
 import { useDeepLink } from "./hooks/use-deeplink";
 import { useDictation } from "./hooks/use-dictation";
 import { useFleetSync } from "./hooks/use-fleet-sync";
@@ -70,6 +70,7 @@ export default function App() {
   useAutoResumeLost();
   useRelaunchMissedResume();
   useCliRestarts();
+  useCliSelfUpdates();
   useFleetSync();
   useActiveViewSync();
 

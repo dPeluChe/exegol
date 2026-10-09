@@ -4,16 +4,22 @@ import { createConnection } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { DoctorCheck, DoctorReport, DoctorStatus } from "@exegol/shared";
+import {
+  type CliInstallCopy,
+  type DoctorCheck,
+  type DoctorReport,
+  type DoctorStatus,
+  INSTALL_METHOD_LABEL,
+} from "@exegol/shared";
 import { safeStorage } from "electron";
 import type Database from "libsql";
-import { cliSetupFor, providerBinaries } from "../agents/cli-catalog";
+import { cliSetupFor } from "../agents/cli-catalog";
 import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
 import { getApiKey } from "../security/keystore";
-import { findAllOnPath, readBinaryVersion } from "./cli-versions";
+import { cliInstalls } from "./cli-versions";
 
 const execAsync = promisify(exec);
 
@@ -113,29 +119,21 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
   return Promise.all(
     providers.map(async (provider) => {
       // A renamed binary (kilocode → kilo) counts as installed under its new name
-      let paths: string[] = [];
-      let found = provider.command;
-      for (const cmd of providerBinaries(provider.command)) {
-        paths = await findAllOnPath(cmd);
-        found = cmd;
-        if (paths.length > 0) break;
-      }
-      const installed = paths.length > 0;
+      const copies = await cliInstalls(provider.id);
+      const installed = copies.length > 0;
       // Duplicate installs (e.g. Homebrew + bun copies of codex) cause
       // self-update loops: the update lands in one path while the other
-      // wins PATH resolution — live incident 2026-07-09.
-      const duplicated = paths.length > 1;
+      // wins PATH resolution (live incidents 2026-07-09, 2026-10-09).
+      const duplicated = copies.length > 1;
+      const label = (c: CliInstallCopy) =>
+        `${c.path} (${[INSTALL_METHOD_LABEL[c.method], c.version && `v${c.version}`].filter(Boolean).join(", ")})`;
       let detail: string;
       if (duplicated) {
-        const versions = await Promise.all(paths.map(readBinaryVersion));
-        const labeled = paths.map((p, i) => (versions[i] ? `${p} (v${versions[i]})` : p));
-        const first = labeled[0];
-        const rest = labeled.slice(1).join(" · ");
-        detail = `Multiple installs — PATH resolves to ${first}; updates may land in the losing copy: ${rest}`;
-      } else if (installed) {
+        const [first, ...rest] = copies.map(label);
+        detail = `Multiple installs — PATH resolves to ${first}; updates may land in the losing copy: ${rest.join(" · ")}`;
+      } else if (copies[0]) {
         // The version answers "is mine current?" before launching it
-        const version = await readBinaryVersion(paths[0] ?? "");
-        detail = version ? `v${version} · ${paths[0]}` : `Found '${found}' on PATH`;
+        detail = label(copies[0]);
       } else {
         detail = `'${provider.command}' not found on PATH`;
       }
@@ -148,7 +146,7 @@ async function runCliDetection(): Promise<DoctorCheck[]> {
         detail,
         actionUrl: installed ? undefined : setup?.docs,
         installCommand: installed ? undefined : (setup?.install ?? undefined),
-        updateCommand: installed ? (setup?.update ?? undefined) : undefined,
+        updateCommand: copies[0]?.updateCommand ?? undefined,
         category: "agents",
       } satisfies DoctorCheck;
     }),

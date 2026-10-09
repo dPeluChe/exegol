@@ -29,6 +29,7 @@ import {
 } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
+import { detectCliSelfUpdate } from "./cli-self-update";
 import { detachOutputPipeline } from "./output-pipeline";
 import {
   type AgentContext,
@@ -419,7 +420,11 @@ export function createSpawnCallbacks(
         }
       }
 
-      finalizeAgentStatus(db, agent, exitCode, maps.stopRequested.delete(agent.id));
+      const stoppedByUser = maps.stopRequested.delete(agent.id);
+      finalizeAgentStatus(db, agent, exitCode, stoppedByUser);
+      if (!isShell && !stoppedByUser && !agent.launchedInShell) {
+        detectCliSelfUpdate(db, agent).catch(() => {});
+      }
 
       // T145: dead agents must not stay live credentials — revoke the MCP
       // token; a committed/leaked .mcp.json then authorizes nothing.

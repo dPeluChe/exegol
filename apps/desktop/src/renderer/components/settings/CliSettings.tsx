@@ -1,4 +1,4 @@
-import type { AgentProvider } from "@exegol/shared";
+import type { AgentProvider, CliInstallCopy } from "@exegol/shared";
 import { Button, cn, Input } from "@exegol/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,9 +13,11 @@ import {
   Trash2,
 } from "lucide-react";
 import { useCallback, useState } from "react";
+import { useCliInstalls } from "../../hooks/use-cli-updates";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { AgentIcon } from "../common/AgentIcon";
 import { CopyCommand } from "../common/CopyCommand";
+import { CliInstallCopies } from "./CliInstallCopies";
 import { mutateCli } from "./mutate-cli";
 import { useProviderCard } from "./use-provider-card";
 
@@ -31,11 +33,13 @@ function useProviders() {
 
 function ProviderCard({
   provider,
+  copies,
   onMoveUp,
   onMoveDown,
   onRemove,
 }: {
   provider: AgentProvider;
+  copies?: CliInstallCopy[];
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   onRemove?: () => void;
@@ -73,6 +77,7 @@ function ProviderCard({
           <ProviderIdentity provider={provider} onSave={card.saveIdentity} />
           {card.error && <p className="mt-1 text-[10px] text-red-400">{card.error}</p>}
           <CapabilityBadges capabilities={provider.capabilities} />
+          {provider.installed !== false && <CliInstallCopies copies={copies} />}
           {provider.installed === false && (
             <div className="mt-1.5 flex flex-col gap-1 text-[10px] text-amber-400">
               <span>Not installed on this machine: the launchers leave it out</span>
@@ -265,6 +270,7 @@ function CapBadge({ label }: { label: string }) {
 export function CliSettings() {
   const { data: providers, isLoading } = useProviders();
   const queryClient = useQueryClient();
+  const installs = useCliInstalls();
 
   const [error, setError] = useState<string | null>(null);
   const builtins = providers?.filter((p) => p.isBuiltin && p.id !== "shell") ?? [];
@@ -344,6 +350,7 @@ export function CliSettings() {
           <ProviderCard
             key={p.id}
             provider={p}
+            copies={installs.get(p.id)}
             // biome-ignore lint/style/noNonNullAssertion: bounds checked by i > 0 / i < length - 1
             onMoveUp={i > 0 ? () => handleSwap(p.id, allProviders[i - 1]!.id) : undefined}
             onMoveDown={

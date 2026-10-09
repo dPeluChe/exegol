@@ -1,9 +1,12 @@
 import type { Agent } from "@exegol/shared";
 import { Button } from "@exegol/ui";
-import { AlertCircle, ChevronDown, Play, RotateCcw } from "lucide-react";
+import { AlertCircle, ArrowUpCircle, ChevronDown, Play, RotateCcw } from "lucide-react";
 import type { Ref } from "react";
 import { useCallback, useState } from "react";
+import { selfUpdateTitle } from "../../hooks/use-cli-updates";
+import { useEnabledProviders } from "../../hooks/use-providers";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
+import { type CliSelfUpdate, useCliSelfUpdateStore } from "../../stores/cli-self-updates";
 import { AgentStopReason } from "./AgentStopReason";
 import { ChatView } from "./ChatView";
 import { TerminalLinkPeek } from "./FilesPeek";
@@ -61,18 +64,21 @@ export function TerminalScrollback({
   }, [agent, paneId, pending, resume]);
 
   const canResume = agent ? resumableCliTypes.has(agent.cliType) : false;
+  const selfUpdate = useCliSelfUpdateStore((s) => s.byAgent[agentId]);
 
   return (
     <div className="relative flex h-full flex-col">
       <ScrollbackStatusBar
         agent={agent}
         canResume={canResume}
+        selfUpdate={selfUpdate}
         pending={pending}
         onResume={handleResume}
         viewMode={viewMode}
         onToggleView={() => setViewMode(viewMode === "terminal" ? "chat" : "terminal")}
       />
-      {agent && (
+      {/* Updated, not failed: no exit card */}
+      {agent && !selfUpdate && (
         <AgentStopReason
           agent={agent}
           onResume={canResume && agent.resumeCommand ? handleResume : undefined}
@@ -133,6 +139,7 @@ export function TerminalScrollback({
 function ScrollbackStatusBar({
   agent,
   canResume,
+  selfUpdate,
   pending,
   onResume,
   viewMode,
@@ -140,6 +147,7 @@ function ScrollbackStatusBar({
 }: {
   agent: ScrollbackAgent | null;
   canResume: boolean;
+  selfUpdate?: CliSelfUpdate;
   pending: boolean;
   onResume: () => void;
   viewMode: "terminal" | "chat";
@@ -148,6 +156,30 @@ function ScrollbackStatusBar({
   const ResumeIcon = canResume ? Play : RotateCcw;
   const resumeLabel = canResume ? "Resume" : "Re-launch";
   const isCrashed = agent?.status === "crashed";
+  const providers = useEnabledProviders();
+
+  if (selfUpdate && agent) {
+    const name = providers.find((p) => p.id === selfUpdate.cliType)?.name ?? selfUpdate.cliType;
+    return (
+      <div className="relative flex shrink-0 items-center gap-2 bg-accent/10 px-3 py-1.5 text-[11px]">
+        <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 text-accent" />
+        <span className="text-text-primary">{selfUpdateTitle(name, selfUpdate.to)}</span>
+        <span className="text-text-muted">
+          (was {selfUpdate.from}): it ended to finish the update
+        </span>
+        <Button
+          size="sm"
+          className="h-6 gap-1 rounded-md bg-accent px-2 text-[10px] text-white hover:bg-accent/90"
+          onClick={onResume}
+          disabled={pending}
+        >
+          <RotateCcw className="h-3 w-3" />
+          Restart session
+        </Button>
+        <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} className="ml-auto" />
+      </div>
+    );
+  }
 
   return (
     <div
