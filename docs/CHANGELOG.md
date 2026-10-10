@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.20] — 2026-10-09 — Move panes between tabs, every folder in Run in, clean copies from agents
+
 ### Added
 - Move a pane to any other tab of the project: right-click it > Move to Tab: <name> (or New Tab when it shares its tab), drag it by the grip before the session name (or the one in its hover bar) onto a tab, or use "Move Pane to Tab" in the Command Palette. It lands beside that tab's focused pane, or replaces an empty launcher, and the session keeps running. A tab left empty closes. Works for single-pane tabs too
 - Simulator pane (macOS with Xcode): see and drive an iOS Simulator inside Exegol. Pick a device, boot it, and the pane shows its screen live; click to tap, drag to swipe, and type while the pane has the focus. The toolbar has Home, copy or save a screenshot, Open in Simulator.app, and boot or shut down. Open it from the launcher's Simulator chip, right-click a pane > Split with Simulator, or the Command Palette; the pane reopens on the same device after a restart. It needs AXe, a free open-source tool: install it with `brew install cameroncooke/axe/axe` (the pane shows the command to copy when it is missing, and never installs it for you)
