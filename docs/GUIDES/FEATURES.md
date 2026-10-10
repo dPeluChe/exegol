@@ -27,7 +27,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Layouts**: six presets (Single, Split Horizontal, Split Vertical, Three Columns, Bottom
   Terminal 70/30, 2×2 Grid), your own saved layouts, and Equalize splits. A project keeps its
   own named layouts (its menu > Layouts...) that start its terminals and agents again. Drag a pane by its left
-  edge to move it.
+  edge to move it. Move a pane to another tab from its menu (Move to Tab), the Command Palette, or
+  by dragging its grip (before the session name, or in its hover bar) onto a tab; onto the tab
+  bar or "+" it gets a new tab. A tab left empty closes; the session keeps running.
 - **Picture-in-Picture**: a terminal or browser pane detaches into a small always-on-top window.
 - **Terminal links**: URLs and file paths in any terminal (agents, shells, Dashboard cards) are
   clickable. A URL opens in the tab's link preview pane; a file (`src/app.ts:42:7`, `./a.tsx`,

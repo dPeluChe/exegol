@@ -6,7 +6,6 @@ import {
   Code2,
   Columns,
   Globe,
-  GripVertical,
   PictureInPicture2,
   Rows,
   TerminalSquare,
@@ -18,6 +17,7 @@ import { useAgent } from "../../hooks/use-trpc";
 import { sizeKey } from "../../lib/browser-viewports";
 import { closeWithConfirm } from "../../lib/close-target";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { movePane } from "../../lib/move-pane";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
@@ -41,6 +41,7 @@ import { GitPane } from "../workspace/GitPane";
 import { BrowserPane } from "./BrowserPaneContent";
 import { EmptyPane } from "./EmptyPaneContent";
 import { PaneContextMenu } from "./PaneContextMenu";
+import { PANE_DRAG_TYPE, PaneDragHandle, readPaneDrag } from "./PaneDragHandle";
 
 // Lazy: xterm + addons (~470KB) only load when a terminal pane mounts
 const TerminalPanel = lazy(() =>
@@ -93,7 +94,6 @@ function PaneToolbar({
   isSplitPane: boolean;
 }) {
   const splitPane = useWorkspaceStore((s) => s.splitPane);
-  const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);
   const markPaneFloating = useWorkspaceStore((s) => s.markPaneFloating);
   const panes = useWorkspaceStore(selectPanes);
   const { projectId, project } = useProjectContext();
@@ -133,46 +133,19 @@ function PaneToolbar({
     [tabId, paneId],
   );
 
-  const handleDragStart = useCallback(
-    (e: React.DragEvent) => {
-      e.dataTransfer.setData("application/exegol-pane", JSON.stringify({ paneId, tabId }));
-      e.dataTransfer.effectAllowed = "move";
-    },
-    [paneId, tabId],
-  );
-
-  const handleExtractToTab = useCallback(() => {
-    extractPaneToNewTab(tabId, paneId);
-    dispatchRefitTerminals();
-  }, [tabId, paneId, extractPaneToNewTab]);
-
   return (
     <>
       {isSplitPane && (
         // The grip sits on the pane's left edge, outlined in the accent so it reads as a handle;
         // the action bar keeps a second one for whoever looks there first
-        // biome-ignore lint/a11y/noStaticElementInteractions: drag handle for pane extraction
-        <div
-          draggable
-          onDragStart={handleDragStart}
-          className="absolute top-1/2 left-0.5 z-10 flex h-10 w-4 -translate-y-1/2 cursor-grab items-center justify-center rounded border border-accent bg-bg-secondary/90 text-accent opacity-0 transition-opacity hover:bg-accent/15 active:cursor-grabbing group-hover/pane:opacity-100"
-          title="Drag to another pane's edge to move it, or to the tab bar to extract it"
-        >
-          <GripVertical className="h-3.5 w-3.5" />
-        </div>
+        <PaneDragHandle
+          paneId={paneId}
+          className="absolute top-1/2 left-0.5 z-10 h-10 w-4 -translate-y-1/2 border border-accent bg-bg-secondary/90 opacity-0 transition-opacity group-hover/pane:opacity-100"
+          iconClassName="h-3.5 w-3.5"
+        />
       )}
       <div className="absolute right-1 top-1 z-10 flex items-center gap-0.5 rounded bg-bg-secondary/80 opacity-0 transition-opacity group-hover/pane:opacity-100">
-        {isSplitPane && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: drag handle for pane extraction
-          <div
-            draggable
-            onDragStart={handleDragStart}
-            className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-accent hover:bg-accent/15 active:cursor-grabbing"
-            title="Drag to another pane's edge to move it, or to the tab bar to extract it"
-          >
-            <GripVertical className="h-3 w-3" />
-          </div>
-        )}
+        <PaneDragHandle paneId={paneId} className="h-5 w-5" />
         {showIdeButton && projectId && (
           <button
             type="button"
@@ -186,7 +159,7 @@ function PaneToolbar({
         {isSplitPane && (
           <button
             type="button"
-            onClick={handleExtractToTab}
+            onClick={() => movePane(paneId, "new")}
             className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
             title="Pop out to new tab"
           >
@@ -491,7 +464,7 @@ function usePaneDropTarget(tabId: string, paneId: string) {
 
   const handlePaneDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     const hasTab = e.dataTransfer.types.includes("application/exegol-tab");
-    const hasPane = e.dataTransfer.types.includes("application/exegol-pane");
+    const hasPane = e.dataTransfer.types.includes(PANE_DRAG_TYPE);
     if (!hasTab && !hasPane) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -518,20 +491,10 @@ function usePaneDropTarget(tabId: string, paneId: string) {
 
       // Pane dropped on another pane: rearrange. The indicator has always been
       // drawn here, but nothing acted on it — the drop silently did nothing.
-      const panePayload = e.dataTransfer.getData("application/exegol-pane");
-      if (panePayload && dropSide) {
-        try {
-          const { paneId: sourcePaneId, tabId: sourceTabId2 } = JSON.parse(panePayload) as {
-            paneId: string;
-            tabId: string;
-          };
-          if (sourceTabId2 === tabId && sourcePaneId !== paneId) {
-            movePaneBeside(tabId, sourcePaneId, paneId, dropSide);
-            refitNextFrame();
-          }
-        } catch {
-          /* malformed payload — ignore */
-        }
+      const dragged = readPaneDrag(e);
+      if (dragged && dropSide && dragged.tabId === tabId && dragged.paneId !== paneId) {
+        movePaneBeside(tabId, dragged.paneId, paneId, dropSide);
+        refitNextFrame();
       }
     },
     [tabId, paneId, dropSide, mergeTabIntoSplit, movePaneBeside],
@@ -622,7 +585,6 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
           splitWithBrowser(tabId, paneId, dir);
         }}
         onSplitTerminal={() => void splitWithTerminal(tabId, paneId)}
-        onExtractToTab={() => useWorkspaceStore.getState().extractPaneToNewTab(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}
         onFloat={
           canFloat(pane)

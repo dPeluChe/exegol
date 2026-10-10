@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Move a pane to any other tab of the project: right-click it > Move to Tab: <name> (or New Tab when it shares its tab), drag it by the grip before the session name (or the one in its hover bar) onto a tab, or use "Move Pane to Tab" in the Command Palette. It lands beside that tab's focused pane, or replaces an empty launcher, and the session keeps running. A tab left empty closes. Works for single-pane tabs too
+
 ## [0.5.19] — 2026-10-09 — CLI install health, Codex launch fix, cleaner sidebar and focus
 
 ### Added
