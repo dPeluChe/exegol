@@ -131,6 +131,16 @@ interface Window {
       ) => () => void;
       onDone: (callback: () => void) => () => void;
     };
+    simulator: {
+      startStream: (paneId: string, udid: string) => Promise<boolean>;
+      setVisible: (paneId: string, visible: boolean) => void;
+      stopStream: (paneId: string) => void;
+      onFrame: (
+        paneId: string,
+        callback: (jpeg: Uint8Array, capturedAt: number) => void,
+      ) => () => void;
+      onState: (callback: (event: import("@exegol/shared").SimStreamEvent) => void) => () => void;
+    };
     onSidecarHealth: (
       callback: (event: import("@exegol/shared").SidecarHealth) => void,
     ) => () => void;

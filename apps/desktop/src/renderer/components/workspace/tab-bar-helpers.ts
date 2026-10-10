@@ -1,5 +1,5 @@
 import type { AgentActivityLevel } from "@exegol/shared";
-import { FolderTree, GitBranch, Globe, Terminal } from "lucide-react";
+import { FolderTree, GitBranch, Globe, Smartphone, Terminal } from "lucide-react";
 import { findFirstPaneId, type LayoutNode, type Pane } from "../../stores/workspace";
 
 // ─── T70: Activity dot for tab chrome ───────────────────────────────────────
@@ -20,6 +20,7 @@ export const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: s
   browser: Globe,
   files: FolderTree,
   git: GitBranch,
+  simulator: Smartphone,
 };
 
 /** A label the app wrote from the agent (its cliType or CLI name, "Claude Code"), not the user */
@@ -73,6 +74,8 @@ export function getTabMeta(
     return { displayName: "Git", Icon: GitBranch, primaryAgentId, agentCliType };
   if (firstPane?.type === "files")
     return { displayName: "Files", Icon: FolderTree, primaryAgentId, agentCliType };
+  if (firstPane?.type === "simulator")
+    return { displayName: "Simulator", Icon: Smartphone, primaryAgentId, agentCliType };
 
   return { displayName: tabLabel, Icon, primaryAgentId, agentCliType };
 }

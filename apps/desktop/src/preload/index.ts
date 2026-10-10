@@ -250,6 +250,27 @@ contextBridge.exposeInMainWorld("api", {
     onKey: (callback: (event: unknown) => void) => listen("dictation:key", callback),
     onDone: (callback: (event: unknown) => void) => listen("dictation:done", callback),
   },
+  /** T203 Simulator pane: AXe's live view of one device, frames pushed to this window only */
+  simulator: {
+    startStream: (paneId: string, udid: string) =>
+      safe.invoke("simulator:stream-start", { paneId, udid }) as Promise<boolean>,
+    setVisible: (paneId: string, visible: boolean) =>
+      safe.send("simulator:stream-visible", paneId, visible),
+    stopStream: (paneId: string) => safe.send("simulator:stream-stop", paneId),
+    onFrame: (paneId: string, callback: (jpeg: Uint8Array, capturedAt: number) => void) => {
+      const handler = (
+        _e: Electron.IpcRendererEvent,
+        id: string,
+        jpeg: Uint8Array,
+        capturedAt: number,
+      ) => {
+        if (id === paneId) callback(jpeg, capturedAt);
+      };
+      safe.on("simulator:frame", handler as never);
+      return () => safe.off("simulator:frame", handler as never);
+    },
+    onState: (callback: (event: unknown) => void) => listen("simulator:stream-state", callback),
+  },
   onModelProgress: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("models:progress", handler as never);

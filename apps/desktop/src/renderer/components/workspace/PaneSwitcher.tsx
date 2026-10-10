@@ -15,7 +15,12 @@ import { type Pane, selectPanes, selectTabs, useWorkspaceStore } from "../../sto
 import { AgentIcon } from "../common/AgentIcon";
 import { PANE_TYPE_ICONS, tabLabel } from "./tab-bar-helpers";
 
-const PANE_LABEL: Record<string, string> = { git: "Git", empty: "Launcher", terminal: "Terminal" };
+const PANE_LABEL: Record<string, string> = {
+  git: "Git",
+  empty: "Launcher",
+  terminal: "Terminal",
+  simulator: "Simulator",
+};
 
 function baseName(path: string): string {
   return path.split("/").filter(Boolean).pop() ?? path;

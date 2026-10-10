@@ -59,6 +59,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 - `browser` — Electron webview with URL bar + back/forward/reload
 - `files`: FileExplorer + Monaco code viewer; Code | Preview for Markdown and HTML (HTML: `<webview>` on the in-memory `exegol-preview` partition, `main/files-preview/`: the `exegol-preview://<token>/` scheme exists only on that session, read-only from the project or worktree root, realpath-checked, no dotfiles, request guard + CSP + dead proxy keep it offline, scripts off unless "Run scripts", links reach a link bar only after a click; not an agent browser pane). Open file, folders, mode and editor spot persist on the pane (`pane.files`, `setFilesView`)
 - `git` — Changes (with Smart Git Button) + Diff + Oplog (agent operations with undo)
+- `simulator`: iOS Simulator (T203, macOS + Xcode only; offered when `simulator.support` finds simctl): device picker, boot, live view, tap/swipe/type through AXe (`brew install cameroncooke/axe/axe`, never auto-installed: the pane shows the command). Device on `pane.simUdid`
 - `empty` — responsive agent launcher grid (3 breakpoints)
 
 ### Layouts (T85, v0.3.0)
@@ -138,7 +139,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 14 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
-- **tRPC over IPC**: 37 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
+- **tRPC over IPC**: 41 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
 - **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
@@ -195,7 +196,7 @@ apps/desktop/src/
                     (driver/take-over/wait), page-scripts, needs-user, log-ring, request-guard
     db/             client, migrations (36 base) + migration-sets/ (per-group wave files),
                     queries/ (22 domain modules + helpers)
-    ipc/            router (37 routers), procedures/ (43 modules incl. history, knowledge, doctor, models, storage)
+    ipc/            router (41 routers), procedures/ (47 modules incl. history, knowledge, doctor, models, storage, simulator)
     history/        T181 session history: merged timeline + per-CLI local store readers
                     (claude-code, codex, droid, goose, gemini) and CLI listings run in the
                     folder (devin, opencode, kilocode: `cli-list.ts`); `hasLocalSession` /
@@ -235,6 +236,10 @@ apps/desktop/src/
                     (sessions, model pick), history (dictation_history + retention), mic
                     (macOS permission), keys (chord forwarded from browser pane pages)
     ide/            catalog (launch facts + line syntax per IDE), detect (installed apps/CLIs, cached 10 min), opener
+    simulator/      T203 iOS Simulator: simctl (devices, boot, screenshot), axe (detect, tap, swipe,
+                    `type --stdin`, key, button, describe-ui size), mjpeg (multipart parser), stream
+                    (one `axe stream-video` per visible pane, latest JPEG on `simulator:frame` to its
+                    window only, no port; killed 30 s hidden, on close and quit). Agent tools reuse it
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)
   renderer/
     components/

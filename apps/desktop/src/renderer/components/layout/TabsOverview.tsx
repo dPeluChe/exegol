@@ -12,6 +12,7 @@ const PANE_LABEL: Record<string, string> = {
   git: "Git",
   empty: "Launcher",
   terminal: "Terminal",
+  simulator: "Simulator",
 };
 
 /** Selects its own agent: a status push re-renders this row, not the whole tree */

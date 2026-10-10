@@ -1,12 +1,14 @@
 import type { AgentAccessMode, AgentProvider, ResumableSession } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Cpu, Globe, History } from "lucide-react";
+import { ChevronDown, ChevronRight, Cpu, Globe, History, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useCliInstalls } from "../../hooks/use-cli-updates";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
+import { useSimulatorAvailable } from "../../hooks/use-simulator";
 import { ACCESS_MODES } from "../../lib/access-modes";
+import { focusNewPane } from "../../lib/pane-focus";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -155,6 +157,12 @@ export function EmptyPane({ paneId }: { paneId: string }) {
     updatePane(paneId, { type: "browser", url: await projectBrowserUrl(projectId, project?.path) });
   }, [paneId, projectId, project?.path, updatePane]);
 
+  const simulator = useSimulatorAvailable();
+  const handleSimulator = useCallback(() => {
+    focusNewPane(paneId);
+    updatePane(paneId, { type: "simulator" });
+  }, [paneId, updatePane]);
+
   const layout = SIZE_LAYOUT[size];
   const { isMini, isCompact } = layout;
 
@@ -207,7 +215,11 @@ export function EmptyPane({ paneId }: { paneId: string }) {
       {/* Access mode toggle — hidden in mini */}
       {!isMini && <AccessModeToggle value={accessMode} onChange={setAccessMode} />}
 
-      <PaneOptions isMini={isMini} onBrowser={handleBrowser} />
+      <PaneOptions
+        isMini={isMini}
+        onBrowser={handleBrowser}
+        onSimulator={simulator ? handleSimulator : undefined}
+      />
 
       {projectId && <RunTargets projectId={projectId} paneId={paneId} compact={isCompact} />}
       {modalProvider && (
@@ -388,26 +400,37 @@ function AccessModeToggle({
 }
 
 /** Pane options — compact in small sizes */
-function PaneOptions({ isMini, onBrowser }: { isMini: boolean; onBrowser: () => void }) {
+function PaneOptions({
+  isMini,
+  onBrowser,
+  onSimulator,
+}: {
+  isMini: boolean;
+  onBrowser: () => void;
+  /** macOS with Xcode only */
+  onSimulator?: () => void;
+}) {
+  const options = [
+    { handler: onBrowser, icon: Globe, label: "Browser" },
+    ...(onSimulator ? [{ handler: onSimulator, icon: Smartphone, label: "Simulator" }] : []),
+  ];
   return (
     <div className={cn("flex shrink-0 items-center", isMini ? "mt-1.5 gap-1" : "mt-3 gap-2")}>
       {/* Terminal, Files and Git act on a folder: they live in the Run-in row below */}
-      {[{ handler: onBrowser, icon: Globe, label: "Browser" }].map(
-        ({ handler, icon: PaneIcon, label }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={handler}
-            className={cn(
-              "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
-              isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
-            )}
-          >
-            <PaneIcon className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
-            {!isMini && label}
-          </button>
-        ),
-      )}
+      {options.map(({ handler, icon: PaneIcon, label }) => (
+        <button
+          key={label}
+          type="button"
+          onClick={handler}
+          className={cn(
+            "flex items-center gap-1 rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
+            isMini ? "px-2 py-1 text-[9px]" : "px-3 py-1.5 text-[11px]",
+          )}
+        >
+          <PaneIcon className={cn(isMini ? "h-3 w-3" : "h-3.5 w-3.5")} />
+          {!isMini && label}
+        </button>
+      ))}
     </div>
   );
 }
