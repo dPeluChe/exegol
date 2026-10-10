@@ -104,11 +104,24 @@ describe("detectRunTargets (T197)", () => {
 
     const targets = await detectRunTargets(root);
     const rels = targets.map((t) => t.rel);
-    expect(rels).toEqual(["", "apps/web", "backend"]);
+    // Repos and packages first, then plain folders (the launcher lists every folder)
+    expect(rels).toEqual(["", "apps/web", "backend", "docs"]);
     const backend = targets.find((t) => t.rel === "backend");
     expect(backend?.git).toBe(true);
     expect(backend?.scripts[0]?.command).toBe("npx convex dev");
     expect(targets.find((t) => t.rel === "apps/web")?.scripts.map((s) => s.name)).toEqual(["dev"]);
+  });
+});
+
+describe("detectRunTargets in a workspace of many repos", () => {
+  it("lists every repo, not only the first dozen", async () => {
+    const root = mkdtempSync(join(tmpdir(), "exegol-run-many-"));
+    for (let i = 0; i < 15; i++)
+      mkdirSync(join(root, `repo-${String(i).padStart(2, "0")}`, ".git"), { recursive: true });
+    mkdirSync(join(root, "zz-new-repo", ".git"), { recursive: true });
+    const rels = (await detectRunTargets(root)).map((t) => t.rel);
+    expect(rels).toHaveLength(17);
+    expect(rels.at(-1)).toBe("zz-new-repo");
   });
 });
 
