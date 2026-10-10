@@ -374,7 +374,8 @@ const SKIP_DIRS = new Set([
 ]);
 /** Monorepo containers whose children are the packages */
 const CONTAINER_DIRS = new Set(["apps", "packages", "services", "libs", "projects"]);
-const MAX_SUBFOLDERS = 12;
+/** A sanity cap only: the launcher filters and folds past a dozen */
+const MAX_SUBFOLDERS = 200;
 
 const exists = (path: string) =>
   stat(path).then(
@@ -404,10 +405,10 @@ async function childDirs(dir: string): Promise<string[]> {
 }
 
 /**
- * The project root plus the subfolders worth a terminal of their own: nested
- * git repos (a workspace of repos has no package.json at its root, so the
- * launcher showed no commands at all) and packages with something to run.
- * Two levels deep only inside apps/, packages/ and the like.
+ * The project root plus every subfolder, like an `ls`: nested git repos and packages with
+ * something to run first (a workspace of repos has no package.json at its root), then plain
+ * folders. Two levels deep only inside apps/, packages/ and the like. Capping at 12 hid a repo
+ * created later in a workspace of many, even after Refresh.
  */
 export async function detectRunTargets(projectPath: string): Promise<RunTarget[]> {
   const candidates: string[] = [];
@@ -438,7 +439,9 @@ export async function detectRunTargets(projectPath: string): Promise<RunTarget[]
     git: await exists(join(projectPath, ".git")),
     scripts: await detectProjectScripts(projectPath),
   };
-  return [root, ...sub.filter((t) => t.git || t.scripts.length > 0).slice(0, MAX_SUBFOLDERS)];
+  const runnable = (t: RunTarget) => t.git || t.scripts.length > 0;
+  const ordered = [...sub.filter(runnable), ...sub.filter((t) => !runnable(t))];
+  return [root, ...ordered.slice(0, MAX_SUBFOLDERS)];
 }
 
 /** Fresh detection: the cached scripts of the project and its subfolders are dropped first */
