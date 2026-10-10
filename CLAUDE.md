@@ -65,6 +65,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 - **6 built-in presets**: Single, Split Horizontal, Split Vertical, Three Columns, Bottom Terminal (70/30 with auto-spawned shell), 2×2 Grid
 - **Custom saved layouts**: capture the current tab as a reusable template with per-slot type + url + filePath, persisted in the workspace store
 - **Equalize splits** action via pane context menu
+- **Move between tabs**: `movePaneToTab` (pure in `stores/workspace/helpers.ts`, store action of the same name) + `lib/move-pane.ts` (`paneMoveTargets`, `movePane`) behind the pane menu, the Command Palette and dropping a `PaneDragHandle` grip on a tab; a tab left empty closes, the session never stops. Floating panes get no move
 - **Pure-function helpers** in `lib/layout-presets.ts` (`computePresetTransformation`, `templateFromLayout`) so the store just applies the result
 
 ### Picture-in-Picture (T84, v0.3.0)

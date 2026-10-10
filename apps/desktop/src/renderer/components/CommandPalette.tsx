@@ -7,6 +7,7 @@ import {
   Keyboard,
   Layout,
   type LucideIcon,
+  MoveRight,
   PanelLeft,
   Plus,
   RotateCcw,
@@ -20,6 +21,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appKeys } from "../lib/keymap";
+import { movePane, paneMoveTargets } from "../lib/move-pane";
 import { SIDEBAR_VIEW_META } from "../lib/sidebar-views";
 import { runCommandInNewTab } from "../lib/spawn-shell";
 import { openTerminalHere, splitActiveWithTerminal } from "../lib/split-terminal";
@@ -51,7 +53,20 @@ const CATEGORY_LABELS: Record<CommandCategory, string> = {
 
 // ─── Command Registry ───────────────────────────────────────────────────────
 
-function useCommands(close: () => void): Command[] {
+/** "Move Pane to Tab: …" for the active pane, read when the palette opens */
+function movePaneCommands(run: (fn: () => void) => () => void): Command[] {
+  const paneId = selectActivePaneId(useWorkspaceStore.getState());
+  if (!paneId) return [];
+  return paneMoveTargets(paneId).map((target) => ({
+    id: `ws:move-pane:${target.tabId}`,
+    label: target.tabId === "new" ? "Move Pane to New Tab" : `Move Pane to Tab: ${target.label}`,
+    category: "workspace",
+    icon: MoveRight,
+    action: run(() => movePane(paneId, target.tabId)),
+  }));
+}
+
+function useCommands(close: () => void, open: boolean): Command[] {
   const agents = useAgentStore((s) => s.agents);
   const emptyPane = useWorkspaceStore((s) => {
     const paneId = selectActivePaneId(s);
@@ -175,6 +190,7 @@ function useCommands(close: () => void): Command[] {
             },
           ]
         : []),
+      ...(open ? movePaneCommands(run) : []),
 
       // Agent commands
       {
@@ -208,7 +224,7 @@ function useCommands(close: () => void): Command[] {
     ];
 
     return cmds;
-  }, [agents, close, emptyPane]);
+  }, [agents, close, emptyPane, open]);
 }
 
 // ─── Fuzzy Filter ────────��──────────────────────────────────────────────────
@@ -284,7 +300,7 @@ export function CommandPalette() {
     setSelectedIndex(0);
   }, [setOpen]);
 
-  const commands = useCommands(close);
+  const commands = useCommands(close, open);
   const projectResults = useProjectSearch(query, close);
 
   const filtered = useMemo(() => {

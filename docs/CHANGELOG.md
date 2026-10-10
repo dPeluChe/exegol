@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Move a pane to any other tab of the project: right-click it > Move to Tab: <name> (or New Tab when it shares its tab), drag it by the grip before the session name (or the one in its hover bar) onto a tab, or use "Move Pane to Tab" in the Command Palette. It lands beside that tab's focused pane, or replaces an empty launcher, and the session keeps running. A tab left empty closes. Works for single-pane tabs too
+
 ### Fixed
 - The launcher's "Run in" lists every folder of the project again, like an `ls`: repos and folders with commands first, then the rest. It stopped at 12, so a repo created later in a workspace of many never showed, even after Refresh; a new launcher also lists the folders fresh instead of reusing the last minute's list
 

@@ -159,6 +159,46 @@ export function releaseAgentPanes(pw: ProjectWorkspace, agentId: string): Projec
   return { ...pw, tabs, panes, activeTabId };
 }
 
+/**
+ * A project's tabs and panes with `paneId` moved from `fromTabId` into `toTabId`, to the right of
+ * that tab's last focused (or first) pane, or in place of it when that pane is an empty launcher.
+ * A source tab left with no pane closes. Null: nothing to move.
+ */
+export function movePaneToTab(
+  pw: ProjectWorkspace,
+  fromTabId: string,
+  paneId: string,
+  toTabId: string,
+): Pick<ProjectWorkspace, "tabs" | "panes"> | null {
+  if (fromTabId === toTabId || !pw.panes[paneId]) return null;
+  const from = pw.tabs.find((t) => t.id === fromTabId);
+  const to = pw.tabs.find((t) => t.id === toTabId);
+  if (!from || !to || !layoutHasPane(from.layout, paneId)) return null;
+  const target = paneInTabOrFirst(to, to.lastFocusedPaneId);
+  if (!target) return null;
+
+  const panes = { ...pw.panes };
+  let toLayout: LayoutNode;
+  if (pw.panes[target]?.type === "empty") {
+    delete panes[target];
+    toLayout = replacePaneId(to.layout, target, paneId);
+  } else {
+    toLayout = splitNodeByPaneId(to.layout, target, "horizontal", paneId);
+  }
+  const fromLayout = removeNodeByPaneId(from.layout, paneId);
+  const tabs = pw.tabs.flatMap((t) => {
+    if (t.id === toTabId) return [{ ...t, layout: toLayout, lastFocusedPaneId: paneId }];
+    if (t.id !== fromTabId) return [t];
+    return fromLayout ? [{ ...t, layout: fromLayout }] : [];
+  });
+  return { tabs, panes };
+}
+
+function replacePaneId(node: LayoutNode, oldId: string, newId: string): LayoutNode {
+  if (node.type === "pane") return node.paneId === oldId ? { type: "pane", paneId: newId } : node;
+  return { ...node, children: node.children.map((c) => replacePaneId(c, oldId, newId)) };
+}
+
 /** `paneId` when the tab's layout holds it, else the tab's first pane */
 export function paneInTabOrFirst(
   tab: WorkspaceTab,
