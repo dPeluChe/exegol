@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { app, clipboard, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { isHostedWebview } from "../browser/electron-host";
-import { getDb } from "../db/client";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
@@ -19,6 +18,7 @@ import {
 const trackedSenders = new Set<number>();
 
 import { whenSessionReady } from "../terminal/reattach-gate";
+import { requestPtyResize } from "../terminal/resize-request";
 import { getMainWindow } from "./window";
 
 export function registerIpcHandlers(): void {
@@ -40,20 +40,7 @@ export function registerIpcHandlers(): void {
 
   // Terminal resize: renderer -> main -> pty
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {
-    const before = getPtyHost().getSize(agentId);
-    // A drag re-sends the same grid every frame; each would be a sidecar RPC
-    if (before?.cols === cols && before?.rows === rows) return;
-    getAgentManager().resize(agentId, cols, rows);
-    // Remembered so a reattach rebuilds the model at the size the output was drawn at
-    try {
-      getDb()
-        .prepare("UPDATE agents SET pty_cols = ?, pty_rows = ? WHERE id = ?")
-        .run(cols, rows, agentId);
-    } catch {
-      /* not an agent row (or db closing): the default size is only a fallback */
-    }
-    // Overview mirrors follow the owner's size; they never resize the PTY themselves
-    if (before) broadcast("terminal:resized", agentId, cols, rows);
+    requestPtyResize(agentId, cols, rows);
   });
 
   // Repaint without telling mirrors: the jiggle is not a real size change
