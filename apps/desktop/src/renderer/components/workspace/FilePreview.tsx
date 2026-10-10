@@ -141,7 +141,8 @@ export function FilePreview({
         saving={saving}
         saveError={saveError}
         onClose={onClose}
-        onSave={() => save()}
+        // A non-UTF-8 file would be rewritten as UTF-8, even from a draft made before it changed
+        onSave={() => (file?.notUtf8 ? undefined : save())}
         onOpenExternal={onOpenExternal}
         onReveal={onReveal}
       />
@@ -290,6 +291,11 @@ function FileBody({
   if (file.kind === "text") {
     return (
       <Suspense fallback={<Message>Loading editor...</Message>}>
+        {file.notUtf8 && (
+          <div className="border-b border-border px-3 py-1 text-[11px] text-text-muted">
+            Not UTF-8: shown as Windows-1252 and read-only, since saving would rewrite it as UTF-8
+          </div>
+        )}
         <CodeViewer
           key={path}
           content={draft ?? file.content}
@@ -300,7 +306,7 @@ function FileBody({
               ? (value) => onEdit(value, { content: file.content, mtimeMs: file.mtimeMs })
               : undefined
           }
-          onSave={onSave}
+          onSave={file.notUtf8 ? undefined : onSave}
           view={view}
           onViewChange={onViewChange}
           version={file.mtimeMs}

@@ -39,5 +39,7 @@ describe("decodeText", () => {
     expect(decodeText(Buffer.from("│ ó ñ", "utf-8"))).toEqual({ content: "│ ó ñ", notUtf8: false });
     const latin1 = Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x20, 0x93, 0x78, 0x94]); // café “x” in CP1252
     expect(decodeText(latin1)).toEqual({ content: "café \u201cx\u201d", notUtf8: true });
+    // A UTF-8 BOM stays in the text, so saving keeps it
+    expect(decodeText(Buffer.from("\ufeffhola", "utf-8")).content).toBe("\ufeffhola");
   });
 });

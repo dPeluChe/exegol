@@ -115,11 +115,15 @@ async function exists(path: string): Promise<boolean> {
  *  the file it checked (terminal links) passes its own */
 /** Saving rewrites as UTF-8, so a Latin-1 / CP1252 file shown as UTF-8 would lose every accented
  *  byte to U+FFFD on save: such a file is shown decoded as CP1252 and read-only */
+// ignoreBOM keeps a UTF-8 BOM in the text, so an edit saves it back (toString kept it too)
+const UTF8_STRICT = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+const CP1252 = new TextDecoder("windows-1252");
+
 export function decodeText(data: Buffer): { content: string; notUtf8: boolean } {
   try {
-    return { content: new TextDecoder("utf-8", { fatal: true }).decode(data), notUtf8: false };
+    return { content: UTF8_STRICT.decode(data), notUtf8: false };
   } catch {
-    return { content: new TextDecoder("windows-1252").decode(data), notUtf8: true };
+    return { content: CP1252.decode(data), notUtf8: true };
   }
 }
 
