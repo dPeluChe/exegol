@@ -454,6 +454,12 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.size ?? null;
   }
 
+  /** The grid the PTY ends up at: a size held during a reattach wins over the model's */
+  requestedSize(id: string): { size: { cols: number; rows: number } | null; held: boolean } {
+    const pending = this.pendingSizes.get(id);
+    return pending ? { size: pending, held: true } : { size: this.getSize(id), held: false };
+  }
+
   hasContent(id: string): boolean {
     return this.sessions.get(id)?.emulator.hasContent ?? false;
   }
