@@ -21,7 +21,7 @@ import { movePane } from "../../lib/move-pane";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { spawnShellIntoPane } from "../../lib/spawn-shell";
-import { splitWithBrowser, splitWithTerminal } from "../../lib/split-terminal";
+import { splitWithBrowser, splitWithSimulator, splitWithTerminal } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
 import {
@@ -42,6 +42,7 @@ import { BrowserPane } from "./BrowserPaneContent";
 import { EmptyPane } from "./EmptyPaneContent";
 import { PaneContextMenu } from "./PaneContextMenu";
 import { PANE_DRAG_TYPE, PaneDragHandle, readPaneDrag } from "./PaneDragHandle";
+import { SimulatorPane } from "./SimulatorPane";
 
 // Lazy: xterm + addons (~470KB) only load when a terminal pane mounts
 const TerminalPanel = lazy(() =>
@@ -419,6 +420,7 @@ const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.Reac
     <FilesPaneContent key={pane.filePath ?? "default"} pane={pane} paneId={paneId} />
   ),
   git: ({ pane }) => <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />,
+  simulator: ({ pane, paneId }) => <SimulatorPane pane={pane} paneId={paneId} />,
   empty: ({ paneId }) => <EmptyPane paneId={paneId} />,
 };
 
@@ -578,6 +580,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         agentId={pane.agentId}
         isSplitPane={isSplitPane}
         onSplit={(dir, newType) => {
+          if (newType === "simulator") return splitWithSimulator(tabId, paneId, dir);
           if (newType !== "browser") {
             useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty");
             return;

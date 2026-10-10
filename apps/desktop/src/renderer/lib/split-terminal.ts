@@ -122,3 +122,25 @@ export function splitWithBrowser(
   focusNewPane(id);
   useWorkspaceStore.getState().splitPane(tabId, paneId, direction, "browser", { id, url });
 }
+
+/** Split `paneId` with a Simulator pane (macOS) that takes the keyboard once mounted */
+export function splitWithSimulator(
+  tabId: string,
+  paneId: string,
+  direction: "horizontal" | "vertical" = "horizontal",
+): void {
+  const id = nanoid(8);
+  focusNewPane(id);
+  useWorkspaceStore.getState().splitPane(tabId, paneId, direction, "simulator", { id });
+}
+
+/** The palette's Simulator: in the active pane when it is an empty launcher, else beside it */
+export function openSimulatorForActivePane(): void {
+  const tabId = getProjectState().activeTabId;
+  const paneId = getActivePaneId();
+  if (!tabId || !paneId) return;
+  if (activeEmptyPaneId()) {
+    focusNewPane(paneId);
+    useWorkspaceStore.getState().updatePane(paneId, { type: "simulator" });
+  } else splitWithSimulator(tabId, paneId);
+}

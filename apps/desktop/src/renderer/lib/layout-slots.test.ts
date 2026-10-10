@@ -62,4 +62,15 @@ describe("saved layout slots", () => {
     const out = computeCustomPresetTransformation(custom, ["busy"], () => false);
     expect(out.newPanes.map((p) => p.id)).not.toContain("busy");
   });
+
+  it("a simulator slot keeps its device", () => {
+    const sim = { s: { id: "s", type: "simulator", simUdid: "UDID-1" } } as never;
+    const layout = templateFromLayout({ type: "pane", paneId: "s" } as never, sim);
+    expect(layout.slotTypes[0]?.simUdid).toBe("UDID-1");
+    const out = computeCustomPresetTransformation(
+      { ...layout, id: "y", name: "ios", createdAt: 0 },
+      [],
+    );
+    expect(out.newPanes[0]).toMatchObject({ type: "simulator", simUdid: "UDID-1" });
+  });
 });

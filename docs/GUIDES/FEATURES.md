@@ -113,6 +113,13 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   element; it arrives at the agent's next turn.
 - **QA record and replay**: record clicks, typing and navigation as a test, replay it, and see
   per-step results, console errors and screenshots in the QA Tests section.
+- **Simulator pane** (macOS with Xcode): pick an iOS Simulator device, boot it and see it live
+  in a pane; click to tap, drag to swipe, type when the pane has the focus (US keyboard
+  characters, Enter, Backspace, Tab, Esc; paste works). Toolbar: Home, copy or save a screenshot,
+  Open in Simulator.app, boot or shut down. Open it from the launcher's Simulator chip, the pane
+  menu's Split with Simulator, or the Command Palette. Needs AXe (MIT):
+  `brew install cameroncooke/axe/axe`; the pane shows that command when AXe is missing and
+  never installs anything itself.
 
 ## Git and code
 

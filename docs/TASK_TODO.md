@@ -224,10 +224,11 @@ error, prefer `--id`) 0.9 s, navigated; `axe type` filled Safari's address field
    `-resultBundlePath` + `xcrun xcresulttool get build-results|test-results` as JSON: errors and
    warnings like Xcode's issue navigator, click to file:line in Files, failed tests, filtered log.
    Same data for agents through the Exegol MCP
-2. Simulator pane: pick a device, boot, install and launch the built app; live view from
-   `axe stream-video` (MJPEG) served on a local port to the pane; the user taps, swipes and types
-   on it (map pane coordinates to points). Agent tools on the Exegol MCP, mirroring the browser
-   ones: `sim_screenshot`, `sim_describe` (accessibility tree with refs), `sim_tap`, `sim_type`,
+2. Simulator pane. ~~MVP~~ shipped on `feat/simulator-pane` (`TASK_COMPLETED/2610.md`): device
+   picker, boot/shutdown, live view (`axe stream-video` parsed in main, frames over IPC, no port),
+   tap, swipe, typing, Home, screenshot, Open in Simulator.app; module `main/simulator/`.
+   Pending: install and launch the built app (with item 1), rotation, verify the pane live.
+   Agent tools on the Exegol MCP (reuse `main/simulator/`), mirroring the browser ones: `sim_screenshot`, `sim_describe` (accessibility tree with refs), `sim_tap`, `sim_type`,
    `sim_swipe`, `sim_button`, `sim_launch`, `sim_logs`; driver / take over / wait for user like
    `browser/control.ts`
 3. Logs pane: `simctl spawn <udid> log stream` (and `devicectl` for devices), filter by app

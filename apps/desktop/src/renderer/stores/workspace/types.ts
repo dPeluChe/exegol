@@ -9,7 +9,7 @@ import type {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type PaneType = "terminal" | "browser" | "files" | "git" | "empty";
+export type PaneType = "terminal" | "browser" | "files" | "git" | "simulator" | "empty";
 
 export interface Pane {
   id: string;
@@ -25,6 +25,8 @@ export interface Pane {
   viewport?: PageSize;
   /** Browser pane: the tab's one pane that URLs clicked in its terminals open in */
   linkPreview?: boolean;
+  /** Simulator pane: the device it shows (macOS) */
+  simUdid?: string;
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }

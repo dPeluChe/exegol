@@ -1,18 +1,10 @@
 import { cn } from "@exegol/ui";
-import { Globe, LayoutGrid } from "lucide-react";
 import { pageLabel } from "../../lib/browser-viewports";
 import { focusPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
-import { PANE_TYPE_ICONS, tabLabel } from "../workspace/tab-bar-helpers";
+import { PANE_META, tabLabel } from "../workspace/tab-bar-helpers";
 import { AgentMiniCard } from "./AgentMiniCard";
-
-const PANE_LABEL: Record<string, string> = {
-  files: "Files",
-  git: "Git",
-  empty: "Launcher",
-  terminal: "Terminal",
-};
 
 /** Selects its own agent: a status push re-renders this row, not the whole tree */
 function PaneAgentRow({ agentId }: { agentId: string }) {
@@ -23,7 +15,7 @@ function PaneAgentRow({ agentId }: { agentId: string }) {
 /** One row per pane, in layout order: agents and shells as agent rows, the rest by what they show */
 function PaneRow({ pane, onOpen }: { pane: Pane; onOpen: () => void }) {
   if (pane.type === "terminal" && pane.agentId) return <PaneAgentRow agentId={pane.agentId} />;
-  const Icon = pane.type === "empty" ? LayoutGrid : (PANE_TYPE_ICONS[pane.type] ?? Globe);
+  const { Icon, label } = PANE_META[pane.type];
   return (
     <button
       type="button"
@@ -31,9 +23,7 @@ function PaneRow({ pane, onOpen }: { pane: Pane; onOpen: () => void }) {
       className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-[10px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-secondary"
     >
       <Icon className="ml-0.5 h-3 w-3 shrink-0" />
-      <span className="truncate">
-        {pane.type === "browser" ? pageLabel(pane.url) || "Browser" : PANE_LABEL[pane.type]}
-      </span>
+      <span className="truncate">{(pane.type === "browser" && pageLabel(pane.url)) || label}</span>
     </button>
   );
 }
