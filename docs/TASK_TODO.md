@@ -222,7 +222,10 @@ it when the user has cleaned up to the sessions they need and says go.
    last screen clear) and reattach hidden panes lazily
 4. Sidecar logs to `sidecar.log` (empty today): gate pauses over 1 s, its own exit cause and
    signal, the pid file state at discovery
-5. Verify live: a heavy command in one terminal, the others keep typing; the health watch (#346)
+5. Ring buffer start on a character boundary: after the 8 MB ring wraps (and on an oversize
+   write) the replay can begin mid UTF-8 sequence, one U+FFFD at the top of a reattach (align the
+   start like `utf8Tail`; found in the #356 encoding review)
+6. Verify live: a heavy command in one terminal, the others keep typing; the health watch (#346)
    stays quiet
 
 ### T201: Local voice dictation `added: 2026-10-07`

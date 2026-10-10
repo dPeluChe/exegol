@@ -113,6 +113,20 @@ async function exists(path: string): Promise<boolean> {
 /** How the viewer shows a file, read through one fd. `svgAsImage`: a terminal link opens an
  *  SVG as a picture, the files viewer keeps it as editable text. `open`: a caller that must pin
  *  the file it checked (terminal links) passes its own */
+/** Saving rewrites as UTF-8, so a Latin-1 / CP1252 file shown as UTF-8 would lose every accented
+ *  byte to U+FFFD on save: such a file is shown decoded as CP1252 and read-only */
+// ignoreBOM keeps a UTF-8 BOM in the text, so an edit saves it back (toString kept it too)
+const UTF8_STRICT = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+const CP1252 = new TextDecoder("windows-1252");
+
+export function decodeText(data: Buffer): { content: string; notUtf8: boolean } {
+  try {
+    return { content: UTF8_STRICT.decode(data), notUtf8: false };
+  } catch {
+    return { content: CP1252.decode(data), notUtf8: true };
+  }
+}
+
 export async function readForViewer(
   path: string,
   opts: { svgAsImage?: boolean; open?: (path: string) => Promise<FileHandle> } = {},
@@ -144,7 +158,8 @@ export async function readForViewer(
     if (data.subarray(0, 8192).includes(0))
       return { kind: "binary" as const, content: "", language: "", size };
     const language = EXTENSION_LANGUAGES[ext] ?? "plaintext";
-    return { kind: "text" as const, content: data.toString("utf-8"), language, size, mtimeMs };
+    const { content, notUtf8 } = decodeText(data);
+    return { kind: "text" as const, content, language, size, mtimeMs, notUtf8 };
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EACCES" || code === "EPERM") {

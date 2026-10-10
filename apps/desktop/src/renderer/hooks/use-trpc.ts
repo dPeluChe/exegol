@@ -245,6 +245,8 @@ export interface FileContent {
   base64?: string;
   /** Text only: the edit base for the on-disk conflict check */
   mtimeMs?: number;
+  /** Text only: not valid UTF-8 (shown as CP1252); never editable, a save would corrupt it */
+  notUtf8?: boolean;
 }
 
 export function useFileContent(path: string | null) {

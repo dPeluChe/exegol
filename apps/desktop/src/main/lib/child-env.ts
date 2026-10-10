@@ -20,8 +20,18 @@ const SESSION_MARKERS = new Set([
 ]);
 
 /** The environment for a CLI Exegol starts: without another session's markers or Exegol's own */
-export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  return Object.fromEntries(
+export function childEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv {
+  const out = Object.fromEntries(
     Object.entries(env).filter(([k]) => !SESSION_MARKERS.has(k) && !k.startsWith("EXEGOL_")),
   );
+  // An app opened from Finder has no locale (Terminal and iTerm set one): `pbcopy` from an agent
+  // then stored UTF-8 as Mac Roman ("│" pasted as "‚îÇ"). Encoding only, never the language.
+  // en_US.UTF-8, not macOS's bare "UTF-8": ssh forwards LC_* and Linux servers lack "UTF-8"
+  if (!out.LANG && !out.LC_ALL && !out.LC_CTYPE && platform !== "win32") {
+    out.LC_CTYPE = platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8";
+  }
+  return out;
 }
