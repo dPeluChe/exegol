@@ -18,6 +18,7 @@ import {
 import { useContextMenu } from "../../hooks/use-context-menu";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { appKeys } from "../../lib/keymap";
+import { movePane, paneMoveTargets } from "../../lib/move-pane";
 import type { PaneType } from "../../stores/workspace";
 
 interface PaneContextMenuProps {
@@ -29,7 +30,6 @@ interface PaneContextMenuProps {
   onSplit: (direction: "horizontal" | "vertical", newType?: PaneType) => void;
   /** A shell beside this pane, in the folder it works in (lib/split-terminal) */
   onSplitTerminal: () => void;
-  onExtractToTab: () => void;
   onEqualize: () => void;
   onClose: () => void;
   /** Only wired for terminal/browser panes — undefined hides the menu entry */
@@ -42,6 +42,8 @@ interface PaneContextMenuProps {
 }
 
 interface MenuItem {
+  /** React key when labels can repeat (two tabs with one name) */
+  id?: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   shortcut?: string;
@@ -118,13 +120,21 @@ function terminalActionsSection({ agentId, onScrollTop, onScrollBottom }: MenuAc
   return items;
 }
 
+function moveSection({ paneId }: MenuActions): MenuItem[] {
+  return paneMoveTargets(paneId).map((target) => ({
+    id: `move:${target.tabId}`,
+    label: `Move to ${target.tabId === "new" ? "New Tab" : `Tab: ${target.label}`}`,
+    icon: MoveRight,
+    action: () => movePane(paneId, target.tabId),
+  }));
+}
+
 function splitSection({
   isSplitPane,
   onSplit,
   onSplitTerminal,
   onFloat,
   onEqualize,
-  onExtractToTab,
 }: MenuActions): MenuItem[] {
   return [
     {
@@ -137,21 +147,19 @@ function splitSection({
     { label: "Split with Browser", icon: Globe, action: () => onSplit("horizontal", "browser") },
     { label: "Split with Terminal", icon: TerminalSquare, shortcut: "⌘Y", action: onSplitTerminal },
     ...(onFloat ? [{ label: "Float to Window", icon: PictureInPicture2, action: onFloat }] : []),
-    ...(isSplitPane
-      ? [
-          { label: "Equalize Splits", icon: Equal, action: onEqualize },
-          { label: "Move to New Tab", icon: MoveRight, action: onExtractToTab },
-        ]
-      : []),
+    ...(isSplitPane ? [{ label: "Equalize Splits", icon: Equal, action: onEqualize }] : []),
   ];
 }
 
 function buildMenuSections(actions: MenuActions): MenuSection[] {
   const isTerminal = actions.paneType === "terminal";
-  const candidates = isTerminal ? [clipboardSection(actions), terminalActionsSection(actions)] : [];
+  const candidates = [
+    ...(isTerminal ? [clipboardSection(actions), terminalActionsSection(actions)] : []),
+    splitSection(actions),
+    moveSection(actions),
+  ];
   return [
     ...candidates.filter((items) => items.length > 0).map((items) => ({ items })),
-    { items: splitSection(actions) },
     {
       items: [
         {
@@ -168,7 +176,8 @@ function buildMenuSections(actions: MenuActions): MenuSection[] {
 export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) {
   const { contextMenu: menu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
   const menuStyle = useFittedMenu(menuRef, menu);
-  const sections = buildMenuSections(actions);
+  // Built on open only: the move list reads the tabs and sessions of that moment
+  const sections = menu ? buildMenuSections(actions) : [];
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: context menu wrapper
@@ -186,10 +195,14 @@ export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) 
           }}
         >
           {sections.map((section, si) => (
-            <div key={section.items[0]?.label ?? si}>
+            <div key={section.items[0]?.id ?? section.items[0]?.label ?? si}>
               {si > 0 && <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />}
               {section.items.map((item) => (
-                <MenuItemButton key={item.label} item={item} onClose={closeContextMenu} />
+                <MenuItemButton
+                  key={item.id ?? item.label}
+                  item={item}
+                  onClose={closeContextMenu}
+                />
               ))}
             </div>
           ))}

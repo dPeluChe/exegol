@@ -22,12 +22,15 @@ import { McpStatusIndicator } from "../common/McpStatusIndicator";
 import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
 import { WatchToggle } from "../common/WatchToggle";
+import { PaneDragHandle } from "../workspace/PaneDragHandle";
 import { CliUpdateControl } from "./CliUpdateControl";
 import { FollowUpControl } from "./FollowUpControl";
 import { PrWatchControl } from "./PrWatchControl";
 import { TurnChangesChip } from "./TurnChanges";
 
 interface TerminalToolbarProps {
+  /** The workspace pane showing it: a grip before the name drags it to another tab */
+  paneId?: string;
   /** T160: live agent identity for the session-name chip (omit for shells). */
   agent?: QuietAgent | null;
   accessMode?: AgentAccessMode | null;
@@ -49,6 +52,7 @@ interface TerminalToolbarProps {
 }
 
 export function TerminalToolbar({
+  paneId,
   agent,
   accessMode,
   isolationMode,
@@ -66,6 +70,7 @@ export function TerminalToolbar({
     // Badges live on the LEFT — the pane's hover actions (float/split/close)
     // occupy the right edge and were covering them (verify session 2026-08-11).
     <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
+      {paneId && <PaneDragHandle paneId={paneId} className="-mr-1 h-4 w-3.5 shrink-0" />}
       {agent && agent.cliType !== "shell" && <SessionControls agent={agent} />}
       {agent && agent.cliType !== "shell" && (
         <McpStatusIndicator agentId={agent.id} accessMode={accessMode} />

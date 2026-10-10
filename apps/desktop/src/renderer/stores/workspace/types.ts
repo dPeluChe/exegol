@@ -179,6 +179,8 @@ export interface WorkspaceStore {
   setFocusedPane: (paneId: string | null) => void;
 
   extractPaneToNewTab: (sourceTabId: string, paneId: string) => void;
+  /** Move a pane into another tab (helpers#movePaneToTab), which becomes active with it focused */
+  movePaneToTab: (fromTabId: string, paneId: string, toTabId: string) => void;
   /** Close exactly this tab or pane (resolveCloseTarget / closeTargetFor) */
   closeTarget: (target: CloseTarget) => void;
   closeFocusedPane: () => void;

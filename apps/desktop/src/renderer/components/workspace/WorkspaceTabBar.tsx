@@ -3,7 +3,7 @@ import { Plus, Terminal } from "lucide-react";
 import { type DragEvent, useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { closeWithConfirm } from "../../lib/close-target";
-import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { movePane } from "../../lib/move-pane";
 import { focusNewPane } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentBrowserStore } from "../../stores/agent-browser";
@@ -21,6 +21,7 @@ import {
 } from "../../stores/workspace";
 import { tabCloseTarget } from "../../stores/workspace/helpers";
 import { LayoutPresets } from "./LayoutPresets";
+import { PANE_ALONE_DRAG_TYPE, PANE_DRAG_TYPE, readPaneDrag } from "./PaneDragHandle";
 import { QuickLaunchBar } from "./QuickLaunchBar";
 import { getTabMeta } from "./tab-bar-helpers";
 import { WorkspaceTabItem } from "./WorkspaceTabItem";
@@ -54,8 +55,6 @@ export function WorkspaceTabBar() {
     [],
   );
 
-  const extractPaneToNewTab = useWorkspaceStore((s) => s.extractPaneToNewTab);
-
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -69,12 +68,15 @@ export function WorkspaceTabBar() {
     e.dataTransfer.effectAllowed = "move";
   }, []);
 
+  // A tab takes a dragged tab (reorder) or a dragged pane (move into it)
   const handleTabDragOver = useCallback((e: DragEvent, tabId: string) => {
-    if (!e.dataTransfer.types.includes("application/exegol-tab")) return;
+    const { types } = e.dataTransfer;
+    if (!types.includes("application/exegol-tab") && !types.includes(PANE_DRAG_TYPE)) return;
     e.preventDefault();
     e.stopPropagation(); // Keep drag inside tab bar — don't trigger pane merge indicators
     e.dataTransfer.dropEffect = "move";
     setDragOverTabId(tabId);
+    setPaneDragOverBar(false);
   }, []);
 
   const handleTabDragLeave = useCallback(() => {
@@ -86,6 +88,12 @@ export function WorkspaceTabBar() {
       e.preventDefault();
       e.stopPropagation(); // Prevent bubbling to WorkspacePane merge handler
       setDragOverTabId(null);
+      setPaneDragOverBar(false);
+      const pane = readPaneDrag(e);
+      if (pane) {
+        if (pane.tabId !== targetTabId) movePane(pane.paneId, targetTabId);
+        return;
+      }
       const sourceTabId = e.dataTransfer.getData("application/exegol-tab");
       if (!sourceTabId || sourceTabId === targetTabId) return;
       const fromIndex = tabs.findIndex((t) => t.id === sourceTabId);
@@ -104,7 +112,8 @@ export function WorkspaceTabBar() {
 
   // Pane drag → tab bar: extract pane to new tab
   const handleBarDragOver = useCallback((e: DragEvent) => {
-    if (!e.dataTransfer.types.includes("application/exegol-pane")) return;
+    const { types } = e.dataTransfer;
+    if (!types.includes(PANE_DRAG_TYPE) || types.includes(PANE_ALONE_DRAG_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setPaneDragOverBar(true);
@@ -115,23 +124,14 @@ export function WorkspaceTabBar() {
     setPaneDragOverBar(false);
   }, []);
 
-  const handleBarDrop = useCallback(
-    (e: DragEvent) => {
-      setPaneDragOverBar(false);
-      const raw = e.dataTransfer.getData("application/exegol-pane");
-      if (!raw) return;
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        const { paneId, tabId: sourceTabId } = JSON.parse(raw);
-        extractPaneToNewTab(sourceTabId, paneId);
-        dispatchRefitTerminals();
-      } catch {
-        // Malformed data — ignore
-      }
-    },
-    [extractPaneToNewTab],
-  );
+  const handleBarDrop = useCallback((e: DragEvent) => {
+    setPaneDragOverBar(false);
+    const pane = readPaneDrag(e);
+    if (!pane) return;
+    e.preventDefault();
+    e.stopPropagation();
+    movePane(pane.paneId, "new");
+  }, []);
 
   const handleNewTerminal = useCallback(async () => {
     if (!projectId) return;

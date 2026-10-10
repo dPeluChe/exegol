@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { releaseAgentPanes } from "./helpers";
+import { movePaneToTab, releaseAgentPanes } from "./helpers";
 import type { ProjectWorkspace } from "./types";
 
 const single = (tabId: string, paneId: string) => ({
@@ -53,5 +53,80 @@ describe("releaseAgentPanes", () => {
     const only: ProjectWorkspace = { ...pw, tabs: [single("t2", "s1")], activeTabId: "t2" };
     expect(releaseAgentPanes(only, "shell-1")?.tabs).toHaveLength(1);
     expect(releaseAgentPanes(pw, "other")).toBeNull();
+  });
+});
+
+describe("movePaneToTab", () => {
+  const pw: ProjectWorkspace = {
+    tabs: [
+      single("solo", "s1"),
+      {
+        id: "split",
+        label: "split",
+        layout: {
+          type: "split",
+          direction: "horizontal",
+          children: [
+            { type: "pane", paneId: "s2" },
+            { type: "pane", paneId: "web" },
+          ],
+          sizes: [30, 70],
+        },
+        lastFocusedPaneId: "web",
+      },
+      single("fresh", "launcher"),
+    ],
+    activeTabId: "solo",
+    panes: {
+      s1: { id: "s1", type: "terminal", agentId: "shell-1" },
+      s2: { id: "s2", type: "terminal", agentId: "shell-2" },
+      web: { id: "web", type: "browser", url: "http://localhost:3000" },
+      launcher: { id: "launcher", type: "empty" },
+    },
+  };
+
+  it("closes the source tab when its only pane leaves, splitting beside the focused pane", () => {
+    const next = movePaneToTab(pw, "solo", "s1", "split");
+    expect(next?.tabs.map((t) => t.id)).toEqual(["split", "fresh"]);
+    const split = next?.tabs[0];
+    expect(split?.lastFocusedPaneId).toBe("s1");
+    expect(split?.layout).toEqual({
+      type: "split",
+      direction: "horizontal",
+      children: [
+        { type: "pane", paneId: "s2" },
+        {
+          type: "split",
+          direction: "horizontal",
+          children: [
+            { type: "pane", paneId: "web" },
+            { type: "pane", paneId: "s1" },
+          ],
+          sizes: [50, 50],
+        },
+      ],
+      sizes: [30, 70],
+    });
+    expect(next?.panes.s1).toEqual(pw.panes.s1);
+  });
+
+  it("keeps the source tab with the rest, and takes the place of an empty launcher", () => {
+    const next = movePaneToTab(pw, "split", "s2", "fresh");
+    expect(next?.tabs.find((t) => t.id === "split")?.layout).toEqual({
+      type: "pane",
+      paneId: "web",
+    });
+    expect(next?.tabs.find((t) => t.id === "fresh")?.layout).toEqual({
+      type: "pane",
+      paneId: "s2",
+    });
+    expect(next?.panes.launcher).toBeUndefined();
+    expect(next?.panes.s2?.agentId).toBe("shell-2");
+  });
+
+  it("does nothing for the same tab, a missing tab or a pane the source does not hold", () => {
+    expect(movePaneToTab(pw, "solo", "s1", "solo")).toBeNull();
+    expect(movePaneToTab(pw, "solo", "s1", "gone")).toBeNull();
+    expect(movePaneToTab(pw, "solo", "web", "fresh")).toBeNull();
   });
 });

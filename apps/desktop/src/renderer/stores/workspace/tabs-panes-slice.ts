@@ -10,6 +10,7 @@ import {
   createEmptyPane,
   getPw,
   layoutHasPane,
+  movePaneToTab,
   paneInTabOrFirst,
   pushClosed,
   releaseAgentPanes,
@@ -69,6 +70,7 @@ type TabsPanesSlice = Pick<
   | "releaseAgent"
   | "setFocusedPane"
   | "extractPaneToNewTab"
+  | "movePaneToTab"
   | "closeTarget"
   | "closeFocusedPane"
   | "recentlyClosed"
@@ -369,6 +371,12 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       newTabs.splice(sourceIdx + 1, 0, newTab);
 
       return withFocus(s, { tabs: newTabs }, newTab.id, paneId);
+    }),
+
+  movePaneToTab: (fromTabId, paneId, toTabId) =>
+    set((s) => {
+      const moved = movePaneToTab(getPw(s), fromTabId, paneId, toTabId);
+      return moved ? withFocus(s, moved, toTabId, paneId) : s;
     }),
 
   closeTarget: (target) => {

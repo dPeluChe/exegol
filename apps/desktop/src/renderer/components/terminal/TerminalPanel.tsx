@@ -148,6 +148,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       )}
       {hasData && (
         <TerminalToolbar
+          paneId={paneId}
           agent={storeAgent ?? null}
           accessMode={agent?.accessMode}
           isolationMode={isolationMode}
