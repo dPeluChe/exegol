@@ -9,7 +9,7 @@ vi.mock("./project-paths", () => ({
   assertPathInsideProject: async () => {},
 }));
 
-const { filesRouter } = await import("./files");
+const { decodeText, filesRouter } = await import("./files");
 const caller = filesRouter.createCaller({} as never);
 
 describe("files.writeFile conflict check", () => {
@@ -31,5 +31,13 @@ describe("files.writeFile conflict check", () => {
       caller.writeFile({ path: file, content: "mine", expectedMtimeMs: stale }),
     ).rejects.toThrow(/changed on disk/);
     expect(readFileSync(file, "utf-8")).toBe("agent wrote this");
+  });
+});
+
+describe("decodeText", () => {
+  it("keeps UTF-8 editable and shows Latin-1 / CP1252 read-only instead of turning it into U+FFFD", () => {
+    expect(decodeText(Buffer.from("│ ó ñ", "utf-8"))).toEqual({ content: "│ ó ñ", notUtf8: false });
+    const latin1 = Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x20, 0x93, 0x78, 0x94]); // café “x” in CP1252
+    expect(decodeText(latin1)).toEqual({ content: "café \u201cx\u201d", notUtf8: true });
   });
 });

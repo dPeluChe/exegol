@@ -22,7 +22,7 @@ describe("childEnv", () => {
   });
 
   it("gives a UTF-8 encoding when the app started with no locale (opened from Finder)", () => {
-    expect(childEnv({ PATH: "/bin" }, "darwin").LC_CTYPE).toBe("UTF-8");
+    expect(childEnv({ PATH: "/bin" }, "darwin").LC_CTYPE).toBe("en_US.UTF-8");
     expect(childEnv({ PATH: "/bin" }, "linux").LC_CTYPE).toBe("C.UTF-8");
     expect(childEnv({ PATH: "/bin" }, "win32").LC_CTYPE).toBeUndefined();
   });

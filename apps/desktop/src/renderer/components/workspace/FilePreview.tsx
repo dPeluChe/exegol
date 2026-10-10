@@ -296,7 +296,7 @@ function FileBody({
           fileName={path}
           revealLine={revealLine}
           onChange={
-            onEdit
+            onEdit && !file.notUtf8
               ? (value) => onEdit(value, { content: file.content, mtimeMs: file.mtimeMs })
               : undefined
           }

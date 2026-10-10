@@ -13,7 +13,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Move a pane to any other tab of the project: right-click it > Move to Tab: <name> (or New Tab when it shares its tab), drag it by the grip before the session name (or the one in its hover bar) onto a tab, or use "Move Pane to Tab" in the Command Palette. It lands beside that tab's focused pane, or replaces an empty launcher, and the session keeps running. A tab left empty closes. Works for single-pane tabs too
 
 ### Fixed
-- Text an agent copies (Claude Code's copy, `pbcopy`) no longer pastes garbled elsewhere: a table drawn with "│" pasted as "‚îÇ" and "ó" as "√≥". Exegol opened from the Dock or Finder gave its terminals no locale, so the clipboard took UTF-8 as Mac Roman; terminals now get a UTF-8 encoding when you have not set one (your `LANG` or `LC_*` always wins)
+- Text an agent copies (Claude Code's copy, `pbcopy`) no longer pastes garbled elsewhere: a table drawn with "│" pasted as "‚îÇ" and "ó" as "√≥". Exegol opened from the Dock or Finder gave its terminals no locale, so the clipboard took UTF-8 as Mac Roman; terminals now get a UTF-8 encoding (`LC_CTYPE=en_US.UTF-8` on macOS, `C.UTF-8` on Linux) when you have not set one: your `LANG` or `LC_*` always wins, and the language of messages does not change
+- Files: a text file that is not UTF-8 (Latin-1, Windows-1252) opens read-only with its accents shown right. Before, it showed broken characters and saving it replaced every accented letter for good
 - The launcher's "Run in" lists every folder of the project again, like an `ls`: repos and folders with commands first, then the rest. It stopped at 12, so a repo created later in a workspace of many never showed, even after Refresh; a new launcher also lists the folders fresh instead of reusing the last minute's list
 
 ## [0.5.19] — 2026-10-09 — CLI install health, Codex launch fix, cleaner sidebar and focus

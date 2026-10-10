@@ -28,9 +28,10 @@ export function childEnv(
     Object.entries(env).filter(([k]) => !SESSION_MARKERS.has(k) && !k.startsWith("EXEGOL_")),
   );
   // An app opened from Finder has no locale (Terminal and iTerm set one): `pbcopy` from an agent
-  // then stored UTF-8 as Mac Roman ("│" pasted as "‚îÇ"). Only the encoding, never the language
+  // then stored UTF-8 as Mac Roman ("│" pasted as "‚îÇ"). Encoding only, never the language.
+  // en_US.UTF-8, not macOS's bare "UTF-8": ssh forwards LC_* and Linux servers lack "UTF-8"
   if (!out.LANG && !out.LC_ALL && !out.LC_CTYPE && platform !== "win32") {
-    out.LC_CTYPE = platform === "darwin" ? "UTF-8" : "C.UTF-8";
+    out.LC_CTYPE = platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8";
   }
   return out;
 }
