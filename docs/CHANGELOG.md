@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Text an agent copies (Claude Code's copy, `pbcopy`) no longer pastes garbled elsewhere: a table drawn with "│" pasted as "‚îÇ" and "ó" as "√≥". Exegol opened from the Dock or Finder gave its terminals no locale, so the clipboard took UTF-8 as Mac Roman; terminals now get a UTF-8 encoding when you have not set one (your `LANG` or `LC_*` always wins)
 - The launcher's "Run in" lists every folder of the project again, like an `ls`: repos and folders with commands first, then the rest. It stopped at 12, so a repo created later in a workspace of many never showed, even after Refresh; a new launcher also lists the folders fresh instead of reusing the last minute's list
 
 ## [0.5.19] — 2026-10-09 — CLI install health, Codex launch fix, cleaner sidebar and focus
