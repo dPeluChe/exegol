@@ -54,6 +54,24 @@ describe("PtyHost resize", () => {
   });
 });
 
+describe("PtyHost requestedSize", () => {
+  it("is the size held while reattaching, else the model's grid", async () => {
+    // A Dashboard card's size held mid-reattach: a pane at the stale grid must not compare equal
+    const host = new PtyHost();
+    let release: (ring: string) => void = () => {};
+    const { client } = fakeSidecar();
+    client.snapshot = () => new Promise<string>((r) => (release = r));
+    host.connectToSidecar(client);
+    const done = host.reattachSession("h", { cols: 120, rows: 40 }, callbacks);
+    expect(host.requestedSize("h")).toEqual({ size: { cols: 120, rows: 40 }, held: false });
+    host.resize("h", 80, 24);
+    expect(host.requestedSize("h")).toEqual({ size: { cols: 80, rows: 24 }, held: true });
+    release("");
+    await done;
+    expect(host.requestedSize("h")).toEqual({ size: { cols: 80, rows: 24 }, held: false });
+  });
+});
+
 describe("PtyHost clear", () => {
   it("forgets the history in the model and the sidecar ring, then sends Ctrl+L", async () => {
     const clear = vi.fn(async () => {});

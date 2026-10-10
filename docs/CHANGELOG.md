@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Opening the Dashboard right after starting Exegol no longer leaves an agent pane drawn at the wrong width when you come back. A watched card set to "fit session to card" could keep the session at the card's size while it was still reconnecting, and the pane's own size was ignored until you switched tabs
+
 ## [0.5.20] — 2026-10-09 — Move panes between tabs, every folder in Run in, clean copies from agents
 
 ### Added
