@@ -1,15 +1,14 @@
 import type { SimDevice, SimulatorSupport } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
+import { IS_MAC } from "../lib/keymap";
 import { trpcInvoke } from "../lib/trpc-client";
-
-const isMac = () => (window.api?.app?.getPlatform?.() ?? "darwin") === "darwin";
 
 /** Xcode's simctl (and AXe) on this Mac; never asked elsewhere */
 export function useSimulatorSupport() {
   return useQuery({
     queryKey: ["simulator", "support"],
     queryFn: () => trpcInvoke<SimulatorSupport>("simulator.support"),
-    enabled: isMac(),
+    enabled: IS_MAC,
     staleTime: 60_000,
   });
 }
@@ -24,6 +23,7 @@ export function useSimDevices(enabled: boolean) {
     queryKey: ["simulator", "devices"],
     queryFn: () => trpcInvoke<SimDevice[]>("simulator.devices"),
     enabled,
-    refetchInterval: 5_000,
+    // Fast while waiting for a boot, slow once one runs
+    refetchInterval: (q) => (q.state.data?.some((d) => d.state === "Booted") ? 30_000 : 5_000),
   });
 }

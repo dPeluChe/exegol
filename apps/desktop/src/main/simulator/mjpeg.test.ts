@@ -68,6 +68,28 @@ describe("MjpegParser", () => {
     expect(frames).toEqual([a]);
   });
 
+  it("skips a PNG part (what AXe sends at scale 1) and keeps the JPEGs", () => {
+    const { frames, parser } = collect();
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    parser.push(Buffer.concat([part(a), part(png), part(b)]));
+    expect(frames).toEqual([a, b]);
+  });
+
+  it("fills a frame spread over many chunks", () => {
+    const { frames, parser } = collect();
+    const big = jpeg(3, 200_000);
+    const data = part(big);
+    for (let i = 0; i < data.length; i += 4096) parser.push(data.subarray(i, i + 4096));
+    expect(frames).toEqual([big]);
+  });
+
+  it("drops a header block that never ends and resyncs on the next part", () => {
+    const { frames, parser } = collect();
+    parser.push(Buffer.alloc(9 * 1024, 0x41));
+    parser.push(Buffer.concat([Buffer.from("\r\n\r\n"), part(a)]));
+    expect(frames).toEqual([a]);
+  });
+
   it("frames do not share memory with the parser's buffer", () => {
     const { frames, parser } = collect();
     const chunk = Buffer.concat([part(a)]);

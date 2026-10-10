@@ -28,8 +28,12 @@ export type SimStreamEvent =
   | { paneId: string; state: "starting" | "live" | "paused" }
   | { paneId: string; state: "ended"; reason: string };
 
-/** AXe types through a HID keyboard: US keys only */
+/** AXe types through a HID keyboard: US keys only, this many per call */
+export const SIM_TYPE_MAX = 500;
 export const SIM_TYPE_TEXT = /^[\x20-\x7E]{1,500}$/;
+
+/** Frame size vs the device's pixels. Below 1: at 1 AXe sends PNG instead of JPEG */
+export const SIM_STREAM_SCALE = 0.5;
 
 /** HID keycodes `axe key` takes for the keys `axe type` cannot send */
 export const SIM_KEYCODES = { Enter: 40, Escape: 41, Backspace: 42, Tab: 43 } as const;

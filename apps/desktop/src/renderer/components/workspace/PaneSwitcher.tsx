@@ -1,5 +1,5 @@
 import { cn } from "@exegol/ui";
-import { LayoutGrid, Rows3 } from "lucide-react";
+import { Rows3 } from "lucide-react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { sessionName } from "../../lib/agent-label";
 import { pageLabel } from "../../lib/browser-viewports";
@@ -13,14 +13,7 @@ import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { useAgentStore } from "../../stores/agents";
 import { type Pane, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-import { PANE_TYPE_ICONS, tabLabel } from "./tab-bar-helpers";
-
-const PANE_LABEL: Record<string, string> = {
-  git: "Git",
-  empty: "Launcher",
-  terminal: "Terminal",
-  simulator: "Simulator",
-};
+import { PANE_META, tabLabel } from "./tab-bar-helpers";
 
 function baseName(path: string): string {
   return path.split("/").filter(Boolean).pop() ?? path;
@@ -45,16 +38,14 @@ function AgentPaneLabel({ agentId }: { agentId: string }) {
 
 function PaneLabel({ pane }: { pane: Pane }) {
   if (pane.type === "terminal" && pane.agentId) return <AgentPaneLabel agentId={pane.agentId} />;
-  const Icon = pane.type === "empty" ? LayoutGrid : (PANE_TYPE_ICONS[pane.type] ?? LayoutGrid);
+  const { Icon, label: typeLabel } = PANE_META[pane.type];
   const path = pane.openFile ?? pane.filePath;
   const label =
     pane.type === "browser"
-      ? pageLabel(pane.url) || "Browser"
-      : pane.type === "files"
-        ? path
-          ? baseName(path)
-          : "Files"
-        : PANE_LABEL[pane.type];
+      ? pageLabel(pane.url) || typeLabel
+      : pane.type === "files" && path
+        ? baseName(path)
+        : typeLabel;
   return (
     <>
       <Icon className="h-3.5 w-3.5 shrink-0 text-text-muted" />

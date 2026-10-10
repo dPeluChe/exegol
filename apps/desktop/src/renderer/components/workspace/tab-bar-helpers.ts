@@ -1,6 +1,14 @@
 import type { AgentActivityLevel } from "@exegol/shared";
-import { FolderTree, GitBranch, Globe, Smartphone, Terminal } from "lucide-react";
-import { findFirstPaneId, type LayoutNode, type Pane } from "../../stores/workspace";
+import {
+  FolderTree,
+  GitBranch,
+  Globe,
+  LayoutGrid,
+  type LucideIcon,
+  Smartphone,
+  Terminal,
+} from "lucide-react";
+import { findFirstPaneId, type LayoutNode, type Pane, type PaneType } from "../../stores/workspace";
 
 // ─── T70: Activity dot for tab chrome ───────────────────────────────────────
 
@@ -15,12 +23,13 @@ export function tabLabel(tab: { label: string }, index: number): string {
   return tab.label || `Tab ${index + 1}`;
 }
 
-export const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  terminal: Terminal,
-  browser: Globe,
-  files: FolderTree,
-  git: GitBranch,
-  simulator: Smartphone,
+export const PANE_META: Record<PaneType, { label: string; Icon: LucideIcon }> = {
+  terminal: { label: "Terminal", Icon: Terminal },
+  browser: { label: "Browser", Icon: Globe },
+  files: { label: "Files", Icon: FolderTree },
+  git: { label: "Git", Icon: GitBranch },
+  simulator: { label: "Simulator", Icon: Smartphone },
+  empty: { label: "Launcher", Icon: LayoutGrid },
 };
 
 /** A label the app wrote from the agent (its cliType or CLI name, "Claude Code"), not the user */
@@ -48,7 +57,7 @@ export function getTabMeta(
 } {
   const firstPaneId = findFirstPaneId(tabLayout);
   const firstPane = firstPaneId ? panes[firstPaneId] : null;
-  const Icon = firstPane ? (PANE_TYPE_ICONS[firstPane.type] ?? null) : null;
+  const Icon = firstPane && firstPane.type !== "empty" ? PANE_META[firstPane.type].Icon : null;
   const primaryAgentId = firstPane?.type === "terminal" ? (firstPane.agentId ?? null) : null;
   const agent = primaryAgentId ? agents[primaryAgentId] : undefined;
   const agentCliType = agent && agent.cliType !== "shell" ? agent.cliType : null;
@@ -68,14 +77,8 @@ export function getTabMeta(
       primaryAgentId,
       agentCliType,
     };
-  if (firstPane?.type === "browser")
-    return { displayName: "Browser", Icon: Globe, primaryAgentId, agentCliType };
-  if (firstPane?.type === "git")
-    return { displayName: "Git", Icon: GitBranch, primaryAgentId, agentCliType };
-  if (firstPane?.type === "files")
-    return { displayName: "Files", Icon: FolderTree, primaryAgentId, agentCliType };
-  if (firstPane?.type === "simulator")
-    return { displayName: "Simulator", Icon: Smartphone, primaryAgentId, agentCliType };
+  if (firstPane && firstPane.type !== "terminal" && firstPane.type !== "empty")
+    return { displayName: PANE_META[firstPane.type].label, Icon, primaryAgentId, agentCliType };
 
   return { displayName: tabLabel, Icon, primaryAgentId, agentCliType };
 }

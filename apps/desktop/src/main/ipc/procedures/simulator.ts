@@ -8,7 +8,7 @@ import {
   type SimKey,
   type SimulatorSupport,
 } from "@exegol/shared";
-import { BrowserWindow, clipboard, dialog, ipcMain, nativeImage } from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain, nativeImage, type WebContents } from "electron";
 import { z } from "zod";
 import {
   detectAxe,
@@ -29,7 +29,13 @@ import {
   shutdownDevice,
   simctlAvailable,
 } from "../../simulator/simctl";
-import { setStreamVisible, startStream, stopStream } from "../../simulator/stream";
+import {
+  setSinkHidden,
+  setStreamVisible,
+  startStream,
+  stopSinkStreams,
+  stopStream,
+} from "../../simulator/stream";
 import { publicProcedure, router } from "../trpc";
 
 const udid = z.string().regex(UDID_PATTERN);
@@ -136,10 +142,37 @@ type StreamInput = { paneId?: unknown; udid?: unknown };
 const validPane = (paneId: unknown): paneId is string =>
   typeof paneId === "string" && PANE_ID.test(paneId);
 
+const watchedSenders = new Set<number>();
+
+/** Streams end with the page (reload, crash, close) and pause with the window */
+function watchSender(sender: WebContents): void {
+  const id = sender.id;
+  if (watchedSenders.has(id)) return;
+  watchedSenders.add(id);
+  sender.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) stopSinkStreams(id);
+  });
+  sender.on("render-process-gone", () => stopSinkStreams(id));
+  sender.once("destroyed", () => {
+    watchedSenders.delete(id);
+    stopSinkStreams(id, true);
+  });
+  const win = BrowserWindow.fromWebContents(sender);
+  if (!win) return;
+  const update = () => {
+    if (!win.isDestroyed()) setSinkHidden(id, win.isMinimized() || !win.isVisible());
+  };
+  win.on("minimize", update);
+  win.on("hide", update);
+  win.on("restore", update);
+  win.on("show", update);
+}
+
 /** Live view: frames go back on `simulator:frame` to the window that asked, never a port */
 export function registerSimulatorIpc(): void {
   ipcMain.handle("simulator:stream-start", (event, input: StreamInput) => {
     if (!validPane(input?.paneId) || !udid.safeParse(input?.udid).success) return false;
+    watchSender(event.sender);
     startStream(event.sender, input.paneId, input.udid as string);
     return true;
   });

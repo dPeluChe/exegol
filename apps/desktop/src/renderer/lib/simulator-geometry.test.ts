@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   clampToScreen,
   containRect,
+  deviceScale,
   isTap,
+  orientPoints,
   pointsFromFrame,
   swipeSeconds,
   toDevicePoint,
-  typeable,
 } from "./simulator-geometry";
 
 // iPhone 17 Pro: 402x874 pt, streamed at scale 0.5 of 3x = 603x1311 px
@@ -58,11 +59,33 @@ describe("toDevicePoint", () => {
 
 describe("pointsFromFrame", () => {
   it("recovers the points from a 0.5-scale stream of a 3x device", () => {
-    expect(pointsFromFrame(FRAME)).toEqual(POINTS);
+    expect(pointsFromFrame(FRAME, 0.5, 3)).toEqual(POINTS);
+  });
+
+  it("knows the 2x devices", () => {
+    expect(deviceScale("iPhone 17 Pro")).toBe(3);
+    expect(deviceScale("iPhone 16e")).toBe(3);
+    expect(deviceScale("iPhone 11 Pro Max")).toBe(3);
+    expect(deviceScale("iPhone 11")).toBe(2);
+    expect(deviceScale("iPhone SE (3rd generation)")).toBe(2);
+    expect(deviceScale("iPad Air 11-inch (M3)")).toBe(2);
+    // iPad Air 11": 820x1180 pt at 2x, streamed at 0.5
+    expect(pointsFromFrame({ width: 820, height: 1180 }, 0.5, 2)).toEqual({
+      width: 820,
+      height: 1180,
+    });
   });
 });
 
-describe("gestures and keys", () => {
+describe("orientPoints", () => {
+  it("swaps the axes when the frame is landscape", () => {
+    expect(orientPoints(POINTS, { width: 1311, height: 603 })).toEqual({ width: 874, height: 402 });
+    expect(orientPoints(POINTS, FRAME)).toEqual(POINTS);
+    expect(orientPoints(POINTS, { width: 0, height: 0 })).toEqual(POINTS);
+  });
+});
+
+describe("gestures", () => {
   it("tells a tap from a swipe", () => {
     expect(isTap({ x: 10, y: 10 }, { x: 13, y: 14 })).toBe(true);
     expect(isTap({ x: 10, y: 10 }, { x: 10, y: 40 })).toBe(false);
@@ -72,13 +95,5 @@ describe("gestures and keys", () => {
     expect(swipeSeconds(20)).toBe(0.1);
     expect(swipeSeconds(400)).toBe(0.4);
     expect(swipeSeconds(9000)).toBe(1.5);
-  });
-
-  it("types only US printable keys", () => {
-    expect(typeable("a")).toBe(true);
-    expect(typeable("~")).toBe(true);
-    expect(typeable(" ")).toBe(true);
-    expect(typeable("é")).toBe(false);
-    expect(typeable("Enter")).toBe(false);
   });
 });

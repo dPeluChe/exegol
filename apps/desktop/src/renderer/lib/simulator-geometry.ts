@@ -53,10 +53,24 @@ export function clampToScreen(
   };
 }
 
-/** Without AXe's tree: frames are points × device scale (3 on current iPhones) × stream scale */
-export function pointsFromFrame(frame: Size, streamScale = 0.5, deviceScale = 3): Size {
-  const factor = streamScale * deviceScale;
+/** Pixels per point by device family; the 2x iPhones are the SE, 8, XR and 11 */
+export function deviceScale(name: string): number {
+  if (/^iPhone (SE|8|XR|11)\b(?! Pro)/.test(name)) return 2;
+  return name.startsWith("iPhone") ? 3 : 2;
+}
+
+/** Without AXe's tree: frames are points × device scale × stream scale */
+export function pointsFromFrame(frame: Size, streamScale: number, scale: number): Size {
+  const factor = streamScale * scale;
   return { width: Math.round(frame.width / factor), height: Math.round(frame.height / factor) };
+}
+
+/** describe-ui answers in one orientation; a rotated frame swaps the axes */
+export function orientPoints(points: Size, frame: Size): Size {
+  if (!frame.width || !frame.height) return points;
+  const frameWide = frame.width > frame.height;
+  const pointsWide = points.width > points.height;
+  return frameWide === pointsWide ? points : { width: points.height, height: points.width };
 }
 
 /** A press that barely moved is a tap; anything longer a swipe */
@@ -68,9 +82,4 @@ export function isTap(down: { x: number; y: number }, up: { x: number; y: number
 /** Swipe duration from how long the drag took, inside what AXe accepts well */
 export function swipeSeconds(ms: number): number {
   return Math.min(Math.max(ms / 1000, 0.1), 1.5);
-}
-
-/** Printable US keys `axe type` can send; anything else is dropped */
-export function typeable(key: string): boolean {
-  return key.length === 1 && key >= " " && key <= "~";
 }

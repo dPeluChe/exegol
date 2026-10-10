@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import type { SimButton, SimKey, SimScreenSize } from "@exegol/shared";
 import { SIM_KEYCODES } from "@exegol/shared";
@@ -38,26 +37,21 @@ export async function runAxe(
   opts: { input?: string; timeoutMs?: number } = {},
 ): Promise<string> {
   const path = await axePath();
-  return new Promise((resolve, reject) => {
-    const child = spawn(path, args, { stdio: ["pipe", "pipe", "pipe"] });
-    const out: Buffer[] = [];
-    let err = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), opts.timeoutMs ?? 15_000);
-    child.stdout.on("data", (d: Buffer) => out.push(d));
-    child.stderr.on("data", (d: Buffer) => {
-      if (err.length < 2_000) err += d.toString();
-    });
-    child.on("error", (e) => {
-      clearTimeout(timer);
-      reject(e);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(Buffer.concat(out).toString());
-      else reject(new Error(`axe ${args[0]} failed (${code ?? "killed"}): ${err.trim()}`));
-    });
-    child.stdin.end(opts.input ?? "");
+  const call = execFileAsync(path, args, {
+    timeout: opts.timeoutMs ?? 15_000,
+    killSignal: "SIGKILL",
+    maxBuffer: 16 * 1024 * 1024,
   });
+  call.child.stdin?.end(opts.input ?? "");
+  try {
+    return (await call).stdout;
+  } catch (err) {
+    const { code, signal, stderr } = err as { code?: unknown; signal?: unknown; stderr?: unknown };
+    const detail = String(stderr ?? "")
+      .trim()
+      .slice(0, 2_000);
+    throw new Error(`axe ${args[0]} failed (${code ?? signal ?? "error"}): ${detail}`);
+  }
 }
 
 const num = (n: number) => String(Math.round(n * 10) / 10);
@@ -101,7 +95,7 @@ export function pressButton(udid: string, button: SimButton) {
   return runAxe(["button", button, "--udid", udid]);
 }
 
-export function describeUi(udid: string) {
+function describeUi(udid: string) {
   return runAxe(["describe-ui", "--udid", udid], { timeoutMs: 20_000 });
 }
 
