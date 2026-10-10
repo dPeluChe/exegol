@@ -1,9 +1,17 @@
 import { cn } from "@exegol/ui";
 import { GripVertical } from "lucide-react";
 import type { DragEvent } from "react";
-import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
+import {
+  collectPaneIds,
+  getProjectState,
+  layoutHasPane,
+  useWorkspaceStore,
+} from "../../stores/workspace";
 
 export const PANE_DRAG_TYPE = "application/exegol-pane";
+/** Set when the pane is alone in its tab: dragover can read types, not data, and a new tab for
+ *  it would change nothing */
+export const PANE_ALONE_DRAG_TYPE = "application/exegol-pane-alone";
 
 export interface PaneDragPayload {
   paneId: string;
@@ -41,6 +49,7 @@ export function PaneDragHandle({
     if (!tab) return e.preventDefault();
     const payload: PaneDragPayload = { paneId, tabId: tab.id };
     e.dataTransfer.setData(PANE_DRAG_TYPE, JSON.stringify(payload));
+    if (collectPaneIds(tab.layout).length === 1) e.dataTransfer.setData(PANE_ALONE_DRAG_TYPE, "1");
     e.dataTransfer.effectAllowed = "move";
   };
 

@@ -21,7 +21,7 @@ import {
 } from "../../stores/workspace";
 import { tabCloseTarget } from "../../stores/workspace/helpers";
 import { LayoutPresets } from "./LayoutPresets";
-import { PANE_DRAG_TYPE, readPaneDrag } from "./PaneDragHandle";
+import { PANE_ALONE_DRAG_TYPE, PANE_DRAG_TYPE, readPaneDrag } from "./PaneDragHandle";
 import { QuickLaunchBar } from "./QuickLaunchBar";
 import { getTabMeta } from "./tab-bar-helpers";
 import { WorkspaceTabItem } from "./WorkspaceTabItem";
@@ -112,7 +112,8 @@ export function WorkspaceTabBar() {
 
   // Pane drag → tab bar: extract pane to new tab
   const handleBarDragOver = useCallback((e: DragEvent) => {
-    if (!e.dataTransfer.types.includes(PANE_DRAG_TYPE)) return;
+    const { types } = e.dataTransfer;
+    if (!types.includes(PANE_DRAG_TYPE) || types.includes(PANE_ALONE_DRAG_TYPE)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setPaneDragOverBar(true);

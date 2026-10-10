@@ -34,7 +34,8 @@ export function paneMoveTargets(paneId: string): MoveTarget[] {
 export function movePane(paneId: string, toTabId: string | "new"): void {
   const store = useWorkspaceStore.getState();
   const from = getProjectState().tabs.find((t) => layoutHasPane(t.layout, paneId));
-  if (!from) return;
+  // Already alone in its tab: a new tab would change nothing, and a focus claim would linger
+  if (!from || (toTabId === "new" && collectPaneIds(from.layout).length === 1)) return;
   if (toTabId === "new") store.extractPaneToNewTab(from.id, paneId);
   else store.movePaneToTab(from.id, paneId, toTabId);
   dispatchRefitTerminals();
