@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The launcher's "Run in" lists every folder of the project again, like an `ls`: repos and folders with commands first, then the rest. It stopped at 12, so a repo created later in a workspace of many never showed, even after Refresh; a new launcher also lists the folders fresh instead of reusing the last minute's list
+
 ## [0.5.19] — 2026-10-09 — CLI install health, Codex launch fix, cleaner sidebar and focus
 
 ### Added

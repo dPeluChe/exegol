@@ -69,7 +69,8 @@ export function RunTargets({
   const { data: targets = [] } = useQuery({
     queryKey: ["resources", "runTargets", projectId],
     queryFn: () => trpcInvoke<RunTarget[]>("resources.runTargets", { projectId }),
-    staleTime: 60_000,
+    // A new launcher lists the folders again (a readdir; scripts stay cached in main)
+    staleTime: 5_000,
   });
   const { data: pins = [] } = useQuery({
     queryKey: ["resources", "runPins", projectId],
