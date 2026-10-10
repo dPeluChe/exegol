@@ -206,6 +206,38 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T203: Xcode and iOS Simulator inside Exegol `added: 2026-10-09`
+**Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-09 (iOS/macOS projects). Agents
+already know `xcodebuild`, `simctl` and can add an MCP on their own; what only Exegol can give is a
+shared view and control of the running app, like the agent browser pane.
+
+Validated live 2026-10-09 (macOS 15.7.4, Xcode 26.3, iPhone 17 Pro iOS 26.3 simulator) with AXe
+1.8.0 (`brew install cameroncooke/axe/axe`, MIT, private Simulator accessibility APIs):
+`simctl boot` 8 s; `axe describe-ui` 0.8 s, JSON tree with type, AXLabel, AXValue and frame
+(25 labelled elements on Settings); `axe tap -x -y` and `--label`/`--id` (an ambiguous label is an
+error, prefer `--id`) 0.9 s, navigated; `axe type` filled Safari's address field; `axe button home`;
+`axe stream-video --format mjpeg --fps 15 --scale 0.5` = 14 fps, ~75 KB a frame, an HTTP
+`multipart/x-mixed-replace` body an `<img>` can show directly.
+
+1. Build & Issues pane: detect `*.xcworkspace` / `*.xcodeproj` / `Package.swift` in the launcher
+   (run targets), schemes via `xcodebuild -list -json` (cached), Build / Test / Run on a simulator,
+   `-resultBundlePath` + `xcrun xcresulttool get build-results|test-results` as JSON: errors and
+   warnings like Xcode's issue navigator, click to file:line in Files, failed tests, filtered log.
+   Same data for agents through the Exegol MCP
+2. Simulator pane: pick a device, boot, install and launch the built app; live view from
+   `axe stream-video` (MJPEG) served on a local port to the pane; the user taps, swipes and types
+   on it (map pane coordinates to points). Agent tools on the Exegol MCP, mirroring the browser
+   ones: `sim_screenshot`, `sim_describe` (accessibility tree with refs), `sim_tap`, `sim_type`,
+   `sim_swipe`, `sim_button`, `sim_launch`, `sim_logs`; driver / take over / wait for user like
+   `browser/control.ts`
+3. Logs pane: `simctl spawn <udid> log stream` (and `devicectl` for devices), filter by app
+4. Later: Open in Xcode in the IDE catalog (`xed -l N file`, bundle `com.apple.dt.Xcode`); wire
+   Xcode's own MCP (`xcrun mcpbridge`) when the machine runs macOS 26.2+ (it crashes on 15.7:
+   missing AppSandbox symbol); SourceKit-LSP in Monaco (`xcode-build-server` for .xcodeproj)
+5. Open questions: AXe is a third-party binary (detect it, offer the brew install, never bundle
+   without checking its license and private-API use); one simulator per project or shared;
+   SwiftUI previews and the visual debugger stay Xcode's
+
 ### T202: Sidecar flow control and lighter reattach `added: 2026-10-09`
 **Priority**: P1 | **Effort**: M | **Source**: the 2026-10-09 log audit after every terminal ignored
 the keyboard during a `spark pull all` (only a reboot fixed it). Needs a `SIDECAR_VERSION` bump:
