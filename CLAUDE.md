@@ -119,6 +119,7 @@ message from the current diff via Claude Haiku (reuses Anthropic API key).
 5. On exit: final output tail → scoring → oplog → worktree cleanup, skipped while another live agent shares it (all non-fatal). With `saveWorktreeWork` on (default), the worktree's pending work is first committed and pushed to its own branch (`agents/worktree-save.ts`); if that is refused (secret, hook, push, default branch) the worktree is kept Memory extraction on exit is currently not wired (T193.8)
 6. Close pane/tab/Cmd+W → stop agent + archive (`archiveAgent` sets `archived_at`; `listAgents` hides it) + remove from store. Shell rows are still deleted
 7. Window reload → sidecar keeps PTY alive → app reconnects on restart
+8. Idle auto-suspend (T205, `agents/idle-suspend.ts` pure + `idle-suspend-sweep.ts`): every 10 min, a session with no PTY output or input (in memory; agents fall back to `status_changed_at`) for `idleSuspendDays` (default 7, 0 Off) is suspended (agents, same path as Suspend) or closed (a shell whose tty runs nothing else: `shellAtRest` over one `ps`). Skipped: running/spawning, PR watch, awaiting approval, ids the renderer reports via `agents.setIdleExempt` (Watching + unread attention). One `agent:idle-suspended` push per sweep drives the toast (`hooks/use-idle-suspend.ts`)
 
 ### Multi-agent pipelines
 Sequential agent orchestration in shared worktrees. Exegol controls everything — agents never launch each other.

@@ -1,4 +1,4 @@
-import type { Settings } from "@exegol/shared";
+import type { IdleSuspendDays, Settings } from "@exegol/shared";
 import { cn, Input } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -21,7 +21,7 @@ import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { Kbd } from "../common/Kbd";
 import { IdePicker } from "./IdePicker";
-import { SwitchRow } from "./settings-ui";
+import { SelectRow, SwitchRow } from "./settings-ui";
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
@@ -29,6 +29,14 @@ const THEME_OPTIONS = [
   { value: "light", label: "Light", icon: Sun },
   { value: "system", label: "System", icon: Palette },
 ] as const;
+
+const IDLE_SUSPEND_OPTIONS: [IdleSuspendDays, string][] = [
+  [0, "Off"],
+  [1, "1 day"],
+  [3, "3 days"],
+  [7, "7 days"],
+  [14, "14 days"],
+];
 
 /** Electron accelerator for a key press, or null while only modifiers are held */
 function acceleratorFor(e: React.KeyboardEvent): string | null {
@@ -238,6 +246,27 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           icon={GitBranch}
           value={settings.saveWorktreeWork}
           onToggle={() => onChange({ saveWorktreeWork: !settings.saveWorktreeWork })}
+        />
+      </div>
+
+      <div>
+        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+          Sessions
+        </h3>
+        <SelectRow
+          label={
+            <>
+              Suspend sessions idle for
+              <span className="block text-[10px] text-text-muted">
+                No output and no typing: agents are suspended (Resume picks them up), shells at
+                their prompt are closed. Never one working, pinned in Watching, with PR watch or
+                waiting on you, nor a shell running something
+              </span>
+            </>
+          }
+          value={settings.idleSuspendDays}
+          options={IDLE_SUSPEND_OPTIONS}
+          onChange={(idleSuspendDays) => onChange({ idleSuspendDays })}
         />
       </div>
 

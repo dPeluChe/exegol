@@ -26,6 +26,7 @@ import {
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { inheritClaudeTrust } from "./claude-trust";
+import { noteSessionActivity } from "./idle-suspend";
 import { applyLaunchModel } from "./launch-model";
 import { noteAgentInput, noteBlindResume, takeMissedResume } from "./missed-resume";
 import { attachOutputPipeline } from "./output-pipeline";
@@ -324,6 +325,7 @@ export class AgentManager {
 
   write(agentId: string, data: string): void {
     noteAgentInput(agentId, data);
+    noteSessionActivity(agentId);
     getPtyHost().write(agentId, data);
   }
 

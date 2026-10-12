@@ -24,6 +24,7 @@ import { useDictation } from "./hooks/use-dictation";
 import { useFleetSync } from "./hooks/use-fleet-sync";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
+import { useIdleSuspend } from "./hooks/use-idle-suspend";
 import { usePanelessAgentSweep } from "./hooks/use-paneless-agent-sweep";
 import { useAutoResumeLost, useRelaunchMissedResume } from "./hooks/use-resume-agent";
 import { useSettingsSync } from "./hooks/use-settings-sync";
@@ -73,6 +74,7 @@ export default function App() {
   useCliSelfUpdates();
   useFleetSync();
   useActiveViewSync();
+  useIdleSuspend();
 
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   // Projects opens over the workspace (as the Dashboard does): its panes stay mounted and sized

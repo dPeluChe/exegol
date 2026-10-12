@@ -1,5 +1,6 @@
 import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 /** The small outlined action button of the Models and Storage tabs */
 export const SMALL_BUTTON =
@@ -53,5 +54,43 @@ export function SwitchRow({
         />
       </div>
     </button>
+  );
+}
+
+const SELECT =
+  "rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[11px] text-text-primary";
+
+/** A setting picked from a short list */
+export function SelectRow<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: ReactNode;
+  value: T;
+  options: [T, string][];
+  onChange: (value: T) => void;
+}) {
+  const known = options.some(([v]) => v === value);
+  return (
+    <label className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-2.5 text-xs">
+      <span className="flex-1 text-text-secondary">{label}</span>
+      <select
+        className={SELECT}
+        value={value}
+        onChange={(e) => {
+          const picked = options.find(([v]) => String(v) === e.target.value);
+          if (picked) onChange(picked[0]);
+        }}
+      >
+        {!known && <option value={value}>{value}</option>}
+        {options.map(([v, text]) => (
+          <option key={v} value={v}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

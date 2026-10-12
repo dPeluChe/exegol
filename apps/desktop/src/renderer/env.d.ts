@@ -95,6 +95,9 @@ interface Window {
     onCliSelfUpdated: (
       callback: (event: import("./stores/cli-self-updates").CliSelfUpdate) => void,
     ) => () => void;
+    onIdleSuspended: (
+      callback: (event: import("./hooks/use-idle-suspend").IdleSuspendEvent) => void,
+    ) => () => void;
     onResumeMissed: (
       callback: (event: { agentId: string; projectId: string; cliType: string }) => void,
     ) => () => void;

@@ -48,10 +48,24 @@ export function QuietControls({ agent, className }: { agent: QuietAgent; classNa
   );
 }
 
-/** Small marker for lists (sidebar, Dashboard) */
-export function QuietBadge({ agent }: { agent: Partial<Pick<AgentState, "muted" | "suspended">> }) {
+/** Small marker for lists (sidebar, Dashboard); `withLabel` spells out Suspended where nothing else does */
+export function QuietBadge({
+  agent,
+  withLabel,
+}: {
+  agent: Partial<Pick<AgentState, "muted" | "suspended">>;
+  withLabel?: boolean;
+}) {
   if (agent.suspended)
-    return <Pause className="h-2.5 w-2.5 shrink-0 text-text-muted" aria-label="Suspended" />;
+    return (
+      <span
+        className="flex shrink-0 items-center gap-0.5 text-[8px] text-text-muted"
+        title="Suspended: Resume to continue"
+      >
+        <Pause className="h-2.5 w-2.5" aria-label="Suspended" />
+        {withLabel && "Suspended"}
+      </span>
+    );
   if (agent.muted)
     return <Moon className="h-2.5 w-2.5 shrink-0 text-sky-400/80" aria-label="Muted" />;
   return null;

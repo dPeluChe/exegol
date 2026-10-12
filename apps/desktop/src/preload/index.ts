@@ -207,6 +207,14 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:cli-self-updated", handler as never);
     };
   },
+  /** The idle sweep suspended or closed sessions (T205) */
+  onIdleSuspended: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:idle-suspended", handler as never);
+    return () => {
+      safe.off("agent:idle-suspended", handler as never);
+    };
+  },
   /** A "continue last" found no session and exited: the renderer relaunches it fresh */
   onResumeMissed: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);

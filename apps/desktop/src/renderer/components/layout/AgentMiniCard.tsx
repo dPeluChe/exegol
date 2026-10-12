@@ -98,7 +98,7 @@ function AgentMiniCardDetails({ agent, isActive }: { agent: AgentState; isActive
           )}
         />
         <span className="flex-1 truncate text-[10px] font-medium">{sessionName(agent)}</span>
-        <QuietBadge agent={agent} />
+        <QuietBadge agent={agent} withLabel />
         {agent.tokenUsage.cost > 0 && (
           <span className="shrink-0 text-[8px] tabular-nums text-accent">
             $

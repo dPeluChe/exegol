@@ -44,6 +44,9 @@ export const settingsSchema = z.object({
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   saveWorktreeWork: z.boolean().default(true),
+  idleSuspendDays: z
+    .union([z.literal(0), z.literal(1), z.literal(3), z.literal(7), z.literal(14)])
+    .default(7),
   mutedNotificationChannels: z.array(z.string()).default([]),
   ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
   ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),

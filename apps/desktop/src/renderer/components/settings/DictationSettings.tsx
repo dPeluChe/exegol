@@ -9,13 +9,13 @@ import {
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Mic } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { useDictationStatus, useMediaConsent, useMicAction } from "../../hooks/use-trpc-dictation";
 import { IS_MAC, PLATFORM } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
-import { SMALL_BUTTON, SwitchRow } from "./settings-ui";
+import { SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
 interface Props {
   settings: Settings;
@@ -23,8 +23,6 @@ interface Props {
 }
 
 const SECTION = "mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted";
-const SELECT =
-  "rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[11px] text-text-primary";
 
 const PAUSE_MEDIA_HINT = IS_MAC
   ? "What is playing (Spotify, Music, a browser tab) pauses while you talk and resumes after, unless you played, paused or skipped it meanwhile"
@@ -304,39 +302,5 @@ function MicSection() {
         </div>
       </div>
     </div>
-  );
-}
-
-function SelectRow<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: ReactNode;
-  value: T;
-  options: [T, string][];
-  onChange: (value: T) => void;
-}) {
-  const known = options.some(([v]) => v === value);
-  return (
-    <label className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-2.5 text-xs">
-      <span className="flex-1 text-text-secondary">{label}</span>
-      <select
-        className={SELECT}
-        value={value}
-        onChange={(e) => {
-          const picked = options.find(([v]) => String(v) === e.target.value);
-          if (picked) onChange(picked[0]);
-        }}
-      >
-        {!known && <option value={value}>{value}</option>}
-        {options.map(([v, text]) => (
-          <option key={v} value={v}>
-            {text}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }

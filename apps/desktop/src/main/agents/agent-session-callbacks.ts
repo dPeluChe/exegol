@@ -30,6 +30,7 @@ import {
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
+import { noteSessionActivity } from "./idle-suspend";
 import { detachOutputPipeline } from "./output-pipeline";
 import {
   type AgentContext,
@@ -286,6 +287,7 @@ export function createSpawnCallbacks(
       if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data);
       else noteOutputDropped(agent.id);
       noteAgentOutput(agent.id);
+      noteSessionActivity(agent.id);
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
