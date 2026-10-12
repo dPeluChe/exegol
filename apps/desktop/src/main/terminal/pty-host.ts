@@ -30,6 +30,13 @@ import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-side
 import { awaitsRepaint, REPAINT_CAP_MS, REPAINT_QUIET_MS } from "./reattach-repaint";
 import { readScreenDialog } from "./screen-dialog";
 import { trackSidecarCall, whileSidecarBulk } from "./sidecar-health-watch";
+import {
+  framesAfter,
+  isFrameGap,
+  isStaleFrame,
+  lostFrames,
+  resyncFromRing,
+} from "./sidecar-resync";
 
 export type { SessionCallbacks } from "./pty-session-types";
 
@@ -60,26 +67,14 @@ export class PtyHost {
   connectToSidecar(client: SidecarClient): void {
     this.sidecarClient = client;
 
-    client.onSessionData((id, data) => {
+    client.onSessionData((id, data, seq) => {
       const s = this.sessions.get(id);
       if (!s) return;
-
-      let processedData = data;
-      if (s.shellReadyState === "pending") {
-        const scan = scanForMarker(data, s);
-        processedData = scan.processedData;
-        if (scan.markerFound) {
-          this.resolveShellReady(s, "ready");
-        }
+      if (s.heldFrames) {
+        s.heldFrames.push({ data, seq });
+        return;
       }
-
-      if (processedData.length > 0) {
-        s.emulator.write(processedData);
-        s.resyncTail?.push(processedData);
-        scheduleScrollbackFlush(s);
-        s.callbacks.onData(processedData);
-        this.outputWatchers.get(id)?.();
-      }
+      this.applyFrame(s, data, seq);
     });
 
     client.onSessionExit((id, exitCode, signal) => {
@@ -100,43 +95,50 @@ export class PtyHost {
     logger.info("[PtyHost] Connected to sidecar");
   }
 
-  /** Retry: the new client takes over before the old socket closes. Both carried the same
-   *  output, unevenly (the old one was stuck), so each live model is rebuilt from the ring */
-  swapSidecarClient(client: SidecarClient): Promise<void> {
+  private applyFrame(s: Session, data: string, seq: number | undefined): void {
+    if (isStaleFrame(s.lastSeq, seq)) return;
+    if (isFrameGap(s.lastSeq, seq)) s.seqGap = true;
+    if (seq !== undefined) s.lastSeq = seq;
+
+    let processedData = data;
+    if (s.shellReadyState === "pending") {
+      const scan = scanForMarker(data, s);
+      processedData = scan.processedData;
+      if (scan.markerFound) {
+        this.resolveShellReady(s, "ready");
+      }
+    }
+
+    if (processedData.length > 0) {
+      s.emulator.write(processedData);
+      s.resyncTail?.push(processedData);
+      scheduleScrollbackFlush(s);
+      s.callbacks.onData(processedData);
+      this.outputWatchers.get(s.id)?.();
+    }
+  }
+
+  /** Retry: the new client takes over before the old socket closes. Only sessions that lost
+   *  frames on the old socket (by seq) are rebuilt from the ring; the rest were exact already */
+  async swapSidecarClient(client: SidecarClient): Promise<void> {
     const old = this.sidecarClient;
     this.connectToSidecar(client);
     old?.disconnect();
+    // Answered after every frame sent before it, on the same socket
+    const info = await Promise.resolve()
+      .then(() => client.listSessionsInfo())
+      .catch(() => null);
+    const sent = new Map(info?.map((i) => [i.id, i.seq]));
     const live = [...this.sessions.values()].filter(
       (s) => s.mode === "sidecar" && s.alive && !this.reattaching.has(s.id),
     );
-    return Promise.all(live.map((s) => this.resyncSession(s, client))).then(() => {});
-  }
-
-  /** Output read before the ring's reply is in it; output after it is replayed on top. Views
-   *  reset (RIS) and repaint in the same stream, as the visibility repaint does */
-  private async resyncSession(s: Session, client: SidecarClient): Promise<void> {
-    const ring = await whileSidecarBulk(client.snapshot(s.id)).catch(() => null);
-    if (ring === null || this.sessions.get(s.id) !== s || s.resyncTail) return;
-    const tail: string[] = [];
-    s.resyncTail = tail;
-    const { cols, rows } = s.emulator.size;
-    const fresh = new HeadlessEmulator(cols, rows);
-    try {
-      await fresh.writeParsed(ring);
-    } finally {
-      s.resyncTail = undefined;
-    }
-    if (this.sessions.get(s.id) !== s) {
-      fresh.dispose();
-      return;
-    }
-    const size = s.emulator.size;
-    if (size.cols !== cols || size.rows !== rows) fresh.resize(size.cols, size.rows);
-    const snapshot = (fresh.snapshot() ?? "") + fresh.modeSequence();
-    for (const chunk of tail) fresh.write(chunk);
-    s.emulator.dispose();
-    s.emulator = fresh;
-    broadcast("terminal:data", s.id, `\x1bc${snapshot}${tail.join("")}`);
+    const lost = live.filter((s) => !info || lostFrames(s.lastSeq, sent.get(s.id), !!s.seqGap));
+    logger.info(
+      `[Sidecar] swap: ${live.length - lost.length} session(s) exact by seq, ${lost.length} rebuilt from the ring`,
+    );
+    await Promise.all(
+      lost.map((s) => resyncFromRing(s, client, () => this.sessions.get(s.id) === s)),
+    );
   }
 
   getSidecarClient(): SidecarClient | null {
@@ -197,7 +199,7 @@ export class PtyHost {
     id: string,
     spawnOpts: { cols: number; rows: number },
     callbacks: SessionCallbacks,
-    options?: { scrollbackPath?: string; tui?: boolean },
+    options?: { scrollbackPath?: string; tui?: boolean; snapshotMaxBytes?: number },
   ): Promise<ReattachedSession | null> {
     if (!this.sidecarClient?.isConnected()) return null;
 
@@ -218,6 +220,7 @@ export class PtyHost {
       markerMatchPos: 0,
       markerHeldBytes: "",
       shellReadyTimeout: null,
+      heldFrames: [],
     };
     this.sessions.set(id, session);
     this.reattaching.add(id);
@@ -225,10 +228,15 @@ export class PtyHost {
     // The ring rebuilds the model only (replayed through onData it re-fired old status/OSC);
     // the caller seeds its scrollback from the returned snapshot
     let snapshot: string | null = null;
+    let ringSeq: number | undefined;
     const started = performance.now();
     let fetched = started;
     try {
-      snapshot = await whileSidecarBulk(this.sidecarClient.snapshot(id));
+      const ring = await whileSidecarBulk(
+        this.sidecarClient.snapshot(id, options?.snapshotMaxBytes),
+      );
+      snapshot = ring.data;
+      ringSeq = ring.seq;
       fetched = performance.now();
       if (snapshot) await emulator.writeParsed(snapshot);
     } catch {
@@ -237,6 +245,11 @@ export class PtyHost {
       this.reattaching.delete(id);
     }
     const parsed = performance.now();
+    // Frames that came while the ring was read: the ones it already holds are dropped
+    const held = session.heldFrames ?? [];
+    session.heldFrames = undefined;
+    session.lastSeq = ringSeq;
+    for (const f of framesAfter(held, ringSeq)) this.applyFrame(session, f.data, f.seq);
 
     const pending = this.pendingSizes.get(id);
     let repainted: Promise<void> | null = null;
@@ -313,6 +326,7 @@ export class PtyHost {
       markerMatchPos: 0,
       markerHeldBytes: "",
       shellReadyTimeout: null,
+      lastSeq: 0,
     };
     this.sessions.set(id, session);
 

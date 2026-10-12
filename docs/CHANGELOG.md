@@ -11,9 +11,16 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Sessions idle for days stop holding memory (an idle Claude session keeps 500-780 MB). With no output and no typing for 7 days, an agent is suspended (Resume picks it up with the same model, YOLO and mode; its worktree stays as it is, nothing is committed or pushed) and a terminal sitting at its prompt is closed. Never touched: a working agent, one pinned in Watching, with Watch PR on, waiting on your answer, in a pipeline, queue or parallel run, with uncommitted worktree changes, or with anything besides the agent in its terminal or a server listening on a port; and a terminal running anything (dev server, `tail`, a background or disowned job). Idle time survives an app restart. Change or turn it off in Settings > General > Sessions (Off, 1, 3, 7 or 14 days). A toast says what happened ("Suspended 2 idle sessions, closed 1 idle terminal") with each one as a link, "nyx (Argos)" or "Terminal (Postino, closed)", that takes you to it. The sidebar marks suspended sessions with "Suspended"
-- Terminals and agents started before 0.5.20 (still without a UTF-8 locale, where `pod install` and `expo run:ios` fail with "CocoaPods requires your terminal to be using UTF-8" and copies paste garbled) show "No UTF-8: restart" in their bar. An agent restarts after its turn and resumes the conversation with the same model, YOLO and mode; a terminal reopens in the same folder (what runs in it ends). Doctor counts them under Terminal encoding. Nothing shows when your shell profile exports a UTF-8 `LANG`
+
+### Changed
+- Installing this version ends every open terminal and agent once (the background process that keeps them alive is replaced). Agents come back marked crashed with their history and can be resumed in their panes; plain terminals reopen fresh. This also retires every session started before 0.5.20 without a UTF-8 locale (where `pod install` failed and copies pasted garbled), so no "restart for UTF-8" notice is needed
+- One terminal printing a flood of output (pulling many repos, a long build log) no longer freezes typing in every other terminal: only the session producing the output waits for Exegol to catch up
+- Reopening Exegol with many agents is faster: panes not on screen reload only the last 1 MB of their output (from the last screen clear when there is one), and terminals keep bracketed paste, mouse scrolling and a hidden cursor after a long session
+- With many busy agents, the oldest output of the largest ones is trimmed (each keeps at least 2 MB) instead of memory growing past the limit
 
 ### Fixed
+- Retry on the "terminals not answering" banner no longer repeats or drops a few characters of output: only terminals that actually missed output are redrawn
+- A reconnected terminal no longer starts with a stray replacement character (�) at the top of its history
 - Opening the Dashboard right after starting Exegol no longer leaves an agent pane drawn at the wrong width when you come back. A watched card set to "fit session to card" could keep the session at the card's size while it was still reconnecting, and the pane's own size was ignored until you switched tabs
 
 ## [0.5.20] — 2026-10-09 — Move panes between tabs, every folder in Run in, clean copies from agents

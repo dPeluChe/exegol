@@ -1,33 +1,42 @@
 // Circular byte buffer for PTY scrollback in the sidecar.
 // Stores raw ANSI output. Oldest data silently overwritten when full.
 
+import { ModeTracker } from "./terminal-modes";
+
 const DEFAULT_CAPACITY = 8 * 1024 * 1024; // 8MB per session
 
-const ALT_ON = "\x1b[?1049h";
-const ALT_OFF = "\x1b[?1049l";
-/** Longest sequence we scan for, minus one — enough overlap that a toggle split
- *  across two writes is still seen. */
-const CARRY = ALT_ON.length - 1;
-const ESC = 0x1b;
-const ALT_ON_BYTES = Buffer.from(ALT_ON, "latin1");
-const ALT_OFF_BYTES = Buffer.from(ALT_OFF, "latin1");
+/** A capped snapshot starts at the first line break this close to its cut, not mid-sequence */
+const LINE_ALIGN_BYTES = 4096;
+/** A reset, or erase screen + scrollback: nothing written before it is visible after */
+const CLEAR_POINTS = [Buffer.from("\x1bc", "latin1"), Buffer.from("\x1b[2J\x1b[3J", "latin1")];
+
+/** Pure: how many leading bytes are UTF-8 continuation bytes (a character cut by the wrap) */
+export function continuationBytes(buf: Buffer): number {
+  let n = 0;
+  while (n < 3 && n < buf.length && ((buf[n] as number) & 0xc0) === 0x80) n++;
+  return n;
+}
+
+/** Pure: where a capped tail should start: the last clear, else the first line break near the cut */
+export function tailStart(tail: Buffer): number {
+  let clear = -1;
+  for (const point of CLEAR_POINTS) clear = Math.max(clear, tail.lastIndexOf(point));
+  if (clear !== -1) return clear;
+  const nl = tail.indexOf(0x0a);
+  return nl !== -1 && nl < LINE_ALIGN_BYTES ? nl + 1 : continuationBytes(tail);
+}
 
 export class RingBuffer {
   private buf: Buffer;
   private head = 0; // Next write position
   private filled = false; // True once buffer has wrapped at least once
   /**
-   * Sticky, because the ring is not: a full-screen TUI enables the alternate
-   * screen once at startup, and after 8 MB of output that sequence has been
-   * evicted. Replaying the ring then rebuilds the PRIMARY screen — the shell
-   * prompt from before the CLI launched — while the app draws into an alternate
-   * screen the terminal never entered. That is opencode reattaching to a dead
-   * shell prompt (2026-08-13).
+   * Sticky, because the ring is not: a full-screen TUI enables the alternate screen (and bracketed
+   * paste, mouse modes) once at startup, and after 8 MB of output those sequences are evicted.
+   * Replaying the ring then rebuilt the PRIMARY screen: opencode reattached to a dead shell prompt
+   * (2026-08-13).
    */
-  private altScreen = false;
-  /** Tail of the previous write, so a toggle split across two chunks is seen. */
-  private readonly carry = Buffer.alloc(CARRY);
-  private carryLen = 0;
+  private readonly modes = new ModeTracker();
 
   constructor(capacity = DEFAULT_CAPACITY) {
     this.buf = Buffer.allocUnsafe(capacity);
@@ -35,30 +44,13 @@ export class RingBuffer {
 
   /** True when the session last switched INTO the alternate screen. */
   get isAltScreen(): boolean {
-    return this.altScreen;
-  }
-
-  private trackScreenMode(data: Buffer): void {
-    // ESC first: a memchr reject costs one native pass and skips the rest for
-    // the overwhelming majority of chunks, which carry no mode switch at all.
-    if (data.indexOf(ESC) !== -1) {
-      const on = data.lastIndexOf(ALT_ON_BYTES);
-      const off = data.lastIndexOf(ALT_OFF_BYTES);
-      if (on !== -1 || off !== -1) this.altScreen = on > off;
-    } else if (this.carryLen > 0) {
-      // The switch may straddle the boundary; only the join can show it.
-      const seam = Buffer.concat([this.carry.subarray(0, this.carryLen), data.subarray(0, CARRY)]);
-      const on = seam.lastIndexOf(ALT_ON_BYTES);
-      const off = seam.lastIndexOf(ALT_OFF_BYTES);
-      if (on !== -1 || off !== -1) this.altScreen = on > off;
-    }
-    this.carryLen = data.copy(this.carry, 0, Math.max(0, data.length - CARRY));
+    return this.modes.altScreen;
   }
 
   write(data: Buffer): void {
     const len = data.length;
     if (len === 0) return;
-    this.trackScreenMode(data);
+    this.modes.write(data);
 
     if (len >= this.buf.length) {
       // Data larger than buffer — keep only the tail
@@ -83,31 +75,56 @@ export class RingBuffer {
   }
 
   /**
-   * Contents in write order (oldest → newest), prefixed with the
-   * alternate-screen switch when the session is in it. That switch is written
-   * once at startup and is usually long evicted, so without the prefix a
-   * reattaching terminal rebuilds the PRIMARY screen while the app keeps
-   * drawing to the alternate one.
+   * Contents in write order (oldest to newest), prefixed with the modes the session is in (the
+   * alternate screen first). A capped snapshot starts at the last clear, else at a line break near the cut.
    */
-  snapshot(): Buffer {
-    return this.altScreen ? Buffer.concat([ALT_ON_BYTES, ...this.parts()]) : this.rawSnapshot();
+  snapshot(maxBytes?: number): Buffer {
+    const parts = this.parts();
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    let body: Buffer;
+    if (maxBytes !== undefined && total > maxBytes) {
+      const tail = concatTail(parts, maxBytes);
+      body = tail.subarray(tailStart(tail));
+    } else {
+      body = this.rawSnapshot();
+    }
+    // Always: content replayed after it ends on the same modes, and a reload from disk lost the start
+    const prefix = this.modes.prefix();
+    return prefix ? Buffer.concat([Buffer.from(prefix, "latin1"), body]) : body;
   }
 
   /**
-   * Contents WITHOUT the alternate-screen prefix. Persistence must use this:
-   * eviction writes the snapshot to disk and reload feeds it back through
-   * `write()`, so a prefixed snapshot would be stored as real content and
-   * prefixed again on the next read — one forged escape accreted per cycle.
+   * Contents WITHOUT the mode prefix. Persistence must use this: eviction writes the snapshot to
+   * disk and reload feeds it back through `write()`, so a prefixed snapshot would be stored as
+   * real content and prefixed again on the next read. Starts on a character boundary.
    */
   rawSnapshot(): Buffer {
     const parts = this.parts();
-    return parts.length === 1 ? Buffer.from(parts[0] as Buffer) : Buffer.concat(parts);
+    const whole = parts.length === 1 ? Buffer.from(parts[0] as Buffer) : Buffer.concat(parts);
+    return this.filled ? whole.subarray(continuationBytes(whole)) : whole;
   }
 
-  /** Contents in write order, without copying — callers concat once. */
+  /** Contents in write order, without copying: callers concat once. */
   private parts(): Buffer[] {
     if (!this.filled) return [this.buf.subarray(0, this.head)];
     return [this.buf.subarray(this.head), this.buf.subarray(0, this.head)];
+  }
+
+  /**
+   * Memory pressure: keep only the newest `bytes` in a smaller allocation (the capacity shrinks
+   * with it). Returns the capacity freed.
+   */
+  shrinkTo(bytes: number): number {
+    const before = this.buf.length;
+    if (bytes >= before) return 0;
+    const tail = concatTail(this.parts(), bytes);
+    const start = continuationBytes(tail);
+    const next = Buffer.allocUnsafe(bytes);
+    const kept = tail.copy(next, 0, start);
+    this.buf = next;
+    this.head = kept % bytes;
+    this.filled = kept === bytes;
+    return before - bytes;
   }
 
   get byteLength(): number {
@@ -121,7 +138,6 @@ export class RingBuffer {
 
   /** Keeps the screen mode: a cleared TUI is still on the alternate screen, and its replay must say so. */
   clear(): void {
-    this.carryLen = 0;
     this.head = 0;
     this.filled = false;
   }
@@ -149,4 +165,17 @@ export class RingBuffer {
       this.filled = false;
     }
   }
+}
+
+/** The last `max` bytes across `parts`, in one buffer */
+function concatTail(parts: Buffer[], max: number): Buffer {
+  const out: Buffer[] = [];
+  let need = max;
+  for (let i = parts.length - 1; i >= 0 && need > 0; i--) {
+    const p = parts[i] as Buffer;
+    const take = Math.min(need, p.length);
+    out.unshift(p.subarray(p.length - take));
+    need -= take;
+  }
+  return Buffer.concat(out);
 }

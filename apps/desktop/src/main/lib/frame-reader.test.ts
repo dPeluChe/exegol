@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { createFrameReader } from "./frame-reader";
-import { createNdjsonBuffer } from "./ndjson";
 
 function feedInChunks(feed: (b: Buffer) => void, text: string, size: number) {
   const buf = Buffer.from(text);
@@ -43,6 +42,20 @@ describe("createFrameReader", () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
+  it("reads a 4 MB paste request in 64 KB chunks linearly (the sidecar's end)", () => {
+    const got: Array<{ params: { data: string } }> = [];
+    const feed = createFrameReader<{ params: { data: string } }>((m) => got.push(m));
+    const data = "línea pegada ✻\r\n".repeat(250_000);
+    const started = performance.now();
+    feedInChunks(
+      feed,
+      `${JSON.stringify({ id: 1, method: "session.write", params: { data } })}\n`,
+      65536,
+    );
+    expect(got[0]?.params.data).toBe(data);
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("keeps the MCP default ceiling: an unframed flood is one incident, then it recovers", () => {
     const got: unknown[] = [];
     const overflow = vi.fn();
@@ -55,8 +68,8 @@ describe("createFrameReader", () => {
   });
 });
 
-// The sidecar still frames with lib/ndjson, so both ends must agree on every chunking.
-describe("createFrameReader matches lib/ndjson", () => {
+// Both ends of the sidecar socket frame with it: every chunking must yield the same frames.
+describe("createFrameReader is chunking-independent", () => {
   const MAX = 1000;
   const MAX_CHUNK = 200;
 
@@ -75,8 +88,6 @@ describe("createFrameReader matches lib/ndjson", () => {
       if (r < 0.1) lines.push("", "   ", "\r");
       else if (r < 0.15) lines.push("not json");
       else if (r < 0.2) {
-        // Oversize, then a blank line longer than a chunk: lib/ndjson checks its whole buffer
-        // and drops complete frames that share the overflowing chunk, frame-reader does not
         lines.push(JSON.stringify({ big: "x".repeat(MAX * 3 + Math.floor(rand() * MAX)) }));
         lines.push(" ".repeat(MAX_CHUNK + 50));
       } else {
@@ -111,7 +122,11 @@ describe("createFrameReader matches lib/ndjson", () => {
     let overflows = 0;
     for (let seed = 1; seed <= 40; seed++) {
       const bytes = Buffer.from(stream(rng(seed)));
-      const expected = run((m, o) => createNdjsonBuffer(m, o, MAX), bytes, rng(seed * 7));
+      const expected = run(
+        (m, o) => createFrameReader(m, o, MAX),
+        bytes,
+        () => 0.999,
+      );
       expect(expected.frames.length).toBeGreaterThan(0);
       overflows += expected.overflows;
       for (let k = 1; k <= 5; k++) {

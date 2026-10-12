@@ -304,7 +304,8 @@ export function listRecentSessions(db: Database.Database, limit = 10): RecentSes
 export function recoverStaleAgents(
   db: Database.Database,
   skipIds?: Set<string>,
-): { crashed: number; alive: number; crashedIds: string[] } {
+  reasonFor: (id: string) => string = () => "no live session",
+): { crashed: number; alive: number; crashedIds: string[]; reasons: string[] } {
   const stale = db
     .prepare(
       `SELECT id, cli_type, status, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
@@ -314,6 +315,7 @@ export function recoverStaleAgents(
 
   let crashed = 0;
   const crashedIds: string[] = [];
+  const reasons: string[] = [];
   const alive = skipIds?.size ?? 0;
   const now = Math.floor(Date.now() / 1000);
 
@@ -323,12 +325,14 @@ export function recoverStaleAgents(
 
   for (const agent of stale) {
     if (skipIds?.has(agent.id)) {
-      logger.info(`[Recovery] Skip ${agent.id} (${agent.cli_type}) — alive via sidecar`);
+      logger.info(`[Recovery] ${agent.id} (${agent.cli_type}): reattached, alive via sidecar`);
       continue;
     }
 
+    const reason = reasonFor(agent.id);
+    reasons.push(reason);
     logger.info(
-      `[Recovery] Mark crashed: ${agent.id} (${agent.cli_type}, status=${agent.status}, pid=${agent.pid ?? "null"})`,
+      `[Recovery] ${agent.id} (${agent.cli_type}, status=${agent.status}, pid=${agent.pid ?? "null"}): crashed, ${reason}`,
     );
     db.prepare(
       "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
@@ -337,7 +341,7 @@ export function recoverStaleAgents(
     crashedIds.push(agent.id);
   }
 
-  return { crashed, alive, crashedIds };
+  return { crashed, alive, crashedIds, reasons };
 }
 
 /** T176: hide an ended session from the dashboard. Live agents are refused —

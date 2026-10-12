@@ -7,6 +7,7 @@ import { logger } from "../lib/logger";
 import { readAgentMcpToken, readPerAgentMcpToken } from "../mcp/exegol-mcp-config";
 import { ensureExegolMcpServerStarted, restoreAgentMcpToken } from "../mcp/exegol-server";
 import { getPtyHost } from "../terminal/pty-host";
+import { HIDDEN_SNAPSHOT_BYTES } from "../terminal/pty-sidecar-protocol";
 import {
   expectReattach,
   holdForRepaint,
@@ -98,6 +99,8 @@ export async function reattachSidecarAgents(
     loadActiveView(db),
   );
   const visible = new Set(order.activeTab);
+  const onScreen = new Set(order.activeTab);
+  let fetchedBytes = 0;
   logger.info(
     `[Reattach] order: ${order.activeTab.length} active-tab, ${order.activeProject} active-project, ${order.rest} rest`,
   );
@@ -151,13 +154,20 @@ export async function reattachSidecarAgents(
           rows: (row.pty_rows as number | null) ?? DEFAULT_PTY_ROWS,
         },
         callbacks,
-        { scrollbackPath, tui: !isShell && !atShellPrompt },
+        {
+          scrollbackPath,
+          tui: !isShell && !atShellPrompt,
+          // A pane off screen replays only its ring's tail: a full 8 MB ring cost ~150 ms each
+          snapshotMaxBytes: onScreen.has(agentId) ? undefined : HIDDEN_SNAPSHOT_BYTES,
+        },
       );
       const snapshot = reattached?.snapshot ?? null;
       repainted = reattached?.repainted ?? null;
       if (reattached) {
-        const kb = snapshot ? Math.round(Buffer.byteLength(snapshot) / 1024) : 0;
-        timing = `fetch ${Math.round(reattached.fetchMs)}ms, ${kb} KB, parse ${Math.round(reattached.parseMs)}ms`;
+        const bytes = snapshot ? Buffer.byteLength(snapshot) : 0;
+        fetchedBytes += bytes;
+        const kb = Math.round(bytes / 1024);
+        timing = `${onScreen.has(agentId) ? "full" : "tail"}, fetch ${Math.round(reattached.fetchMs)}ms, ${kb} KB, parse ${Math.round(reattached.parseMs)}ms`;
       }
       // The ring's end seeds the scrollback that attention tails, final output and scoring read
       if (!isShell && snapshot) {
@@ -270,7 +280,7 @@ export async function reattachSidecarAgents(
   });
 
   logger.info(
-    `[Reattach] done ${ids.length} in ${Date.now() - started}ms (alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size})`,
+    `[Reattach] done ${ids.length} in ${Date.now() - started}ms, ${Math.round(fetchedBytes / 1024)} KB fetched (alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size})`,
   );
   return result;
 }

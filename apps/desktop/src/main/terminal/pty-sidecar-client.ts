@@ -22,13 +22,13 @@ import {
   type SessionSnapshotResult,
 } from "./pty-sidecar-protocol";
 
-type DataCallback = (id: string, data: string) => void;
+type DataCallback = (id: string, data: string, seq?: number) => void;
 type ExitCallback = (id: string, exitCode: number, signal?: number) => void;
 type ErrorCallback = (id: string, message: string) => void;
 
 export class SidecarClient {
   private socket: Socket | null = null;
-  /** Main's own linear reader (lib/frame-reader); the sidecar end keeps lib/ndjson. Bounded:
+  /** Linear reader (lib/frame-reader), the sidecar's end too. Bounded:
    *  this socket carries far more traffic than the MCP one and runs in the same
    *  main process, so an unbounded buffer here is the same OOM. */
   private feed = createFrameReader<JsonRpcMessage>(
@@ -140,9 +140,9 @@ export class SidecarClient {
     await this.call("session.destroy", { id });
   }
 
-  async snapshot(id: string): Promise<string | null> {
-    const result = (await this.call("session.snapshot", { id })) as SessionSnapshotResult;
-    return result.data;
+  /** The ring (only its tail with `maxBytes`) and the seq of the last frame it includes */
+  async snapshot(id: string, maxBytes?: number): Promise<SessionSnapshotResult> {
+    return (await this.call("session.snapshot", { id, maxBytes })) as SessionSnapshotResult;
   }
 
   /** Forget the session's ring buffer, so a later reattach does not replay it */
@@ -228,7 +228,7 @@ export class SidecarClient {
       switch (msg.method) {
         case "session.data": {
           const p = msg.params as SessionDataNotification;
-          for (const cb of this.dataCallbacks) cb(p.id, p.data);
+          for (const cb of this.dataCallbacks) cb(p.id, p.data, p.seq);
           break;
         }
         case "session.exit": {

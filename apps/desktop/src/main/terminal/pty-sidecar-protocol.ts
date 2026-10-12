@@ -9,10 +9,12 @@ import { join } from "node:path";
 export const EXEGOL_DIR = join(homedir(), ".exegol");
 export const SIDECAR_SOCK_PATH = join(EXEGOL_DIR, "pty-sidecar.sock");
 export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
+/** The sidecar's own log (sidecar-log.ts), also its stdout/stderr */
+export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
 /**
  * BUMP THIS whenever you change code the sidecar bundles (pty-sidecar-entry,
  * pty-sidecar-eviction, pty-sidecar-flusher, pty-sidecar-queries, this file,
- * ring-buffer, lib/ndjson). The
+ * ring-buffer, terminal-modes, sidecar-log, lib/frame-reader). The
  * sidecar is detached so it outlives both an app restart AND an app update —
  * on a version mismatch, discovery shuts the old one down and spawns a fresh
  * one. Forget the bump and the fix silently never loads: that is a released
@@ -23,8 +25,11 @@ export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
  * 1.5.0 — session.clear, bounded framing, client backpressure, DA1 while detached,
  *         replay without terminal queries (2026-10-01)
  * 1.6.0 — the pid file is a lease: a sidecar exits once it no longer names its token (2026-10-01)
+ * 1.7.0: per-session output pause, seq on output frames, capped snapshots (tail from the last
+ *        clear), sticky terminal modes, rings start on a UTF-8 boundary, active rings shrink
+ *        under memory pressure, linear framing (lib/frame-reader), sidecar.log (2026-10-12)
  */
-export const SIDECAR_VERSION = "1.6.0";
+export const SIDECAR_VERSION = "1.7.0";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 
@@ -32,6 +37,8 @@ export const SIDECAR_CONNECT_TIMEOUT_MS = 5_000;
 export const SIDECAR_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // Auto-exit after 5min idle
 export const RING_BUFFER_CAPACITY = 8 * 1024 * 1024; // 8MB per session (default)
 export const SHELL_RING_BUFFER_CAPACITY = 1 * 1024 * 1024; // 1MB for plain shells (T143)
+/** A hidden pane's reattach replays only this much of its ring (T202) */
+export const HIDDEN_SNAPSHOT_BYTES = 1 * 1024 * 1024;
 
 // ─── Ring buffer memory policy (T143) ────────────────────────────────────
 
@@ -131,8 +138,16 @@ export interface SessionIdParams {
   id: string;
 }
 
+export interface SessionSnapshotParams {
+  id: string;
+  /** Only the ring's tail (from the last clear when one is in it); omitted: the whole ring */
+  maxBytes?: number;
+}
+
 export interface SessionSnapshotResult {
   data: string | null;
+  /** The seq of the last output frame the data includes (absent before 1.7.0) */
+  seq?: number;
 }
 
 export interface SessionListResult {
@@ -149,6 +164,8 @@ export interface SessionInfo {
   alive: boolean;
   exitCode: number | null;
   signal: string | null;
+  /** The seq of the last output frame sent (absent before 1.7.0) */
+  seq?: number;
 }
 
 export interface SessionListInfoResult {
@@ -183,6 +200,8 @@ export interface SessionMemoryResult {
 export interface SessionDataNotification {
   id: string;
   data: string;
+  /** Per session, +1 per frame: lets main tell a frame it already has from one it lost */
+  seq?: number;
 }
 
 export interface SessionExitNotification {

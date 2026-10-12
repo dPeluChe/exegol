@@ -104,11 +104,14 @@ message from the current diff via Claude Haiku (reuses Anthropic API key).
 
 ### PTY Sidecar Architecture
 - **Sidecar process**: standalone detached Node.js process (`pty-sidecar-entry.ts`), survives window reload/crash
-- **JSON-RPC over Unix socket**: `~/.exegol/pty-sidecar.sock` for control, NDJSON framing
-- **Ring buffer**: 8MB circular buffer per session, stores raw ANSI output for instant reconnect
-- **Discovery**: PID file at `~/.exegol/pty-sidecar.pid`, reuse existing or spawn new
+- **JSON-RPC over Unix socket**: `~/.exegol/pty-sidecar.sock` for control, NDJSON framing (`lib/frame-reader`, linear, both ends)
+- **Ring buffer**: 8MB circular buffer per session, stores raw ANSI output for instant reconnect; replays start on a UTF-8 boundary and carry the sticky DEC modes (`terminal-modes.ts`: alt screen, bracketed paste, mouse, cursor keys and visibility). Over the 256 MB global cap, idle rings evict to disk, then the largest active rings shrink to 2 MB (`planTrims`)
+- **Flow control** (`OutputGate`, `pty-sidecar-flusher.ts`): while main's socket is backed up, only the sessions filling it pause (a frame over 1 KB that failed the write, or 16 KB of its own queued; echo never), resumed on drain
+- **Seq**: every `session.data` frame carries a per-session `seq`; snapshots and `session.listInfo` return the last one sent. Main (`sidecar-resync.ts`) drops frames it already applied, holds frames during a reattach and replays only those after the ring's seq, and on a Retry swap rebuilds only sessions that lost frames
+- **Discovery**: PID file at `~/.exegol/pty-sidecar.pid`, reuse existing or spawn new. Replacing another version logs `[Sidecar] replacing <old> -> <new>` and first writes `~/.exegol/sidecar-replaced-<time>.json` (ids and DB metadata of its live sessions, `bootstrap/sidecar-replacement.ts`)
+- **sidecar.log** (`~/.exegol/logs/sidecar.log`, `sidecar-log.ts`, 1 MB + one `.1`): start, sessions created/exited (pid, code, signal), clients, gate pauses over 1 s, ring trims, exit cause, and discovery's pid file state. Never content, input, prompts or env
 - **Fallback**: if sidecar fails, falls back to legacy per-session subprocess mode transparently
-- **Reconnection**: on app restart, `reattachSidecarAgents()` rebuilds callbacks + replays ring buffer snapshot
+- **Reconnection**: on app restart, `reattachSidecarAgents()` rebuilds callbacks + replays ring buffer snapshot (panes off screen: only the last 1 MB, from the last clear, `HIDDEN_SNAPSHOT_BYTES`); every agent gets a `[Recovery]` line with its decision and reason, then one `[Recovery] done in Xms` summary
 - **Health watch** (`sidecar-health-watch.ts`, pure parts in `sidecar-health.ts`): a write/resize/kill unanswered 3 s or failed starts pings (0, 2, 5, 10 s backoff), logs the stall with the sidecar's CPU/RSS and main's event-loop lag, pushes `sidecar:health`; the banner's Retry swaps in a new socket to the same sidecar (`reconnectSidecar`), Restart terminals stops it (`stopSidecarProcess`) and relaunches into crash recovery
 
 ### Agent lifecycle

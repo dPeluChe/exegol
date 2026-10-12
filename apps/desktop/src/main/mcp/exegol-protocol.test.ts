@@ -1,18 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { createNdjsonBuffer, MAX_NDJSON_LINE_CHARS } from "../lib/ndjson";
+import { createFrameReader, MAX_FRAME_BYTES } from "../lib/frame-reader";
 import { encodeRequest, encodeResponse } from "./exegol-protocol";
 
-describe("createNdjsonBuffer", () => {
+describe("createFrameReader (MCP framing)", () => {
   it("parses a single complete line", () => {
     const received: unknown[] = [];
-    const feed = createNdjsonBuffer((msg) => received.push(msg));
+    const read = createFrameReader((msg) => received.push(msg));
+    const feed = (t: string) => read(Buffer.from(t));
     feed(`${JSON.stringify({ hello: "world" })}\n`);
     expect(received).toEqual([{ hello: "world" }]);
   });
 
   it("buffers partial lines across multiple chunks", () => {
     const received: unknown[] = [];
-    const feed = createNdjsonBuffer((msg) => received.push(msg));
+    const read = createFrameReader((msg) => received.push(msg));
+    const feed = (t: string) => read(Buffer.from(t));
     const json = JSON.stringify({ a: 1 });
     feed(json.slice(0, 5));
     feed(`${json.slice(5)}\n`);
@@ -21,14 +23,16 @@ describe("createNdjsonBuffer", () => {
 
   it("parses multiple messages delivered in one chunk", () => {
     const received: unknown[] = [];
-    const feed = createNdjsonBuffer((msg) => received.push(msg));
+    const read = createFrameReader((msg) => received.push(msg));
+    const feed = (t: string) => read(Buffer.from(t));
     feed(`${JSON.stringify({ n: 1 })}\n${JSON.stringify({ n: 2 })}\n`);
     expect(received).toEqual([{ n: 1 }, { n: 2 }]);
   });
 
   it("frames a message split over many chunks next to whole ones", () => {
     const received: unknown[] = [];
-    const feed = createNdjsonBuffer((msg) => received.push(msg));
+    const read = createFrameReader((msg) => received.push(msg));
+    const feed = (t: string) => read(Buffer.from(t));
     const big = JSON.stringify({ body: "x".repeat(10_000) });
     for (let i = 0; i < big.length; i += 64) feed(big.slice(i, i + 64));
     const two = JSON.stringify({ n: 2 });
@@ -39,7 +43,8 @@ describe("createNdjsonBuffer", () => {
 
   it("drops malformed lines without throwing", () => {
     const received: unknown[] = [];
-    const feed = createNdjsonBuffer((msg) => received.push(msg));
+    const read = createFrameReader((msg) => received.push(msg));
+    const feed = (t: string) => read(Buffer.from(t));
     expect(() => feed("not json\n")).not.toThrow();
     feed(`${JSON.stringify({ ok: true })}\n`);
     expect(received).toEqual([{ ok: true }]);
@@ -78,13 +83,14 @@ describe("frame limit", () => {
   it("discards an unframed flood and recovers at the next newline", () => {
     const seen: unknown[] = [];
     let overflows = 0;
-    const feed = createNdjsonBuffer(
+    const read = createFrameReader(
       (m) => seen.push(m),
       () => overflows++,
     );
+    const feed = (t: string) => read(Buffer.from(t));
 
     const chunk = "x".repeat(1024 * 1024);
-    for (let i = 0; i <= MAX_NDJSON_LINE_CHARS / chunk.length; i++) feed(chunk);
+    for (let i = 0; i <= MAX_FRAME_BYTES / chunk.length; i++) feed(chunk);
     expect(overflows).toBe(1);
     expect(seen).toHaveLength(0);
 
@@ -97,10 +103,11 @@ describe("frame limit", () => {
 
   it("reports one incident, not one per 8M chars of garbage", () => {
     let overflows = 0;
-    const feed = createNdjsonBuffer(
+    const read = createFrameReader(
       () => {},
       () => overflows++,
     );
+    const feed = (t: string) => read(Buffer.from(t));
     const chunk = "x".repeat(1024 * 1024);
     for (let i = 0; i < 20; i++) feed(chunk);
     expect(overflows).toBe(1);

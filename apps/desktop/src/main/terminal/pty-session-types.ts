@@ -30,6 +30,12 @@ export interface Session {
   shellReadyTimeout: ReturnType<typeof setTimeout> | null;
   /** Set while Retry rebuilds the model from the ring: output that came after the ring's copy */
   resyncTail?: string[];
+  /** Seq of the last sidecar output frame applied (sidecar-resync.ts) */
+  lastSeq?: number;
+  /** A frame arrived past lastSeq + 1: some were lost (a Retry swap rebuilds it) */
+  seqGap?: boolean;
+  /** Frames that arrive while a reattach reads the ring, applied after it by seq */
+  heldFrames?: Array<{ data: string; seq?: number }>;
 }
 
 export const MAX_CONCURRENT_SPAWNS = 3;

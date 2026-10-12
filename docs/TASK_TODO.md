@@ -310,32 +310,17 @@ error, prefer `--id`) 0.9 s, navigated; `axe type` filled Safari's address field
 
 ### T202: Sidecar flow control and lighter reattach `added: 2026-10-09`
 **Priority**: P1 | **Effort**: M | **Source**: the 2026-10-09 log audit after every terminal ignored
-the keyboard during a `spark pull all` (only a reboot fixed it). Needs a `SIDECAR_VERSION` bump:
-installing it ends every live terminal (sessions return crashed, history kept, resumable), so ship
-it when the user has cleaned up to the sessions they need and says go.
+the keyboard during a `spark pull all` (only a reboot fixed it). Items 1-5 and 7 shipped on
+`feat/t202-sidecar-flow` (SIDECAR_VERSION 1.7.0, `TASK_COMPLETED/2610.md`).
 
-1. Pause per session: `OutputGate` in `pty-sidecar-entry.ts` pauses ALL PTYs once main's socket
-   queue passes 16 KB, so one flooding terminal freezes every session's echo. Pause only the
-   session(s) whose output fills the queue
-2. Sequence numbers on output frames so the #346 Retry socket swap is exact (today a few ms of
-   output at the swap can repeat or drop)
-3. Lighter reattach: 9 of 20 Claude rings were full 8 MB (104 MB as JSON, 5.5 s for 35 sessions,
-   shells queued behind them). Cap the hidden-session snapshot (about 1 MB of tail, or from the
-   last screen clear) and reattach hidden panes lazily
-4. Sidecar logs to `sidecar.log` (empty today): gate pauses over 1 s, its own exit cause and
-   signal, the pid file state at discovery
-5. Ring buffer start on a character boundary: after the 8 MB ring wraps (and on an oversize
-   write) the replay can begin mid UTF-8 sequence, one U+FFFD at the top of a reattach (align the
-   start like `utf8Tail`; found in the #356 encoding review)
+3. Reattach hidden panes lazily (the capped 1 MB tail shipped; deferring the whole reattach of a
+   pane off screen did not: status, attention and MCP re-arm hang off it)
 6. Verify live: a heavy command in one terminal, the others keep typing; the health watch (#346)
-   stays quiet
-7. After the bump every session is new (UTF-8 since 0.5.20): delete the locale detector from #361
-   (`agents/session-locale.ts`, `LocaleRestartControl`, `doctor.sessionsWithoutUtf8` and its
-   capability, the Doctor "Terminal encoding" check) once no user can still have a pre-0.5.20
-   session alive (the bump itself guarantees it)
-8. Only if a third restart reason appears: one "session outdated" chip with its reason instead of
-   `CliUpdateControl` + `LocaleRestartControl`, and rename `stores/cli-restarts` to a session
-   restart queue
+   stays quiet. After installing: `~/.exegol/sidecar-replaced-*.json`, the `[Recovery]` line per
+   agent and the `[Resume]` outcomes in the log, gate and trim lines in `logs/sidecar.log`
+8. Only if a second restart reason appears next to CLI updates: one "session outdated" chip with
+   its reason instead of `CliUpdateControl`, and rename `stores/cli-restarts` to a session restart
+   queue
 
 ### T201: Local voice dictation `added: 2026-10-07`
 **Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-07. Speech to text that runs
@@ -572,27 +557,15 @@ exchange-bus MVP only, no headless council executions. Absorbs:
    - (T184 leftover) `pty-host.ts` reattach hands the sidecar's raw snapshot to the renderer; the
      other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
      there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)
-   - (T185.14 rest, review #9) Sidecar memory pressure: ring eviction only touches idle sessions
-     (33 active rings = 264 MiB > 256 MiB target). Byte counting and the client backlog cap
-     shipped 2026-10-01 (`TASK_COMPLETED/2610.md`). Bumps SIDECAR_VERSION.
    - (T184.2 rest) Queries while the app runs but no view draws the session: the sidecar answers
      DA1 only while no client is connected (app closed). With the app open, a hidden pane's xterm
      may not answer, and OSC 10/11/12 colour queries are never answered from the sidecar (T183.1
      terminal fidelity answers them in the renderer only). Needs main to tell the sidecar which
      sessions have a live view.
-   - (P2) Renderer-acked, per-session flow control: `OutputGate` pauses every PTY when one socket
-     backs up (terax `pty/output.rs`, klaudio 10d1e70).
-   - Snapshot only the ring tail (~1 MB) on reattach: needs a sidecar change + SIDECAR_VERSION
-     bump, which restarts every live PTY once; schedule with the user. Measured 2026-10-08
-     (`perf/reattach-repaint`, local harness: real `SidecarClient` + `PtyHost` over a unix socket,
-     27 sessions = 18 x 8 MB coloured TUI rings + 9 x 1 MB shells, pool of 3): the ~2 s per ring
-     was main's NDJSON framing (quadratic on 8 KB macOS socket reads, ~3 s per 12 MB frame), now
-     linear: from 56.9 s to 4.6 s total. What is left per 8 MB ring: fetch ~150 ms (sidecar serve +
-     JSON.parse) and xterm parse ~135 ms (1 MB shell: ~20 ms). A 1 MB tail would cut each heavy
-     session to ~40 ms: from ~4.6 s to ~1.2 s for 27 sessions, and the longest main-thread block
-     (~250 ms, the 12 MB JSON.parse + one xterm write) to ~40 ms. Also: `lib/ndjson` (bundled) has
-     the same quadratic concat; fix it with that bump (main, MCP included, already uses `lib/frame-reader`; its header
-     comment still names the MCP users)
+   - (P2) Renderer-acked flow control: the sidecar now pauses per session on main's socket
+     (T202), but nothing waits for the renderer's xterm (terax `pty/output.rs`, klaudio 10d1e70).
+   - Panes on screen still replay their full ring (up to 8 MB, ~150 ms fetch + ~135 ms parse
+     each, measured 2026-10-08); hidden ones replay a 1 MB tail since T202.
 10. **Polls**: GitPane / SmartGitAction / TerminalPanel poll git status + `gh pr view` every 15s;
     refetch on turn-end / commit / push events instead. The PR poll part is shared with T142.
     > Merged from the "Queue after 0.5.7" performance follow-ups (0.5.3 audit) on 2026-10-04.
@@ -609,7 +582,7 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     dimension. Persist model id, dimension and chunker version per index generation. Before T153.
 13. **Indexer ignores `.gitignore`** (#6): `walkDir` (`project-indexer.ts`) only applies its own
     exclude list. Symlinks are no longer followed (fe7e264). Use git-aware enumeration.
-14. Sidecar memory pressure (rest): merged into 8.
+14. Sidecar memory pressure (rest): shipped with T202 (active rings shrink to 2 MB).
 15. **Memory salience reinforces a negation** (#7, P1 for T158/T164): `classifyObservation`
     (`salience.ts:51,61`) reinforces "Always run migrations…" with "Never run migrations…" (word
     similarity > 0.8). Auto-dedup only exact normalized matches; supersession needs an explicit

@@ -5,7 +5,7 @@
 import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import * as pty from "node-pty";
-import { createNdjsonBuffer } from "../lib/ndjson";
+import { createFrameReader } from "../lib/frame-reader";
 import {
   clearHistory,
   computeMemoryInfo,
@@ -29,14 +29,21 @@ import {
   type SessionCreateParams,
   type SessionIdParams,
   type SessionResizeParams,
+  type SessionSnapshotParams,
   type SessionWriteParams,
   SIDECAR_IDLE_TIMEOUT_MS,
+  SIDECAR_LOG_PATH,
   SIDECAR_PID_PATH,
   SIDECAR_SOCK_PATH,
   SIDECAR_VERSION,
 } from "./pty-sidecar-protocol";
 import { da1Replies, stripTerminalQueries } from "./pty-sidecar-queries";
 import { RingBuffer } from "./ring-buffer";
+import { createSidecarLog, kb, scrubHome, seconds } from "./sidecar-log";
+
+const log = createSidecarLog(SIDECAR_LOG_PATH, "Sidecar");
+/** A gate pause shorter than this is ordinary backpressure, not worth a line */
+const GATE_LOG_MS = 1000;
 
 // ─── Session state ──────────────────────────────────────────────────────
 
@@ -56,6 +63,8 @@ interface SidecarSession {
   lastActivityAt: number;
   /** T143: set once this session's ring buffer content was evicted to disk */
   evictedPath: string | null;
+  /** Seq of the last output frame sent (T202) */
+  seq: number;
 }
 
 const sessions = new Map<string, SidecarSession>();
@@ -64,20 +73,28 @@ const startTime = Date.now();
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
 // T143: periodic ring buffer eviction sweep (see pty-sidecar-eviction.ts)
-setInterval(() => evictIfOverCap(sessions.values()), RING_BUFFER_EVICTION_SWEEP_MS).unref();
+setInterval(() => {
+  for (const t of evictIfOverCap(sessions.values())) {
+    log(`trim ${t.id} ${kb(t.before)} -> ${kb(t.after)} (memory pressure)`);
+  }
+}, RING_BUFFER_EVICTION_SWEEP_MS).unref();
 
 // ─── Client management ──────────────────────────────────────────────────
 
-const output = new OutputGate<Socket>((paused) => {
-  for (const s of sessions.values()) {
-    if (!s.alive) continue;
-    if (paused) s.pty.pause();
-    else s.pty.resume();
-  }
-});
+const output = new OutputGate<Socket>(
+  (id) => {
+    const s = sessions.get(id);
+    if (s?.alive) s.pty.pause();
+  },
+  ({ id, bytes, ms }) => {
+    const s = sessions.get(id);
+    if (s?.alive) s.pty.resume();
+    if (ms >= GATE_LOG_MS) log(`gate: ${id} paused ${seconds(ms)} (${kb(bytes)} queued)`);
+  },
+);
 
-function broadcast(msg: string): void {
-  output.send(clients, msg);
+function broadcast(msg: string, id?: string, bytes?: number): void {
+  output.send(clients, msg, id, bytes);
 }
 
 function applyAppend(s: SidecarSession, data: string, bytes: number): void {
@@ -93,9 +110,11 @@ function flushSession(s: SidecarSession): void {
   }
   if (s.pending.length === 0) return;
   const data = s.pending;
+  const bytes = s.pendingBytes;
   s.pending = "";
   s.pendingBytes = 0;
-  broadcast(makeNotification("session.data", { id: s.id, data }));
+  s.seq++;
+  broadcast(makeNotification("session.data", { id: s.id, data, seq: s.seq }), s.id, bytes);
 }
 
 function scheduleFlush(s: SidecarSession): void {
@@ -106,7 +125,10 @@ function scheduleFlush(s: SidecarSession): void {
 function resetIdleTimer(): void {
   if (idleTimer) clearTimeout(idleTimer);
   if (sessions.size === 0 && clients.size === 0) {
-    idleTimer = setTimeout(() => stopAndExit(0), SIDECAR_IDLE_TIMEOUT_MS);
+    idleTimer = setTimeout(
+      () => stopAndExit(0, "idle, no sessions or clients"),
+      SIDECAR_IDLE_TIMEOUT_MS,
+    );
   } else {
     idleTimer = null;
   }
@@ -159,9 +181,10 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           flushTimer: null,
           lastActivityAt: Date.now(),
           evictedPath: null,
+          seq: 0,
         };
         sessions.set(p.id, session);
-        if (output.paused) proc.pause();
+        log(`session ${p.id} created, pid ${proc.pid}`);
 
         proc.onData((data: string) => {
           reloadIfEvicted(session);
@@ -182,6 +205,10 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           session.alive = false;
           session.exitCode = exitCode ?? null;
           session.signal = signal != null ? String(signal) : null;
+          output.forget(p.id);
+          log(
+            `session ${p.id} exited, pid ${proc.pid}, code ${exitCode}, signal ${signal ?? "none"}`,
+          );
           broadcast(makeNotification("session.exit", { id: p.id, exitCode, signal }));
           // Keep session in map for snapshot retrieval — cleanup after grace period
           setTimeout(() => {
@@ -249,6 +276,8 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
             }
           }
           sessions.delete(id);
+          output.forget(id);
+          log(`session ${id} destroyed`);
           resetIdleTimer();
         }
         client.write(makeResponse(req.id, { ok: true }));
@@ -256,11 +285,17 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
       }
 
       case "session.snapshot": {
-        const { id } = req.params as SessionIdParams;
+        const { id, maxBytes } = req.params as SessionSnapshotParams;
         const s = sessions.get(id);
-        if (s) reloadIfEvicted(s);
-        const data = s ? stripTerminalQueries(s.ringBuffer.snapshot().toString("utf-8")) : null;
-        client.write(makeResponse(req.id, { data }));
+        if (!s) {
+          client.write(makeResponse(req.id, { data: null }));
+          break;
+        }
+        reloadIfEvicted(s);
+        // Sent first, so the ring holds exactly the frames up to `seq`
+        flushSession(s);
+        const data = stripTerminalQueries(s.ringBuffer.snapshot(maxBytes).toString("utf-8"));
+        client.write(makeResponse(req.id, { data, seq: s.seq }));
         break;
       }
 
@@ -283,6 +318,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
           alive: s.alive,
           exitCode: s.exitCode,
           signal: s.signal,
+          seq: s.seq,
         }));
         client.write(makeResponse(req.id, { sessions: info }));
         break;
@@ -302,7 +338,7 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
 
       case "shutdown": {
         client.write(makeResponse(req.id, { ok: true }));
-        stopAndExit(500);
+        stopAndExit(500, "shutdown requested");
         break;
       }
 
@@ -323,19 +359,20 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
 
 const server = createServer((client: Socket) => {
   clients.add(client);
+  log(`client connected (${clients.size} connected)`);
   resetIdleTimer();
 
-  const feed = createNdjsonBuffer<JsonRpcMessage>(
+  const feed = createFrameReader<JsonRpcMessage>(
     (msg) => {
       // Responses from the client are not expected; ignore them
       if ("id" in msg && "method" in msg) handleRequest(msg as JsonRpcRequest, client);
     },
-    () => process.stderr.write("[Sidecar] Client sent an oversized frame, discarding\n"),
+    () => log("client sent an oversized frame, discarding"),
   );
   client.on("data", feed);
 
   const drop = () => {
-    clients.delete(client);
+    if (clients.delete(client)) log(`client disconnected (${clients.size} connected)`);
     output.release(client);
     resetIdleTimer();
   };
@@ -375,6 +412,7 @@ function cleanup(): void {
 
 function start(): void {
   mkdirSync(EXEGOL_DIR, { recursive: true });
+  log(`start: version ${SIDECAR_VERSION}, pid ${process.pid}`);
   try {
     unlinkSync(SIDECAR_SOCK_PATH);
   } catch {
@@ -393,15 +431,14 @@ function start(): void {
     resetIdleTimer();
     const lease = setInterval(() => {
       if (holdsLease(readPidFileText(), TOKEN)) return;
-      process.stderr.write("[Sidecar] Replaced (pid file no longer names this sidecar), exiting\n");
       clearInterval(lease);
-      stopAndExit(2000);
+      stopAndExit(2000, "replaced: the pid file no longer names this sidecar");
     }, LEASE_CHECK_MS);
     lease.unref();
   });
 
   server.on("error", (err) => {
-    process.stderr.write(`[Sidecar] Server error: ${err.message}\n`);
+    log(`exit: server error (${scrubHome(err.message)})`);
     cleanup();
     process.exit(1);
   });
@@ -413,7 +450,9 @@ function start(): void {
  * Kill every session and exit. Pending output is flushed first: onExit may not fire before the
  * SIGKILL escalation, and clients may disconnect meanwhile, stranding the last <4 ms of output.
  */
-function stopAndExit(graceMs: number): void {
+function stopAndExit(graceMs: number, reason: string): void {
+  const live = [...sessions.values()].filter((s) => s.alive).length;
+  log(`exiting: ${reason} (${live} live session(s))`);
   for (const s of sessions.values()) {
     flushSession(s);
     if (!s.alive) continue;
@@ -437,10 +476,14 @@ function stopAndExit(graceMs: number): void {
   }, graceMs);
 }
 
-process.on("SIGTERM", () => stopAndExit(2000));
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(signal, () => stopAndExit(2000, signal));
+}
 
 process.on("uncaughtException", (err) => {
-  process.stderr.write(`[Sidecar] Uncaught: ${err.message}\n`);
+  log(`uncaught: ${err.name}: ${scrubHome(err.message)}`);
 });
+
+process.on("exit", (code) => log(`exit code ${code}`));
 
 start();

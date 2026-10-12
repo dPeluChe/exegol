@@ -53,9 +53,11 @@ import {
 } from "../../db/queries/parallel-runs";
 import { cliSessionNames, lastLocalSession } from "../../history";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
+import { logger } from "../../lib/logger";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
 import { isPathAllowed } from "../../security/path-guard";
 import { installedProviderIds } from "../../system/cli-versions";
+import { redact } from "../../system/diagnostics";
 import { getPtyHost } from "../../terminal/pty-host";
 import { getRecoveryState } from "../../terminal/reattach-gate";
 import { publicProcedure, router } from "../trpc";
@@ -84,6 +86,12 @@ async function followUpCall<T>(run: () => T | Promise<T>): Promise<T> {
       throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
     throw err;
   }
+}
+
+/** One line of why a resume failed, without paths (the log goes into public bug reports) */
+function resumeFailure(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  return redact(message.split("\n")[0] ?? "").slice(0, 160);
 }
 
 export const agentRouter = router({
@@ -430,9 +438,15 @@ export const agentRouter = router({
     const agent = createAgent(ctx.db, input);
     const manager = ctx.agentManager;
 
+    const resumedFrom = input.resumeFromAgentId;
+    const fresh = input.resumeSession ? "" : " (fresh start, no session to resume)";
     try {
       await manager.spawn(ctx.db, agent, input);
+      if (resumedFrom) logger.info(`[Resume] ${resumedFrom} -> ${agent.id} ok${fresh}`);
     } catch (err) {
+      if (resumedFrom) {
+        logger.warn(`[Resume] ${resumedFrom} -> ${agent.id} failed ${resumeFailure(err)}${fresh}`);
+      }
       updateAgentStatus(ctx.db, agent.id, "failed", String(err));
       throw new TRPCError({
         code: "INTERNAL_SERVER_ERROR",

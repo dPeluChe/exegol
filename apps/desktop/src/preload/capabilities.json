@@ -297,8 +297,7 @@
       "run",
       "cliUpdates",
       "cliInstalls",
-      "planUsage",
-      "sessionsWithoutUtf8"
+      "planUsage"
     ],
     "diagnostics": [
       "collect",
