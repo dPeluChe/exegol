@@ -8,12 +8,14 @@ import type { SidecarClient } from "./pty-sidecar-client";
 import type { SessionInfo, SessionSnapshotResult } from "./pty-sidecar-protocol";
 
 type DataCb = (id: string, data: string, seq?: number) => void;
+type ExitCb = (id: string, exitCode: number, signal?: number) => void;
 
 function fakeClient(
   snapshot: (id: string) => Promise<SessionSnapshotResult>,
   listSessionsInfo?: () => Promise<SessionInfo[]>,
 ) {
   let emit: DataCb = () => {};
+  let exit: ExitCb = () => {};
   const client = {
     isConnected: () => true,
     snapshot: vi.fn(snapshot),
@@ -22,10 +24,16 @@ function fakeClient(
     onSessionData: (cb: DataCb) => {
       emit = cb;
     },
-    onSessionExit: () => {},
+    onSessionExit: (cb: ExitCb) => {
+      exit = cb;
+    },
     onSessionError: () => {},
   } as unknown as SidecarClient & { snapshot: ReturnType<typeof vi.fn> };
-  return { client, emit: (id: string, data: string, seq?: number) => emit(id, data, seq) };
+  return {
+    client,
+    emit: (id: string, data: string, seq?: number) => emit(id, data, seq),
+    exit: (id: string, code: number) => exit(id, code),
+  };
 }
 
 const callbacks = { onData: () => {}, onExit: () => {}, onError: () => {} } as never;
@@ -123,5 +131,45 @@ describe("PtyHost reattach by seq", () => {
     const model = host.getSnapshot("r") ?? "";
     expect(model.match(/early/g)).toHaveLength(1);
     expect(model).toContain("late");
+  });
+});
+
+describe("PtyHost reattach ordering", () => {
+  it("an exit during the ring read runs after the held frames, which follow the seeded scrollback", async () => {
+    const order: string[] = [];
+    let reply: (v: SessionSnapshotResult) => void = () => {};
+    const c = fakeClient(() => new Promise((r) => (reply = r)));
+    const host = new PtyHost();
+    host.connectToSidecar(c.client);
+    const cbs = {
+      onData: (d: string) => order.push(`data ${d}`),
+      onExit: (code: number) => order.push(`exit ${code}`),
+      onError: () => {},
+    };
+    const done = host.reattachSession("e", { cols: 80, rows: 24 }, cbs, {
+      onSnapshot: (ring) => order.push(`seed ${ring}`),
+    });
+    c.emit("e", "last words", 8);
+    c.exit("e", 0);
+    expect(order).toEqual([]);
+    reply({ data: "history", seq: 7 });
+    await done;
+    expect(order).toEqual(["seed history", "data last words", "exit 0"]);
+    expect(host.isAlive("e")).toBe(false);
+  });
+
+  it("a Retry swap during the ring read reads it again from the new client", async () => {
+    let fail: (e: Error) => void = () => {};
+    const old = fakeClient(() => new Promise((_, reject) => (fail = reject)));
+    const host = new PtyHost();
+    host.connectToSidecar(old.client);
+    const done = host.reattachSession("w", { cols: 80, rows: 24 }, callbacks);
+    const fresh = fakeClient(ring("from the new socket\r\n", 3), async () => []);
+    await host.swapSidecarClient(fresh.client);
+    // The swap closed the old socket under the read
+    fail(new Error("Sidecar connection closed"));
+    const result = await done;
+    expect(result?.snapshot).toContain("from the new socket");
+    expect(fresh.client.snapshot).toHaveBeenCalledWith("w", undefined);
   });
 });

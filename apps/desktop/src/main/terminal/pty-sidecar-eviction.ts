@@ -88,31 +88,30 @@ export interface RingTrim {
   after: number;
 }
 
-/**
- * Pure: which active rings to shrink, largest first, until the total fits the cap. Never below
- * the floor, so a busy agent keeps a useful tail.
- */
-export function planTrims(
-  rings: Array<{ id: string; capacity: number }>,
+/** Pure: the largest rings to shrink to the floor until the total fits; a busy agent keeps a tail */
+export function planTrims<T>(
+  items: T[],
+  capacityOf: (item: T) => number,
   total: number,
   cap: number,
   floor = ACTIVE_RING_FLOOR_BYTES,
-): RingTrim[] {
-  const trims: RingTrim[] = [];
+): Array<{ item: T; before: number; after: number }> {
+  const trims: Array<{ item: T; before: number; after: number }> = [];
   let over = total - cap;
-  const largest = rings.filter((r) => r.capacity > floor).sort((a, b) => b.capacity - a.capacity);
-  for (const r of largest) {
+  const largest = items
+    .filter((i) => capacityOf(i) > floor)
+    .sort((a, b) => capacityOf(b) - capacityOf(a));
+  for (const item of largest) {
     if (over <= 0) break;
-    trims.push({ id: r.id, before: r.capacity, after: floor });
-    over -= r.capacity - floor;
+    const before = capacityOf(item);
+    trims.push({ item, before, after: floor });
+    over -= before - floor;
   }
   return trims;
 }
 
-/**
- * Sweep all sessions: evict LRU-idle ones to disk while over the global cap, then, if active rings
- * alone still pass it (33 busy agents = 264 MiB), shrink the largest of them to the floor.
- */
+/** Evicts LRU-idle rings to disk while over the global cap; if busy rings alone still pass it
+ *  (33 agents = 264 MiB), the largest shrink to the floor */
 export function evictIfOverCap(sessions: Iterable<EvictableSession>): RingTrim[] {
   const all = Array.from(sessions);
   let total = 0;
@@ -135,11 +134,12 @@ export function evictIfOverCap(sessions: Iterable<EvictableSession>): RingTrim[]
   if (total <= GLOBAL_RING_BUFFER_CAP_BYTES) return [];
 
   const resident = all.filter((s) => !s.evictedPath);
-  const byId = new Map(resident.map((s) => [s.id, s]));
-  const rings = resident.map((s) => ({ id: s.id, capacity: s.ringBuffer.capacity }));
-  const trims = planTrims(rings, total, GLOBAL_RING_BUFFER_CAP_BYTES);
-  for (const t of trims) byId.get(t.id)?.ringBuffer.shrinkTo(t.after);
-  return trims;
+  return planTrims(resident, (s) => s.ringBuffer.capacity, total, GLOBAL_RING_BUFFER_CAP_BYTES).map(
+    ({ item, before, after }) => {
+      item.ringBuffer.shrinkTo(after);
+      return { id: item.id, before, after };
+    },
+  );
 }
 
 /** Per-session memory report for the `session.memory` RPC (Monitor > Resources). */

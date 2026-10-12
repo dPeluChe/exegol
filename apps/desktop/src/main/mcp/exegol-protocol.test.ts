@@ -2,19 +2,23 @@ import { describe, expect, it } from "vitest";
 import { createFrameReader, MAX_FRAME_BYTES } from "../lib/frame-reader";
 import { encodeRequest, encodeResponse } from "./exegol-protocol";
 
+/** The MCP socket's framing, fed strings */
+function feeder(onMessage: (m: unknown) => void, onOverflow?: () => void) {
+  const read = createFrameReader(onMessage, onOverflow);
+  return (text: string) => read(Buffer.from(text));
+}
+
 describe("createFrameReader (MCP framing)", () => {
   it("parses a single complete line", () => {
     const received: unknown[] = [];
-    const read = createFrameReader((msg) => received.push(msg));
-    const feed = (t: string) => read(Buffer.from(t));
+    const feed = feeder((msg) => received.push(msg));
     feed(`${JSON.stringify({ hello: "world" })}\n`);
     expect(received).toEqual([{ hello: "world" }]);
   });
 
   it("buffers partial lines across multiple chunks", () => {
     const received: unknown[] = [];
-    const read = createFrameReader((msg) => received.push(msg));
-    const feed = (t: string) => read(Buffer.from(t));
+    const feed = feeder((msg) => received.push(msg));
     const json = JSON.stringify({ a: 1 });
     feed(json.slice(0, 5));
     feed(`${json.slice(5)}\n`);
@@ -23,16 +27,14 @@ describe("createFrameReader (MCP framing)", () => {
 
   it("parses multiple messages delivered in one chunk", () => {
     const received: unknown[] = [];
-    const read = createFrameReader((msg) => received.push(msg));
-    const feed = (t: string) => read(Buffer.from(t));
+    const feed = feeder((msg) => received.push(msg));
     feed(`${JSON.stringify({ n: 1 })}\n${JSON.stringify({ n: 2 })}\n`);
     expect(received).toEqual([{ n: 1 }, { n: 2 }]);
   });
 
   it("frames a message split over many chunks next to whole ones", () => {
     const received: unknown[] = [];
-    const read = createFrameReader((msg) => received.push(msg));
-    const feed = (t: string) => read(Buffer.from(t));
+    const feed = feeder((msg) => received.push(msg));
     const big = JSON.stringify({ body: "x".repeat(10_000) });
     for (let i = 0; i < big.length; i += 64) feed(big.slice(i, i + 64));
     const two = JSON.stringify({ n: 2 });
@@ -43,8 +45,7 @@ describe("createFrameReader (MCP framing)", () => {
 
   it("drops malformed lines without throwing", () => {
     const received: unknown[] = [];
-    const read = createFrameReader((msg) => received.push(msg));
-    const feed = (t: string) => read(Buffer.from(t));
+    const feed = feeder((msg) => received.push(msg));
     expect(() => feed("not json\n")).not.toThrow();
     feed(`${JSON.stringify({ ok: true })}\n`);
     expect(received).toEqual([{ ok: true }]);
@@ -83,11 +84,10 @@ describe("frame limit", () => {
   it("discards an unframed flood and recovers at the next newline", () => {
     const seen: unknown[] = [];
     let overflows = 0;
-    const read = createFrameReader(
+    const feed = feeder(
       (m) => seen.push(m),
       () => overflows++,
     );
-    const feed = (t: string) => read(Buffer.from(t));
 
     const chunk = "x".repeat(1024 * 1024);
     for (let i = 0; i <= MAX_FRAME_BYTES / chunk.length; i++) feed(chunk);
@@ -103,11 +103,10 @@ describe("frame limit", () => {
 
   it("reports one incident, not one per 8M chars of garbage", () => {
     let overflows = 0;
-    const read = createFrameReader(
+    const feed = feeder(
       () => {},
       () => overflows++,
     );
-    const feed = (t: string) => read(Buffer.from(t));
     const chunk = "x".repeat(1024 * 1024);
     for (let i = 0; i < 20; i++) feed(chunk);
     expect(overflows).toBe(1);

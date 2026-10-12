@@ -16,8 +16,8 @@ describe("sidecar replacement inventory", () => {
       [
         {
           id: "a",
-          project_id: "p1",
-          cli_type: "claude-code",
+          projectId: "p1",
+          cliType: "claude-code",
           alias: "Orion",
           pid: 123,
           status: "running",

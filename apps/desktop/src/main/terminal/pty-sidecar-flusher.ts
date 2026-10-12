@@ -77,19 +77,14 @@ export interface GatePause {
 /** A frame this small that happens to cross the high-water mark is echo, not the flood */
 export const ECHO_FRAME_BYTES = 1024;
 
-/**
- * Pure: a session is filling the queue once its own output queued while backed up reaches its
- * share, or when a frame of real size is the one that failed the write.
- */
+/** Pure: a session fills the queue once its own backed-up output reaches its share, or when a
+ *  frame of real size is the one that failed the write */
 export function fillsQueue(backlog: number, writeFailed: boolean, frameBytes: number): boolean {
   return backlog >= SESSION_BACKLOG_BYTES || (writeFailed && frameBytes > ECHO_FRAME_BYTES);
 }
 
-/**
- * Flow control for the sidecar's clients: while one has a full socket queue, only the sessions
- * filling it pause (the CLI blocks on its own writes). Pausing every PTY froze the echo of every
- * terminal while one ran a flood (2026-10-09 log audit).
- */
+/** While a client's socket is backed up, only the sessions filling it pause (the CLI blocks on
+ *  its writes): pausing every PTY froze every terminal's echo during one flood */
 export class OutputGate<C extends OutputClient> {
   private readonly stuck = new Set<C>();
   private readonly backlog = new Map<string, number>();

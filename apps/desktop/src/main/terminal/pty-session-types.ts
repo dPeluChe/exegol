@@ -1,6 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import type { HeadlessEmulator } from "./headless-emulator";
 import type { FrameDecoder } from "./pty-ipc";
+import type { HeldFrame } from "./sidecar-resync";
 
 export type ShellReadyState = "pending" | "ready" | "timed_out" | "unsupported";
 
@@ -35,7 +36,9 @@ export interface Session {
   /** A frame arrived past lastSeq + 1: some were lost (a Retry swap rebuilds it) */
   seqGap?: boolean;
   /** Frames that arrive while a reattach reads the ring, applied after it by seq */
-  heldFrames?: Array<{ data: string; seq?: number }>;
+  heldFrames?: HeldFrame[];
+  /** An exit that arrived while frames were held: it runs after them */
+  pendingExit?: { exitCode: number; signal?: number };
 }
 
 export const MAX_CONCURRENT_SPAWNS = 3;

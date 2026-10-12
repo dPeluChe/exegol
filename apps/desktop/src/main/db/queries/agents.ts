@@ -166,6 +166,14 @@ export function getAgent(db: Database.Database, id: string): Agent | null {
   return row ? mapAgentRow(row as Record<string, unknown>) : null;
 }
 
+export function listAgentsByIds(db: Database.Database, ids: string[]): Agent[] {
+  if (ids.length === 0) return [];
+  const rows = db
+    .prepare(`SELECT * FROM agents WHERE id IN (${ids.map(() => "?").join(",")})`)
+    .all(...ids);
+  return (rows as Record<string, unknown>[]).map(mapAgentRow);
+}
+
 /** The folder an agent works in: its worktree, else the project root */
 export function getAgentCwd(db: Database.Database, id: string): string | null {
   const row = db

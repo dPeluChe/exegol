@@ -5,8 +5,8 @@ import { ModeTracker } from "./terminal-modes";
 
 const DEFAULT_CAPACITY = 8 * 1024 * 1024; // 8MB per session
 
-/** A capped snapshot starts at the first line break this close to its cut, not mid-sequence */
-const LINE_ALIGN_BYTES = 4096;
+/** A capped snapshot starts at a line break or ESC this close to its cut, never mid-sequence */
+const ALIGN_BYTES = 4096;
 /** A reset, or erase screen + scrollback: nothing written before it is visible after */
 const CLEAR_POINTS = [Buffer.from("\x1bc", "latin1"), Buffer.from("\x1b[2J\x1b[3J", "latin1")];
 
@@ -17,25 +17,25 @@ export function continuationBytes(buf: Buffer): number {
   return n;
 }
 
-/** Pure: where a capped tail should start: the last clear, else the first line break near the cut */
+/** Pure: where a capped tail starts: the last clear, else the first line start or ESC near the
+ *  cut, whichever comes first, else the first whole character */
 export function tailStart(tail: Buffer): number {
   let clear = -1;
   for (const point of CLEAR_POINTS) clear = Math.max(clear, tail.lastIndexOf(point));
   if (clear !== -1) return clear;
-  const nl = tail.indexOf(0x0a);
-  return nl !== -1 && nl < LINE_ALIGN_BYTES ? nl + 1 : continuationBytes(tail);
+  const window = tail.subarray(0, ALIGN_BYTES);
+  const nl = window.indexOf(0x0a);
+  const esc = window.indexOf(0x1b);
+  const starts = [nl === -1 ? -1 : nl + 1, esc].filter((i) => i !== -1);
+  return starts.length > 0 ? Math.min(...starts) : continuationBytes(tail);
 }
 
 export class RingBuffer {
   private buf: Buffer;
   private head = 0; // Next write position
   private filled = false; // True once buffer has wrapped at least once
-  /**
-   * Sticky, because the ring is not: a full-screen TUI enables the alternate screen (and bracketed
-   * paste, mouse modes) once at startup, and after 8 MB of output those sequences are evicted.
-   * Replaying the ring then rebuilt the PRIMARY screen: opencode reattached to a dead shell prompt
-   * (2026-08-13).
-   */
+  /** Sticky, because the ring is not: a TUI sets its modes once at startup and the ring evicts
+   *  them (opencode reattached to a dead shell prompt, 2026-08-13) */
   private readonly modes = new ModeTracker();
 
   constructor(capacity = DEFAULT_CAPACITY) {
@@ -74,33 +74,26 @@ export class RingBuffer {
     this.head = newHead;
   }
 
-  /**
-   * Contents in write order (oldest to newest), prefixed with the modes the session is in (the
-   * alternate screen first). A capped snapshot starts at the last clear, else at a line break near the cut.
-   */
+  /** Contents oldest first behind the current modes (a reload from disk lost the start). A
+   *  capped one keeps the tail from a clean start. One copy */
   snapshot(maxBytes?: number): Buffer {
-    const parts = this.parts();
-    const total = parts.reduce((n, p) => n + p.length, 0);
-    let body: Buffer;
-    if (maxBytes !== undefined && total > maxBytes) {
-      const tail = concatTail(parts, maxBytes);
-      body = tail.subarray(tailStart(tail));
-    } else {
-      body = this.rawSnapshot();
-    }
-    // Always: content replayed after it ends on the same modes, and a reload from disk lost the start
-    const prefix = this.modes.prefix();
-    return prefix ? Buffer.concat([Buffer.from(prefix, "latin1"), body]) : body;
+    const prefix = Buffer.from(this.modes.prefix(), "latin1");
+    let parts = this.parts();
+    const capped = maxBytes !== undefined && byteSum(parts) > maxBytes;
+    if (capped) parts = tailParts(parts, maxBytes);
+    const out = Buffer.concat([prefix, ...parts]);
+    const body = out.subarray(prefix.length);
+    const start = capped ? tailStart(body) : this.filled ? continuationBytes(body) : 0;
+    if (start === 0) return out;
+    // Slide the prefix up to the start instead of copying the body again
+    out.copy(out, start, 0, prefix.length);
+    return out.subarray(start);
   }
 
-  /**
-   * Contents WITHOUT the mode prefix. Persistence must use this: eviction writes the snapshot to
-   * disk and reload feeds it back through `write()`, so a prefixed snapshot would be stored as
-   * real content and prefixed again on the next read. Starts on a character boundary.
-   */
+  /** Without the mode prefix: eviction persists this and reloads it through write(), so a
+   *  prefixed copy would accrete one forged escape per cycle */
   rawSnapshot(): Buffer {
-    const parts = this.parts();
-    const whole = parts.length === 1 ? Buffer.from(parts[0] as Buffer) : Buffer.concat(parts);
+    const whole = Buffer.concat(this.parts());
     return this.filled ? whole.subarray(continuationBytes(whole)) : whole;
   }
 
@@ -110,17 +103,19 @@ export class RingBuffer {
     return [this.buf.subarray(this.head), this.buf.subarray(0, this.head)];
   }
 
-  /**
-   * Memory pressure: keep only the newest `bytes` in a smaller allocation (the capacity shrinks
-   * with it). Returns the capacity freed.
-   */
+  /** Memory pressure: keep the newest `bytes` in a smaller allocation. Returns the bytes freed */
   shrinkTo(bytes: number): number {
     const before = this.buf.length;
     if (bytes >= before) return 0;
-    const tail = concatTail(this.parts(), bytes);
-    const start = continuationBytes(tail);
+    const tail = tailParts(this.parts(), bytes);
+    let skip = continuationBytes(Buffer.concat(tail.map((p) => p.subarray(0, 3))));
     const next = Buffer.allocUnsafe(bytes);
-    const kept = tail.copy(next, 0, start);
+    let kept = 0;
+    for (const p of tail) {
+      const from = Math.min(skip, p.length);
+      skip -= from;
+      kept += p.copy(next, kept, from);
+    }
     this.buf = next;
     this.head = kept % bytes;
     this.filled = kept === bytes;
@@ -167,8 +162,12 @@ export class RingBuffer {
   }
 }
 
-/** The last `max` bytes across `parts`, in one buffer */
-function concatTail(parts: Buffer[], max: number): Buffer {
+function byteSum(parts: Buffer[]): number {
+  return parts.reduce((n, p) => n + p.length, 0);
+}
+
+/** The last `max` bytes across `parts`, as views */
+function tailParts(parts: Buffer[], max: number): Buffer[] {
   const out: Buffer[] = [];
   let need = max;
   for (let i = parts.length - 1; i >= 0 && need > 0; i--) {
@@ -177,5 +176,5 @@ function concatTail(parts: Buffer[], max: number): Buffer {
     out.unshift(p.subarray(p.length - take));
     need -= take;
   }
-  return Buffer.concat(out);
+  return out;
 }

@@ -1,10 +1,16 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { describePidFile } from "./pty-sidecar-discovery";
 import { ACTIVE_RING_FLOOR_BYTES, planTrims } from "./pty-sidecar-eviction";
-import { createSidecarLog, formatLogLine, needsRotation, scrubHome } from "./sidecar-log";
+import {
+  createSidecarLog,
+  formatLogLine,
+  keepsLine,
+  rotateSidecarLog,
+  scrubHome,
+} from "./sidecar-log";
 import { framesAfter, isFrameGap, isStaleFrame, lostFrames } from "./sidecar-resync";
 
 describe("output seq (T202)", () => {
@@ -50,7 +56,11 @@ describe("ring trims under memory pressure (T202)", () => {
       { id: "b", capacity: 8 * MB },
       { id: "c", capacity: 4 * MB },
     ];
-    const trims = planTrims(rings, 21 * MB, 12 * MB);
+    const trims = planTrims(rings, (r) => r.capacity, 21 * MB, 12 * MB).map((t) => ({
+      id: t.item.id,
+      before: t.before,
+      after: t.after,
+    }));
     expect(trims).toEqual([
       { id: "a", before: 8 * MB, after: ACTIVE_RING_FLOOR_BYTES },
       { id: "b", before: 8 * MB, after: ACTIVE_RING_FLOOR_BYTES },
@@ -58,32 +68,43 @@ describe("ring trims under memory pressure (T202)", () => {
   });
 
   it("never touches a ring at or under the floor, and nothing when under the cap", () => {
-    expect(planTrims([{ id: "s", capacity: 2 * MB }], 300 * MB, 256 * MB)).toEqual([]);
-    expect(planTrims([{ id: "a", capacity: 8 * MB }], 8 * MB, 256 * MB)).toEqual([]);
+    const cap = (r: { capacity: number }) => r.capacity;
+    expect(planTrims([{ capacity: 2 * MB }], cap, 300 * MB, 256 * MB)).toEqual([]);
+    expect(planTrims([{ capacity: 8 * MB }], cap, 8 * MB, 256 * MB)).toEqual([]);
   });
 });
 
 describe("sidecar.log (T202)", () => {
-  it("rotates once a line would pass the cap, keeping one .1", () => {
-    expect(needsRotation(0, 500, 100)).toBe(false);
-    expect(needsRotation(90, 20, 100)).toBe(true);
-    expect(needsRotation(50, 20, 100)).toBe(false);
+  it("past the soft cap keeps only essential lines, and never rotates by itself", () => {
+    expect(keepsLine(10, false, 100)).toBe(true);
+    expect(keepsLine(100, false, 100)).toBe(false);
+    expect(keepsLine(500, true, 100)).toBe(true);
 
     const dir = mkdtempSync(join(tmpdir(), "sidecar-log-"));
     const path = join(dir, "sidecar.log");
     const at = () => new Date("2026-10-12T10:00:00Z");
-    const log = createSidecarLog(path, "Sidecar", 120, at);
-    log("first line of the old file");
-    log("second line of the old file");
-    log("third line");
-    expect(readFileSync(`${path}.1`, "utf-8")).toBe(
-      formatLogLine(at(), "Sidecar", "first line of the old file"),
-    );
-    const current = readFileSync(path, "utf-8");
-    expect(current).toContain("second line");
-    expect(current).toContain("third line");
-    log("x".repeat(40));
-    expect(readFileSync(`${path}.1`, "utf-8")).toContain("second line");
+    const log = createSidecarLog(path, "Sidecar", 100, at);
+    log("first routine line of the file");
+    log("second routine line of the file");
+    log("dropped routine line");
+    log("exiting: SIGTERM", true);
+    const text = readFileSync(path, "utf-8");
+    expect(text).toContain("second routine");
+    expect(text).not.toContain("dropped");
+    expect(text.endsWith(formatLogLine(at(), "Sidecar", "exiting: SIGTERM"))).toBe(true);
+    expect(existsSync(`${path}.1`)).toBe(false);
+  });
+
+  it("main rotates at spawn: past the size the file moves to .1", () => {
+    const dir = mkdtempSync(join(tmpdir(), "sidecar-log-"));
+    const path = join(dir, "sidecar.log");
+    writeFileSync(path, "x".repeat(50));
+    rotateSidecarLog(path, 100);
+    expect(existsSync(`${path}.1`)).toBe(false);
+    writeFileSync(path, "y".repeat(150));
+    rotateSidecarLog(path, 100);
+    expect(readFileSync(`${path}.1`, "utf-8")).toBe("y".repeat(150));
+    expect(existsSync(path)).toBe(false);
   });
 
   it("formats with time and source, and scrubs the home folder", () => {

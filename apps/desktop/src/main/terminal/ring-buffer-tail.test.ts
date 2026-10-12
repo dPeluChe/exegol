@@ -51,6 +51,21 @@ describe("RingBuffer capped snapshot (T202)", () => {
     expect(tailStart(Buffer.from("ab\ncd"))).toBe(3);
     expect(tailStart(Buffer.from([0x80, 0x61]))).toBe(1);
   });
+
+  it("tailStart: a TUI tail with no line break starts at the next ESC, not mid-sequence", () => {
+    const tui = Buffer.from(`;5H\x1b[38;5;2mframe${"\x1b[2;3Hx".repeat(10)}`, "latin1");
+    expect(tailStart(tui)).toBe(3);
+    expect(tailStart(Buffer.from("ab\x1b[1mcd\nef"))).toBe(2);
+  });
+
+  it("a capped TUI snapshot starts on an escape sequence, behind its modes", () => {
+    const rb = new RingBuffer(4096);
+    rb.write(Buffer.from("\x1b[?2004h"));
+    rb.write(Buffer.from("\x1b[12;40Hcell".repeat(200)));
+    const snap = rb.snapshot(100).toString("latin1");
+    expect(snap.startsWith("\x1b[?2004h\x1b[")).toBe(true);
+    expect(snap.endsWith("cell")).toBe(true);
+  });
 });
 
 describe("RingBuffer sticky modes (T202)", () => {
@@ -68,6 +83,25 @@ describe("RingBuffer sticky modes (T202)", () => {
     rb.write(Buffer.from("text\x1b[?20"));
     rb.write(Buffer.from("04l"));
     expect(rb.snapshot().toString("latin1").startsWith("\x1b[?2004l")).toBe(true);
+  });
+
+  it("a reset (ESC c) clears every mode and the alternate screen; DECSTR clears cursor modes", () => {
+    const rb = new RingBuffer(256);
+    rb.write(Buffer.from("\x1b[?1049h\x1b[?2004h\x1b[?25l\x1bc"));
+    expect(rb.isAltScreen).toBe(false);
+    expect(rb.snapshot().toString("latin1")).toBe("\x1b[?1049h\x1b[?2004h\x1b[?25l\x1bc");
+    rb.write(Buffer.from("\x1b[?2004h\x1b[?1h\x1b[?25l\x1b[!p"));
+    const snap = rb.snapshot().toString("latin1");
+    expect(snap.startsWith("\x1b[?2004h\x1b")).toBe(true);
+    expect(snap.startsWith("\x1b[?2004h\x1b[?1h")).toBe(false);
+  });
+
+  it("a reset split across writes is seen, and switches after it still count", () => {
+    const rb = new RingBuffer(256);
+    rb.write(Buffer.from("\x1b[?2004hx\x1b"));
+    rb.write(Buffer.from("c\x1b[?1000h"));
+    // Prefix is 1000h alone (2004h was reset), then the raw content
+    expect(rb.snapshot().toString("latin1").startsWith("\x1b[?1000h\x1b[?2004hx")).toBe(true);
   });
 
   it("a split right after ESC is still seen", () => {

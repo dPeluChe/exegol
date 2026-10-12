@@ -1,21 +1,15 @@
-// What a sidecar version bump ended: before discovery shuts the old sidecar down, an inventory of
-// its live sessions goes to ~/.exegol/sidecar-replaced-<timestamp>.json (ids and DB metadata only:
-// no output, no env), and recovery names why each agent came back crashed.
+// A version bump ends every live session: the inventory says which ones (ids and DB metadata,
+// never output or env), and crashReason says why each agent came back crashed.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Agent } from "@exegol/shared";
 import type Database from "libsql";
+import { listAgentsByIds } from "../db/queries/agents";
 import { logger } from "../lib/logger";
 import type { SidecarReplacement } from "../terminal/pty-sidecar-discovery";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
 
-export interface AgentRow {
-  id: string;
-  project_id: string | null;
-  cli_type: string | null;
-  alias: string | null;
-  pid: number | null;
-  status: string | null;
-}
+type InventoryAgent = Pick<Agent, "id" | "projectId" | "cliType" | "alias" | "pid" | "status">;
 
 export interface ReplacedInventory {
   replacedAt: string;
@@ -34,23 +28,23 @@ export interface ReplacedInventory {
 /** Pure: one entry per live session; a session with no agent row keeps only its id */
 export function buildReplacedInventory(
   r: SidecarReplacement,
-  rows: AgentRow[],
+  agents: InventoryAgent[],
   at: Date,
 ): ReplacedInventory {
-  const byId = new Map(rows.map((row) => [row.id, row]));
+  const byId = new Map(agents.map((a) => [a.id, a]));
   return {
     replacedAt: at.toISOString(),
     from: r.from,
     to: r.to,
     sessions: r.liveSessionIds.map((id) => {
-      const row = byId.get(id);
+      const a = byId.get(id);
       return {
         agentId: id,
-        projectId: row?.project_id ?? null,
-        cliType: row?.cli_type ?? null,
-        alias: row?.alias ?? null,
-        pid: row?.pid ?? null,
-        status: row?.status ?? null,
+        projectId: a?.projectId ?? null,
+        cliType: a?.cliType ?? null,
+        alias: a?.alias ?? null,
+        pid: a?.pid ?? null,
+        status: a?.status ?? null,
       };
     }),
   };
@@ -67,21 +61,12 @@ export function writeReplacedInventory(
 ): string | null {
   const at = new Date();
   const ids = r.liveSessionIds;
-  const rows =
-    ids.length === 0
-      ? []
-      : (db
-          .prepare(
-            `SELECT id, project_id, cli_type, alias, pid, status FROM agents WHERE id IN (${ids
-              .map(() => "?")
-              .join(",")})`,
-          )
-          .all(...ids) as AgentRow[]);
+  const agents = listAgentsByIds(db, ids);
   const name = inventoryFileName(at);
   try {
     writeFileSync(
       join(EXEGOL_DIR, name),
-      `${JSON.stringify(buildReplacedInventory(r, rows, at), null, 2)}\n`,
+      `${JSON.stringify(buildReplacedInventory(r, agents, at), null, 2)}\n`,
     );
   } catch (err) {
     logger.warn("[Sidecar] could not write the replacement inventory:", err);

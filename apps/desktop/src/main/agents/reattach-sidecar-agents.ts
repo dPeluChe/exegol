@@ -99,7 +99,7 @@ export async function reattachSidecarAgents(
     loadActiveView(db),
   );
   const visible = new Set(order.activeTab);
-  const onScreen = new Set(order.activeTab);
+  let firstVisibleLogged = false;
   let fetchedBytes = 0;
   logger.info(
     `[Reattach] order: ${order.activeTab.length} active-tab, ${order.activeProject} active-project, ${order.rest} rest`,
@@ -107,7 +107,8 @@ export async function reattachSidecarAgents(
 
   const ready = (agentId: string): void => {
     settleReattach(agentId);
-    if (visible.delete(agentId) && visible.size === order.activeTab.length - 1) {
+    if (!firstVisibleLogged && visible.has(agentId)) {
+      firstVisibleLogged = true;
       logger.info(`[Reattach] first visible ready in ${Date.now() - started}ms`);
     }
   };
@@ -158,7 +159,18 @@ export async function reattachSidecarAgents(
           scrollbackPath,
           tui: !isShell && !atShellPrompt,
           // A pane off screen replays only its ring's tail: a full 8 MB ring cost ~150 ms each
-          snapshotMaxBytes: onScreen.has(agentId) ? undefined : HIDDEN_SNAPSHOT_BYTES,
+          snapshotMaxBytes: visible.has(agentId) ? undefined : HIDDEN_SNAPSHOT_BYTES,
+          // The ring's end seeds the scrollback that attention tails, final output and scoring
+          // read, before any newer output reaches it
+          onSnapshot: isShell
+            ? undefined
+            : (ring) =>
+                appendScrollback(
+                  maps,
+                  agentId,
+                  ring.slice(-maxScrollbackBytes),
+                  maxScrollbackBytes,
+                ),
         },
       );
       const snapshot = reattached?.snapshot ?? null;
@@ -167,13 +179,8 @@ export async function reattachSidecarAgents(
         const bytes = snapshot ? Buffer.byteLength(snapshot) : 0;
         fetchedBytes += bytes;
         const kb = Math.round(bytes / 1024);
-        timing = `${onScreen.has(agentId) ? "full" : "tail"}, fetch ${Math.round(reattached.fetchMs)}ms, ${kb} KB, parse ${Math.round(reattached.parseMs)}ms`;
+        timing = `${visible.has(agentId) ? "full" : "tail"}, fetch ${Math.round(reattached.fetchMs)}ms, ${kb} KB, parse ${Math.round(reattached.parseMs)}ms`;
       }
-      // The ring's end seeds the scrollback that attention tails, final output and scoring read
-      if (!isShell && snapshot) {
-        appendScrollback(maps, agentId, snapshot.slice(-maxScrollbackBytes), maxScrollbackBytes);
-      }
-
       // Only mark as running if the PTY process is actually alive
       // (sidecar may hold a dead session whose exit event fires immediately)
       const alive = ptyHost.isAlive(agentId);

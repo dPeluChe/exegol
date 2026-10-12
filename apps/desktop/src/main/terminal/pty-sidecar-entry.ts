@@ -412,7 +412,7 @@ function cleanup(): void {
 
 function start(): void {
   mkdirSync(EXEGOL_DIR, { recursive: true });
-  log(`start: version ${SIDECAR_VERSION}, pid ${process.pid}`);
+  log(`start: version ${SIDECAR_VERSION}, pid ${process.pid}`, true);
   try {
     unlinkSync(SIDECAR_SOCK_PATH);
   } catch {
@@ -438,7 +438,7 @@ function start(): void {
   });
 
   server.on("error", (err) => {
-    log(`exit: server error (${scrubHome(err.message)})`);
+    log(`exit: server error (${scrubHome(err.message)})`, true);
     cleanup();
     process.exit(1);
   });
@@ -452,7 +452,7 @@ function start(): void {
  */
 function stopAndExit(graceMs: number, reason: string): void {
   const live = [...sessions.values()].filter((s) => s.alive).length;
-  log(`exiting: ${reason} (${live} live session(s))`);
+  log(`exiting: ${reason} (${live} live session(s))`, true);
   for (const s of sessions.values()) {
     flushSession(s);
     if (!s.alive) continue;
@@ -481,9 +481,9 @@ for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
 }
 
 process.on("uncaughtException", (err) => {
-  log(`uncaught: ${err.name}: ${scrubHome(err.message)}`);
+  log(`uncaught: ${err.name}: ${scrubHome(err.message)}`, true);
 });
 
-process.on("exit", (code) => log(`exit code ${code}`));
+process.on("exit", (code) => log(`exit code ${code}`, true));
 
 start();

@@ -2,28 +2,21 @@
 
 import { spawn as cpSpawn, execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  unlinkSync,
-} from "node:fs";
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { LOG_DIR, logger } from "../lib/logger";
+import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
   parsePidFile,
   SIDECAR_CONNECT_TIMEOUT_MS,
+  SIDECAR_LOG_PATH,
   SIDECAR_PID_PATH,
   SIDECAR_VERSION,
 } from "./pty-sidecar-protocol";
-import { createSidecarLog, SIDECAR_LOG_MAX_BYTES } from "./sidecar-log";
+import { createSidecarLog, rotateSidecarLog } from "./sidecar-log";
 
 export function isProcessAlive(pid: number): boolean {
   try {
@@ -73,11 +66,9 @@ async function tryConnect(
     if (ping.version === SIDECAR_VERSION) return "ready";
     const info = await client.listSessionsInfo().catch(() => []);
     const liveSessionIds = info.filter((s) => s.alive).map((s) => s.id);
-    logger.warn(
-      `[Sidecar] replacing ${ping.version} -> ${SIDECAR_VERSION} (${liveSessionIds.length} live session(s))`,
-    );
-    sidecarLog(
-      `replacing pid ${pidFile.pid}: ${ping.version} -> ${SIDECAR_VERSION}, ${liveSessionIds.length} live session(s)`,
+    discoveryLog(
+      `replacing ${ping.version} -> ${SIDECAR_VERSION} (${liveSessionIds.length} live session(s)), pid ${pidFile.pid}`,
+      true,
     );
     try {
       onReplace?.({ from: ping.version, to: SIDECAR_VERSION, liveSessionIds });
@@ -93,10 +84,13 @@ async function tryConnect(
   }
 }
 
-/** The sidecar's log (sidecar-log.ts) and its stderr. It outlives the app, so it writes straight
- *  to a file; rolled to `.1` past 1 MB. Same file as SIDECAR_LOG_PATH outside tests */
-export const SIDECAR_LOG = join(LOG_DIR, "sidecar.log");
-const sidecarLog = createSidecarLog(SIDECAR_LOG, "Discovery");
+const sidecarLog = createSidecarLog(SIDECAR_LOG_PATH, "Discovery");
+
+/** sidecar.log, and main's log too when it matters for the session story */
+function discoveryLog(message: string, toMain = false): void {
+  sidecarLog(message, true);
+  if (toMain) logger.warn(`[Sidecar] ${message}`);
+}
 
 /** Pure: what discovery found, for sidecar.log (no paths) */
 export function describePidFile(pidFile: PidFile | null, alive: boolean): string {
@@ -106,10 +100,8 @@ export function describePidFile(pidFile: PidFile | null, alive: boolean): string
 
 function openSidecarLog(): number | "ignore" {
   try {
-    if (existsSync(SIDECAR_LOG) && statSync(SIDECAR_LOG).size > SIDECAR_LOG_MAX_BYTES) {
-      renameSync(SIDECAR_LOG, `${SIDECAR_LOG}.1`);
-    }
-    return openSync(SIDECAR_LOG, "a");
+    rotateSidecarLog(SIDECAR_LOG_PATH);
+    return openSync(SIDECAR_LOG_PATH, "a");
   } catch {
     return "ignore";
   }
@@ -171,16 +163,16 @@ export async function ensureSidecar(
 ): Promise<SidecarClient> {
   const pidFile = readPidFile();
   const alive = !!pidFile && isProcessAlive(pidFile.pid);
-  sidecarLog(`${describePidFile(pidFile, alive)}, app ${SIDECAR_VERSION}`);
+  discoveryLog(`${describePidFile(pidFile, alive)}, app ${SIDECAR_VERSION}`);
   if (pidFile && alive) {
     const client = new SidecarClient();
     const state = await tryConnect(client, pidFile, onReplace);
     if (state === "ready") {
-      sidecarLog(`reusing pid ${pidFile.pid}`);
+      discoveryLog(`reusing pid ${pidFile.pid}`);
       return client;
     }
     if (state === "unreachable")
-      sidecarLog(`pid ${pidFile.pid} did not answer, spawning a new one`);
+      discoveryLog(`pid ${pidFile.pid} did not answer, spawning a new one`);
     // Nothing is signalled (the pid may be recycled). Wait for one we asked to shut down:
     // sidecars before 1.6.0 unlink the socket path on exit even after a successor bound it
     if (state === "retiring") await waitForExit(pidFile.pid);
@@ -204,7 +196,7 @@ export async function ensureSidecar(
   if (ping.version !== SIDECAR_VERSION) {
     throw new Error(`Sidecar version mismatch: ${ping.version} !== ${SIDECAR_VERSION}`);
   }
-  sidecarLog(`spawned pid ${newPidFile.pid}`);
+  discoveryLog(`spawned pid ${newPidFile.pid}`);
   return client;
 }
 

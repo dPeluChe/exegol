@@ -1,46 +1,54 @@
-// sidecar.log: the detached sidecar's own story (start, sessions, gate pauses, trims, exit), plus
-// discovery's view of it from main. Ids, pids, sizes and codes only: never terminal content,
-// typed input, prompts or env values. The sidecar bundles this file.
+// sidecar.log: ids, pids, sizes and codes only, never terminal content, input, prompts or env.
+// Main alone rotates it, at spawn (the sidecar's stderr fd stays on the live file for native
+// crash output); past the soft cap the sidecar keeps only essential lines.
 
-import { appendFileSync, mkdirSync, renameSync, statSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname } from "node:path";
 
-export const SIDECAR_LOG_MAX_BYTES = 1024 * 1024;
+/** Main rolls the file to `.1` past this when it spawns a sidecar */
+export const SIDECAR_LOG_ROTATE_BYTES = 1024 * 1024;
+/** A sidecar that lives for weeks stops routine lines here */
+export const SIDECAR_LOG_SOFT_CAP_BYTES = 4 * 1024 * 1024;
 
-/** Pure: roll to `.1` when this line would take the file past the cap */
-export function needsRotation(size: number, lineBytes: number, maxBytes: number): boolean {
-  return size > 0 && size + lineBytes > maxBytes;
+/** Pure: routine lines stop past the soft cap; start, exit and errors always go in */
+export function keepsLine(size: number, essential: boolean, softCap: number): boolean {
+  return essential || size < softCap;
 }
 
 export function formatLogLine(now: Date, source: string, message: string): string {
   return `${now.toISOString()} [${source}] ${message}\n`;
 }
 
-/** Appends lines to `path`, keeping it under `maxBytes` with one rotated `.1` */
+/** Appends lines to `path`; never rotates (rotateSidecarLog does, from main) */
 export function createSidecarLog(
   path: string,
   source: string,
-  maxBytes = SIDECAR_LOG_MAX_BYTES,
+  softCap = SIDECAR_LOG_SOFT_CAP_BYTES,
   now: () => Date = () => new Date(),
-): (message: string) => void {
+): (message: string, essential?: boolean) => void {
   let dirReady = false;
-  return (message) => {
-    const line = formatLogLine(now(), source, message);
+  return (message, essential = false) => {
     try {
       if (!dirReady) {
         mkdirSync(dirname(path), { recursive: true });
         dirReady = true;
       }
-      // Stat per line: main and the sidecar both append, and lines are rare
-      if (needsRotation(fileSize(path), Buffer.byteLength(line), maxBytes)) {
-        renameSync(path, `${path}.1`);
-      }
-      appendFileSync(path, line);
+      if (!keepsLine(fileSize(path), essential, softCap)) return;
+      appendFileSync(path, formatLogLine(now(), source, message));
     } catch {
       /* logging must never take a terminal down */
     }
   };
+}
+
+/** Main, right before it spawns a sidecar, whose stderr then opens the fresh file */
+export function rotateSidecarLog(path: string, maxBytes = SIDECAR_LOG_ROTATE_BYTES): void {
+  try {
+    if (existsSync(path) && statSync(path).size > maxBytes) renameSync(path, `${path}.1`);
+  } catch {
+    /* keep appending to the old file */
+  }
 }
 
 function fileSize(path: string): number {

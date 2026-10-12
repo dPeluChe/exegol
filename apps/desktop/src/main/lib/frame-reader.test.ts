@@ -122,16 +122,18 @@ describe("createFrameReader is chunking-independent", () => {
     let overflows = 0;
     for (let seed = 1; seed <= 40; seed++) {
       const bytes = Buffer.from(stream(rng(seed)));
-      const expected = run(
+      // Reference: every chunk MAX_CHUNK bytes. One chunk would not do: a frame is only measured
+      // while it is held across chunks
+      const evenChunks = run(
         (m, o) => createFrameReader(m, o, MAX),
         bytes,
         () => 0.999,
       );
-      expect(expected.frames.length).toBeGreaterThan(0);
-      overflows += expected.overflows;
+      expect(evenChunks.frames.length).toBeGreaterThan(0);
+      overflows += evenChunks.overflows;
       for (let k = 1; k <= 5; k++) {
         const got = run((m, o) => createFrameReader(m, o, MAX), bytes, rng(seed * 31 + k));
-        expect(got).toEqual(expected);
+        expect(got).toEqual(evenChunks);
       }
     }
     expect(overflows).toBeGreaterThan(0);
