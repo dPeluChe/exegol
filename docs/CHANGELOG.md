@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Terminals and agents started before 0.5.20 (still without a UTF-8 locale, where `pod install` and `expo run:ios` fail with "CocoaPods requires your terminal to be using UTF-8" and copies paste garbled) show "No UTF-8: restart" in their bar. An agent restarts after its turn and resumes the conversation with the same model, YOLO and mode; a terminal reopens in the same folder (what runs in it ends). Doctor counts them under Terminal encoding. Nothing shows when your shell profile exports a UTF-8 `LANG`
+
 ### Fixed
 - Opening the Dashboard right after starting Exegol no longer leaves an agent pane drawn at the wrong width when you come back. A watched card set to "fit session to card" could keep the session at the card's size while it was still reconnecting, and the pane's own size was ignored until you switched tabs
 

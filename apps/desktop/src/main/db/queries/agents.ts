@@ -511,3 +511,21 @@ export function listLiveAgentIds(db: Database.Database, projectId: string): stri
     .all(projectId, ...LIVE_STATUSES) as { id: string }[];
   return rows.map((r) => r.id);
 }
+
+export interface LiveAgentPid {
+  id: string;
+  project_id: string;
+  cli_type: string;
+  alias: string | null;
+  pid: number;
+}
+
+/** Every live session with a process, across projects (dev server owners, locale check) */
+export function listLiveAgentPids(db: Database.Database): LiveAgentPid[] {
+  return db
+    .prepare(
+      `SELECT id, project_id, cli_type, alias, pid FROM agents
+       WHERE pid IS NOT NULL AND status IN (${liveIn()})`,
+    )
+    .all(...LIVE_STATUSES) as LiveAgentPid[];
+}

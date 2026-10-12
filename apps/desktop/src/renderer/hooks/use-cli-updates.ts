@@ -109,7 +109,7 @@ export function useCliRestarts(): void {
       // Said out loud: it happens away from the click (after the turn), or nothing seemed to
       useToastStore.getState().addToast({
         type: "info",
-        title: `Restarting ${agent.alias ?? agent.cliType} on the new version`,
+        title: `Restarting ${agent.alias ?? agent.cliType}`,
         agentId: agent.id,
       });
       void (async () => {
