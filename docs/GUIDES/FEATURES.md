@@ -73,9 +73,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   of each kind per pushed commit and 10 per watch; the agent's own comments are skipped.
 - **Idle auto-suspend**: a session with no output and no typing for 7 days (Settings > General >
   Sessions: Off, 1, 3, 7 or 14 days) frees its memory. Agents are suspended (Resume continues
-  them), shells at their prompt close. Never one that is working, pinned in Watching, on Watch PR
-  or waiting on you, nor a shell running something. A toast names each session and its project;
-  click one to go to it. Suspended sessions carry a "Suspended" mark in the sidebar.
+  them, the worktree stays as it is), terminals at their prompt close. Never one that is working,
+  pinned in Watching, on Watch PR, waiting on you, in a pipeline, with uncommitted worktree
+  changes or a server listening, nor a terminal running anything. A toast links each session
+  with its project; suspended sessions carry a "Suspended" mark in the sidebar.
 - **Send to**: select text in one terminal and paste it into another live agent.
 - **Follow-ups and Steer**: Queue in the terminal toolbar (and on a Watching card) holds prompts
   for an agent's next turn; each is typed when the turn ends, one per turn. Steer (Claude Code,

@@ -90,6 +90,15 @@ export function listPrWatchedAgents(db: Database.Database): PrWatchedAgent[] {
     .all(...statuses) as unknown as PrWatchedAgent[];
 }
 
+export function setAgentLastActivity(db: Database.Database, id: string, at: number): void {
+  db.prepare("UPDATE agents SET last_activity_at = ? WHERE id = ?").run(at, id);
+}
+
+/** Shells are terminal tabs with nothing to keep: closing one deletes its row */
+export function deleteShellRow(db: Database.Database, id: string): void {
+  db.prepare("DELETE FROM agents WHERE id = ? AND cli_type = 'shell'").run(id);
+}
+
 export function setAgentSuspended(db: Database.Database, id: string, at: number | null): void {
   db.prepare("UPDATE agents SET suspended_at = ? WHERE id = ?").run(at, id);
 }

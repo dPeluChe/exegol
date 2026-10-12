@@ -14,7 +14,7 @@ export interface Toast {
   /** A button on the toast (Reopen after a close) */
   action?: { label: string; run: () => void };
   /** Clickable names under the body (the sessions an idle sweep suspended) */
-  links?: { label: string; run: () => void }[];
+  links?: { id: string; label: string; run: () => void }[];
   /** How long it stays, TOAST_AUTO_DISMISS_MS when absent */
   durationMs?: number;
   createdAt: number;

@@ -15,14 +15,12 @@ import { IS_MAC, PLATFORM } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
-import { SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
+import { SECTION_HEADING, SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
 interface Props {
   settings: Settings;
   onChange: (updates: Partial<Settings>) => void;
 }
-
-const SECTION = "mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted";
 
 const PAUSE_MEDIA_HINT = IS_MAC
   ? "What is playing (Spotify, Music, a browser tab) pauses while you talk and resumes after, unless you played, paused or skipped it meanwhile"
@@ -62,7 +60,7 @@ export function DictationSettings({ settings, onChange }: Props) {
       />
 
       <div>
-        <h3 className={SECTION}>Shortcut</h3>
+        <h3 className={SECTION_HEADING}>Shortcut</h3>
         <ShortcutRow value={prefs.shortcut} onChange={(shortcut) => set({ shortcut })} />
         <p className="mt-1 text-[10px] text-text-muted">
           Press it to start and again to insert, or hold it while you talk. Esc cancels.
@@ -72,7 +70,7 @@ export function DictationSettings({ settings, onChange }: Props) {
       <MicSection />
 
       <div>
-        <h3 className={SECTION}>Recording</h3>
+        <h3 className={SECTION_HEADING}>Recording</h3>
         <div className="space-y-2">
           <SwitchRow
             label="Press Enter after dictation"
@@ -116,7 +114,7 @@ export function DictationSettings({ settings, onChange }: Props) {
       </div>
 
       <div>
-        <h3 className={SECTION}>Overlay</h3>
+        <h3 className={SECTION_HEADING}>Overlay</h3>
         <SelectRow
           label="Overlay position"
           value={prefs.overlayPosition}
@@ -133,7 +131,7 @@ export function DictationSettings({ settings, onChange }: Props) {
       </div>
 
       <div>
-        <h3 className={SECTION}>History</h3>
+        <h3 className={SECTION_HEADING}>History</h3>
         <div className="mb-3 space-y-2">
           <SelectRow
             label="Keep dictations for"
@@ -240,7 +238,7 @@ function MicSection() {
   const label = MIC_LABEL[status.mic] ?? MIC_LABEL.unknown;
   return (
     <div>
-      <h3 className={SECTION}>Microphone and model</h3>
+      <h3 className={SECTION_HEADING}>Microphone and model</h3>
       <div className="space-y-2 rounded-xl border border-border bg-bg-secondary px-4 py-3">
         <div className="flex items-center gap-2 text-xs">
           <span className="flex-1 text-text-secondary">Microphone access</span>

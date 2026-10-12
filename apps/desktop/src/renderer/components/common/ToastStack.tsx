@@ -109,7 +109,7 @@ function ToastItem({ toast }: { toast: Toast }) {
         <div className="flex w-full flex-wrap gap-1 pr-3 pb-2 pl-9">
           {toast.links.map((link) => (
             <button
-              key={link.label}
+              key={link.id}
               type="button"
               onClick={() => {
                 link.run();

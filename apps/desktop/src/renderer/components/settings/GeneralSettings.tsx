@@ -1,4 +1,4 @@
-import type { IdleSuspendDays, Settings } from "@exegol/shared";
+import type { Settings } from "@exegol/shared";
 import { cn, Input } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -21,7 +21,8 @@ import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { Kbd } from "../common/Kbd";
 import { IdePicker } from "./IdePicker";
-import { SelectRow, SwitchRow } from "./settings-ui";
+import { SessionsSection } from "./SessionsSection";
+import { SECTION_HEADING, SwitchRow } from "./settings-ui";
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
@@ -29,14 +30,6 @@ const THEME_OPTIONS = [
   { value: "light", label: "Light", icon: Sun },
   { value: "system", label: "System", icon: Palette },
 ] as const;
-
-const IDLE_SUSPEND_OPTIONS: [IdleSuspendDays, string][] = [
-  [0, "Off"],
-  [1, "1 day"],
-  [3, "3 days"],
-  [7, "7 days"],
-  [14, "14 days"],
-];
 
 /** Electron accelerator for a key press, or null while only modifiers are held */
 function acceleratorFor(e: React.KeyboardEvent): string | null {
@@ -143,9 +136,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       {/* Theme + Hotkey in same row */}
       <div className="flex items-start gap-6">
         <div>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-            Theme
-          </h3>
+          <h3 className={SECTION_HEADING}>Theme</h3>
           <div className="flex gap-2">
             {THEME_OPTIONS.map((opt) => {
               const isActive = settings.theme === opt.value;
@@ -171,9 +162,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </div>
 
         <div>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-            Global Hotkey
-          </h3>
+          <h3 className={SECTION_HEADING}>Global Hotkey</h3>
           <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-2.5">
             <KeyCombo combo={settings.globalHotkey} />
             <HotkeyRecorder onRecord={(globalHotkey) => onChange({ globalHotkey })} />
@@ -183,9 +172,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
 
       {/* IDE selector */}
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Default IDE
-        </h3>
+        <h3 className={SECTION_HEADING}>Default IDE</h3>
         <IdePicker
           value={settings.defaultIde}
           onChange={(ide) => ide && onChange({ defaultIde: ide })}
@@ -204,9 +191,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
 
       {/* Notifications */}
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Notifications
-        </h3>
+        <h3 className={SECTION_HEADING}>Notifications</h3>
         <div className="flex flex-col gap-2">
           {[
             {
@@ -237,9 +222,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       </div>
 
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Worktrees
-        </h3>
+        <h3 className={SECTION_HEADING}>Worktrees</h3>
         <SwitchRow
           label="Save worktree work to its branch when an agent ends"
           description="Commits what is pending (never ignored files, likely secrets or files over 10 MB) and pushes the agent's own branch to origin, so the work is on the remote before any cleanup. Also used by the daily worktree sweep"
@@ -249,26 +232,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         />
       </div>
 
-      <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Sessions
-        </h3>
-        <SelectRow
-          label={
-            <>
-              Suspend sessions idle for
-              <span className="block text-[10px] text-text-muted">
-                No output and no typing: agents are suspended (Resume picks them up), shells at
-                their prompt are closed. Never one working, pinned in Watching, with PR watch or
-                waiting on you, nor a shell running something
-              </span>
-            </>
-          }
-          value={settings.idleSuspendDays}
-          options={IDLE_SUSPEND_OPTIONS}
-          onChange={(idleSuspendDays) => onChange({ idleSuspendDays })}
-        />
-      </div>
+      <SessionsSection settings={settings} onChange={onChange} />
 
       {/* Ollama / Project Indexing status */}
       <OllamaStatusSection settings={settings} onChange={onChange} />
@@ -316,9 +280,7 @@ function OllamaStatusSection({
 
   return (
     <div>
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-        Project Indexing (Ollama)
-      </h3>
+      <h3 className={SECTION_HEADING}>Project Indexing (Ollama)</h3>
       <div className="space-y-3 rounded-xl border border-border bg-bg-secondary p-4">
         <p className="text-[10px] text-text-muted">
           Exegol can index your project files using local embeddings via Ollama. This enables

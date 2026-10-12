@@ -26,7 +26,6 @@ import {
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { inheritClaudeTrust } from "./claude-trust";
-import { noteSessionActivity } from "./idle-suspend";
 import { applyLaunchModel } from "./launch-model";
 import { noteAgentInput, noteBlindResume, takeMissedResume } from "./missed-resume";
 import { attachOutputPipeline } from "./output-pipeline";
@@ -325,12 +324,16 @@ export class AgentManager {
 
   write(agentId: string, data: string): void {
     noteAgentInput(agentId, data);
-    noteSessionActivity(agentId);
     getPtyHost().write(agentId, data);
   }
 
   resize(agentId: string, cols: number, rows: number): void {
     getPtyHost().resize(agentId, cols, rows);
+  }
+
+  /** A pipeline or the queue waits on this agent's exit */
+  hasCompletionCallback(agentId: string): boolean {
+    return this.completionCallbacks.has(agentId);
   }
 
   onAgentComplete(agentId: string, callback: (exitCode: number) => void): void {

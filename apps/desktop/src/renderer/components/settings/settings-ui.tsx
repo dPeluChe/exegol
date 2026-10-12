@@ -2,6 +2,10 @@ import { cn } from "@exegol/ui";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+/** A settings section's title */
+export const SECTION_HEADING =
+  "mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted";
+
 /** The small outlined action button of the Models and Storage tabs */
 export const SMALL_BUTTON =
   "flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-secondary hover:bg-bg-tertiary disabled:opacity-50";

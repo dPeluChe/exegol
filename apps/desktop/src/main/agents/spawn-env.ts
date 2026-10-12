@@ -101,6 +101,18 @@ function statusChangedAt(
   return at;
 }
 
+/** A closed shell's row is gone: every window drops it, not only the one that closed it */
+export function broadcastShellClosed(agent: { id: string; projectId: string }): void {
+  broadcastAgentStatus({
+    agentId: agent.id,
+    projectId: agent.projectId,
+    status: "stopped",
+    currentStep: null,
+    cliType: "shell",
+    timestamp: Date.now(),
+  });
+}
+
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
 export function broadcastAgentStatus(event: AgentStatusEvent): void {
   const prev = lastBroadcastStatus.get(event.agentId);

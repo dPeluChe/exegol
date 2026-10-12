@@ -15,12 +15,12 @@ import {
   removeFollowUp,
   steerFollowUp,
 } from "../../agents/follow-up-queue";
-import { deleteShellRow, setIdleExempt } from "../../agents/idle-suspend-sweep";
+import { setIdleExempt } from "../../agents/idle-exempt";
 import { takeLostOnRestart } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
 import { providerSessionId } from "../../agents/provider-session-id";
-import { coreRust, resolveCommand } from "../../agents/spawn-env";
+import { broadcastShellClosed, coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
 import { resolveTaskLabel } from "../../agents/task-label";
 import {
@@ -38,6 +38,7 @@ import {
 import {
   archiveAgent,
   archiveEndedAgents,
+  deleteShellRow,
   getAgentCwd,
   listActiveAgents,
   setAgentAlias,
@@ -564,7 +565,8 @@ export const agentRouter = router({
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);
     if (agent?.cliType === "shell") {
-      deleteShellRow(ctx.db, agent);
+      deleteShellRow(ctx.db, agent.id);
+      broadcastShellClosed(agent);
       return { success: true, archived: false };
     }
     archiveAgent(ctx.db, input.id);

@@ -26,8 +26,13 @@ export async function setAgentPrWatch(agentId: string, on: boolean): Promise<voi
  * the stop's own status event does not land in Needs attention.
  */
 export async function suspendAgent(agentId: string): Promise<void> {
-  const store = useAgentStore.getState();
-  store.updateAgent(agentId, { suspended: true });
-  store.dismissAttention(agentId);
+  markSuspended(agentId);
   await trpcMutate("agents.suspend", { id: agentId });
+}
+
+/** Before the stop lands: out of Needs attention, and its exit makes no noise */
+export function markSuspended(agentId: string, suspended = true): void {
+  const store = useAgentStore.getState();
+  store.updateAgent(agentId, { suspended });
+  if (suspended) store.dismissAttention(agentId);
 }

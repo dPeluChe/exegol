@@ -5,7 +5,7 @@ import {
   parseChord,
 } from "../types/dictation";
 import { IDE_IDS } from "../types/ide";
-import { DEFAULT_SETTINGS } from "../types/settings";
+import { DEFAULT_SETTINGS, IDLE_SUSPEND_DAYS, type IdleSuspendDays } from "../types/settings";
 
 export const ideTypeSchema = z.enum(IDE_IDS);
 
@@ -45,8 +45,9 @@ export const settingsSchema = z.object({
   toastsEnabled: z.boolean().default(true),
   saveWorktreeWork: z.boolean().default(true),
   idleSuspendDays: z
-    .union([z.literal(0), z.literal(1), z.literal(3), z.literal(7), z.literal(14)])
-    .default(7),
+    .number()
+    .refine((d): d is IdleSuspendDays => (IDLE_SUSPEND_DAYS as readonly number[]).includes(d))
+    .default(DEFAULT_SETTINGS.idleSuspendDays),
   mutedNotificationChannels: z.array(z.string()).default([]),
   ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
   ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),

@@ -269,4 +269,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_025_agent_model_roles",
     sql: "ALTER TABLE agents ADD COLUMN model_roles TEXT;",
   },
+  {
+    // T205: last input or output (ms), written at most every 5 min, for the idle sweep
+    id: "w3_026_agent_last_activity_at",
+    sql: "ALTER TABLE agents ADD COLUMN last_activity_at INTEGER;",
+  },
 ];
