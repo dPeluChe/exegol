@@ -259,6 +259,13 @@ it when the user has cleaned up to the sessions they need and says go.
    start like `utf8Tail`; found in the #356 encoding review)
 6. Verify live: a heavy command in one terminal, the others keep typing; the health watch (#346)
    stays quiet
+7. After the bump every session is new (UTF-8 since 0.5.20): delete the locale detector from #361
+   (`agents/session-locale.ts`, `LocaleRestartControl`, `doctor.sessionsWithoutUtf8` and its
+   capability, the Doctor "Terminal encoding" check) once no user can still have a pre-0.5.20
+   session alive (the bump itself guarantees it)
+8. Only if a third restart reason appears: one "session outdated" chip with its reason instead of
+   `CliUpdateControl` + `LocaleRestartControl`, and rename `stores/cli-restarts` to a session
+   restart queue
 
 ### T201: Local voice dictation `added: 2026-10-07`
 **Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-07. Speech to text that runs
