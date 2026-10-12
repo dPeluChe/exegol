@@ -1,11 +1,15 @@
 import { readFile } from "node:fs/promises";
-import { LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
+import { listLiveAgentPids } from "../db/queries/agents";
 import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { loginShell } from "./spawn-env";
 
-type LocaleEnv = Partial<Record<"LANG" | "LC_ALL" | "LC_CTYPE", string>>;
+const LOCALE_VARS = ["LC_ALL", "LC_CTYPE", "LANG"] as const;
+type LocaleEnv = Partial<Record<(typeof LOCALE_VARS)[number], string>>;
+const isLocaleVar = (name: string): name is keyof LocaleEnv =>
+  (LOCALE_VARS as readonly string[]).includes(name);
+const PS_LOCALE = new RegExp(`\\s(${LOCALE_VARS.join("|")})=(\\S*)`, "g");
 
 /** The encoding a process uses: LC_ALL wins over LC_CTYPE over LANG, the C rules */
 export function hasUtf8Locale(env: LocaleEnv): boolean {
@@ -20,7 +24,7 @@ export function localesFromPs(text: string): Map<number, LocaleEnv> {
     const pid = Number(line.trim().split(/\s/, 1)[0]);
     if (!pid) continue;
     const env: LocaleEnv = {};
-    for (const m of line.matchAll(/\s(LANG|LC_ALL|LC_CTYPE)=(\S*)/g)) {
+    for (const m of line.matchAll(PS_LOCALE)) {
       env[m[1] as keyof LocaleEnv] = m[2];
     }
     out.set(pid, env);
@@ -34,8 +38,7 @@ export function localeFromEnviron(raw: string): LocaleEnv {
   for (const entry of raw.split("\0")) {
     const eq = entry.indexOf("=");
     const name = entry.slice(0, eq);
-    if (name === "LANG" || name === "LC_ALL" || name === "LC_CTYPE")
-      env[name] = entry.slice(eq + 1);
+    if (isLocaleVar(name)) env[name] = entry.slice(eq + 1);
   }
   return env;
 }
@@ -87,22 +90,20 @@ function loginShellSetsUtf8(): Promise<boolean> {
  *  CocoaPods refuses to run there and pbcopy stores Mac Roman. Restarting them is the only fix */
 export async function sessionsWithoutUtf8(db: Database.Database): Promise<string[]> {
   if (process.platform === "win32") return [];
-  const statuses = [...LIVE_STATUSES];
-  const rows = db
-    .prepare(
-      `SELECT id, pid FROM agents WHERE pid IS NOT NULL AND archived_at IS NULL
-       AND status IN (${statuses.map(() => "?").join(",")})`,
-    )
-    .all(...statuses) as { id: string; pid: number }[];
+  const rows = listLiveAgentPids(db);
   if (rows.length === 0) return [];
-  const locales = await readLocales(rows.map((r) => r.pid));
+  const [locales, shellUtf8] = await Promise.all([
+    readLocales(rows.map((r) => r.pid)),
+    loginShellSetsUtf8(),
+  ]);
+  if (shellUtf8) return [];
   const missing = rows.filter((r) => {
     const env = locales.get(r.pid);
     return env && !hasUtf8Locale(env);
   });
-  if (missing.length === 0 || (await loginShellSetsUtf8())) return [];
-  if (missing.length !== lastLogged)
+  if (missing.length !== lastLogged && missing.length > 0) {
     logger.info(`[Locale] ${missing.length} of ${rows.length} live sessions started without UTF-8`);
+  }
   lastLogged = missing.length;
   return missing.map((r) => r.id);
 }
