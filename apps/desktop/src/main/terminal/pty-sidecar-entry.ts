@@ -2,7 +2,7 @@
 // Runs with ELECTRON_RUN_AS_NODE=1, survives window reloads.
 // Manages all PTY sessions via JSON-RPC over Unix domain socket.
 
-import { mkdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, unlinkSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import * as pty from "node-pty";
 import { createFrameReader } from "../lib/frame-reader";
@@ -13,17 +13,15 @@ import {
   reloadIfEvicted,
 } from "./pty-sidecar-eviction";
 import { appendPending, FLUSH_INTERVAL_MS, OutputGate } from "./pty-sidecar-flusher";
+import { createSidecarLease } from "./pty-sidecar-lease";
 import {
   EXEGOL_DIR,
   GLOBAL_RING_BUFFER_CAP_BYTES,
-  holdsLease,
   type JsonRpcMessage,
   type JsonRpcRequest,
   LEASE_CHECK_MS,
   makeNotification,
   makeResponse,
-  type PidFile,
-  parsePidFile,
   RING_BUFFER_CAPACITY,
   RING_BUFFER_EVICTION_SWEEP_MS,
   type SessionCreateParams,
@@ -33,7 +31,6 @@ import {
   type SessionWriteParams,
   SIDECAR_IDLE_TIMEOUT_MS,
   SIDECAR_LOG_PATH,
-  SIDECAR_PID_PATH,
   SIDECAR_SOCK_PATH,
   SIDECAR_VERSION,
 } from "./pty-sidecar-protocol";
@@ -388,42 +385,8 @@ const server = createServer((client: Socket) => {
 
 // ─── Startup ────────────────────────────────────────────────────────────
 
-/** Discovery's identity for this sidecar; the pid file naming it is our lease (holdsLease). */
-const TOKEN = process.env.EXEGOL_SIDECAR_TOKEN ?? "";
-
-/** Inode of the socket file our listen() created. */
-let socketIno: number | null = null;
-
-/** The pid file's text; null when it is gone, undefined when it could not be read (no evidence). */
-function readPidFileText(): string | null | undefined {
-  try {
-    return readFileSync(SIDECAR_PID_PATH, "utf-8");
-  } catch (err) {
-    return (err as NodeJS.ErrnoException).code === "ENOENT" ? null : undefined;
-  }
-}
-
-/** Remove our pid file and socket, never a successor's (2026-08-13: an exiting predecessor
- *  deleted the replacement's files and orphaned it). */
-/** Give up the pid file (only ours): discovery then spawns a successor instead of reusing us */
-function releaseLease(): void {
-  try {
-    if (parsePidFile(readPidFileText())?.token === TOKEN) unlinkSync(SIDECAR_PID_PATH);
-  } catch {
-    /* already gone */
-  }
-}
-
-function cleanup(): void {
-  releaseLease();
-  try {
-    if (socketIno !== null && statSync(SIDECAR_SOCK_PATH).ino === socketIno) {
-      unlinkSync(SIDECAR_SOCK_PATH);
-    }
-  } catch {
-    /* already gone */
-  }
-}
+/** Discovery's identity for this sidecar; the pid file naming it is our lease */
+const lease = createSidecarLease(process.env.EXEGOL_SIDECAR_TOKEN ?? "");
 
 function start(): void {
   mkdirSync(EXEGOL_DIR, { recursive: true });
@@ -435,43 +398,36 @@ function start(): void {
   }
 
   server.listen(SIDECAR_SOCK_PATH, () => {
-    socketIno = statSync(SIDECAR_SOCK_PATH).ino;
-    const pidFile: PidFile = {
-      pid: process.pid,
-      token: TOKEN,
-      version: SIDECAR_VERSION,
-      sock: SIDECAR_SOCK_PATH,
-    };
-    writeFileSync(SIDECAR_PID_PATH, JSON.stringify(pidFile), "utf-8");
+    lease.claim();
     resetIdleTimer();
-    const lease = setInterval(() => {
-      if (holdsLease(readPidFileText(), TOKEN)) return;
-      clearInterval(lease);
+    const leaseCheck = setInterval(() => {
+      if (lease.holds()) return;
+      clearInterval(leaseCheck);
       stopAndExit(2000, "replaced: the pid file no longer names this sidecar");
     }, LEASE_CHECK_MS);
-    lease.unref();
+    leaseCheck.unref();
   });
 
   server.on("error", (err) => {
     log(`exit: server error (${scrubHome(err.message)})`, true);
-    cleanup();
+    lease.cleanup();
     process.exit(1);
   });
 }
 
 // ─── Signal handling ────────────────────────────────────────────────────
 
+let shuttingDown = false;
+
 /**
  * Kill every session and exit. Pending output is flushed first: onExit may not fire before the
  * SIGKILL escalation, and clients may disconnect meanwhile, stranding the last <4 ms of output.
  */
-let shuttingDown = false;
-
 function stopAndExit(graceMs: number, reason: string): void {
   if (shuttingDown) return;
   shuttingDown = true;
   // Undiscoverable before the notice: main reconnecting on it must find a successor, not us
-  releaseLease();
+  lease.release();
   const live = [...sessions.values()].filter((s) => s.alive).map((s) => s.id);
   log(`exiting: ${reason} (${live.length} live session(s))`, true);
   for (const s of sessions.values()) flushSession(s);
@@ -496,7 +452,7 @@ function stopAndExit(graceMs: number, reason: string): void {
         /* */
       }
     }
-    cleanup();
+    lease.cleanup();
     process.exit(0);
   }, graceMs);
 }

@@ -14,7 +14,7 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
 /**
  * BUMP THIS whenever you change code the sidecar bundles (pty-sidecar-entry,
  * pty-sidecar-eviction, pty-sidecar-flusher, pty-sidecar-queries, this file,
- * ring-buffer, terminal-modes, sidecar-log, lib/frame-reader). The
+ * pty-sidecar-lease, ring-buffer, terminal-modes, sidecar-log, lib/frame-reader). The
  * sidecar is detached so it outlives both an app restart AND an app update —
  * on a version mismatch, discovery shuts the old one down and spawns a fresh
  * one. Forget the bump and the fix silently never loads: that is a released

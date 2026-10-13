@@ -1,19 +1,8 @@
-import type { AgentCliType, AgentProvider, ResumableSession, SpawnPreview } from "@exegol/shared";
-import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exegol/shared";
+import { agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
-import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
-import { continueLastPart } from "../../agents/agent-spawn-flow";
-import {
-  folderExists,
-  followChain,
-  noteShellFolder,
-  shellResumeFolder,
-} from "../../agents/auto-resume";
-import { finishAutoResume, planLostResume } from "../../agents/auto-resume-plan";
-import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
 import {
   FOLLOW_UP_MAX_CHARS,
   FollowUpError,
@@ -23,21 +12,12 @@ import {
   steerFollowUp,
 } from "../../agents/follow-up-queue";
 import { setIdleExempt } from "../../agents/idle-exempt";
-import { settleLost, takeLostOnRestart } from "../../agents/lost-sessions";
-import { listCliModels } from "../../agents/model-lists";
-import { runPreflight } from "../../agents/preflight";
-import { providerSessionId } from "../../agents/provider-session-id";
-import { broadcastShellClosed, coreRust, resolveCommand } from "../../agents/spawn-env";
-import { resolveSpawnTarget } from "../../agents/spawn-target";
-import { resolveTaskLabel } from "../../agents/task-label";
+import { broadcastShellClosed } from "../../agents/spawn-env";
 import {
-  createAgent,
   getAgent,
-  getProject,
   getWorktreeByAgentId,
   listAgents,
   listRecentSessions,
-  listWorktrees,
   setAgentMuted,
   setAgentSuspended,
   updateAgentStatus,
@@ -46,49 +26,18 @@ import {
   archiveAgent,
   archiveEndedAgents,
   deleteShellRow,
-  getAgentCwd,
-  getAgentLastCwd,
   listActiveAgents,
-  resumedInto,
   setAgentAlias,
-  setAgentLastCwd,
   setAgentPrWatch,
-  setAgentResumedFrom,
-  watchedInfo,
 } from "../../db/queries/agents";
-import {
-  createParallelRun,
-  enrichParallelRunForComparison,
-  getParallelRun,
-  listParallelRuns,
-  updateParallelRunStatus,
-} from "../../db/queries/parallel-runs";
-import { cliSessionNames, lastLocalSession } from "../../history";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
-import { logger } from "../../lib/logger";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
-import { isPathAllowed } from "../../security/path-guard";
-import { installedProviderIds } from "../../system/cli-versions";
-import { redact } from "../../system/diagnostics";
 import { getPtyHost } from "../../terminal/pty-host";
 import { getRecoveryState } from "../../terminal/reattach-gate";
 import { publicProcedure, router } from "../trpc";
-
-/** Each provider marked installed (one PATH check, the one spawn uses) with how to install it on
- *  this OS: the launcher and Settings > CLIs read the same answer */
-function withInstallInfo(providers: AgentProvider[]): AgentProvider[] {
-  const installed = installedProviderIds();
-  return providers.map((p) => {
-    const setup = cliSetupFor(p.id);
-    return {
-      ...p,
-      installed: p.id === "shell" || installed.has(p.id),
-      installCommand: setup?.install ?? null,
-      installDocs: setup?.docs ?? null,
-      interruptKey: interruptKeyOf(p.id),
-    };
-  });
-}
+import { agentParallelProcedures } from "./agents-parallel";
+import { agentProviderProcedures } from "./agents-providers";
+import { agentSpawnProcedures } from "./agents-resume";
 
 async function followUpCall<T>(run: () => T | Promise<T>): Promise<T> {
   try {
@@ -100,174 +49,23 @@ async function followUpCall<T>(run: () => T | Promise<T>): Promise<T> {
   }
 }
 
-async function resumedShellFolder(
-  db: Parameters<typeof getAgentLastCwd>[0],
-  fromId: string,
-  bases: string[],
-): Promise<string | undefined> {
-  const last = getAgentLastCwd(db, fromId);
-  const exists = folderExists(last);
-  const allowed = exists && bases.length > 0 && (await isPathAllowed(last as string, bases));
-  const { cwd, decision } = shellResumeFolder(last, exists, allowed);
-  const where = decision === "kept" ? "folder kept" : `folder ${decision}, project root`;
-  noteShellFolder(fromId, decision);
-  if (decision !== "none") logger.info(`[Resume] ${fromId} shell: ${where}`);
-  return cwd;
-}
-
-/** A crashed row whose session now runs in a new one: archived here, not by the renderer, so a
- *  reload in between never leaves a Resume that starts a second process on the same session */
-function retireResumedSource(db: Parameters<typeof getAgent>[0], id: string): void {
-  settleLost([id]);
-  if (getAgent(db, id)?.status === "crashed") archiveAgent(db, id);
-}
-
-/** One line of why a resume failed, without paths (the log goes into public bug reports) */
-function resumeFailure(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err);
-  return redact(message.split("\n")[0] ?? "").slice(0, 160);
-}
-
 export const agentRouter = router({
-  listProviders: publicProcedure.query(({ ctx }) => withInstallInfo(ctx.providerRegistry.list())),
-
-  /** List only enabled providers (for launcher/modal UI — respects Settings toggles) */
-  listEnabledProviders: publicProcedure.query(({ ctx }) =>
-    withInstallInfo(
-      ctx.providerRegistry.list().filter((p) => p.enabled !== false && p.id !== "shell"),
-    ),
-  ),
-
-  registerProvider: publicProcedure
-    .input(
-      z.object({
-        id: z.string().min(1),
-        name: z.string().min(1),
-        command: z.string().min(1),
-        args: z.array(z.string()).default([]),
-        env: z.record(z.string()).default({}),
-        argsTemplate: z.string().default("{command} {task}"),
-        icon: z.string().max(3).default("?"),
-        color: z.string().default("#6B7280"),
-        capabilities: z
-          .object({
-            supportsWorktree: z.boolean().default(false),
-            supportsResume: z.boolean().default(false),
-            resumeFlag: z.string().default(""),
-            resumeCommandPattern: z.string().optional(),
-            supportsRPC: z.boolean().default(false),
-            supportsVision: z.boolean().default(false),
-            supportsPromptArg: z.boolean().default(false),
-            promptFlag: z.string().default(""),
-            pipelineIdleCloseSeconds: z.number().default(0),
-          })
-          .default({}),
-        enabled: z.boolean().default(true),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      return ctx.providerRegistry.register(ctx.db, input);
-    }),
-
-  /** A custom CLI's name and command (it was created as "New Agent" / my-agent with no way to
-   *  change either). Built-ins keep theirs */
-  updateCustomProvider: publicProcedure
-    .input(
-      z.object({
-        id: z.string(),
-        name: z.string().trim().min(1).max(60),
-        command: z
-          .string()
-          .trim()
-          .min(1)
-          .max(200)
-          .regex(/^[^\n\r]+$/),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      const provider = ctx.providerRegistry.get(input.id);
-      if (!provider || provider.isBuiltin) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Only a custom CLI can be edited" });
-      }
-      provider.name = input.name;
-      provider.command = input.command;
-      ctx.providerRegistry.saveCustomToDb(ctx.db);
-      return { success: true };
-    }),
-
-  unregisterProvider: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => {
-      const removed = ctx.providerRegistry.unregister(ctx.db, input.id);
-      if (!removed) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Cannot remove built-in provider or provider not found",
-        });
-      }
-      return { success: true };
-    }),
-
-  updateProviderArgs: publicProcedure
-    .input(z.object({ id: z.string(), args: z.array(z.string()) }))
-    .mutation(({ ctx, input }) => {
-      const registry = ctx.providerRegistry;
-      const provider = registry.get(input.id);
-      if (!provider) {
-        throw new TRPCError({ code: "NOT_FOUND", message: `Provider ${input.id} not found` });
-      }
-      // Update args in memory and persist
-      provider.args = input.args;
-      registry.saveCustomToDb(ctx.db);
-      return { success: true };
-    }),
-
-  toggleProviderEnabled: publicProcedure
-    .input(z.object({ id: z.string(), enabled: z.boolean() }))
-    .mutation(({ ctx, input }) => {
-      const registry = ctx.providerRegistry;
-      const provider = registry.get(input.id);
-      if (!provider) {
-        throw new TRPCError({ code: "NOT_FOUND", message: `Provider ${input.id} not found` });
-      }
-      provider.enabled = input.enabled;
-      registry.saveCustomToDb(ctx.db);
-      return { success: true };
-    }),
-
-  swapProviders: publicProcedure
-    .input(z.object({ idA: z.string(), idB: z.string() }))
-    .mutation(({ ctx, input }) => {
-      ctx.providerRegistry.swap(ctx.db, input.idA, input.idB);
-      return { success: true };
-    }),
-
-  resetProviderArgs: publicProcedure.mutation(({ ctx }) => {
-    const registry = ctx.providerRegistry;
-    for (const p of registry.list()) {
-      p.args = [];
-    }
-    registry.saveCustomToDb(ctx.db);
-    return { success: true };
-  }),
-
+  ...agentProviderProcedures,
+  ...agentSpawnProcedures,
+  ...agentParallelProcedures,
   recentSessions: publicProcedure
     .input(z.object({ limit: z.number().int().positive().optional() }).optional())
     .query(({ ctx, input }) => {
       return listRecentSessions(ctx.db, input?.limit ?? 10);
     }),
-
   list: publicProcedure.input(z.object({ projectId: z.string() })).query(({ ctx, input }) => {
     return listAgents(ctx.db, input.projectId);
   }),
-
   /** T156: cross-project non-terminal agents (project name + group color). */
   // At once, even mid-recovery: the sidebar lists sessions while they reconnect (recoveryState)
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
-
   /** Startup reattach progress; `recovery:progress` pushes each change */
   recoveryState: publicProcedure.query(() => getRecoveryState()),
-
   /** The view on screen: the next startup reattaches its sessions first */
   setActiveView: publicProcedure
     .input(
@@ -277,301 +75,25 @@ export const agentRouter = router({
       }),
     )
     .mutation(({ ctx, input }) => saveActiveView(ctx.db, input)),
-
-  /** Sessions a restart took with the sidecar that are not settled yet (a reload mid-stagger
-   *  gets the rest): the recent ones to resume in their panes, the rest kept suspended */
-  takeLostOnRestart: publicProcedure
-    .input(z.object({ pinned: z.array(z.string().max(128)).max(256).default([]) }).optional())
-    .query(async ({ ctx, input }) =>
-      planLostResume(ctx.db, await takeLostOnRestart(), Date.now(), new Set(input?.pinned)),
-    ),
-
-  /** Watching pins follow their session: each id's newest continuation, and what the session
-   *  was when none is live (archived rows included) */
-  resolveWatched: publicProcedure
-    .input(z.object({ ids: z.array(z.string().max(128)).max(256) }))
-    .query(({ ctx, input }) =>
-      input.ids.map((id) => {
-        const latest = followChain(id, (cur) => resumedInto(ctx.db, cur));
-        return { id, latest, info: watchedInfo(ctx.db, latest) };
-      }),
-    ),
-
-  /** How the renderer's staggered auto-resume went, for the log */
-  autoResumeReport: publicProcedure
-    .input(
-      z.object({
-        outcomes: z
-          .array(
-            z.object({
-              id: z.string().max(128),
-              cliType: z.string().regex(/^[\w-]{1,40}$/),
-              outcome: z.enum(["resumed", "failed", "skipped"]),
-              // Cut, never refused: one long error must not drop the whole report
-              reason: z
-                .string()
-                .optional()
-                .transform((r) => r?.slice(0, 120)),
-            }),
-          )
-          .max(1000),
-        totalMs: z.number().int().nonnegative(),
-        kept: z.number().int().nonnegative(),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      finishAutoResume(
-        ctx.db,
-        input.outcomes.map((o) => ({ ...o, reason: o.reason && redact(o.reason) })),
-        input.totalMs,
-        input.kept,
-      );
-    }),
-
-  /** A shell's folder from OSC 7: its resume reopens there */
-  setShellCwd: publicProcedure
-    .input(
-      z.object({
-        id: z.string().max(128),
-        cwd: z
-          .string()
-          .min(1)
-          .max(4096)
-          .startsWith("/")
-          .refine((c) => !c.includes("\0"), "NUL in path"),
-      }),
-    )
-    .mutation(({ ctx, input }) => {
-      if (getAgent(ctx.db, input.id)?.cliType === "shell") {
-        setAgentLastCwd(ctx.db, input.id, input.cwd);
-      }
-    }),
-
-  /** Shell id → provider of an agent CLI typed inside it (`claude` in a plain terminal) */
-  /** A CLI typed in a terminal exited back to the prompt: start it again there, continuing
-   *  its last conversation (the provider's resume flag), in the same shell and cwd */
-  continueInShell: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const agent = getAgent(ctx.db, input.id);
-      if (!agent?.launchedInShell || agent.status !== "idle") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Not at its shell prompt" });
-      }
-      const provider = ctx.providerRegistry.get(agent.cliType);
-      if (!provider?.command || provider.command.startsWith("__")) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "No command for this CLI" });
-      }
-      const cwd = getAgentCwd(ctx.db, agent.id);
-      const last = cwd ? await lastLocalSession(agent.cliType, cwd) : undefined;
-      const command = [
-        provider.command,
-        continueLastPart(agent.cliType, provider.capabilities, last?.sessionId ?? null),
-      ]
-        .filter(Boolean)
-        .join(" ");
-      ctx.agentManager.write(agent.id, `${command}\r`);
-      return { command };
-    }),
-
   /** T176: dismiss ended sessions from the dashboard. Archive, not delete —
    *  the row keeps its scoring, oplog attribution and resume handle. */
   archive: publicProcedure
     .input(z.object({ id: z.string() }))
     .mutation(({ ctx, input }) => ({ archived: archiveAgent(ctx.db, input.id) })),
-
   archiveEnded: publicProcedure
     .input(z.object({ projectId: z.string().optional() }).optional())
     .mutation(({ ctx, input }) => ({ archived: archiveEndedAgents(ctx.db, input?.projectId) })),
-
-  /** T160: set/clear the session alias — the agent_send addressing name. */
-  /** Models this account can use with a CLI, from the CLI's own list (empty when it has none) */
-  listModels: publicProcedure
-    .input(z.object({ cliType: z.string().regex(/^[\w-]{1,40}$/) }))
-    .query(({ input }) => listCliModels(input.cliType)),
-
   setAlias: publicProcedure
     .input(z.object({ id: z.string(), alias: z.string().trim().max(40).nullable() }))
     .mutation(({ ctx, input }) => {
       setAgentAlias(ctx.db, input.id, input.alias || null);
       return { success: true };
     }),
-
   // Returns null (not undefined) for consistency with TanStack Query v5,
   // which treats undefined from queryFn as a protocol error.
   get: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
     return getAgent(ctx.db, input.id) ?? null;
   }),
-
-  /** T155.5: past sessions of ANY provider that captured a resume handle, newest first. */
-  listResumable: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        limit: z.number().int().min(1).max(20).optional(),
-      }),
-    )
-    .query(({ ctx, input }) => {
-      const rows = ctx.db
-        .prepare(
-          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias
-           FROM agents
-           WHERE project_id = ?
-             AND status IN ('completed', 'failed', 'stopped', 'crashed')
-             AND archived_at IS NULL
-           AND (resume_command IS NOT NULL OR claude_session_id IS NOT NULL)
-           ORDER BY COALESCE(stopped_at, started_at) DESC
-           LIMIT ?`,
-        )
-        .all(input.projectId, input.limit ?? 10) as Array<{
-        id: string;
-        cli_type: string;
-        task_description: string;
-        status: string;
-        started_at: number | null;
-        stopped_at: number | null;
-        alias: string | null;
-      }>;
-      return rows.map<ResumableSession>((r) => ({
-        agentId: r.id,
-        cliType: r.cli_type,
-        // The codename is how the user (and other agents) knew this session —
-        // a resume picker listing only task text makes them re-identify it.
-        alias: r.alias,
-        taskDescription: r.task_description,
-        status: r.status,
-        endedAt: r.stopped_at ?? r.started_at,
-      }));
-    }),
-
-  /** The launcher's past-session chips: each agent's session name inside its CLI, by agent id.
-   *  Separate from listResumable so the chips render before any store is read */
-  sessionNames: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        agentIds: z.array(z.string().max(64)).max(20),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      if (input.agentIds.length === 0) return {};
-      const rows = ctx.db
-        .prepare(
-          `SELECT a.id, a.cli_type, a.task_description, a.claude_session_id, a.resume_command,
-                  COALESCE(w.path, p.path) AS cwd
-           FROM agents a
-           LEFT JOIN worktrees w ON w.id = a.worktree_id
-           JOIN projects p ON p.id = a.project_id
-           WHERE a.project_id = ? AND a.id IN (${input.agentIds.map(() => "?").join(",")})`,
-        )
-        .all(input.projectId, ...input.agentIds) as Array<{
-        id: string;
-        cli_type: string;
-        task_description: string;
-        claude_session_id: string | null;
-        resume_command: string | null;
-        cwd: string;
-      }>;
-      const refs = rows.flatMap((r) => {
-        const sessionId = providerSessionId(r.cli_type, r.claude_session_id, r.resume_command);
-        return sessionId
-          ? [
-              {
-                agentId: r.id,
-                provider: r.cli_type,
-                sessionId,
-                cwd: r.cwd,
-                task: r.task_description,
-              },
-            ]
-          : [];
-      });
-      return refs.length > 0 ? cliSessionNames(refs) : {};
-    }),
-
-  /** Where a spawn would actually run — the same resolver the spawn path uses,
-   *  so the modal cannot promise a directory the agent never gets. */
-  previewSpawn: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string(),
-        useWorktree: z.boolean(),
-        branchName: z.string().optional(),
-        taskDescription: z.string().optional(),
-        /** Needed because the blank-task fallback is the provider's name.
-         *  Validated here rather than widening the domain type inland. */
-        cliType: agentCliTypeSchema,
-      }),
-    )
-    .query(({ ctx, input }): SpawnPreview => {
-      const project = getProject(ctx.db, input.projectId);
-      if (!project) {
-        throw new TRPCError({ code: "NOT_FOUND", message: `Project ${input.projectId} not found` });
-      }
-      // Through the SAME label resolution the spawn will apply: createAgent
-      // turns a blank task into the provider's display name, and the branch is
-      // slugged from THAT. Previewing the raw task promised `exegol/` while the
-      // agent landed on `exegol/claude-code` — the exact class of lie this
-      // procedure exists to remove.
-      const target = resolveSpawnTarget(ctx.db, project, {
-        ...input,
-        taskDescription: resolveTaskLabel(input.cliType, input.taskDescription),
-      });
-      return { cwd: target.cwd, branchName: target.branchName, reused: target.reused };
-    }),
-
-  spawn: publicProcedure.input(agentCreateSchema).mutation(async ({ ctx, input: raw }) => {
-    const project = getProject(ctx.db, raw.projectId);
-    const bases = project
-      ? [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)]
-      : [];
-    // A resumed shell reopens in its last OSC 7 folder while that is still in the project
-    const input =
-      raw.cliType === "shell" && raw.resumeFromAgentId && !raw.cwdOverride
-        ? { ...raw, cwdOverride: await resumedShellFolder(ctx.db, raw.resumeFromAgentId, bases) }
-        : raw;
-    // A renderer-chosen start folder (the launcher's "run in", a terminal beside a session)
-    // stays inside the project or one of its worktrees
-    if (input.cwdOverride) {
-      if (!project || !(await isPathAllowed(input.cwdOverride, bases))) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Start folder is outside the project" });
-      }
-    }
-    const agent = createAgent(ctx.db, input);
-    if (input.cliType === "shell" && input.cwdOverride) {
-      setAgentLastCwd(ctx.db, agent.id, input.cwdOverride);
-    }
-    const manager = ctx.agentManager;
-
-    const resumedFrom = input.resumeFromAgentId;
-    const fresh = input.resumeSession ? "" : " (fresh start, no session to resume)";
-    try {
-      await manager.spawn(ctx.db, agent, input);
-      if (resumedFrom) {
-        logger.info(`[Resume] ${resumedFrom} -> ${agent.id} ok${fresh}`);
-        setAgentResumedFrom(ctx.db, agent.id, resumedFrom);
-        retireResumedSource(ctx.db, resumedFrom);
-      }
-    } catch (err) {
-      if (resumedFrom) {
-        logger.warn(`[Resume] ${resumedFrom} -> ${agent.id} failed ${resumeFailure(err)}${fresh}`);
-      }
-      updateAgentStatus(ctx.db, agent.id, "failed", String(err));
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: `Failed to spawn agent: ${err instanceof Error ? err.message : String(err)}`,
-      });
-    }
-
-    const spawned = getAgent(ctx.db, agent.id);
-    if (!spawned) {
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: `Agent ${agent.id} not found after spawn`,
-      });
-    }
-    return spawned;
-  }),
-
   // Idempotent: if the agent is already gone (race with a concurrent close),
   // return success instead of NOT_FOUND so the renderer's double-call
   // cleanup pattern (stop + delete) doesn't spam the console.
@@ -582,7 +104,6 @@ export const agentRouter = router({
       setAgentMuted(ctx.db, input.id, input.muted);
       return getAgent(ctx.db, input.id);
     }),
-
   /** T142 phase 1: tell the agent about its PR's failing checks, reviews and conflicts */
   setPrWatch: publicProcedure
     .input(z.object({ id: z.string(), on: z.boolean() }))
@@ -591,12 +112,10 @@ export const agentRouter = router({
       onPrWatchToggled(input.id, input.on);
       return getAgent(ctx.db, input.id);
     }),
-
   /** What the PR watch last saw (in memory, never calls gh) */
   prWatchStatus: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(({ input }) => getPrWatchStatus(input.id)),
-
   /** Stop quietly and keep the session for Resume (marked before the stop, so its exit is quiet too) */
   suspend: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     if (!getAgent(ctx.db, input.id)) return null;
@@ -604,7 +123,6 @@ export const agentRouter = router({
     await ctx.agentManager.stop(ctx.db, input.id);
     return getAgent(ctx.db, input.id);
   }),
-
   /** Sessions the idle sweep leaves alone: pinned in Watching or with an unread attention item */
   setIdleExempt: publicProcedure
     .input(z.object({ agentIds: z.array(z.string().max(128)).max(500) }))
@@ -612,12 +130,10 @@ export const agentRouter = router({
       setIdleExempt(input.agentIds);
       return { ok: true };
     }),
-
   /** The numbered question the agent's screen is waiting on (permission prompt, approval) */
   screenDialog: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(({ input }) => getPtyHost().screenDialog(input.id)),
-
   /** Press one option, only on an agent waiting on the same question the user saw: two prompts
    *  in a row both offer 1/2/3, and a stale click must not answer the next one */
   answerDialog: publicProcedure
@@ -644,35 +160,28 @@ export const agentRouter = router({
       ctx.agentManager.write(input.id, input.key);
       return { ok: true };
     }),
-
   /** Which live agents have the Exegol MCP tools connected (pushed on mcp:status after this) */
   mcpStatus: publicProcedure.query(({ ctx }) => ({ agents: getMcpAgentStates(ctx.db) })),
-
   /** T200.4: the user's follow-up queue, typed at the agent's turn boundary (in memory) */
   followUps: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(({ input }) => listFollowUps(input.id)),
-
   queueFollowUp: publicProcedure
     .input(z.object({ id: z.string(), text: z.string().min(1).max(FOLLOW_UP_MAX_CHARS) }))
     .mutation(({ ctx, input }) => followUpCall(() => queueFollowUp(ctx.db, input.id, input.text))),
-
   removeFollowUp: publicProcedure
     .input(z.object({ id: z.string(), itemId: z.string().max(100) }))
     .mutation(({ input }) => removeFollowUp(input.id, input.itemId)),
-
   /** Interrupt, wait for the prompt (STEER_TIMEOUT_MS cap), type; past the cap it stays queued */
   steer: publicProcedure
     .input(z.object({ id: z.string(), text: z.string().min(1).max(FOLLOW_UP_MAX_CHARS) }))
     .mutation(({ ctx, input }) => followUpCall(() => steerFollowUp(ctx.db, input.id, input.text))),
-
   stop: publicProcedure.input(z.object({ id: z.string() })).mutation(async ({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);
     if (!agent) return null;
     await ctx.agentManager.stop(ctx.db, input.id);
     return getAgent(ctx.db, input.id) ?? agent;
   }),
-
   /**
    * Closing a pane retires the session — it does NOT destroy it.
    *
@@ -694,7 +203,6 @@ export const agentRouter = router({
     archiveAgent(ctx.db, input.id);
     return { success: true, archived: true };
   }),
-
   // Returns null instead of throwing: stale pane references to deleted
   // agents are a recoverable state, not an error.
   getStatus: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
@@ -705,7 +213,6 @@ export const agentRouter = router({
       currentStep: agent.currentStep,
     };
   }),
-
   // No-ops silently if the agent was deleted mid-update (e.g., user closed
   // the pane while a push event was in flight).
   updateStatus: publicProcedure
@@ -722,7 +229,6 @@ export const agentRouter = router({
       updateAgentStatus(ctx.db, input.id, input.status, input.currentStep);
       return getAgent(ctx.db, input.id) ?? null;
     }),
-
   /** T106 — Resolve the on-disk worktree path for an agent (for "View diff"). */
   getWorktreePath: publicProcedure
     .input(z.object({ agentId: z.string() }))
@@ -739,172 +245,4 @@ export const agentRouter = router({
     }),
 
   // ─── T65: Parallel Multi-Agent ────────────────────────────────────────
-
-  spawnParallel: publicProcedure
-    .input(
-      z.object({
-        projectId: z.string().min(1),
-        taskDescription: z.string().min(1),
-        /** CLI types for each parallel variant (e.g. ["claude-code", "gemini", "codex"]) */
-        cliTypes: z.array(z.string().min(1)).min(2).max(5),
-        /** Use isolated worktrees for each variant */
-        useWorktree: z.boolean().default(true),
-        branchPrefix: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const manager = ctx.agentManager;
-      const agentIds: string[] = [];
-      const errors: string[] = [];
-
-      // Spawn each variant in parallel
-      const spawnPromises = input.cliTypes.map(async (cliType, index) => {
-        const branchName = input.branchPrefix
-          ? `${input.branchPrefix}-v${index + 1}`
-          : `exegol/parallel-v${index + 1}`;
-        const agent = createAgent(ctx.db, {
-          projectId: input.projectId,
-          cliType: cliType as AgentCliType,
-          taskDescription: input.taskDescription,
-        });
-        agentIds.push(agent.id);
-        try {
-          await manager.spawn(ctx.db, agent, {
-            projectId: input.projectId,
-            cliType: cliType as AgentCliType,
-            taskDescription: input.taskDescription,
-            useWorktree: input.useWorktree,
-            branchName,
-          });
-        } catch (err) {
-          updateAgentStatus(ctx.db, agent.id, "failed", String(err));
-          errors.push(`${cliType}: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      });
-
-      await Promise.all(spawnPromises);
-
-      if (agentIds.length === 0) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: `All parallel spawns failed: ${errors.join("; ")}`,
-        });
-      }
-
-      // Create the parallel run record
-      const run = createParallelRun(ctx.db, {
-        projectId: input.projectId,
-        taskDescription: input.taskDescription,
-        cliTypes: input.cliTypes,
-        agentIds,
-      });
-
-      // Link agents to the parallel run
-      for (const agentId of agentIds) {
-        ctx.db.prepare("UPDATE agents SET parallel_run_id = ? WHERE id = ?").run(run.id, agentId);
-      }
-
-      return { run, agentIds, errors };
-    }),
-
-  listParallelRuns: publicProcedure
-    .input(z.object({ projectId: z.string() }))
-    .query(({ ctx, input }) => {
-      return listParallelRuns(ctx.db, input.projectId);
-    }),
-
-  getParallelRun: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
-    return getParallelRun(ctx.db, input.id) ?? null;
-  }),
-
-  /** T107 — enriched comparator payload: single round-trip, server-side N work. */
-  getParallelRunDetails: publicProcedure
-    .input(z.object({ runId: z.string() }))
-    .query(({ ctx, input }) => {
-      const run = getParallelRun(ctx.db, input.runId);
-      if (!run) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: `Parallel run ${input.runId} not found`,
-        });
-      }
-      return enrichParallelRunForComparison(ctx.db, run);
-    }),
-
-  /** T131 — promote & clean is the default: losers' worktrees + branches are
-   *  removed unless dirty (reported back, unset `clean` or pass `force` to
-   *  override). The winner is never touched — defer mode. */
-  promoteParallelAgent: publicProcedure
-    .input(
-      z.object({
-        runId: z.string(),
-        agentId: z.string(),
-        clean: z.boolean().default(true),
-        force: z.boolean().default(false),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const cleanup = await promoteParallelAgent(ctx.db, input.runId, input.agentId, {
-        clean: input.clean,
-        force: input.force,
-      });
-      return { success: true, cleanup };
-    }),
-
-  cancelParallelRun: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const run = getParallelRun(ctx.db, input.id);
-      if (!run) throw new TRPCError({ code: "NOT_FOUND" });
-      const manager = ctx.agentManager;
-      // Stop all running agents in the group: each stop is independent
-      await Promise.all(
-        run.agentIds
-          .filter((agentId) => {
-            const status = getAgent(ctx.db, agentId)?.status;
-            return status === "running" || status === "spawning" || status === "waiting_input";
-          })
-          .map((agentId) => manager.stop(ctx.db, agentId)),
-      );
-      updateParallelRunStatus(ctx.db, input.id, "cancelled");
-      return { success: true };
-    }),
-
-  /** T104 — Run preflight checks before spawning an agent.
-   *  Returns errors (blocking) and warnings (non-blocking) without side effects. */
-  preflight: publicProcedure
-    .input(
-      z.object({
-        cliType: z.string(),
-        projectId: z.string(),
-        useWorktree: z.boolean().optional(),
-      }),
-    )
-    .query(async ({ ctx, input }) => {
-      const provider = ctx.providerRegistry.get(input.cliType);
-      if (!provider) {
-        return {
-          ok: false,
-          errors: [{ code: "UNKNOWN_CLI", message: `Unknown CLI type: ${input.cliType}` }],
-          warnings: [],
-        };
-      }
-      const project = ctx.db
-        .prepare("SELECT path FROM projects WHERE id = ?")
-        .get(input.projectId) as { path: string } | undefined;
-      if (!project) {
-        return {
-          ok: false,
-          errors: [{ code: "PROJECT_NOT_FOUND", message: "Project not found" }],
-          warnings: [],
-        };
-      }
-      return runPreflight({
-        cliType: input.cliType as Parameters<typeof runPreflight>[0]["cliType"],
-        command: resolveCommand(provider.command),
-        projectPath: project.path,
-        useWorktree: input.useWorktree,
-        coreRustLoaded: !!coreRust,
-      });
-    }),
 });
