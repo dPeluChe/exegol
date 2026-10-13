@@ -40,6 +40,7 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+D` / `Cmd+Shift+D` | `Ctrl+Shift+D` / `Ctrl+Shift+Alt+D` | New pane to the right / below |
 | `Cmd+Y` | `Ctrl+Shift+Y` | Terminal beside the focused pane, in the folder it works in (in the pane itself when it is empty) |
 | `T` | same | In an empty pane's launcher (no field focused): terminal in the selected Run in folder |
+| `R` `N` `T` `F` `B` `1-9` | same | In an ended session's pane (no field focused): Resume (Restart, or Reopen for a terminal), new session of the same CLI there, Terminal, Files, Browser, switch to another agent in the same place |
 | `Cmd+L` | `Ctrl+Shift+L` | Browser pane (or floating browser): select its address bar |
 | `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere on macOS Cmd+R reloads the window |
 | `Cmd+Enter` | `Ctrl+Enter` | Launch from the spawn dialogs, send a diff comment |

@@ -75,10 +75,12 @@ export function useSpawnAgent({
   projectId,
   targetPaneId,
   onClose,
+  onSpawned,
 }: {
   projectId: string;
   targetPaneId?: string;
   onClose: () => void;
+  onSpawned?: (agentId: string) => void;
 }) {
   const [spawning, setSpawning] = useState(false);
   const addAgent = useAgentStore((s) => s.addAgent);
@@ -105,6 +107,7 @@ export function useSpawnAgent({
         switchSection("agents");
         const paneId = placeInWorkspace(agent.id, targetPaneId);
         if (paneId) focusNewPane(paneId);
+        onSpawned?.(agent.id);
         onClose();
       } catch (err) {
         console.error("[SpawnAgentModal] Spawn failed:", err);
@@ -112,7 +115,7 @@ export function useSpawnAgent({
         setSpawning(false);
       }
     },
-    [projectId, addAgent, createTerminal, setFocusedAgent, onClose, targetPaneId],
+    [projectId, addAgent, createTerminal, setFocusedAgent, onClose, onSpawned, targetPaneId],
   );
 
   return { spawning, spawn };

@@ -43,6 +43,7 @@ interface SpawnFormInit {
   initialCliType?: string;
   initialSession: SessionChoice;
   initialAccessMode: AgentAccessMode;
+  initialBranch?: string | null;
 }
 
 /** What the user picked in the launch modal, and the handlers that keep the picks consistent. */
@@ -54,6 +55,7 @@ export function useSpawnForm({
   initialCliType,
   initialSession,
   initialAccessMode,
+  initialBranch,
 }: SpawnFormInit) {
   const [task, setTask] = useState(initialTask ?? "");
   const [pickedProviderId, setPickedProviderId] = useState(
@@ -64,9 +66,11 @@ export function useSpawnForm({
   // several agents on ONE branch is a property of how that project is run, not
   // a per-spawn decision. Defaulting to "isolated" every time meant unchecking
   // it on every single launch for review-style work (Antonio, 2026-08-13).
-  const [useWorktree, setUseWorktree] = useState(() => readWorktreePreference(projectId));
-  const [branchName, setBranchName] = useState("");
-  const [branchEdited, setBranchEdited] = useState(false);
+  const [useWorktree, setUseWorktree] = useState(
+    () => !!initialBranch || readWorktreePreference(projectId),
+  );
+  const [branchName, setBranchName] = useState(initialBranch ?? "");
+  const [branchEdited, setBranchEdited] = useState(!!initialBranch);
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [session, setSession] = useState<SessionChoice>(initialSession);
   /** null = inherit the provider's configured args; a boolean overrides it. */
