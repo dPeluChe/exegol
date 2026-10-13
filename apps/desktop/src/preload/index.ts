@@ -109,6 +109,11 @@ contextBridge.exposeInMainWorld("api", {
     redraw: (id: string) => safe.send("terminal:redraw", id),
     /** Forget the session's history in main and the sidecar (Clear Terminal) */
     clear: (id: string) => safe.send("terminal:clear", id),
+    /** How many terminal views repainted after a GPU process crash (main logs the count) */
+    gpuRepainted: (views: number) => safe.send("terminal:gpu-repainted", views),
+    /** Mounted views and live WebGL contexts in this window, logged with a GPU crash */
+    gpuStats: (stats: { views: number; webgl: number; capped: boolean }) =>
+      safe.send("terminal:gpu-stats", stats),
     /** The PTY's current grid (T194 mirrors), null when the session is gone */
     getSize: (id: string): Promise<{ cols: number; rows: number } | null> =>
       safe.invoke("terminal:get-size", id),
@@ -275,6 +280,10 @@ contextBridge.exposeInMainWorld("api", {
   },
   /** Terminals not answering (the PTY sidecar's health watch) and back */
   onSidecarHealth: (callback: (event: unknown) => void) => listen("sidecar:health", callback),
+  /** The GPU process crashed: WebGL terminals must rebuild and repaint */
+  onGpuProcessGone: (callback: (event: unknown) => void) => listen("gpu:process-gone", callback),
+  /** Three GPU crashes in 10 min: terminals stay on the DOM renderer this session */
+  gpuDomOnly: (): Promise<boolean> => safe.invoke("gpu:dom-only"),
   onPipelineStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("pipeline:status-changed", handler as never);

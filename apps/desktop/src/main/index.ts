@@ -44,6 +44,7 @@ import { ensureCanonicalPaths } from "./skills/paths";
 import { integrateAppImage } from "./system/appimage-integration";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
+import { handleGpuProcessGone, startGpuWatch, stopGpuWatch } from "./system/gpu-watch";
 import { scheduleHousekeeping } from "./system/housekeeping";
 import { backfillProjectIcons } from "./system/project-icons";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
@@ -161,6 +162,7 @@ app.whenReady().then(async () => {
   });
   startMetricsCollector();
   startSidecarHealthWatch(() => getPtyHost().getSidecarClient());
+  startGpuWatch();
   getQueueExecutor().start(getDb());
   getAgentManager().startShellPromotion(getDb());
   startPrWatch();
@@ -224,6 +226,8 @@ app.on("child-process-gone", (_event, details) => {
   logger.error(
     `[Crash] ${details.type} process gone (${details.reason}, exit ${details.exitCode})${details.name ? `: ${details.name}` : ""}`,
   );
+  // WebGL terminals stay blank after this (worst when the window was hidden): renderers rebuild
+  if (details.type === "GPU") handleGpuProcessGone(details);
 });
 
 installSignalHandlers(() => runTeardown(teardownSteps()));
@@ -265,6 +269,7 @@ function teardownSteps() {
     { name: "queueExecutor", run: () => getQueueExecutor().stop() },
     { name: "metrics", run: stopMetricsCollector },
     { name: "sidecarHealth", run: stopSidecarHealthWatch },
+    { name: "gpuWatch", run: stopGpuWatch },
     { name: "messageSweep", run: stopSweep },
     { name: "prWatch", run: stopPrWatch },
     { name: "database", run: closeDatabase },

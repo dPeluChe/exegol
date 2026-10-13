@@ -383,6 +383,9 @@
     "log:renderer-error",
     "terminal:redraw",
     "terminal:clear",
+    "terminal:gpu-repainted",
+    "terminal:gpu-stats",
+    "gpu:dom-only",
     "terminal:resized",
     "app:version",
     "menu:new-tab",
@@ -448,6 +451,7 @@
     "dictation:engine",
     "dictation:key",
     "dictation:done",
-    "sidecar:health"
+    "sidecar:health",
+    "gpu:process-gone"
   ]
 }
