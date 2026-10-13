@@ -142,7 +142,7 @@ describe("buildClaudeCodeHooksFile", () => {
     const hooks = written("a1");
     const fileEvent = (entry: { hooks: unknown[] } | undefined) =>
       (entry?.hooks as { command?: string }[] | undefined)
-        ?.map((h) => h.command?.match(/notify\.sh" ([a-z_]+); fi$/)?.[1])
+        ?.map((h) => h.command?.match(/notify\.sh" ([a-z_]+) agent$/)?.[1])
         .find(Boolean);
     expect(fileEvent(hooks.Stop?.[0])).toBe("stop");
     expect(fileEvent(hooks.Notification?.[0])).toBe("permission_needed");

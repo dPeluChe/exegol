@@ -2,18 +2,24 @@
 // Creates ~/.exegol/hooks/notify.sh for lifecycle event notification.
 // Keeps Exegol's guarded entries in ~/.claude/settings.json and ~/.codex/hooks.json.
 
+import { randomBytes } from "node:crypto";
 import {
+  accessSync,
+  chmodSync,
+  constants,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
   CLAUDE_ATTENTION_NOTIFICATIONS,
   CLAUDE_IDLE_NOTIFICATIONS,
@@ -71,10 +77,13 @@ export function sweepStaleAgentEvents(): void {
 function createNotifyScript(): void {
   const script = `#!/bin/bash
 # Exegol lifecycle notification hook.
-# Usage: notify.sh <event_type>
+# Usage: notify.sh <event_type> [agent]
 # Called by agent hooks (Claude Code, Codex, etc.) on lifecycle events.
 # Only fires for Exegol-managed agents (EXEGOL_AGENT_ID must be set).
 [ -z "$EXEGOL_AGENT_ID" ] && exit 0
+# A session with its own hooks file gets its events from there ("agent"); a global entry an
+# older Exegol build wrote unguarded must not send them twice
+[ -n "$EXEGOL_HOOKS_FILE" ] && [ "$2" != "agent" ] && exit 0
 EVENT_DIR="$HOME/.exegol/events"
 mkdir -p "$EVENT_DIR"
 EVENT_TYPE="\${1:-unknown}"
@@ -127,26 +136,32 @@ const NOTIFY_EVENTS = [
 ] as const;
 export type NotifyEvent = (typeof NOTIFY_EVENTS)[number];
 
-/** What releases before this one wrote: it started notify.sh for every session on the machine */
-const legacyNotifyCommand = (event: string, script: string) =>
-  `[ -x "${script}" ] && "${script}" ${event}`;
+/** Earlier forms, still recognized as Exegol's. The first ran notify.sh for every session */
+const previousNotifyCommands = (event: string, script: string) => [
+  `[ -x "${script}" ] && "${script}" ${event}`,
+  `if [ -n "$EXEGOL_AGENT_ID" ] && [ -z "$${HOOKS_FILE_ENV}" ] && [ -x "${script}" ]; then "${script}" ${event}; fi`,
+];
 
-/** A file-event hook. `global` does nothing unless the session is Exegol's and has no own file */
+/**
+ * A file-event hook, in a form sh, bash, zsh and fish all run, exiting 0 when skipped. `global`
+ * does nothing unless the session is Exegol's and has no hooks file of its own.
+ */
 export function notifyCommand(
   event: NotifyEvent,
   scope: "global" | "agent",
   script = NOTIFY_SCRIPT,
 ): string {
-  const guard =
-    scope === "global" ? `[ -n "$EXEGOL_AGENT_ID" ] && [ -z "$${HOOKS_FILE_ENV}" ] && ` : "";
-  return `if ${guard}[ -x "${script}" ]; then "${script}" ${event}; fi`;
+  const run = `[ ! -x "${script}" ] || "${script}" ${event}`;
+  return scope === "global"
+    ? `[ -z "$EXEGOL_AGENT_ID" ] || [ -n "$${HOOKS_FILE_ENV}" ] || ${run}`
+    : `${run} agent`;
 }
 
 /** Every command an Exegol release wrote to a global file: only these are ever removed */
 function ownedCommands(script: string): Set<string> {
   return new Set(
     NOTIFY_EVENTS.flatMap((e) => [
-      legacyNotifyCommand(e, script),
+      ...previousNotifyCommands(e, script),
       notifyCommand(e, "global", script),
     ]),
   );
@@ -160,6 +175,31 @@ export function isExegolHook(def: HookDef, script = NOTIFY_SCRIPT): boolean {
     def.hooks.length > 0 &&
     def.hooks.every((h) => h?.type === "command" && owned.has(h.command))
   );
+}
+
+/** What decides whether an Exegol entry changed; other keys (a user's "timeout") are kept */
+const hookCore = (d: HookDef) => ({
+  matcher: d.matcher,
+  hooks: d.hooks.map((h) => ({ type: h.type, command: h.command })),
+});
+
+/** The new entries, keeping keys a user added to the Exegol entry they replace */
+function carryExtraKeys(ours: HookDef[], desired: HookDef[]): HookDef[] {
+  const left = [...ours];
+  return desired.map((def) => {
+    const i = left.findIndex((o) => o.matcher === def.matcher);
+    const prev = left.splice(i >= 0 ? i : 0, 1)[0];
+    if (!prev) return def;
+    const { matcher: _m, hooks: prevHooks, ...extra } = prev;
+    return {
+      ...def,
+      ...extra,
+      hooks: def.hooks.map((h, j) => {
+        const { type: _t, command: _c, ...actionExtra } = prevHooks[j] ?? ({} as HookAction);
+        return { ...h, ...actionExtra };
+      }),
+    };
+  });
 }
 
 export interface HooksMerge {
@@ -193,13 +233,16 @@ export function withExegolHooks(
   let removed = 0;
   let added = 0;
   for (const event of events) {
-    const existing = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : [];
-    const ours = existing.filter(isOurs);
+    const value = hooks[event];
+    // Not a list: not a shape we understand, so not ours to replace
+    if (value !== undefined && !Array.isArray(value)) continue;
+    const existing = (value as unknown[] | undefined) ?? [];
+    const ours = existing.filter(isOurs) as HookDef[];
     const desired = managed.filter((m) => m.event === event).map((m) => m.def);
-    if (JSON.stringify(ours) === JSON.stringify(desired)) continue;
+    if (JSON.stringify(ours.map(hookCore)) === JSON.stringify(desired.map(hookCore))) continue;
     removed += ours.length;
     added += desired.length;
-    const next = [...existing.filter((d) => !isOurs(d)), ...desired];
+    const next = [...existing.filter((d) => !isOurs(d)), ...carryExtraKeys(ours, desired)];
     if (next.length > 0) hooks[event] = next;
     else delete hooks[event];
   }
@@ -207,44 +250,97 @@ export function withExegolHooks(
   return { settings: { ...settings, hooks }, removed, added };
 }
 
-/** The file's own indent and final newline, so a rewrite only shows the hooks in a diff */
+const BOM = "﻿";
+
+/** The file's own BOM, indent, line endings and final newline: a rewrite only shows the hooks */
 export function formatLike(original: string, value: unknown): string {
-  const indent = /^\{\r?\n([ \t]+)\S/.exec(original)?.[1] ?? 2;
-  const body = JSON.stringify(value, null, indent);
-  return original === "" || original.endsWith("\n") ? `${body}\n` : body;
+  const text = original.startsWith(BOM) ? original.slice(1) : original;
+  const indent = /^\{\r?\n([ \t]+)\S/.exec(text)?.[1] ?? 2;
+  let body = JSON.stringify(value, null, indent);
+  if (text === "" || text.endsWith("\n")) body += "\n";
+  // JSON.stringify escapes newlines inside strings, so every raw \n here is a line break
+  if (text.includes("\r\n")) body = body.replace(/\n/g, "\r\n");
+  return original.startsWith(BOM) ? BOM + body : body;
 }
 
-/** Rewrite a hooks file only when Exegol's entries change, after a backup of what was there */
-function syncHooksFile(path: string, label: string, managed: ManagedHook[]): void {
+const skipLogged = new Set<string>();
+function skipOnce(label: string, why: string): void {
+  if (skipLogged.has(label)) return;
+  skipLogged.add(label);
+  logger.warn(`[AgentWrappers] ${label} ${why}, leaving it alone`);
+}
+
+const writable = (path: string) => {
   try {
-    const original = existsSync(path) ? readFileSync(path, "utf-8") : "";
+    accessSync(path, constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Rewrite a hooks file only when Exegol's entries change. A symlink (stow, chezmoi,
+ * home-manager) is followed and the real file is written next to itself; a read-only file or
+ * folder (a nix store) is skipped. The first rewrite keeps the original as `.exegol-backup`.
+ * Returns whether it wrote.
+ */
+export function syncHooksFile(
+  path: string,
+  label: string,
+  managed: ManagedHook[],
+  script = NOTIFY_SCRIPT,
+): boolean {
+  try {
+    const exists = existsSync(path);
+    if (!exists && lstatSync(path, { throwIfNoEntry: false })) {
+      skipOnce(label, "is a link to a missing file");
+      return false;
+    }
+    const target = exists ? realpathSync(path) : path;
+    if ((exists && !writable(target)) || !writable(dirname(target))) {
+      skipOnce(label, "is read-only");
+      return false;
+    }
+    const raw = exists ? readFileSync(target, "utf-8") : "";
+    const original = raw.startsWith(BOM) ? raw.slice(1) : raw;
     let settings: unknown = {};
     if (original.trim()) {
       try {
         settings = JSON.parse(original);
       } catch {
         // Never overwrite a file the user wrote by hand just because we can't parse it
-        logger.warn(`[AgentWrappers] ${label} is not valid JSON, leaving it alone`);
-        return;
+        skipOnce(label, "is not valid JSON");
+        return false;
       }
     }
     if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
-      logger.warn(`[AgentWrappers] ${label} is not a JSON object, leaving it alone`);
-      return;
+      skipOnce(label, "is not a JSON object");
+      return false;
     }
-    const merge = withExegolHooks(settings as Record<string, unknown>, managed);
-    if (merge.removed + merge.added === 0) return;
-    const mode = original ? statSync(path).mode & 0o777 : 0o644;
-    if (original) writeFileSync(`${path}.exegol-backup`, original, { mode });
+    const merge = withExegolHooks(settings as Record<string, unknown>, managed, script);
+    if (merge.removed + merge.added === 0) return false;
+
+    const dir = dirname(target);
+    const name = basename(target);
+    const mode = exists ? statSync(target).mode & 0o777 : 0o644;
+    for (const f of readdirSync(dir)) {
+      if (f.startsWith(`${name}.exegol-tmp`)) unlinkSync(join(dir, f));
+    }
+    const backup = join(dir, `${name}.exegol-backup`);
+    if (raw && !existsSync(backup)) writeFileSync(backup, raw, { mode: 0o600 });
     // Renamed into place: a CLI starting meanwhile never reads half a file
-    const tmp = `${path}.exegol-tmp`;
-    writeFileSync(tmp, formatLike(original, merge.settings), { mode });
-    renameSync(tmp, path);
+    const tmp = join(dir, `${name}.exegol-tmp-${process.pid}-${randomBytes(4).toString("hex")}`);
+    writeFileSync(tmp, formatLike(raw, merge.settings), { mode: 0o600 });
+    chmodSync(tmp, mode);
+    renameSync(tmp, target);
     logger.info(
       `[AgentWrappers] ${label}: ${merge.removed} Exegol hook entries removed, ${merge.added} added`,
     );
+    return true;
   } catch (err) {
     logger.warn(`[AgentWrappers] Failed to update ${label}:`, err);
+    return false;
   }
 }
 
