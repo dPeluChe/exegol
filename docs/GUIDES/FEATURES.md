@@ -104,6 +104,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 - **Browser pane**: a webview with URL bar and navigation, next to your agents. It remembers
   the page it was on, and can show it at a device size (desktop, laptop, tablet, mobile).
+  A page's `alert()`, `confirm()` and `prompt()` show as a bar inside the pane, never as a
+  window-wide dialog.
 - **Design mode**: click an element to send its selector, styles and HTML to an agent.
 - **Agents in the browser**: agents drive the project's browser pane through the Exegol MCP
   tools (`browser_open`, `browser_snapshot`, `browser_click`...), live in the same pane you see.

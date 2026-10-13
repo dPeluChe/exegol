@@ -35,6 +35,8 @@ import {
 } from "./control";
 import { projectsToMigrate, selectCookiesToCopy, toSetDetails } from "./cookie-migration";
 import { type BrowserLogEntry, LogRing, toLogLevel } from "./log-ring";
+import { forgetPaneDialogs } from "./page-dialogs";
+import { installPageEvents, trackPageEvents } from "./page-events";
 import { blocksAgentRequest, logUrl } from "./request-guard";
 import {
   type BrowserHost,
@@ -191,6 +193,7 @@ function trackWebview(wc: WebContents): void {
   const id = wc.id;
   ringOf(id);
   guardWebview(wc);
+  trackPageEvents(wc);
   wc.on("console-message", (...args: unknown[]) => {
     const d = args[0] as {
       level?: string;
@@ -229,6 +232,7 @@ function trackWebview(wc: WebContents): void {
       if (r.wcId !== id) continue;
       registered.delete(paneId);
       dictationPages.delete(paneId);
+      forgetPaneDialogs(paneId);
       forgetPane(paneId);
     }
   });
@@ -561,6 +565,7 @@ export function installAgentBrowser(db: Database.Database): void {
     });
   });
 
+  installPageEvents((wcId) => paneOfWebContents(wcId)?.paneId);
   ipcMain.handle("browser:register-pane", (event, input) =>
     registerPane(db, event.sender, input ?? {}),
   );

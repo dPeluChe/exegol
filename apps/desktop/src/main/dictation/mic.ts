@@ -1,5 +1,6 @@
 import type { MicStatus } from "@exegol/shared";
 import { app, type Session, session, shell, systemPreferences, type WebContents } from "electron";
+import { pageClipboardDecision } from "../browser/page-events";
 import { getMainWindow } from "../windows/main-window-ref";
 import { allowMediaRequest } from "./media-policy";
 
@@ -50,6 +51,9 @@ const appOrigin = (): string => {
 };
 
 function decide(wc: WebContents | null, permission: string, mediaTypes: string[], url: string) {
+  // One handler per session: browser pane pages' clipboard is decided here too
+  const clipboard = pageClipboardDecision(wc, permission);
+  if (clipboard !== null) return clipboard;
   const main = getMainWindow();
   return allowMediaRequest({
     permission,
