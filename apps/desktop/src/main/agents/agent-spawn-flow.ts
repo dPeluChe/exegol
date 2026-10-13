@@ -37,6 +37,7 @@ import {
 } from "./spawn-env";
 import { findReusableWorktree, findWorktreeHolding, requestedBranchFor } from "./spawn-target";
 import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
+import { HOOKS_FILE_ENV } from "./wrappers";
 
 interface PtyInvocation {
   shell: string;
@@ -271,6 +272,7 @@ export function buildPtyInvocation(
   let env: Record<string, string>;
   let stdinCommand: string | null = null;
   let blindResume = false;
+  let claudeHooksFile: string | null = null;
 
   // oh-my-zsh's interactive update prompt blocks shell init (no ready marker,
   // frozen pane) — suppress it in every PTY we spawn.
@@ -380,6 +382,7 @@ export function buildPtyInvocation(
       });
       if (hooksPath) {
         fullCommand = `${fullCommand} --settings ${hooksPath}`;
+        claudeHooksFile = hooksPath;
       }
     }
 
@@ -472,6 +475,8 @@ export function buildPtyInvocation(
       EXEGOL_AGENT_ID: agent.id,
       EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
     } as Record<string, string>;
+    // The global settings.json hooks then step aside: this file drops the same events
+    if (claudeHooksFile) env[HOOKS_FILE_ENV] = claudeHooksFile;
     if (mcpToken) env.EXEGOL_MCP_TOKEN = mcpToken;
   }
 
