@@ -1,5 +1,6 @@
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
+import { type WebglBudget, webglBudget } from "./webgl-budget";
 
 /** Backoff: a crashed GPU process (window moved to another display) takes seconds to return */
 const RETRY_DELAYS_MS = [250, 1_000, 3_000];
@@ -12,6 +13,8 @@ export interface WebglController {
   attach: () => void;
   detach: () => void;
   dispose: () => void;
+  /** A fresh addon and retry budget: after a GPU process crash the old context can look alive yet never draw */
+  rebuild: () => void;
   /** Whether WebGL ultimately failed and we're on the DOM renderer. */
   hasFallenBack: () => boolean;
 }
@@ -25,7 +28,11 @@ export interface WebglController {
  * owner kick the PTY: a TUI stayed blank after a GPU crash until it was resized.
  * Only `onContextLoss`: a second DOM listener on the same canvas double-fires per loss.
  */
-export function createWebglController(terminal: Terminal, onLost?: () => void): WebglController {
+export function createWebglController(
+  terminal: Terminal,
+  onLost?: () => void,
+  budget: WebglBudget = webglBudget,
+): WebglController {
   let addon: WebglAddon | null = null;
   let scheduledTimer: ReturnType<typeof setTimeout> | null = null;
   let retries = 0;
@@ -40,10 +47,19 @@ export function createWebglController(terminal: Terminal, onLost?: () => void): 
     }
   }
 
+  function dropAddon(): void {
+    if (!addon) return;
+    addon.dispose();
+    addon = null;
+    budget.release();
+  }
+
+  // Denied at the cap: this terminal draws on the DOM renderer until a slot frees
+  const attachWhenFree = () => attach();
+
   function onContextLost(): void {
     if (disposed) return;
-    addon?.dispose();
-    addon = null;
+    dropAddon();
     onLost?.();
     const now = Date.now();
     if (now - lastLossAt > STABLE_RESET_MS) retries = 0;
@@ -69,6 +85,7 @@ export function createWebglController(terminal: Terminal, onLost?: () => void): 
 
   function attach(): void {
     if (disposed || fellBack || addon) return;
+    if (!budget.acquire(attachWhenFree)) return;
     try {
       const webgl = new WebglAddon();
       webgl.onContextLoss(() => onContextLost());
@@ -77,13 +94,23 @@ export function createWebglController(terminal: Terminal, onLost?: () => void): 
     } catch {
       // WebGL unavailable on this device: xterm keeps the DOM renderer
       fellBack = true;
+      budget.release();
     }
   }
 
   function detach(): void {
     clearScheduled();
-    addon?.dispose();
-    addon = null;
+    budget.cancelWait(attachWhenFree);
+    dropAddon();
+  }
+
+  function rebuild(): void {
+    if (disposed) return;
+    detach();
+    retries = 0;
+    lastLossAt = 0;
+    fellBack = false;
+    attach();
   }
 
   function dispose(): void {
@@ -95,6 +122,7 @@ export function createWebglController(terminal: Terminal, onLost?: () => void): 
     attach,
     detach,
     dispose,
+    rebuild,
     hasFallenBack: () => fellBack,
   };
 }

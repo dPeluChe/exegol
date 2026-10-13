@@ -4,6 +4,7 @@ import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
+import { GPU_REPAINT_EVENT, type GpuRepaintDetail } from "../../lib/gpu-repaint";
 import { claimPaneFocus } from "../../lib/pane-focus";
 import { useTerminalStore } from "../../stores/terminals";
 import {
@@ -27,6 +28,7 @@ import {
 } from "./terminal-types";
 import { createWebglController, type WebglController } from "./terminal-webgl";
 import { HIDE_DEBOUNCE_MS, useTerminalVisibility } from "./use-terminal-visibility";
+import { trackTerminalView } from "./webgl-budget";
 
 /** Sessions already kicked by this renderer (see kickAltScreen) */
 const kickedSessions = new Set<string>();
@@ -69,6 +71,9 @@ export function useXterm({
   const refitRef = useRef<() => void>(() => {});
   // The live session in state, so the visibility effects re-run on every rebuild
   const [session, setSession] = useState<TerminalSession | null>(null);
+  // Inactive tabs and the Agents area under the Dashboard are `invisible`, which an
+  // IntersectionObserver still counts as on screen: only this keeps them off WebGL
+  const [shown, setShown] = useState(true);
 
   const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
   const setTerminalSize = useTerminalStore((s) => s.setTerminalSize);
@@ -199,12 +204,15 @@ export function useXterm({
     onReady?.();
 
     const resizeObserver = observeContainerSize(container, mirror, refit);
+    const untrackView = trackTerminalView();
+    setShown(isShown(container));
     const mousePress = trackMousePress(container);
 
     return () => {
       clearTimeout(settleTimer);
       clearTimeout(kickTimer);
       resizeObserver.disconnect();
+      untrackView();
       // WebGL context must be freed before the terminal itself is torn down.
       webglRef.current?.dispose();
       webglRef.current = null;
@@ -269,14 +277,15 @@ export function useXterm({
     // Mirrors draw on canvas: several open at once would eat into Chromium's
     // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
     const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
-    if (isVisible && !webglRef.current && !useCanvas) {
+    const onScreen = isVisible && shown;
+    if (onScreen && !webglRef.current && !useCanvas) {
       // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
       const controller = createWebglController(terminal, () =>
         window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
       );
       controller.attach();
       webglRef.current = controller;
-    } else if (!isVisible && webglRef.current) {
+    } else if (!onScreen && webglRef.current) {
       // Debounced like the IPC hide: scrolling past must not tear down and
       // rebuild a GL context and its glyph atlas every time
       const timer = setTimeout(() => {
@@ -285,7 +294,7 @@ export function useXterm({
       }, HIDE_DEBOUNCE_MS);
       return () => clearTimeout(timer);
     }
-  }, [session, isVisible, mirror, cliType, agentId]);
+  }, [session, isVisible, shown, mirror, cliType, agentId]);
 
   // T155 (verify session): manual "Refresh Terminal" from the pane menu —
   // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
@@ -305,6 +314,29 @@ export function useXterm({
     };
     window.addEventListener("exegol:kick-terminal", handleKick);
     return () => window.removeEventListener("exegol:kick-terminal", handleKick);
+  }, [agentId, mirror, readOnly, handleResize]);
+
+  // GPU process crashed (lib/gpu-repaint): a context xterm "restored" while hidden can stay
+  // blank, so every view takes a new addon, refits, repaints and kicks an alt-screen TUI
+  useEffect(() => {
+    const handleGpuRepaint = (e: Event) => {
+      const terminal = terminalRef.current;
+      if (!terminal) return;
+      const detail = (e as CustomEvent<GpuRepaintDetail>).detail;
+      detail.views++;
+      try {
+        webglRef.current?.rebuild();
+        handleResize();
+        terminal.refresh(0, terminal.rows - 1);
+        if (!mirror && !readOnly && terminal.buffer.active.type === "alternate") {
+          window.api.terminal.redraw(agentId);
+        }
+      } catch {
+        /* not ready */
+      }
+    };
+    window.addEventListener(GPU_REPAINT_EVENT, handleGpuRepaint);
+    return () => window.removeEventListener(GPU_REPAINT_EVENT, handleGpuRepaint);
   }, [agentId, mirror, readOnly, handleResize]);
 
   // Keyboard navigation (lib/pane-focus) hands this pane the cursor
@@ -338,6 +370,7 @@ export function useXterm({
     // session (the dashboard hides; the workspace dispatches a refit)
     const handleRefit = () => {
       const terminal = terminalRef.current;
+      if (containerRef.current) setShown(isShown(containerRef.current));
       if (!terminal) return;
       try {
         handleResize();
@@ -355,6 +388,11 @@ export function useXterm({
   }, [handleResize]);
 
   return { containerRef, terminalRef, fitAddonRef, serializeAddonRef };
+}
+
+/** `visibility: hidden` on an ancestor (a hidden tab, the Agents area under the Dashboard) */
+function isShown(el: HTMLElement): boolean {
+  return el.checkVisibility?.({ visibilityProperty: true }) ?? true;
 }
 
 /** Refits on every box change; `disconnect` also cancels a pending mirror refit */

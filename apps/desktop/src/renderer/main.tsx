@@ -5,6 +5,7 @@ import App from "./App";
 import { LoadingSpinner } from "./components/common";
 import { TitleTooltips } from "./components/common/TitleTooltips";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { installGpuRepaint } from "./lib/gpu-repaint";
 import { queryClient } from "./lib/query-client";
 import { installRendererErrorReporting } from "./lib/report-error";
 import "./styles/globals.css";
@@ -27,6 +28,7 @@ const SettingsRoot = lazy(() =>
 focusManager.setEventListener((setFocused) => window.api.onWindowFocus(setFocused));
 
 installRendererErrorReporting();
+installGpuRepaint();
 
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("Root element not found");
