@@ -52,7 +52,7 @@ const appOrigin = (): string => {
 
 function decide(wc: WebContents | null, permission: string, mediaTypes: string[], url: string) {
   // One handler per session: browser pane pages' clipboard is decided here too
-  const clipboard = pageClipboardDecision(wc, permission);
+  const clipboard = pageClipboardDecision(wc, permission, url);
   if (clipboard !== null) return clipboard;
   const main = getMainWindow();
   return allowMediaRequest({

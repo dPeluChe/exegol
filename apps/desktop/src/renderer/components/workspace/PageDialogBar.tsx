@@ -10,6 +10,8 @@ interface PageDialog {
   host: string;
   message: string;
   defaultPrompt: string;
+  /** The page keeps opening dialogs */
+  offerBlock: boolean;
 }
 
 const btn =
@@ -74,6 +76,18 @@ function PageDialogRow({
         {dialog.message && (
           <div className="max-h-24 overflow-auto whitespace-pre-wrap break-words">
             {dialog.message}
+          </div>
+        )}
+        {dialog.offerBlock && (
+          <div className="mt-0.5 text-text-muted">
+            This page keeps opening dialogs.{" "}
+            <button
+              type="button"
+              className="underline hover:text-text-primary"
+              onClick={() => void window.api.browser.blockPageDialogs(dialog.id).catch(() => {})}
+            >
+              Block dialogs from this page
+            </button>
           </div>
         )}
         {dialog.type === "prompt" && (

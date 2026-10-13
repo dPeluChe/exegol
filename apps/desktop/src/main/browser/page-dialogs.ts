@@ -2,8 +2,9 @@
  *  waiting for the user, and the notes an agent gets about them. No Electron here */
 
 export type PageDialogType = "alert" | "confirm" | "prompt";
-/** show: a bar in the pane; accept: alert closed as OK; cancel: confirm false, prompt null */
-export type PageDialogDecision = "show" | "accept" | "cancel";
+/** show: a bar in the pane; accept: alert closed as OK; cancel: confirm false, prompt null;
+ *  native: Electron's own box (a webview in no pane) */
+export type PageDialogDecision = "native" | "show" | "accept" | "cancel";
 
 export interface PendingPageDialog {
   id: string;
@@ -12,7 +13,24 @@ export interface PendingPageDialog {
   type: PageDialogType;
   host: string;
   answer: (ok: boolean, text: string) => void;
+  /** Takes the bar away (the dialog went without an answer from it) */
+  notifyClosed?: () => void;
 }
+
+export interface PageDialogContext {
+  hasPane: boolean;
+  agentActing: boolean;
+  /** The user's own click or key on the page came after the agent's last action */
+  userGestureAfterAgent: boolean;
+  /** Dialogs of this page already waiting in the pane */
+  pendingOnPage: number;
+  /** The user blocked this page's dialogs (until it navigates) */
+  blocked: boolean;
+}
+
+export const MAX_PENDING_PER_PAGE = 3;
+const FLOOD_COUNT = 3;
+const FLOOD_WINDOW_MS = 30_000;
 
 const MAX_NOTES = 10;
 export const MAX_DIALOG_TEXT = 2_000;
@@ -34,16 +52,24 @@ export function dialogHost(url: unknown): string {
 export const isPageDialogType = (t: unknown): t is PageDialogType =>
   t === "alert" || t === "confirm" || t === "prompt";
 
-/** An agent driving the pane never waits on a page dialog: alerts close, questions are
- *  cancelled. A page in no registered pane has nobody to answer it */
-export function decidePageDialog(
-  type: PageDialogType,
-  pane: { registered: boolean; agentActing: boolean },
-): PageDialogDecision {
-  if (!pane.registered) return type === "alert" ? "accept" : "cancel";
-  if (!pane.agentActing) return "show";
-  return type === "alert" ? "accept" : "cancel";
+const auto = (type: PageDialogType): PageDialogDecision => (type === "alert" ? "accept" : "cancel");
+
+/** An agent driving the pane never waits on a page dialog (alerts close, questions are
+ *  cancelled) unless the user just acted on the page themselves */
+export function decidePageDialog(type: PageDialogType, c: PageDialogContext): PageDialogDecision {
+  if (!c.hasPane) return "native";
+  if (c.blocked || c.pendingOnPage >= MAX_PENDING_PER_PAGE) return auto(type);
+  if (c.agentActing && !c.userGestureAfterAgent) return auto(type);
+  return "show";
 }
+
+/** Dialog times of a page within the flood window, `now` included */
+export function recentDialogs(times: readonly number[], now: number): number[] {
+  return [...times.filter((t) => now - t < FLOOD_WINDOW_MS), now];
+}
+
+/** The page keeps opening dialogs: the bar offers to block them */
+export const isDialogFlood = (recent: readonly number[]): boolean => recent.length >= FLOOD_COUNT;
 
 /** What Chromium gets back: confirm false / prompt null on cancel */
 export function dialogResult(
@@ -112,9 +138,25 @@ export function dropPendingOf(wcId: number): PendingPageDialog[] {
   for (const d of pending.values()) {
     if (d.wcId !== wcId) continue;
     pending.delete(d.id);
+    d.notifyClosed?.();
     out.push(d);
   }
   return out;
+}
+
+/** Answers every dialog of a page as cancelled (the user blocked them) */
+export function cancelPendingOf(wcId: number): void {
+  for (const d of [...pending.values()]) {
+    if (d.wcId !== wcId) continue;
+    answerPending(d.id, false, "");
+    d.notifyClosed?.();
+  }
+}
+
+export function pendingCountOf(wcId: number): number {
+  let n = 0;
+  for (const d of pending.values()) if (d.wcId === wcId) n += 1;
+  return n;
 }
 
 /** The dialog the pane shows: an agent's tool would hang on the blocked page */

@@ -183,10 +183,12 @@ interface Window {
           host: string;
           message: string;
           defaultPrompt: string;
+          offerBlock: boolean;
         }) => void,
       ) => () => void;
       onPageDialogClosed: (callback: (closed: { id: string }) => void) => () => void;
       answerPageDialog: (answer: { id: string; ok: boolean; text?: string }) => Promise<boolean>;
+      blockPageDialogs: (id: string) => Promise<boolean>;
     };
     onPreviewLink: (
       callback: (link: { from: string; url: string; host: string; dropped: boolean }) => void,

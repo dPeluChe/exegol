@@ -19,6 +19,7 @@ import {
   logAction,
   requireHost,
   resolvePane,
+  touch,
   userHasControl,
 } from "./tool-guards";
 import {
@@ -65,6 +66,8 @@ export async function callBrowserTool(
   // The page is blocked on a dialog the pane shows: any page script would hang until answered
   const dialog = pendingOnPane(pane.paneId);
   if (dialog) return pageDialogBlockedResult(pane.paneId, dialog);
+  // Acting before the first page script: a dialog it raises is handled, not left hanging
+  touch(db, ctx, pane);
   let result: unknown;
   try {
     switch (tool) {
@@ -110,6 +113,12 @@ export async function callBrowserTool(
         break;
     }
   } catch (err) {
+    const raised = pendingOnPane(pane.paneId);
+    if (raised)
+      return withDialogNotes(
+        pageDialogBlockedResult(pane.paneId, raised),
+        takeDialogNotes(pane.paneId),
+      );
     logAction(db, ctx, {
       tool,
       paneId: pane.paneId,

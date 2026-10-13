@@ -10,7 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- A web page's `alert()`, `confirm()` or `prompt()` in a browser pane no longer opens an Exegol dialog that blocks the whole window: it shows as a bar inside that pane ("localhost:3000 says", OK / Cancel, a text field for prompt) and the rest of the app keeps working. `prompt()` works now (it used to return nothing). While an agent drives the pane, alerts close on their own and questions are cancelled, and the agent is told so. Pages can write to the clipboard; reading it needs your own click or key in the page first and is never allowed while an agent drives it
+- A web page's `alert()`, `confirm()` or `prompt()` in a browser pane no longer opens an Exegol dialog that blocks the whole window: it shows as a bar inside that pane ("localhost:3000 says", OK / Cancel, a text field for prompt) and the rest of the app keeps working. `prompt()` works now (it used to return nothing). While an agent drives the pane, alerts close on their own and questions are cancelled, and the agent is told so. A page that keeps opening dialogs can be blocked until it navigates. Pages can write to the clipboard; reading it needs your own click or key in the page first and is never allowed while an agent drives it
 - A pane opened with Cmd+D, Cmd+Shift+D, the split buttons or the pane menu now takes the keyboard: its launcher keys (T for a terminal) work at once, without clicking it first. Cmd+] and Ctrl+Tab into an empty launcher focus it too
 
 ### Added

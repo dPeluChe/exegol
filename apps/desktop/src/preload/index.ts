@@ -358,6 +358,8 @@ contextBridge.exposeInMainWorld("api", {
       listen("browser:page-dialog-closed", callback),
     answerPageDialog: (answer: { id: string; ok: boolean; text?: string }) =>
       safe.invoke("browser:page-dialog-answer", answer),
+    /** Until the page navigates, its dialogs are cancelled without showing */
+    blockPageDialogs: (id: string) => safe.invoke("browser:page-dialog-block", { id }),
   },
   /** An http(s) link clicked in a Files HTML preview (main refused the navigation) */
   onPreviewLink: (callback: (link: unknown) => void) => listen("files-preview:link", callback),

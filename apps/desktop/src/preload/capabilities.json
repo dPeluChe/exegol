@@ -434,6 +434,7 @@
     "browser:page-dialog",
     "browser:page-dialog-closed",
     "browser:page-dialog-answer",
+    "browser:page-dialog-block",
     "mcp:status",
     "files-preview:link",
     "agent:turn-changes",
