@@ -85,6 +85,15 @@ export function splitAndFocus(
   focusNewPane(id);
 }
 
+/** A new tab whose empty launcher takes the keyboard (Cmd+T, the tab bar +, the palette) */
+export function addTabAndFocus(label?: string): string {
+  const store = useWorkspaceStore.getState();
+  const tabId = store.addTab(label);
+  const paneId = getProjectState().tabs.find((t) => t.id === tabId)?.layout;
+  if (paneId?.type === "pane") focusNewPane(paneId.paneId);
+  return tabId;
+}
+
 /** Cmd+D / Cmd+Shift+D: split the pane keyboard actions act on */
 export function splitActivePane(direction: "horizontal" | "vertical"): void {
   const tabId = getProjectState().activeTabId;

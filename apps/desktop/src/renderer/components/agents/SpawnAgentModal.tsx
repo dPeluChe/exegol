@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useEnabledProviders, useRecheckProviders } from "../../hooks/use-providers";
 import { editKeys } from "../../lib/keymap";
+import { Kbd } from "../common/Kbd";
 import { ModelAndName } from "./ModelPicker";
 import { AccessModePicker, InstallHint, ProviderPicker, SkillPicker } from "./SpawnOptions";
 import { SpawnSessionPicker } from "./SpawnSessionPicker";
@@ -179,9 +180,10 @@ export function SpawnAgentModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:bg-white/5"
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:bg-white/5"
             >
               Cancel
+              <Kbd className="h-4 min-w-4 px-1 text-[9px]">esc</Kbd>
             </button>
             <LaunchButton canLaunch={canLaunch} spawning={spawning} onLaunch={handleSpawn} />
           </div>
