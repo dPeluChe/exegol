@@ -18,12 +18,7 @@ import {
 } from "../../lib/dictation/overlay-position";
 import { dictationChord } from "../../lib/dictation/shortcut";
 import { insertHint, TARGET_KINDS, targetName } from "../../lib/dictation/target";
-import {
-  clippedAbove,
-  shouldFollow,
-  unannounced,
-  wordCount,
-} from "../../lib/dictation/transcript-scroll";
+import { clippedAbove, shouldFollow, unannounced } from "../../lib/dictation/transcript-scroll";
 import { IS_MAC } from "../../lib/keymap";
 import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
@@ -170,25 +165,29 @@ function Recorder({ onCenter }: { onCenter?: () => void }) {
       <div
         {...DRAG_HANDLE}
         title="Drag to move, double-click to put back"
-        className="flex cursor-grab flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 pt-3"
+        className="grid cursor-grab grid-cols-[1fr_auto_1fr] items-center gap-2 px-3.5 pt-3"
       >
-        <StatePill phase={phase} />
-        <Commands phase={phase} />
-      </div>
-      <div className="flex items-center gap-1.5 px-3.5 pt-2.5">
-        <div className="min-w-0 flex-1">
-          {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
-        </div>
-        {onCenter && (
+        <span className="flex min-w-0 justify-start">
+          <StatePill phase={phase} />
+        </span>
+        {onCenter ? (
           <OverlayButton variant="icon" title="Center" label="Center" onClick={onCenter}>
             <Crosshair className="h-3 w-3" />
           </OverlayButton>
+        ) : (
+          <span />
         )}
+        <span className="flex min-w-0 justify-end">
+          <TargetChip />
+        </span>
+      </div>
+      <div className="px-3.5 pt-2.5">
+        {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
       </div>
       <Transcript phase={phase} />
       <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-bg-primary/40 px-3.5 py-1.5">
-        <TargetChip />
-        <WordCount />
+        <CancelButton />
+        {isRecording(phase) && <InsertButton />}
       </div>
     </div>
   );
@@ -226,7 +225,7 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
       <span className="flex min-w-0 flex-1 justify-end overflow-hidden whitespace-nowrap text-[11px] text-text-secondary [mask-image:linear-gradient(to_right,transparent,#000_1.5rem)]">
         <span>{partial || (phase === "transcribing" ? "Finishing" : "Listening")}</span>
       </span>
-      <Commands phase={phase} compact />
+      <Commands phase={phase} />
     </div>
   );
 }
@@ -413,16 +412,6 @@ function Transcript({ phase }: { phase: DictationPhase }) {
   );
 }
 
-function WordCount() {
-  const words = useDictationStore((s) => wordCount(s.partial));
-  if (!words) return null;
-  return (
-    <span className="shrink-0 text-[10px] tabular-nums text-text-muted">
-      {words} {words === 1 ? "word" : "words"}
-    </span>
-  );
-}
-
 const MAC_GLYPHS: Record<string, string> = { Cmd: "⌘", Ctrl: "⌃", Shift: "⇧", Option: "⌥" };
 
 /** The chord's keys for this platform: glyphs on macOS, words elsewhere */
@@ -431,47 +420,54 @@ const chordKeys = (chord: KeyChord): string[] =>
     .split("+")
     .map((k) => (IS_MAC ? (MAC_GLYPHS[k] ?? k) : k));
 
-/** Keycaps that also click: Insert (Enter or the dictation chord, accent) and Esc cancel
- *  (neutral), set apart so one is not taken for the other */
-function Commands({ phase, compact = false }: { phase: DictationPhase; compact?: boolean }) {
+/** The pill's keycaps that also click: Insert (accent) and Esc cancel (neutral) */
+function Commands({ phase }: { phase: DictationPhase }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      {isRecording(phase) && <InsertButton compact />}
+      <CancelButton />
+    </div>
+  );
+}
+
+function InsertButton({ compact = false }: { compact?: boolean }) {
   const chord = dictationChord();
   const keys = chord && !compact ? chordKeys(chord) : [];
   const enter = IS_MAC ? "↵" : "Enter";
   return (
-    <div className={cn("flex shrink-0 items-center", compact ? "gap-1.5" : "gap-2.5")}>
-      {isRecording(phase) && (
-        <OverlayButton
-          variant="insert"
-          label={chord ? `Insert (Enter or ${formatChord(chord, IS_MAC)})` : "Insert (Enter)"}
-          title={`Insert: ${[enter, chord ? chordKeys(chord).join("") : ""].filter(Boolean).join(" or ")}`}
-          onClick={() => void stopDictation("button")}
-        >
-          <KeyCap>{enter}</KeyCap>
-          {keys.length > 0 && (
-            <>
-              <span>or</span>
-              <span className="inline-flex gap-0.5">
-                {keys.map((k) => (
-                  <KeyCap key={k}>{k}</KeyCap>
-                ))}
-              </span>
-            </>
-          )}
-          <span>insert</span>
-        </OverlayButton>
+    <OverlayButton
+      variant="insert"
+      label={chord ? `Insert (Enter or ${formatChord(chord, IS_MAC)})` : "Insert (Enter)"}
+      title={`Insert: ${[enter, chord ? chordKeys(chord).join("") : ""].filter(Boolean).join(" or ")}`}
+      onClick={() => void stopDictation("button")}
+    >
+      <KeyCap>{enter}</KeyCap>
+      {keys.length > 0 && (
+        <>
+          <span>or</span>
+          <span className="inline-flex gap-0.5">
+            {keys.map((k) => (
+              <KeyCap key={k}>{k}</KeyCap>
+            ))}
+          </span>
+        </>
       )}
-      <OverlayButton
-        variant="cancel"
-        label="Cancel (Esc)"
-        title="Cancel: Esc"
-        onClick={() => dismissDictation("button")}
-      >
-        <KeyCap>Esc</KeyCap>
-        <span>cancel</span>
-      </OverlayButton>
-    </div>
+      <span>insert</span>
+    </OverlayButton>
   );
 }
+
+const CancelButton = () => (
+  <OverlayButton
+    variant="cancel"
+    label="Cancel (Esc)"
+    title="Cancel: Esc"
+    onClick={() => dismissDictation("button")}
+  >
+    <KeyCap>Esc</KeyCap>
+    <span>cancel</span>
+  </OverlayButton>
+);
 
 const KeyCap = ({ children }: { children: ReactNode }) => (
   <Kbd className="h-5 min-w-5 px-1">{children}</Kbd>
