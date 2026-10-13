@@ -22,7 +22,7 @@ import { StatusDot } from "../../common/StatusDot";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { FollowUpControl } from "../../terminal/FollowUpControl";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
-import { WatchGoneStrip } from "./WatchGoneStrip";
+import { WatchGoneCard, WatchGoneStrip } from "./WatchGoneStrip";
 
 const DRAG_TYPE = "application/x-exegol-watch";
 /** Cards and collapsed strips alike take the dashboard's height; more rows scroll it */
@@ -59,13 +59,14 @@ export function WatchingSection({
   const moveWatched = useWatchStore((s) => s.moveWatched);
   const agents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
+  const gone = useWatchStore((s) => s.gone);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
   const needsInput = (id: string) => !!attentionItems[id] && !attentionItems[id]?.read;
   // A question opens a mirror on its own, but the open cap holds for it too
   const openIds = new Set(
     watched
-      .filter((id) => agents[id] && (opened.includes(id) || needsInput(id)))
+      .filter((id) => (agents[id] || gone[id]) && (opened.includes(id) || needsInput(id)))
       .slice(0, MAX_OPEN_MIRRORS),
   );
 
@@ -139,6 +140,19 @@ export function WatchingSection({
               dropTarget: dragOver === id,
               dragProps: dragProps(id),
             };
+            const goneInfo = gone[id];
+            if (openIds.has(id) && !agent && goneInfo) {
+              return (
+                <WatchGoneCard
+                  key={id}
+                  gone={goneInfo}
+                  agentId={id}
+                  height={FULL_HEIGHT}
+                  dragProps={common.dragProps}
+                  dropTarget={common.dropTarget}
+                />
+              );
+            }
             return openIds.has(id) && agent ? (
               <WatchCard key={id} agent={agent} onOpenAgent={onOpenAgent} {...common} />
             ) : (
