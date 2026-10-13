@@ -486,6 +486,7 @@ export class PtyHost {
     flushScrollbackSync(session);
     session.emulator.dispose();
     this.sessions.delete(id);
+    this.pendingSizes.delete(id);
     this.exitWaiters.notify(id);
   }
 }

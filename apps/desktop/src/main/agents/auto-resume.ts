@@ -64,14 +64,21 @@ export function folderExists(path: string | null): boolean {
   }
 }
 
-/** The folder decision of each resumed shell, for its [AutoResume] line (no path) */
+/** The folder decision of each resumed shell, for its [AutoResume] line (no path). Manual
+ *  resumes note one too and nobody reads it: past the cap the oldest go */
 const shellFolders = new Map<string, string>();
+const SHELL_FOLDER_NOTES = 256;
 
 export function noteShellFolder(sourceId: string, decision: ShellFolder["decision"]): void {
+  shellFolders.delete(sourceId);
   shellFolders.set(
     sourceId,
     decision === "kept" ? "folder kept" : `folder ${decision}, project root`,
   );
+  if (shellFolders.size > SHELL_FOLDER_NOTES) {
+    const oldest = shellFolders.keys().next().value;
+    if (oldest !== undefined) shellFolders.delete(oldest);
+  }
 }
 
 export function takeShellFolder(sourceId: string): string | undefined {

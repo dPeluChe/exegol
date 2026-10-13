@@ -72,6 +72,7 @@ export class SidecarLossHandler {
     }
     for (const id of [...this.held.keys()]) this.releaseHeld(id, GONE_WITHOUT_NOTICE);
     for (const s of left) this.lose(s, this.tracker.reasonFor(s.id) ?? GONE_WITHOUT_NOTICE);
+    this.tracker.clear();
   }
 
   private releaseHeld(id: string, reason: string): void {

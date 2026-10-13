@@ -39,4 +39,10 @@ export class SidecarLossTracker {
   forget(id: string): void {
     this.noticed.delete(id);
   }
+
+  /** The sidecar is gone: no notice outlives it */
+  clear(): void {
+    this.noticed.clear();
+    this.recentExits = [];
+  }
 }

@@ -35,17 +35,22 @@ export class SidecarClient {
   /** Linear reader (lib/frame-reader), the sidecar's end too. Bounded:
    *  this socket carries far more traffic than the MCP one and runs in the same
    *  main process, so an unbounded buffer here is the same OOM. */
-  private feed = createFrameReader<JsonRpcMessage>(
-    (msg) => this.handleMessage(msg),
-    () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
-    // A session.snapshot answers with the ENTIRE ring buffer in one frame, and
-    // JSON escaping inflates it — measured, 8 MB of coloured output becomes
-    // 10.7 M chars. At the default ceiling the reply is dropped and a reattached
-    // terminal comes back blank, the exact thing the ring buffer exists to
-    // prevent. ×2 clears the measured worst case with ~50% margin; ×4 was twice
-    // the heap for headroom nothing needs.
-    RING_BUFFER_CAPACITY * 2,
-  );
+  private feed = this.newFeed();
+
+  private newFeed() {
+    return createFrameReader<JsonRpcMessage>(
+      (msg) => this.handleMessage(msg),
+      () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
+      // A session.snapshot answers with the ENTIRE ring buffer in one frame, and
+      // JSON escaping inflates it — measured, 8 MB of coloured output becomes
+      // 10.7 M chars. At the default ceiling the reply is dropped and a reattached
+      // terminal comes back blank, the exact thing the ring buffer exists to
+      // prevent. ×2 clears the measured worst case with ~50% margin; ×4 was twice
+      // the heap for headroom nothing needs.
+      RING_BUFFER_CAPACITY * 2,
+    );
+  }
+
   private pendingRequests = new Map<
     number,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -79,6 +84,8 @@ export class SidecarClient {
         const wasConnected = this.connected;
         this.connected = false;
         this.socket = null;
+        // A half-read frame (up to a whole ring snapshot) must not stay with a dead client
+        this.feed = this.newFeed();
         if (wasConnected) for (const cb of this.closeCallbacks) cb();
         // Reject all pending requests
         for (const [, pending] of this.pendingRequests) {

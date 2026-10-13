@@ -49,6 +49,15 @@ describe("exitKind", () => {
     expect(exitKind(false, 0)).toBe("normal");
   });
 
+  it("clear drops notices and the burst window (nothing outlives a gone sidecar)", () => {
+    const t = new SidecarLossTracker(() => 0);
+    t.notice("SIGTERM", ["a", "b"]);
+    t.onExit("a");
+    t.clear();
+    expect(t.reasonFor("b")).toBeUndefined();
+    expect(t.onExit("c")).toBe("normal");
+  });
+
   it("the burst window forgets old exits", () => {
     let now = 0;
     const t = new SidecarLossTracker(() => now);
