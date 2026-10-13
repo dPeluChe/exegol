@@ -317,13 +317,9 @@ T has a shortcut; the modal keeps all 8 agents after one is picked and shows the
    iOS/macOS target from T203), installed IDEs, installed CLIs and their duplicate copies, file
    manager. Today these live in `system/scripts.ts`, `ide/detect.ts`, `agents/cli-install-method.ts`
    and the T203 notes; the launcher, Settings and Doctor read the one module
-8. Ended session pane: when a CLI exits (Ctrl+C, /exit, a crash), the pane today shows "Ended" +
-   Resume, "Completed ... New agent with same task" and "Show session output". Turn it into the
-   launcher with that session's context instead: header "Claude Code ended · <alias> · <project /
-   folder>", primary Resume (same conversation, model, YOLO, mode), New session of the same agent
-   in that folder, switch agent (the folder kept), turn the pane into Terminal / Files / Browser /
-   Simulator, and the session output collapsed below; same shortcuts as the launcher (R resume,
-   N new, T terminal...). Applies to shells that exit too (reopen here, or launcher)
+8. ~~Ended session pane~~: shipped 2026-10-13 (`TASK_COMPLETED/2610.md`). Left for here: a
+   Simulator conversion once T203's pane exists, and the folder (a shell's subfolder) carried
+   into the launch form when switching agent (item 1)
 9. Verify live: open a pane at the root of a workspace project with a pinned command in a
    subfolder (opens at the root), launch Claude in a subfolder by keyboard only (folder, 1, Enter),
    switch the agent inside the form, Continue last in that folder

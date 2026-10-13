@@ -1,14 +1,14 @@
 import type { Agent } from "@exegol/shared";
-import { Button } from "@exegol/ui";
-import { AlertCircle, ArrowUpCircle, ChevronDown, Play, RotateCcw } from "lucide-react";
+import { Button, cn } from "@exegol/ui";
+import { ArrowUpCircle, ChevronDown, RotateCcw } from "lucide-react";
 import type { Ref } from "react";
 import { useCallback, useState } from "react";
 import { selfUpdateTitle } from "../../hooks/use-cli-updates";
 import { useEnabledProviders } from "../../hooks/use-providers";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { type CliSelfUpdate, useCliSelfUpdateStore } from "../../stores/cli-self-updates";
-import { AgentStopReason } from "./AgentStopReason";
 import { ChatView } from "./ChatView";
+import { EndedSessionLauncher } from "./EndedSessionLauncher";
 import { TerminalLinkPeek } from "./FilesPeek";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { TerminalViewToggle } from "./TerminalToolbar";
@@ -25,6 +25,11 @@ export type ScrollbackAgent = Pick<
   currentStep?: string | null;
   /** Stopped on purpose with Suspend: nothing went wrong */
   suspended?: boolean;
+  alias?: string | null;
+  /** Launch choices a new session in the same place keeps */
+  model?: string | null;
+  modelRoles?: Record<string, string> | null;
+  yolo?: boolean | null;
 };
 
 interface TerminalScrollbackProps {
@@ -41,8 +46,8 @@ interface TerminalScrollbackProps {
 }
 
 /**
- * Read-only terminal view shown after an agent stops/crashes. Replays the
- * stored scrollback in a non-interactive xterm and exposes the resume action.
+ * An agent that stopped or crashed: the ended-session launcher, and the stored
+ * scrollback in a non-interactive xterm one click below it.
  */
 export function TerminalScrollback({
   agent,
@@ -64,54 +69,56 @@ export function TerminalScrollback({
   }, [agent, paneId, pending, resume]);
 
   const canResume = agent ? resumableCliTypes.has(agent.cliType) : false;
+  const toggleView = () => setViewMode(viewMode === "terminal" ? "chat" : "terminal");
   const updated = useCliSelfUpdateStore((s) => s.byAgent[agentId]);
-  // A failed or crashed session keeps its exit card, whatever the CLI version did
+  // A failed or crashed session keeps its exit look, whatever the CLI version did
   const selfUpdate =
     agent && agent.status !== "failed" && agent.status !== "crashed" ? updated : undefined;
 
   return (
     <div className="relative flex h-full flex-col">
-      <ScrollbackStatusBar
-        agent={agent}
-        canResume={canResume}
-        selfUpdate={selfUpdate}
-        pending={pending}
-        onResume={handleResume}
-        viewMode={viewMode}
-        onToggleView={() => setViewMode(viewMode === "terminal" ? "chat" : "terminal")}
-      />
-      {/* Updated, not failed: no exit card */}
-      {agent && !selfUpdate && (
-        <AgentStopReason
-          agent={agent}
-          onResume={canResume && agent.resumeCommand ? handleResume : undefined}
-          onSpawnNew={(task) => {
-            window.dispatchEvent(
-              new CustomEvent("exegol:spawn-agent", {
-                detail: { taskDescription: task, cliType: agent.cliType },
-              }),
-            );
-          }}
-          onViewDiff={(aid) => {
-            window.dispatchEvent(new CustomEvent("exegol:view-diff", { detail: { agentId: aid } }));
-          }}
+      {selfUpdate && (
+        <SelfUpdateBar
+          selfUpdate={selfUpdate}
+          pending={pending}
+          onRestart={handleResume}
+          viewMode={viewMode}
+          onToggleView={toggleView}
         />
       )}
-      {/* Ended sessions start with a CLEAN pane (verify session 2026-08-11) —
-          the stale terminal below the card read as confusion. Output is one
-          click away, and the Chat toggle still works when shown. */}
-      {!showOutput ? (
-        <div className="flex flex-1 items-start justify-center pt-6">
+      {/* Ended sessions start with a CLEAN pane (verify session 2026-08-11): the launcher, the
+          output one click away */}
+      <div
+        className={
+          showOutput
+            ? "max-h-[55%] shrink-0 overflow-y-auto border-b border-border"
+            : "flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto"
+        }
+      >
+        {agent && (
+          <EndedSessionLauncher
+            agent={agent}
+            paneId={paneId}
+            canResume={canResume}
+            pending={pending}
+            onResume={handleResume}
+          />
+        )}
+        <div className="flex items-center justify-center gap-2 pb-3">
           <button
             type="button"
-            onClick={() => setShowOutput(true)}
+            onClick={() => setShowOutput(!showOutput)}
             className="flex items-center gap-1.5 rounded border border-border px-3 py-1.5 text-[11px] text-text-muted transition-colors hover:bg-white/5 hover:text-text-primary"
           >
-            <ChevronDown className="h-3 w-3" />
-            Show session output
+            <ChevronDown className={cn("h-3 w-3", showOutput && "rotate-180")} />
+            {showOutput ? "Hide session output" : "Show session output"}
           </button>
+          {showOutput && !selfUpdate && (
+            <TerminalViewToggle viewMode={viewMode} onToggle={toggleView} />
+          )}
         </div>
-      ) : (
+      </div>
+      {showOutput && (
         // min-h-0: a flex item won't shrink below its content, so the grid set the box height
         <div className="relative min-h-0 flex-1">
           {viewMode === "chat" ? (
@@ -138,78 +145,38 @@ export function TerminalScrollback({
   );
 }
 
-/** Crashed / Ended / Suspended strip with the resume action and the view toggle */
-function ScrollbackStatusBar({
-  agent,
-  canResume,
+/** The CLI ended to finish its own update: restart on the new version */
+function SelfUpdateBar({
   selfUpdate,
   pending,
-  onResume,
+  onRestart,
   viewMode,
   onToggleView,
 }: {
-  agent: ScrollbackAgent | null;
-  canResume: boolean;
-  selfUpdate?: CliSelfUpdate;
+  selfUpdate: CliSelfUpdate;
   pending: boolean;
-  onResume: () => void;
+  onRestart: () => void;
   viewMode: "terminal" | "chat";
   onToggleView: () => void;
 }) {
-  const ResumeIcon = canResume ? Play : RotateCcw;
-  const resumeLabel = canResume ? "Resume" : "Re-launch";
-  const isCrashed = agent?.status === "crashed";
   const providers = useEnabledProviders();
-
-  if (selfUpdate && agent) {
-    const name = providers.find((p) => p.id === selfUpdate.cliType)?.name ?? selfUpdate.cliType;
-    return (
-      <div className="relative flex shrink-0 items-center gap-2 bg-accent/10 px-3 py-1.5 text-[11px]">
-        <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 text-accent" />
-        <span className="text-text-primary">{selfUpdateTitle(name, selfUpdate.to)}</span>
-        <span className="text-text-muted">
-          (was {selfUpdate.from}): it ended to finish the update
-        </span>
-        <Button
-          size="sm"
-          className="h-6 gap-1 rounded-md bg-accent px-2 text-[10px] text-white hover:bg-accent/90"
-          onClick={onResume}
-          disabled={pending}
-        >
-          <RotateCcw className="h-3 w-3" />
-          Restart session
-        </Button>
-        <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} className="ml-auto" />
-      </div>
-    );
-  }
-
+  const name = providers.find((p) => p.id === selfUpdate.cliType)?.name ?? selfUpdate.cliType;
   return (
-    <div
-      className={`relative flex shrink-0 items-center px-3 py-1.5 text-[11px] ${isCrashed ? "bg-red-500/10" : "bg-yellow-500/10"}`}
-    >
-      <div className="flex items-center gap-1.5">
-        <AlertCircle
-          className={`h-3.5 w-3.5 shrink-0 ${isCrashed ? "text-red-400" : "text-yellow-400"}`}
-        />
-        <span className={isCrashed ? "text-red-200/80" : "text-yellow-200/80"}>
-          {isCrashed ? "Crashed" : agent?.suspended ? "Suspended: Resume to continue" : "Ended"}
-        </span>
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center gap-2 pointer-events-none">
-        {agent && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="pointer-events-auto h-6 gap-1 rounded-md border border-accent/30 px-2 text-[10px] text-accent hover:bg-accent/10"
-            onClick={onResume}
-            disabled={pending}
-          >
-            <ResumeIcon className="h-3 w-3" />
-            {resumeLabel}
-          </Button>
-        )}
-      </div>
+    <div className="relative flex shrink-0 items-center gap-2 bg-accent/10 px-3 py-1.5 text-[11px]">
+      <ArrowUpCircle className="h-3.5 w-3.5 shrink-0 text-accent" />
+      <span className="text-text-primary">{selfUpdateTitle(name, selfUpdate.to)}</span>
+      <span className="text-text-muted">
+        (was {selfUpdate.from}): it ended to finish the update
+      </span>
+      <Button
+        size="sm"
+        className="h-6 gap-1 rounded-md bg-accent px-2 text-[10px] text-white hover:bg-accent/90"
+        onClick={onRestart}
+        disabled={pending}
+      >
+        <RotateCcw className="h-3 w-3" />
+        Restart session
+      </Button>
       <TerminalViewToggle viewMode={viewMode} onToggle={onToggleView} className="ml-auto" />
     </div>
   );

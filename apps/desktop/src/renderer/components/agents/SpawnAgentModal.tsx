@@ -28,6 +28,10 @@ interface SpawnAgentModalProps {
    *  through this modal rather than spawning behind its back. */
   initialSession?: SessionChoice;
   initialAccessMode?: AgentAccessMode;
+  /** Start in this branch's worktree (an ended session's place, reused) */
+  initialBranch?: string | null;
+  /** After the new agent took its pane */
+  onSpawned?: (agentId: string) => void;
 }
 
 export function SpawnAgentModal({
@@ -39,6 +43,8 @@ export function SpawnAgentModal({
   targetPaneId,
   initialSession = null,
   initialAccessMode = "write",
+  initialBranch,
+  onSpawned,
 }: SpawnAgentModalProps) {
   // All enabled ones: the picker groups those not installed and the form starts on one that is
   const enabledProviders = useEnabledProviders();
@@ -50,8 +56,9 @@ export function SpawnAgentModal({
     initialCliType,
     initialSession,
     initialAccessMode,
+    initialBranch,
   });
-  const { spawning, spawn } = useSpawnAgent({ projectId, targetPaneId, onClose });
+  const { spawning, spawn } = useSpawnAgent({ projectId, targetPaneId, onClose, onSpawned });
   const recheck = useRecheckProviders();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 

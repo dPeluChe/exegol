@@ -26,6 +26,7 @@ import {
   archiveAgent,
   archiveEndedAgents,
   deleteShellRow,
+  getAgentLastCwd,
   listActiveAgents,
   setAgentAlias,
   setAgentPrWatch,
@@ -232,17 +233,24 @@ export const agentRouter = router({
   /** T106 — Resolve the on-disk worktree path for an agent (for "View diff"). */
   getWorktreePath: publicProcedure
     .input(z.object({ agentId: z.string() }))
-    .query(({ ctx, input }) => {
-      const owned = getWorktreeByAgentId(ctx.db, input.agentId)?.path;
-      if (owned) return owned;
-      // An agent that joined another's worktree (a reuse, a terminal beside it) links it here
-      const joined = ctx.db
-        .prepare(
-          "SELECT w.path FROM agents a JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?",
-        )
-        .get(input.agentId) as { path: string } | undefined;
-      return joined?.path ?? null;
-    }),
+    .query(({ ctx, input }) => worktreePathOf(ctx.db, input.agentId)),
+  /** Where an ended session worked: its worktree, else a shell's last folder; null is the root */
+  sessionFolder: publicProcedure
+    .input(z.object({ agentId: z.string().max(128) }))
+    .query(
+      ({ ctx, input }) =>
+        worktreePathOf(ctx.db, input.agentId) ?? getAgentLastCwd(ctx.db, input.agentId),
+    ),
 
   // ─── T65: Parallel Multi-Agent ────────────────────────────────────────
 });
+
+function worktreePathOf(db: Parameters<typeof getAgent>[0], agentId: string): string | null {
+  const owned = getWorktreeByAgentId(db, agentId)?.path;
+  if (owned) return owned;
+  // An agent that joined another's worktree (a reuse, a terminal beside it) links it here
+  const joined = db
+    .prepare("SELECT w.path FROM agents a JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?")
+    .get(agentId) as { path: string } | undefined;
+  return joined?.path ?? null;
+}

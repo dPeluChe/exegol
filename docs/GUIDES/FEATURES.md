@@ -85,6 +85,12 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Launch options**: model (for CLIs with a model flag) and session name in the launcher.
 - **Access modes**: read, write or plan per agent or pipeline step, shown as a badge.
 - **Resume**: Claude sessions resume with their session id after a restart.
+- **Ended session pane**: when a CLI exits (Ctrl+C, /exit, a crash) its pane shows "Claude Code
+  ended · name · project / folder" with the status and exit code, Resume (same conversation,
+  model, YOLO, mode and name; Restart when the CLI cannot resume), a new session of the same CLI
+  in the same place, an agent switcher, and Terminal, Files or Browser in that folder; the output
+  stays one click below. A closed terminal offers Reopen terminal here (its last folder).
+  Keys: R, N, T, F, B, 1-9.
 - **CLI updates**: a session offers Restart to update when its CLI has a newer install, and
   Update when a newer release is out; the conversation resumes on the new version. The update
   command matches how the running copy was installed; Settings > CLIs lists duplicate installs

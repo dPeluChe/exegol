@@ -55,7 +55,7 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 - **Monitor**: Resources & Tokens | Scoring
 
 ### Pane types
-- `terminal` — agent CLI or plain `$SHELL`
+- `terminal` — agent CLI or plain `$SHELL`; once it exits, `EndedSessionLauncher` (Resume/Restart/Reopen, new session there, agent switcher, Terminal/Files/Browser in its folder from `agents.sessionFolder`; pure parts in `lib/ended-session.ts`) with the output collapsed below; replacing it retires the row like a pane close
 - `browser` — Electron webview with URL bar + back/forward/reload
 - `files`: FileExplorer + Monaco code viewer; Code | Preview for Markdown and HTML (HTML: `<webview>` on the in-memory `exegol-preview` partition, `main/files-preview/`: the `exegol-preview://<token>/` scheme exists only on that session, read-only from the project or worktree root, realpath-checked, no dotfiles, request guard + CSP + dead proxy keep it offline, scripts off unless "Run scripts", links reach a link bar only after a click; not an agent browser pane). Open file, folders, mode and editor spot persist on the pane (`pane.files`, `setFilesView`)
 - `git` — Changes (with Smart Git Button) + Diff + Oplog (agent operations with undo)
