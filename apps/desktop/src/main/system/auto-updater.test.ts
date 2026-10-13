@@ -6,7 +6,16 @@ vi.mock("electron", () => ({
 }));
 vi.mock("electron-updater", () => ({ autoUpdater: { on: vi.fn() } }));
 
-import { silencedReason } from "./auto-updater";
+import { silencedReason, updateChannel } from "./auto-updater";
+
+describe("updateChannel", () => {
+  it("keeps a local test build on stable, canaries on canary", () => {
+    expect(updateChannel("0.5.20")).toBe("stable");
+    expect(updateChannel("0.5.21-test.171da0d")).toBe("stable");
+    expect(updateChannel("0.5.21-test.171da0d.dirty")).toBe("stable");
+    expect(updateChannel("0.5.21-canary.20261013")).toBe("canary");
+  });
+});
 
 /** The exact error a packaged 0.5.0 showed as "Update error" (no release published yet). */
 function noReleaseError(): Error {

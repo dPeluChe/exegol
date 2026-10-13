@@ -137,6 +137,29 @@ The app also sweeps per-agent files once a day, at startup and then daily while 
 skips when the orphaned ids outnumber twice the known ones (a reset or swapped database). Agent
 history (terminal scrollback) is never removed.
 
+### 3b. Local test build
+
+To hand a build to someone for testing (never for a release):
+
+```bash
+bun run package:local              # needs build:rust + rebuild:native like step 3
+bun run package:local -- --dry-run # print version and output path only
+```
+
+- Version `<next patch>-test.<short sha>`, plus `.dirty` with uncommitted changes (0.5.20 at
+  171da0d gives `0.5.21-test.171da0d`). `package.json` is not edited: the script passes it as
+  `EXEGOL_LOCAL_VERSION` and `electron-builder.ts` sets `extraMetadata.version`.
+- Output `apps/desktop/dist/local/Exegol-TEST-<version>.dmg`; the folder is deleted first, so it
+  only ever holds the last test build. `clean:build` never touches it. The script prints the DMG's
+  absolute path.
+- macOS arm64 DMG only, signed with the same identity, never notarized (`APPLE_KEYCHAIN_PROFILE`
+  is dropped for the build). Fine on the machine that built it; a copied DMG needs Open Anyway.
+- The app shows "TEST <sha>" in the title bar, the version and commit at the bottom of the
+  Settings nav and in About Exegol. Releases show none of it (`testBuildOf`).
+- Updates: a test build stays on the stable feed with downgrades off (`updateChannel` in
+  `auto-updater.ts`). Semver orders `0.5.20 < 0.5.21-test.x < 0.5.21`, so the release it was
+  built from is never offered and the next real release is.
+
 ### 4. Install and first launch (unsigned build)
 
 Open the DMG and drag Exegol to Applications. The app is not signed or notarized, so Gatekeeper blocks a double-click on first launch: right-click Exegol in Applications and choose Open, then confirm. A DMG downloaded from GitHub also carries the quarantine flag; clear it with `xattr -dr com.apple.quarantine /Applications/Exegol.app` if Open is not offered.
