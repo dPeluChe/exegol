@@ -14,6 +14,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Installing this version ends every open terminal and agent once (the background process that keeps them alive is replaced). Agents come back marked crashed with their history and can be resumed in their panes; plain terminals reopen fresh. This also retires every session started before 0.5.20 without a UTF-8 locale (where `pod install` failed and copies pasted garbled), so no "restart for UTF-8" notice is needed
+- After the terminals were lost (a restart, a reboot, an update like this one), sessions come back gradually instead of all at once: 3 at a time, the ones on screen first, then the most recently used. Sessions untouched for more than 3 days stay suspended (Resume in their pane) and one notice lists them with links. Relaunching 36 agents at once had taken memory from 11 to 15 GB
+- Terminals reopen in the folder you last were in (when it still exists in the project), not at the project root
 - One terminal printing a flood of output (pulling many repos, a long build log) no longer freezes typing in every other terminal: only the session producing the output waits for Exegol to catch up
 - Reopening Exegol with many agents is faster: panes not on screen reload only the last 1 MB of their output (from the last screen clear when there is one), and terminals keep bracketed paste, mouse scrolling and a hidden cursor after a long session
 - With many busy agents, the oldest output of the largest ones is trimmed (each keeps at least 2 MB) instead of memory growing past the limit

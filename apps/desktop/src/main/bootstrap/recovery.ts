@@ -215,7 +215,9 @@ export async function runStartupRecovery(): Promise<void> {
     );
     // An empty sidecar lost every session at once (restart): bring them back in their panes
     if (sidecarSessionTotal === 0 && recovery.crashedIds.length > 0) {
-      setLostOnRestart(recovery.crashedIds);
+      setLostOnRestart(
+        recovery.crashedIds.map((id) => ({ id, lastActiveAt: recovery.lastActive.get(id) ?? 0 })),
+      );
       logger.info(
         `[Startup] ${recovery.crashedIds.length} session(s) lost with the sidecar: offered for auto-resume`,
       );

@@ -7,6 +7,7 @@ import {
 } from "@exegol/shared";
 import type Database from "libsql";
 import { pickAgentCodename } from "../../agents/agent-names";
+import { lastActiveOf } from "../../agents/auto-resume";
 import { providerSessionId } from "../../agents/provider-session-id";
 import { resolveTaskLabel } from "../../agents/task-label";
 import { logger } from "../../lib/logger";
@@ -97,6 +98,17 @@ export function setAgentLastActivity(db: Database.Database, id: string, at: numb
 /** Shells are terminal tabs with nothing to keep: closing one deletes its row */
 export function deleteShellRow(db: Database.Database, id: string): void {
   db.prepare("DELETE FROM agents WHERE id = ? AND cli_type = 'shell'").run(id);
+}
+
+export function setAgentLastCwd(db: Database.Database, id: string, cwd: string): void {
+  db.prepare("UPDATE agents SET last_cwd = ? WHERE id = ?").run(cwd, id);
+}
+
+export function getAgentLastCwd(db: Database.Database, id: string): string | null {
+  const row = db.prepare("SELECT last_cwd FROM agents WHERE id = ?").get(id) as
+    | { last_cwd: string | null }
+    | undefined;
+  return row?.last_cwd ?? null;
 }
 
 export function setAgentSuspended(db: Database.Database, id: string, at: number | null): void {
@@ -313,17 +325,32 @@ export function recoverStaleAgents(
   db: Database.Database,
   skipIds?: Set<string>,
   reasonFor: (id: string) => string = () => "no live session",
-): { crashed: number; alive: number; crashedIds: string[]; reasons: string[] } {
+): {
+  crashed: number;
+  alive: number;
+  crashedIds: string[];
+  reasons: string[];
+  /** Read before the sweep moves status_changed_at (auto-resume's 3-day rule) */
+  lastActive: Map<string, number>;
+} {
   const stale = db
     .prepare(
-      `SELECT id, cli_type, status, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
+      `SELECT id, cli_type, status, pid, last_activity_at, status_changed_at, started_at FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
        OR (launched_in_shell = 1 AND status = 'idle')`,
     )
-    .all() as Array<{ id: string; cli_type: string; status: string; pid: number | null }>;
+    .all() as Array<
+    {
+      id: string;
+      cli_type: string;
+      status: string;
+      pid: number | null;
+    } & Parameters<typeof lastActiveOf>[0]
+  >;
 
   let crashed = 0;
   const crashedIds: string[] = [];
   const reasons: string[] = [];
+  const lastActive = new Map<string, number>();
   const alive = skipIds?.size ?? 0;
   const now = Math.floor(Date.now() / 1000);
 
@@ -347,9 +374,10 @@ export function recoverStaleAgents(
     ).run(now, agent.id);
     crashed++;
     crashedIds.push(agent.id);
+    lastActive.set(agent.id, lastActiveOf(agent));
   }
 
-  return { crashed, alive, crashedIds, reasons };
+  return { crashed, alive, crashedIds, reasons, lastActive };
 }
 
 /** T176: hide an ended session from the dashboard. Live agents are refused —

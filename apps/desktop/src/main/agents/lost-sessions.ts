@@ -1,19 +1,20 @@
 import { whenRecovered } from "../terminal/reattach-gate";
+import type { LostSession } from "./auto-resume";
 
 /**
- * Sessions a restart took with it: the sidecar came back empty (reboot, or it was killed), so
- * every live agent was marked crashed at once. The renderer resumes them into their panes once.
+ * Sessions a restart took with it: the sidecar came back empty (reboot, kill, version bump), so
+ * every live agent was marked crashed at once. The renderer resumes the recent ones, staggered.
  */
-let lost: string[] = [];
+let lost: LostSession[] = [];
 
-export function setLostOnRestart(ids: string[]): void {
-  lost = ids;
+export function setLostOnRestart(sessions: LostSession[]): void {
+  lost = sessions;
 }
 
 /** Once: a second window or a reload must not resume them again */
-export async function takeLostOnRestart(): Promise<string[]> {
+export async function takeLostOnRestart(): Promise<LostSession[]> {
   await whenRecovered();
-  const ids = lost;
+  const sessions = lost;
   lost = [];
-  return ids;
+  return sessions;
 }

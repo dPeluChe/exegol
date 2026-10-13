@@ -5,6 +5,7 @@ import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { isDictationChord } from "../../lib/dictation/shortcut";
 import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
+import { persistShellCwd } from "../../lib/shell-cwd";
 import { useAgentStore } from "../../stores/agents";
 import { stripTerminalReports } from "./mirror-input";
 import {
@@ -89,7 +90,10 @@ export function setupTerminalSession(
     oscHandlers = registerOscHandlers(
       terminal,
       {
-        setCwd: (cwd) => deps.setPaneCwd(paneId, cwd),
+        setCwd: (cwd) => {
+          deps.setPaneCwd(paneId, cwd);
+          persistShellCwd(deps.agentId, cwd);
+        },
         setLastExit: (code) => deps.setPaneLastExit(paneId, code),
         // Read at answer time, not captured: a theme switch mid-session must
         // change what the next query gets back.

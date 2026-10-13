@@ -1,8 +1,16 @@
 import type { Agent, AgentCreate, AgentProvider } from "@exegol/shared";
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  AUTO_RESUME_CONCURRENCY,
+  AUTO_RESUME_SETTLE_MS,
+  orderAutoResume,
+  screenRank,
+  staggered,
+} from "../lib/auto-resume";
 import { queryClient } from "../lib/query-client";
+import { markSuspended } from "../lib/session-quiet";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
-import { findAgentPane, toAgentState, useAgentStore } from "../stores/agents";
+import { findAgentPane, jumpToAgent, toAgentState, useAgentStore } from "../stores/agents";
 import { useTerminalStore } from "../stores/terminals";
 import { toastError, useToastStore } from "../stores/toasts";
 import { useWatchStore } from "../stores/watch";
@@ -45,12 +53,13 @@ const resumed = new Set<string>();
 
 /** Run `fn` once per session: two resumes of one Claude session started two processes on it
  *  (seen in a log, 20ms apart); one died and the pane could end up on the dead one */
-export async function onceAtATime(id: string, fn: () => Promise<void>): Promise<void> {
-  if (resuming.has(id) || resumed.has(id)) return;
+export async function onceAtATime<T>(id: string, fn: () => Promise<T>): Promise<T | undefined> {
+  if (resuming.has(id) || resumed.has(id)) return undefined;
   resuming.add(id);
   try {
-    await fn();
+    const result = await fn();
     resumed.add(id);
+    return result;
   } finally {
     resuming.delete(id);
   }
@@ -71,7 +80,7 @@ export async function fetchResumableCliTypes(): Promise<Set<string>> {
 }
 
 /** Resume (`canResume`) or re-launch `agent` as a new row that takes its place, in `paneId` or
- *  the pane that shows it */
+ *  the pane that shows it. Resolves to the new row's id */
 export function resumeSessionInto(
   agent: ResumeSource,
   canResume: boolean,
@@ -83,8 +92,8 @@ export function resumeSessionInto(
     /** Archive the old row instead of deleting it: its output stays readable */
     keepOld?: boolean;
   } = {},
-): Promise<void> {
-  return onceAtATime(agent.id, async () => {
+): Promise<string | null> {
+  const run = onceAtATime(agent.id, async () => {
     // A close's stop still running: resuming now ran two processes on one session
     await pendingStop(agent.id);
     const newAgent = await spawn({
@@ -99,7 +108,7 @@ export function resumeSessionInto(
       // Always the source: a re-launch (no resume) still inherits its YOLO choice
       resumeFromAgentId: agent.id,
     });
-    if (!newAgent?.id) return;
+    if (!newAgent?.id) return null;
 
     const pane = paneId ?? findAgentPane(agent.id, agent.projectId)?.paneId;
     useWatchStore.getState().replaceAgent(agent.id, newAgent.id);
@@ -111,7 +120,9 @@ export function resumeSessionInto(
     agents.addAgent(toAgentState(newAgent, { activityLevel: "busy" }));
     useTerminalStore.getState().createTerminal(newAgent.id);
     if (pane) setPaneAgent(agent.projectId, pane, newAgent.id);
+    return newAgent.id;
   });
+  return run.then((id) => id ?? null);
 }
 
 /**
@@ -137,9 +148,66 @@ export function useResumeAgent() {
   return { resume, pending: spawnAgent.isPending, resumableCliTypes };
 }
 
+type LostAgent = Agent & { lastActiveAt: number };
+
+interface KeptSession {
+  agentId: string;
+  projectId: string;
+  projectName: string;
+  name: string;
+  cliType: string;
+}
+
+const KEPT_LINKS = 5;
+
+/** The next resume waits for this CLI to be up (at its prompt), at most AUTO_RESUME_SETTLE_MS */
+function settled(agentId: string, cliType: string): Promise<void> {
+  if (cliType === "shell") return Promise.resolve();
+  return new Promise((resolve) => {
+    const isUp = () => {
+      const a = useAgentStore.getState().agents[agentId];
+      return !a || a.status === "waiting_input" || a.status === "idle";
+    };
+    if (isUp()) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      clearTimeout(timer);
+      unsub();
+      resolve();
+    };
+    const timer = setTimeout(done, AUTO_RESUME_SETTLE_MS);
+    const unsub = useAgentStore.subscribe(() => {
+      if (isUp()) done();
+    });
+  });
+}
+
+function showKept(kept: KeptSession[]): void {
+  const store = useAgentStore.getState();
+  for (const k of kept) {
+    store.updateAgent(k.agentId, { status: "stopped" });
+    markSuspended(k.agentId);
+  }
+  if (kept.length === 0) return;
+  const more = kept.length - KEPT_LINKS;
+  useToastStore.getState().addToast({
+    type: "info",
+    title: `${kept.length} session${kept.length === 1 ? "" : "s"} kept suspended (idle 3+ days)`,
+    body: more > 0 ? `+${more} more` : undefined,
+    durationMs: 30_000,
+    links: kept.slice(0, KEPT_LINKS).map((k) => ({
+      id: k.agentId,
+      label: `${k.name} (${k.projectName})`,
+      run: () => jumpToAgent(k.agentId, k.projectId),
+    })),
+  });
+}
+
 /**
- * After a restart took every session with the sidecar: resume each one into its pane, once,
- * so the terminals and agents are there again. Waits for the provider list (resume vs re-launch).
+ * After a restart took every session with the sidecar: the ones active in the last 3 days come
+ * back in their panes, 3 at a time, on screen first (main kept the rest suspended). Once.
  */
 export function useAutoResumeLost(): void {
   const { resume, resumableCliTypes } = useResumeAgent();
@@ -148,12 +216,40 @@ export function useAutoResumeLost(): void {
     if (ran.current || resumableCliTypes.size === 0) return;
     ran.current = true;
     void (async () => {
-      const lost = await trpcInvoke<Agent[]>("agents.takeLostOnRestart").catch(() => []);
-      for (const agent of lost) {
+      const lost = await trpcInvoke<{ resume: LostAgent[]; kept: KeptSession[] }>(
+        "agents.takeLostOnRestart",
+      ).catch(() => ({ resume: [], kept: [] }));
+      showKept(lost.kept);
+      if (lost.resume.length === 0) return;
+      const started = Date.now();
+      const ws = useWorkspaceStore.getState();
+      const ordered = orderAutoResume(lost.resume, (a) =>
+        screenRank(a.id, a.projectId, ws.projectWorkspaces, ws._activeProjectId),
+      );
+      const outcomes: Array<{ id: string; cliType: string; outcome: string; reason?: string }> = [];
+      await staggered(ordered, AUTO_RESUME_CONCURRENCY, async (agent) => {
         const pane = findAgentPane(agent.id, agent.projectId);
-        // Sequential: a burst of CLIs starting at once is what the user just rebooted away from
-        if (pane) await resume(agent, pane.paneId).catch(() => {});
-      }
+        const report = (outcome: string, reason?: string) =>
+          outcomes.push({ id: agent.id, cliType: agent.cliType, outcome, reason });
+        if (!pane) {
+          report("skipped", "no pane");
+          return;
+        }
+        try {
+          const newId = await resume(agent, pane.paneId);
+          if (!newId) {
+            report("skipped", "already resuming");
+            return;
+          }
+          report("resumed");
+          await settled(newId, agent.cliType);
+        } catch (err) {
+          report("failed", err instanceof Error ? err.message.split("\n")[0] : "spawn failed");
+        }
+      });
+      trpcMutate("agents.autoResumeReport", { outcomes, totalMs: Date.now() - started }).catch(
+        () => {},
+      );
     })();
   }, [resumableCliTypes, resume]);
 }

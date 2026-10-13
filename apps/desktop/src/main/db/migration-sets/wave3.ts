@@ -274,4 +274,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_026_agent_last_activity_at",
     sql: "ALTER TABLE agents ADD COLUMN last_activity_at INTEGER;",
   },
+  {
+    // T202: a shell's last OSC 7 folder, where its resume reopens
+    id: "w3_027_agent_last_cwd",
+    sql: "ALTER TABLE agents ADD COLUMN last_cwd TEXT;",
+  },
 ];
