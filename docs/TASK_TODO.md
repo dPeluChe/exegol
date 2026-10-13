@@ -206,6 +206,51 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T209: Browser pane page dialogs (alert / confirm / prompt) `added: 2026-10-13`
+**Priority**: P2 | **Effort**: S-M | **Source**: user test 2026-10-13: a test page's "Copy markdown,
+HTML and plain text (Safari only)" button failed in Chromium (custom clipboard formats need the
+`web ` prefix there, so the failure itself is the page's) and its `alert()` showed as an app-modal
+macOS dialog with the Exegol icon, blocking the whole window, with nothing in the log.
+
+1. Page `alert()`: shown inside its browser pane (a dismissable bar with the host), not app-modal;
+   `confirm()` / `prompt()` stay native (they are synchronous) but titled with the pane's host so
+   it is clear a web page asks, not Exegol
+2. Agent browser: while an agent is acting, a page dialog must not hang the tool call: dismiss
+   alerts (report "page_dialog: alert" to the agent), cancel confirm/prompt unless the user takes
+   over; `wait_for_user` when the page needs an answer
+3. Log `[Browser] page dialog <type> on <host>` (never the text: it is third-party content)
+4. Check the project partitions' clipboard permissions (`clipboard-sanitized-write`, read on a
+   user gesture) so pages that work in Chrome work in the pane
+
+### T208: Database pane (SQLite and Postgres first) `added: 2026-10-13`
+**Priority**: P2 | **Effort**: L | **Source**: user idea 2026-10-13. Survey of the user's projects
+(2026-10-13): 51 SQLite files, 25 Postgres URLs in `.env*` (plus pgvector/timescale images), 5
+`sqlite:` URLs, Redis in 5 compose files, MySQL in 1. Nothing detects or opens them today.
+
+1. Detection (T204 module): SQLite files (`*.db`, `*.sqlite`, `*.sqlite3`, header check
+   `SQLite format 3`), `DATABASE_URL`-style keys in `.env*` (scheme only until the user connects),
+   Prisma/Drizzle configs, compose services (postgres, mysql, redis images, T207); the launcher
+   offers "Open database"
+2. Pane type `db`: connection header (kind, host/file, read-only badge), schema tree (tables,
+   views, columns, indexes, row counts), table view with paging (virtualized grid, keyset or
+   LIMIT/OFFSET, filters and sort), a SQL editor (Monaco, SQL highlighting, run selection,
+   history per connection), results as grid or JSON, export CSV/JSON, copy row as JSON
+3. Engines: SQLite through the libsql already shipped (open with `mode=ro`, `PRAGMA query_only`);
+   Postgres with `pg` (pure JS). Both run in an Electron `utilityProcess` per connection (a slow
+   query never blocks main), with a statement timeout and a row cap per page
+4. Safety: read-only by default (Postgres `default_transaction_read_only`, SQLite `query_only`);
+   writes need an explicit "Allow writes" per connection with a confirm showing the statement;
+   passwords and URLs with credentials in the keystore, never in files or logs; SSL modes; a
+   project's `.env` URL is read only when the user picks it, and `localhost` vs remote is shown
+5. Later: MySQL (`mysql2`), Redis key browser, Exegol's own DB (read-only, debug), an MCP
+   `db_query` tool for agents (read-only connections the user opened, results marked untrusted,
+   row cap), ER view from foreign keys
+6. Never log query text, rows, connection strings or credentials; logs keep kind, host class
+   (local/remote), duration and row counts
+7. Why not embed a third-party viewer (pgweb, sqlite-web, DBeaver): a second runtime per engine,
+   another web server on a port, no shared keystore or read-only policy; "Open in TablePlus /
+   DBeaver" stays as an extra button when one is installed (`ide/detect` pattern)
+
 ### T207: Docker containers of the project `added: 2026-10-12`
 **Priority**: P2 | **Effort**: M | **Source**: user idea 2026-10-12. Viable with the `docker` CLI
 alone (Docker Desktop, OrbStack and Colima all ship it); no daemon running = the feature hides.
@@ -272,7 +317,14 @@ T has a shortcut; the modal keeps all 8 agents after one is picked and shows the
    iOS/macOS target from T203), installed IDEs, installed CLIs and their duplicate copies, file
    manager. Today these live in `system/scripts.ts`, `ide/detect.ts`, `agents/cli-install-method.ts`
    and the T203 notes; the launcher, Settings and Doctor read the one module
-8. Verify live: open a pane at the root of a workspace project with a pinned command in a
+8. Ended session pane: when a CLI exits (Ctrl+C, /exit, a crash), the pane today shows "Ended" +
+   Resume, "Completed ... New agent with same task" and "Show session output". Turn it into the
+   launcher with that session's context instead: header "Claude Code ended · <alias> · <project /
+   folder>", primary Resume (same conversation, model, YOLO, mode), New session of the same agent
+   in that folder, switch agent (the folder kept), turn the pane into Terminal / Files / Browser /
+   Simulator, and the session output collapsed below; same shortcuts as the launcher (R resume,
+   N new, T terminal...). Applies to shells that exit too (reopen here, or launcher)
+9. Verify live: open a pane at the root of a workspace project with a pinned command in a
    subfolder (opens at the root), launch Claude in a subfolder by keyboard only (folder, 1, Enter),
    switch the agent inside the form, Continue last in that folder
 
