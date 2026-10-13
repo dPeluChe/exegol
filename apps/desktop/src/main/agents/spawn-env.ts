@@ -28,7 +28,7 @@ import {
 } from "./agent-messaging";
 import { COMMAND_ALIASES } from "./cli-catalog";
 import { scoreAgent } from "./scoring";
-import { HOOKS_DIR } from "./wrappers";
+import { HOOKS_DIR, type NotifyEvent, notifyCommand } from "./wrappers";
 
 export interface AgentContext {
   id: string;
@@ -216,7 +216,8 @@ function oscNotifyCommand(agentId: string, event: AgentSignalType, stdoutFallbac
 /**
  * Write a per-agent Claude Code hooks settings file that emits OSC-777 notify
  * signals on Stop/Notification/PreToolUse/SessionStart so the PTY stream carries
- * deterministic lifecycle events instead of relying on scraped output.
+ * deterministic lifecycle events instead of relying on scraped output, plus the
+ * notify.sh file events (NotifyHandler) the global settings.json used to send.
  * Returns the settings file path, or null if it couldn't be written
  * (non-fatal — the scraping parser remains the fallback).
  */
@@ -227,8 +228,17 @@ export function buildClaudeCodeHooksFile(
   try {
     mkdirSync(HOOKS_DIR, { recursive: true });
     const path = join(HOOKS_DIR, `${agentId}.json`);
-    const hookEntry = (event: AgentSignalType, stdoutFallback = true) => ({
-      hooks: [{ type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) }],
+    // The file event rides along: it carries Claude's session id (OSC has none) and was the
+    // global settings.json's job, which now skips sessions that have this file
+    const fileEvent = (event: NotifyEvent) => ({
+      type: "command",
+      command: notifyCommand(event, "agent"),
+    });
+    const hookEntry = (event: AgentSignalType, stdoutFallback = true, file?: NotifyEvent) => ({
+      hooks: [
+        { type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) },
+        ...(file ? [fileEvent(file)] : []),
+      ],
     });
     // T175: the claim guard runs on write-shaped tools only, and BEFORE the
     // write — the one moment where "which agent touched this" is still known.
@@ -259,11 +269,18 @@ export function buildClaudeCodeHooksFile(
             : []),
         ],
         Notification: [
-          { matcher: CLAUDE_ATTENTION_NOTIFICATIONS, ...hookEntry("attention") },
-          { matcher: CLAUDE_IDLE_NOTIFICATIONS, ...hookEntry("idle") },
+          {
+            matcher: CLAUDE_ATTENTION_NOTIFICATIONS,
+            ...hookEntry("attention", true, "permission_needed"),
+          },
+          { matcher: CLAUDE_IDLE_NOTIFICATIONS, ...hookEntry("idle", true, "session_ready") },
         ],
-        SessionStart: [{ matcher: CLAUDE_SESSION_READY_SOURCES, ...hookEntry("idle", false) }],
-        Stop: [hookEntry("finished")],
+        SessionStart: [
+          { matcher: CLAUDE_SESSION_READY_SOURCES, ...hookEntry("idle", false, "session_ready") },
+        ],
+        Stop: [hookEntry("finished", true, "stop")],
+        PostToolUse: [{ matcher: "*", hooks: [fileEvent("tool_use")] }],
+        UserPromptSubmit: [{ hooks: [fileEvent("prompt_submit")] }],
       },
     };
     writeFileSync(path, JSON.stringify(settings, null, 2), "utf-8");

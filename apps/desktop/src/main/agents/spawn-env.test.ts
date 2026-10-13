@@ -137,6 +137,22 @@ describe("buildClaudeCodeHooksFile", () => {
     expect(command(hooks.Stop?.[0])).toMatch(/\|\| printf '/);
   });
 
+  // The global settings.json skips sessions with this file: it must drop the same file events
+  it("drops the notify.sh file events the global settings.json used to", () => {
+    const hooks = written("a1");
+    const fileEvent = (entry: { hooks: unknown[] } | undefined) =>
+      (entry?.hooks as { command?: string }[] | undefined)
+        ?.map((h) => h.command?.match(/notify\.sh" ([a-z_]+) agent$/)?.[1])
+        .find(Boolean);
+    expect(fileEvent(hooks.Stop?.[0])).toBe("stop");
+    expect(fileEvent(hooks.Notification?.[0])).toBe("permission_needed");
+    expect(fileEvent(hooks.Notification?.[1])).toBe("session_ready");
+    expect(fileEvent(hooks.SessionStart?.[0])).toBe("session_ready");
+    expect(fileEvent(hooks.PostToolUse?.[0])).toBe("tool_use");
+    expect(fileEvent(hooks.UserPromptSubmit?.[0])).toBe("prompt_submit");
+    expect(JSON.stringify(hooks)).not.toContain("EXEGOL_HOOKS_FILE");
+  });
+
   it("omits the guard when claims cannot collide", () => {
     const hooks = written("a1", { enforceClaims: false });
     expect(hooks.PreToolUse).toHaveLength(1);

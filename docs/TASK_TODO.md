@@ -206,22 +206,6 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
-### T209: Browser pane page dialogs (alert / confirm / prompt) `added: 2026-10-13`
-**Priority**: P2 | **Effort**: S-M | **Source**: user test 2026-10-13: a test page's "Copy markdown,
-HTML and plain text (Safari only)" button failed in Chromium (custom clipboard formats need the
-`web ` prefix there, so the failure itself is the page's) and its `alert()` showed as an app-modal
-macOS dialog with the Exegol icon, blocking the whole window, with nothing in the log.
-
-1. Page `alert()`: shown inside its browser pane (a dismissable bar with the host), not app-modal;
-   `confirm()` / `prompt()` stay native (they are synchronous) but titled with the pane's host so
-   it is clear a web page asks, not Exegol
-2. Agent browser: while an agent is acting, a page dialog must not hang the tool call: dismiss
-   alerts (report "page_dialog: alert" to the agent), cancel confirm/prompt unless the user takes
-   over; `wait_for_user` when the page needs an answer
-3. Log `[Browser] page dialog <type> on <host>` (never the text: it is third-party content)
-4. Check the project partitions' clipboard permissions (`clipboard-sanitized-write`, read on a
-   user gesture) so pages that work in Chrome work in the pane
-
 ### T208: Database pane (SQLite and Postgres first) `added: 2026-10-13`
 **Priority**: P2 | **Effort**: L | **Source**: user idea 2026-10-13. Survey of the user's projects
 (2026-10-13): 51 SQLite files, 25 Postgres URLs in `.env*` (plus pgvector/timescale images), 5
@@ -383,8 +367,8 @@ on the machine (no audio leaves it), typed into the focused pane.
      `$ORIGIN` (the .so files sit beside it in `app.asar.unpacked`, so no `LD_LIBRARY_PATH`),
      checked on the npm tarball only
 3. Later:
-   - The global `~/.claude/settings.json` hooks from `agents/wrappers.ts` fire for every Claude
-     session on the machine, not only Exegol's: scope them or drop them for the per-agent file
+   - ~~Global Claude/Codex hooks scoped to Exegol sessions~~: shipped on `fix/scope-global-hooks`
+     (`TASK_COMPLETED/2610.md`). Not checked live
    - Whisper through whisper-server (whisper.cpp, Metal) for faster Whisper on Apple Silicon
    - Apple SpeechAnalyzer on macOS 26+ as a no-download engine
    - Silero VAD (sherpa-onnx, verified download) for the phrase cuts; the energy VAD cuts them now

@@ -1,3 +1,4 @@
+import { testBuildOf } from "@exegol/shared";
 import {
   app,
   type BaseWindow,
@@ -25,6 +26,13 @@ import { openSettingsWindow } from "./settings";
  * closes the actual window.
  */
 export function installAppMenu(): void {
+  const test = testBuildOf(app.getVersion());
+  if (test) {
+    app.setAboutPanelOptions({
+      applicationVersion: app.getVersion(),
+      version: `TEST build, commit ${test.commit}${test.dirty ? " + local changes" : ""}`,
+    });
+  }
   if (process.platform !== "darwin") {
     // On Windows/Linux we don't force a menu — the default is fine.
     Menu.setApplicationMenu(null);

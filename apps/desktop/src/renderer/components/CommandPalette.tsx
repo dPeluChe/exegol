@@ -24,7 +24,7 @@ import { appKeys } from "../lib/keymap";
 import { movePane, paneMoveTargets } from "../lib/move-pane";
 import { SIDEBAR_VIEW_META } from "../lib/sidebar-views";
 import { runCommandInNewTab } from "../lib/spawn-shell";
-import { openTerminalHere, splitActiveWithTerminal } from "../lib/split-terminal";
+import { addTabAndFocus, openTerminalHere, splitActiveWithTerminal } from "../lib/split-terminal";
 import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -135,7 +135,7 @@ function useCommands(close: () => void, open: boolean): Command[] {
         category: "workspace",
         icon: Layout,
         shortcut: "⌘T",
-        action: run(() => useWorkspaceStore.getState().addTab()),
+        action: run(() => addTabAndFocus()),
       },
       {
         id: "ws:close-pane",

@@ -27,7 +27,8 @@
     "kill:dev": "sh scripts/kill-dev.sh",
     "package:mac": "cd apps/desktop && bun run package:mac",
     "package:win": "cd apps/desktop && bun run package:win",
-    "package:linux": "cd apps/desktop && bun run package:linux"
+    "package:linux": "cd apps/desktop && bun run package:linux",
+    "package:local": "cd apps/desktop && bun run package:local"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.7",

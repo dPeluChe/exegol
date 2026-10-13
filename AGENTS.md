@@ -9,6 +9,7 @@ architecture; read it before changing a subsystem. People: [CONTRIBUTING.md](CON
 ```bash
 bun install && bun run rebuild:native   # setup (Rust + node-pty for Electron)
 bun run dev                              # run the app
+bun run package:local                    # test DMG for the user: never hand out a dist/<version> build
 bun run lint                             # pinned Biome 2.4.7, fails on warnings
 bun run typecheck
 bun run test && bun run test:shared

@@ -110,6 +110,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 - **Browser pane**: a webview with URL bar and navigation, next to your agents. It remembers
   the page it was on, and can show it at a device size (desktop, laptop, tablet, mobile).
+  A page's `alert()`, `confirm()` and `prompt()` show as a bar inside the pane, never as a
+  window-wide dialog.
 - **Design mode**: click an element to send its selector, styles and HTML to an agent.
 - **Agents in the browser**: agents drive the project's browser pane through the Exegol MCP
   tools (`browser_open`, `browser_snapshot`, `browser_click`...), live in the same pane you see.
@@ -167,7 +169,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   goes only into the focused pane (pasted into a terminal without Enter, a browser page's focused
   field, the code editor's cursor), else it is copied. Overlay with waveform, timer, where the
   text goes and the words so far (live with the streaming model, phrase by phrase at each pause
-  with the others), a one-line pill in the title bar while its pane is off screen (or always, with Overlay position: Title bar); with no model it offers a choice of three recommended models; Settings > Dictation for the shortcut, mic, limits and history; a mic
+  with the others; drag it by its header anywhere inside the pane, it stays there next time,
+  the Center button in the header (or a double-click on it) puts it back), a one-line pill in the title bar while its pane is off screen (or always, with Overlay position: Title bar); with no model it offers a choice of three recommended models; Settings > Dictation for the shortcut, mic, limits and history; a mic
   button in the status bar. "Pause music while dictating" (on by default) pauses what is playing
   through the system's Now Playing on macOS (browser tabs included) or MPRIS players through
   playerctl on Linux, and resumes it after; on macOS, "Also control Music and Spotify directly"

@@ -4,6 +4,8 @@ import type { Configuration } from "electron-builder";
 
 // One folder per version (dist/0.5.1/...) so builds don't pile up side by side
 const version = readVersion();
+// Set by scripts/package-local.ts: a `-test.<sha>` version, its own folder and DMG name, no notarizing
+const localVersion = process.env.EXEGOL_LOCAL_VERSION;
 
 function readVersion(): string {
   const pkg: unknown = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
@@ -29,8 +31,10 @@ const config: Configuration = {
   productName: "Exegol",
   copyright: "Copyright 2026 Exegol",
 
+  ...(localVersion && { extraMetadata: { version: localVersion } }),
+
   directories: {
-    output: `dist/${version}`,
+    output: localVersion ? "dist/local" : `dist/${version}`,
     buildResources: "src/resources/build",
   },
 
@@ -94,7 +98,7 @@ const config: Configuration = {
     gatekeeperAssess: false,
     // Notarized when a notarytool keychain profile is given (APPLE_KEYCHAIN_PROFILE=<profile>,
     // see docs/GUIDES/RELEASE.md). Without it macOS refuses the downloaded DMG ("could not verify")
-    notarize: !!process.env.APPLE_KEYCHAIN_PROFILE,
+    notarize: !localVersion && !!process.env.APPLE_KEYCHAIN_PROFILE,
     entitlements: "src/resources/build/entitlements.mac.plist",
     entitlementsInherit: "src/resources/build/entitlements.mac.inherit.plist",
     darkModeSupport: true,
@@ -107,7 +111,7 @@ const config: Configuration = {
   },
 
   dmg: {
-    artifactName: DMG_NAME,
+    artifactName: localVersion ? `Exegol-TEST-${localVersion}.dmg` : DMG_NAME,
     background: "src/resources/build/dmg-background.png",
     window: { width: 540, height: 380 },
     contents: [
