@@ -1,6 +1,6 @@
 import { dictationSettingsOf, formatChord, type KeyChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { ArrowDown, Loader2 } from "lucide-react";
+import { ArrowDown, Crosshair, Loader2 } from "lucide-react";
 import { type ReactNode, type UIEvent, useLayoutEffect, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
@@ -10,7 +10,6 @@ import { OVERLAY_ATTR } from "../../lib/dictation/overlay-keys";
 import {
   dockedPill,
   freeSpan,
-  NO_OFFSET,
   type OverlayBox,
   overlayMode,
   PILL_HEIGHT,
@@ -30,7 +29,6 @@ import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { type DictationPhase, isRecording, useDictationStore } from "../../stores/dictation";
-import { useDictationOverlayStore } from "../../stores/dictation-overlay";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import { Kbd } from "../common/Kbd";
@@ -38,7 +36,7 @@ import { LevelBars } from "./LevelBars";
 import { ModelChooser } from "./ModelChooser";
 import { ErrorBody, MicDenied } from "./overlay-panels";
 import { keepFocus, OverlayButton } from "./overlay-ui";
-import { anchorKind, cardBox, DRAG_HANDLE, useOverlayDrag } from "./use-overlay-drag";
+import { cardBox, DRAG_HANDLE, useOverlayDrag } from "./use-overlay-drag";
 
 const CARD_WIDTH = 360;
 const CHOOSER_WIDTH = 420;
@@ -84,15 +82,10 @@ function Positioned({ paneId }: { paneId: string | null }) {
   const recording = isRecording(phase) || phase === "transcribing";
   const mode = overlayMode(position, !!paneId, onScreen, recording);
   const width = phase === "no-model" ? CHOOSER_WIDTH : CARD_WIDTH;
-  const kind = anchorKind(mode);
-  const stored = useDictationOverlayStore((s) => (kind ? s.offsets[kind] : undefined));
-  const dx = stored?.dx ?? NO_OFFSET.dx;
-  const dy = stored?.dy ?? NO_OFFSET.dy;
   const [box, setBox] = useState<OverlayBox | null>(null);
   const [card, setCard] = useState<HTMLDivElement | null>(null);
-  const apply = (next: OverlayBox) => setBox((prev) => (sameBox(prev, next) ? prev : next));
-  const drag = useOverlayDrag({ mode, paneId, width, card, stored: { dx, dy }, apply });
-  const live = drag.live;
+  const drag = useOverlayDrag({ mode, paneId, width, card, apply: setBox });
+  const { dx, dy, live } = drag;
   useLayoutEffect(() => {
     let frame = 0;
     const place = () => {
@@ -152,22 +145,23 @@ function Positioned({ paneId }: { paneId: string | null }) {
             phase === "listening" && "shadow-[0_8px_40px_-12px_var(--color-accent)]",
           )}
         >
-          <Body />
+          <Body onCenter={drag.reset} />
         </div>
       )}
     </div>
   );
 }
 
-function Body() {
+/** `onCenter` is set while the card sits at a dragged spot */
+function Body({ onCenter }: { onCenter?: () => void }) {
   const phase = useDictationStore((s) => s.phase);
   if (phase === "no-model") return <ModelChooser />;
   if (phase === "mic-denied") return <MicDenied />;
   if (phase === "error") return <ErrorBody />;
-  return <Recorder />;
+  return <Recorder onCenter={onCenter} />;
 }
 
-function Recorder() {
+function Recorder({ onCenter }: { onCenter?: () => void }) {
   const phase = useDictationStore((s) => s.phase);
   return (
     // A click on the card is a no-op: recording goes on and the pane keeps the focus
@@ -179,7 +173,14 @@ function Recorder() {
         className="flex cursor-grab flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 pt-3"
       >
         <StatePill phase={phase} />
-        <Commands phase={phase} />
+        <span className="flex items-center gap-1.5">
+          {onCenter && (
+            <OverlayButton variant="icon" title="Center" label="Center" onClick={onCenter}>
+              <Crosshair className="h-3.5 w-3.5" />
+            </OverlayButton>
+          )}
+          <Commands phase={phase} />
+        </span>
       </div>
       <div className="px-3.5 pt-2.5">
         {phase === "listening" ? <LevelBars /> : <div className="h-10" />}

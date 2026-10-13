@@ -1,5 +1,6 @@
 import { type MouseEvent, type PointerEvent, useRef, useState } from "react";
 import {
+  NO_OFFSET,
   type Offset,
   type OverlayBox,
   type OverlayMode,
@@ -8,7 +9,7 @@ import {
   type Rect,
 } from "../../lib/dictation/overlay-position";
 import { paneRoot } from "../../lib/pane-focus";
-import { type AnchorKind, useDictationOverlayStore } from "../../stores/dictation-overlay";
+import { useDictationOverlayStore } from "../../stores/dictation-overlay";
 
 /** Marks where the card can be grabbed: its header, never a button or the text */
 export const DRAG_HANDLE = { "data-drag-handle": "" };
@@ -19,10 +20,8 @@ const onHandle = (t: EventTarget | null): boolean =>
   !!t.closest("[data-drag-handle]") &&
   !t.closest("button, a, input, textarea, select");
 
-export const anchorKind = (mode: OverlayMode): AnchorKind | null => (mode === "dock" ? null : mode);
-
 /** The pane the card sits over, else the window (also when the pane is not in the DOM) */
-export function anchorRect(mode: OverlayMode, paneId: string | null): Rect {
+function anchorRect(mode: OverlayMode, paneId: string | null): Rect {
   const el = mode === "pane" && paneId ? paneRoot(paneId) : null;
   return el
     ? el.getBoundingClientRect()
@@ -49,28 +48,29 @@ interface Gesture {
   moved: boolean;
 }
 
-/** Drags the card by its handle with pointer capture. `live` holds the offset while dragging so
- *  a relayout (text growing) does not snap the card back; it is stored on release */
+/** The card's stored offset and its drag by the handle (pointer capture). `live` holds the
+ *  offset mid-drag so a relayout does not snap the card back; it is stored on release */
 export function useOverlayDrag({
   mode,
   paneId,
   width,
   card,
-  stored,
   apply,
 }: {
   mode: OverlayMode;
   paneId: string | null;
   width: number;
   card: HTMLElement | null;
-  stored: Offset;
   apply: (box: OverlayBox) => void;
 }) {
-  const kind = anchorKind(mode);
+  const kind = mode === "dock" ? null : mode;
+  const stored = useDictationOverlayStore((s) => (kind ? s.offsets[kind] : undefined));
   const setOffset = useDictationOverlayStore((s) => s.setOffset);
   const gestureRef = useRef<Gesture | null>(null);
   const live = useRef<Offset | null>(null);
   const [dragging, setDragging] = useState(false);
+  const { dx, dy } = stored ?? NO_OFFSET;
+  const reset = stored && kind ? () => setOffset(kind, null) : undefined;
 
   const end = (e: PointerEvent<HTMLElement>) => {
     const gesture = gestureRef.current;
@@ -93,7 +93,7 @@ export function useOverlayDrag({
       if (!kind || e.button !== 0 || !onHandle(e.target)) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       // From where the card shows: a stored offset may be clamped by a smaller window now
-      const { box, anchor } = cardBox(mode, paneId, { width, el: card }, stored);
+      const { box, anchor } = cardBox(mode, paneId, { width, el: card }, { dx, dy });
       gestureRef.current = {
         pointerId: e.pointerId,
         x: e.clientX,
@@ -105,23 +105,24 @@ export function useOverlayDrag({
     onPointerMove: (e: PointerEvent<HTMLElement>) => {
       const gesture = gestureRef.current;
       if (!gesture || e.pointerId !== gesture.pointerId) return;
-      const dx = e.clientX - gesture.x;
-      const dy = e.clientY - gesture.y;
+      const mx = e.clientX - gesture.x;
+      const my = e.clientY - gesture.y;
       if (!gesture.moved) {
-        if (Math.hypot(dx, dy) < DRAG_START_PX) return;
+        if (Math.hypot(mx, my) < DRAG_START_PX) return;
         gesture.moved = true;
         setDragging(true);
       }
-      const offset = { dx: gesture.start.dx + dx, dy: gesture.start.dy + dy };
+      const offset = { dx: gesture.start.dx + mx, dy: gesture.start.dy + my };
       const { box, anchor } = cardBox(mode, paneId, { width, el: card }, offset);
       live.current = offsetOf(box, anchor);
       apply(box);
     },
     onPointerUp: end,
     onPointerCancel: end,
+    onLostPointerCapture: end,
     onDoubleClick: (e: MouseEvent) => {
-      if (kind && onHandle(e.target)) setOffset(kind, null);
+      if (onHandle(e.target)) reset?.();
     },
   };
-  return { dragging, handlers, live };
+  return { dx, dy, reset, dragging, handlers, live };
 }
