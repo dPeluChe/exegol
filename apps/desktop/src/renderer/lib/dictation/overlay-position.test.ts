@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutNode } from "../../stores/workspace/types";
-import { anchoredBox, dockedPill, freeSpan, overlayMode, paneOnScreen } from "./overlay-position";
+import {
+  dockedPill,
+  freeSpan,
+  NO_OFFSET,
+  offsetBox,
+  offsetOf,
+  overlayMode,
+  paneOnScreen,
+} from "./overlay-position";
 
 const layout: LayoutNode = {
   type: "split",
@@ -93,9 +101,50 @@ describe("freeSpan", () => {
   });
 });
 
-describe("anchoredBox", () => {
-  it("stays inside the window next to an edge", () => {
-    expect(anchoredBox({ left: 0, top: 0, width: 200, height: 200 }, 1200, 360).left).toBe(8);
-    expect(anchoredBox({ left: 1100, top: 0, width: 100, height: 200 }, 1200, 360).left).toBe(832);
+const viewport = { width: 1200, height: 800 };
+const card = { width: 360, height: 200 };
+
+describe("offsetBox", () => {
+  it("with no offset, centers on the anchor and stays inside the window next to an edge", () => {
+    const pane = { left: 400, top: 100, width: 600, height: 600 };
+    expect(offsetBox(pane, viewport, card, NO_OFFSET)).toEqual({
+      left: 520,
+      top: 400,
+      width: 360,
+      docked: false,
+    });
+    const narrowLeft = { left: 0, top: 0, width: 200, height: 200 };
+    expect(offsetBox(narrowLeft, viewport, card, NO_OFFSET).left).toBe(8);
+    const narrowRight = { left: 1100, top: 0, width: 100, height: 200 };
+    expect(offsetBox(narrowRight, viewport, card, NO_OFFSET).left).toBe(832);
+  });
+
+  it("follows the offset and is kept inside the pane it sits over", () => {
+    const pane = { left: 400, top: 100, width: 600, height: 600 };
+    const moved = offsetBox(pane, viewport, card, { dx: -50, dy: 120 });
+    expect(moved).toMatchObject({ left: 470, top: 520 });
+    const far = offsetBox(pane, viewport, card, { dx: 5000, dy: -5000 });
+    expect(far).toMatchObject({ left: 1000 - 8 - 360, top: 100 + 8 + 100 });
+  });
+
+  it("a pane too small for the card clamps that axis to the window instead", () => {
+    const pane = { left: 1000, top: 600, width: 200, height: 150 };
+    const box = offsetBox(pane, viewport, card, { dx: 0, dy: 500 });
+    expect(box.left).toBe(832);
+    expect(box.top).toBe(800 - 8 - 100);
+  });
+
+  it("a part of the pane past the window does not count", () => {
+    const pane = { left: -300, top: 0, width: 900, height: 800 };
+    expect(offsetBox(pane, viewport, card, { dx: -1000, dy: 0 }).left).toBe(8);
+  });
+
+  it("offsetOf gives back the offset of a box that was not clamped", () => {
+    const pane = { left: 400, top: 100, width: 600, height: 600 };
+    const offset = { dx: -50, dy: 120 };
+    expect(offsetOf(offsetBox(pane, viewport, card, offset), pane)).toEqual(offset);
+    const window = { left: 0, top: 0, ...viewport };
+    const clamped = offsetOf(offsetBox(window, viewport, card, { dx: 9000, dy: 0 }), window);
+    expect(clamped).toEqual({ dx: 1200 - 8 - 180 - 600, dy: 0 });
   });
 });

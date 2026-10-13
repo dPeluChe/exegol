@@ -9,11 +9,17 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Confirm dialogs (close pane, delete, restart terminals) show their keys: Esc cancels and Cmd+Enter (Ctrl+Enter off macOS) runs the action from anywhere in the dialog; Enter still presses the focused button. The Launch Agent dialog shows Esc on Cancel
+- A new tab (Cmd+T, the + in the tab bar, the palette) takes the keyboard, so its launcher keys work at once
+
 ### Fixed
 - The log no longer fills with "event loop blocked for 3600s" while the Mac sleeps: a system sleep or dark wake is not counted as a stall, real stalls are still logged
 - A pane opened with Cmd+D, Cmd+Shift+D, the split buttons or the pane menu now takes the keyboard: its launcher keys (T for a terminal) work at once, without clicking it first. Cmd+] and Ctrl+Tab into an empty launcher focus it too
 
 ### Added
+- Drag the dictation card by its header when it covers what you need to see. It stays inside the pane (or the window), keeps its spot for the next dictation and follows the pane when it resizes; the Center button in its header (shown once you moved it) or a double-click on the header puts it back in the middle. Typing keeps going to your pane while you drag, and Enter and Esc work as before. The title-bar pill does not move
+- The dictation card is laid out by what you look at: the header shows the timer, the Center button and where the text goes (the session and its project), then the waveform and the words, and the footer has Esc cancel on the left and Insert on the right. The word count is gone
 - `bun run package:local` (development): a signed local test build named `Exegol-TEST-<version>.dmg` in `apps/desktop/dist/local/`, versioned `<next patch>-test.<commit>`; the app shows a "TEST <commit>" badge in the title bar and the commit in About and Settings, and updates to the next real release
 - Sessions idle for days stop holding memory (an idle Claude session keeps 500-780 MB). With no output and no typing for 7 days, an agent is suspended (Resume picks it up with the same model, YOLO and mode; its worktree stays as it is, nothing is committed or pushed) and a terminal sitting at its prompt is closed. Never touched: a working agent, one pinned in Watching, with Watch PR on, waiting on your answer, in a pipeline, queue or parallel run, with uncommitted worktree changes, or with anything besides the agent in its terminal or a server listening on a port; and a terminal running anything (dev server, `tail`, a background or disowned job). Idle time survives an app restart. Change or turn it off in Settings > General > Sessions (Off, 1, 3, 7 or 14 days). A toast says what happened ("Suspended 2 idle sessions, closed 1 idle terminal") with each one as a link, "nyx (Argos)" or "Terminal (Postino, closed)", that takes you to it. The sidebar marks suspended sessions with "Suspended"
 
