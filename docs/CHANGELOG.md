@@ -9,6 +9,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Confirm dialogs (close pane, delete, restart terminals) show their keys: Esc cancels and Cmd+Enter (Ctrl+Enter off macOS) runs the action from anywhere in the dialog; Enter still presses the focused button. The Launch Agent dialog shows Esc on Cancel
+- A new tab (Cmd+T, the + in the tab bar, the palette) takes the keyboard, so its launcher keys work at once
+
 ### Fixed
 - A pane opened with Cmd+D, Cmd+Shift+D, the split buttons or the pane menu now takes the keyboard: its launcher keys (T for a terminal) work at once, without clicking it first. Cmd+] and Ctrl+Tab into an empty launcher focus it too
 
