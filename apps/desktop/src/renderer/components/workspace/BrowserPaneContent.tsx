@@ -19,6 +19,7 @@ import { BrowserQaRecordingBar } from "./BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./BrowserReplayResultBar";
 import { DeviceFrame, PageView } from "./BrowserViewport";
 import { DesignIssueBubble } from "./DesignIssueBubble";
+import { PageDialogBar } from "./PageDialogBar";
 import { useBrowserQa } from "./use-browser-qa";
 import { useDevServerPorts } from "./use-dev-server-ports";
 import { useRegisterBrowserPane } from "./use-register-browser-pane";
@@ -213,6 +214,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         }
       />
       <AgentBrowserBanner paneId={paneId} />
+      <PageDialogBar paneId={paneId} />
       {showAsk && (
         <AskAgentBar
           paneId={paneId}

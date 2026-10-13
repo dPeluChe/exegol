@@ -219,6 +219,8 @@ describe("buildPtyInvocation", () => {
     // worktree cannot collide with anyone, so it pays no guard spawn per write.
     expect(mocks.buildClaudeCodeHooksFile).toHaveBeenCalledWith(agent.id, { enforceClaims: true });
     expect(inv.args[1]).toContain("--settings /tmp/exegol-hooks/agent.json");
+    // Tells the global settings.json hooks to step aside for this session
+    expect(inv.env.EXEGOL_HOOKS_FILE).toBe("/tmp/exegol-hooks/agent.json");
   });
 
   it("skips the claim guard for an agent isolated in its own worktree", () => {
@@ -242,6 +244,7 @@ describe("buildPtyInvocation", () => {
 
     expect(mocks.buildClaudeCodeHooksFile).not.toHaveBeenCalled();
     expect(inv.args[1]?.match(/--settings/g)).toHaveLength(1);
+    expect(inv.env.EXEGOL_HOOKS_FILE).toBeUndefined();
   });
 
   it("skips hooks for non-claude providers", () => {

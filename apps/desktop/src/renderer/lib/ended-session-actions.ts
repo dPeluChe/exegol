@@ -58,8 +58,8 @@ async function spawnInto(
   return placeNew(created, projectId, paneId) ? created : null;
 }
 
-/** A fresh session of the same CLI where it worked (its worktree branch reused, else the folder
- *  the launcher started it in), with its model, YOLO and access mode, in `paneId` */
+/** A fresh session of the same CLI where it worked (its worktree branch reused), with its model,
+ *  YOLO and access mode, in `paneId` */
 export async function newSessionInPane(
   agent: EndedSource,
   paneId: string,
@@ -75,6 +75,7 @@ export async function newSessionInPane(
     modelRoles: agent.modelRoles ?? undefined,
     yolo: agent.yolo ?? undefined,
   };
+  // The folder the launcher started it in (T204); a worktree branch is reused instead
   const inFolder = !agent.branchName && folder;
   const created = await spawnInto(
     inFolder ? { ...base, cwdOverride: folder } : base,
