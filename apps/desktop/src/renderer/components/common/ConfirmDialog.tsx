@@ -2,6 +2,8 @@ import { Button, cn } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { type ReactNode, useRef } from "react";
+import { editKeys, hasClickModifier } from "../../lib/keymap";
+import { Kbd } from "./Kbd";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -38,6 +40,12 @@ export function ConfirmDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
+          // Cmd+Enter confirms from anywhere in the dialog; Enter alone presses the focused button
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || !hasClickModifier(e)) return;
+            e.preventDefault();
+            handleConfirm();
+          }}
           onOpenAutoFocus={(e) => {
             if (!autoFocusCancel) return;
             e.preventDefault();
@@ -89,6 +97,7 @@ export function ConfirmDialog({
               }}
             >
               {cancelLabel}
+              <Kbd className="ml-2 h-5 text-[9px]">esc</Kbd>
             </Button>
             <Button
               onClick={handleConfirm}
@@ -98,6 +107,9 @@ export function ConfirmDialog({
               }}
             >
               {confirmLabel}
+              <Kbd className="ml-2 h-5 border-white/30 bg-white/15 text-[9px] text-white">
+                {editKeys("Cmd+↵").replace("Cmd+", "⌘")}
+              </Kbd>
             </Button>
           </div>
         </Dialog.Content>
