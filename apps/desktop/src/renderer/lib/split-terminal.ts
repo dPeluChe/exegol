@@ -1,5 +1,4 @@
 import { nanoid } from "nanoid";
-import { deleteAgent } from "../hooks/use-delete-agent";
 import { useAgentStore } from "../stores/agents";
 import { toastError } from "../stores/toasts";
 import {
@@ -71,17 +70,6 @@ async function shellInPane(projectId: string, paneId: string, cwd: string | unde
     dropPaneFocus(paneId);
     throw err;
   }
-}
-
-/** A fresh shell in the same pane and folder takes the place of `agentId`, which closes (its
- *  environment cannot change while it runs) */
-export async function replaceShellInPane(
-  projectId: string,
-  paneId: string,
-  agentId: string,
-): Promise<void> {
-  await shellInPane(projectId, paneId, await paneFolder(paneId));
-  deleteAgent(agentId);
 }
 
 /** Split `paneId` and move the keyboard to the new pane, so its launcher keys work at once */

@@ -30,6 +30,7 @@ import {
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
+import { handleLostSession } from "./lost-session-exit";
 import { detachOutputPipeline } from "./output-pipeline";
 import { noteSessionActivity } from "./session-activity";
 import {
@@ -509,5 +510,8 @@ export function createSpawnCallbacks(
     onError: (message: string) => {
       logger.error(`[AgentManager] PTY error for ${agent.id}: ${message}`);
     },
+
+    onLost: (reason: string, persist: boolean) =>
+      handleLostSession(db, agent, maps, reason, persist),
   };
 }

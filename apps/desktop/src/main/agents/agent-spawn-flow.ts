@@ -88,7 +88,7 @@ export function setupAgentCwd(
 
   if (config.cwdOverride) {
     cwd = config.cwdOverride;
-    logger.info("[AgentManager] Using cwdOverride:", { cwd });
+    logger.info("[AgentManager] Using a start folder override");
     // A folder of the checkout itself (the launcher's "run in") is not a pipeline worktree
     const inCheckout = cwd === project.path || cwd.startsWith(`${project.path}/`);
     // Joined like a reuse: the owner's exit cleanup keeps the worktree while this one lives

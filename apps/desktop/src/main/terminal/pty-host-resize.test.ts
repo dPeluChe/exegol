@@ -12,11 +12,13 @@ function fakeSidecar() {
   const resize = vi.fn(async () => {});
   const client = {
     isConnected: () => true,
-    snapshot: async () => "",
+    snapshot: async () => ({ data: "" }),
     resize,
     onSessionData: () => {},
     onSessionExit: () => {},
     onSessionError: () => {},
+    onShuttingDown: () => {},
+    onClose: () => {},
   } as unknown as SidecarClient;
   return { client, resize };
 }
@@ -60,7 +62,7 @@ describe("PtyHost requestedSize", () => {
     const host = new PtyHost();
     let release: (ring: string) => void = () => {};
     const { client } = fakeSidecar();
-    client.snapshot = () => new Promise<string>((r) => (release = r));
+    client.snapshot = () => new Promise<string>((r) => (release = r)).then((data) => ({ data }));
     host.connectToSidecar(client);
     const done = host.reattachSession("h", { cols: 120, rows: 40 }, callbacks);
     expect(host.requestedSize("h")).toEqual({ size: { cols: 120, rows: 40 }, held: false });
@@ -78,7 +80,7 @@ describe("PtyHost clear", () => {
     const write = vi.fn(async () => {});
     const client = {
       ...(fakeSidecar().client as object),
-      snapshot: async () => "old history\r\n",
+      snapshot: async () => ({ data: "old history\r\n" }),
       clear,
       write,
     } as unknown as SidecarClient;
@@ -99,7 +101,7 @@ describe("PtyHost reattach", () => {
     const onData = vi.fn();
     const client = {
       ...(fakeSidecar().client as object),
-      snapshot: async () => "old screen\r\n",
+      snapshot: async () => ({ data: "old screen\r\n" }),
     } as unknown as SidecarClient;
     const host = new PtyHost();
     host.connectToSidecar(client);
@@ -116,7 +118,7 @@ describe("PtyHost reattach", () => {
   it("resolves only once the ring is parsed, so a pane's snapshot right after is not empty", async () => {
     const client = {
       ...(fakeSidecar().client as object),
-      snapshot: async () => `${"history line\r\n".repeat(2000)}idle prompt> `,
+      snapshot: async () => ({ data: `${"history line\r\n".repeat(2000)}idle prompt> ` }),
     } as unknown as SidecarClient;
     const host = new PtyHost();
     host.connectToSidecar(client);
@@ -132,7 +134,7 @@ describe("PtyHost reattach at the pane's size", () => {
     let emit: (id: string, data: string) => void = () => {};
     const client = {
       ...(fakeSidecar().client as object),
-      snapshot,
+      snapshot: () => snapshot().then((data) => ({ data })),
       onSessionData: (cb: typeof emit) => {
         emit = cb;
       },

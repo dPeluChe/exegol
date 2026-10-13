@@ -274,4 +274,15 @@ export const wave3Migrations: Migration[] = [
     id: "w3_026_agent_last_activity_at",
     sql: "ALTER TABLE agents ADD COLUMN last_activity_at INTEGER;",
   },
+  {
+    // T202: a shell's last OSC 7 folder, where its resume reopens
+    id: "w3_027_agent_last_cwd",
+    sql: "ALTER TABLE agents ADD COLUMN last_cwd TEXT;",
+  },
+  {
+    // T202: the session a resume continued, so a Watching pin follows the chain to the live one
+    id: "w3_028_agent_resumed_from",
+    sql: `ALTER TABLE agents ADD COLUMN resumed_from TEXT;
+    CREATE INDEX IF NOT EXISTS idx_agents_resumed_from ON agents(resumed_from);`,
+  },
 ];

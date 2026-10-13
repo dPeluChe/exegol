@@ -63,20 +63,50 @@ interface OutputClient {
   once(event: "drain", listener: () => void): unknown;
 }
 
-/**
- * Flow control for the sidecar's clients: while one has a full socket queue, the PTYs pause
- * (the CLI blocks on its own writes) instead of the queue growing without bound.
- */
+/** What one session may queue while a client is backed up; typing echo stays far below it. */
+export const SESSION_BACKLOG_BYTES = 16 * 1024;
+
+/** A session the gate paused, reported when it resumes */
+export interface GatePause {
+  id: string;
+  /** Its bytes queued while the client was backed up */
+  bytes: number;
+  ms: number;
+}
+
+/** A frame this small that happens to cross the high-water mark is echo, not the flood */
+export const ECHO_FRAME_BYTES = 1024;
+
+/** Pure: a session fills the queue once its own backed-up output reaches its share, or when a
+ *  frame of real size is the one that failed the write */
+export function fillsQueue(backlog: number, writeFailed: boolean, frameBytes: number): boolean {
+  return backlog >= SESSION_BACKLOG_BYTES || (writeFailed && frameBytes > ECHO_FRAME_BYTES);
+}
+
+/** While a client's socket is backed up, only the sessions filling it pause (the CLI blocks on
+ *  its writes): pausing every PTY froze every terminal's echo during one flood */
 export class OutputGate<C extends OutputClient> {
   private readonly stuck = new Set<C>();
+  private readonly backlog = new Map<string, number>();
+  private readonly pausedAt = new Map<string, number>();
 
-  constructor(private readonly onPausedChange: (paused: boolean) => void) {}
+  constructor(
+    private readonly onPause: (id: string) => void,
+    private readonly onResume: (pause: GatePause) => void,
+    private readonly now: () => number = Date.now,
+  ) {}
 
-  get paused(): boolean {
+  get backedUp(): boolean {
     return this.stuck.size > 0;
   }
 
-  send(clients: Iterable<C>, msg: string): void {
+  isPaused(id: string): boolean {
+    return this.pausedAt.has(id);
+  }
+
+  /** `id`/`bytes`: the session this output belongs to; others (exit notices) are not counted */
+  send(clients: Iterable<C>, msg: string, id?: string, bytes = 0): void {
+    let failed = false;
     for (const client of clients) {
       let ok = true;
       try {
@@ -85,14 +115,34 @@ export class OutputGate<C extends OutputClient> {
         /* dead client: its close releases it */
       }
       if (ok || this.stuck.has(client)) continue;
+      failed = true;
       this.stuck.add(client);
-      if (this.stuck.size === 1) this.onPausedChange(true);
       client.once("drain", () => this.release(client));
+    }
+    if (id === undefined || this.stuck.size === 0) return;
+    const backlog = (this.backlog.get(id) ?? 0) + bytes;
+    this.backlog.set(id, backlog);
+    if (!this.pausedAt.has(id) && fillsQueue(backlog, failed, bytes)) {
+      this.pausedAt.set(id, this.now());
+      this.onPause(id);
     }
   }
 
   /** On drain, close or error */
   release(client: C): void {
-    if (this.stuck.delete(client) && this.stuck.size === 0) this.onPausedChange(false);
+    if (!this.stuck.delete(client) || this.stuck.size > 0) return;
+    const now = this.now();
+    const paused = [...this.pausedAt];
+    this.pausedAt.clear();
+    for (const [id, since] of paused) {
+      this.onResume({ id, bytes: this.backlog.get(id) ?? 0, ms: now - since });
+    }
+    this.backlog.clear();
+  }
+
+  /** The session ended: nothing to resume */
+  forget(id: string): void {
+    this.pausedAt.delete(id);
+    this.backlog.delete(id);
   }
 }

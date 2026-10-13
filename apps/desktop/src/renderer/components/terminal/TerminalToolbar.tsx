@@ -25,7 +25,6 @@ import { WatchToggle } from "../common/WatchToggle";
 import { PaneDragHandle } from "../workspace/PaneDragHandle";
 import { CliUpdateControl } from "./CliUpdateControl";
 import { FollowUpControl } from "./FollowUpControl";
-import { LocaleRestartControl } from "./LocaleRestartControl";
 import { PrWatchControl } from "./PrWatchControl";
 import { TurnChangesChip } from "./TurnChanges";
 
@@ -73,7 +72,6 @@ export function TerminalToolbar({
     <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
       {paneId && <PaneDragHandle paneId={paneId} className="-mr-1 h-4 w-3.5 shrink-0" />}
       {agent && agent.cliType !== "shell" && <SessionControls agent={agent} />}
-      {agent && <LocaleRestartControl agentId={agent.id} paneId={paneId} />}
       {agent && agent.cliType !== "shell" && (
         <McpStatusIndicator agentId={agent.id} accessMode={accessMode} />
       )}

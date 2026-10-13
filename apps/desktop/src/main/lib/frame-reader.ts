@@ -1,17 +1,22 @@
-import { MAX_NDJSON_LINE_CHARS } from "./ndjson";
+// NDJSON framing for both ends of every socket: the sidecar client and the sidecar itself (it
+// bundles this file: a change here needs a SIDECAR_VERSION bump, pty-sidecar-protocol.ts), the MCP
+// server and the MCP shim and claim-guard bins.
 
 /**
- * NDJSON framing for the main process: the sidecar client, the MCP server and the MCP shim and
- * claim-guard bins. lib/ndjson grew one string per chunk and its indexOf flattened it each time:
- * a ring snapshot arrives in 8 KB chunks on macOS, so 12 MB of JSON cost ~3s of main thread.
- * Here each chunk is scanned once and a frame is joined once.
- * lib/ndjson is now used only by the sidecar entry, which bundles it (its header still names the
- * MCP users: editing it needs a SIDECAR_VERSION bump, so it stays as is).
+ * Default frame ceiling: a newline-less stream would otherwise grow without bound. The sidecar
+ * client passes a larger one, since a ring snapshot arrives as one frame.
+ */
+export const MAX_FRAME_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Each chunk is scanned once and a frame is joined once. The string reader it replaced grew one
+ * string per chunk and flattened it on every indexOf: a ring snapshot in 8 KB macOS socket reads
+ * cost ~3s of main thread per 12 MB frame.
  */
 export function createFrameReader<T>(
   onMessage: (msg: T) => void,
   onOverflow?: () => void,
-  maxBytes: number = MAX_NDJSON_LINE_CHARS,
+  maxBytes: number = MAX_FRAME_BYTES,
 ): (chunk: Buffer) => void {
   let parts: Buffer[] = [];
   let held = 0;

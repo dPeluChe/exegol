@@ -89,7 +89,7 @@ points:
 ## Rules that are easy to miss
 
 - **PTY sidecar**: it outlives the app on purpose. If you change anything it bundles
-  (`pty-sidecar-*.ts`, `ring-buffer.ts`, `lib/ndjson.ts`; the list is in the `SIDECAR_VERSION`
+  (`pty-sidecar-*.ts`, `ring-buffer.ts`, `lib/frame-reader.ts`; the list is in the `SIDECAR_VERSION`
   comment), bump `SIDECAR_VERSION` in `pty-sidecar-protocol.ts`, or the running sidecar keeps
   the old code, for released users too. A bump restarts every live terminal on update.
 - **Database**: add migrations only to your group's file in `apps/desktop/src/main/db/migration-sets/`

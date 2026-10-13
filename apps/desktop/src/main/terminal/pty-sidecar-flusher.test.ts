@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   appendPending,
+  fillsQueue,
+  type GatePause,
   MAX_PENDING_BYTES,
   OutputGate,
   OVERFLOW_NOTICE,
+  SESSION_BACKLOG_BYTES,
 } from "./pty-sidecar-flusher";
 
 describe("appendPending (T113 PTY flusher)", () => {
@@ -69,7 +72,7 @@ describe("appendPending (T113 PTY flusher)", () => {
   });
 });
 
-describe("OutputGate (client backpressure)", () => {
+describe("OutputGate (per-session backpressure)", () => {
   function fakeClient(accepts: boolean) {
     const client = {
       accepts,
@@ -86,29 +89,81 @@ describe("OutputGate (client backpressure)", () => {
     return client;
   }
 
-  it("pauses while a client's queue is full and resumes on its drain, dropping nothing", () => {
-    const changes: boolean[] = [];
-    const gate = new OutputGate<ReturnType<typeof fakeClient>>((p) => changes.push(p));
+  function gateWithLog() {
+    const events: string[] = [];
+    const resumed: GatePause[] = [];
+    let now = 1000;
+    const gate = new OutputGate<ReturnType<typeof fakeClient>>(
+      (id) => events.push(`pause ${id}`),
+      (p) => {
+        events.push(`resume ${p.id}`);
+        resumed.push(p);
+      },
+      () => now,
+    );
+    return { gate, events, resumed, advance: (ms: number) => (now += ms) };
+  }
+
+  it("pauses only the session whose output filled the queue; the others keep flowing", () => {
+    const { gate, events, resumed, advance } = gateWithLog();
     const slow = fakeClient(false);
     const healthy = fakeClient(true);
-    gate.send([slow, healthy], "a");
-    gate.send([slow, healthy], "b");
-    expect(gate.paused).toBe(true);
-    expect(changes).toEqual([true]);
-    expect(slow.written).toEqual(["a", "b"]);
-    expect(healthy.written).toEqual(["a", "b"]);
+    gate.send([slow, healthy], "flood", "a", 40_000);
+    gate.send([slow, healthy], "k", "b", 1);
+    gate.send([slow, healthy], "e", "b", 1);
+    expect(events).toEqual(["pause a"]);
+    expect(gate.isPaused("b")).toBe(false);
+    expect(slow.written).toEqual(["flood", "k", "e"]);
+    expect(healthy.written).toEqual(["flood", "k", "e"]);
+    advance(1500);
     slow.drain?.();
-    expect(gate.paused).toBe(false);
-    expect(changes).toEqual([true, false]);
+    expect(events).toEqual(["pause a", "resume a"]);
+    expect(resumed).toEqual([{ id: "a", bytes: 40_000, ms: 1500 }]);
+    expect(gate.backedUp).toBe(false);
   });
 
-  it("a closed client releases the pause", () => {
-    const changes: boolean[] = [];
-    const gate = new OutputGate<ReturnType<typeof fakeClient>>((p) => changes.push(p));
+  it("a second session is paused once its own backlog passes the limit", () => {
+    const { gate, events } = gateWithLog();
     const slow = fakeClient(false);
-    gate.send([slow], "a");
+    gate.send([slow], "x", "a", 5000);
+    gate.send([slow], "y", "b", SESSION_BACKLOG_BYTES - 1);
+    expect(events).toEqual(["pause a"]);
+    gate.send([slow], "z", "b", 1);
+    expect(events).toEqual(["pause a", "pause b"]);
+  });
+
+  it("output with no session (exit notices) never pauses anyone", () => {
+    const { gate, events } = gateWithLog();
+    const slow = fakeClient(false);
+    gate.send([slow], "exit");
+    expect(gate.backedUp).toBe(true);
+    expect(events).toEqual([]);
+  });
+
+  it("a closed client releases the pause once; a forgotten session is not resumed", () => {
+    const { gate, events } = gateWithLog();
+    const slow = fakeClient(false);
+    gate.send([slow], "a", "a", 2000);
+    gate.send([slow], "b", "b", SESSION_BACKLOG_BYTES);
+    gate.forget("b");
     gate.release(slow);
     gate.release(slow);
-    expect(changes).toEqual([true, false]);
+    expect(events).toEqual(["pause a", "pause b", "resume a"]);
+  });
+
+  it("an echo frame that crosses the mark is not the flood", () => {
+    const { gate, events } = gateWithLog();
+    const slow = fakeClient(false);
+    gate.send([slow], "k", "typing", 3);
+    expect(events).toEqual([]);
+    gate.send([slow], "flood", "build", 64_000);
+    expect(events).toEqual(["pause build"]);
+  });
+
+  it("fillsQueue: a failed write of real size, or a full share", () => {
+    expect(fillsQueue(5000, true, 5000)).toBe(true);
+    expect(fillsQueue(3, true, 3)).toBe(false);
+    expect(fillsQueue(SESSION_BACKLOG_BYTES, false, 10)).toBe(true);
+    expect(fillsQueue(SESSION_BACKLOG_BYTES - 1, false, 10)).toBe(false);
   });
 });

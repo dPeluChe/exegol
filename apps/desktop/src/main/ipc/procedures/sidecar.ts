@@ -28,6 +28,8 @@ export const sidecarRouter = router({
    *  crashed (history kept) and offers them for resume, as after a reboot */
   restart: publicProcedure.mutation(async () => {
     logger.warn("[Sidecar] Restart terminals: stopping the sidecar and relaunching");
+    // Its exits are no failures, and the relaunch's recovery offers the sessions for resume
+    getPtyHost().expectRelaunch();
     await stopSidecarProcess(getPtyHost().getSidecarClient());
     allowQuit();
     app.relaunch();
