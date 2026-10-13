@@ -5,8 +5,10 @@ import { ChevronDown, ChevronRight, Cpu, Globe, History } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useCliInstalls } from "../../hooks/use-cli-updates";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
 import { ACCESS_MODES } from "../../lib/access-modes";
+import { claimPaneFocus } from "../../lib/pane-focus";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -109,6 +111,17 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   const [accessMode, setAccessMode] = useState<AgentAccessMode>("write");
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const { containerRef, size } = usePaneSize();
+  // The launcher's keys (T, numbers) need the keyboard: on a new split and on Cmd+] / Ctrl+Tab
+  useMountEffect(() => {
+    if (claimPaneFocus(paneId)) containerRef.current?.focus();
+    const onFocusPane = (e: Event) => {
+      if ((e as CustomEvent<{ paneId: string }>).detail?.paneId === paneId) {
+        containerRef.current?.focus();
+      }
+    };
+    window.addEventListener("exegol:focus-pane", onFocusPane);
+    return () => window.removeEventListener("exegol:focus-pane", onFocusPane);
+  });
   const enabled = useEnabledProviders();
   const providers = useMemo(() => enabled.filter(isLaunchable), [enabled]);
   const missingCount = enabled.length - providers.length;
@@ -161,7 +174,8 @@ export function EmptyPane({ paneId }: { paneId: string }) {
   return (
     <div
       ref={containerRef}
-      className="flex h-full flex-col items-center justify-center overflow-y-auto p-3"
+      tabIndex={-1}
+      className="flex h-full flex-col items-center justify-center overflow-y-auto p-3 outline-none"
     >
       {/* Header — hidden in mini */}
       {!isMini && <LauncherHeader compact={isCompact} />}

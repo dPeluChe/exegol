@@ -21,7 +21,7 @@ import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { movePane } from "../../lib/move-pane";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
-import { splitWithBrowser, splitWithTerminal } from "../../lib/split-terminal";
+import { splitAndFocus, splitWithBrowser, splitWithTerminal } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
 import {
@@ -93,7 +93,6 @@ function PaneToolbar({
   paneType: string;
   isSplitPane: boolean;
 }) {
-  const splitPane = useWorkspaceStore((s) => s.splitPane);
   const markPaneFloating = useWorkspaceStore((s) => s.markPaneFloating);
   const panes = useWorkspaceStore(selectPanes);
   const { projectId, project } = useProjectContext();
@@ -218,7 +217,7 @@ function PaneToolbar({
         )}
         <button
           type="button"
-          onClick={() => splitPane(tabId, paneId, "horizontal", "empty")}
+          onClick={() => splitAndFocus(tabId, paneId, "horizontal")}
           className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
           title="Split horizontal"
         >
@@ -226,7 +225,7 @@ function PaneToolbar({
         </button>
         <button
           type="button"
-          onClick={() => splitPane(tabId, paneId, "vertical", "empty")}
+          onClick={() => splitAndFocus(tabId, paneId, "vertical")}
           className="flex h-5 w-5 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
           title="Split vertical"
         >
@@ -579,7 +578,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         isSplitPane={isSplitPane}
         onSplit={(dir, newType) => {
           if (newType !== "browser") {
-            useWorkspaceStore.getState().splitPane(tabId, paneId, dir, newType ?? "empty");
+            splitAndFocus(tabId, paneId, dir, newType ?? "empty");
             return;
           }
           splitWithBrowser(tabId, paneId, dir);
