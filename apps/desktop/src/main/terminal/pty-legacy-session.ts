@@ -6,8 +6,10 @@ import { logger } from "../lib/logger";
 import { parseJson } from "../lib/parse-json";
 import { HeadlessEmulator } from "./headless-emulator";
 import {
+  encodeFrame,
   encodeJson,
   FRAME_DATA,
+  FRAME_DISPOSE,
   FRAME_ERROR,
   FRAME_EXIT,
   FRAME_READY,
@@ -24,6 +26,7 @@ import {
   SUBPROCESS_READY_TIMEOUT_MS,
 } from "./pty-session-types";
 import { scanForMarker } from "./pty-shell-ready";
+import type { SidecarClient } from "./pty-sidecar-client";
 
 const SPAWNED_FRAME = z.object({ pid: z.number() });
 const EXIT_FRAME = z.object({ exitCode: z.number(), signal: z.number().optional() });
@@ -36,6 +39,36 @@ function resolveSubprocessPath(): string {
   if (existsSync(nested)) return nested;
   logger.warn(`[PtyHost] Subprocess not found at ${primary} or ${nested}, spawn will likely fail`);
   return primary;
+}
+
+/** Force-kill a session: flush scrollback, send dispose, then SIGKILL as safety net */
+export function forceKillSession(session: Session, sidecar: SidecarClient | null): void {
+  if (!session.alive) return;
+  session.alive = false;
+  flushScrollbackSync(session);
+
+  if (session.mode === "sidecar") {
+    sidecar?.destroy(session.id).catch(() => {});
+  } else if (session.child) {
+    try {
+      session.child.stdin?.write(encodeFrame(FRAME_DISPOSE, Buffer.alloc(0)));
+    } catch {
+      /* pipe closed */
+    }
+    const child = session.child;
+    setTimeout(() => {
+      if (!child.killed) {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          /* already dead */
+        }
+      }
+    }, 1000);
+  }
+
+  if (session.flushTimer) clearTimeout(session.flushTimer);
+  session.emulator.dispose();
 }
 
 export interface LegacyHostDeps {

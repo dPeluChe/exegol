@@ -20,11 +20,13 @@ import {
   type SessionListResult,
   type SessionMemoryResult,
   type SessionSnapshotResult,
+  type SidecarShuttingDownNotification,
 } from "./pty-sidecar-protocol";
 
 type DataCallback = (id: string, data: string, seq?: number) => void;
 type ExitCallback = (id: string, exitCode: number, signal?: number) => void;
 type ErrorCallback = (id: string, message: string) => void;
+type ShutdownCallback = (reason: string, sessions: string[]) => void;
 
 export class SidecarClient {
   private socket: Socket | null = null;
@@ -50,6 +52,8 @@ export class SidecarClient {
   private dataCallbacks: DataCallback[] = [];
   private exitCallbacks: ExitCallback[] = [];
   private errorCallbacks: ErrorCallback[] = [];
+  private shutdownCallbacks: ShutdownCallback[] = [];
+  private closeCallbacks: Array<() => void> = [];
   private connected = false;
 
   async connect(sockPath: string): Promise<void> {
@@ -70,8 +74,10 @@ export class SidecarClient {
       sock.on("data", (chunk: Buffer) => this.feed(chunk));
 
       sock.on("close", () => {
+        const wasConnected = this.connected;
         this.connected = false;
         this.socket = null;
+        if (wasConnected) for (const cb of this.closeCallbacks) cb();
         // Reject all pending requests
         for (const [, pending] of this.pendingRequests) {
           pending.reject(new Error("Sidecar connection closed"));
@@ -112,6 +118,16 @@ export class SidecarClient {
 
   onSessionError(cb: ErrorCallback): void {
     this.errorCallbacks.push(cb);
+  }
+
+  /** The sidecar is about to kill these sessions itself */
+  onShuttingDown(cb: ShutdownCallback): void {
+    this.shutdownCallbacks.push(cb);
+  }
+
+  /** The socket closed by itself (not through disconnect()) */
+  onClose(cb: () => void): void {
+    this.closeCallbacks.push(cb);
   }
 
   // ─── RPC methods ───────────────────────────────────────────────────
@@ -234,6 +250,11 @@ export class SidecarClient {
         case "session.exit": {
           const p = msg.params as SessionExitNotification;
           for (const cb of this.exitCallbacks) cb(p.id, p.exitCode, p.signal);
+          break;
+        }
+        case "sidecar.shuttingDown": {
+          const p = msg.params as SidecarShuttingDownNotification;
+          for (const cb of this.shutdownCallbacks) cb(p.reason, p.sessions);
           break;
         }
         case "session.error": {

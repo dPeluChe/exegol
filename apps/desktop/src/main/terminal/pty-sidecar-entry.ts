@@ -451,10 +451,14 @@ function start(): void {
  * SIGKILL escalation, and clients may disconnect meanwhile, stranding the last <4 ms of output.
  */
 function stopAndExit(graceMs: number, reason: string): void {
-  const live = [...sessions.values()].filter((s) => s.alive).length;
-  log(`exiting: ${reason} (${live} live session(s))`, true);
+  const live = [...sessions.values()].filter((s) => s.alive).map((s) => s.id);
+  log(`exiting: ${reason} (${live.length} live session(s))`, true);
+  for (const s of sessions.values()) flushSession(s);
+  // Before the kills, on the same sockets: main must not take these exits for the CLIs' own
+  if (live.length > 0) {
+    broadcast(makeNotification("sidecar.shuttingDown", { reason, sessions: live }));
+  }
   for (const s of sessions.values()) {
-    flushSession(s);
     if (!s.alive) continue;
     try {
       s.pty.kill();

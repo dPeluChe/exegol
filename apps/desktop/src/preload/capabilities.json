@@ -394,6 +394,7 @@
     "agent:resume-missed",
     "agent:cli-self-updated",
     "agent:idle-suspended",
+    "agent:sessions-lost",
     "recovery:progress",
     "window:focus-changed",
     "metrics:update",

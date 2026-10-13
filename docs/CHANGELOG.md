@@ -21,6 +21,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - With many busy agents, the oldest output of the largest ones is trimmed (each keeps at least 2 MB) instead of memory growing past the limit
 
 ### Fixed
+- When the process behind the terminals stops while Exegol is open (killed, out of memory, shut down), sessions no longer end as "failed" with their shells deleted on the next start: they come back marked as interrupted and resume right away, 3 at a time, the same way as after a restart
 - Retry on the "terminals not answering" banner no longer repeats or drops a few characters of output: only terminals that actually missed output are redrawn
 - A reconnected terminal no longer starts with a stray replacement character (�) at the top of its history
 - Opening the Dashboard right after starting Exegol no longer leaves an agent pane drawn at the wrong width when you come back. A watched card set to "fit session to card" could keep the session at the card's size while it was still reconnecting, and the pane's own size was ignored until you switched tabs

@@ -28,6 +28,8 @@ function fakeClient(
       exit = cb;
     },
     onSessionError: () => {},
+    onShuttingDown: () => {},
+    onClose: () => {},
   } as unknown as SidecarClient & { snapshot: ReturnType<typeof vi.fn> };
   return {
     client,

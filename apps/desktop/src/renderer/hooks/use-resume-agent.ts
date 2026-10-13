@@ -209,68 +209,84 @@ function showKept(kept: KeptSession[]): void {
 const REASON_MAX = 120;
 
 /**
- * After a restart took every session with the sidecar: the ones active in the last 3 days come
- * back in their panes, 3 at a time, on screen first (main kept the rest suspended). Runs even
- * with no resumable CLI: old ones still get suspended and shells come back.
+ * After the sidecar took every session (at startup, or a stop under the running app pushed by
+ * main): the ones active in the last 3 days come back in their panes, 3 at a time, on screen first
+ * (main kept the rest suspended). Runs even with no resumable CLI: shells still come back.
  */
 export function useAutoResumeLost(): void {
   const spawnAgent = useSpawnAgent();
   const latest = useLatest({ spawn: spawnAgent.mutateAsync });
   useMountEffect(() => {
-    void (async () => {
-      const lost = await trpcInvoke<{ resume: LostAgent[]; kept: KeptSession[] }>(
-        "agents.takeLostOnRestart",
-      ).catch(() => ({ resume: [], kept: [] }));
-      showKept(lost.kept);
-      if (lost.resume.length === 0) return;
-      const resumable = await fetchResumableCliTypes();
-      const started = Date.now();
-      const ws = useWorkspaceStore.getState();
-      const ordered = orderAutoResume(lost.resume, (a) =>
-        screenRank(a.id, a.projectId, ws.projectWorkspaces, ws._activeProjectId),
-      );
-      const outcomes: Array<{ id: string; cliType: string; outcome: string; reason?: string }> = [];
-      await staggered(ordered, AUTO_RESUME_CONCURRENCY, async (agent) => {
-        const pane = findAgentPane(agent.id, agent.projectId);
-        const report = (outcome: string, reason?: string) =>
-          outcomes.push({
-            id: agent.id,
-            cliType: agent.cliType,
-            outcome,
-            reason: reason?.slice(0, REASON_MAX),
-          });
-        if (!pane) {
-          // Main suspends it: Resume from the sidebar, not a crash
-          useAgentStore.getState().updateAgent(agent.id, { status: "stopped" });
-          markSuspended(agent.id);
-          report("skipped", "no pane");
-          return;
-        }
-        try {
-          const canResume = resumable.has(agent.cliType);
-          const newId = await resumeSessionInto(
-            agent,
-            canResume,
-            latest.current.spawn,
-            pane.paneId,
-          );
-          if (!newId) {
-            report("skipped", "already resuming");
-            return;
-          }
-          report("resumed", canResume ? undefined : "fresh start");
-          await settled(newId, agent.cliType);
-        } catch (err) {
-          report("failed", err instanceof Error ? err.message.split("\n")[0] : "spawn failed");
-        }
-      });
-      trpcMutate("agents.autoResumeReport", {
-        outcomes,
-        totalMs: Date.now() - started,
-        kept: lost.kept.length,
-      }).catch(() => {});
-    })();
+    // One pass at a time: a stop while a pass runs queues one more (main keeps what is pending)
+    let running = false;
+    let again = false;
+    const pass = async () => {
+      if (running) {
+        again = true;
+        return;
+      }
+      running = true;
+      try {
+        do {
+          again = false;
+          await resumeLostOnce(latest.current.spawn);
+        } while (again);
+      } finally {
+        running = false;
+      }
+    };
+    void pass();
+    return window.api.onSessionsLost(() => void pass());
   });
+}
+
+async function resumeLostOnce(spawn: (data: AgentCreate) => Promise<Agent>): Promise<void> {
+  const lost = await trpcInvoke<{ resume: LostAgent[]; kept: KeptSession[] }>(
+    "agents.takeLostOnRestart",
+  ).catch(() => ({ resume: [], kept: [] }));
+  showKept(lost.kept);
+  if (lost.resume.length === 0) return;
+  const resumable = await fetchResumableCliTypes();
+  const started = Date.now();
+  const ws = useWorkspaceStore.getState();
+  const ordered = orderAutoResume(lost.resume, (a) =>
+    screenRank(a.id, a.projectId, ws.projectWorkspaces, ws._activeProjectId),
+  );
+  const outcomes: Array<{ id: string; cliType: string; outcome: string; reason?: string }> = [];
+  await staggered(ordered, AUTO_RESUME_CONCURRENCY, async (agent) => {
+    const pane = findAgentPane(agent.id, agent.projectId);
+    const report = (outcome: string, reason?: string) =>
+      outcomes.push({
+        id: agent.id,
+        cliType: agent.cliType,
+        outcome,
+        reason: reason?.slice(0, REASON_MAX),
+      });
+    if (!pane) {
+      // Main suspends it: Resume from the sidebar, not a crash
+      useAgentStore.getState().updateAgent(agent.id, { status: "stopped" });
+      markSuspended(agent.id);
+      report("skipped", "no pane");
+      return;
+    }
+    try {
+      const canResume = resumable.has(agent.cliType);
+      const newId = await resumeSessionInto(agent, canResume, spawn, pane.paneId);
+      if (!newId) {
+        report("skipped", "already resuming");
+        return;
+      }
+      report("resumed", canResume ? undefined : "fresh start");
+      await settled(newId, agent.cliType);
+    } catch (err) {
+      report("failed", err instanceof Error ? err.message.split("\n")[0] : "spawn failed");
+    }
+  });
+  trpcMutate("agents.autoResumeReport", {
+    outcomes,
+    totalMs: Date.now() - started,
+    kept: lost.kept.length,
+  }).catch(() => {});
 }
 
 /**

@@ -6,6 +6,7 @@ import { logger } from "../lib/logger";
 import { terminalProcesses, terminateAll } from "../system/process-tree";
 import { readProcessTable } from "../system/shell-clis";
 import { ExitWaiters } from "./exit-waiters";
+import { SidecarLossHandler } from "./pty-host-loss";
 import {
   newSidecarSession,
   type ReattachedSession,
@@ -17,13 +18,12 @@ import {
   encodeFrame,
   encodeJson,
   encodeString,
-  FRAME_DISPOSE,
   FRAME_KILL,
   FRAME_RESIZE,
   FRAME_WRITE,
   type SpawnPayload,
 } from "./pty-ipc";
-import { doCreateLegacy, type LegacyHostDeps } from "./pty-legacy-session";
+import { doCreateLegacy, forceKillSession, type LegacyHostDeps } from "./pty-legacy-session";
 import { flushScrollbackSync, scheduleScrollbackFlush } from "./pty-scrollback";
 import {
   MAX_CONCURRENT_SPAWNS,
@@ -52,6 +52,11 @@ export class PtyHost {
   private spawnSlot = createLimiter(MAX_CONCURRENT_SPAWNS);
   private sidecarClient: SidecarClient | null = null;
   private exitWaiters = new ExitWaiters();
+  private loss = new SidecarLossHandler({
+    sessions: this.sessions,
+    finishNormal: (s, code, signal) => this.finishExitNow(s, code, signal),
+    finishLost: (s, reason, persist) => this.finishLost(s, reason, persist),
+  });
 
   // ─── Sidecar integration ────────────────────────────────────────────
 
@@ -82,14 +87,38 @@ export class PtyHost {
       s.callbacks.onError(message);
     });
 
+    client.onShuttingDown((reason, ids) => this.loss.notice(reason, ids));
+    client.onClose(() => {
+      if (this.sidecarClient === client) this.loss.socketClosed();
+    });
+
     logger.info("[PtyHost] Connected to sidecar");
   }
 
+  /** A sidecar exit: the CLI's own, or one the sidecar's stop caused (pty-host-loss.ts) */
   private finishExit(s: Session, exitCode: number, signal?: number): void {
-    s.alive = false;
-    flushScrollbackSync(s);
-    this.cleanup(s.id);
+    this.loss.exit(s, exitCode, signal);
+  }
+
+  private finishExitNow(s: Session, exitCode: number, signal?: number): void {
+    this.endSession(s);
     s.callbacks.onExit(exitCode, signal);
+  }
+
+  private finishLost(s: Session, reason: string, persist: boolean): void {
+    this.endSession(s);
+    if (s.callbacks.onLost) s.callbacks.onLost(reason, persist);
+    else s.callbacks.onExit(1);
+  }
+
+  /** After the sessions a sidecar stop took are marked lost (not while relaunching) */
+  onSidecarLost(fn: (reason: string) => void): void {
+    this.loss.onSidecarLost(fn);
+  }
+
+  /** Restart terminals: the relaunch's recovery takes the sessions */
+  expectRelaunch(): void {
+    this.loss.expectRelaunch();
   }
 
   private applyFrame(s: Session, data: string, seq: number | undefined): void {
@@ -166,12 +195,8 @@ export class PtyHost {
     return this.sidecarClient.listSessions();
   }
 
-  /**
-   * List sessions with alive flag + exit info.
-   * Use this over listSidecarSessions() for crash recovery, because the
-   * sidecar keeps dead sessions in its map for 60s (snapshot grace period).
-   * Treating them as alive leaves agents stuck in "running" with no PTY.
-   */
+  /** With alive + exit info: the sidecar keeps dead sessions 60s, and crash recovery must not
+   *  read them as running */
   async listSidecarSessionsInfo(): Promise<
     Array<{ id: string; alive: boolean; exitCode: number | null; signal: string | null }>
   > {
@@ -422,40 +447,10 @@ export class PtyHost {
 
   destroyAll(): void {
     for (const [, session] of this.sessions) {
-      this.forceKillSession(session);
+      forceKillSession(session, this.sidecarClient);
     }
     this.sessions.clear();
     this.exitWaiters.notifyAll();
-  }
-
-  /** Force-kill a session: flush scrollback, send dispose, then SIGKILL as safety net */
-  private forceKillSession(session: Session): void {
-    if (!session.alive) return;
-    session.alive = false;
-    flushScrollbackSync(session);
-
-    if (session.mode === "sidecar") {
-      this.sidecarClient?.destroy(session.id).catch(() => {});
-    } else if (session.child) {
-      try {
-        session.child.stdin?.write(encodeFrame(FRAME_DISPOSE, Buffer.alloc(0)));
-      } catch {
-        /* pipe closed */
-      }
-      const child = session.child;
-      setTimeout(() => {
-        if (!child.killed) {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            /* already dead */
-          }
-        }
-      }, 1000);
-    }
-
-    if (session.flushTimer) clearTimeout(session.flushTimer);
-    session.emulator.dispose();
   }
 
   // ─── Private ──────────────────────────────────────────────────────────
@@ -475,6 +470,12 @@ export class PtyHost {
     } catch {
       /* pipe broken */
     }
+  }
+
+  private endSession(s: Session): void {
+    s.alive = false;
+    flushScrollbackSync(s);
+    this.cleanup(s.id);
   }
 
   private cleanup(id: string): void {

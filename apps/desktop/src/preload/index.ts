@@ -215,6 +215,14 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:idle-suspended", handler as never);
     };
   },
+  /** The sidecar stopped under the running app: its sessions wait in the lost list (T202) */
+  onSessionsLost: (callback: () => void) => {
+    const handler = () => callback();
+    safe.on("agent:sessions-lost", handler as never);
+    return () => {
+      safe.off("agent:sessions-lost", handler as never);
+    };
+  },
   /** A "continue last" found no session and exited: the renderer relaunches it fresh */
   onResumeMissed: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);

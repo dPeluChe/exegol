@@ -3,6 +3,7 @@ import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { recoverStaleAgents } from "../db/queries";
 import { markStaleQueuedUndeliverable } from "../db/queries/messages";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
@@ -33,7 +34,7 @@ export function cleanupStaleData(): void {
     // and their pane opens a fresh shell, then drops the row.
     const shellCleanup = getDb()
       .prepare(
-        "DELETE FROM agents WHERE cli_type = 'shell' AND status IN ('completed', 'failed', 'stopped', 'crashed')",
+        "DELETE FROM agents WHERE cli_type = 'shell' AND status IN ('completed', 'failed', 'stopped', 'crashed') AND suspended_at IS NULL",
       )
       .run();
     if (shellCleanup.changes > 0) {
@@ -63,6 +64,18 @@ export function cleanupStaleData(): void {
   } catch {
     /* table may not exist yet */
   }
+}
+
+/** The sidecar stopped under the running app: a fresh one for the resumes, then the renderer
+ *  takes the lost list again */
+async function reconnectAfterLoss(reason: string): Promise<void> {
+  try {
+    getPtyHost().connectToSidecar(await ensureSidecar());
+    logger.info(`[Sidecar] reconnected to a new sidecar after it stopped (${reason})`);
+  } catch (err) {
+    logger.warn("[Sidecar] no new sidecar after the stop, sessions resume in legacy mode:", err);
+  }
+  broadcast("agent:sessions-lost", { reason });
 }
 
 // Background: sidecar connection + agent recovery (non-blocking)
@@ -108,6 +121,7 @@ export async function runStartupRecovery(): Promise<void> {
       writeReplacedInventory(getDb(), r);
     });
     getPtyHost().connectToSidecar(sidecarClient);
+    getPtyHost().onSidecarLost(reconnectAfterLoss);
     sidecarConnected = true;
   } catch (err) {
     logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);

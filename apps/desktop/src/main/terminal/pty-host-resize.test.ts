@@ -17,6 +17,8 @@ function fakeSidecar() {
     onSessionData: () => {},
     onSessionExit: () => {},
     onSessionError: () => {},
+    onShuttingDown: () => {},
+    onClose: () => {},
   } as unknown as SidecarClient;
   return { client, resize };
 }

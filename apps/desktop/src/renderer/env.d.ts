@@ -98,6 +98,7 @@ interface Window {
     onIdleSuspended: (
       callback: (event: import("./hooks/use-idle-suspend").IdleSuspendEvent) => void,
     ) => () => void;
+    onSessionsLost: (callback: () => void) => () => void;
     onResumeMissed: (
       callback: (event: { agentId: string; projectId: string; cliType: string }) => void,
     ) => () => void;

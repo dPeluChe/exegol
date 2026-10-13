@@ -12,6 +12,12 @@ export function setLostOnRestart(sessions: LostSession[]): void {
   lost = sessions;
 }
 
+/** A sidecar that stopped under the running app (lost-session-exit.ts) */
+export function addLost(sessions: LostSession[]): void {
+  const known = new Set(lost.map((s) => s.id));
+  lost = [...lost, ...sessions.filter((s) => !known.has(s.id))];
+}
+
 /** The ones not settled yet */
 export async function takeLostOnRestart(): Promise<LostSession[]> {
   await whenRecovered();

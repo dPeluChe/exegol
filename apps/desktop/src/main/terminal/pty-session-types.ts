@@ -9,6 +9,8 @@ export interface SessionCallbacks {
   onData: (data: string) => void;
   onExit: (exitCode: number, signal?: number) => void;
   onError: (message: string) => void;
+  /** Gone with the sidecar, not the CLI's own exit: no finalize, no scoring, no cleanup */
+  onLost?: (reason: string, persist: boolean) => void;
 }
 
 export type SessionMode = "legacy" | "sidecar";
