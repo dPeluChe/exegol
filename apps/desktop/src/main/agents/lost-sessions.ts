@@ -3,7 +3,8 @@ import type { LostSession } from "./auto-resume";
 
 /**
  * Sessions a restart took with it: the sidecar came back empty (reboot, kill, version bump), so
- * every live agent was marked crashed at once. The renderer resumes the recent ones, staggered.
+ * every live agent was marked crashed at once. Each stays here until it is resumed, kept
+ * suspended or reported, so a renderer reload mid-stagger picks up the rest.
  */
 let lost: LostSession[] = [];
 
@@ -11,10 +12,13 @@ export function setLostOnRestart(sessions: LostSession[]): void {
   lost = sessions;
 }
 
-/** Once: a second window or a reload must not resume them again */
+/** The ones not settled yet */
 export async function takeLostOnRestart(): Promise<LostSession[]> {
   await whenRecovered();
-  const sessions = lost;
-  lost = [];
-  return sessions;
+  return [...lost];
+}
+
+export function settleLost(ids: Iterable<string>): void {
+  const done = new Set(ids);
+  if (done.size > 0) lost = lost.filter((s) => !done.has(s.id));
 }

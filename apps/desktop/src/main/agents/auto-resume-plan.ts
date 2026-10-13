@@ -3,6 +3,7 @@ import type Database from "libsql";
 import { getAgent, getProject, setAgentSuspended, updateAgentStatus } from "../db/queries";
 import { logger } from "../lib/logger";
 import { idleDays, type LostSession, splitLost } from "./auto-resume";
+import { settleLost } from "./lost-sessions";
 import { getProviderRegistry } from "./registry";
 
 export interface KeptSession {
@@ -21,10 +22,18 @@ export interface AutoResumeOutcome {
   reason?: string;
 }
 
-let keptCount = 0;
+export const KEPT_STEP = "Suspended (idle 3+ days)";
+export const NO_PANE_STEP = "Suspended (no pane to resume in)";
+/** The renderer's reason for a session it had no pane for */
+export const NO_PANE = "no pane";
 
-/** The recent lost sessions go back to the renderer to resume; the rest become suspended
- *  (stopped, Resume in their pane), not crashed */
+/** Stopped and suspended: the pane shows Resume, not the crash */
+function suspendLost(db: Database.Database, id: string, step: string, now: number): void {
+  setAgentSuspended(db, id, Math.floor(now / 1000));
+  updateAgentStatus(db, id, "stopped", step);
+}
+
+/** The recent lost sessions go back to the renderer to resume; the rest are kept suspended */
 export function planLostResume(
   db: Database.Database,
   lost: LostSession[],
@@ -35,8 +44,7 @@ export function planLostResume(
   for (const s of keep) {
     const agent = getAgent(db, s.id);
     if (!agent) continue;
-    setAgentSuspended(db, s.id, Math.floor(now / 1000));
-    updateAgentStatus(db, s.id, "stopped");
+    suspendLost(db, s.id, KEPT_STEP, now);
     logger.info(
       `[AutoResume] ${s.id} ${agent.cliType} -> kept suspended (idle ${idleDays(now - s.lastActiveAt)})`,
     );
@@ -48,23 +56,34 @@ export function planLostResume(
       cliType: agent.cliType,
     });
   }
-  keptCount = kept.length;
+  settleLost(keep.map((s) => s.id));
   const agents = resume.flatMap((s) => {
     const agent = getAgent(db, s.id);
-    return agent ? [{ ...agent, lastActiveAt: s.lastActiveAt }] : [];
+    return agent?.status === "crashed" ? [{ ...agent, lastActiveAt: s.lastActiveAt }] : [];
   });
   return { resume: agents, kept };
 }
 
-/** What the renderer did with the ones it resumed */
-export function logAutoResume(outcomes: AutoResumeOutcome[], totalMs: number): void {
+/** What the renderer did with the ones it was handed. One it skipped (no pane) is suspended
+ *  rather than left crashed */
+export function finishAutoResume(
+  db: Database.Database,
+  outcomes: AutoResumeOutcome[],
+  totalMs: number,
+  kept: number,
+  now = Date.now(),
+): void {
   const count = (o: AutoResumeOutcome["outcome"]) => outcomes.filter((x) => x.outcome === o).length;
   for (const o of outcomes) {
+    if (o.reason === NO_PANE && getAgent(db, o.id)?.status === "crashed") {
+      suspendLost(db, o.id, NO_PANE_STEP, now);
+    }
     logger.info(
       `[AutoResume] ${o.id} ${o.cliType} -> ${o.outcome}${o.reason ? ` (${o.reason})` : ""}`,
     );
   }
+  settleLost(outcomes.map((o) => o.id));
   logger.info(
-    `[AutoResume] done in ${totalMs}ms: ${count("resumed")} resumed, ${count("failed")} failed, ${count("skipped")} skipped, ${keptCount} kept suspended`,
+    `[AutoResume] done in ${totalMs}ms: ${count("resumed")} resumed, ${count("failed")} failed, ${count("skipped")} skipped, ${kept} kept suspended`,
   );
 }

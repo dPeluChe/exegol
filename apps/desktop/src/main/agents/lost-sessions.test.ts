@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { settleAllReattach } from "../terminal/reattach-gate";
 import { AUTO_RESUME_MAX_IDLE_MS, lastActiveOf, shellResumeFolder, splitLost } from "./auto-resume";
-import { setLostOnRestart, takeLostOnRestart } from "./lost-sessions";
+import { setLostOnRestart, settleLost, takeLostOnRestart } from "./lost-sessions";
 
 describe("lost sessions after a restart", () => {
-  it("waits for recovery, then hands them out once", async () => {
+  it("waits for recovery, then hands them out until they are settled", async () => {
     const lost = [
       { id: "a", lastActiveAt: 1 },
       { id: "b", lastActiveAt: 2 },
@@ -13,6 +13,8 @@ describe("lost sessions after a restart", () => {
     setLostOnRestart(lost);
     settleAllReattach();
     expect(await pending).toEqual(lost);
+    expect(await takeLostOnRestart()).toEqual(lost);
+    settleLost(["a", "b"]);
     expect(await takeLostOnRestart()).toEqual([]);
   });
 });

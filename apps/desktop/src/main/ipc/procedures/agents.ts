@@ -1,4 +1,3 @@
-import { statSync } from "node:fs";
 import type { AgentCliType, AgentProvider, ResumableSession, SpawnPreview } from "@exegol/shared";
 import { agentCliTypeSchema, agentCreateSchema, agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
@@ -7,8 +6,8 @@ import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import { continueLastPart } from "../../agents/agent-spawn-flow";
-import { shellResumeFolder } from "../../agents/auto-resume";
-import { logAutoResume, planLostResume } from "../../agents/auto-resume-plan";
+import { folderExists, shellResumeFolder } from "../../agents/auto-resume";
+import { finishAutoResume, planLostResume } from "../../agents/auto-resume-plan";
 import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
 import {
   FOLLOW_UP_MAX_CHARS,
@@ -19,7 +18,7 @@ import {
   steerFollowUp,
 } from "../../agents/follow-up-queue";
 import { setIdleExempt } from "../../agents/idle-exempt";
-import { takeLostOnRestart } from "../../agents/lost-sessions";
+import { settleLost, takeLostOnRestart } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
 import { providerSessionId } from "../../agents/provider-session-id";
@@ -99,12 +98,19 @@ async function resumedShellFolder(
   bases: string[],
 ): Promise<string | undefined> {
   const last = getAgentLastCwd(db, fromId);
-  const exists = !!last && statSync(last, { throwIfNoEntry: false })?.isDirectory() === true;
+  const exists = folderExists(last);
   const allowed = exists && bases.length > 0 && (await isPathAllowed(last as string, bases));
   const { cwd, decision } = shellResumeFolder(last, exists, allowed);
   const where = decision === "kept" ? "folder kept" : `folder ${decision}, project root`;
   if (decision !== "none") logger.info(`[Resume] ${fromId} shell: ${where}`);
   return cwd;
+}
+
+/** A crashed row whose session now runs in a new one: archived here, not by the renderer, so a
+ *  reload in between never leaves a Resume that starts a second process on the same session */
+function retireResumedSource(db: Parameters<typeof getAgent>[0], id: string): void {
+  settleLost([id]);
+  if (getAgent(db, id)?.status === "crashed") archiveAgent(db, id);
 }
 
 /** One line of why a resume failed, without paths (the log goes into public bug reports) */
@@ -263,8 +269,8 @@ export const agentRouter = router({
     )
     .mutation(({ ctx, input }) => saveActiveView(ctx.db, input)),
 
-  /** Sessions a restart took with the sidecar (handed out once): the recent ones to resume in
-   *  their panes, the rest already kept suspended */
+  /** Sessions a restart took with the sidecar that are not settled yet (a reload mid-stagger
+   *  gets the rest): the recent ones to resume in their panes, the rest kept suspended */
   takeLostOnRestart: publicProcedure.query(async ({ ctx }) =>
     planLostResume(ctx.db, await takeLostOnRestart()),
   ),
@@ -279,23 +285,40 @@ export const agentRouter = router({
               id: z.string().max(128),
               cliType: z.string().regex(/^[\w-]{1,40}$/),
               outcome: z.enum(["resumed", "failed", "skipped"]),
-              reason: z.string().max(120).optional(),
+              // Cut, never refused: one long error must not drop the whole report
+              reason: z
+                .string()
+                .optional()
+                .transform((r) => r?.slice(0, 120)),
             }),
           )
-          .max(256),
+          .max(1000),
         totalMs: z.number().int().nonnegative(),
+        kept: z.number().int().nonnegative(),
       }),
     )
-    .mutation(({ input }) => {
-      logAutoResume(
+    .mutation(({ ctx, input }) => {
+      finishAutoResume(
+        ctx.db,
         input.outcomes.map((o) => ({ ...o, reason: o.reason && redact(o.reason) })),
         input.totalMs,
+        input.kept,
       );
     }),
 
   /** A shell's folder from OSC 7: its resume reopens there */
   setShellCwd: publicProcedure
-    .input(z.object({ id: z.string().max(128), cwd: z.string().min(1).max(4096).startsWith("/") }))
+    .input(
+      z.object({
+        id: z.string().max(128),
+        cwd: z
+          .string()
+          .min(1)
+          .max(4096)
+          .startsWith("/")
+          .refine((c) => !c.includes("\0"), "NUL in path"),
+      }),
+    )
     .mutation(({ ctx, input }) => {
       if (getAgent(ctx.db, input.id)?.cliType === "shell") {
         setAgentLastCwd(ctx.db, input.id, input.cwd);
@@ -501,7 +524,10 @@ export const agentRouter = router({
     const fresh = input.resumeSession ? "" : " (fresh start, no session to resume)";
     try {
       await manager.spawn(ctx.db, agent, input);
-      if (resumedFrom) logger.info(`[Resume] ${resumedFrom} -> ${agent.id} ok${fresh}`);
+      if (resumedFrom) {
+        logger.info(`[Resume] ${resumedFrom} -> ${agent.id} ok${fresh}`);
+        retireResumedSource(ctx.db, resumedFrom);
+      }
     } catch (err) {
       if (resumedFrom) {
         logger.warn(`[Resume] ${resumedFrom} -> ${agent.id} failed ${resumeFailure(err)}${fresh}`);

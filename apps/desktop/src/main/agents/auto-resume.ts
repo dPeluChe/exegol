@@ -1,5 +1,6 @@
 // After a lost sidecar: which sessions come back by themselves. Relaunching all 36 at once took
 // process memory from 11.2 to 15 GB; the renderer staggers the resumes, this picks them.
+import { statSync } from "node:fs";
 
 /** Sessions idle longer than this stay suspended (Resume in their pane) */
 export const AUTO_RESUME_MAX_IDLE_MS = 3 * 24 * 60 * 60 * 1000;
@@ -49,6 +50,16 @@ export function shellResumeFolder(
   if (!exists) return { cwd: undefined, decision: "gone" };
   if (!allowed) return { cwd: undefined, decision: "outside the project" };
   return { cwd: lastCwd, decision: "kept" };
+}
+
+/** A directory we can stat; a refused or malformed path (EACCES, a NUL byte) counts as gone */
+export function folderExists(path: string | null): boolean {
+  if (!path) return false;
+  try {
+    return statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+  } catch {
+    return false;
+  }
 }
 
 export const idleDays = (ms: number) => `${Math.floor(ms / 86_400_000)}d`;
