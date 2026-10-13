@@ -236,11 +236,17 @@ export function listAgentsByIds(db: Database.Database, ids: string[]): Agent[] {
   return (rows as Record<string, unknown>[]).map(mapAgentRow);
 }
 
-/** The folder an agent works in: its worktree, else the project root */
+/** An agent's folder in SQL over `agents a`, `worktrees w`, `projects p`: the start folder the
+ *  launcher gave it (a shell's last_cwd is its OSC 7 folder, not where it started), its worktree,
+ *  else the project root */
+export const AGENT_FOLDER_SQL =
+  "COALESCE(CASE WHEN a.cli_type <> 'shell' THEN a.last_cwd END, w.path, p.path)";
+
+/** The folder an agent works in: its start folder, its worktree, else the project root */
 export function getAgentCwd(db: Database.Database, id: string): string | null {
   const row = db
     .prepare(
-      `SELECT COALESCE(w.path, p.path) AS cwd
+      `SELECT ${AGENT_FOLDER_SQL} AS cwd
        FROM agents a
        LEFT JOIN worktrees w ON w.id = a.worktree_id
        JOIN projects p ON p.id = a.project_id

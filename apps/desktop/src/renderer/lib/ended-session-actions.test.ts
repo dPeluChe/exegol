@@ -45,6 +45,20 @@ describe("ended session actions", () => {
     expect(calls).toEqual(["pin:old1->new1", "delete:old1"]);
   });
 
+  it("a new session starts in the session's folder, unless it had a worktree branch", async () => {
+    const { trpcMutate } = await import("./trpc-client");
+    await newSessionInPane(source, "pane1", "/p/app/web");
+    expect(trpcMutate).toHaveBeenLastCalledWith(
+      "agents.spawn",
+      expect.objectContaining({ cwdOverride: "/p/app/web", useWorktree: false }),
+    );
+    await newSessionInPane({ ...source, branchName: "exegol/x" }, "pane1", "/wt/x");
+    expect(trpcMutate).toHaveBeenLastCalledWith(
+      "agents.spawn",
+      expect.not.objectContaining({ cwdOverride: expect.anything() }),
+    );
+  });
+
   it("Files clears the pane's agent so the retire does not empty it", () => {
     filesInPane(source, "pane1", "/p/app/web");
     expect(setPaneIn).toHaveBeenCalledWith("P", "pane1", {

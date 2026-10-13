@@ -1,16 +1,14 @@
-import { type AgentAccessMode, type AgentProvider, MODEL_ID_PATTERN } from "@exegol/shared";
+import type { AgentAccessMode, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { useEnabledProviders, useRecheckProviders } from "../../hooks/use-providers";
+import { useEnabledProviders } from "../../hooks/use-providers";
 import { editKeys } from "../../lib/keymap";
 import { Kbd } from "../common/Kbd";
-import { ModelAndName } from "./ModelPicker";
-import { AccessModePicker, InstallHint, ProviderPicker, SkillPicker } from "./SpawnOptions";
-import { SpawnSessionPicker } from "./SpawnSessionPicker";
-import { SpawnWorkLocation } from "./SpawnWorkLocation";
+import { AgentSwitcher } from "./AgentSwitcher";
+import { SpawnFormBody } from "./SpawnFormBody";
 import { useSpawnAgent } from "./use-spawn-agent";
-import { type SessionChoice, useSpawnForm } from "./use-spawn-form";
+import { canLaunchForm, type SessionChoice, useSpawnForm } from "./use-spawn-form";
 
 export type { SessionChoice } from "./use-spawn-form";
 
@@ -31,6 +29,8 @@ interface SpawnAgentModalProps {
   initialAccessMode?: AgentAccessMode;
   /** Start in this branch's worktree (an ended session's place, reused) */
   initialBranch?: string | null;
+  /** Start in this folder of the project (a launcher's subfolder) */
+  folder?: string;
   /** After the new agent took its pane */
   onSpawned?: (agentId: string) => void;
 }
@@ -45,9 +45,10 @@ export function SpawnAgentModal({
   initialSession = null,
   initialAccessMode = "write",
   initialBranch,
+  folder,
   onSpawned,
 }: SpawnAgentModalProps) {
-  // All enabled ones: the picker groups those not installed and the form starts on one that is
+  // All enabled ones: the switcher lists those not installed last and the form starts on one that is
   const enabledProviders = useEnabledProviders();
   const form = useSpawnForm({
     projectId,
@@ -58,9 +59,9 @@ export function SpawnAgentModal({
     initialSession,
     initialAccessMode,
     initialBranch,
+    folder,
   });
   const { spawning, spawn } = useSpawnAgent({ projectId, targetPaneId, onClose, onSpawned });
-  const recheck = useRecheckProviders();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Focus textarea on mount
@@ -68,9 +69,7 @@ export function SpawnAgentModal({
     textareaRef.current?.focus();
   }, []);
 
-  const modelOk = !form.model.trim() || MODEL_ID_PATTERN.test(form.model.trim());
-  const notInstalled = form.provider?.installed === false;
-  const canLaunch = !!form.providerId && modelOk && !notInstalled && !spawning;
+  const canLaunch = canLaunchForm(form, spawning);
 
   const handleSpawn = () => {
     if (canLaunch) spawn(form);
@@ -91,91 +90,27 @@ export function SpawnAgentModal({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} role="none" />
 
       {/* Modal */}
-      <div className="relative z-10 w-[480px] rounded-xl border border-border bg-bg-primary shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-text-primary">Launch Agent</h2>
+      <div className="relative z-10 flex max-h-[90vh] w-[480px] flex-col rounded-xl border border-border bg-bg-primary shadow-2xl">
+        {/* Header: the agent, switchable without closing */}
+        <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
+          <AgentSwitcher
+            providers={enabledProviders}
+            selectedId={form.providerId}
+            onChoose={form.chooseProvider}
+            suffix={folder ? `in ${folder.slice(folder.lastIndexOf("/") + 1)}` : undefined}
+          />
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="flex h-6 w-6 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted hover:bg-white/10 hover:text-text-primary"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex flex-col gap-4 p-4">
-          <ProviderPicker
-            providers={enabledProviders}
-            selectedId={form.providerId}
-            onChoose={form.chooseProvider}
-          />
-          {notInstalled && form.provider && (
-            <InstallHint provider={form.provider} projectId={projectId} onRecheck={recheck} />
-          )}
-          <ModelAndName
-            key={form.providerId}
-            providerId={form.providerId}
-            model={form.model}
-            onModel={form.setModel}
-            roles={form.modelRoles}
-            onRole={form.setModelRole}
-            onPreset={form.applyPreset}
-            name={form.name}
-            onName={form.setName}
-          />
-          <SpawnSessionPicker
-            projectId={projectId}
-            providerId={form.providerId}
-            resumeFlag={form.provider?.capabilities?.resumeFlag}
-            useWorktree={form.useWorktree}
-            session={form.session}
-            onSession={form.chooseSession}
-            localSessionId={form.localSessionId}
-            onLocalSession={form.chooseLocalSession}
-          />
-          <AccessModePicker
-            accessMode={form.accessMode}
-            onAccessMode={form.setAccessMode}
-            provider={form.provider}
-            yoloFlag={form.yoloFlag}
-            yolo={form.yolo}
-            onYolo={form.setYolo}
-          />
-          <SkillPicker
-            projectId={projectId}
-            selected={form.selectedSkills}
-            onToggle={form.toggleSkill}
-          />
-          <SpawnWorkLocation
-            projectId={projectId}
-            providerId={form.providerId}
-            task={form.task}
-            useWorktree={form.useWorktree}
-            onWorktree={form.chooseWorktree}
-            branchName={form.branchName}
-            branchEdited={form.branchEdited}
-            onBranch={form.editBranch}
-            baseBranch={form.baseBranch}
-            onBaseBranch={form.setBaseBranch}
-          />
-          {/* Task prompt */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-[11px] font-medium text-text-muted" htmlFor="task-prompt">
-              Task · prompt · greeting <span className="text-text-muted">(optional)</span>
-            </label>
-            <textarea
-              ref={textareaRef}
-              id="task-prompt"
-              value={form.task}
-              onChange={(e) => form.setTask(e.target.value)}
-              placeholder="Sent to the agent as its first message — a task, a prompt, or just a hello"
-              rows={3}
-              className="resize-none rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50"
-            />
-          </div>
+        <div className="flex flex-col gap-4 overflow-y-auto p-4">
+          <SpawnFormBody projectId={projectId} form={form} promptRef={textareaRef} />
         </div>
 
         {/* Footer */}
@@ -192,7 +127,12 @@ export function SpawnAgentModal({
               Cancel
               <Kbd className="h-4 min-w-4 px-1 text-[9px]">esc</Kbd>
             </button>
-            <LaunchButton canLaunch={canLaunch} spawning={spawning} onLaunch={handleSpawn} />
+            <LaunchButton
+              canLaunch={canLaunch}
+              spawning={spawning}
+              onLaunch={handleSpawn}
+              keys={editKeys("Cmd+Enter")}
+            />
           </div>
         </div>
       </div>
@@ -214,14 +154,16 @@ function spawnSummary(
   ].join("");
 }
 
-function LaunchButton({
+export function LaunchButton({
   canLaunch,
   spawning,
   onLaunch,
+  keys,
 }: {
   canLaunch: boolean;
   spawning: boolean;
   onLaunch: () => void;
+  keys: string;
 }) {
   return (
     <button
@@ -229,14 +171,16 @@ function LaunchButton({
       disabled={!canLaunch}
       onClick={onLaunch}
       className={cn(
-        "rounded-lg px-4 py-1.5 text-[11px] font-semibold transition-all",
+        "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-[11px] font-semibold transition-all",
         canLaunch
           ? "bg-accent text-white hover:bg-accent/90"
           : "bg-bg-tertiary text-text-muted cursor-not-allowed",
       )}
     >
       {spawning ? "Launching..." : "Launch"}
-      <span className="ml-1 text-[9px] opacity-60">{editKeys("Cmd+Enter")}</span>
+      <Kbd className="h-4 min-w-4 border-white/30 bg-white/10 px-1 text-[9px] text-current">
+        {keys}
+      </Kbd>
     </button>
   );
 }

@@ -8,12 +8,32 @@ import {
 import { hasLocalSession, listLocalSessions } from "../../history";
 import { mergeHistory } from "../../history/merge";
 import { claudeCodeHistory } from "../../history/providers/claude-code";
+import { isPathAllowed } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 
 /** The base view is the last 30 days; older sessions stay for reference behind
  *  the range filter (Antonio, 2026-08-18: "el historico si exista para
  *  referencia unicamente"). */
 const DEFAULT_WINDOW_DAYS = 30;
+
+const CWD = z
+  .string()
+  .max(4096)
+  .startsWith("/")
+  .refine((c) => !c.includes("\0"), "NUL in path");
+
+/** The launcher's folder while it is inside the project or a worktree, else the project root */
+async function launchFolder(
+  db: Parameters<typeof getProject>[0],
+  projectId: string,
+  cwd: string | undefined,
+): Promise<string | null> {
+  const project = getProject(db, projectId);
+  if (!project) return null;
+  if (!cwd) return project.path;
+  const bases = [project.path, ...listWorktrees(db, project.id).map((w) => w.path)];
+  return (await isPathAllowed(cwd, bases)) ? cwd : project.path;
+}
 
 export const historyRouter = router({
   /**
@@ -69,15 +89,17 @@ export const historyRouter = router({
   /** Claude Code sessions in the project folder, newest first, for the launcher's resume picker
    *  (a folder with several: pick one by its /rename name instead of --continue's latest) */
   resumableLocal: publicProcedure
-    .input(z.object({ projectId: z.string(), provider: z.literal("claude-code") }))
+    .input(
+      z.object({ projectId: z.string(), provider: z.literal("claude-code"), cwd: CWD.optional() }),
+    )
     .query(async ({ ctx, input }) => {
-      const project = getProject(ctx.db, input.projectId);
-      if (!project) return [];
+      const cwd = await launchFolder(ctx.db, input.projectId, input.cwd);
+      if (!cwd) return [];
       const since = Math.floor(Date.now() / 1000) - DEFAULT_WINDOW_DAYS * 86_400;
       // Claude's store alone: the full scan also runs every CLI's listing (seconds) to drop them
-      const local = await claudeCodeHistory.list([project.path], since).catch(() => []);
+      const local = await claudeCodeHistory.list([cwd], since).catch(() => []);
       return local
-        .filter((s) => s.cwd === project.path)
+        .filter((s) => s.cwd === cwd)
         .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
         .slice(0, 15);
     }),
@@ -85,11 +107,16 @@ export const historyRouter = router({
   /** Whether the launcher's "Continue last" would find a session of this CLI in the project
    *  folder: false hides it, null (no adapter, CLI missing) shows it with a caveat */
   hasLocalSession: publicProcedure
-    .input(z.object({ projectId: z.string(), provider: z.string().regex(/^[a-z0-9-]{1,40}$/) }))
+    .input(
+      z.object({
+        projectId: z.string(),
+        provider: z.string().regex(/^[a-z0-9-]{1,40}$/),
+        cwd: CWD.optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
-      const project = getProject(ctx.db, input.projectId);
-      if (!project) return null;
-      return hasLocalSession(input.provider, project.path);
+      const cwd = await launchFolder(ctx.db, input.projectId, input.cwd);
+      return cwd ? hasLocalSession(input.provider, cwd) : null;
     }),
 
   /** The tail of what a past Exegol session said. Local sessions have none —

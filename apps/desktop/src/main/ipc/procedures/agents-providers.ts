@@ -3,6 +3,7 @@ import type { AgentProvider } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
+import { cliDefaultModel } from "../../agents/default-model";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
 import { coreRust, resolveCommand } from "../../agents/spawn-env";
@@ -153,6 +154,11 @@ export const agentProviderProcedures = {
   listModels: publicProcedure
     .input(z.object({ cliType: z.string().regex(/^[\w-]{1,40}$/) }))
     .query(({ input }) => listCliModels(input.cliType)),
+
+  /** The model the CLI uses with none given, and where it is set (null when unknown) */
+  defaultModel: publicProcedure
+    .input(z.object({ cliType: z.string().regex(/^[\w-]{1,40}$/) }))
+    .query(({ input }) => cliDefaultModel(input.cliType)),
 
   /** T104 — Run preflight checks before spawning an agent.
    *  Returns errors (blocking) and warnings (non-blocking) without side effects. */

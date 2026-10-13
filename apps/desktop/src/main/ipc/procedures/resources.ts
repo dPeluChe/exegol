@@ -1,21 +1,38 @@
-import { PREFERRED_PORTS_KEY } from "@exegol/shared";
+import { PREFERRED_PORTS_KEY, type ProjectDetect } from "@exegol/shared";
+import type Database from "libsql";
 import { z } from "zod";
 import { getProject, listAgents } from "../../db/queries";
-import { getJsonSetting, setJsonSetting } from "../../db/queries/settings";
+import { getAppSettings, getJsonSetting, setJsonSetting } from "../../db/queries/settings";
 import { killDevServer, listDevServers } from "../../system/dev-servers";
 import { getProjectPorts } from "../../system/ports";
+import { detectProject } from "../../system/project-detect";
 import {
   getMetricsHistory,
   getProjectMetrics,
   getSidecarMemoryMetrics,
   getSystemMetrics,
 } from "../../system/resources";
-import { detectRunTargets, refreshRunTargets } from "../../system/scripts";
 import { publicProcedure, router } from "../trpc";
 
 // ─── Preferred Ports (per-project, stored in settings table) ──────────────
 
 const RUN_PINS_KEY = "project_run_pins";
+
+const EMPTY_DETECT: ProjectDetect = { folders: [], editor: null, fileManager: "" };
+
+function launcherDetect(db: Database.Database, projectId: string, fresh: boolean) {
+  const project = getProject(db, projectId);
+  if (!project) return Promise.resolve(EMPTY_DETECT);
+  const settings = getAppSettings(db);
+  return detectProject(
+    {
+      projectPath: project.path,
+      ide: project.ide ?? settings.defaultIde,
+      customIdePath: settings.customIdePath,
+    },
+    fresh,
+  );
+}
 
 export const resourcesRouter = router({
   system: publicProcedure.query(() => {
@@ -80,21 +97,15 @@ export const resourcesRouter = router({
       return input.port;
     }),
 
-  /** T197: project root + subfolders (nested repos, packages) and what each can run */
-  runTargets: publicProcedure
+  /** T204: the launcher's folders (root + subfolders, kind, commands), editor and file manager */
+  projectDetect: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .query(async ({ ctx, input }) => {
-      const project = getProject(ctx.db, input.projectId);
-      return project ? detectRunTargets(project.path) : [];
-    }),
+    .query(({ ctx, input }) => launcherDetect(ctx.db, input.projectId, false)),
 
-  /** The launcher's refresh: re-detects folders and scripts, cache bypassed */
-  refreshRunTargets: publicProcedure
+  /** The launcher's refresh: folders, scripts and IDEs detected again, caches bypassed */
+  refreshProjectDetect: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(async ({ ctx, input }) => {
-      const project = getProject(ctx.db, input.projectId);
-      return project ? refreshRunTargets(project.path) : [];
-    }),
+    .mutation(({ ctx, input }) => launcherDetect(ctx.db, input.projectId, true)),
 
   /** Pinned run commands per project, as "rel\u0000command" keys */
   runPins: publicProcedure
