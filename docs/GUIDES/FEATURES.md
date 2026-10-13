@@ -23,7 +23,7 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   marked git, node, xcode, swift or expo, and the list's refresh finds them again). Agents,
   Terminal, Files, Git, Browser, Finder (Explorer on Windows, the file manager on Linux), the
   editor (the project's IDE, else Settings', shown only when installed) and the folder's commands
-  all start there. Keys while the pane has the keyboard: 1-9 the agents, T F G B O E the rest.
+  all start there. Keys while the pane has the keyboard: 1-9 the agents, T F G B O E the rest, Option+1..9 (Alt+1..9 off macOS) the folder's commands.
   Picking an agent turns the pane into its launch form ("Claude Code in web"): session, model,
   mode, YOLO, Here or Worktree (a worktree only from the root) and the prompt; Enter launches and
   Esc goes back. The agent can be switched in the form and in the Launch Agent dialog, keeping

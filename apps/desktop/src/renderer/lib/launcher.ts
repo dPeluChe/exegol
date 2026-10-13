@@ -1,4 +1,5 @@
 import { endedFocusAllowed, type FocusTarget, isTextField } from "./ended-session";
+import { appKeys, editKeys, hasClickModifier, IS_MAC } from "./keymap";
 
 /** What the empty pane's launcher opens in its folder, besides agents */
 export type LauncherAction =
@@ -64,33 +65,6 @@ export function launcherActions(opts: {
   return actions;
 }
 
-export type LauncherKey = { action: LauncherAction } | { agentIndex: number } | { folder: true };
-
-type KeyInput = Pick<
-  KeyboardEvent,
-  "key" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "repeat"
->;
-
-/** A launcher key with no field typing: 1-9 agents in grid order, letters the pane actions, / or
- *  Cmd+F (Ctrl+F) the folder filter. Never a held key's repeats */
-export function launcherKeyAction(
-  e: KeyInput,
-  typing: boolean,
-  actions: LauncherAction[],
-  agentCount: number,
-): LauncherKey | null {
-  if (typing || e.repeat || e.altKey) return null;
-  const key = e.key.toLowerCase();
-  if (e.metaKey || e.ctrlKey) return key === "f" && !e.shiftKey ? { folder: true } : null;
-  if (key === "/") return { folder: true };
-  if (/^[1-9]$/.test(key)) {
-    const index = Number(key) - 1;
-    return index < agentCount ? { agentIndex: index } : null;
-  }
-  const action = KEY_TO_ACTION[key];
-  return action && actions.includes(action) ? { action } : null;
-}
-
 /** Keys need the keyboard nowhere (body) or in the pane, and no text field focused: the folder
  *  filter and the form's prompt take their own typing */
 export function launcherFocusAllowed(
@@ -103,16 +77,88 @@ export function launcherFocusAllowed(
   return endedFocusAllowed(active, ctx);
 }
 
-/** A form key: Esc goes back to the grid, Enter (no Shift, not mid-composition) or Cmd+Enter
- *  launches; Enter on a button or a select keeps its own meaning */
+export type LauncherKey =
+  | { action: LauncherAction }
+  | { agentIndex: number }
+  | { commandIndex: number }
+  | { folder: true };
+
+type KeyInput = Pick<
+  KeyboardEvent,
+  "key" | "code" | "metaKey" | "ctrlKey" | "altKey" | "shiftKey" | "repeat"
+>;
+
+/** Option+1..9 (Alt+1..9 off macOS), read from e.code: the layout's Option or AltGr character
+ *  never matters. Ctrl or Cmd also down is not it (AltGr on Windows is Ctrl+Alt; macOS takes
+ *  Ctrl+1..9 for Spaces) */
+function commandDigit(e: KeyInput): number | null {
+  if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return null;
+  const digit = /^Digit([1-9])$/.exec(e.code)?.[1];
+  return digit ? Number(digit) : null;
+}
+
+/** "⌥1" on macOS, "Alt+1" elsewhere */
+export function commandBadge(n: number, mac = IS_MAC): string {
+  return mac ? `⌥${n}` : appKeys(`Option+${n}`, false);
+}
+
+/**
+ * A launcher key with no field typing: 1-9 agents in grid order, letters the pane actions,
+ * Option+1..9 (Alt) the folder's commands, / or Cmd+F (Ctrl+F off macOS) the folder filter.
+ * Plain keys are the same on every OS; never a held key's repeats
+ */
+export function launcherKeyAction(
+  e: KeyInput,
+  typing: boolean,
+  counts: { actions: LauncherAction[]; agents: number; commands: number },
+  mac = IS_MAC,
+): LauncherKey | null {
+  if (typing || e.repeat) return null;
+  const n = commandDigit(e);
+  if (n !== null) return n <= counts.commands ? { commandIndex: n - 1 } : null;
+  const key = e.key.toLowerCase();
+  if (e.altKey) return null;
+  if (e.metaKey || e.ctrlKey) {
+    // editKeys("Cmd+F"): Cmd alone on macOS, Ctrl alone elsewhere
+    const only = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
+    return only && key === "f" && !e.shiftKey ? { folder: true } : null;
+  }
+  if (key === "/") return { folder: true };
+  if (/^[1-9]$/.test(key)) {
+    const index = Number(key) - 1;
+    return index < counts.agents ? { agentIndex: index } : null;
+  }
+  const action = KEY_TO_ACTION[key];
+  return action && counts.actions.includes(action) ? { action } : null;
+}
+
+/** The folder filter's chord for this platform's labels */
+export const folderFilterKeys = (mac = IS_MAC) => editKeys("Cmd+F", mac);
+
+/** A form key: Esc goes back to the grid; Enter (no Shift, not mid-composition) or Cmd+Enter
+ *  (Ctrl+Enter off macOS) launches; Enter on a button or a select keeps its own meaning */
 export function launchFormKey(
   e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "isComposing">,
   targetTag: string,
+  mac = IS_MAC,
 ): "back" | "launch" | null {
   if (e.key === "Escape") return "back";
   if (e.key !== "Enter" || e.isComposing || e.altKey) return null;
-  if (e.metaKey || e.ctrlKey) return "launch";
-  if (e.shiftKey) return null;
+  if (hasClickModifier(e, mac)) return "launch";
+  if (e.shiftKey || e.metaKey || e.ctrlKey) return null;
   const tag = targetTag.toUpperCase();
   return tag === "BUTTON" || tag === "SELECT" ? null : "launch";
+}
+
+interface Script {
+  command: string;
+}
+
+export const pinKey = (rel: string, command: string) => `${rel}\u0000${command}`;
+
+/** A folder's commands in shortcut order: pinned first, then as detected */
+export function orderedCommands<T extends Script>(scripts: T[], pins: string[], rel: string): T[] {
+  const pinned = new Set(pins);
+  const isPinned = (s: T) => pinned.has(pinKey(rel, s.command));
+  return [...scripts.filter(isPinned), ...scripts.filter((s) => !isPinned(s))];
 }

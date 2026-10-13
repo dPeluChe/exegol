@@ -1,6 +1,5 @@
 import type { LauncherFolder } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Code2,
   FolderOpen,
@@ -15,15 +14,19 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
-import { LAUNCHER_ACTION_KEYS, type LauncherAction } from "../../lib/launcher";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import {
+  commandBadge,
+  LAUNCHER_ACTION_KEYS,
+  type LauncherAction,
+  orderedCommands,
+  pinKey,
+} from "../../lib/launcher";
 import { Kbd } from "../common/Kbd";
+import { useRunPins } from "./use-launcher-actions";
 
 type Script = LauncherFolder["scripts"][number];
 
 const VISIBLE_COMMANDS = 4;
-
-const pinKey = (rel: string, command: string) => `${rel}\u0000${command}`;
 
 function runnerLabel(s: Script): string | null {
   const src = s.source.toLowerCase();
@@ -47,7 +50,7 @@ export const CHIP = "flex items-center gap-1 rounded-lg border transition-all";
 
 /**
  * T197/T204: what the pane can become in the launcher's folder (keys T, F, G, B, O, E), then the
- * folder's commands, pinned first and the rest behind "+N"; commands stay clicks
+ * folder's commands, pinned first and the rest behind "+N", the first nine on Option+1..9
  */
 export function FolderActions({
   projectId,
@@ -69,25 +72,14 @@ export function FolderActions({
   onAction: (action: LauncherAction) => void;
   onCommand: (label: string, command: string) => void;
 }) {
-  const queryClient = useQueryClient();
-  const { data: pins = [] } = useQuery({
-    queryKey: ["resources", "runPins", projectId],
-    queryFn: () => trpcInvoke<string[]>("resources.runPins", { projectId }),
-    // Only this client changes them, and the mutation writes the result back
-    staleTime: Number.POSITIVE_INFINITY,
-  });
-  const togglePin = useMutation({
-    mutationFn: (key: string) => trpcMutate<string[]>("resources.toggleRunPin", { projectId, key }),
-    onSuccess: (next) => queryClient.setQueryData(["resources", "runPins", projectId], next),
-  });
+  const { pins, togglePin } = useRunPins(projectId);
   const [expanded, setExpanded] = useState(false);
 
   const pinSet = new Set(pins);
-  const isPinned = (s: Script) => pinSet.has(pinKey(folder.rel, s.command));
-  const pinned = folder.scripts.filter(isPinned);
-  const rest = folder.scripts.filter((s) => !isPinned(s));
-  const shown = expanded ? rest : rest.slice(0, Math.max(0, VISIBLE_COMMANDS - pinned.length));
-  const hidden = rest.length - shown.length;
+  const commands = orderedCommands(folder.scripts, pins, folder.rel);
+  const pinnedCount = commands.filter((s) => pinSet.has(pinKey(folder.rel, s.command))).length;
+  const shown = expanded ? commands : commands.slice(0, Math.max(VISIBLE_COMMANDS, pinnedCount));
+  const hidden = commands.length - shown.length;
   const size = compact ? "px-2 py-1 text-[9px]" : "px-2.5 py-1 text-[11px]";
   const button = cn(
     CHIP,
@@ -126,7 +118,7 @@ export function FolderActions({
       </div>
       {folder.scripts.length > 0 && (
         <div className="flex max-w-full flex-wrap justify-center gap-1">
-          {[...pinned, ...shown].map((s) => {
+          {shown.map((s, i) => {
             const key = pinKey(folder.rel, s.command);
             const on = pinSet.has(key);
             const runner = runnerLabel(s);
@@ -144,7 +136,7 @@ export function FolderActions({
                   type="button"
                   disabled={!!launching}
                   onClick={() => onCommand(s.name, s.command)}
-                  title={s.command}
+                  title={i < 9 ? `${s.command} (${commandBadge(i + 1)})` : s.command}
                   className={cn(
                     "flex items-center gap-1 text-text-secondary hover:text-text-primary",
                     size,
@@ -156,10 +148,13 @@ export function FolderActions({
                   {runner && !compact && (
                     <span className="text-[9px] text-text-muted">({runner})</span>
                   )}
+                  {i < 9 && !compact && (
+                    <Kbd className="h-4 min-w-4 px-1 text-[9px]">{commandBadge(i + 1)}</Kbd>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => togglePin.mutate(key)}
+                  onClick={() => togglePin(key)}
                   className={cn(
                     "px-1 text-text-muted hover:text-amber-400",
                     on ? "text-amber-400" : "opacity-0 group-hover:opacity-100",

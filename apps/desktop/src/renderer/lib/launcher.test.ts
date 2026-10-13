@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { defaultModelLabel, sessionNameDisplay } from "./launch-form";
 import {
+  commandBadge,
+  folderFilterKeys,
   type LauncherAction,
   launcherActions,
   launcherFocusAllowed,
@@ -7,6 +10,8 @@ import {
   launcherKeyAction,
   launchFormKey,
   matchFolders,
+  orderedCommands,
+  pinKey,
 } from "./launcher";
 import { sessionsInFolder } from "./launcher-sessions";
 
@@ -55,6 +60,7 @@ describe("launcherActions", () => {
 const key = (k: string, mods: Partial<KeyboardEvent> = {}) =>
   ({
     key: k,
+    code: /^[0-9]$/.test(k) ? `Digit${k}` : `Key${k.toUpperCase()}`,
     metaKey: false,
     ctrlKey: false,
     altKey: false,
@@ -65,35 +71,82 @@ const key = (k: string, mods: Partial<KeyboardEvent> = {}) =>
 
 describe("launcherKeyAction", () => {
   const all: LauncherAction[] = ["terminal", "files", "git", "browser", "finder", "editor"];
-  it("1-9 pick agents in grid order, within the grid", () => {
-    expect(launcherKeyAction(key("1"), false, all, 3)).toEqual({ agentIndex: 0 });
-    expect(launcherKeyAction(key("3"), false, all, 3)).toEqual({ agentIndex: 2 });
-    expect(launcherKeyAction(key("4"), false, all, 3)).toBeNull();
-    expect(launcherKeyAction(key("0"), false, all, 3)).toBeNull();
+  const counts = (agents: number, commands = 0, actions = all) => ({ actions, agents, commands });
+  it("1-9 pick agents in grid order, within the grid, on every OS", () => {
+    for (const mac of [true, false]) {
+      expect(launcherKeyAction(key("1"), false, counts(3), mac)).toEqual({ agentIndex: 0 });
+      expect(launcherKeyAction(key("3"), false, counts(3), mac)).toEqual({ agentIndex: 2 });
+      expect(launcherKeyAction(key("4"), false, counts(3), mac)).toBeNull();
+      expect(launcherKeyAction(key("0"), false, counts(3), mac)).toBeNull();
+    }
   });
   it("letters open the pane's views, only those offered", () => {
-    expect(launcherKeyAction(key("T"), false, all, 0)).toEqual({ action: "terminal" });
-    expect(launcherKeyAction(key("o"), false, all, 0)).toEqual({ action: "finder" });
-    expect(launcherKeyAction(key("e"), false, ["terminal"], 0)).toBeNull();
-    expect(launcherKeyAction(key("s"), false, all, 0)).toBeNull();
+    expect(launcherKeyAction(key("T"), false, counts(0))).toEqual({ action: "terminal" });
+    expect(launcherKeyAction(key("o"), false, counts(0), false)).toEqual({ action: "finder" });
+    expect(launcherKeyAction(key("e"), false, counts(0, 0, ["terminal"]))).toBeNull();
+    expect(launcherKeyAction(key("s"), false, counts(0))).toBeNull();
   });
-  it("/ and Cmd+F (Ctrl+F) open the folder filter", () => {
-    expect(launcherKeyAction(key("/"), false, all, 0)).toEqual({ folder: true });
-    expect(launcherKeyAction(key("f", { metaKey: true }), false, all, 0)).toEqual({
-      folder: true,
-    });
-    expect(launcherKeyAction(key("f", { ctrlKey: true }), false, all, 0)).toEqual({
-      folder: true,
-    });
+  it("Option+1..9 (Alt off macOS) run the folder's commands, read from e.code", () => {
+    for (const mac of [true, false]) {
+      // macOS Option+1 types "¡": the code is what counts
+      const opt1 = key("¡", { altKey: true, code: "Digit1" });
+      expect(launcherKeyAction(opt1, false, counts(9, 2), mac)).toEqual({ commandIndex: 0 });
+      const opt3 = key("£", { altKey: true, code: "Digit3" });
+      expect(launcherKeyAction(opt3, false, counts(9, 2), mac)).toBeNull();
+    }
   });
-  it("never while typing, on a repeat, with Alt or another app chord", () => {
-    expect(launcherKeyAction(key("t"), true, all, 0)).toBeNull();
-    expect(launcherKeyAction(key("1", { repeat: true }), false, all, 3)).toBeNull();
-    expect(launcherKeyAction(key("t", { altKey: true }), false, all, 0)).toBeNull();
-    expect(launcherKeyAction(key("t", { metaKey: true }), false, all, 0)).toBeNull();
+  it("never Ctrl+digit (Spaces on macOS), AltGr (Ctrl+Alt) or Cmd+Option", () => {
+    const d1 = { code: "Digit1" };
+    expect(launcherKeyAction(key("1", { ctrlKey: true, ...d1 }), false, counts(9, 9))).toBeNull();
     expect(
-      launcherKeyAction(key("f", { metaKey: true, shiftKey: true }), false, all, 0),
+      launcherKeyAction(
+        key("1", { ctrlKey: true, altKey: true, ...d1 }),
+        false,
+        counts(9, 9),
+        false,
+      ),
     ).toBeNull();
+    expect(
+      launcherKeyAction(key("1", { metaKey: true, altKey: true, ...d1 }), false, counts(9, 9)),
+    ).toBeNull();
+  });
+  it("/ everywhere; Cmd+F on macOS, Ctrl+F elsewhere opens the folder filter", () => {
+    expect(launcherKeyAction(key("/"), false, counts(0), false)).toEqual({ folder: true });
+    expect(launcherKeyAction(key("f", { metaKey: true }), false, counts(0), true)).toEqual({
+      folder: true,
+    });
+    expect(launcherKeyAction(key("f", { ctrlKey: true }), false, counts(0), true)).toBeNull();
+    expect(launcherKeyAction(key("f", { ctrlKey: true }), false, counts(0), false)).toEqual({
+      folder: true,
+    });
+    expect(launcherKeyAction(key("f", { metaKey: true }), false, counts(0), false)).toBeNull();
+  });
+  it("never while typing, on a repeat, with Alt on a letter or another chord", () => {
+    expect(launcherKeyAction(key("t"), true, counts(0))).toBeNull();
+    expect(launcherKeyAction(key("1", { repeat: true }), false, counts(3))).toBeNull();
+    expect(launcherKeyAction(key("t", { altKey: true }), false, counts(0))).toBeNull();
+    expect(launcherKeyAction(key("t", { metaKey: true }), false, counts(0))).toBeNull();
+    expect(
+      launcherKeyAction(key("f", { metaKey: true, shiftKey: true }), false, counts(0), true),
+    ).toBeNull();
+  });
+});
+
+describe("commandBadge and the folder chord", () => {
+  it("renders per platform", () => {
+    expect(commandBadge(1, true)).toBe("⌥1");
+    expect(commandBadge(1, false)).toBe("Alt+1");
+    expect(folderFilterKeys(true)).toBe("Cmd+F");
+    expect(folderFilterKeys(false)).toBe("Ctrl+F");
+  });
+});
+
+describe("orderedCommands", () => {
+  it("pinned first, then as detected", () => {
+    const scripts = [{ command: "dev" }, { command: "build" }, { command: "test" }];
+    const order = orderedCommands(scripts, [pinKey("web", "test")], "web").map((s) => s.command);
+    expect(order).toEqual(["test", "dev", "build"]);
+    expect(orderedCommands(scripts, [pinKey("api", "test")], "web")[0]?.command).toBe("dev");
   });
 });
 
@@ -126,13 +179,60 @@ describe("launchFormKey", () => {
   it("Esc goes back, Enter and Cmd+Enter launch, Shift+Enter is a new line", () => {
     expect(launchFormKey(ev("Escape"), "TEXTAREA")).toBe("back");
     expect(launchFormKey(ev("Enter"), "TEXTAREA")).toBe("launch");
-    expect(launchFormKey(ev("Enter", { metaKey: true }), "BUTTON")).toBe("launch");
     expect(launchFormKey(ev("Enter", { shiftKey: true }), "TEXTAREA")).toBeNull();
+  });
+  it("Cmd+Enter on macOS, Ctrl+Enter elsewhere launches from anywhere", () => {
+    expect(launchFormKey(ev("Enter", { metaKey: true }), "BUTTON", true)).toBe("launch");
+    expect(launchFormKey(ev("Enter", { ctrlKey: true }), "BUTTON", true)).toBeNull();
+    expect(launchFormKey(ev("Enter", { ctrlKey: true }), "BUTTON", false)).toBe("launch");
+    expect(launchFormKey(ev("Enter", { metaKey: true }), "BUTTON", false)).toBeNull();
   });
   it("Enter on a button or a select, or mid-composition, keeps its own meaning", () => {
     expect(launchFormKey(ev("Enter"), "BUTTON")).toBeNull();
     expect(launchFormKey(ev("Enter"), "select")).toBeNull();
     expect(launchFormKey(ev("Enter", { isComposing: true }), "TEXTAREA")).toBeNull();
+  });
+});
+
+describe("defaultModelLabel", () => {
+  it("names the model and where it is set, else the generic label", () => {
+    expect(defaultModelLabel({ model: "opus", source: "~/.claude/settings.json" })).toBe(
+      "Default · opus (from ~/.claude/settings.json)",
+    );
+    expect(defaultModelLabel(null)).toBe("Default (the CLI's own setting)");
+  });
+});
+
+describe("sessionNameDisplay", () => {
+  const base = { session: null, localSessionId: null, cliNames: {}, localSessions: [] };
+  const past = { agentId: "a1", alias: "jade" };
+  it("a new session takes a name", () => {
+    expect(sessionNameDisplay(base)).toEqual({ input: true });
+  });
+  it("a past session shows the CLI's name, else its codename", () => {
+    expect(sessionNameDisplay({ ...base, session: past, cliNames: { a1: "exegoldev" } })).toEqual({
+      input: false,
+      name: "exegoldev",
+    });
+    expect(sessionNameDisplay({ ...base, session: past })).toEqual({ input: false, name: "jade" });
+  });
+  it("Continue last shows the newest session here when known; a Claude session by its name", () => {
+    const localSessions = [
+      { sessionId: "s1", name: "refactor", title: null },
+      { sessionId: "s2", name: null, title: "fix the tests" },
+    ];
+    expect(sessionNameDisplay({ ...base, session: "last", localSessions })).toEqual({
+      input: false,
+      name: "refactor",
+    });
+    expect(sessionNameDisplay({ ...base, session: "last" })).toEqual({
+      input: false,
+      name: "the last session here",
+    });
+    expect(sessionNameDisplay({ ...base, localSessionId: "s2", localSessions })).toEqual({
+      input: false,
+      name: "fix the tests",
+    });
   });
 });
 

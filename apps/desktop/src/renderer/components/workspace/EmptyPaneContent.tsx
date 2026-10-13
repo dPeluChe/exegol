@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useCliInstalls } from "../../hooks/use-cli-updates";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
-import { launcherActions, launcherFolder } from "../../lib/launcher";
+import { launcherActions, launcherFolder, orderedCommands } from "../../lib/launcher";
 import { sessionsInFolder } from "../../lib/launcher-sessions";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { type SessionChoice, SpawnAgentModal } from "../agents/SpawnAgentModal";
@@ -14,7 +14,7 @@ import { AgentIcon } from "../common";
 import { FolderActions } from "./FolderActions";
 import { LauncherFolderPicker } from "./LauncherFolderPicker";
 import { PaneLaunchForm } from "./PaneLaunchForm";
-import { useLauncherActions, useProjectDetect } from "./use-launcher-actions";
+import { useLauncherActions, useProjectDetect, useRunPins } from "./use-launcher-actions";
 import { useLauncherKeys } from "./use-launcher-keys";
 
 // ─── Empty Pane (launcher) ──────────────────────────────────────────────────
@@ -129,6 +129,8 @@ export function EmptyPane({ paneId, folder: remembered }: { paneId: string; fold
     paneId,
     folder,
   });
+  const { pins } = useRunPins(projectId ?? "");
+  const commands = folder ? orderedCommands(folder.scripts, pins, folder.rel) : [];
   const actions = launcherActions({ atRoot, git: !!folder?.git, editor: !!detect?.editor });
   const layout = SIZE_LAYOUT[size];
   const fileManager = detect?.fileManager || "Finder";
@@ -152,10 +154,14 @@ export function EmptyPane({ paneId, folder: remembered }: { paneId: string; fold
     enabled: !picked && !folderOpen,
     actions,
     agentCount: Math.min(providers.length, 9),
+    commandCount: Math.min(commands.length, 9),
     onKey: (hit) => {
       if ("folder" in hit) setFolderOpen(true);
       else if ("action" in hit) run(hit.action, fileManager);
-      else {
+      else if ("commandIndex" in hit) {
+        const command = commands[hit.commandIndex];
+        if (command) void runCommand(command.name, command.command);
+      } else {
         const provider = providers[hit.agentIndex];
         if (provider) pick(provider);
       }

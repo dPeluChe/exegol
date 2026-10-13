@@ -1,6 +1,6 @@
 import type { Ref } from "react";
 import { useRecheckProviders } from "../../hooks/use-providers";
-import { ModelAndName } from "./ModelPicker";
+import { ModelChoice } from "./ModelPicker";
 import { AccessModePicker, InstallHint, SkillPicker } from "./SpawnOptions";
 import { SpawnSessionPicker } from "./SpawnSessionPicker";
 import { SpawnWorkLocation } from "./SpawnWorkLocation";
@@ -25,7 +25,7 @@ export function SpawnFormBody({
       {notInstalled && form.provider && (
         <InstallHint provider={form.provider} projectId={projectId} onRecheck={recheck} />
       )}
-      <ModelAndName
+      <ModelChoice
         key={form.providerId}
         providerId={form.providerId}
         model={form.model}
@@ -33,8 +33,6 @@ export function SpawnFormBody({
         roles={form.modelRoles}
         onRole={form.setModelRole}
         onPreset={form.applyPreset}
-        name={form.name}
-        onName={form.setName}
       />
       <SpawnSessionPicker
         projectId={projectId}
@@ -47,6 +45,8 @@ export function SpawnFormBody({
         onSession={form.chooseSession}
         localSessionId={form.localSessionId}
         onLocalSession={form.chooseLocalSession}
+        name={form.name}
+        onName={form.setName}
       />
       <AccessModePicker
         accessMode={form.accessMode}

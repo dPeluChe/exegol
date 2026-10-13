@@ -29,6 +29,22 @@ export function useProjectDetect(projectId: string) {
   return { detect: query.data, refresh };
 }
 
+/** Pinned run commands of the project ("rel\0command"), and the pin toggle */
+export function useRunPins(projectId: string) {
+  const queryClient = useQueryClient();
+  const { data: pins = [] } = useQuery({
+    queryKey: ["resources", "runPins", projectId],
+    queryFn: () => trpcInvoke<string[]>("resources.runPins", { projectId }),
+    // Only this client changes them, and the mutation writes the result back
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const togglePin = useMutation({
+    mutationFn: (key: string) => trpcMutate<string[]>("resources.toggleRunPin", { projectId, key }),
+    onSuccess: (next) => queryClient.setQueryData(["resources", "runPins", projectId], next),
+  });
+  return { pins, togglePin: (key: string) => togglePin.mutate(key) };
+}
+
 /** A shell named after where it runs: what it runs is its live step, gone once it exits */
 export function terminalNameFor(folder: LauncherFolder): string {
   return folder.rel ? (folder.rel.split("/").pop() ?? "Terminal") : "Terminal";

@@ -26,6 +26,7 @@
       "archiveEnded",
       "cancelParallelRun",
       "continueInShell",
+      "defaultModel",
       "delete",
       "followUps",
       "get",

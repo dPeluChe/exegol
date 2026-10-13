@@ -3,7 +3,7 @@ import { cn } from "@exegol/ui";
 import { ChevronDown, Folder, FolderGit2, RefreshCw } from "lucide-react";
 import { useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
-import { folderRowLabel, matchFolders } from "../../lib/launcher";
+import { folderFilterKeys, folderRowLabel, matchFolders } from "../../lib/launcher";
 
 import { Kbd } from "../common/Kbd";
 
@@ -60,7 +60,7 @@ export function LauncherFolderPicker({
         type="button"
         onClick={open ? onClose : onOpen}
         aria-expanded={open}
-        title={`${selected.path} (/ to change)`}
+        title={`${selected.path} (/ or ${folderFilterKeys()} to change)`}
         className={cn(
           "flex max-w-full items-center gap-1.5 rounded-lg px-2 py-1 hover:bg-white/5",
           compact ? "text-[11px]" : "text-[13px]",

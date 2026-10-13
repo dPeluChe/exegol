@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { useRef } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useEnabledProviders } from "../../hooks/use-providers";
+import { editKeys } from "../../lib/keymap";
 import { launchFormKey } from "../../lib/launcher";
 import { AgentSwitcher } from "../agents/AgentSwitcher";
 import { LaunchButton } from "../agents/SpawnAgentModal";
@@ -63,7 +64,7 @@ export function PaneLaunchForm({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the form's keys (Esc back, Enter launch)
     <div
-      className="flex w-full max-w-md flex-col gap-3 rounded-xl border border-border bg-bg-primary/60 p-3"
+      className="my-auto flex w-full max-w-md shrink-0 flex-col gap-3 rounded-xl border border-border bg-bg-primary p-4 shadow-2xl"
       onKeyDown={onKeyDown}
     >
       <div className="flex items-start gap-2">
@@ -75,7 +76,6 @@ export function PaneLaunchForm({
           className="mt-0.5 flex shrink-0 items-center gap-1 rounded px-1 py-0.5 text-text-muted hover:bg-white/5 hover:text-text-secondary"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          <Kbd className="h-4 min-w-4 px-1 text-[9px]">esc</Kbd>
         </button>
         <AgentSwitcher
           providers={enabledProviders}
@@ -88,9 +88,17 @@ export function PaneLaunchForm({
         projectId={projectId}
         form={form}
         promptRef={promptRef}
-        promptPlaceholder="Sent as its first message. Enter launches, Shift+Enter for a new line"
+        promptPlaceholder={`Sent as its first message. Enter launches (${editKeys("Cmd+Enter")} anywhere), Shift+Enter for a new line`}
       />
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2 border-t border-border pt-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[11px] font-medium text-text-secondary hover:bg-white/5"
+        >
+          Cancel
+          <Kbd className="h-4 min-w-4 px-1 text-[9px]">esc</Kbd>
+        </button>
         <LaunchButton canLaunch={canLaunch} spawning={spawning} onLaunch={launch} keys="↵" />
       </div>
     </div>

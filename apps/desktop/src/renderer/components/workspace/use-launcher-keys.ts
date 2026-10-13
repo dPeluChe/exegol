@@ -17,11 +17,12 @@ interface KeyState {
   enabled: boolean;
   actions: LauncherAction[];
   agentCount: number;
+  commandCount: number;
   onKey: (hit: LauncherKey) => void;
 }
 
 /**
- * The launcher's keys (1-9, T F G B O E, / and Cmd+F) for the pane they act on (getActivePaneId:
+ * The launcher's keys (1-9, T F G B O E, Option+1..9, / and Cmd+F) for the pane they act on (getActivePaneId:
  * focusedPaneId is null or stale until a click), with no text field focused anywhere. Capture
  * phase and stopped, like the ended launcher's. The pane takes the keyboard when it mounts
  */
@@ -42,14 +43,18 @@ export function useLauncherKeys(
       if ((e as CustomEvent<{ paneId: string }>).detail?.paneId === paneId) focusRoot();
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      const { enabled, actions, agentCount, onKey } = keys.current;
+      const { enabled, actions, agentCount, commandCount, onKey } = keys.current;
       if (!enabled || !isActive() || document.querySelector('[role="dialog"]')) return;
       const allowed = launcherFocusAllowed(document.activeElement as HTMLElement | null, {
         body: document.body,
         launcher: rootRef.current,
         pane: paneRoot(paneId),
       });
-      const hit = launcherKeyAction(e, !allowed, actions, agentCount);
+      const hit = launcherKeyAction(e, !allowed, {
+        actions,
+        agents: agentCount,
+        commands: commandCount,
+      });
       if (!hit) return;
       e.preventDefault();
       e.stopPropagation();

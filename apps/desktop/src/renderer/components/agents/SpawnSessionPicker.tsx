@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
 import { useProject } from "../../hooks/use-trpc";
 import { formatTimeAgo } from "../../lib/format";
+import { sessionNameDisplay } from "../../lib/launch-form";
 import { sessionsInFolder } from "../../lib/launcher-sessions";
 import { trpcInvoke } from "../../lib/trpc-client";
-import { SpawnChip } from "./SpawnOptions";
+import { INPUT_CLASS, SpawnChip } from "./SpawnOptions";
 import type { SessionChoice } from "./use-spawn-form";
 
 interface LocalSession {
@@ -41,6 +42,8 @@ export function SpawnSessionPicker({
   onSession,
   localSessionId,
   onLocalSession,
+  name,
+  onName,
 }: {
   projectId: string;
   providerId: string;
@@ -52,6 +55,8 @@ export function SpawnSessionPicker({
   onSession: (choice: SessionChoice) => void;
   localSessionId: string | null;
   onLocalSession: (id: string | null) => void;
+  name: string;
+  onName: (name: string) => void;
 }) {
   const { data: project } = useProject(projectId);
   const { data: resumable = [] } = useResumableSessions(projectId);
@@ -100,78 +105,86 @@ export function SpawnSessionPicker({
   // Once known, so it never appears and vanishes. false: nothing here. null: no way to check
   const showContinue = canContinue && hasSession !== undefined && hasSession !== false;
 
-  if (resumableHere.length === 0 && !showContinue) return null;
+  const hasChoices = resumableHere.length > 0 || showContinue;
+  const display = sessionNameDisplay({ session, localSessionId, cliNames, localSessions });
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[11px] font-medium text-text-muted">Session</span>
-      <div className="flex flex-wrap gap-1.5">
-        <SpawnChip
-          selected={(session === null || (session === "last" && !showContinue)) && !localSessionId}
-          onClick={() => onSession(null)}
-        >
-          New
-        </SpawnChip>
-        {/* Works without a captured handle: it is the provider's own
+      {hasChoices && (
+        <>
+          <span className="text-[11px] font-medium text-text-muted">Session</span>
+          <div className="flex flex-wrap gap-1.5">
+            <SpawnChip
+              selected={
+                (session === null || (session === "last" && !showContinue)) && !localSessionId
+              }
+              onClick={() => onSession(null)}
+            >
+              New
+            </SpawnChip>
+            {/* Works without a captured handle: it is the provider's own
             flag, which is what the user would type by hand. */}
-        {showContinue && (
-          <SpawnChip
-            selected={session === "last"}
-            onClick={() => onSession("last")}
-            title={
-              hasSession === null
-                ? `Launches with ${resumeFlag}. Exegol cannot check for a previous session of this CLI here; if it finds none, a new one starts`
-                : `Launches with ${resumeFlag}`
-            }
-            className="flex items-center gap-1.5"
-          >
-            <History className="h-3 w-3" />
-            Continue last
-            <code className="text-text-muted">{resumeFlag}</code>
-          </SpawnChip>
-        )}
-        {resumableHere.slice(0, CHIP_COUNT).map((past) => (
-          <SpawnChip
-            key={past.agentId}
-            selected={session !== "last" && session?.agentId === past.agentId}
-            onClick={() => onSession(past)}
-            title={[past.alias, cliNames[past.agentId], past.taskDescription]
-              .filter(Boolean)
-              .join("\n")}
-            className="flex min-w-0 max-w-full items-center gap-1.5"
-          >
-            <History className="h-3 w-3 shrink-0" />
-            {/* The codename is how the user knew it; task text is the fallback. */}
-            <span className="max-w-[150px] shrink-0 truncate">
-              {past.alias ?? past.taskDescription.slice(0, 24)}
-            </span>
-            {/* What the CLI itself calls it (Claude's /rename), so it matches its own resume list */}
-            {cliNames[past.agentId] && (
-              <span className="max-w-[160px] truncate font-normal opacity-75">
-                · {cliNames[past.agentId]}
-              </span>
+            {showContinue && (
+              <SpawnChip
+                selected={session === "last"}
+                onClick={() => onSession("last")}
+                title={
+                  hasSession === null
+                    ? `Launches with ${resumeFlag}. Exegol cannot check for a previous session of this CLI here; if it finds none, a new one starts`
+                    : `Launches with ${resumeFlag}`
+                }
+                className="flex items-center gap-1.5"
+              >
+                <History className="h-3 w-3" />
+                Continue last
+                <code className="text-text-muted">{resumeFlag}</code>
+              </SpawnChip>
             )}
-            <span className="text-text-muted">{formatTimeAgo(past.endedAt)}</span>
-          </SpawnChip>
-        ))}
-      </div>
-      {scope === "project" && resumableHere.length > 0 && (
-        <span className="text-[10px] text-text-muted">
-          No {providerName ?? "session"} session in this folder yet: these ran elsewhere in the
-          project and resume where they ran
-        </span>
+            {resumableHere.slice(0, CHIP_COUNT).map((past) => (
+              <SpawnChip
+                key={past.agentId}
+                selected={session !== "last" && session?.agentId === past.agentId}
+                onClick={() => onSession(past)}
+                title={[past.alias, cliNames[past.agentId], past.taskDescription]
+                  .filter(Boolean)
+                  .join("\n")}
+                className="flex min-w-0 max-w-full items-center gap-1.5"
+              >
+                <History className="h-3 w-3 shrink-0" />
+                {/* The codename is how the user knew it; task text is the fallback. */}
+                <span className="max-w-[150px] shrink-0 truncate">
+                  {past.alias ?? past.taskDescription.slice(0, 24)}
+                </span>
+                {/* What the CLI itself calls it (Claude's /rename), so it matches its own resume list */}
+                {cliNames[past.agentId] && (
+                  <span className="max-w-[160px] truncate font-semibold text-accent">
+                    · {cliNames[past.agentId]}
+                  </span>
+                )}
+                <span className="text-text-muted">{formatTimeAgo(past.endedAt)}</span>
+              </SpawnChip>
+            ))}
+          </div>
+          {scope === "project" && resumableHere.length > 0 && (
+            <span className="text-[10px] text-text-muted">
+              No {providerName ?? "session"} session in this folder yet: these ran elsewhere in the
+              project and resume where they ran
+            </span>
+          )}
+          {showContinue && hasSession === null && (
+            <span className="text-[10px] text-text-muted">
+              Continue last: Exegol cannot read this CLI's history here, so it may start a new one
+            </span>
+          )}
+          {providerId === "claude-code" && !useWorktree && localSessions.length > 0 && (
+            <LocalSessionSelect
+              sessions={localSessions}
+              value={localSessionId}
+              onChange={onLocalSession}
+            />
+          )}
+        </>
       )}
-      {showContinue && hasSession === null && (
-        <span className="text-[10px] text-text-muted">
-          Continue last: Exegol cannot read this CLI's history here, so it may start a new one
-        </span>
-      )}
-      {providerId === "claude-code" && !useWorktree && localSessions.length > 0 && (
-        <LocalSessionSelect
-          sessions={localSessions}
-          value={localSessionId}
-          onChange={onLocalSession}
-        />
-      )}
+      <SessionName display={display} name={name} onName={onName} />
     </div>
   );
 }
@@ -203,5 +216,39 @@ function LocalSessionSelect({
         </option>
       ))}
     </select>
+  );
+}
+
+/** A new session takes a name; a resumed one shows the name it already has, in the accent color,
+ *  since that is what the user recognizes it by */
+function SessionName({
+  display,
+  name,
+  onName,
+}: {
+  display: ReturnType<typeof sessionNameDisplay>;
+  name: string;
+  onName: (name: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[11px] font-medium text-text-muted">
+        Name {display.input && <span className="text-text-muted">(optional)</span>}
+      </span>
+      {display.input ? (
+        <input
+          aria-label="Session name"
+          value={name}
+          maxLength={40}
+          onChange={(e) => onName(e.target.value)}
+          placeholder="A codename if empty"
+          className={INPUT_CLASS}
+        />
+      ) : (
+        <span className="truncate rounded-lg border border-accent/40 bg-accent/10 px-2.5 py-1.5 text-[11px] font-semibold text-accent">
+          {display.name}
+        </span>
+      )}
+    </div>
   );
 }
