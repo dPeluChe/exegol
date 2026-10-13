@@ -139,7 +139,7 @@ interface Container {
 
 const TEXT_INPUTS = new Set(["text", "search", "url", "email", ""]);
 
-function isTextField(el: FocusTarget): boolean {
+export function isTextField(el: FocusTarget): boolean {
   if (el.isContentEditable) return true;
   const tag = el.tagName.toUpperCase();
   if (tag === "TEXTAREA") return !el.readOnly && !el.disabled;

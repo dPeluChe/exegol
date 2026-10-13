@@ -152,7 +152,8 @@ function LauncherBody({
     if (locked || isResuming(agent.id)) return;
     if (PRIMARY.has(action)) return onResume();
     if (!paneId) return;
-    if (action === "new") guard(`${cliName} did not start`, () => newSessionInPane(agent, paneId));
+    if (action === "new")
+      guard(`${cliName} did not start`, () => newSessionInPane(agent, paneId, folder));
     if (action === "terminal")
       guard("Could not open a terminal", () => terminalInPane(agent, paneId, folder));
     if (action === "files") filesInPane(agent, paneId, folder);
@@ -282,6 +283,9 @@ function LauncherBody({
           initialCliType={switchTo.id}
           initialAccessMode={agent.accessMode ?? "write"}
           initialBranch={agent.branchName}
+          folder={
+            !agent.branchName && folder && folderLabel(folder, project?.path) ? folder : undefined
+          }
           targetPaneId={paneId}
           onSpawned={(newId) => handOver(agent.id, newId)}
           onClose={() => setSwitchTo(null)}

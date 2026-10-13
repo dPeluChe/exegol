@@ -2,7 +2,9 @@ import type { ResumableSession } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
+import { useProject } from "../../hooks/use-trpc";
 import { formatTimeAgo } from "../../lib/format";
+import { sessionsInFolder } from "../../lib/launcher-sessions";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { SpawnChip } from "./SpawnOptions";
 import type { SessionChoice } from "./use-spawn-form";
@@ -16,12 +18,25 @@ interface LocalSession {
 
 const CHIP_COUNT = 5;
 
-/** T161: start fresh, continue the CLI's own last session, or pick one */
+/** The project's past sessions with a resume handle, newest first, each with its folder */
+export function useResumableSessions(projectId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["resumableSessions", projectId],
+    queryFn: () => trpcInvoke<ResumableSession[]>("agents.listResumable", { projectId, limit: 50 }),
+    enabled: !!projectId,
+    staleTime: 10_000,
+  });
+}
+
+/** T161: start fresh, continue the CLI's own last session, or pick one; T204: those of the
+ *  launcher's folder (`folder`, the project root when absent) */
 export function SpawnSessionPicker({
   projectId,
   providerId,
+  providerName,
   resumeFlag,
   useWorktree,
+  folder,
   session,
   onSession,
   localSessionId,
@@ -29,20 +44,24 @@ export function SpawnSessionPicker({
 }: {
   projectId: string;
   providerId: string;
+  providerName?: string;
   resumeFlag: string | undefined;
   useWorktree: boolean;
+  folder?: string;
   session: SessionChoice;
   onSession: (choice: SessionChoice) => void;
   localSessionId: string | null;
   onLocalSession: (id: string | null) => void;
 }) {
-  const { data: resumable = [] } = useQuery({
-    queryKey: ["resumableSessions", projectId],
-    queryFn: () => trpcInvoke<ResumableSession[]>("agents.listResumable", { projectId, limit: 20 }),
-    staleTime: 10_000,
+  const { data: project } = useProject(projectId);
+  const { data: resumable = [] } = useResumableSessions(projectId);
+  const projectPath = project?.path ?? "";
+  // Only this provider's sessions (`claude --resume` cannot open a codex session), in this folder
+  const { sessions: resumableHere, scope } = sessionsInFolder(resumable, {
+    providerId,
+    folder: folder ?? projectPath,
+    projectPath,
   });
-  // Only this provider's sessions: `claude --resume` cannot open a codex session.
-  const resumableHere = resumable.filter((r) => r.cliType === providerId);
   const chipIds = resumableHere.slice(0, CHIP_COUNT).map((r) => r.agentId);
   // A second query: the chips show at once, names fill in once the CLI's store is read
   const { data: cliNames = {} } = useQuery({
@@ -54,9 +73,13 @@ export function SpawnSessionPicker({
   });
 
   const { data: localSessions = [] } = useQuery({
-    queryKey: ["history", "resumableLocal", projectId],
+    queryKey: ["history", "resumableLocal", projectId, folder],
     queryFn: () =>
-      trpcInvoke<LocalSession[]>("history.resumableLocal", { projectId, provider: "claude-code" }),
+      trpcInvoke<LocalSession[]>("history.resumableLocal", {
+        projectId,
+        provider: "claude-code",
+        cwd: folder,
+      }),
     enabled: providerId === "claude-code",
     staleTime: 10_000,
   });
@@ -64,9 +87,13 @@ export function SpawnSessionPicker({
   // An isolated worktree is a new folder: there is nothing in it to continue
   const canContinue = !!resumeFlag && !useWorktree;
   const { data: hasSession } = useQuery({
-    queryKey: ["history", "hasLocalSession", projectId, providerId],
+    queryKey: ["history", "hasLocalSession", projectId, providerId, folder],
     queryFn: () =>
-      trpcInvoke<boolean | null>("history.hasLocalSession", { projectId, provider: providerId }),
+      trpcInvoke<boolean | null>("history.hasLocalSession", {
+        projectId,
+        provider: providerId,
+        cwd: folder,
+      }),
     enabled: canContinue,
     staleTime: 10_000,
   });
@@ -127,6 +154,17 @@ export function SpawnSessionPicker({
           </SpawnChip>
         ))}
       </div>
+      {scope === "project" && resumableHere.length > 0 && (
+        <span className="text-[10px] text-text-muted">
+          No {providerName ?? "session"} session in this folder yet: these ran elsewhere in the
+          project and resume where they ran
+        </span>
+      )}
+      {showContinue && hasSession === null && (
+        <span className="text-[10px] text-text-muted">
+          Continue last: Exegol cannot read this CLI's history here, so it may start a new one
+        </span>
+      )}
       {providerId === "claude-code" && !useWorktree && localSessions.length > 0 && (
         <LocalSessionSelect
           sessions={localSessions}

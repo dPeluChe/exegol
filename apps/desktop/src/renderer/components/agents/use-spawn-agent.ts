@@ -38,8 +38,18 @@ function spawnInput(projectId: string, c: SpawnForm) {
     model: MODEL_LAUNCH[c.providerId] && c.model.trim() ? c.model.trim() : undefined,
     modelRoles: Object.keys(c.modelRoles).length > 0 ? c.modelRoles : undefined,
     name: c.name.trim() || undefined,
+    cwdOverride: startFolder(c),
     ...resumeInput(c),
   };
+}
+
+/** The launcher's folder; a past session resumes where it ran (main reads its folder) */
+export function startFolder(
+  c: Pick<SpawnForm, "folder" | "useWorktree" | "session" | "localSessionId">,
+): string | undefined {
+  if (!c.folder || c.useWorktree) return undefined;
+  const pastSession = c.session && c.session !== "last" && !c.localSessionId;
+  return pastSession ? undefined : c.folder;
 }
 
 /** The Exegol session a resume continues: a past session picked by id, or Claude's own session

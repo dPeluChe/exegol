@@ -23,6 +23,7 @@ import {
   updateAgentStatus,
 } from "../../db/queries";
 import {
+  AGENT_FOLDER_SQL,
   archiveAgent,
   getAgentCwd,
   getAgentLastCwd,
@@ -50,6 +51,17 @@ async function resumedShellFolder(
   noteShellFolder(fromId, decision);
   if (decision !== "none") logger.info(`[Resume] ${fromId} shell: ${where}`);
   return cwd;
+}
+
+/** An agent the launcher started in a folder resumes there: its CLI keyed the session by it */
+async function resumedAgentFolder(
+  db: Parameters<typeof getAgentLastCwd>[0],
+  fromId: string,
+  bases: string[],
+): Promise<string | undefined> {
+  const last = getAgentLastCwd(db, fromId);
+  if (!last || !folderExists(last) || bases.length === 0) return undefined;
+  return (await isPathAllowed(last, bases)) ? last : undefined;
 }
 
 /** A crashed row whose session now runs in a new one: archived here, not by the renderer, so a
@@ -166,19 +178,22 @@ export const agentSpawnProcedures = {
     .input(
       z.object({
         projectId: z.string(),
-        limit: z.number().int().min(1).max(20).optional(),
+        limit: z.number().int().min(1).max(50).optional(),
       }),
     )
     .query(({ ctx, input }) => {
       const rows = ctx.db
         .prepare(
-          `SELECT id, cli_type, task_description, status, started_at, stopped_at, alias
-           FROM agents
-           WHERE project_id = ?
-             AND status IN ('completed', 'failed', 'stopped', 'crashed')
-             AND archived_at IS NULL
-           AND (resume_command IS NOT NULL OR claude_session_id IS NOT NULL)
-           ORDER BY COALESCE(stopped_at, started_at) DESC
+          `SELECT a.id, a.cli_type, a.task_description, a.status, a.started_at, a.stopped_at,
+                  a.alias, ${AGENT_FOLDER_SQL} AS folder
+           FROM agents a
+           LEFT JOIN worktrees w ON w.id = a.worktree_id
+           JOIN projects p ON p.id = a.project_id
+           WHERE a.project_id = ?
+             AND a.status IN ('completed', 'failed', 'stopped', 'crashed')
+             AND a.archived_at IS NULL
+           AND (a.resume_command IS NOT NULL OR a.claude_session_id IS NOT NULL)
+           ORDER BY COALESCE(a.stopped_at, a.started_at) DESC
            LIMIT ?`,
         )
         .all(input.projectId, input.limit ?? 10) as Array<{
@@ -189,6 +204,7 @@ export const agentSpawnProcedures = {
         started_at: number | null;
         stopped_at: number | null;
         alias: string | null;
+        folder: string | null;
       }>;
       return rows.map<ResumableSession>((r) => ({
         agentId: r.id,
@@ -199,6 +215,7 @@ export const agentSpawnProcedures = {
         taskDescription: r.task_description,
         status: r.status,
         endedAt: r.stopped_at ?? r.started_at,
+        folder: r.folder,
       }));
     }),
 
@@ -216,7 +233,7 @@ export const agentSpawnProcedures = {
       const rows = ctx.db
         .prepare(
           `SELECT a.id, a.cli_type, a.task_description, a.claude_session_id, a.resume_command,
-                  COALESCE(w.path, p.path) AS cwd
+                  ${AGENT_FOLDER_SQL} AS cwd
            FROM agents a
            LEFT JOIN worktrees w ON w.id = a.worktree_id
            JOIN projects p ON p.id = a.project_id
@@ -283,11 +300,15 @@ export const agentSpawnProcedures = {
     const bases = project
       ? [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)]
       : [];
-    // A resumed shell reopens in its last OSC 7 folder while that is still in the project
-    const input =
-      raw.cliType === "shell" && raw.resumeFromAgentId && !raw.cwdOverride
-        ? { ...raw, cwdOverride: await resumedShellFolder(ctx.db, raw.resumeFromAgentId, bases) }
-        : raw;
+    // A resumed shell reopens in its last OSC 7 folder while that is still in the project; an
+    // agent in the folder it was started in
+    const from = raw.cwdOverride ? undefined : raw.resumeFromAgentId;
+    const resumeFolder = !from
+      ? undefined
+      : raw.cliType === "shell"
+        ? await resumedShellFolder(ctx.db, from, bases)
+        : await resumedAgentFolder(ctx.db, from, bases);
+    const input = resumeFolder ? { ...raw, cwdOverride: resumeFolder } : raw;
     // A renderer-chosen start folder (the launcher's "run in", a terminal beside a session)
     // stays inside the project or one of its worktrees
     if (input.cwdOverride) {
@@ -296,9 +317,8 @@ export const agentSpawnProcedures = {
       }
     }
     const agent = createAgent(ctx.db, input);
-    if (input.cliType === "shell" && input.cwdOverride) {
-      setAgentLastCwd(ctx.db, agent.id, input.cwdOverride);
-    }
+    // An agent's start folder: its resume, session list and links read it (AGENT_FOLDER_SQL)
+    if (input.cwdOverride) setAgentLastCwd(ctx.db, agent.id, input.cwdOverride);
     const manager = ctx.agentManager;
 
     const resumedFrom = input.resumeFromAgentId;

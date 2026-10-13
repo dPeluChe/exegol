@@ -63,10 +63,13 @@ export function SpawnWorkLocation({
   onBranch,
   baseBranch,
   onBaseBranch,
+  folder,
 }: {
   projectId: string;
   providerId: string;
   task: string;
+  /** The launcher's subfolder: the agent works there, and a worktree is cut only at the root */
+  folder?: string;
   useWorktree: boolean;
   onWorktree: (isolated: boolean) => void;
   branchName: string;
@@ -83,13 +86,19 @@ export function SpawnWorkLocation({
     branchName,
     useWorktree,
   );
-  const workingPath = useWorktree ? (preview?.cwd ?? "") : (project?.path ?? "");
+  const workingPath = useWorktree ? (preview?.cwd ?? "") : (folder ?? project?.path ?? "");
+  const places = folder ? PLACES.filter((p) => !p.isolated) : PLACES;
 
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-[11px] font-medium text-text-muted">Where to work</span>
-      <div className="flex gap-1.5">
-        {PLACES.map(({ isolated, label, hint }) => (
+      <div className="flex items-center gap-1.5">
+        {folder && (
+          <span className="order-last text-[10px] text-text-muted">
+            Worktree: pick the project root as the folder
+          </span>
+        )}
+        {places.map(({ isolated, label, hint }) => (
           <SpawnChip
             key={label}
             selected={useWorktree === isolated}

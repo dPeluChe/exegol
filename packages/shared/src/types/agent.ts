@@ -777,6 +777,8 @@ export type ResumableSession = {
   taskDescription: string;
   status: string;
   endedAt: number | null;
+  /** The folder it ran in: its start folder, worktree or the project root */
+  folder?: string | null;
 };
 
 /** Where a spawn WOULD run, resolved by the same code that will create it —

@@ -18,10 +18,16 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer, with a
   Preview of Markdown and HTML; HTML renders offline from the project's files, scripts off until
   "Run scripts"), git, and an
-  empty pane with the agent launcher. Its "Run in" row opens the chosen folder (root or a
-  subfolder) in a terminal, Files, Git, Finder (Explorer on Windows, the file manager on Linux) or
-  the project's IDE (T opens the terminal). Its refresh button finds the folders and their
-  commands again; past 12 folders a filter and "+N more" keep the row short. "Split with
+  empty pane with the launcher. The launcher starts from a folder, "📁 project / folder ▾" (the
+  project root unless the pane was set to another; / or Cmd+F filters the project's folders, each
+  marked git, node, xcode, swift or expo, and the list's refresh finds them again). Agents,
+  Terminal, Files, Git, Browser, Finder (Explorer on Windows, the file manager on Linux), the
+  editor (the project's IDE, else Settings', shown only when installed) and the folder's commands
+  all start there. Keys while the pane has the keyboard: 1-9 the agents, T F G B O E the rest.
+  Picking an agent turns the pane into its launch form ("Claude Code in web"): session, model,
+  mode, YOLO, Here or Worktree (a worktree only from the root) and the prompt; Enter launches and
+  Esc goes back. The agent can be switched in the form and in the Launch Agent dialog, keeping
+  the folder, prompt and mode. Its sessions and "Continue last" are those in that folder. "Split with
   Terminal" in a pane's menu (Cmd+Y) opens a shell beside it in that pane's folder: a shell's
   current folder, an agent's worktree, the open file's folder, else the project root.
 - **Layouts**: six presets (Single, Split Horizontal, Split Vertical, Three Columns, Bottom

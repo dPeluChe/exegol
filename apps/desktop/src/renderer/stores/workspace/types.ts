@@ -25,6 +25,8 @@ export interface Pane {
   viewport?: PageSize;
   /** Browser pane: the tab's one pane that URLs clicked in its terminals open in */
   linkPreview?: boolean;
+  /** Empty pane: the launcher's folder (relative to the project, "" the root) */
+  launcherFolder?: string;
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }

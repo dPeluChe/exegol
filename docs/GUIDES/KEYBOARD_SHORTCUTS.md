@@ -39,7 +39,10 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+Shift+T` | `Ctrl+Shift+Alt+T` | Reopen the last closed tab or pane and resume its sessions |
 | `Cmd+D` / `Cmd+Shift+D` | `Ctrl+Shift+D` / `Ctrl+Shift+Alt+D` | New pane to the right / below |
 | `Cmd+Y` | `Ctrl+Shift+Y` | Terminal beside the focused pane, in the folder it works in (in the pane itself when it is empty) |
-| `T` | same | In an empty pane's launcher (no field focused): terminal in the selected Run in folder |
+| `1-9` | same | In an empty pane's launcher (no field focused): open that agent's launch form, in grid order |
+| `T` `F` `G` `B` `O` `E` | same | In an empty pane's launcher (no field focused), in its folder: Terminal, Files, Git, Browser, Finder (the file manager), editor |
+| `/` or `Cmd+F` | `/` or `Ctrl+F` | In an empty pane's launcher: change its folder (type to filter, arrows, Enter, Esc) |
+| `Enter` / `Esc` | same | In a pane's launch form: launch (Shift+Enter for a new line, Cmd+Enter anywhere) / back to the launcher |
 | `R` `N` `T` `F` `B` `1-9` | same | In an ended session's pane (no field focused): Resume (Restart, or Reopen for a terminal), new session of the same CLI there, Terminal, Files, Browser, switch to another agent in the same place |
 | `Cmd+L` | `Ctrl+Shift+L` | Browser pane (or floating browser): select its address bar |
 | `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere on macOS Cmd+R reloads the window |

@@ -2,13 +2,11 @@ import type { AgentAccessMode, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { isLaunchable } from "../../hooks/use-providers";
 import { useProject } from "../../hooks/use-trpc";
 import { useSkills } from "../../hooks/use-trpc-skills";
 import { ACCESS_MODES } from "../../lib/access-modes";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { runCommandInNewTab } from "../../lib/spawn-shell";
-import { AgentIcon } from "../common/AgentIcon";
 import { CopyCommand } from "../common/CopyCommand";
 
 /** One pickable pill in the launch modal (agent, session, mode, skill, place). */
@@ -40,43 +38,6 @@ export function SpawnChip({
     >
       {children}
     </button>
-  );
-}
-
-export function ProviderPicker({
-  providers,
-  selectedId,
-  onChoose,
-}: {
-  providers: AgentProvider[];
-  selectedId: string;
-  onChoose: (id: string) => void;
-}) {
-  const installed = providers.filter(isLaunchable);
-  const missing = providers.filter((p) => !isLaunchable(p));
-  const chip = (p: AgentProvider, dim: boolean) => (
-    <SpawnChip
-      key={p.id}
-      selected={selectedId === p.id}
-      onClick={() => onChoose(p.id)}
-      title={dim ? `${p.name} is not installed on this machine` : undefined}
-      className={cn("flex items-center gap-1.5", dim && "opacity-50")}
-    >
-      <AgentIcon provider={p.id} size={16} fallback={p.icon} fallbackColor={p.color} />
-      {p.name}
-    </SpawnChip>
-  );
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[11px] font-medium text-text-muted">Agent</span>
-      <div className="flex flex-wrap gap-1.5">{installed.map((p) => chip(p, false))}</div>
-      {missing.length > 0 && (
-        <>
-          <span className="mt-1 text-[10px] text-text-muted">Not installed</span>
-          <div className="flex flex-wrap gap-1.5">{missing.map((p) => chip(p, true))}</div>
-        </>
-      )}
-    </div>
   );
 }
 

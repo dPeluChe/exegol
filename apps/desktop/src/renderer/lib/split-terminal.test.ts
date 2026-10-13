@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isQuickTerminalKey, terminalCwdFor } from "./split-terminal";
+import { terminalCwdFor } from "./split-terminal";
 
 describe("terminalCwdFor", () => {
   it("a terminal: the shell's live cwd first, then the session's worktree, else the root", () => {
@@ -21,30 +21,5 @@ describe("terminalCwdFor", () => {
     expect(terminalCwdFor({ type: "browser" })).toBeUndefined();
     expect(terminalCwdFor({ type: "empty" })).toBeUndefined();
     expect(terminalCwdFor(undefined)).toBeUndefined();
-  });
-});
-
-describe("isQuickTerminalKey", () => {
-  const key = (k: string, mods: Partial<KeyboardEvent> = {}) => ({
-    key: k,
-    metaKey: false,
-    ctrlKey: false,
-    altKey: false,
-    repeat: false,
-    ...mods,
-  });
-
-  it("is a bare T (either case) with no field typing", () => {
-    expect(isQuickTerminalKey(key("t"), false)).toBe(true);
-    expect(isQuickTerminalKey(key("T"), false)).toBe(true);
-  });
-
-  it("is not T in a field, a held key, a chord or another key", () => {
-    expect(isQuickTerminalKey(key("t"), true)).toBe(false);
-    expect(isQuickTerminalKey(key("t", { repeat: true }), false)).toBe(false);
-    expect(isQuickTerminalKey(key("t", { metaKey: true }), false)).toBe(false);
-    expect(isQuickTerminalKey(key("t", { ctrlKey: true }), false)).toBe(false);
-    expect(isQuickTerminalKey(key("t", { altKey: true }), false)).toBe(false);
-    expect(isQuickTerminalKey(key("y"), false)).toBe(false);
   });
 });

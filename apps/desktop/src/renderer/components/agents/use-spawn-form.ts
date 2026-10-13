@@ -1,6 +1,7 @@
 import {
   type AgentAccessMode,
   type AgentProvider,
+  MODEL_ID_PATTERN,
   type ResumableSession,
   YOLO_FLAGS,
 } from "@exegol/shared";
@@ -44,6 +45,14 @@ interface SpawnFormInit {
   initialSession: SessionChoice;
   initialAccessMode: AgentAccessMode;
   initialBranch?: string | null;
+  /** The launcher's folder when not the project root: the agent starts there, never a worktree */
+  folder?: string;
+}
+
+/** Switching agent drops a session that belongs to the old one, "Continue last" included: left
+ *  set, it sent resumeSession for a CLI with no resume flag */
+export function sessionAfterSwitch(current: SessionChoice, providerId: string): SessionChoice {
+  return current === "last" || (current && current.cliType !== providerId) ? null : current;
 }
 
 /** What the user picked in the launch modal, and the handlers that keep the picks consistent. */
@@ -56,6 +65,7 @@ export function useSpawnForm({
   initialSession,
   initialAccessMode,
   initialBranch,
+  folder,
 }: SpawnFormInit) {
   const [task, setTask] = useState(initialTask ?? "");
   const [pickedProviderId, setPickedProviderId] = useState(
@@ -88,14 +98,10 @@ export function useSpawnForm({
     pickedProviderId || (enabledProviders.find(isLaunchable) ?? enabledProviders[0])?.id || "";
   const provider = enabledProviders.find((p) => p.id === providerId);
 
-  // Switching provider must drop a selection that belongs to the old one —
-  // "Continue last" included: left set, it sent resumeSession for a CLI with no
-  // resume flag at all.
+  // Folder, prompt and mode stay; the session, model and roles belong to the old agent
   const chooseProvider = (id: string) => {
     setPickedProviderId(id);
-    setSession((current) =>
-      current === "last" || (current && current.cliType !== id) ? null : current,
-    );
+    setSession((current) => sessionAfterSwitch(current, id));
     setLocalSessionId(null);
     // A model id belongs to one CLI
     setModel("");
@@ -153,8 +159,9 @@ export function useSpawnForm({
     chooseProvider,
     accessMode,
     setAccessMode,
-    useWorktree,
+    useWorktree: useWorktree && !folder,
     chooseWorktree,
+    folder,
     branchName,
     branchEdited,
     editBranch,
@@ -180,3 +187,13 @@ export function useSpawnForm({
 }
 
 export type SpawnForm = ReturnType<typeof useSpawnForm>;
+
+/** Launchable: an agent picked and installed, a valid model id, not already launching */
+export function canLaunchForm(
+  form: Pick<SpawnForm, "providerId" | "provider" | "model">,
+  spawning: boolean,
+): boolean {
+  const model = form.model.trim();
+  const modelOk = !model || MODEL_ID_PATTERN.test(model);
+  return !!form.providerId && modelOk && form.provider?.installed !== false && !spawning;
+}

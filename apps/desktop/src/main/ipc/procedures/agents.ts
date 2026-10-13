@@ -240,9 +240,9 @@ export const agentRouter = router({
   sessionFolder: publicProcedure
     .input(z.object({ agentId: z.string().max(128) }))
     .query(({ ctx, input }) => {
-      const shell = getAgent(ctx.db, input.agentId)?.cliType === "shell";
-      const lastCwd = shell ? getAgentLastCwd(ctx.db, input.agentId) : null;
-      const folder = lastCwd ?? worktreePathOf(ctx.db, input.agentId);
+      // A shell's OSC 7 folder, or the folder the launcher started an agent in
+      const folder =
+        getAgentLastCwd(ctx.db, input.agentId) ?? worktreePathOf(ctx.db, input.agentId);
       return folderExists(folder) ? folder : null;
     }),
 

@@ -58,22 +58,29 @@ async function spawnInto(
   return placeNew(created, projectId, paneId) ? created : null;
 }
 
-/** A fresh session of the same CLI where it worked (its worktree branch reused), with its model,
- *  YOLO and access mode, in `paneId` */
-export async function newSessionInPane(agent: EndedSource, paneId: string): Promise<void> {
+/** A fresh session of the same CLI where it worked (its worktree branch reused, else the folder
+ *  the launcher started it in), with its model, YOLO and access mode, in `paneId` */
+export async function newSessionInPane(
+  agent: EndedSource,
+  paneId: string,
+  folder: string | null = null,
+): Promise<void> {
+  const base = {
+    projectId: agent.projectId,
+    cliType: agent.cliType,
+    useWorktree: !!agent.branchName,
+    branchName: agent.branchName ?? undefined,
+    accessMode: agent.accessMode ?? undefined,
+    model: agent.model ?? undefined,
+    modelRoles: agent.modelRoles ?? undefined,
+    yolo: agent.yolo ?? undefined,
+  };
+  const inFolder = !agent.branchName && folder;
   const created = await spawnInto(
-    {
-      projectId: agent.projectId,
-      cliType: agent.cliType,
-      useWorktree: !!agent.branchName,
-      branchName: agent.branchName ?? undefined,
-      accessMode: agent.accessMode ?? undefined,
-      model: agent.model ?? undefined,
-      modelRoles: agent.modelRoles ?? undefined,
-      yolo: agent.yolo ?? undefined,
-    },
+    inFolder ? { ...base, cwdOverride: folder } : base,
     agent.projectId,
     paneId,
+    inFolder ? base : undefined,
   );
   if (created) handOver(agent.id, created.id);
 }

@@ -47,16 +47,6 @@ async function paneFolder(paneId: string): Promise<string | undefined> {
   return terminalCwdFor(pane, { shellCwd, sessionDir });
 }
 
-/** T in an empty pane's launcher, with no field taking the typing */
-export function isQuickTerminalKey(
-  e: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey" | "altKey" | "repeat">,
-  typing: boolean,
-): boolean {
-  return (
-    !typing && !e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === "t"
-  );
-}
-
 /** A shell in `paneId`, in `cwd`; the project root when main refuses that folder (a shell that
  *  cd'd out of the project) */
 async function shellInPane(projectId: string, paneId: string, cwd: string | undefined) {
