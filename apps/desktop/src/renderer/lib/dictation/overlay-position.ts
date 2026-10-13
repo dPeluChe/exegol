@@ -62,17 +62,46 @@ export function overlayMode(
   return hasPane && recording ? "dock" : "window";
 }
 
-/** Centered on the rect, kept inside the window */
-export function anchoredBox(r: Rect, viewportWidth: number, width: number): OverlayBox {
-  const w = Math.min(width, viewportWidth - GUTTER * 2);
-  const left = Math.max(GUTTER, r.left + r.width / 2 - w / 2);
-  return {
-    left: Math.min(left, viewportWidth - w - GUTTER),
-    top: r.top + r.height / 2,
-    width: w,
-    docked: false,
-  };
+/** Where the user dragged the card: its center minus the anchor's center (pane or window) */
+export interface Offset {
+  dx: number;
+  dy: number;
 }
+
+export const NO_OFFSET: Offset = { dx: 0, dy: 0 };
+
+interface Size {
+  width: number;
+  height: number;
+}
+
+/** Inside [lo, hi] with the gutter; an axis the card does not fit in falls back to the window */
+function clampAxis(start: number, size: number, lo: number, hi: number, viewport: number): number {
+  const [a, b] = hi - lo >= size + GUTTER * 2 ? [lo, hi] : [0, viewport];
+  return Math.max(a + GUTTER, Math.min(start, b - GUTTER - size));
+}
+
+/** The card at `offset` from the anchor's center, kept inside the anchor's visible part (the
+ *  window when that is too small). `top` is the card's vertical middle */
+export function offsetBox(anchor: Rect, viewport: Size, card: Size, offset: Offset): OverlayBox {
+  const w = Math.min(card.width, viewport.width - GUTTER * 2);
+  const lo = { x: Math.max(0, anchor.left), y: Math.max(0, anchor.top) };
+  const hi = {
+    x: Math.min(viewport.width, anchor.left + anchor.width),
+    y: Math.min(viewport.height, anchor.top + anchor.height),
+  };
+  const cx = anchor.left + anchor.width / 2 + offset.dx;
+  const cy = anchor.top + anchor.height / 2 + offset.dy;
+  const left = clampAxis(cx - w / 2, w, lo.x, hi.x, viewport.width);
+  const top = clampAxis(cy - card.height / 2, card.height, lo.y, hi.y, viewport.height);
+  return { left, top: top + card.height / 2, width: w, docked: false };
+}
+
+/** The offset a placed card holds: stored clamped, so a drag past the edge does not linger */
+export const offsetOf = (box: OverlayBox, anchor: Rect): Offset => ({
+  dx: box.left + box.width / 2 - (anchor.left + anchor.width / 2),
+  dy: box.top - (anchor.top + anchor.height / 2),
+});
 
 /** The title bar's free span: past the traffic-light inset and the controls left of the middle,
  *  before the ones right of it. A control across the middle is ignored */

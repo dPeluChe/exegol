@@ -4,7 +4,7 @@ import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
 import { cyclePane, focusActivePane, paneRoot } from "../lib/pane-focus";
-import { splitActivePane, terminalForActivePane } from "../lib/split-terminal";
+import { addTabAndFocus, splitActivePane, terminalForActivePane } from "../lib/split-terminal";
 import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -35,7 +35,7 @@ export function useHotkeys() {
       if (key === "t") {
         e.preventDefault();
         if (chord.shift) void reopenClosed();
-        else useWorkspaceStore.getState().addTab();
+        else addTabAndFocus();
         return;
       }
 

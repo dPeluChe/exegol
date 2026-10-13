@@ -13,11 +13,6 @@ export const shouldFollow = (box: ScrollBox, slack = SLACK_PX): boolean =>
 
 export const clippedAbove = (box: ScrollBox): boolean => box.scrollTop > 1;
 
-export function wordCount(text: string): number {
-  const trimmed = text.trim();
-  return trimmed ? trimmed.split(/\s+/).length : 0;
-}
-
 /** What a screen reader has not heard yet: the words after what it was last told (all of it
  *  when a streaming model rewrote earlier words) */
 export function unannounced(announced: string, text: string): string {
