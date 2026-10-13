@@ -22,6 +22,7 @@ bun run dev:ui           # Electron only (JS fallback, faster)
 bun run kill:dev         # Stop a stuck dev Electron (keeps the sidecar + agent sessions)
 bun run clean:build      # Dry run of the post-build cleanup (old dist versions, caches); -- --apply removes
 bun run build:rust       # Build Rust native module only
+bun run package:local    # Signed test DMG, never notarized: dist/local/Exegol-TEST-<x.y.z+1>-test.<sha>.dmg (-- --dry-run)
 bun run rebuild:native   # Rust + rebuild node-pty for Electron
 
 # The PTY sidecar is DETACHED: it survives app restarts on purpose (that is what

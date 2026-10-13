@@ -16,6 +16,7 @@
     "package:mac": "electron-vite build && electron-builder --config electron-builder.ts --mac --publish never",
     "package:win": "electron-vite build && electron-builder --config electron-builder.ts --win --publish never",
     "package:linux": "electron-vite build && electron-builder --config electron-builder.ts --linux --publish never",
+    "package:local": "bun scripts/package-local.ts",
     "postpackage": "bun run clean:build -- --apply --repo-only",
     "postpackage:mac": "bun run clean:build -- --apply --repo-only",
     "postpackage:win": "bun run clean:build -- --apply --repo-only",
