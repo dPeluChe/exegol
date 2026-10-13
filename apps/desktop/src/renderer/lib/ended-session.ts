@@ -123,6 +123,42 @@ export function endedKeysLive({
   return focusInside && !held && now - mountedAt >= ENDED_KEYS_SETTLE_MS;
 }
 
+/** The bits of a focused element the key gate reads (an HTMLElement in the app) */
+export interface FocusTarget {
+  tagName: string;
+  type?: string;
+  readOnly?: boolean;
+  disabled?: boolean;
+  isContentEditable?: boolean;
+  closest(selector: string): unknown;
+}
+
+interface Container {
+  contains(node: never): boolean;
+}
+
+const TEXT_INPUTS = new Set(["text", "search", "url", "email", ""]);
+
+function isTextField(el: FocusTarget): boolean {
+  if (el.isContentEditable) return true;
+  const tag = el.tagName.toUpperCase();
+  if (tag === "TEXTAREA") return !el.readOnly && !el.disabled;
+  if (tag === "INPUT") return TEXT_INPUTS.has(el.type ?? "") && !el.readOnly && !el.disabled;
+  return tag === "SELECT";
+}
+
+/** Where the keyboard may be for the launcher's keys: nowhere (body), the launcher, or anywhere in
+ *  its pane but a real text field; the scrollback xterm's helper textarea is not one */
+export function endedFocusAllowed(
+  active: FocusTarget | null,
+  ctx: { body: unknown; launcher: Container | null; pane: Container | null },
+): boolean {
+  if (!active || active === ctx.body) return true;
+  if (ctx.launcher?.contains(active as never)) return true;
+  if (!ctx.pane?.contains(active as never)) return false;
+  return !!active.closest(".xterm") || !isTextField(active);
+}
+
 export const PRIMARY_LABEL: Record<"resume" | "restart" | "reopen", string> = {
   resume: "Resume",
   restart: "Restart",

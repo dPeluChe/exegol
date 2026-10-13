@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   endedActions,
+  endedFocusAllowed,
   endedHeader,
   endedKeyAction,
   endedKeysLive,
@@ -123,5 +124,38 @@ describe("endedKeysLive", () => {
   });
   it("never while a respawn is on its way", () => {
     expect(endedKeysLive({ ...base, held: true })).toBe(false);
+  });
+});
+
+describe("endedFocusAllowed", () => {
+  const el = (tagName: string, opts: { xterm?: boolean; type?: string } = {}) => ({
+    tagName,
+    type: opts.type,
+    closest: (sel: string) => (sel === ".xterm" && opts.xterm ? {} : null),
+  });
+  const body = el("BODY");
+  const launcherBtn = el("BUTTON");
+  const scrollbackTextarea = el("TEXTAREA", { xterm: true });
+  const paneInput = el("INPUT", { type: "text" });
+  const paneDiv = el("DIV");
+  const elsewhere = el("TEXTAREA");
+  const inPane = new Set<unknown>([launcherBtn, scrollbackTextarea, paneInput, paneDiv]);
+  const ctx = {
+    body,
+    launcher: { contains: (n: never) => n === launcherBtn },
+    pane: { contains: (n: never) => inPane.has(n) },
+  };
+  it("accepts body (the CLI's xterm just went away) and nothing focused", () => {
+    expect(endedFocusAllowed(body, ctx)).toBe(true);
+    expect(endedFocusAllowed(null, ctx)).toBe(true);
+  });
+  it("accepts the launcher and the scrollback xterm's helper textarea", () => {
+    expect(endedFocusAllowed(launcherBtn, ctx)).toBe(true);
+    expect(endedFocusAllowed(scrollbackTextarea, ctx)).toBe(true);
+    expect(endedFocusAllowed(paneDiv, ctx)).toBe(true);
+  });
+  it("refuses a real text field in the pane and anything outside it", () => {
+    expect(endedFocusAllowed(paneInput, ctx)).toBe(false);
+    expect(endedFocusAllowed(elsewhere, ctx)).toBe(false);
   });
 });

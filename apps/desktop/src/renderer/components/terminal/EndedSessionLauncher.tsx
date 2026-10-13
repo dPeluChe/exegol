@@ -21,6 +21,7 @@ import {
   ENDED_ACTION_KEYS,
   type EndedAction,
   endedActions,
+  endedFocusAllowed,
   endedHeader,
   endedKeyAction,
   endedKeysLive,
@@ -37,11 +38,11 @@ import {
   terminalInPane,
 } from "../../lib/ended-session-actions";
 import { focusedField } from "../../lib/focused-field";
-import { claimPaneFocus } from "../../lib/pane-focus";
+import { claimPaneFocus, paneRoot } from "../../lib/pane-focus";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useAppStore } from "../../stores/app";
 import { toastError } from "../../stores/toasts";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { getActivePaneId } from "../../stores/workspace";
 import { SpawnAgentModal } from "../agents/SpawnAgentModal";
 import { AgentIcon, LoadingSpinner } from "../common";
 
@@ -342,38 +343,48 @@ function useEndedKeys(
     if (!paneId) return;
     const mountedAt = Date.now();
     const focusRoot = () => rootRef.current?.focus();
-    // Like an empty pane: a new split or Cmd+] / Ctrl+Tab hands it the keyboard; so does an exit
-    // in the focused pane (the terminal that had it is gone)
-    const idle = !document.activeElement || document.activeElement === document.body;
-    const focused = useWorkspaceStore.getState().focusedPaneId === paneId;
-    if (claimPaneFocus(paneId) || (focused && idle)) focusRoot();
+    // The pane keys act on (focused, else the tab's first): focusedPaneId alone is null or stale
+    // until a click, so the keys never fired after a Ctrl+C
+    const isActive = () =>
+      getActivePaneId() === paneId && useAppStore.getState().activeView === "workspace";
+    // A new split, Cmd+] / Ctrl+Tab, or the CLI exiting in the active pane: the launcher takes
+    // the keyboard, unless the user is typing in a field elsewhere
+    const claim = () => {
+      if (isActive() && !focusedField()) focusRoot();
+    };
+    if (claimPaneFocus(paneId)) focusRoot();
+    else claim();
+    const frame = requestAnimationFrame(claim);
     const onFocusPane = (e: Event) => {
       if ((e as CustomEvent<{ paneId: string }>).detail?.paneId === paneId) focusRoot();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (useWorkspaceStore.getState().focusedPaneId !== paneId) return;
-      if (useAppStore.getState().activeView !== "workspace") return;
-      if (document.querySelector('[role="dialog"]')) return;
+      if (!isActive() || document.querySelector('[role="dialog"]')) return;
       const { agentId, actions, others, run, pick, switchTo } = keys.current;
-      const active = document.activeElement;
       const live = endedKeysLive({
         mountedAt,
         now: Date.now(),
-        focusInside: !!active && !!rootRef.current?.contains(active),
+        focusInside: endedFocusAllowed(document.activeElement as HTMLElement | null, {
+          body: document.body,
+          launcher: rootRef.current,
+          pane: paneRoot(paneId),
+        }),
         held: isResuming(agentId) || !!switchTo,
       });
-      const typing = !!focusedField() || active instanceof HTMLSelectElement;
-      const hit = live ? endedKeyAction(e, typing, actions, others.length) : null;
+      const hit = live ? endedKeyAction(e, false, actions, others.length) : null;
       if (!hit) return;
+      // Capture phase, stopped here: the read-only scrollback xterm must not take it too
       e.preventDefault();
+      e.stopPropagation();
       if ("action" in hit) run(hit.action);
       else pick(others[hit.agentIndex] ?? null);
     };
     window.addEventListener("exegol:focus-pane", onFocusPane);
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
     return () => {
+      cancelAnimationFrame(frame);
       window.removeEventListener("exegol:focus-pane", onFocusPane);
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onKey, true);
     };
   });
 }
