@@ -65,6 +65,7 @@
       "suspend",
       "swapProviders",
       "takeLostOnRestart",
+      "resolveWatched",
       "autoResumeReport",
       "setShellCwd",
       "toggleProviderEnabled",

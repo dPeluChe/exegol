@@ -1,4 +1,4 @@
-import { ENDED_STATUSES } from "@exegol/shared";
+import { type Agent, ENDED_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   AlertTriangle,
@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { resumeSessionInto } from "../../hooks/use-resume-agent";
 import { useAgent } from "../../hooks/use-trpc";
 import { sizeKey } from "../../lib/browser-viewports";
 import { closeWithConfirm } from "../../lib/close-target";
@@ -20,7 +21,6 @@ import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { movePane } from "../../lib/move-pane";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
-import { spawnShellIntoPane } from "../../lib/spawn-shell";
 import { splitWithBrowser, splitWithTerminal } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { isPaneAgentStale, useAgentStore } from "../../stores/agents";
@@ -313,19 +313,19 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
     }
   }, [isError, paneId, agentId, updatePane]);
 
-  // A shell killed by a reboot can't get its process back, but its pane can
-  // get a terminal back: a fresh shell in the project folder, same pane
+  // A shell the sidecar took can't get its process back, but its pane gets a terminal back in
+  // its last folder: the same resume as auto-resume, which runs once per session
   const respawned = useRef(false);
   useEffect(() => {
     if (respawned.current || agent?.cliType !== "shell" || agent.status !== "crashed") return;
     respawned.current = true;
-    spawnShellIntoPane(agent.projectId, paneId)
-      .then(() => {
-        useAgentStore.getState().removeAgent(agentId);
-        return trpcMutate("agents.delete", { id: agentId });
-      })
-      .catch((err) => console.error("[PaneRecovery] Could not reopen the shell:", err));
-  }, [agent, agentId, paneId]);
+    resumeSessionInto(
+      agent,
+      false,
+      (data) => trpcMutate<Agent>("agents.spawn", data),
+      paneId,
+    ).catch((err) => console.error("[PaneRecovery] Could not reopen the shell:", err));
+  }, [agent, paneId]);
 
   // Ended and still not in the store once its own project's list landed: archived or closed
   // null: the row is gone (a closed shell is deleted); waiting on it ended in "Failed to start"

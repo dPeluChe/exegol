@@ -22,6 +22,7 @@ import { StatusDot } from "../../common/StatusDot";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { FollowUpControl } from "../../terminal/FollowUpControl";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
+import { WatchGoneStrip } from "./WatchGoneStrip";
 
 const DRAG_TYPE = "application/x-exegol-watch";
 /** Cards and collapsed strips alike take the dashboard's height; more rows scroll it */
@@ -170,7 +171,19 @@ function CollapsedStrip({
 }) {
   const toggleOpen = useWatchStore((s) => s.toggleOpen);
   const toggleWatch = useWatchStore((s) => s.toggleWatch);
-  const name = agent ? (agent.alias ?? agent.cliType) : "session gone";
+  const gone = useWatchStore((s) => s.gone[agentId]);
+  if (!agent) {
+    return (
+      <WatchGoneStrip
+        gone={gone}
+        agentId={agentId}
+        height={FULL_HEIGHT}
+        dragProps={dragProps}
+        dropTarget={dropTarget}
+      />
+    );
+  }
+  const name = agent.alias ?? agent.cliType;
 
   return (
     <div

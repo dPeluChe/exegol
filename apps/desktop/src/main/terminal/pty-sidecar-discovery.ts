@@ -143,8 +143,8 @@ function waitForPidFile(token: string, timeoutMs: number): Promise<PidFile> {
 const EXIT_WAIT_MS = 3_000;
 const EXIT_POLL_MS = 100;
 
-async function waitForExit(pid: number): Promise<void> {
-  const deadline = Date.now() + EXIT_WAIT_MS;
+export async function waitForExit(pid: number, waitMs = EXIT_WAIT_MS): Promise<void> {
+  const deadline = Date.now() + waitMs;
   while (isProcessAlive(pid)) {
     if (Date.now() > deadline) {
       logger.warn(`[PtySidecar] Previous sidecar (pid ${pid}) did not exit; not signalling it`);
@@ -169,6 +169,7 @@ export async function ensureSidecar(
     const state = await tryConnect(client, pidFile, onReplace);
     if (state === "ready") {
       discoveryLog(`reusing pid ${pidFile.pid}`);
+      client.pid = pidFile.pid;
       return client;
     }
     if (state === "unreachable")
@@ -197,6 +198,7 @@ export async function ensureSidecar(
     throw new Error(`Sidecar version mismatch: ${ping.version} !== ${SIDECAR_VERSION}`);
   }
   discoveryLog(`spawned pid ${newPidFile.pid}`);
+  client.pid = newPidFile.pid;
   return client;
 }
 
@@ -210,6 +212,7 @@ export async function reconnectSidecar(): Promise<SidecarClient> {
     await client.connect(pidFile.sock);
     const ping = await withTimeout(client.ping(), 5_000, "Sidecar ping");
     if (ping.version !== SIDECAR_VERSION) throw new Error("Sidecar version changed");
+    client.pid = pidFile.pid;
     return client;
   } catch (err) {
     client.disconnect();

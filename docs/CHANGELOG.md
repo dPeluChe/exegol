@@ -22,6 +22,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - When the process behind the terminals stops while Exegol is open (killed, out of memory, shut down), sessions no longer end as "failed" with their shells deleted on the next start: they come back marked as interrupted and resume right away, 3 at a time, the same way as after a restart
+- Sessions pinned in Watching follow their session through any resume (from the pane, the automatic one after a restart, or two in a row): the card stays in its place with its settings and shows the live terminal. Pinned sessions come back first and are never left suspended. A pin whose session cannot continue shows what it was (name, CLI, project, last state and when) with Resume and Unpin, instead of "session gone"
+- A terminal interrupted by the background process stopping keeps its pane and reopens there, in the folder it was in, instead of turning into the empty launcher
 - Retry on the "terminals not answering" banner no longer repeats or drops a few characters of output: only terminals that actually missed output are redrawn
 - A reconnected terminal no longer starts with a stray replacement character (�) at the top of its history
 - Opening the Dashboard right after starting Exegol no longer leaves an agent pane drawn at the wrong width when you come back. A watched card set to "fit session to card" could keep the session at the card's size while it was still reconnecting, and the pane's own size was ignored until you switched tabs

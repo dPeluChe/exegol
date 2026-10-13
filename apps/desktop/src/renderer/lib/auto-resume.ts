@@ -7,14 +7,16 @@ export const AUTO_RESUME_CONCURRENCY = 3;
 /** The next resume starts once the previous CLI is up, or after this */
 export const AUTO_RESUME_SETTLE_MS = 10_000;
 
-/** Pure: 0 in the active project's active tab, 1 in another project's active tab, 2 in any
- *  other pane, 3 without a pane */
+/** Pure: -1 pinned in Watching, 0 in the active project's active tab, 1 in another project's
+ *  active tab, 2 in any other pane, 3 without a pane */
 export function screenRank(
   agentId: string,
   projectId: string,
   workspaces: Record<string, ProjectWorkspace>,
   activeProjectId: string | null,
+  pinned: ReadonlySet<string> = new Set(),
 ): number {
+  if (pinned.has(agentId)) return -1;
   const pw = workspaces[projectId];
   if (!pw) return 3;
   const holds = (tabId: string | null) => {

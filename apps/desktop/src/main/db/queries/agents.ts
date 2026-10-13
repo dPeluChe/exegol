@@ -100,6 +100,56 @@ export function deleteShellRow(db: Database.Database, id: string): void {
   db.prepare("DELETE FROM agents WHERE id = ? AND cli_type = 'shell'").run(id);
 }
 
+export function setAgentResumedFrom(db: Database.Database, id: string, from: string): void {
+  db.prepare("UPDATE agents SET resumed_from = ? WHERE id = ?").run(from, id);
+}
+
+/** The newest row that resumed `id` */
+export function resumedInto(db: Database.Database, id: string): string | undefined {
+  const row = db
+    .prepare(
+      "SELECT id FROM agents WHERE resumed_from = ? ORDER BY started_at DESC, rowid DESC LIMIT 1",
+    )
+    .get(id) as { id: string } | undefined;
+  return row?.id;
+}
+
+export interface WatchedInfo {
+  id: string;
+  alias: string | null;
+  cliType: string;
+  projectId: string;
+  projectName: string | null;
+  status: string;
+  statusChangedAt: number | null;
+  taskDescription: string;
+  branchName: string | null;
+}
+
+/** What a session was, archived or not, for a Watching card whose session is gone */
+export function watchedInfo(db: Database.Database, id: string): WatchedInfo | null {
+  const r = db
+    .prepare(
+      `SELECT a.id, a.alias, a.cli_type, a.project_id, p.name AS project_name, a.status,
+              a.status_changed_at, a.task_description, w.branch_name
+       FROM agents a LEFT JOIN projects p ON p.id = a.project_id
+       LEFT JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?`,
+    )
+    .get(id) as Record<string, unknown> | undefined;
+  if (!r) return null;
+  return {
+    id: r.id as string,
+    alias: (r.alias as string | null) ?? null,
+    cliType: r.cli_type as string,
+    projectId: r.project_id as string,
+    projectName: (r.project_name as string | null) ?? null,
+    status: r.status as string,
+    statusChangedAt: (r.status_changed_at as number | null) ?? null,
+    taskDescription: (r.task_description as string) ?? "",
+    branchName: (r.branch_name as string | null) ?? null,
+  };
+}
+
 export function setAgentLastCwd(db: Database.Database, id: string, cwd: string): void {
   db.prepare("UPDATE agents SET last_cwd = ? WHERE id = ?").run(cwd, id);
 }

@@ -6,8 +6,9 @@ import { markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
-import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
+import { ensureSidecar, isProcessAlive, waitForExit } from "../terminal/pty-sidecar-discovery";
 import { settleAllReattach } from "../terminal/reattach-gate";
+import { successorSidecar } from "../terminal/sidecar-reconnect";
 import {
   type CrashContext,
   countReasons,
@@ -70,8 +71,13 @@ export function cleanupStaleData(): void {
  *  takes the lost list again */
 async function reconnectAfterLoss(reason: string): Promise<void> {
   try {
-    getPtyHost().connectToSidecar(await ensureSidecar());
-    logger.info(`[Sidecar] reconnected to a new sidecar after it stopped (${reason})`);
+    const oldPid = getPtyHost().getSidecarClient()?.pid ?? null;
+    const client = await successorSidecar({ oldPid, waitForExit, isProcessAlive, ensureSidecar });
+    if (!client) throw new Error(`pid ${oldPid} is still the only sidecar`);
+    getPtyHost().connectToSidecar(client);
+    logger.info(
+      `[Sidecar] reconnected to pid ${client.pid} after pid ${oldPid} stopped (${reason})`,
+    );
   } catch (err) {
     logger.warn("[Sidecar] no new sidecar after the stop, sessions resume in legacy mode:", err);
   }

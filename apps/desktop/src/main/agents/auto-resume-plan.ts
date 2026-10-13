@@ -2,7 +2,7 @@ import type { Agent } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getProject, setAgentSuspended, updateAgentStatus } from "../db/queries";
 import { logger } from "../lib/logger";
-import { idleDays, type LostSession, splitLost } from "./auto-resume";
+import { idleDays, type LostSession, splitLost, takeShellFolder } from "./auto-resume";
 import { settleLost } from "./lost-sessions";
 import { getProviderRegistry } from "./registry";
 
@@ -38,8 +38,9 @@ export function planLostResume(
   db: Database.Database,
   lost: LostSession[],
   now = Date.now(),
+  pinned: ReadonlySet<string> = new Set(),
 ): { resume: Array<Agent & { lastActiveAt: number }>; kept: KeptSession[] } {
-  const { resume, keep } = splitLost(lost, now);
+  const { resume, keep } = splitLost(lost, now, undefined, pinned);
   const kept: KeptSession[] = [];
   for (const s of keep) {
     const agent = getAgent(db, s.id);
@@ -78,9 +79,11 @@ export function finishAutoResume(
     if (o.reason === NO_PANE && getAgent(db, o.id)?.status === "crashed") {
       suspendLost(db, o.id, NO_PANE_STEP, now);
     }
-    logger.info(
-      `[AutoResume] ${o.id} ${o.cliType} -> ${o.outcome}${o.reason ? ` (${o.reason})` : ""}`,
-    );
+    const folder = takeShellFolder(o.id);
+    const notes = [o.reason, o.cliType === "shell" && o.outcome === "resumed" ? folder : undefined]
+      .filter(Boolean)
+      .join(", ");
+    logger.info(`[AutoResume] ${o.id} ${o.cliType} -> ${o.outcome}${notes ? ` (${notes})` : ""}`);
   }
   settleLost(outcomes.map((o) => o.id));
   logger.info(

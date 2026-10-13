@@ -30,8 +30,10 @@ export function splitLost(
   lost: LostSession[],
   now: number,
   maxIdleMs = AUTO_RESUME_MAX_IDLE_MS,
+  /** Pinned in Watching: a commitment to that session, never kept suspended */
+  pinned: ReadonlySet<string> = new Set(),
 ): { resume: LostSession[]; keep: LostSession[] } {
-  const recent = (s: LostSession) => now - s.lastActiveAt <= maxIdleMs;
+  const recent = (s: LostSession) => pinned.has(s.id) || now - s.lastActiveAt <= maxIdleMs;
   const byRecency = [...lost].sort((a, b) => b.lastActiveAt - a.lastActiveAt);
   return { resume: byRecency.filter(recent), keep: byRecency.filter((s) => !recent(s)) };
 }
@@ -59,6 +61,34 @@ export function folderExists(path: string | null): boolean {
     return statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
   } catch {
     return false;
+  }
+}
+
+/** The folder decision of each resumed shell, for its [AutoResume] line (no path) */
+const shellFolders = new Map<string, string>();
+
+export function noteShellFolder(sourceId: string, decision: ShellFolder["decision"]): void {
+  shellFolders.set(
+    sourceId,
+    decision === "kept" ? "folder kept" : `folder ${decision}, project root`,
+  );
+}
+
+export function takeShellFolder(sourceId: string): string | undefined {
+  const d = shellFolders.get(sourceId);
+  shellFolders.delete(sourceId);
+  return d;
+}
+
+/** Pure: the newest session in a resume chain (each new row names the one it resumed) */
+export function followChain(start: string, childOf: (id: string) => string | undefined): string {
+  let cur = start;
+  const seen = new Set([start]);
+  for (;;) {
+    const next = childOf(cur);
+    if (!next || seen.has(next)) return cur;
+    seen.add(next);
+    cur = next;
   }
 }
 

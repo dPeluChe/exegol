@@ -28,7 +28,8 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
  * 1.7.0: per-session output pause, seq on output frames, capped snapshots (tail from the last
  *        clear), sticky terminal modes, rings start on a UTF-8 boundary, active rings shrink
  *        under memory pressure, linear framing (lib/frame-reader), sidecar.log, and a
- *        `sidecar.shuttingDown` notice before it kills its sessions (2026-10-12)
+ *        `sidecar.shuttingDown` notice before it kills its sessions, the pid file released first
+ *        and session.create refused while it shuts down (2026-10-12)
  */
 export const SIDECAR_VERSION = "1.7.0";
 

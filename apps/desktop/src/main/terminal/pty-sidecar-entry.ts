@@ -152,6 +152,12 @@ function handleRequest(req: JsonRpcRequest, client: Socket): void {
 
       case "session.create": {
         const p = req.params as SessionCreateParams;
+        if (shuttingDown) {
+          client.write(
+            makeResponse(req.id, undefined, { code: -1, message: "Sidecar is shutting down" }),
+          );
+          break;
+        }
         if (sessions.has(p.id)) {
           client.write(
             makeResponse(req.id, undefined, { code: -1, message: "Session already exists" }),
@@ -399,9 +405,18 @@ function readPidFileText(): string | null | undefined {
 
 /** Remove our pid file and socket, never a successor's (2026-08-13: an exiting predecessor
  *  deleted the replacement's files and orphaned it). */
-function cleanup(): void {
+/** Give up the pid file (only ours): discovery then spawns a successor instead of reusing us */
+function releaseLease(): void {
   try {
     if (parsePidFile(readPidFileText())?.token === TOKEN) unlinkSync(SIDECAR_PID_PATH);
+  } catch {
+    /* already gone */
+  }
+}
+
+function cleanup(): void {
+  releaseLease();
+  try {
     if (socketIno !== null && statSync(SIDECAR_SOCK_PATH).ino === socketIno) {
       unlinkSync(SIDECAR_SOCK_PATH);
     }
@@ -450,7 +465,13 @@ function start(): void {
  * Kill every session and exit. Pending output is flushed first: onExit may not fire before the
  * SIGKILL escalation, and clients may disconnect meanwhile, stranding the last <4 ms of output.
  */
+let shuttingDown = false;
+
 function stopAndExit(graceMs: number, reason: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  // Undiscoverable before the notice: main reconnecting on it must find a successor, not us
+  releaseLease();
   const live = [...sessions.values()].filter((s) => s.alive).map((s) => s.id);
   log(`exiting: ${reason} (${live.length} live session(s))`, true);
   for (const s of sessions.values()) flushSession(s);

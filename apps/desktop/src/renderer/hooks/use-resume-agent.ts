@@ -241,8 +241,11 @@ export function useAutoResumeLost(): void {
 }
 
 async function resumeLostOnce(spawn: (data: AgentCreate) => Promise<Agent>): Promise<void> {
+  // Pins are commitments: never kept suspended, resumed first, even with no pane
+  const pinned = new Set(useWatchStore.getState().watched);
   const lost = await trpcInvoke<{ resume: LostAgent[]; kept: KeptSession[] }>(
     "agents.takeLostOnRestart",
+    { pinned: [...pinned] },
   ).catch(() => ({ resume: [], kept: [] }));
   showKept(lost.kept);
   if (lost.resume.length === 0) return;
@@ -250,7 +253,7 @@ async function resumeLostOnce(spawn: (data: AgentCreate) => Promise<Agent>): Pro
   const started = Date.now();
   const ws = useWorkspaceStore.getState();
   const ordered = orderAutoResume(lost.resume, (a) =>
-    screenRank(a.id, a.projectId, ws.projectWorkspaces, ws._activeProjectId),
+    screenRank(a.id, a.projectId, ws.projectWorkspaces, ws._activeProjectId, pinned),
   );
   const outcomes: Array<{ id: string; cliType: string; outcome: string; reason?: string }> = [];
   await staggered(ordered, AUTO_RESUME_CONCURRENCY, async (agent) => {
@@ -262,7 +265,7 @@ async function resumeLostOnce(spawn: (data: AgentCreate) => Promise<Agent>): Pro
         outcome,
         reason: reason?.slice(0, REASON_MAX),
       });
-    if (!pane) {
+    if (!pane && !pinned.has(agent.id)) {
       // Main suspends it: Resume from the sidebar, not a crash
       useAgentStore.getState().updateAgent(agent.id, { status: "stopped" });
       markSuspended(agent.id);
@@ -271,7 +274,7 @@ async function resumeLostOnce(spawn: (data: AgentCreate) => Promise<Agent>): Pro
     }
     try {
       const canResume = resumable.has(agent.cliType);
-      const newId = await resumeSessionInto(agent, canResume, spawn, pane.paneId);
+      const newId = await resumeSessionInto(agent, canResume, spawn, pane?.paneId);
       if (!newId) {
         report("skipped", "already resuming");
         return;

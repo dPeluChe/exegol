@@ -29,6 +29,8 @@ type ErrorCallback = (id: string, message: string) => void;
 type ShutdownCallback = (reason: string, sessions: string[]) => void;
 
 export class SidecarClient {
+  /** The sidecar process this client reached (set by discovery) */
+  pid: number | null = null;
   private socket: Socket | null = null;
   /** Linear reader (lib/frame-reader), the sidecar's end too. Bounded:
    *  this socket carries far more traffic than the MCP one and runs in the same

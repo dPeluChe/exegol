@@ -6,7 +6,12 @@ import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { promoteParallelAgent } from "../../agents/agent-parallel-orchestration";
 import { continueLastPart } from "../../agents/agent-spawn-flow";
-import { folderExists, shellResumeFolder } from "../../agents/auto-resume";
+import {
+  folderExists,
+  followChain,
+  noteShellFolder,
+  shellResumeFolder,
+} from "../../agents/auto-resume";
 import { finishAutoResume, planLostResume } from "../../agents/auto-resume-plan";
 import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
 import {
@@ -44,9 +49,12 @@ import {
   getAgentCwd,
   getAgentLastCwd,
   listActiveAgents,
+  resumedInto,
   setAgentAlias,
   setAgentLastCwd,
   setAgentPrWatch,
+  setAgentResumedFrom,
+  watchedInfo,
 } from "../../db/queries/agents";
 import {
   createParallelRun,
@@ -102,6 +110,7 @@ async function resumedShellFolder(
   const allowed = exists && bases.length > 0 && (await isPathAllowed(last as string, bases));
   const { cwd, decision } = shellResumeFolder(last, exists, allowed);
   const where = decision === "kept" ? "folder kept" : `folder ${decision}, project root`;
+  noteShellFolder(fromId, decision);
   if (decision !== "none") logger.info(`[Resume] ${fromId} shell: ${where}`);
   return cwd;
 }
@@ -271,9 +280,22 @@ export const agentRouter = router({
 
   /** Sessions a restart took with the sidecar that are not settled yet (a reload mid-stagger
    *  gets the rest): the recent ones to resume in their panes, the rest kept suspended */
-  takeLostOnRestart: publicProcedure.query(async ({ ctx }) =>
-    planLostResume(ctx.db, await takeLostOnRestart()),
-  ),
+  takeLostOnRestart: publicProcedure
+    .input(z.object({ pinned: z.array(z.string().max(128)).max(256).default([]) }).optional())
+    .query(async ({ ctx, input }) =>
+      planLostResume(ctx.db, await takeLostOnRestart(), Date.now(), new Set(input?.pinned)),
+    ),
+
+  /** Watching pins follow their session: each id's newest continuation, and what the session
+   *  was when none is live (archived rows included) */
+  resolveWatched: publicProcedure
+    .input(z.object({ ids: z.array(z.string().max(128)).max(256) }))
+    .query(({ ctx, input }) =>
+      input.ids.map((id) => {
+        const latest = followChain(id, (cur) => resumedInto(ctx.db, cur));
+        return { id, latest, info: watchedInfo(ctx.db, latest) };
+      }),
+    ),
 
   /** How the renderer's staggered auto-resume went, for the log */
   autoResumeReport: publicProcedure
@@ -526,6 +548,7 @@ export const agentRouter = router({
       await manager.spawn(ctx.db, agent, input);
       if (resumedFrom) {
         logger.info(`[Resume] ${resumedFrom} -> ${agent.id} ok${fresh}`);
+        setAgentResumedFrom(ctx.db, agent.id, resumedFrom);
         retireResumedSource(ctx.db, resumedFrom);
       }
     } catch (err) {
