@@ -19,6 +19,10 @@ export type StatusBarWidgetSetting = {
   mode?: "percent" | "values";
 };
 
+/** Settings > General: suspend sessions idle this many days; 0 = Off */
+export const IDLE_SUSPEND_DAYS = [0, 1, 3, 7, 14] as const;
+export type IdleSuspendDays = (typeof IDLE_SUSPEND_DAYS)[number];
+
 export type Settings = {
   defaultIde: IdeType;
   customIdePath: string | null;
@@ -31,6 +35,8 @@ export type Settings = {
   toastsEnabled: boolean;
   /** Commit and push a worktree's pending work to its branch when its agent ends or before a sweep */
   saveWorktreeWork: boolean;
+  /** T205: no PTY output and no input for this many days suspends an agent or closes a shell */
+  idleSuspendDays: IdleSuspendDays;
   /** T155.7: per-channel notification kill switches (NotificationMuteChannel ids) */
   mutedNotificationChannels: string[];
   /** Ollama server URL for local embeddings */
@@ -62,6 +68,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notificationsEnabled: true,
   toastsEnabled: true,
   saveWorktreeWork: true,
+  idleSuspendDays: 7,
   mutedNotificationChannels: [],
   ollamaUrl: "http://localhost:11434",
   ollamaModel: "nomic-embed-text",

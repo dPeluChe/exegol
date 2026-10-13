@@ -15,11 +15,12 @@ import {
   removeFollowUp,
   steerFollowUp,
 } from "../../agents/follow-up-queue";
+import { setIdleExempt } from "../../agents/idle-exempt";
 import { takeLostOnRestart } from "../../agents/lost-sessions";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
 import { providerSessionId } from "../../agents/provider-session-id";
-import { broadcastAgentStatus, coreRust, resolveCommand } from "../../agents/spawn-env";
+import { broadcastShellClosed, coreRust, resolveCommand } from "../../agents/spawn-env";
 import { resolveSpawnTarget } from "../../agents/spawn-target";
 import { resolveTaskLabel } from "../../agents/task-label";
 import {
@@ -37,6 +38,7 @@ import {
 import {
   archiveAgent,
   archiveEndedAgents,
+  deleteShellRow,
   getAgentCwd,
   listActiveAgents,
   setAgentAlias,
@@ -481,6 +483,14 @@ export const agentRouter = router({
     return getAgent(ctx.db, input.id);
   }),
 
+  /** Sessions the idle sweep leaves alone: pinned in Watching or with an unread attention item */
+  setIdleExempt: publicProcedure
+    .input(z.object({ agentIds: z.array(z.string().max(128)).max(500) }))
+    .mutation(({ input }) => {
+      setIdleExempt(input.agentIds);
+      return { ok: true };
+    }),
+
   /** The numbered question the agent's screen is waiting on (permission prompt, approval) */
   screenDialog: publicProcedure
     .input(z.object({ id: z.string() }))
@@ -555,16 +565,8 @@ export const agentRouter = router({
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     const agent = getAgent(ctx.db, input.id);
     if (agent?.cliType === "shell") {
-      ctx.db.prepare("DELETE FROM agents WHERE id = ?").run(input.id);
-      // Every window drops it, not only the one that closed it
-      broadcastAgentStatus({
-        agentId: agent.id,
-        projectId: agent.projectId,
-        status: "stopped",
-        currentStep: null,
-        cliType: "shell",
-        timestamp: Date.now(),
-      });
+      deleteShellRow(ctx.db, agent.id);
+      broadcastShellClosed(agent);
       return { success: true, archived: false };
     }
     archiveAgent(ctx.db, input.id);

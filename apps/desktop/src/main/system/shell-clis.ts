@@ -14,6 +14,8 @@ export interface ProcRow {
   tpgid?: number;
   /** Controlling terminal (`ttys003`), "??" without one */
   tty?: string;
+  /** Resident memory in KB */
+  rss?: number;
   args: string;
 }
 
@@ -119,13 +121,17 @@ export function readProcessTable(): Promise<ProcRow[]> {
 }
 
 async function readTable(): Promise<ProcRow[]> {
-  const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,pgid=,tpgid=,tty=,args="], {
-    timeout: 5000,
-    maxBuffer: 8 * 1024 * 1024,
-  });
+  const { stdout } = await execFileAsync(
+    "ps",
+    ["-A", "-o", "pid=,ppid=,pgid=,tpgid=,tty=,rss=,args="],
+    {
+      timeout: 5000,
+      maxBuffer: 8 * 1024 * 1024,
+    },
+  );
   const rows: ProcRow[] = [];
   for (const line of stdout.split("\n")) {
-    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(\S+)\s+(.*)$/);
+    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(\S+)\s+(\d+)\s+(.*)$/);
     if (m) {
       rows.push({
         pid: Number(m[1]),
@@ -133,7 +139,8 @@ async function readTable(): Promise<ProcRow[]> {
         pgid: Number(m[3]),
         tpgid: Number(m[4]),
         tty: m[5],
-        args: m[6] ?? "",
+        rss: Number(m[6]),
+        args: m[7] ?? "",
       });
     }
   }

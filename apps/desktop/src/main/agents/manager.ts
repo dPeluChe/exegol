@@ -331,6 +331,11 @@ export class AgentManager {
     getPtyHost().resize(agentId, cols, rows);
   }
 
+  /** A pipeline or the queue waits on this agent's exit */
+  hasCompletionCallback(agentId: string): boolean {
+    return this.completionCallbacks.has(agentId);
+  }
+
   onAgentComplete(agentId: string, callback: (exitCode: number) => void): void {
     this.completionCallbacks.set(agentId, callback);
   }

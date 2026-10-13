@@ -21,7 +21,8 @@ import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { Kbd } from "../common/Kbd";
 import { IdePicker } from "./IdePicker";
-import { SwitchRow } from "./settings-ui";
+import { SessionsSection } from "./SessionsSection";
+import { SECTION_HEADING, SwitchRow } from "./settings-ui";
 
 const THEME_OPTIONS = [
   { value: "dark", label: "Dark", icon: Moon },
@@ -135,9 +136,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       {/* Theme + Hotkey in same row */}
       <div className="flex items-start gap-6">
         <div>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-            Theme
-          </h3>
+          <h3 className={SECTION_HEADING}>Theme</h3>
           <div className="flex gap-2">
             {THEME_OPTIONS.map((opt) => {
               const isActive = settings.theme === opt.value;
@@ -163,9 +162,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
         </div>
 
         <div>
-          <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-            Global Hotkey
-          </h3>
+          <h3 className={SECTION_HEADING}>Global Hotkey</h3>
           <div className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-2.5">
             <KeyCombo combo={settings.globalHotkey} />
             <HotkeyRecorder onRecord={(globalHotkey) => onChange({ globalHotkey })} />
@@ -175,9 +172,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
 
       {/* IDE selector */}
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Default IDE
-        </h3>
+        <h3 className={SECTION_HEADING}>Default IDE</h3>
         <IdePicker
           value={settings.defaultIde}
           onChange={(ide) => ide && onChange({ defaultIde: ide })}
@@ -196,9 +191,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
 
       {/* Notifications */}
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Notifications
-        </h3>
+        <h3 className={SECTION_HEADING}>Notifications</h3>
         <div className="flex flex-col gap-2">
           {[
             {
@@ -229,9 +222,7 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
       </div>
 
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Worktrees
-        </h3>
+        <h3 className={SECTION_HEADING}>Worktrees</h3>
         <SwitchRow
           label="Save worktree work to its branch when an agent ends"
           description="Commits what is pending (never ignored files, likely secrets or files over 10 MB) and pushes the agent's own branch to origin, so the work is on the remote before any cleanup. Also used by the daily worktree sweep"
@@ -240,6 +231,8 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           onToggle={() => onChange({ saveWorktreeWork: !settings.saveWorktreeWork })}
         />
       </div>
+
+      <SessionsSection settings={settings} onChange={onChange} />
 
       {/* Ollama / Project Indexing status */}
       <OllamaStatusSection settings={settings} onChange={onChange} />
@@ -287,9 +280,7 @@ function OllamaStatusSection({
 
   return (
     <div>
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-        Project Indexing (Ollama)
-      </h3>
+      <h3 className={SECTION_HEADING}>Project Indexing (Ollama)</h3>
       <div className="space-y-3 rounded-xl border border-border bg-bg-secondary p-4">
         <p className="text-[10px] text-text-muted">
           Exegol can index your project files using local embeddings via Ollama. This enables

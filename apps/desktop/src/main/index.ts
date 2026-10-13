@@ -1,5 +1,6 @@
 import { app, dialog, globalShortcut, shell } from "electron";
 import { seedAgentLinkCache, stopSweep } from "./agents/agent-messaging";
+import { startIdleSuspend } from "./agents/idle-suspend-sweep";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
@@ -141,6 +142,7 @@ app.whenReady().then(async () => {
   void runStartupRecovery().finally(() => {
     getSchedulerEngine().start(getDb());
     scheduleHousekeeping(getDb());
+    startIdleSuspend(getDb());
   });
 
   // Background services (non-blocking, start after window)

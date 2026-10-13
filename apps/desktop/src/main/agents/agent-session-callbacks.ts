@@ -31,6 +31,7 @@ import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
 import { detachOutputPipeline } from "./output-pipeline";
+import { noteSessionActivity } from "./session-activity";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -286,6 +287,7 @@ export function createSpawnCallbacks(
       if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data);
       else noteOutputDropped(agent.id);
       noteAgentOutput(agent.id);
+      noteSessionActivity(agent.id, "output");
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 

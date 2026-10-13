@@ -77,6 +77,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       className={cn(
+        toast.links?.length && "flex-wrap",
         "pointer-events-auto relative flex w-72 animate-toast-in overflow-hidden rounded-lg border border-border bg-bg-secondary text-left shadow-lg",
       )}
     >
@@ -104,6 +105,23 @@ function ToastItem({ toast }: { toast: Toast }) {
           </div>
         </div>
       </button>
+      {toast.links && toast.links.length > 0 && (
+        <div className="flex w-full flex-wrap gap-1 pr-3 pb-2 pl-9">
+          {toast.links.map((link) => (
+            <button
+              key={link.id}
+              type="button"
+              onClick={() => {
+                link.run();
+                removeToast(toast.id);
+              }}
+              className="max-w-full truncate rounded bg-bg-tertiary px-1.5 py-0.5 text-[10px] text-text-secondary hover:text-accent"
+            >
+              {link.label}
+            </button>
+          ))}
+        </div>
+      )}
       {toast.action && (
         <button
           type="button"

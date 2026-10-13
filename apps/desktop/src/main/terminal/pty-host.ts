@@ -1,5 +1,6 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
 import type { ScreenDialog } from "@exegol/shared";
+import { noteSessionActivity } from "../agents/session-activity";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { terminalProcesses, terminateAll } from "../system/process-tree";
@@ -354,6 +355,7 @@ export class PtyHost {
   write(id: string, data: string): void {
     const s = this.sessions.get(id);
     if (!s?.alive) return;
+    noteSessionActivity(id, "input");
     if (s.shellReadyState === "pending") {
       if (data.startsWith("\x1b")) return;
       s.preReadyStdinQueue.push(data);
