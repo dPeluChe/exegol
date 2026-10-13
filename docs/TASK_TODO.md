@@ -206,22 +206,6 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
-### T209: Browser pane page dialogs (alert / confirm / prompt) `added: 2026-10-13`
-**Priority**: P2 | **Effort**: S-M | **Source**: user test 2026-10-13: a test page's "Copy markdown,
-HTML and plain text (Safari only)" button failed in Chromium (custom clipboard formats need the
-`web ` prefix there, so the failure itself is the page's) and its `alert()` showed as an app-modal
-macOS dialog with the Exegol icon, blocking the whole window, with nothing in the log.
-
-1. Page `alert()`: shown inside its browser pane (a dismissable bar with the host), not app-modal;
-   `confirm()` / `prompt()` stay native (they are synchronous) but titled with the pane's host so
-   it is clear a web page asks, not Exegol
-2. Agent browser: while an agent is acting, a page dialog must not hang the tool call: dismiss
-   alerts (report "page_dialog: alert" to the agent), cancel confirm/prompt unless the user takes
-   over; `wait_for_user` when the page needs an answer
-3. Log `[Browser] page dialog <type> on <host>` (never the text: it is third-party content)
-4. Check the project partitions' clipboard permissions (`clipboard-sanitized-write`, read on a
-   user gesture) so pages that work in Chrome work in the pane
-
 ### T208: Database pane (SQLite and Postgres first) `added: 2026-10-13`
 **Priority**: P2 | **Effort**: L | **Source**: user idea 2026-10-13. Survey of the user's projects
 (2026-10-13): 51 SQLite files, 25 Postgres URLs in `.env*` (plus pgvector/timescale images), 5
@@ -290,43 +274,20 @@ without leaving the project.
 **Priority**: P1 | **Effort**: L | **Source**: user review of the empty-pane launcher and the Launch
 Agent modal (2026-10-12). One PR, reviewed in detail.
 
-Today (`EmptyPaneContent.tsx`, `RunTargets.tsx`, `SpawnAgentModal`): the folder default comes from a
-pinned command (`pickRunTarget`: pin, else root with commands, else first repo), so a project opens
-on a subfolder; the folder only drives the bottom row (Terminal, Files, Git, Finder, IDE,
-commands), agents always launch at the project root and nothing says where; recent sessions are
-project-wide; the IDE button is `projectIde ?? defaultIde ?? "vscode"` with no install check; only
-T has a shortcut; the modal keeps all 8 agents after one is picked and shows the path at the bottom.
+Items 1-7 (folder-first launcher, keys, editor button, in-pane form, agent switcher, sessions per
+folder, `project-detect.ts`) shipped 2026-10-13 and item 8 (ended pane) before it
+(`TASK_COMPLETED/2610.md`). Left:
 
-1. Folder first: a header "📁 project / folder ▾" (combobox over the run targets, filter inside),
-   default the project root; a choice is remembered per pane. Agents, panes and commands all start
-   there
-2. Shortcuts with a badge on each target, only when no field has the focus: 1-9 agents in grid
-   order; T Terminal, F Files, G Git, B Browser, S Simulator, E editor, O file manager
-3. Editor button: the project's IDE, else Settings' default editor, shown only when installed
-   (`ide/detect`); none installed or set, no button
-4. Picking an agent (click or number) turns the pane into its launch form in place: the agent in
-   the header with the folder ("Claude Code in iteris-landing", Esc goes back), the other agents
-   hidden; session (New, Continue last, a past one), model, mode, YOLO, Here / Worktree, prompt;
-   Enter launches. The modal stays for the tab bar "+" and mini panes
-5. In the form (and the modal) the agent can be switched without closing: a compact agent switcher
-   keeps the folder, prompt and mode; model and session lists follow the new agent
-6. Sessions filtered by agent and folder ("Continue last" is the last one there), from the history
-   readers (`history/`) where the CLI records a cwd, else project-wide with a note
-7. One detection module behind the launcher (`main/system/project-detect.ts` or similar): folders
-   and their kind (git repo, Node scripts, Xcode project or workspace, Expo prebuilt or managed,
-   iOS/macOS target from T203), installed IDEs, installed CLIs and their duplicate copies, file
-   manager. Today these live in `system/scripts.ts`, `ide/detect.ts`, `agents/cli-install-method.ts`
-   and the T203 notes; the launcher, Settings and Doctor read the one module
-8. Ended session pane: when a CLI exits (Ctrl+C, /exit, a crash), the pane today shows "Ended" +
-   Resume, "Completed ... New agent with same task" and "Show session output". Turn it into the
-   launcher with that session's context instead: header "Claude Code ended · <alias> · <project /
-   folder>", primary Resume (same conversation, model, YOLO, mode), New session of the same agent
-   in that folder, switch agent (the folder kept), turn the pane into Terminal / Files / Browser /
-   Simulator, and the session output collapsed below; same shortcuts as the launcher (R resume,
-   N new, T terminal...). Applies to shells that exit too (reopen here, or launcher)
-9. Verify live: open a pane at the root of a workspace project with a pinned command in a
-   subfolder (opens at the root), launch Claude in a subfolder by keyboard only (folder, 1, Enter),
-   switch the agent inside the form, Continue last in that folder
+1. Verify live: open a pane at the root of a workspace project with a pinned command in a
+   subfolder (opens at the root), launch Claude in a subfolder by keyboard only (/, folder, Enter,
+   1, Enter), switch the agent inside the form, Continue last in that folder
+2. Simulator: the S key and button in the launcher, and the ended pane's Simulator conversion, once
+   T203's pane exists (`launcherActions` already takes `simulator`)
+3. Detection module, the rest: installed CLIs and their duplicate copies
+   (`agents/cli-install-method.ts`, `doctor.cliInstalls`) and the iOS/macOS targets from T203 into
+   `system/project-detect.ts`; Settings and Doctor read it too
+4. Worktree from a subfolder: today a subfolder offers Here only (a worktree is cut at the root).
+   Cut the worktree and start the agent in the same relative folder inside it
 
 ### T203: Xcode and iOS Simulator inside Exegol `added: 2026-10-09`
 **Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-09 (iOS/macOS projects). Agents

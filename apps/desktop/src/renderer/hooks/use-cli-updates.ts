@@ -24,7 +24,7 @@ import { toastError, useToastStore } from "../stores/toasts";
 import { useLatest } from "./use-latest";
 import { useMountEffect } from "./use-mount-effect";
 import { useEnabledProviders } from "./use-providers";
-import { useResumeAgent } from "./use-resume-agent";
+import { markResuming, useResumeAgent } from "./use-resume-agent";
 
 const CHECK_MS = 10 * 60 * 1000;
 /** While an update runs in a tab: how soon its new version is noticed (a --version per CLI,
@@ -112,10 +112,14 @@ export function useCliRestarts(): void {
         title: `Restarting ${agent.alias ?? agent.cliType}`,
         agentId: agent.id,
       });
+      // Held from the suspend on: the ended pane must not offer to replace it meanwhile
+      markResuming([agent.id], true);
       void (async () => {
         if (LIVE_STATUSES.has(agent.status)) await suspendAgent(agent.id);
         await resume(agent, pane);
-      })().catch(toastError(`${agent.alias ?? agent.cliType} did not restart`));
+      })()
+        .catch(toastError(`${agent.alias ?? agent.cliType} did not restart`))
+        .finally(() => markResuming([agent.id], false));
     }
   }, [pending, agents, statuses, resume]);
 }

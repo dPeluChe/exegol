@@ -3,21 +3,18 @@ import { cn } from "@exegol/ui";
 import { type ModelMode, type ModelPreset, useModelPresetStore } from "../../stores/model-presets";
 import { PresetCards, RoleField, SavePresetButton, usePresets } from "./ModelRolesPicker";
 import { ModelSelect } from "./ModelSelect";
-import { INPUT_CLASS } from "./SpawnOptions";
 
 const LABEL_CLASS = "text-[11px] font-medium text-text-muted";
 
-/** Model (for CLIs that take one at launch) and session name. A CLI with model roles or presets
- *  first offers one model or a combination; empty keeps the CLI's default and a codename */
-export function ModelAndName({
+/** Model, for CLIs that take one at launch. A CLI with model roles or presets
+ *  first offers one model or a combination; empty keeps the CLI's default */
+export function ModelChoice({
   providerId,
   model,
   onModel,
   roles,
   onRole,
   onPreset,
-  name,
-  onName,
 }: {
   providerId: string;
   model: string;
@@ -25,8 +22,6 @@ export function ModelAndName({
   roles: Record<string, string>;
   onRole: (roleId: string, value: string) => void;
   onPreset: (preset: Pick<ModelPreset, "model" | "roles">) => void;
-  name: string;
-  onName: (name: string) => void;
 }) {
   const launch = MODEL_LAUNCH[providerId];
   const defs = MODEL_ROLES[providerId] ?? [];
@@ -42,46 +37,24 @@ export function ModelAndName({
     if (next === "single") onPreset({ model, roles: {} });
   };
 
-  const nameField = (
-    <div className={cn("flex flex-col gap-1.5", (!launch || mode === "combo") && "col-span-2")}>
-      <label className={LABEL_CLASS} htmlFor="spawn-name">
-        Name <span className="text-text-muted">(optional)</span>
-      </label>
-      <input
-        id="spawn-name"
-        value={name}
-        maxLength={40}
-        onChange={(e) => onName(e.target.value)}
-        placeholder="A codename if empty"
-        className={INPUT_CLASS}
-      />
-    </div>
-  );
-
-  if (mode === "single" || !launch) {
+  if (!launch) return null;
+  if (mode === "single") {
     return (
-      <div className="grid grid-cols-2 gap-3">
-        {launch && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <label className={LABEL_CLASS} htmlFor="spawn-model" title={launchHint(launch)}>
-                {label}
-                {!hasCombos && (
-                  <span className="ml-1 font-mono text-[10px]">{launchHint(launch)}</span>
-                )}
-              </label>
-              {hasCombos && <ModelModeToggle mode={mode} onMode={chooseMode} />}
-            </div>
-            <ModelSelect
-              id="spawn-model"
-              providerId={providerId}
-              label={label}
-              value={model}
-              onChange={onModel}
-            />
-          </div>
-        )}
-        {nameField}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <label className={LABEL_CLASS} htmlFor="spawn-model" title={launchHint(launch)}>
+            {label}
+            {!hasCombos && <span className="ml-1 font-mono text-[10px]">{launchHint(launch)}</span>}
+          </label>
+          {hasCombos && <ModelModeToggle mode={mode} onMode={chooseMode} />}
+        </div>
+        <ModelSelect
+          id="spawn-model"
+          providerId={providerId}
+          label={label}
+          value={model}
+          onChange={onModel}
+        />
       </div>
     );
   }
@@ -125,7 +98,6 @@ export function ModelAndName({
           ))}
         </div>
       </div>
-      {nameField}
     </div>
   );
 }

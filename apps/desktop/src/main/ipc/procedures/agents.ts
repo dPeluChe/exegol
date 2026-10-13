@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
+import { folderExists } from "../../agents/auto-resume";
 import {
   FOLLOW_UP_MAX_CHARS,
   FollowUpError,
@@ -26,6 +27,7 @@ import {
   archiveAgent,
   archiveEndedAgents,
   deleteShellRow,
+  getAgentLastCwd,
   listActiveAgents,
   setAgentAlias,
   setAgentPrWatch,
@@ -232,17 +234,27 @@ export const agentRouter = router({
   /** T106 — Resolve the on-disk worktree path for an agent (for "View diff"). */
   getWorktreePath: publicProcedure
     .input(z.object({ agentId: z.string() }))
+    .query(({ ctx, input }) => worktreePathOf(ctx.db, input.agentId)),
+  /** Where an ended session worked: a shell's last folder, else its worktree; null is the root
+   *  (also when that folder is gone: Files must not open a missing dir) */
+  sessionFolder: publicProcedure
+    .input(z.object({ agentId: z.string().max(128) }))
     .query(({ ctx, input }) => {
-      const owned = getWorktreeByAgentId(ctx.db, input.agentId)?.path;
-      if (owned) return owned;
-      // An agent that joined another's worktree (a reuse, a terminal beside it) links it here
-      const joined = ctx.db
-        .prepare(
-          "SELECT w.path FROM agents a JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?",
-        )
-        .get(input.agentId) as { path: string } | undefined;
-      return joined?.path ?? null;
+      // A shell's OSC 7 folder, or the folder the launcher started an agent in
+      const folder =
+        getAgentLastCwd(ctx.db, input.agentId) ?? worktreePathOf(ctx.db, input.agentId);
+      return folderExists(folder) ? folder : null;
     }),
 
   // ─── T65: Parallel Multi-Agent ────────────────────────────────────────
 });
+
+function worktreePathOf(db: Parameters<typeof getAgent>[0], agentId: string): string | null {
+  const owned = getWorktreeByAgentId(db, agentId)?.path;
+  if (owned) return owned;
+  // An agent that joined another's worktree (a reuse, a terminal beside it) links it here
+  const joined = db
+    .prepare("SELECT w.path FROM agents a JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?")
+    .get(agentId) as { path: string } | undefined;
+  return joined?.path ?? null;
+}

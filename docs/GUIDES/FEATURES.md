@@ -18,10 +18,16 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   terminal (an agent CLI or a plain shell), browser, files (explorer + Monaco viewer, with a
   Preview of Markdown and HTML; HTML renders offline from the project's files, scripts off until
   "Run scripts"), git, and an
-  empty pane with the agent launcher. Its "Run in" row opens the chosen folder (root or a
-  subfolder) in a terminal, Files, Git, Finder (Explorer on Windows, the file manager on Linux) or
-  the project's IDE (T opens the terminal). Its refresh button finds the folders and their
-  commands again; past 12 folders a filter and "+N more" keep the row short. "Split with
+  empty pane with the launcher. The launcher starts from a folder, "📁 project / folder ▾" (the
+  project root unless the pane was set to another; / or Cmd+F filters the project's folders, each
+  marked git, node, xcode, swift or expo, and the list's refresh finds them again). Agents,
+  Terminal, Files, Git, Browser, Finder (Explorer on Windows, the file manager on Linux), the
+  editor (the project's IDE, else Settings', shown only when installed) and the folder's commands
+  all start there. Keys while the pane has the keyboard: 1-9 the agents, T F G B O E the rest, Option+1..9 (Alt+1..9 off macOS) the folder's commands.
+  Picking an agent turns the pane into its launch form ("Claude Code in web"): session, model,
+  mode, YOLO, Here or Worktree (a worktree only from the root) and the prompt; Enter launches and
+  Esc goes back. The agent can be switched in the form and in the Launch Agent dialog, keeping
+  the folder, prompt and mode. Its sessions and "Continue last" are those in that folder. "Split with
   Terminal" in a pane's menu (Cmd+Y) opens a shell beside it in that pane's folder: a shell's
   current folder, an agent's worktree, the open file's folder, else the project root.
 - **Layouts**: six presets (Single, Split Horizontal, Split Vertical, Three Columns, Bottom
@@ -85,6 +91,12 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Launch options**: model (for CLIs with a model flag) and session name in the launcher.
 - **Access modes**: read, write or plan per agent or pipeline step, shown as a badge.
 - **Resume**: Claude sessions resume with their session id after a restart.
+- **Ended session pane**: when a CLI exits (Ctrl+C, /exit, a crash) its pane shows "Claude Code
+  ended · name · project / folder" with the status and exit code, Resume (same conversation,
+  model, YOLO, mode and name; Restart when the CLI cannot resume), a new session of the same CLI
+  in the same place, an agent switcher, and Terminal, Files or Browser in that folder; the output
+  stays one click below. A closed terminal offers Reopen terminal here (its last folder).
+  Keys: R, N, T, F, B, 1-9.
 - **CLI updates**: a session offers Restart to update when its CLI has a newer install, and
   Update when a newer release is out; the conversation resumes on the new version. The update
   command matches how the running copy was installed; Settings > CLIs lists duplicate installs
@@ -104,6 +116,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 - **Browser pane**: a webview with URL bar and navigation, next to your agents. It remembers
   the page it was on, and can show it at a device size (desktop, laptop, tablet, mobile).
+  A page's `alert()`, `confirm()` and `prompt()` show as a bar inside the pane, never as a
+  window-wide dialog.
 - **Design mode**: click an element to send its selector, styles and HTML to an agent.
 - **Agents in the browser**: agents drive the project's browser pane through the Exegol MCP
   tools (`browser_open`, `browser_snapshot`, `browser_click`...), live in the same pane you see.

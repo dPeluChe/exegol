@@ -11,6 +11,7 @@ import { closeTerminalPeek } from "../../stores/terminal-links";
 import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
+import { EndedSessionLauncher } from "./EndedSessionLauncher";
 import { FilesPeek, PeekFileOverlay, TerminalLinkPeek } from "./FilesPeek";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
@@ -248,7 +249,7 @@ function usePersistSerializedOnStop(
 }
 
 /** Stopped with no saved history (or still loading it): a restart that killed the sidecar before
- *  history was saved landed here with no way back, so offer Resume/Re-launch */
+ *  history was saved landed here with no way back, so the ended launcher still shows */
 function SessionEndedState({
   agent,
   paneId,
@@ -265,30 +266,31 @@ function SessionEndedState({
     return <LoadingSpinner label="Loading session history..." className="h-full" />;
   }
   const crashed = agent?.status === "crashed";
+  const note = crashed
+    ? "It was interrupted (app or system restart) before its history was saved"
+    : "No history available";
+  if (!agent) {
+    return (
+      <EmptyState
+        icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
+        title={crashed ? "Session lost" : "Session ended"}
+        description={note}
+        className="h-full"
+      />
+    );
+  }
   return (
-    <EmptyState
-      icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
-      title={crashed ? "Session lost" : "Session ended"}
-      description={
-        crashed
-          ? "It was interrupted (app or system restart) before its history was saved"
-          : "No history available"
-      }
-      action={
-        agent
-          ? {
-              label: pending
-                ? "Starting..."
-                : resumableCliTypes.has(agent.cliType)
-                  ? "Resume"
-                  : "Re-launch",
-              onClick: () => {
-                if (!pending) resume(agent, paneId).catch(() => {});
-              },
-            }
-          : undefined
-      }
-      className="h-full"
-    />
+    <div className="flex h-full flex-col items-center justify-center overflow-y-auto">
+      <EndedSessionLauncher
+        agent={agent}
+        paneId={paneId}
+        canResume={resumableCliTypes.has(agent.cliType)}
+        pending={pending}
+        onResume={() => {
+          if (!pending) resume(agent, paneId).catch(() => {});
+        }}
+        note={note}
+      />
+    </div>
   );
 }

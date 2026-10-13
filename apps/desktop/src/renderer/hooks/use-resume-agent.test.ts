@@ -9,7 +9,8 @@ vi.mock("../lib/trpc-client", () => ({
   }),
 }));
 
-const { onceAtATime, resumableFrom, resumeSessionInto } = await import("./use-resume-agent");
+const { isResuming, markResuming, onceAtATime, resumableFrom, resumeHeld, resumeSessionInto } =
+  await import("./use-resume-agent");
 const { deleteAgent } = await import("./use-delete-agent");
 
 describe("onceAtATime", () => {
@@ -56,5 +57,33 @@ describe("resumableFrom", () => {
       ({ id, capabilities: { supportsResume }, installed }) as unknown as AgentProvider;
     const got = resumableFrom([p("a", true, true), p("b", false, true), p("c", true, false)]);
     expect([...got]).toEqual(["a"]);
+  });
+});
+
+describe("isResuming / resumeHeld", () => {
+  const agent = { id: "a1", cliType: "claude-code", status: "stopped" };
+  it("holds a session while its resume runs, and releases it after", async () => {
+    let finish: () => void = () => {};
+    const run = onceAtATime("a1", () => new Promise<void>((r) => (finish = r)));
+    expect(isResuming("a1")).toBe(true);
+    expect(resumeHeld(agent)).toBe(true);
+    finish();
+    await run;
+    expect(isResuming("a1")).toBe(false);
+    expect(resumeHeld(agent)).toBe(false);
+  });
+  it("queued ids (auto-resume, a CLI restart) hold until unmarked", () => {
+    markResuming(["q1", "q2"], true);
+    expect(isResuming("q2")).toBe(true);
+    markResuming(["q1", "q2"], false);
+    expect(isResuming("q1")).toBe(false);
+  });
+  it("a crashed shell is held until the lost-session pass is done", () => {
+    const shell = { id: "sh", cliType: "shell", status: "crashed" };
+    expect(resumeHeld(shell, { ids: {}, lostPassDone: false })).toBe(true);
+    expect(resumeHeld(shell, { ids: {}, lostPassDone: true })).toBe(false);
+    expect(resumeHeld({ ...shell, status: "stopped" }, { ids: {}, lostPassDone: false })).toBe(
+      false,
+    );
   });
 });

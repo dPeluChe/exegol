@@ -411,14 +411,14 @@ const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.Reac
     pane.agentId ? (
       <RecoverableTerminalPane agentId={pane.agentId} paneId={paneId} />
     ) : (
-      <EmptyPane paneId={paneId} />
+      <EmptyPane paneId={paneId} folder={pane.launcherFolder} />
     ),
   browser: ({ pane, paneId }) => <BrowserPane pane={pane} paneId={paneId} />,
   files: ({ pane, paneId }) => (
     <FilesPaneContent key={pane.filePath ?? "default"} pane={pane} paneId={paneId} />
   ),
   git: ({ pane }) => <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />,
-  empty: ({ paneId }) => <EmptyPane paneId={paneId} />,
+  empty: ({ pane, paneId }) => <EmptyPane paneId={paneId} folder={pane.launcherFolder} />,
 };
 
 function PaneBody({ pane, paneId, isFloating }: PaneContentProps & { isFloating: boolean }) {
