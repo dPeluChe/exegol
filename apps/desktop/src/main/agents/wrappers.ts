@@ -1,12 +1,14 @@
 // Agent wrapper scripts + lifecycle hook injection for Claude Code and Codex.
 // Creates ~/.exegol/hooks/notify.sh for lifecycle event notification.
-// Merges hooks into ~/.claude/settings.json and ~/.codex/hooks.json.
+// Keeps Exegol's guarded entries in ~/.claude/settings.json and ~/.codex/hooks.json.
 
 import {
   existsSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -91,7 +93,11 @@ echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\
   writeFileSync(NOTIFY_SCRIPT, script, { mode: 0o755 });
 }
 
-// ─── Shared hook types (Claude Code + Codex use same format) ────────────
+// ─── Global hooks (Claude Code + Codex use the same format) ─────────────
+//
+// A spawned Claude session gets its file-event hooks from its per-agent `--settings` file. The
+// global files stay for what has no per-session file: a `claude` typed in an Exegol terminal, and
+// codex. Their guard runs in the hook's own shell, so outside Exegol nothing else starts.
 
 interface HookAction {
   type: string;
@@ -103,128 +109,189 @@ interface HookDef {
   hooks: HookAction[];
 }
 
-/** Ours runs the notify script; "exegol" alone also matches user hooks in a path like labs-exegol */
-export function isExegolHook(def: HookDef): boolean {
-  return !!def.hooks?.some((h) => h.command?.includes(NOTIFY_SCRIPT));
+export interface ManagedHook {
+  event: string;
+  def: HookDef;
 }
 
-/** Merge managed hooks into an existing settings object (preserves user hooks) */
-function mergeHooksIntoSettings(
+/** Set on a spawned Claude session whose `--settings` file already drops the file events */
+export const HOOKS_FILE_ENV = "EXEGOL_HOOKS_FILE";
+
+const NOTIFY_EVENTS = [
+  "stop",
+  "tool_use",
+  "prompt_submit",
+  "permission_needed",
+  "session_ready",
+  "session_start",
+] as const;
+export type NotifyEvent = (typeof NOTIFY_EVENTS)[number];
+
+/** What releases before this one wrote: it started notify.sh for every session on the machine */
+const legacyNotifyCommand = (event: string, script: string) =>
+  `[ -x "${script}" ] && "${script}" ${event}`;
+
+/** A file-event hook. `global` does nothing unless the session is Exegol's and has no own file */
+export function notifyCommand(
+  event: NotifyEvent,
+  scope: "global" | "agent",
+  script = NOTIFY_SCRIPT,
+): string {
+  const guard =
+    scope === "global" ? `[ -n "$EXEGOL_AGENT_ID" ] && [ -z "$${HOOKS_FILE_ENV}" ] && ` : "";
+  return `if ${guard}[ -x "${script}" ]; then "${script}" ${event}; fi`;
+}
+
+/** Every command an Exegol release wrote to a global file: only these are ever removed */
+function ownedCommands(script: string): Set<string> {
+  return new Set(
+    NOTIFY_EVENTS.flatMap((e) => [
+      legacyNotifyCommand(e, script),
+      notifyCommand(e, "global", script),
+    ]),
+  );
+}
+
+/** Exact match on every command of the entry: a user hook that merely mentions exegol is kept */
+export function isExegolHook(def: HookDef, script = NOTIFY_SCRIPT): boolean {
+  const owned = ownedCommands(script);
+  return (
+    Array.isArray(def?.hooks) &&
+    def.hooks.length > 0 &&
+    def.hooks.every((h) => h?.type === "command" && owned.has(h.command))
+  );
+}
+
+export interface HooksMerge {
+  settings: Record<string, unknown>;
+  removed: number;
+  added: number;
+}
+
+/**
+ * The settings with exactly `managed` as Exegol's entries. Other entries keep their place, and
+ * an event whose Exegol entries already match is left alone, so a second run changes nothing.
+ * `managed` empty is the uninstall.
+ */
+export function withExegolHooks(
   settings: Record<string, unknown>,
-  events: Array<{ event: string; def: HookDef }>,
-): void {
-  if (!settings.hooks || typeof settings.hooks !== "object") {
-    (settings as Record<string, unknown>).hooks = {};
+  managed: ManagedHook[],
+  script = NOTIFY_SCRIPT,
+): HooksMerge {
+  const current = settings.hooks;
+  if (current !== undefined && (!current || typeof current !== "object" || Array.isArray(current)))
+    return { settings, removed: 0, added: 0 };
+  const hooks: Record<string, unknown> = { ...(current as Record<string, unknown> | undefined) };
+  const isOurs = (d: unknown) => isExegolHook(d as HookDef, script);
+  const events = new Set([
+    ...managed.map((m) => m.event),
+    ...Object.keys(hooks).filter((e) => {
+      const defs = hooks[e];
+      return Array.isArray(defs) && defs.some(isOurs);
+    }),
+  ]);
+  let removed = 0;
+  let added = 0;
+  for (const event of events) {
+    const existing = Array.isArray(hooks[event]) ? (hooks[event] as unknown[]) : [];
+    const ours = existing.filter(isOurs);
+    const desired = managed.filter((m) => m.event === event).map((m) => m.def);
+    if (JSON.stringify(ours) === JSON.stringify(desired)) continue;
+    removed += ours.length;
+    added += desired.length;
+    const next = [...existing.filter((d) => !isOurs(d)), ...desired];
+    if (next.length > 0) hooks[event] = next;
+    else delete hooks[event];
   }
-  const hooks = settings.hooks as Record<string, unknown>;
+  if (removed + added === 0) return { settings, removed, added };
+  return { settings: { ...settings, hooks }, removed, added };
+}
 
-  // Strip ours once per event: an event can carry several managed defs (Notification)
-  const stripped = new Set<string>();
-  for (const { event, def } of events) {
-    const existing = hooks[event];
-    if (!stripped.has(event)) {
-      stripped.add(event);
-      hooks[event] = Array.isArray(existing)
-        ? existing.filter((d: HookDef) => !isExegolHook(d))
-        : [];
+/** The file's own indent and final newline, so a rewrite only shows the hooks in a diff */
+export function formatLike(original: string, value: unknown): string {
+  const indent = /^\{\r?\n([ \t]+)\S/.exec(original)?.[1] ?? 2;
+  const body = JSON.stringify(value, null, indent);
+  return original === "" || original.endsWith("\n") ? `${body}\n` : body;
+}
+
+/** Rewrite a hooks file only when Exegol's entries change, after a backup of what was there */
+function syncHooksFile(path: string, label: string, managed: ManagedHook[]): void {
+  try {
+    const original = existsSync(path) ? readFileSync(path, "utf-8") : "";
+    let settings: unknown = {};
+    if (original.trim()) {
+      try {
+        settings = JSON.parse(original);
+      } catch {
+        // Never overwrite a file the user wrote by hand just because we can't parse it
+        logger.warn(`[AgentWrappers] ${label} is not valid JSON, leaving it alone`);
+        return;
+      }
     }
-    (hooks[event] as HookDef[]).push(def);
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      logger.warn(`[AgentWrappers] ${label} is not a JSON object, leaving it alone`);
+      return;
+    }
+    const merge = withExegolHooks(settings as Record<string, unknown>, managed);
+    if (merge.removed + merge.added === 0) return;
+    const mode = original ? statSync(path).mode & 0o777 : 0o644;
+    if (original) writeFileSync(`${path}.exegol-backup`, original, { mode });
+    // Renamed into place: a CLI starting meanwhile never reads half a file
+    const tmp = `${path}.exegol-tmp`;
+    writeFileSync(tmp, formatLike(original, merge.settings), { mode });
+    renameSync(tmp, path);
+    logger.info(
+      `[AgentWrappers] ${label}: ${merge.removed} Exegol hook entries removed, ${merge.added} added`,
+    );
+  } catch (err) {
+    logger.warn(`[AgentWrappers] Failed to update ${label}:`, err);
   }
 }
 
-// ─── Claude Code Hook Injection ─────────────────────────────────────────
+const globalRun = (event: NotifyEvent, script: string) => [
+  { type: "command", command: notifyCommand(event, "global", script) },
+];
+
+/** The per-agent file's file events, for a `claude` typed in an Exegol terminal */
+export function claudeGlobalHooks(script = NOTIFY_SCRIPT): ManagedHook[] {
+  return [
+    { event: "Stop", def: { hooks: globalRun("stop", script) } },
+    { event: "PostToolUse", def: { matcher: "*", hooks: globalRun("tool_use", script) } },
+    { event: "UserPromptSubmit", def: { hooks: globalRun("prompt_submit", script) } },
+    {
+      event: "Notification",
+      def: {
+        matcher: CLAUDE_ATTENTION_NOTIFICATIONS,
+        hooks: globalRun("permission_needed", script),
+      },
+    },
+    {
+      event: "Notification",
+      def: { matcher: CLAUDE_IDLE_NOTIFICATIONS, hooks: globalRun("session_ready", script) },
+    },
+    {
+      event: "SessionStart",
+      def: { matcher: CLAUDE_SESSION_READY_SOURCES, hooks: globalRun("session_ready", script) },
+    },
+  ];
+}
+
+/** Codex has no per-session hooks file, so every codex session Exegol runs reads these */
+export function codexGlobalHooks(script = NOTIFY_SCRIPT): ManagedHook[] {
+  return [
+    { event: "SessionStart", def: { hooks: globalRun("session_start", script) } },
+    { event: "Stop", def: { hooks: globalRun("stop", script) } },
+  ];
+}
 
 function mergeClaudeHooks(): void {
   if (!existsSync(CLAUDE_SETTINGS)) return;
-
-  try {
-    const settings = JSON.parse(readFileSync(CLAUDE_SETTINGS, "utf-8"));
-    const notifyCmd = `[ -x "${NOTIFY_SCRIPT}" ] && "${NOTIFY_SCRIPT}"`;
-
-    mergeHooksIntoSettings(settings, [
-      {
-        event: "Stop",
-        def: { hooks: [{ type: "command", command: `${notifyCmd} stop` }] },
-      },
-      {
-        event: "PostToolUse",
-        def: { matcher: "*", hooks: [{ type: "command", command: `${notifyCmd} tool_use` }] },
-      },
-      {
-        event: "UserPromptSubmit",
-        def: { hooks: [{ type: "command", command: `${notifyCmd} prompt_submit` }] },
-      },
-      // The missing attention leg (verify session 2026-08-11): Notification
-      // fires on permission prompts/questions — without it, needsAttention
-      // never reached the signal pipeline through the file channel.
-      {
-        event: "Notification",
-        def: {
-          matcher: CLAUDE_ATTENTION_NOTIFICATIONS,
-          hooks: [{ type: "command", command: `${notifyCmd} permission_needed` }],
-        },
-      },
-      {
-        event: "Notification",
-        def: {
-          matcher: CLAUDE_IDLE_NOTIFICATIONS,
-          hooks: [{ type: "command", command: `${notifyCmd} session_ready` }],
-        },
-      },
-      {
-        event: "SessionStart",
-        def: {
-          matcher: CLAUDE_SESSION_READY_SOURCES,
-          hooks: [{ type: "command", command: `${notifyCmd} session_ready` }],
-        },
-      },
-    ]);
-
-    writeFileSync(CLAUDE_SETTINGS, JSON.stringify(settings, null, 2), "utf-8");
-    logger.info("[AgentWrappers] Claude Code hooks merged into settings.json");
-  } catch (err) {
-    logger.warn("[AgentWrappers] Failed to merge Claude hooks:", err);
-  }
+  syncHooksFile(CLAUDE_SETTINGS, "~/.claude/settings.json", claudeGlobalHooks());
 }
 
-// ─── Codex Hook Injection ───────────────────────────────────────────────
-
 function mergeCodexHooks(): void {
-  const codexDir = join(homedir(), ".codex");
-  if (!existsSync(codexDir)) return; // Codex not installed
-  let settings: Record<string, unknown> = {};
-
-  if (existsSync(CODEX_HOOKS)) {
-    try {
-      settings = JSON.parse(readFileSync(CODEX_HOOKS, "utf-8"));
-    } catch (err) {
-      // Never overwrite a file the user wrote by hand just because we can't parse it
-      logger.warn("[AgentWrappers] ~/.codex/hooks.json is not valid JSON, leaving it alone:", err);
-      return;
-    }
-  }
-
-  const notifyCmd = `[ -x "${NOTIFY_SCRIPT}" ] && "${NOTIFY_SCRIPT}"`;
-
-  // Codex supports SessionStart and Stop events
-  mergeHooksIntoSettings(settings, [
-    {
-      event: "SessionStart",
-      def: { hooks: [{ type: "command", command: `${notifyCmd} session_start` }] },
-    },
-    {
-      event: "Stop",
-      def: { hooks: [{ type: "command", command: `${notifyCmd} stop` }] },
-    },
-  ]);
-
-  try {
-    mkdirSync(codexDir, { recursive: true });
-    writeFileSync(CODEX_HOOKS, JSON.stringify(settings, null, 2), "utf-8");
-    logger.info("[AgentWrappers] Codex hooks merged into hooks.json");
-  } catch (err) {
-    logger.warn("[AgentWrappers] Failed to merge Codex hooks:", err);
-  }
+  if (!existsSync(join(homedir(), ".codex"))) return; // Codex not installed
+  syncHooksFile(CODEX_HOOKS, "~/.codex/hooks.json", codexGlobalHooks());
 }
 
 export function getEventsDir(): string {

@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- The hooks Exegol adds to `~/.claude/settings.json` and `~/.codex/hooks.json` no longer start a script in every Claude and Codex session on the machine: they now do nothing outside Exegol, and Claude sessions Exegol launches get them from their own per-session file. The old entries are replaced once at startup (a copy of the file is saved next to it as `.exegol-backup`), other tools' hooks are left untouched, and the files are not rewritten when nothing changes
 - A pane opened with Cmd+D, Cmd+Shift+D, the split buttons or the pane menu now takes the keyboard: its launcher keys (T for a terminal) work at once, without clicking it first. Cmd+] and Ctrl+Tab into an empty launcher focus it too
 
 ### Added
