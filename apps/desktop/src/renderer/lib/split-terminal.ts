@@ -1,11 +1,11 @@
 import { nanoid } from "nanoid";
-import { deleteAgent } from "../hooks/use-delete-agent";
 import { useAgentStore } from "../stores/agents";
 import { toastError } from "../stores/toasts";
 import {
   getActivePaneId,
   getProjectState,
   type Pane,
+  type PaneType,
   useWorkspaceStore,
 } from "../stores/workspace";
 import { dispatchRefitTerminals } from "./dispatch-refit";
@@ -72,15 +72,23 @@ async function shellInPane(projectId: string, paneId: string, cwd: string | unde
   }
 }
 
-/** A fresh shell in the same pane and folder takes the place of `agentId`, which closes (its
- *  environment cannot change while it runs) */
-export async function replaceShellInPane(
-  projectId: string,
-  paneId: string,
-  agentId: string,
-): Promise<void> {
-  await shellInPane(projectId, paneId, await paneFolder(paneId));
-  deleteAgent(agentId);
+/** Split `paneId` and move the keyboard to the new pane, so its launcher keys work at once */
+export function splitAndFocus(
+  tabId: string,
+  paneId: string | null,
+  direction: "horizontal" | "vertical",
+  type: PaneType = "empty",
+): void {
+  const id = nanoid(8);
+  useWorkspaceStore.getState().splitPane(tabId, paneId, direction, type, { id });
+  dispatchRefitTerminals();
+  focusNewPane(id);
+}
+
+/** Cmd+D / Cmd+Shift+D: split the pane keyboard actions act on */
+export function splitActivePane(direction: "horizontal" | "vertical"): void {
+  const tabId = getProjectState().activeTabId;
+  if (tabId) splitAndFocus(tabId, getActivePaneId(), direction);
 }
 
 /** Split `paneId` and open a shell beside it, in the folder that pane works in */

@@ -173,17 +173,17 @@ function Recorder({ onCenter }: { onCenter?: () => void }) {
         className="flex cursor-grab flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 pt-3"
       >
         <StatePill phase={phase} />
-        <span className="flex items-center gap-1.5">
-          {onCenter && (
-            <OverlayButton variant="icon" title="Center" label="Center" onClick={onCenter}>
-              <Crosshair className="h-3.5 w-3.5" />
-            </OverlayButton>
-          )}
-          <Commands phase={phase} />
-        </span>
+        <Commands phase={phase} />
       </div>
-      <div className="px-3.5 pt-2.5">
-        {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
+      <div className="flex items-center gap-1.5 px-3.5 pt-2.5">
+        <div className="min-w-0 flex-1">
+          {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
+        </div>
+        {onCenter && (
+          <OverlayButton variant="icon" title="Center" label="Center" onClick={onCenter}>
+            <Crosshair className="h-3 w-3" />
+          </OverlayButton>
+        )}
       </div>
       <Transcript phase={phase} />
       <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-bg-primary/40 px-3.5 py-1.5">

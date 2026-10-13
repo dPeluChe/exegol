@@ -3,10 +3,18 @@ import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { recoverStaleAgents } from "../db/queries";
 import { markStaleQueuedUndeliverable } from "../db/queries/messages";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
-import { ensureSidecar } from "../terminal/pty-sidecar-discovery";
+import { ensureSidecar, isProcessAlive, waitForExit } from "../terminal/pty-sidecar-discovery";
 import { settleAllReattach } from "../terminal/reattach-gate";
+import { successorSidecar } from "../terminal/sidecar-reconnect";
+import {
+  type CrashContext,
+  countReasons,
+  crashReason,
+  writeReplacedInventory,
+} from "./sidecar-replacement";
 
 // Background: stale data cleanup (not needed before first paint)
 export function cleanupStaleData(): void {
@@ -27,7 +35,7 @@ export function cleanupStaleData(): void {
     // and their pane opens a fresh shell, then drops the row.
     const shellCleanup = getDb()
       .prepare(
-        "DELETE FROM agents WHERE cli_type = 'shell' AND status IN ('completed', 'failed', 'stopped', 'crashed')",
+        "DELETE FROM agents WHERE cli_type = 'shell' AND status IN ('completed', 'failed', 'stopped', 'crashed') AND suspended_at IS NULL",
       )
       .run();
     if (shellCleanup.changes > 0) {
@@ -57,6 +65,23 @@ export function cleanupStaleData(): void {
   } catch {
     /* table may not exist yet */
   }
+}
+
+/** The sidecar stopped under the running app: a fresh one for the resumes, then the renderer
+ *  takes the lost list again */
+async function reconnectAfterLoss(reason: string): Promise<void> {
+  try {
+    const oldPid = getPtyHost().getSidecarClient()?.pid ?? null;
+    const client = await successorSidecar({ oldPid, waitForExit, isProcessAlive, ensureSidecar });
+    if (!client) throw new Error(`pid ${oldPid} is still the only sidecar`);
+    getPtyHost().connectToSidecar(client);
+    logger.info(
+      `[Sidecar] reconnected to pid ${client.pid} after pid ${oldPid} stopped (${reason})`,
+    );
+  } catch (err) {
+    logger.warn("[Sidecar] no new sidecar after the stop, sessions resume in legacy mode:", err);
+  }
+  broadcast("agent:sessions-lost", { reason });
 }
 
 // Background: sidecar connection + agent recovery (non-blocking)
@@ -90,13 +115,19 @@ export async function runStartupRecovery(): Promise<void> {
     logger.warn("[Recovery] Could not sweep stranded messages:", err);
   }
 
+  const recoveryStarted = Date.now();
+  const replaced = new Set<string>();
   let aliveSessionIds: string[] = [];
   let sidecarConnected = false;
   /** -1: unknown (old sidecar, or none): never read as "every session was lost" */
   let sidecarSessionTotal = -1;
   try {
-    const sidecarClient = await ensureSidecar();
+    const sidecarClient = await ensureSidecar((r) => {
+      for (const id of r.liveSessionIds) replaced.add(id);
+      writeReplacedInventory(getDb(), r);
+    });
     getPtyHost().connectToSidecar(sidecarClient);
+    getPtyHost().onSidecarLost(reconnectAfterLoss);
     sidecarConnected = true;
   } catch (err) {
     logger.warn("[Startup] PTY sidecar unavailable, using legacy subprocess mode:", err);
@@ -156,9 +187,19 @@ export async function runStartupRecovery(): Promise<void> {
     // but PTY exited) fall through to recoverStaleAgents so they're marked
     // as crashed instead of sitting in DB as "running" with no live process.
     let aliveSkipIds = new Set<string>();
+    let orphans = 0;
+    const why: CrashContext = {
+      replaced,
+      dead: new Set(),
+      failed: new Set(),
+      sidecarConnected,
+      sidecarSessionTotal,
+    };
     if (aliveSessionIds.length > 0) {
       const result = await getAgentManager().reattachSidecarAgents(getDb(), aliveSessionIds);
       aliveSkipIds = result.aliveIds;
+      why.dead = result.deadIds;
+      why.failed = result.failedIds;
       logger.info(
         `[Startup] Reattach result: alive=${result.reattached}, dead=${result.deadIds.size}, failed=${result.failedIds.size}`,
       );
@@ -180,20 +221,23 @@ export async function runStartupRecovery(): Promise<void> {
         if (result.aliveIds.has(sessionId) || result.deadIds.has(sessionId)) continue;
         try {
           ptyHost.killUnclaimed(sessionId);
+          orphans++;
           logger.info(`[Startup] Killed orphan sidecar session ${sessionId} (no live DB agent)`);
         } catch {
           /* non-fatal */
         }
       }
     }
-    const recovery = recoverStaleAgents(getDb(), aliveSkipIds);
+    const recovery = recoverStaleAgents(getDb(), aliveSkipIds, (id) => crashReason(id, why));
     crashedIds = recovery.crashedIds;
     logger.info(
-      `[Startup] Crash sweep: marked ${recovery.crashed} agent(s) as crashed (${recovery.alive} alive)`,
+      `[Recovery] done in ${Date.now() - recoveryStarted}ms: ${recovery.alive} reattached, ${recovery.crashed} crashed${recovery.crashed > 0 ? ` (${countReasons(recovery.reasons)})` : ""}, ${orphans} orphan session(s) killed`,
     );
     // An empty sidecar lost every session at once (restart): bring them back in their panes
     if (sidecarSessionTotal === 0 && recovery.crashedIds.length > 0) {
-      setLostOnRestart(recovery.crashedIds);
+      setLostOnRestart(
+        recovery.crashedIds.map((id) => ({ id, lastActiveAt: recovery.lastActive.get(id) ?? 0 })),
+      );
       logger.info(
         `[Startup] ${recovery.crashedIds.length} session(s) lost with the sidecar: offered for auto-resume`,
       );

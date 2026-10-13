@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { sessionsWithoutUtf8 } from "../../agents/session-locale";
 import { allCliInstalls, cliUpdateStatus } from "../../system/cli-versions";
 import { runDoctorChecks } from "../../system/doctor";
 import { planUsage } from "../../system/plan-usage";
@@ -12,8 +11,6 @@ export const doctorRouter = router({
   cliUpdates: publicProcedure
     .input(z.object({ cliTypes: z.array(z.string().regex(/^[\w-]{1,40}$/)).max(20) }))
     .query(({ input }) => cliUpdateStatus(input.cliTypes)),
-  /** Live sessions started without a UTF-8 locale: their pane offers a restart */
-  sessionsWithoutUtf8: publicProcedure.query(({ ctx }) => sessionsWithoutUtf8(ctx.db)),
   /** Every copy of each installed CLI on PATH: method, version, update and remove commands */
   cliInstalls: publicProcedure.query(() => allCliInstalls()),
   /** Plan windows (5h / weekly, reset) of these CLIs, read from their own logins */

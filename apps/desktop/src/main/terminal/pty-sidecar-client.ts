@@ -20,28 +20,37 @@ import {
   type SessionListResult,
   type SessionMemoryResult,
   type SessionSnapshotResult,
+  type SidecarShuttingDownNotification,
 } from "./pty-sidecar-protocol";
 
-type DataCallback = (id: string, data: string) => void;
+type DataCallback = (id: string, data: string, seq?: number) => void;
 type ExitCallback = (id: string, exitCode: number, signal?: number) => void;
 type ErrorCallback = (id: string, message: string) => void;
+type ShutdownCallback = (reason: string, sessions: string[]) => void;
 
 export class SidecarClient {
+  /** The sidecar process this client reached (set by discovery) */
+  pid: number | null = null;
   private socket: Socket | null = null;
-  /** Main's own linear reader (lib/frame-reader); the sidecar end keeps lib/ndjson. Bounded:
+  /** Linear reader (lib/frame-reader), the sidecar's end too. Bounded:
    *  this socket carries far more traffic than the MCP one and runs in the same
    *  main process, so an unbounded buffer here is the same OOM. */
-  private feed = createFrameReader<JsonRpcMessage>(
-    (msg) => this.handleMessage(msg),
-    () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
-    // A session.snapshot answers with the ENTIRE ring buffer in one frame, and
-    // JSON escaping inflates it — measured, 8 MB of coloured output becomes
-    // 10.7 M chars. At the default ceiling the reply is dropped and a reattached
-    // terminal comes back blank, the exact thing the ring buffer exists to
-    // prevent. ×2 clears the measured worst case with ~50% margin; ×4 was twice
-    // the heap for headroom nothing needs.
-    RING_BUFFER_CAPACITY * 2,
-  );
+  private feed = this.newFeed();
+
+  private newFeed() {
+    return createFrameReader<JsonRpcMessage>(
+      (msg) => this.handleMessage(msg),
+      () => logger.warn("[PtySidecar] Sidecar sent an oversized frame — discarding"),
+      // A session.snapshot answers with the ENTIRE ring buffer in one frame, and
+      // JSON escaping inflates it — measured, 8 MB of coloured output becomes
+      // 10.7 M chars. At the default ceiling the reply is dropped and a reattached
+      // terminal comes back blank, the exact thing the ring buffer exists to
+      // prevent. ×2 clears the measured worst case with ~50% margin; ×4 was twice
+      // the heap for headroom nothing needs.
+      RING_BUFFER_CAPACITY * 2,
+    );
+  }
+
   private pendingRequests = new Map<
     number,
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -50,6 +59,8 @@ export class SidecarClient {
   private dataCallbacks: DataCallback[] = [];
   private exitCallbacks: ExitCallback[] = [];
   private errorCallbacks: ErrorCallback[] = [];
+  private shutdownCallbacks: ShutdownCallback[] = [];
+  private closeCallbacks: Array<() => void> = [];
   private connected = false;
 
   async connect(sockPath: string): Promise<void> {
@@ -70,8 +81,12 @@ export class SidecarClient {
       sock.on("data", (chunk: Buffer) => this.feed(chunk));
 
       sock.on("close", () => {
+        const wasConnected = this.connected;
         this.connected = false;
         this.socket = null;
+        // A half-read frame (up to a whole ring snapshot) must not stay with a dead client
+        this.feed = this.newFeed();
+        if (wasConnected) for (const cb of this.closeCallbacks) cb();
         // Reject all pending requests
         for (const [, pending] of this.pendingRequests) {
           pending.reject(new Error("Sidecar connection closed"));
@@ -114,6 +129,16 @@ export class SidecarClient {
     this.errorCallbacks.push(cb);
   }
 
+  /** The sidecar is about to kill these sessions itself */
+  onShuttingDown(cb: ShutdownCallback): void {
+    this.shutdownCallbacks.push(cb);
+  }
+
+  /** The socket closed by itself (not through disconnect()) */
+  onClose(cb: () => void): void {
+    this.closeCallbacks.push(cb);
+  }
+
   // ─── RPC methods ───────────────────────────────────────────────────
 
   async ping(): Promise<PingResult> {
@@ -140,9 +165,9 @@ export class SidecarClient {
     await this.call("session.destroy", { id });
   }
 
-  async snapshot(id: string): Promise<string | null> {
-    const result = (await this.call("session.snapshot", { id })) as SessionSnapshotResult;
-    return result.data;
+  /** The ring (only its tail with `maxBytes`) and the seq of the last frame it includes */
+  async snapshot(id: string, maxBytes?: number): Promise<SessionSnapshotResult> {
+    return (await this.call("session.snapshot", { id, maxBytes })) as SessionSnapshotResult;
   }
 
   /** Forget the session's ring buffer, so a later reattach does not replay it */
@@ -228,12 +253,17 @@ export class SidecarClient {
       switch (msg.method) {
         case "session.data": {
           const p = msg.params as SessionDataNotification;
-          for (const cb of this.dataCallbacks) cb(p.id, p.data);
+          for (const cb of this.dataCallbacks) cb(p.id, p.data, p.seq);
           break;
         }
         case "session.exit": {
           const p = msg.params as SessionExitNotification;
           for (const cb of this.exitCallbacks) cb(p.id, p.exitCode, p.signal);
+          break;
+        }
+        case "sidecar.shuttingDown": {
+          const p = msg.params as SidecarShuttingDownNotification;
+          for (const cb of this.shutdownCallbacks) cb(p.reason, p.sessions);
           break;
         }
         case "session.error": {

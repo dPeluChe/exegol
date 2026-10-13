@@ -31,6 +31,7 @@ import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
 import { useUpdateStatusSync } from "./hooks/use-update-status";
+import { useWatchFollow } from "./hooks/use-watch-follow";
 import { useAppStore } from "./stores/app";
 
 // Lazy: rarely-used surfaces are not needed on first paint.
@@ -75,6 +76,7 @@ export default function App() {
   useFleetSync();
   useActiveViewSync();
   useIdleSuspend();
+  useWatchFollow();
 
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   // Projects opens over the workspace (as the Dashboard does): its panes stay mounted and sized

@@ -15,8 +15,7 @@ import type { BugDiagnostics } from "@exegol/shared";
 import type Database from "libsql";
 import { flushLogSync, LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_SLUG, EXEGOL_REPO_URL } from "../lib/repo";
-import { SIDECAR_LOG } from "../terminal/pty-sidecar-discovery";
-import { SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
+import { SIDECAR_LOG_PATH, SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
 import { consoleTail } from "./console-capture";
 import { runDoctorChecks } from "./doctor";
 
@@ -167,7 +166,7 @@ export async function collectDiagnostics(
     .filter(Boolean)
     .map((t) => compactLog(t))
     .join("\n");
-  const sidecar = compactLog(tailFile(SIDECAR_LOG, 80));
+  const sidecar = compactLog(tailFile(SIDECAR_LOG_PATH, 80));
   const devConsole = redact(compactLog(consoleTail()));
   const lastError = [...current.split("\n"), ...previous.split("\n")]
     .reverse()

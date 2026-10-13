@@ -79,14 +79,46 @@ function evictToDisk(s: EvictableSession): void {
   }
 }
 
-/** Sweep all sessions and evict LRU-idle ones to disk if over the global cap. */
-export function evictIfOverCap(sessions: Iterable<EvictableSession>): void {
+/** Active rings are trimmed no lower than this under memory pressure */
+export const ACTIVE_RING_FLOOR_BYTES = 2 * 1024 * 1024;
+
+export interface RingTrim {
+  id: string;
+  before: number;
+  after: number;
+}
+
+/** Pure: the largest rings to shrink to the floor until the total fits; a busy agent keeps a tail */
+export function planTrims<T>(
+  items: T[],
+  capacityOf: (item: T) => number,
+  total: number,
+  cap: number,
+  floor = ACTIVE_RING_FLOOR_BYTES,
+): Array<{ item: T; before: number; after: number }> {
+  const trims: Array<{ item: T; before: number; after: number }> = [];
+  let over = total - cap;
+  const largest = items
+    .filter((i) => capacityOf(i) > floor)
+    .sort((a, b) => capacityOf(b) - capacityOf(a));
+  for (const item of largest) {
+    if (over <= 0) break;
+    const before = capacityOf(item);
+    trims.push({ item, before, after: floor });
+    over -= before - floor;
+  }
+  return trims;
+}
+
+/** Evicts LRU-idle rings to disk while over the global cap; if busy rings alone still pass it
+ *  (33 agents = 264 MiB), the largest shrink to the floor */
+export function evictIfOverCap(sessions: Iterable<EvictableSession>): RingTrim[] {
   const all = Array.from(sessions);
   let total = 0;
   for (const s of all) {
     if (!s.evictedPath) total += s.ringBuffer.capacity;
   }
-  if (total <= GLOBAL_RING_BUFFER_CAP_BYTES) return;
+  if (total <= GLOBAL_RING_BUFFER_CAP_BYTES) return [];
 
   const now = Date.now();
   const idleCandidates = all
@@ -99,6 +131,15 @@ export function evictIfOverCap(sessions: Iterable<EvictableSession>): void {
     evictToDisk(s);
     if (s.evictedPath) total -= freed;
   }
+  if (total <= GLOBAL_RING_BUFFER_CAP_BYTES) return [];
+
+  const resident = all.filter((s) => !s.evictedPath);
+  return planTrims(resident, (s) => s.ringBuffer.capacity, total, GLOBAL_RING_BUFFER_CAP_BYTES).map(
+    ({ item, before, after }) => {
+      item.ringBuffer.shrinkTo(after);
+      return { id: item.id, before, after };
+    },
+  );
 }
 
 /** Per-session memory report for the `session.memory` RPC (Monitor > Resources). */

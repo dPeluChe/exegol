@@ -13,7 +13,7 @@ const VARIANTS = {
     "inline-flex min-h-6 shrink-0 items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-1.5 text-[10px] font-medium text-accent hover:bg-accent/20",
   cancel:
     "inline-flex min-h-6 shrink-0 items-center gap-1 rounded-md border border-transparent px-1.5 text-[10px] text-text-muted hover:border-border hover:bg-bg-tertiary hover:text-text-primary",
-  icon: "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-bg-tertiary hover:text-text-primary",
+  icon: "inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-bg-tertiary hover:text-text-primary",
 };
 
 export function OverlayButton({

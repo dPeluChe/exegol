@@ -65,6 +65,9 @@
       "suspend",
       "swapProviders",
       "takeLostOnRestart",
+      "resolveWatched",
+      "autoResumeReport",
+      "setShellCwd",
       "toggleProviderEnabled",
       "unregisterProvider",
       "updateCustomProvider",
@@ -297,8 +300,7 @@
       "run",
       "cliUpdates",
       "cliInstalls",
-      "planUsage",
-      "sessionsWithoutUtf8"
+      "planUsage"
     ],
     "diagnostics": [
       "collect",
@@ -393,6 +395,7 @@
     "agent:resume-missed",
     "agent:cli-self-updated",
     "agent:idle-suspended",
+    "agent:sessions-lost",
     "recovery:progress",
     "window:focus-changed",
     "metrics:update",

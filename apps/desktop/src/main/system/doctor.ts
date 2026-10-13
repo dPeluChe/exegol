@@ -15,7 +15,6 @@ import { safeStorage } from "electron";
 import type Database from "libsql";
 import { cliSetupFor } from "../agents/cli-catalog";
 import { getProviderRegistry } from "../agents/registry";
-import { sessionsWithoutUtf8 } from "../agents/session-locale";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
@@ -217,13 +216,12 @@ function checkStaleWorktrees(db: Database.Database): DoctorCheck {
 export async function runDoctorChecks(db: Database.Database): Promise<DoctorReport> {
   const s = getAppSettings(db);
   const ollamaConfig = { url: s.ollamaUrl, model: s.ollamaModel };
-  const [cliChecks, gitVersion, ghAvailable, ollama, mcpCheck, noUtf8] = await Promise.all([
+  const [cliChecks, gitVersion, ghAvailable, ollama, mcpCheck] = await Promise.all([
     runCliDetection(),
     checkGitVersion(),
     checkCommandAvailable("gh"),
     checkOllamaStatus(ollamaConfig),
     checkMcpSocket(),
-    sessionsWithoutUtf8(db).catch(() => []),
   ]);
 
   const checks: DoctorCheck[] = [...cliChecks];
@@ -302,17 +300,6 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
   }
 
   checks.push(checkStaleWorktrees(db));
-
-  checks.push({
-    id: "session-locale",
-    label: "Terminal encoding",
-    status: noUtf8.length > 0 ? "warn" : "ok",
-    detail:
-      noUtf8.length > 0
-        ? `${noUtf8.length} live session(s) started without UTF-8 (CocoaPods fails, copies turn into mojibake): restart them from their pane`
-        : "Live sessions run with a UTF-8 locale",
-    category: "config",
-  });
 
   const anthropicKey = getApiKey(db, "anthropic") ?? process.env.ANTHROPIC_API_KEY;
   const openaiKey = getApiKey(db, "openai") ?? process.env.OPENAI_API_KEY;
