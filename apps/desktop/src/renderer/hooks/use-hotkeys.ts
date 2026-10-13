@@ -4,7 +4,7 @@ import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
 import { cyclePane, focusActivePane, paneRoot } from "../lib/pane-focus";
-import { terminalForActivePane } from "../lib/split-terminal";
+import { splitActivePane, terminalForActivePane } from "../lib/split-terminal";
 import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -76,14 +76,14 @@ export function useHotkeys() {
       // Cmd+Shift+D: Split vertical
       if (chord.shift && key === "d") {
         e.preventDefault();
-        useWorkspaceStore.getState().splitFocusedPane("vertical");
+        splitActivePane("vertical");
         return;
       }
 
       // Cmd+D: Split horizontal
       if (key === "d") {
         e.preventDefault();
-        useWorkspaceStore.getState().splitFocusedPane("horizontal");
+        splitActivePane("horizontal");
         return;
       }
 
