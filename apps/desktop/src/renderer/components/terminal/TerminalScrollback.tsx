@@ -102,6 +102,7 @@ export function TerminalScrollback({
             canResume={canResume}
             pending={pending}
             onResume={handleResume}
+            hidePrimary={!!selfUpdate}
           />
         )}
         <div className="flex items-center justify-center gap-2 pb-3">

@@ -11,10 +11,11 @@ import {
   RotateCcw,
   Terminal,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { type RefObject, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
+import { isResuming, resumeHeld, useResumingStore } from "../../hooks/use-resume-agent";
 import { useProject } from "../../hooks/use-trpc";
 import {
   ENDED_ACTION_KEYS,
@@ -22,6 +23,7 @@ import {
   endedActions,
   endedHeader,
   endedKeyAction,
+  endedKeysLive,
   folderLabel,
   PRIMARY_LABEL,
   statusChipText,
@@ -30,18 +32,18 @@ import {
   browserInPane,
   type EndedSource,
   filesInPane,
+  handOver,
   newSessionInPane,
-  retireEnded,
   terminalInPane,
 } from "../../lib/ended-session-actions";
 import { focusedField } from "../../lib/focused-field";
-import { claimPaneFocus, paneRoot } from "../../lib/pane-focus";
+import { claimPaneFocus } from "../../lib/pane-focus";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { useAppStore } from "../../stores/app";
 import { toastError } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { SpawnAgentModal } from "../agents/SpawnAgentModal";
-import { AgentIcon } from "../common";
+import { AgentIcon, LoadingSpinner } from "../common";
 
 export type EndedAgent = EndedSource & {
   status: AgentStatus;
@@ -69,15 +71,7 @@ const ACTION_META: Record<EndedAction, { icon: LucideIcon; label: string }> = {
 
 const PRIMARY = new Set<EndedAction>(["resume", "restart", "reopen"]);
 
-/** A CLI that exited (Ctrl+C, /exit, a crash): the launcher, with this session's place and choices */
-export function EndedSessionLauncher({
-  agent,
-  paneId,
-  canResume,
-  pending,
-  onResume,
-  note,
-}: {
+interface LauncherProps {
   agent: EndedAgent;
   paneId?: string;
   canResume: boolean;
@@ -85,7 +79,35 @@ export function EndedSessionLauncher({
   onResume: () => void;
   /** Why there is no output to show (history lost) */
   note?: string;
-}) {
+  /** The self-update bar above already offers Restart session */
+  hidePrimary?: boolean;
+}
+
+/** A CLI that exited (Ctrl+C, /exit, a crash): the launcher, with this session's place and
+ *  choices; while a respawn is on its way (resume, restart, lost-session pass) only a spinner */
+export function EndedSessionLauncher(props: LauncherProps) {
+  const { agent } = props;
+  const held = useResumingStore((s) => resumeHeld(agent, s));
+  if (held) {
+    return (
+      <LoadingSpinner
+        label={agent.cliType === "shell" ? "Reopening..." : "Resuming..."}
+        className="py-6"
+      />
+    );
+  }
+  return <LauncherBody {...props} />;
+}
+
+function LauncherBody({
+  agent,
+  paneId,
+  canResume,
+  pending,
+  onResume,
+  note,
+  hidePrimary,
+}: LauncherProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [switchTo, setSwitchTo] = useState<AgentProvider | null>(null);
@@ -116,63 +138,31 @@ export function EndedSessionLauncher({
     folder: folderLabel(folder, project?.path),
     suspended: agent.suspended,
   });
+  const locked = pending || busy;
 
   const guard = (failTitle: string, fn: () => Promise<void>) => {
-    if (busy) return;
     setBusy(true);
     fn()
       .catch(toastError(failTitle))
       .finally(() => setBusy(false));
   };
+  // One action at a time: R then N spawned two
   const run = (action: EndedAction) => {
-    if (PRIMARY.has(action)) {
-      if (!pending) onResume();
-      return;
-    }
+    if (locked || isResuming(agent.id)) return;
+    if (PRIMARY.has(action)) return onResume();
     if (!paneId) return;
     if (action === "new") guard(`${cliName} did not start`, () => newSessionInPane(agent, paneId));
     if (action === "terminal")
-      guard("Could not open a terminal", () =>
-        terminalInPane(agent.id, agent.projectId, paneId, folder),
-      );
-    if (action === "files") filesInPane(agent.id, paneId, folder);
+      guard("Could not open a terminal", () => terminalInPane(agent, paneId, folder));
+    if (action === "files") filesInPane(agent, paneId, folder);
     if (action === "browser")
-      guard("Could not open a browser", () =>
-        browserInPane(agent.id, agent.projectId, project?.path, paneId),
-      );
+      guard("Could not open a browser", () => browserInPane(agent, project?.path, paneId));
+  };
+  const pick = (provider: AgentProvider | null) => {
+    if (!locked && !isResuming(agent.id)) setSwitchTo(provider);
   };
 
-  const keys = useLatest({ actions, others, run, switching: !!switchTo });
-  useMountEffect(() => {
-    if (!paneId) return;
-    // Like an empty pane: a new split or Cmd+] / Ctrl+Tab hands it the keyboard
-    if (claimPaneFocus(paneId)) rootRef.current?.focus();
-    const onFocusPane = (e: Event) => {
-      if ((e as CustomEvent<{ paneId: string }>).detail?.paneId === paneId) {
-        rootRef.current?.focus();
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (useWorkspaceStore.getState().focusedPaneId !== paneId) return;
-      if (useAppStore.getState().activeView !== "workspace") return;
-      if (document.querySelector('[role="dialog"]')) return;
-      const active = document.activeElement;
-      const inPane = !active || active === document.body || !!paneRoot(paneId)?.contains(active);
-      const typing = !!focusedField() || active instanceof HTMLSelectElement;
-      const { actions, others, run, switching } = keys.current;
-      const hit = inPane && !switching ? endedKeyAction(e, typing, actions, others.length) : null;
-      if (!hit) return;
-      e.preventDefault();
-      if ("action" in hit) run(hit.action);
-      else setSwitchTo(others[hit.agentIndex] ?? null);
-    };
-    window.addEventListener("exegol:focus-pane", onFocusPane);
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("exegol:focus-pane", onFocusPane);
-      window.removeEventListener("keydown", onKey);
-    };
-  });
+  useEndedKeys(paneId, rootRef, { agentId: agent.id, actions, others, run, pick, switchTo });
 
   const chip = statusChipText(agent.status, score?.exitCode, agent.suspended);
   const showDiff = !isShell && (!!agent.branchName || (score?.filesChanged ?? 0) > 0);
@@ -212,18 +202,18 @@ export function EndedSessionLauncher({
 
       <div className="flex flex-wrap items-center justify-center gap-1.5">
         {actions
-          .filter((a) => PRIMARY.has(a))
+          .filter((a) => PRIMARY.has(a) && !hidePrimary)
           .map((a) => (
             <ActionButton
               key={a}
               action={a}
-              disabled={pending || busy}
+              disabled={locked}
               onClick={() => run(a)}
               className="rounded-lg bg-accent px-3 py-1 text-[11px] font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
             />
           ))}
         {actions.includes("new") && (
-          <button type="button" disabled={busy} onClick={() => run("new")} className={button}>
+          <button type="button" disabled={locked} onClick={() => run("new")} className={button}>
             <Plus className="h-3 w-3" />
             New {cliName} session here
             <Kbd k={ENDED_ACTION_KEYS.new} />
@@ -254,7 +244,8 @@ export function EndedSessionLauncher({
             <button
               key={p.id}
               type="button"
-              onClick={() => setSwitchTo(p)}
+              disabled={locked}
+              onClick={() => pick(p)}
               title={`${p.name} here (${i + 1})`}
               className="relative flex items-center rounded-md border border-border bg-bg-secondary p-1 transition-colors hover:border-accent/50"
             >
@@ -275,7 +266,7 @@ export function EndedSessionLauncher({
               <ActionButton
                 key={a}
                 action={a}
-                disabled={busy}
+                disabled={locked}
                 onClick={() => run(a)}
                 className={button}
               />
@@ -291,7 +282,7 @@ export function EndedSessionLauncher({
           initialAccessMode={agent.accessMode ?? "write"}
           initialBranch={agent.branchName}
           targetPaneId={paneId}
-          onSpawned={() => retireEnded(agent.id)}
+          onSpawned={(newId) => handOver(agent.id, newId)}
           onClose={() => setSwitchTo(null)}
         />
       )}
@@ -329,4 +320,60 @@ function Kbd({ k }: { k: string }) {
   return (
     <kbd className="rounded border border-current/30 px-1 font-sans text-[9px] opacity-70">{k}</kbd>
   );
+}
+
+interface KeyState {
+  agentId: string;
+  actions: EndedAction[];
+  others: AgentProvider[];
+  run: (action: EndedAction) => void;
+  pick: (provider: AgentProvider | null) => void;
+  switchTo: AgentProvider | null;
+}
+
+/** R, N, T, F, B, 1-9 with the focus inside the launcher (never stray typing meant for the CLI) */
+function useEndedKeys(
+  paneId: string | undefined,
+  rootRef: RefObject<HTMLDivElement | null>,
+  state: KeyState,
+) {
+  const keys = useLatest(state);
+  useMountEffect(() => {
+    if (!paneId) return;
+    const mountedAt = Date.now();
+    const focusRoot = () => rootRef.current?.focus();
+    // Like an empty pane: a new split or Cmd+] / Ctrl+Tab hands it the keyboard; so does an exit
+    // in the focused pane (the terminal that had it is gone)
+    const idle = !document.activeElement || document.activeElement === document.body;
+    const focused = useWorkspaceStore.getState().focusedPaneId === paneId;
+    if (claimPaneFocus(paneId) || (focused && idle)) focusRoot();
+    const onFocusPane = (e: Event) => {
+      if ((e as CustomEvent<{ paneId: string }>).detail?.paneId === paneId) focusRoot();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (useWorkspaceStore.getState().focusedPaneId !== paneId) return;
+      if (useAppStore.getState().activeView !== "workspace") return;
+      if (document.querySelector('[role="dialog"]')) return;
+      const { agentId, actions, others, run, pick, switchTo } = keys.current;
+      const active = document.activeElement;
+      const live = endedKeysLive({
+        mountedAt,
+        now: Date.now(),
+        focusInside: !!active && !!rootRef.current?.contains(active),
+        held: isResuming(agentId) || !!switchTo,
+      });
+      const typing = !!focusedField() || active instanceof HTMLSelectElement;
+      const hit = live ? endedKeyAction(e, typing, actions, others.length) : null;
+      if (!hit) return;
+      e.preventDefault();
+      if ("action" in hit) run(hit.action);
+      else pick(others[hit.agentIndex] ?? null);
+    };
+    window.addEventListener("exegol:focus-pane", onFocusPane);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("exegol:focus-pane", onFocusPane);
+      window.removeEventListener("keydown", onKey);
+    };
+  });
 }

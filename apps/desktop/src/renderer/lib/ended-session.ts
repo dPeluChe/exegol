@@ -104,6 +104,25 @@ export function statusChipText(
   return exitCode == null ? label : `${label} · exit ${exitCode}`;
 }
 
+/** Typing that was meant for the CLI lands here once it exits: keys wait this long after mount */
+export const ENDED_KEYS_SETTLE_MS = 500;
+
+/** The launcher's keys work only with the focus inside it, after the settle time, and never
+ *  while a respawn is on its way */
+export function endedKeysLive({
+  mountedAt,
+  now,
+  focusInside,
+  held,
+}: {
+  mountedAt: number;
+  now: number;
+  focusInside: boolean;
+  held: boolean;
+}): boolean {
+  return focusInside && !held && now - mountedAt >= ENDED_KEYS_SETTLE_MS;
+}
+
 export const PRIMARY_LABEL: Record<"resume" | "restart" | "reopen", string> = {
   resume: "Resume",
   restart: "Restart",

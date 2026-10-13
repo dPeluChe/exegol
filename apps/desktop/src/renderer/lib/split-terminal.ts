@@ -59,7 +59,7 @@ export function isQuickTerminalKey(
 
 /** A shell in `paneId`, in `cwd`; the project root when main refuses that folder (a shell that
  *  cd'd out of the project) */
-export async function shellInPane(projectId: string, paneId: string, cwd: string | undefined) {
+async function shellInPane(projectId: string, paneId: string, cwd: string | undefined) {
   focusNewPane(paneId);
   try {
     await spawnShellIntoPane(projectId, paneId, "Terminal", cwd).catch((err) => {

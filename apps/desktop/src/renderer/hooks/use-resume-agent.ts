@@ -1,5 +1,6 @@
 import type { Agent, AgentCreate, AgentProvider } from "@exegol/shared";
 import { useCallback, useMemo } from "react";
+import { create } from "zustand";
 import {
   AUTO_RESUME_CONCURRENCY,
   AUTO_RESUME_SETTLE_MS,
@@ -14,7 +15,7 @@ import { findAgentPane, jumpToAgent, toAgentState, useAgentStore } from "../stor
 import { useTerminalStore } from "../stores/terminals";
 import { toastError, useToastStore } from "../stores/toasts";
 import { useWatchStore } from "../stores/watch";
-import { useWorkspaceStore } from "../stores/workspace";
+import { type Pane, useWorkspaceStore } from "../stores/workspace";
 import { pendingStop } from "./use-delete-agent";
 import { useLatest } from "./use-latest";
 import { useMountEffect } from "./use-mount-effect";
@@ -35,16 +36,54 @@ function useResumableCliTypes(): Set<string> {
 }
 
 /** updatePane only reaches the active project: a pane in another project (auto-resume after a
- *  restart, the Dashboard) kept pointing at the old agent */
-function setPaneAgent(projectId: string, paneId: string, agentId: string): void {
+ *  restart, the Dashboard) kept pointing at the old agent. False when that pane is gone */
+export function setPaneIn(projectId: string, paneId: string, patch: Partial<Pane>): boolean {
+  let written = false;
   useWorkspaceStore.setState((s) => {
     const pw = s.projectWorkspaces[projectId];
     const existing = pw?.panes[paneId];
     if (!pw || !existing) return s;
-    const panes = { ...pw.panes, [paneId]: { ...existing, type: "terminal" as const, agentId } };
+    written = true;
+    const panes = { ...pw.panes, [paneId]: { ...existing, ...patch } };
     return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
   });
+  return written;
 }
+
+function setPaneAgent(projectId: string, paneId: string, agentId: string): void {
+  setPaneIn(projectId, paneId, { type: "terminal", agentId });
+}
+
+interface ResumingState {
+  /** Sessions a resume, a restart or the lost-session pass is about to replace */
+  ids: Record<string, true>;
+  /** The lost-session pass is done: a crashed shell still here was not reopened */
+  lostPassDone: boolean;
+}
+
+export const useResumingStore = create<ResumingState>(() => ({ ids: {}, lostPassDone: false }));
+
+export function markResuming(ids: string[], on: boolean): void {
+  useResumingStore.setState((s) => {
+    const next = { ...s.ids };
+    for (const id of ids) {
+      if (on) next[id] = true;
+      else delete next[id];
+    }
+    return { ids: next };
+  });
+}
+
+/** A respawn is on its way for this session: its pane must not offer to replace it meanwhile */
+export function resumeHeld(
+  agent: { id: string; cliType: string; status: string },
+  s: ResumingState = useResumingStore.getState(),
+): boolean {
+  if (s.ids[agent.id]) return true;
+  return agent.cliType === "shell" && agent.status === "crashed" && !s.lostPassDone;
+}
+
+export const isResuming = (id: string) => !!useResumingStore.getState().ids[id];
 
 /** Sessions being resumed now, and ones already resumed (their row is gone), across every
  *  caller: pane, card, restart onto an update */
@@ -56,12 +95,14 @@ const resumed = new Set<string>();
 export async function onceAtATime<T>(id: string, fn: () => Promise<T>): Promise<T | undefined> {
   if (resuming.has(id) || resumed.has(id)) return undefined;
   resuming.add(id);
+  markResuming([id], true);
   try {
     const result = await fn();
     resumed.add(id);
     return result;
   } finally {
     resuming.delete(id);
+    markResuming([id], false);
   }
 }
 
@@ -229,10 +270,12 @@ export function useAutoResumeLost(): void {
       try {
         do {
           again = false;
+          useResumingStore.setState({ lostPassDone: false });
           await resumeLostOnce(latest.current.spawn);
         } while (again);
       } finally {
         running = false;
+        useResumingStore.setState({ lostPassDone: true });
       }
     };
     void pass();
@@ -255,6 +298,9 @@ async function resumeLostOnce(spawn: (data: AgentCreate) => Promise<Agent>): Pro
   const ordered = orderAutoResume(lost.resume, (a) =>
     screenRank(a.id, a.projectId, ws.projectWorkspaces, ws._activeProjectId, pinned),
   );
+  // Queued ones too: their panes show "Resuming" instead of a launcher that could replace them
+  const queued = ordered.map((a) => a.id);
+  markResuming(queued, true);
   const outcomes: Array<{ id: string; cliType: string; outcome: string; reason?: string }> = [];
   await staggered(ordered, AUTO_RESUME_CONCURRENCY, async (agent) => {
     const pane = findAgentPane(agent.id, agent.projectId);
@@ -285,6 +331,7 @@ async function resumeLostOnce(spawn: (data: AgentCreate) => Promise<Agent>): Pro
       report("failed", err instanceof Error ? err.message.split("\n")[0] : "spawn failed");
     }
   });
+  markResuming(queued, false);
   trpcMutate("agents.autoResumeReport", {
     outcomes,
     totalMs: Date.now() - started,

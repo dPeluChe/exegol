@@ -3,6 +3,7 @@ import {
   endedActions,
   endedHeader,
   endedKeyAction,
+  endedKeysLive,
   folderLabel,
   statusChipText,
 } from "./ended-session";
@@ -106,5 +107,21 @@ describe("statusChipText", () => {
     expect(statusChipText("completed", 0)).toBe("completed · exit 0");
     expect(statusChipText("crashed")).toBe("crashed");
     expect(statusChipText("stopped", 130, true)).toBe("suspended · exit 130");
+  });
+});
+
+describe("endedKeysLive", () => {
+  const base = { mountedAt: 1000, now: 1600, focusInside: true, held: false };
+  it("live with the focus inside, after the settle time", () => {
+    expect(endedKeysLive(base)).toBe(true);
+  });
+  it("stray typing right after the exit is ignored", () => {
+    expect(endedKeysLive({ ...base, now: 1200 })).toBe(false);
+  });
+  it("needs the focus inside the launcher", () => {
+    expect(endedKeysLive({ ...base, focusInside: false })).toBe(false);
+  });
+  it("never while a respawn is on its way", () => {
+    expect(endedKeysLive({ ...base, held: true })).toBe(false);
   });
 });

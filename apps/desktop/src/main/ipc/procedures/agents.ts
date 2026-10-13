@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
+import { folderExists } from "../../agents/auto-resume";
 import {
   FOLLOW_UP_MAX_CHARS,
   FollowUpError,
@@ -234,13 +235,16 @@ export const agentRouter = router({
   getWorktreePath: publicProcedure
     .input(z.object({ agentId: z.string() }))
     .query(({ ctx, input }) => worktreePathOf(ctx.db, input.agentId)),
-  /** Where an ended session worked: its worktree, else a shell's last folder; null is the root */
+  /** Where an ended session worked: a shell's last folder, else its worktree; null is the root
+   *  (also when that folder is gone: Files must not open a missing dir) */
   sessionFolder: publicProcedure
     .input(z.object({ agentId: z.string().max(128) }))
-    .query(
-      ({ ctx, input }) =>
-        worktreePathOf(ctx.db, input.agentId) ?? getAgentLastCwd(ctx.db, input.agentId),
-    ),
+    .query(({ ctx, input }) => {
+      const shell = getAgent(ctx.db, input.agentId)?.cliType === "shell";
+      const lastCwd = shell ? getAgentLastCwd(ctx.db, input.agentId) : null;
+      const folder = lastCwd ?? worktreePathOf(ctx.db, input.agentId);
+      return folderExists(folder) ? folder : null;
+    }),
 
   // ─── T65: Parallel Multi-Agent ────────────────────────────────────────
 });
