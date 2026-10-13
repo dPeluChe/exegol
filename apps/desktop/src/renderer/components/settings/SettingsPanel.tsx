@@ -16,6 +16,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { AppVersionLine } from "../layout/TestBuildBadge";
 import { ApiKeysSettings } from "./ApiKeysSettings";
 import { CliSettings } from "./CliSettings";
 import { DictationSettings } from "./DictationSettings";
@@ -159,6 +160,7 @@ function SettingsNav({
           {tab.label}
         </button>
       ))}
+      <AppVersionLine />
     </nav>
   );
 }

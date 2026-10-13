@@ -16,6 +16,30 @@ export const STILL_STALLED_LOG_MS = 60_000;
 /** Main's event loop blocked longer than this is logged */
 export const LOOP_LAG_MS = 1_000;
 export const LOOP_SAMPLE_MS = 5_000;
+/** Wall clock ahead of the monotonic one by this much: the machine slept (Linux; macOS libuv's
+ *  clock counts sleep, so there the CPU rule below catches it) */
+export const SLEEP_DRIFT_MS = 2_000;
+/** A gap this long with under this share of CPU: the process was frozen (sleep, dark wake), not
+ *  blocked. Costs a real stall spent waiting in a syscall that long */
+export const FROZEN_GAP_MS = 30_000;
+export const FROZEN_CPU_SHARE = 0.05;
+
+/** One lag sample: worst loop delay, elapsed wall, monotonic and CPU time since the last one,
+ *  and whether powerMonitor reported a suspend or resume meanwhile */
+export interface LoopSample {
+  lagMs: number;
+  wallMs: number;
+  monoMs: number;
+  cpuMs: number;
+  slept: boolean;
+}
+
+export function loopVerdict(s: LoopSample): "ok" | "stall" | "sleep" {
+  if (s.lagMs <= LOOP_LAG_MS) return "ok";
+  if (s.slept || s.wallMs - s.monoMs > SLEEP_DRIFT_MS) return "sleep";
+  if (s.lagMs >= FROZEN_GAP_MS && s.cpuMs < s.lagMs * FROZEN_CPU_SHARE) return "sleep";
+  return "stall";
+}
 /** One failure line per RPC method per stall, and at most this often */
 export const FAILURE_LOG_MS = 60_000;
 

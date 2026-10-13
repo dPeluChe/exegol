@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clippedAbove, shouldFollow, unannounced, wordCount } from "./transcript-scroll";
+import { clippedAbove, shouldFollow, unannounced } from "./transcript-scroll";
 
 const box = (scrollTop: number, scrollHeight = 400, clientHeight = 120) => ({
   scrollTop,
@@ -33,15 +33,6 @@ describe("clippedAbove", () => {
     expect(clippedAbove(box(0))).toBe(false);
     expect(clippedAbove(box(0.5))).toBe(false);
     expect(clippedAbove(box(40))).toBe(true);
-  });
-});
-
-describe("wordCount", () => {
-  it("counts words across spaces and line breaks", () => {
-    expect(wordCount("")).toBe(0);
-    expect(wordCount("   ")).toBe(0);
-    expect(wordCount("hello")).toBe(1);
-    expect(wordCount("  hello  big\nworld ")).toBe(3);
   });
 });
 

@@ -1,14 +1,13 @@
 import { dictationSettingsOf, formatChord, type KeyChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { AlertTriangle, ArrowDown, Loader2, MicOff } from "lucide-react";
+import { ArrowDown, Crosshair, Loader2 } from "lucide-react";
 import { type ReactNode, type UIEvent, useLayoutEffect, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
-import { useDictationStatus, useMicAction } from "../../hooks/use-trpc-dictation";
-import { currentAnalyser, dismissDictation, stopDictation } from "../../lib/dictation/controller";
+import { useDictationStatus } from "../../hooks/use-trpc-dictation";
+import { dismissDictation, stopDictation } from "../../lib/dictation/controller";
 import { OVERLAY_ATTR } from "../../lib/dictation/overlay-keys";
 import {
-  anchoredBox,
   dockedPill,
   freeSpan,
   type OverlayBox,
@@ -19,12 +18,7 @@ import {
 } from "../../lib/dictation/overlay-position";
 import { dictationChord } from "../../lib/dictation/shortcut";
 import { insertHint, TARGET_KINDS, targetName } from "../../lib/dictation/target";
-import {
-  clippedAbove,
-  shouldFollow,
-  unannounced,
-  wordCount,
-} from "../../lib/dictation/transcript-scroll";
+import { clippedAbove, shouldFollow, unannounced } from "../../lib/dictation/transcript-scroll";
 import { IS_MAC } from "../../lib/keymap";
 import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
@@ -33,8 +27,11 @@ import { type DictationPhase, isRecording, useDictationStore } from "../../store
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import { Kbd } from "../common/Kbd";
+import { LevelBars } from "./LevelBars";
 import { ModelChooser } from "./ModelChooser";
+import { ErrorBody, MicDenied } from "./overlay-panels";
 import { keepFocus, OverlayButton } from "./overlay-ui";
+import { cardBox, DRAG_HANDLE, useOverlayDrag } from "./use-overlay-drag";
 
 const CARD_WIDTH = 360;
 const CHOOSER_WIDTH = 420;
@@ -81,23 +78,16 @@ function Positioned({ paneId }: { paneId: string | null }) {
   const mode = overlayMode(position, !!paneId, onScreen, recording);
   const width = phase === "no-model" ? CHOOSER_WIDTH : CARD_WIDTH;
   const [box, setBox] = useState<OverlayBox | null>(null);
+  const [card, setCard] = useState<HTMLDivElement | null>(null);
+  const drag = useOverlayDrag({ mode, paneId, width, card, apply: setBox });
+  const { dx, dy, live } = drag;
   useLayoutEffect(() => {
     let frame = 0;
-    const centered = () =>
-      anchoredBox(
-        { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
-        window.innerWidth,
-        width,
-      );
     const place = () => {
       frame = 0;
-      const el = mode === "pane" && paneId ? paneRoot(paneId) : null;
+      const offset = live.current ?? { dx, dy };
       const next =
-        mode === "dock"
-          ? dockBox()
-          : el
-            ? anchoredBox(el.getBoundingClientRect(), window.innerWidth, width)
-            : centered();
+        mode === "dock" ? dockBox() : cardBox(mode, paneId, { width, el: card }, offset).box;
       setBox((prev) => (sameBox(prev, next) ? prev : next));
     };
     const schedule = () => {
@@ -114,22 +104,27 @@ function Positioned({ paneId }: { paneId: string | null }) {
           ? [paneRoot(paneId)]
           : [];
     for (const el of watched) if (el) observer.observe(el);
+    // The card's own height (text growing) moves where it must be clamped
+    if (card && mode !== "dock") observer.observe(card);
     window.addEventListener("resize", schedule);
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       window.removeEventListener("resize", schedule);
     };
-  }, [mode, paneId, width]);
+  }, [mode, paneId, width, dx, dy, card, live]);
   if (!box) return null;
   const failed = phase === "error" || phase === "mic-denied";
   return (
     <div
+      ref={setCard}
       {...{ [OVERLAY_ATTR]: "" }}
+      {...(box.docked ? {} : drag.handlers)}
       className={cn(
         // no-drag: docked in the title bar, the window's drag region would take the clicks
         "titlebar-no-drag fixed z-[220] cursor-default select-none transition-[left,top,width,transform] duration-300 ease-out motion-reduce:transition-none",
         !box.docked && "-translate-y-1/2",
+        drag.dragging && "cursor-grabbing transition-none [&_*]:cursor-grabbing",
       )}
       style={{ left: box.left, top: box.top, width: box.width }}
       role="dialog"
@@ -145,38 +140,54 @@ function Positioned({ paneId }: { paneId: string | null }) {
             phase === "listening" && "shadow-[0_8px_40px_-12px_var(--color-accent)]",
           )}
         >
-          <Body />
+          <Body onCenter={drag.reset} />
         </div>
       )}
     </div>
   );
 }
 
-function Body() {
+/** `onCenter` is set while the card sits at a dragged spot */
+function Body({ onCenter }: { onCenter?: () => void }) {
   const phase = useDictationStore((s) => s.phase);
   if (phase === "no-model") return <ModelChooser />;
   if (phase === "mic-denied") return <MicDenied />;
   if (phase === "error") return <ErrorBody />;
-  return <Recorder />;
+  return <Recorder onCenter={onCenter} />;
 }
 
-function Recorder() {
+function Recorder({ onCenter }: { onCenter?: () => void }) {
   const phase = useDictationStore((s) => s.phase);
   return (
     // A click on the card is a no-op: recording goes on and the pane keeps the focus
     // biome-ignore lint/a11y/noStaticElementInteractions: swallows focus changes only
     <div onMouseDown={keepFocus}>
-      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 pt-3">
-        <StatePill phase={phase} />
-        <Commands phase={phase} />
+      <div
+        {...DRAG_HANDLE}
+        title="Drag to move, double-click to put back"
+        className="grid cursor-grab grid-cols-[1fr_auto_1fr] items-center gap-2 px-3.5 pt-3"
+      >
+        <span className="flex min-w-0 justify-start">
+          <StatePill phase={phase} />
+        </span>
+        {onCenter ? (
+          <OverlayButton variant="icon" title="Center" label="Center" onClick={onCenter}>
+            <Crosshair className="h-3 w-3" />
+          </OverlayButton>
+        ) : (
+          <span />
+        )}
+        <span className="flex min-w-0 justify-end">
+          <TargetChip />
+        </span>
       </div>
       <div className="px-3.5 pt-2.5">
         {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
       </div>
       <Transcript phase={phase} />
       <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-bg-primary/40 px-3.5 py-1.5">
-        <TargetChip />
-        <WordCount />
+        <CancelButton />
+        {isRecording(phase) && <InsertButton />}
       </div>
     </div>
   );
@@ -214,7 +225,7 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
       <span className="flex min-w-0 flex-1 justify-end overflow-hidden whitespace-nowrap text-[11px] text-text-secondary [mask-image:linear-gradient(to_right,transparent,#000_1.5rem)]">
         <span>{partial || (phase === "transcribing" ? "Finishing" : "Listening")}</span>
       </span>
-      <Commands phase={phase} compact />
+      <Commands phase={phase} />
     </div>
   );
 }
@@ -401,16 +412,6 @@ function Transcript({ phase }: { phase: DictationPhase }) {
   );
 }
 
-function WordCount() {
-  const words = useDictationStore((s) => wordCount(s.partial));
-  if (!words) return null;
-  return (
-    <span className="shrink-0 text-[10px] tabular-nums text-text-muted">
-      {words} {words === 1 ? "word" : "words"}
-    </span>
-  );
-}
-
 const MAC_GLYPHS: Record<string, string> = { Cmd: "⌘", Ctrl: "⌃", Shift: "⇧", Option: "⌥" };
 
 /** The chord's keys for this platform: glyphs on macOS, words elsewhere */
@@ -419,185 +420,55 @@ const chordKeys = (chord: KeyChord): string[] =>
     .split("+")
     .map((k) => (IS_MAC ? (MAC_GLYPHS[k] ?? k) : k));
 
-/** Keycaps that also click: Insert (Enter or the dictation chord, accent) and Esc cancel
- *  (neutral), set apart so one is not taken for the other */
-function Commands({ phase, compact = false }: { phase: DictationPhase; compact?: boolean }) {
+/** The pill's keycaps that also click: Insert (accent) and Esc cancel (neutral) */
+function Commands({ phase }: { phase: DictationPhase }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      {isRecording(phase) && <InsertButton compact />}
+      <CancelButton />
+    </div>
+  );
+}
+
+function InsertButton({ compact = false }: { compact?: boolean }) {
   const chord = dictationChord();
   const keys = chord && !compact ? chordKeys(chord) : [];
   const enter = IS_MAC ? "↵" : "Enter";
   return (
-    <div className={cn("flex shrink-0 items-center", compact ? "gap-1.5" : "gap-2.5")}>
-      {isRecording(phase) && (
-        <OverlayButton
-          variant="insert"
-          label={chord ? `Insert (Enter or ${formatChord(chord, IS_MAC)})` : "Insert (Enter)"}
-          title={`Insert: ${[enter, chord ? chordKeys(chord).join("") : ""].filter(Boolean).join(" or ")}`}
-          onClick={() => void stopDictation("button")}
-        >
-          <KeyCap>{enter}</KeyCap>
-          {keys.length > 0 && (
-            <>
-              <span>or</span>
-              <span className="inline-flex gap-0.5">
-                {keys.map((k) => (
-                  <KeyCap key={k}>{k}</KeyCap>
-                ))}
-              </span>
-            </>
-          )}
-          <span>insert</span>
-        </OverlayButton>
+    <OverlayButton
+      variant="insert"
+      label={chord ? `Insert (Enter or ${formatChord(chord, IS_MAC)})` : "Insert (Enter)"}
+      title={`Insert: ${[enter, chord ? chordKeys(chord).join("") : ""].filter(Boolean).join(" or ")}`}
+      onClick={() => void stopDictation("button")}
+    >
+      <KeyCap>{enter}</KeyCap>
+      {keys.length > 0 && (
+        <>
+          <span>or</span>
+          <span className="inline-flex gap-0.5">
+            {keys.map((k) => (
+              <KeyCap key={k}>{k}</KeyCap>
+            ))}
+          </span>
+        </>
       )}
-      <OverlayButton
-        variant="cancel"
-        label="Cancel (Esc)"
-        title="Cancel: Esc"
-        onClick={() => dismissDictation("button")}
-      >
-        <KeyCap>Esc</KeyCap>
-        <span>cancel</span>
-      </OverlayButton>
-    </div>
+      <span>insert</span>
+    </OverlayButton>
   );
 }
+
+const CancelButton = () => (
+  <OverlayButton
+    variant="cancel"
+    label="Cancel (Esc)"
+    title="Cancel: Esc"
+    onClick={() => dismissDictation("button")}
+  >
+    <KeyCap>Esc</KeyCap>
+    <span>cancel</span>
+  </OverlayButton>
+);
 
 const KeyCap = ({ children }: { children: ReactNode }) => (
   <Kbd className="h-5 min-w-5 px-1">{children}</Kbd>
 );
-
-const BARS = 28;
-
-/** Mounted only while listening: the draw loop stops with it. Each bar is the level of a slice
- *  of the last audio frame, held and eased down so speech reads as motion */
-function LevelBars() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  const glow = useRef<HTMLDivElement>(null);
-  useMountEffect(() => {
-    let frame = 0;
-    let glowShown = 0;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const data = new Uint8Array(1024);
-    const levels = new Float32Array(BARS);
-    const color = ref.current ? getComputedStyle(ref.current).color : "";
-    // Reduced motion: a few still frames a second, no easing or glow
-    const next = () => {
-      frame = reduce ? window.setTimeout(draw, 200) : requestAnimationFrame(draw);
-    };
-    const draw = () => {
-      next();
-      const canvas = ref.current;
-      const ctx = canvas?.getContext("2d");
-      if (!canvas || !ctx) return;
-      const dpr = window.devicePixelRatio || 1;
-      const w = canvas.clientWidth * dpr;
-      const h = canvas.clientHeight * dpr;
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-      }
-      const analyser = currentAnalyser();
-      if (analyser) analyser.getByteTimeDomainData(data);
-      const step = Math.floor(data.length / BARS);
-      let total = 0;
-      for (let i = 0; i < BARS; i++) {
-        let sum = 0;
-        for (let j = i * step; j < (i + 1) * step; j++) {
-          const v = analyser ? ((data[j] ?? 128) - 128) / 128 : 0;
-          sum += v * v;
-        }
-        // Speech RMS sits around 0.02-0.2: scaled so a normal voice fills most of the height
-        const level = Math.min(1, Math.sqrt(sum / step) * 6);
-        levels[i] = reduce ? level : Math.max(level, (levels[i] ?? 0) * 0.86);
-        total += levels[i] ?? 0;
-      }
-      // Only real moves restyle the blurred layer
-      const glowLevel = reduce ? 0 : Math.min(1, (total / BARS) * 2);
-      if (glow.current && Math.abs(glowLevel - glowShown) > 0.05) {
-        glowShown = glowLevel;
-        glow.current.style.opacity = glowLevel.toFixed(2);
-      }
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = color;
-      const gap = 3 * dpr;
-      const barW = (w - gap * (BARS - 1)) / BARS;
-      const min = 3 * dpr;
-      for (let i = 0; i < BARS; i++) {
-        // Taller in the middle: reads as a voice, not a meter
-        const shape = 0.55 + 0.45 * Math.sin((Math.PI * (i + 0.5)) / BARS);
-        const level = levels[i] ?? 0;
-        const barH = Math.max(min, level * shape * h);
-        ctx.globalAlpha = 0.35 + 0.65 * Math.min(1, level * 1.5);
-        ctx.beginPath();
-        ctx.roundRect(i * (barW + gap), (h - barH) / 2, barW, barH, barW / 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    };
-    next();
-    return () => {
-      if (reduce) clearTimeout(frame);
-      else cancelAnimationFrame(frame);
-    };
-  });
-  return (
-    <div className="relative h-10">
-      <div
-        ref={glow}
-        aria-hidden
-        className="pointer-events-none absolute inset-x-6 inset-y-1 rounded-full bg-accent/25 opacity-0 blur-xl"
-      />
-      <canvas
-        ref={ref}
-        aria-hidden
-        className="pointer-events-none relative h-10 w-full text-accent"
-      />
-    </div>
-  );
-}
-
-function MicDenied() {
-  const mic = useMicAction();
-  return (
-    <Panel icon={<MicOff className="h-4 w-4" />} title="Exegol cannot use the microphone">
-      <p className="text-xs leading-relaxed text-text-secondary">
-        {IS_MAC
-          ? "Allow Exegol in System Settings > Privacy & Security > Microphone, then try again."
-          : "The system refused the microphone. Check that one is connected and allowed."}
-      </p>
-      <div className="mt-3 flex justify-end gap-2">
-        <OverlayButton onClick={() => dismissDictation("button")}>Close</OverlayButton>
-        {IS_MAC && (
-          <OverlayButton variant="primary" onClick={() => mic.mutate("openMicSettings")}>
-            Open System Settings
-          </OverlayButton>
-        )}
-      </div>
-    </Panel>
-  );
-}
-
-function ErrorBody() {
-  const error = useDictationStore((s) => s.error);
-  return (
-    <Panel icon={<AlertTriangle className="h-4 w-4" />} title="Dictation failed">
-      <p className="text-xs leading-relaxed break-words text-text-secondary">{error}</p>
-      <div className="mt-3 flex justify-end">
-        <OverlayButton onClick={() => dismissDictation("button")}>Close</OverlayButton>
-      </div>
-    </Panel>
-  );
-}
-
-function Panel({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
-  return (
-    <div className="flex gap-3 p-3.5">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-error/10 text-error">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 text-sm font-medium text-text-primary">{title}</div>
-        {children}
-      </div>
-    </div>
-  );
-}

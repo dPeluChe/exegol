@@ -6,6 +6,7 @@ import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AttentionQueue } from "./AttentionQueue";
 import { BugReportButton } from "./BugReportDialog";
 import { useWidgetLayout, WidgetZone } from "./bar-widgets";
+import { TestBuildBadge } from "./TestBuildBadge";
 import { UpdateButton } from "./UpdateButton";
 
 /** Fixed: traffic-light room, the title bar buttons, the project name, window controls. The
@@ -41,6 +42,7 @@ export function TitleBar() {
           </button>
           <BugReportButton />
           <UpdateButton />
+          <TestBuildBadge />
         </div>
         <WidgetZone layout={layout} bar="header" slot="left" />
       </div>
