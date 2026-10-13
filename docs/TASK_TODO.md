@@ -206,6 +206,41 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T207: Docker containers of the project `added: 2026-10-12`
+**Priority**: P2 | **Effort**: M | **Source**: user idea 2026-10-12. Viable with the `docker` CLI
+alone (Docker Desktop, OrbStack and Colima all ship it); no daemon running = the feature hides.
+
+1. Detection (in the T204 detection module): `Dockerfile`, `compose.yaml` / `docker-compose.yml`
+   per folder; the launcher's folder row offers "compose up" / "down" (run in a visible terminal)
+2. Which containers belong to the project: `docker ps --format json` and the compose labels
+   (`com.docker.compose.project.working_dir`, `.config_files`) matched to the project path
+3. Watch: one `docker events --format json` stream while the app runs (started only if the daemon
+   answers, restarted with backoff), no polling; state pushed to the renderer
+4. UI: status bar widget (containers up per project), a Containers list in the Project tab: state,
+   health, uptime, published ports (open in a browser pane, like the dev server chips), logs in a
+   terminal pane (`docker compose logs -f <svc>`), restart / stop with a confirm
+5. Dev servers list: a port held by Docker's proxy shows its container instead of "com.docker"
+6. Later: a read-only MCP tool for agents (containers and ports of their project)
+7. Never log container env, logs or command lines; only names, ids, states and ports
+
+### T206: API client pane (Postman-like) `added: 2026-10-12`
+**Priority**: P2 | **Effort**: L | **Source**: user idea 2026-10-12. Test local or remote services
+without leaving the project.
+
+1. New pane type `api`: method, URL, query, headers, body (JSON, form, raw), auth (bearer, basic,
+   API key); sent from main (Node fetch: no CORS, localhost and remote alike); response with
+   status, time, size, headers and a pretty body (Monaco, JSON folding), Copy as curl
+2. Requests saved as plain `.http` files in the repo (`.exegol/api/` or any folder, the VS Code
+   REST Client / JetBrains format): reviewable in git, agents can write and run them too
+3. Environments and variables (`{{baseUrl}}`, `{{token}}`): values in the project settings,
+   secrets in the keystore (never in the `.http` files); per-project history of the last runs
+4. Import: OpenAPI 3 / Swagger 2 from a file or URL (also probing a running dev server's
+   `/openapi.json`, `/swagger.json`, `/docs-json`) into a tree of endpoints with prefilled bodies
+   from the schema; paste a curl command
+5. Agents (later): an MCP `api_request` tool under the agent browser's URL policy (localhost +
+   project allowlist, write access only), results marked as untrusted content
+6. Never log bodies, headers or variable values; the bug report sees only method + host
+
 ### T204: Launcher rebuilt around the folder, one detection module `added: 2026-10-12`
 **Priority**: P1 | **Effort**: L | **Source**: user review of the empty-pane launcher and the Launch
 Agent modal (2026-10-12). One PR, reviewed in detail.
