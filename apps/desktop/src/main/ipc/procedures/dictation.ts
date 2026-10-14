@@ -36,6 +36,8 @@ import { invalidateStorageReport } from "../../system/storage";
 import { publicProcedure, router } from "../trpc";
 
 const sessionId = z.string().regex(/^[A-Za-z0-9_-]{8,32}$/);
+/** The target's project at start: its vocabulary joins the global one */
+const projectId = z.string().max(64).nullable().optional();
 const historyId = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,32}$/) });
 
 /** Local voice dictation (T201): mic permission, sessions, history (Settings > Dictation) */
@@ -54,12 +56,14 @@ export const dictationRouter = router({
   /** Turning on direct Music/Spotify control: the Automation prompt now, not mid-dictation */
   mediaConsent: publicProcedure.mutation(() => askMediaConsent()),
 
-  warm: publicProcedure.mutation(({ ctx }) => warmDictation(ctx.db)),
+  warm: publicProcedure
+    .input(z.object({ projectId }).optional())
+    .mutation(({ ctx, input }) => warmDictation(ctx.db, input?.projectId ?? null)),
 
   /** Audio then arrives on `dictation:audio`; partial text on `dictation:partial` */
   start: publicProcedure
-    .input(z.object({ input: z.enum(DICTATION_INPUTS).default("default") }).optional())
-    .mutation(({ ctx, input }) => startDictation(ctx.db, input?.input)),
+    .input(z.object({ input: z.enum(DICTATION_INPUTS).default("default"), projectId }).optional())
+    .mutation(({ ctx, input }) => startDictation(ctx.db, input?.input, input?.projectId ?? null)),
 
   pause: publicProcedure
     .input(z.object({ sessionId, paused: z.boolean() }))

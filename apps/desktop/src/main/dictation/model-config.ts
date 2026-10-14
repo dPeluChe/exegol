@@ -12,17 +12,33 @@ export interface RecognizerSpec {
   };
 }
 
-type Builder = (file: (name: string) => string, numThreads: number) => RecognizerSpec;
+/** The vocabulary a recognizer is built with. Files live under the vocabulary folder (main
+ *  writes them), never in the models folder */
+export interface VocabularySpec {
+  terms: string[];
+  score: number;
+  /** One term per line, for transducers decoded with modified_beam_search */
+  hotwordsFile: string;
+  /** sentencepiece vocab derived from the model's tokens.txt: lets hotwords be plain words */
+  bpeVocab: string;
+}
+
+type Builder = (
+  file: (name: string) => string,
+  numThreads: number,
+  vocab: VocabularySpec | null,
+) => RecognizerSpec;
 
 const offline = (
   modelConfig: Record<string, unknown>,
   numThreads: number,
-  featureDim = 80,
+  extra: Record<string, unknown> = {},
 ): RecognizerSpec => ({
   kind: "offline",
   config: {
-    featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim },
+    featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim: 80 },
     modelConfig: { ...modelConfig, numThreads, provider: "cpu", debug: 0 },
+    ...extra,
   },
 });
 
@@ -46,10 +62,23 @@ const moonshine: Builder = (file, numThreads) =>
 
 // Per catalog id: the sherpa-onnx model family and the file names inside its folder
 const BUILDERS: Record<string, Builder> = {
-  "parakeet-tdt-0.6b-v3-int8": (file, numThreads) =>
+  "parakeet-tdt-0.6b-v3-int8": (file, numThreads, vocab) =>
     offline(
-      { transducer: transducer(file), tokens: file("tokens.txt"), modelType: "nemo_transducer" },
+      {
+        transducer: transducer(file),
+        tokens: file("tokens.txt"),
+        modelType: "nemo_transducer",
+        ...(vocab ? { modelingUnit: "bpe", bpeVocab: vocab.bpeVocab } : {}),
+      },
       numThreads,
+      vocab
+        ? {
+            decodingMethod: "modified_beam_search",
+            maxActivePaths: 4,
+            hotwordsFile: vocab.hotwordsFile,
+            hotwordsScore: vocab.score,
+          }
+        : {},
     ),
   "whisper-large-v3-turbo-int8": (file, numThreads) =>
     offline(
@@ -79,7 +108,7 @@ const BUILDERS: Record<string, Builder> = {
       enableEndpoint: 0,
     },
   }),
-  "qwen3-asr-0.6b-int8": (file, numThreads) =>
+  "qwen3-asr-0.6b-int8": (file, numThreads, vocab) =>
     offline(
       {
         qwen3Asr: {
@@ -87,7 +116,7 @@ const BUILDERS: Record<string, Builder> = {
           encoder: file("encoder.int8.onnx"),
           decoder: file("decoder.int8.onnx"),
           tokenizer: file("tokenizer"),
-          hotwords: "",
+          hotwords: vocab?.terms.join(",") ?? "",
         },
         tokens: "",
       },
@@ -99,14 +128,42 @@ const BUILDERS: Record<string, Builder> = {
 
 export const hasRecognizer = (id: string): boolean => id in BUILDERS;
 
+/** Models whose sherpa-onnx recognizer takes a vocabulary: hotwords on Parakeet's NeMo transducer
+ *  (modified_beam_search, offline only), a prompt on Qwen3-ASR. Whisper, Moonshine and the
+ *  streaming Nemotron (greedy only for NeMo online) have no biasing in sherpa-onnx 1.13 */
+const VOCABULARY_USE: Record<string, "hotwords" | "prompt"> = {
+  "parakeet-tdt-0.6b-v3-int8": "hotwords",
+  "qwen3-asr-0.6b-int8": "prompt",
+};
+
+export const vocabularyUse = (id: string): "hotwords" | "prompt" | null =>
+  VOCABULARY_USE[id] ?? null;
+
 /** The recognizer for a catalog model installed in `dir`; null for a model the engine lacks */
 export function recognizerSpec(
   entry: SpeechModelEntry,
   dir: string,
   numThreads: number,
+  vocab: VocabularySpec | null = null,
 ): RecognizerSpec | null {
   const build = BUILDERS[entry.id];
-  return build ? build((name) => join(dir, name), numThreads) : null;
+  const used = vocab && vocab.terms.length > 0 && vocabularyUse(entry.id) ? vocab : null;
+  return build ? build((name) => join(dir, name), numThreads, used) : null;
+}
+
+/** tokens.txt ("piece id" per line) as the "piece<TAB>score" vocab sherpa-onnx's sentencepiece
+ *  reads. Score -id: lower ids are the earlier, more frequent merges in a BPE model */
+export function bpeVocabFromTokens(tokens: string): string {
+  const lines: string[] = [];
+  for (const line of tokens.split("\n")) {
+    const at = line.lastIndexOf(" ");
+    if (at <= 0) continue;
+    const piece = line.slice(0, at);
+    const id = Number(line.slice(at + 1));
+    if (!Number.isInteger(id) || /^<.*>$/.test(piece)) continue;
+    lines.push(`${piece}\t${-id}`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 /** Every file path in a spec (any string value that is absolute) */

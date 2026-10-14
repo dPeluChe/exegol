@@ -17,6 +17,7 @@ import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
 import { DictationInput } from "./DictationInput";
 import { DictationRecordings } from "./DictationRecordings";
+import { DictationVocabulary } from "./DictationVocabulary";
 import { SECTION_HEADING, SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
 interface Props {
@@ -134,6 +135,8 @@ export function DictationSettings({ settings, onChange }: Props) {
           project, tab or view) and comes back with it.
         </p>
       </div>
+
+      <DictationVocabulary prefs={prefs} set={set} />
 
       <DictationRecordings prefs={prefs} set={set} />
 

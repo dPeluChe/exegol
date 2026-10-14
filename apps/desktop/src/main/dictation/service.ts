@@ -1,4 +1,5 @@
 import {
+  cleanDictation,
   DEFAULT_SPEECH_MODEL_KEY,
   DICTATION_SAMPLE_RATE,
   type DictationCancelSource,
@@ -8,8 +9,9 @@ import {
   type DictationStopReason,
   type DictationTargetKind,
   dictationSettingsOf,
+  dictationVocabulary,
   parseChord,
-  sanitizeDictation,
+  type SpeechModelEntry,
 } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "nanoid";
@@ -18,7 +20,7 @@ import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/se
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { DEFAULT_MODEL_ID, findModel, MODEL_CATALOG } from "../models/catalog";
-import { modelStatus } from "../models/manager";
+import { modelDir, modelStatus } from "../models/manager";
 import { armDictationSession, disarmDictationSession, pauseDictationSession } from "./background";
 import {
   beginSession,
@@ -37,8 +39,9 @@ import { addDictation, pruneDictations } from "./history";
 import { setDictationChord } from "./keys";
 import { holdMedia, type MediaHold, mediaBackend } from "./media-pause";
 import { disarmMic, micStatus } from "./mic";
-import { hasRecognizer } from "./model-config";
+import { hasRecognizer, vocabularyUse } from "./model-config";
 import { RecordingBuffer, saveRecording } from "./recordings";
+import { prepareVocabulary, type VocabularyInfo } from "./vocabulary";
 
 /** Set once a recording started here: Linux and Windows have no OS answer to remember */
 const MIC_USED_KEY = "dictation_mic_used";
@@ -55,6 +58,7 @@ interface Active {
   audio: RecordingBuffer | null;
   /** No audio reaches the engine or the recording, and the limit stands still */
   paused: boolean;
+  vocabulary: VocabularyInfo | null;
 }
 
 /** While paused the players stay paused this long before the safety timer gives them back */
@@ -101,6 +105,22 @@ async function pickModel(db: Database.Database) {
   return { entry: preferred ?? fallback, ready: false };
 }
 
+/** Global terms plus the target project's; a write failure dictates without them */
+async function vocabularyFor(
+  settings: DictationSettings,
+  entry: SpeechModelEntry,
+  projectId: string | null,
+) {
+  const terms = dictationVocabulary(settings, projectId);
+  return prepareVocabulary(entry.id, modelDir(entry.id), terms, settings.vocabularyBoost).catch(
+    (err) => {
+      const reason = (err as NodeJS.ErrnoException)?.code ?? "write failed";
+      logger.warn(`[Dictation] vocabulary not used: ${reason}`);
+      return { spec: null, info: null };
+    },
+  );
+}
+
 export async function dictationStatus(db: Database.Database): Promise<DictationStatus> {
   const [{ entry, ready }, engine] = await Promise.all([pickModel(db), probeEngine()]);
   const mic = micStatus();
@@ -116,6 +136,7 @@ export async function dictationStatus(db: Database.Database): Promise<DictationS
       kind: entry.kind,
       ready,
       sizeBytes: entry.sizeBytes,
+      vocabulary: vocabularyUse(entry.id) !== null,
     },
     engine: engineState(),
     engineAvailable: engine.ok,
@@ -123,13 +144,18 @@ export async function dictationStatus(db: Database.Database): Promise<DictationS
   };
 }
 
-export async function startDictation(db: Database.Database, input: DictationInput = "default") {
+export async function startDictation(
+  db: Database.Database,
+  input: DictationInput = "default",
+  projectId: string | null = null,
+) {
   const settings = dictationSettings(db);
   disarmMic();
   if (!settings.enabled) throw new Error("dictation is off in Settings > Dictation");
   if (!(await probeEngine()).ok) throw new Error("the speech engine cannot run on this system");
   const { entry, ready } = await pickModel(db);
   if (!ready) throw new Error("no speech model is downloaded");
+  const vocabulary = await vocabularyFor(settings, entry, projectId);
   // Past the longest dictation the music comes back even if no end arrives (renderer died)
   const holdMs = (settings.maxSeconds + 30) * 1000;
   // A dictation replacing a running one keeps its pause while unreleased: resume then pause races
@@ -152,10 +178,11 @@ export async function startDictation(db: Database.Database, input: DictationInpu
       media,
       audio: settings.keepRecordings ? new RecordingBuffer(settings.maxSeconds) : null,
       paused: false,
+      vocabulary: vocabulary.info,
     };
     warmedCold = null;
     // The model loads while the user speaks: audio waits in the engine until it is ready
-    ensureModel(entry.id).catch(() => {});
+    ensureModel(entry.id, vocabulary.spec).catch(() => {});
     beginSession(id, settings.maxSeconds);
     armDictationSession(id, settings.maxSeconds);
   } catch (err) {
@@ -200,7 +227,7 @@ export async function stopDictation(
   if (!active || active.id !== input.sessionId) {
     throw new Error("this dictation is no longer running");
   }
-  const { modelId, cold, media, audio } = active;
+  const { modelId, cold, media, audio, vocabulary } = active;
   active = null;
   disarmDictationSession();
   media?.release();
@@ -228,7 +255,7 @@ export async function stopDictation(
     });
     pruneDictations(db, { days: settings.retentionDays, max: settings.retentionMax });
     broadcast("dictation:done", {});
-    const inserted = sanitizeDictation(text);
+    const inserted = cleanDictation(text, settings);
     if (audio && inserted) {
       const projectName = saved.projectId ? (getProject(db, saved.projectId)?.name ?? null) : null;
       const at = new Date();
@@ -246,6 +273,7 @@ export async function stopDictation(
           historyId: saved.id,
           text: inserted,
           rawText: text,
+          vocabulary,
         });
       });
     }
@@ -262,12 +290,16 @@ function loadSplit(cold: boolean): string {
 
 /** Called as a dictation starts in the renderer, before the mic prompt and capture: the engine
  *  spawns and loads the model while the user is still getting ready to speak */
-export async function warmDictation(db: Database.Database): Promise<{ ok: boolean }> {
-  if (!dictationSettings(db).enabled || !(await probeEngine()).ok) return { ok: false };
+export async function warmDictation(
+  db: Database.Database,
+  projectId: string | null = null,
+): Promise<{ ok: boolean }> {
+  const settings = dictationSettings(db);
+  if (!settings.enabled || !(await probeEngine()).ok) return { ok: false };
   const { entry, ready } = await pickModel(db);
   if (!ready) return { ok: false };
   warmedCold = !modelLoaded(entry.id);
-  ensureModel(entry.id).catch(() => {});
+  ensureModel(entry.id, (await vocabularyFor(settings, entry, projectId)).spec).catch(() => {});
   return { ok: true };
 }
 

@@ -2,7 +2,8 @@ import type { RecognizerSpec } from "./model-config";
 
 /** Main → engine process */
 export type EngineRequest =
-  | { type: "load"; modelId: string; spec: RecognizerSpec }
+  /** `key`: the model plus its vocabulary hash; a different key rebuilds the recognizer */
+  | { type: "load"; modelId: string; key: string; spec: RecognizerSpec }
   | { type: "begin"; sessionId: string; maxSamples: number }
   | { type: "audio"; sessionId: string; samples: Float32Array }
   | { type: "finish"; sessionId: string }

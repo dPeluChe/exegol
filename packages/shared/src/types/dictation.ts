@@ -1,5 +1,7 @@
 /** Local voice dictation (T201 phase 2): settings, status, history and the shortcut chord */
 
+import { applySpokenPunctuation } from "./dictation-punctuation";
+
 /** Mic audio is resampled to this before it leaves the renderer; every model takes it */
 export const DICTATION_SAMPLE_RATE = 16_000;
 
@@ -18,6 +20,47 @@ export function rms(samples: Float32Array): number {
 export function sanitizeDictation(text: string): string {
   // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
   return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
+}
+
+/** What a dictation inserts: sanitized, then spoken punctuation when it is on */
+export function cleanDictation(text: string, opts: { spokenPunctuation: boolean }): string {
+  const clean = sanitizeDictation(text);
+  return opts.spokenPunctuation ? applySpokenPunctuation(clean) : clean;
+}
+
+export const DICTATION_VOCABULARY_MAX = 200;
+export const DICTATION_TERM_MAX = 64;
+/** hotwordsScore in sherpa-onnx: added per matched token while decoding */
+export const DICTATION_VOCABULARY_BOOSTS = [1.5, 3, 5] as const;
+
+/** One term per line. Commas, slashes and colons are the engines' separators: they become spaces */
+export function parseVocabulary(text: string | readonly string[]): string[] {
+  const lines = typeof text === "string" ? text.split("\n") : text;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const term = line
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: terms go into engine files
+      .replace(/[\u0000-\u001f\u007f-\u009f,/:]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, DICTATION_TERM_MAX)
+      .trim();
+    if (!term || seen.has(term)) continue;
+    seen.add(term);
+    out.push(term);
+    if (out.length >= DICTATION_VOCABULARY_MAX) break;
+  }
+  return out;
+}
+
+/** The global list plus the project's own terms, capped together */
+export function dictationVocabulary(
+  settings: Pick<DictationSettings, "vocabulary" | "projectVocabulary">,
+  projectId: string | null,
+): string[] {
+  const own = projectId ? (settings.projectVocabulary[projectId] ?? []) : [];
+  return parseVocabulary([...settings.vocabulary, ...own]);
 }
 
 /** Where a dictation went: a pane kind, a text field of the app, or the clipboard */
@@ -103,6 +146,12 @@ export interface DictationSettings {
   inputDeviceId: string | null;
   /** Its label when it was picked, for the "not found" notice once it is gone */
   inputDeviceLabel: string | null;
+  /** Terms to bias recognition toward (models that support it), and each project's additions */
+  vocabulary: string[];
+  projectVocabulary: Record<string, string[]>;
+  vocabularyBoost: number;
+  /** "coma", "new line"... become punctuation (Spanish and English) */
+  spokenPunctuation: boolean;
 }
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
@@ -123,6 +172,10 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   recordingsRetentionDays: 10,
   inputDeviceId: null,
   inputDeviceLabel: null,
+  vocabulary: [],
+  projectVocabulary: {},
+  vocabularyBoost: 3,
+  spokenPunctuation: true,
 };
 
 /** The saved settings over the defaults: a row written before a field existed lacks it */
@@ -149,6 +202,8 @@ export interface DictationStatus {
     kind: "offline" | "streaming";
     ready: boolean;
     sizeBytes: number;
+    /** Its recognizer takes the vocabulary (Settings > Dictation) */
+    vocabulary: boolean;
   };
   engine: DictationEngineState;
   /** The speech engine (a native addon) loads on this system; checked once in its process */

@@ -3,6 +3,8 @@ import {
   DEFAULT_DICTATION_SETTINGS,
   DICTATION_OVERLAY_POSITIONS,
   DICTATION_RECORDING_RETENTION_DAYS,
+  DICTATION_TERM_MAX,
+  DICTATION_VOCABULARY_MAX,
   type DictationRecordingRetentionDays,
   parseChord,
 } from "../types/dictation";
@@ -42,6 +44,16 @@ export const dictationSettingsSchema = z.object({
     .default(DEFAULT_DICTATION_SETTINGS.recordingsRetentionDays),
   inputDeviceId: z.string().max(256).nullable().default(null),
   inputDeviceLabel: z.string().max(256).nullable().default(null),
+  vocabulary: z.array(z.string().max(DICTATION_TERM_MAX)).max(DICTATION_VOCABULARY_MAX).default([]),
+  projectVocabulary: z
+    .record(
+      z.string().max(64),
+      z.array(z.string().max(DICTATION_TERM_MAX)).max(DICTATION_VOCABULARY_MAX),
+    )
+    .refine((r) => Object.keys(r).length <= 500, "too many projects")
+    .default({}),
+  vocabularyBoost: z.number().min(0.5).max(10).default(DEFAULT_DICTATION_SETTINGS.vocabularyBoost),
+  spokenPunctuation: z.boolean().default(true),
 });
 
 export const settingsSchema = z.object({

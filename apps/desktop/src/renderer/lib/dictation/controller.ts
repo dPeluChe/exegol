@@ -1,4 +1,5 @@
 import {
+  cleanDictation,
   DICTATION_SAMPLE_RATE,
   type DictationCancelSource,
   type DictationSettings,
@@ -209,7 +210,7 @@ export async function startDictation(): Promise<void> {
     if (!status.engineAvailable) return reset();
     if (!current.settings.enabled) throw new Error("Dictation is off in Settings > Dictation");
     if (!status.model.ready) return endWith({ phase: "no-model" });
-    trpcMutate("dictation.warm").catch(() => {});
+    trpcMutate("dictation.warm", { projectId: target.projectId }).catch(() => {});
     if (target.kind === "browser") {
       await window.api.dictation.markBrowser({
         paneId: target.paneId,
@@ -243,7 +244,10 @@ export async function startDictation(): Promise<void> {
           ? `${current.settings.inputDeviceLabel || "The selected input"} not found, using system default`
           : null,
     });
-    const started = await trpcMutate<{ sessionId: string }>("dictation.start", { input });
+    const started = await trpcMutate<{ sessionId: string }>("dictation.start", {
+      input,
+      projectId: target.projectId,
+    });
     patchStatus({ micEverGranted: true });
     if (gone()) {
       void trpcMutate("dictation.cancel", { sessionId: started.sessionId, source: "superseded" });
@@ -293,7 +297,7 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     // Esc while transcribing: cancelled for real, nothing is inserted
     if (run !== r) return;
     reset();
-    const clean = sanitizeDictation(text);
+    const clean = cleanDictation(text, r.settings);
     if (!clean) {
       toast().addToast({ type: "info", title: "No words recognized" });
       return;

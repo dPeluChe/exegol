@@ -7,6 +7,7 @@ export * from "./dashboard";
 export * from "./dev-servers";
 export * from "./diagnostics";
 export * from "./dictation";
+export * from "./dictation-punctuation";
 export * from "./diff-comment";
 export * from "./github-issue";
 export * from "./ide";

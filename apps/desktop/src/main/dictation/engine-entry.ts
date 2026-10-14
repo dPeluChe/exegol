@@ -1,7 +1,7 @@
 /**
  * Speech engine, run as an Electron utilityProcess: sherpa-onnx-node (N-API, no per-Electron
  * rebuild) decodes here so a model load or a long decode never blocks the main process.
- * It only opens files under the models folder main passes at fork.
+ * It only opens files under the models and vocabulary folders main passes at fork.
  */
 import { realpathSync } from "node:fs";
 import { DICTATION_SAMPLE_RATE as SAMPLE_RATE } from "@exegol/shared";
@@ -17,8 +17,10 @@ import {
   WHISPER_MIN_PHRASE_MS,
 } from "./phrases";
 
-const ROOT_FLAG = "--models-root=";
-const modelsRoot = process.argv.find((a) => a.startsWith(ROOT_FLAG))?.slice(ROOT_FLAG.length);
+const flag = (name: string) =>
+  process.argv.find((a) => a.startsWith(name))?.slice(name.length) || undefined;
+const modelsRoot = flag("--models-root=");
+const vocabRoot = flag("--vocab-root=");
 
 type Loaded =
   | { kind: "offline"; recognizer: sherpa.OfflineRecognizer }
@@ -45,7 +47,7 @@ interface Session {
   cancelled: boolean;
 }
 
-let loadedId: string | null = null;
+let loadedKey: string | null = null;
 let loaded: Loaded | null = null;
 /** Pauses cut only phrases at least this long (Whisper decodes a 30 s window per phrase) */
 let minPhraseMs = 0;
@@ -58,27 +60,34 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : String
 
 function assertModelPaths(spec: RecognizerSpec): void {
   if (!modelsRoot) throw new Error("no models folder");
-  const root = realpathSync(modelsRoot);
+  const roots = [modelsRoot, vocabRoot].flatMap((r) => {
+    try {
+      return r ? [realpathSync(r)] : [];
+    } catch {
+      return [];
+    }
+  });
   for (const path of specPaths(spec.config)) {
-    if (!isInside(root, realpathSync(path)))
+    const real = realpathSync(path);
+    if (!roots.some((root) => isInside(root, real)))
       throw new Error("model file outside the models folder");
   }
 }
 
-async function load(modelId: string, spec: RecognizerSpec): Promise<void> {
-  if (loadedId === modelId && loaded) {
+async function load(modelId: string, key: string, spec: RecognizerSpec): Promise<void> {
+  if (loadedKey === key && loaded) {
     reply({ type: "loaded", modelId });
     return;
   }
   loaded = null;
-  loadedId = null;
+  loadedKey = null;
   try {
     assertModelPaths(spec);
     loaded =
       spec.kind === "offline"
         ? { kind: "offline", recognizer: await sherpa.OfflineRecognizer.createAsync(spec.config) }
         : { kind: "online", recognizer: new sherpa.OnlineRecognizer(spec.config) };
-    loadedId = modelId;
+    loadedKey = key;
     minPhraseMs = spec.config.modelConfig.whisper ? WHISPER_MIN_PHRASE_MS : 0;
     reply({ type: "loaded", modelId });
   } catch (err) {
@@ -198,7 +207,7 @@ async function finish(s: Session): Promise<Finished> {
 function handle(msg: EngineRequest): void {
   switch (msg.type) {
     case "load":
-      loading = load(msg.modelId, msg.spec);
+      loading = load(msg.modelId, msg.key, msg.spec);
       return;
     case "begin":
       if (session) session.cancelled = true;

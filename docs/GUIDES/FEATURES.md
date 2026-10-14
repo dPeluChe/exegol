@@ -185,7 +185,12 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   to compare models offline (`docs/GUIDES/DICTATION_BENCH.md`); also listed in Settings > Storage.
   Cmd+P (Ctrl+Shift+P) or the card's Pause button pauses a dictation and resumes it with the same
   text and target; Settings > Dictation > Input picks the microphone (system default when it is
-  missing, said in the card).
+  missing, said in the card). Settings > Dictation > Vocabulary: terms to recognize as written
+  (global plus per project; used by Parakeet TDT v3 as hotwords and Qwen3-ASR in its prompt, other
+  models ignore them) and spoken punctuation in Spanish and English ("coma", "punto", "nueva
+  línea", "comma", "period", "new line"...). "punto" and "period" count only at the end of a
+  sentence; after an article or determiner ("la coma", "a new line") the word stays a word;
+  "punto" before a lowercase word stays ("google punto com").
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is
