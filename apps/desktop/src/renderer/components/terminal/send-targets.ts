@@ -90,3 +90,31 @@ export function buildSendSections(
 }
 
 export const hasSendTargets = (s: SendSections) => s.own !== null || s.others.length > 0;
+
+/** Settings > Terminal: press Enter after a Send to, per target kind (both off: paste only) */
+export interface SendEnterPrefs {
+  sendToRunTerminal: boolean;
+  sendToSubmitAgent: boolean;
+}
+
+/** paste: text only. enter: text, then Enter. held: Enter wanted, but the agent is asking a
+ *  question that an Enter would answer */
+export type SendAction = "paste" | "enter" | "held";
+
+export function sendAction(
+  target: Pick<SendTarget, "cliType">,
+  prefs: SendEnterPrefs,
+  asksQuestion: boolean,
+): SendAction {
+  if (target.cliType === "shell") return prefs.sendToRunTerminal ? "enter" : "paste";
+  if (!prefs.sendToSubmitAgent) return "paste";
+  return asksQuestion ? "held" : "enter";
+}
+
+/** The Send to list's footer: what a pick does with these settings */
+export function sendHint(prefs: SendEnterPrefs): string {
+  if (prefs.sendToRunTerminal && prefs.sendToSubmitAgent) return "Pastes and presses Enter";
+  if (prefs.sendToRunTerminal) return "Pastes; runs it in terminals";
+  if (prefs.sendToSubmitAgent) return "Pastes; submits it to agents";
+  return "Pastes only";
+}

@@ -4,7 +4,7 @@ import type { RefObject } from "react";
 import { appKeys } from "../../lib/keymap";
 import { focusActivePane } from "../../lib/pane-focus";
 import { SendToList } from "./SendToList";
-import { hasSendTargets, type SendSections, type SendTarget } from "./send-targets";
+import { hasSendTargets, type SendSections } from "./send-targets";
 import type { TerminalInstanceHandle } from "./TerminalInstance";
 
 interface TerminalFloatingButtonsProps {
@@ -17,7 +17,6 @@ interface TerminalFloatingButtonsProps {
   sendSections: SendSections;
   showSendTo: boolean;
   setShowSendTo: (v: boolean) => void;
-  onSendTo: (target: SendTarget) => void;
 }
 
 export function TerminalFloatingButtons({
@@ -28,7 +27,6 @@ export function TerminalFloatingButtons({
   sendSections,
   showSendTo,
   setShowSendTo,
-  onSendTo,
 }: TerminalFloatingButtonsProps) {
   const canSend = hasSendTargets(sendSections);
   return (
@@ -43,7 +41,8 @@ export function TerminalFloatingButtons({
           </p>
           <SendToList
             sections={sendSections}
-            onPick={onSendTo}
+            getSelection={() => terminalRef.current?.getSelection() ?? ""}
+            onSent={() => setShowSendTo(false)}
             onEscape={() => {
               setShowSendTo(false);
               focusActivePane();
@@ -63,7 +62,7 @@ export function TerminalFloatingButtons({
                 ? "border-accent/40 bg-accent/10 text-accent"
                 : "border-border bg-bg-secondary/90 text-text-muted hover:text-text-primary",
             )}
-            title="Paste the selected text into another agent or terminal (never sent: add context or review it there)"
+            title="Paste the selected text into another agent or terminal (Enter only if Settings > Terminal says so)"
           >
             <Send className="h-3 w-3" />
             <span>Send to</span>

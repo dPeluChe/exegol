@@ -1,6 +1,6 @@
 import type { AgentStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { buildSendSections, hasSendTargets } from "./send-targets";
+import { buildSendSections, hasSendTargets, sendAction, sendHint } from "./send-targets";
 
 const session = (
   id: string,
@@ -118,5 +118,44 @@ describe("buildSendSections", () => {
       ["typed", "codex"],
       ["exited", "shell"],
     ]);
+  });
+});
+
+describe("sendAction", () => {
+  const shell = { cliType: "shell" };
+  const agent = { cliType: "claude-code" };
+  const prefs = (run: boolean, submit: boolean) => ({
+    sendToRunTerminal: run,
+    sendToSubmitAgent: submit,
+  });
+
+  it("pastes only by default, asking or not", () => {
+    for (const asks of [false, true]) {
+      expect(sendAction(shell, prefs(false, false), asks)).toBe("paste");
+      expect(sendAction(agent, prefs(false, false), asks)).toBe("paste");
+    }
+  });
+
+  it("each setting presses Enter for its own kind of target only", () => {
+    expect(sendAction(shell, prefs(true, false), false)).toBe("enter");
+    expect(sendAction(agent, prefs(true, false), false)).toBe("paste");
+    expect(sendAction(agent, prefs(false, true), false)).toBe("enter");
+    expect(sendAction(shell, prefs(false, true), false)).toBe("paste");
+  });
+
+  it("never submits into an agent asking a question", () => {
+    expect(sendAction(agent, prefs(true, true), true)).toBe("held");
+    expect(sendAction(agent, prefs(false, true), true)).toBe("held");
+  });
+});
+
+describe("sendHint", () => {
+  it("says what a pick does", () => {
+    const hint = (run: boolean, submit: boolean) =>
+      sendHint({ sendToRunTerminal: run, sendToSubmitAgent: submit });
+    expect(hint(false, false)).toBe("Pastes only");
+    expect(hint(true, false)).toBe("Pastes; runs it in terminals");
+    expect(hint(false, true)).toBe("Pastes; submits it to agents");
+    expect(hint(true, true)).toBe("Pastes and presses Enter");
   });
 });

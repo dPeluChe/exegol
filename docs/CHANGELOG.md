@@ -11,7 +11,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Right-click a terminal with text selected: "Send selection to" opens the same list as the Send to button
-- Send to reaches plain terminals too, both ways: send a command an agent printed to the project's terminal (it lands at the prompt for you to review and run, nothing is pressed) or a shell's output to an agent. Terminals show their folder
+- Send to reaches plain terminals too, both ways: send a command an agent printed to the project's terminal (by default it lands at the prompt for you to review and run) or a shell's output to an agent. Terminals show their folder
+- Settings > Terminal > Send to: "run it (press Enter)" for terminals and "submit it (press Enter)" for agents, both off by default (paste only). An agent asking a question or a permission is never submitted to: the text is pasted and a toast says so. The Send to list's footer says what a pick does, with a link to the setting
 
 ### Changed
 - Send to lists the sessions of the pane's own project first; other projects sit behind "Other projects (N)", closed until you open it (remembered while the window is open) and open by itself when your project has nothing else. Arrow keys, Enter and Esc work in the list

@@ -1,8 +1,7 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
-import type { SendTarget } from "./send-targets";
 import type { TerminalInstanceHandle } from "./terminal-types";
-import { registerSelectionSource, sendSelectionTo, useSendSections } from "./use-send-to";
+import { registerSelectionSource, useSendSections } from "./use-send-to";
 import { useTerminalUrlDetector } from "./use-terminal-url-detector";
 
 type TerminalHandleRef = RefObject<TerminalInstanceHandle | null>;
@@ -66,8 +65,7 @@ export function useFilesPeek(projectId: string | undefined) {
   };
 }
 
-/** "Send to": the selected text goes into another live agent's input (not submitted: the user
- *  adds context there). Only agents: pasting prose into a shell would run it line by line.
+/** "Send to": the selection goes into another live agent or terminal (SendToList sends it).
  *  With a pane, its right-click menu offers the same list (registerSelectionSource) */
 export function useSendTo(
   agentId: string,
@@ -88,14 +86,6 @@ export function useSendTo(
     });
   }, [paneId, agentId, projectId, terminalRef]);
 
-  const handleSendTo = useCallback(
-    (target: SendTarget) => {
-      setShowSendTo(false);
-      sendSelectionTo(terminalRef.current?.getSelection() ?? "", target);
-    },
-    [terminalRef],
-  );
-
   const onSelectionChange = useCallback((selected: boolean) => {
     setHasSelection(selected);
     if (!selected) setShowSendTo(false);
@@ -105,7 +95,6 @@ export function useSendTo(
     sendSections,
     showSendTo,
     setShowSendTo,
-    handleSendTo,
     onSelectionChange,
   };
 }

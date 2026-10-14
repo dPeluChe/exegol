@@ -1,12 +1,20 @@
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { pasteToAgent } from "../../lib/agent-input";
+import { agentAsksQuestion } from "../../lib/agent-question";
 import { focusActivePane } from "../../lib/pane-focus";
 import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
+import { useToastStore } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
 import type { ProjectWorkspace } from "../../stores/workspace/types";
-import { buildSendSections, type SendSections, type SendTarget } from "./send-targets";
+import {
+  buildSendSections,
+  type SendEnterPrefs,
+  type SendSections,
+  type SendTarget,
+  sendAction,
+} from "./send-targets";
 
 const EMPTY: SendSections = { own: null, others: [] };
 
@@ -53,11 +61,29 @@ function shellFolders(
   return folders;
 }
 
-/** Pasted, never submitted: an agent gets context added, a shell gets the command reviewed before
- *  Enter. Multi-line is one bracketed paste, so a shell never runs it line by line */
-export function sendSelectionTo(text: string, target: SendTarget): void {
+/** The paste is consumed first: in one write a TUI could read the Enter as part of it */
+const ENTER_DELAY_MS = 50;
+
+/** Pasted (multi-line as one bracketed paste, so a shell never runs it line by line), then Enter
+ *  only when the setting for that kind of target asks, and never into an agent's question */
+export async function sendSelectionTo(
+  text: string,
+  target: SendTarget,
+  prefs: SendEnterPrefs,
+): Promise<void> {
   if (!text) return;
+  const wantsEnter = sendAction(target, prefs, false) === "enter";
+  const asks = wantsEnter && target.cliType !== "shell" && (await agentAsksQuestion(target.id));
+  const action = sendAction(target, prefs, asks);
   pasteToAgent(target.id, text);
+  if (action === "enter") {
+    setTimeout(() => window.api.terminal.write(target.id, "\r"), ENTER_DELAY_MS);
+  } else if (action === "held") {
+    useToastStore.getState().addToast({
+      type: "info",
+      title: `Pasted, not submitted: ${target.name} is asking a question`,
+    });
+  }
   jumpToAgent(target.id, target.projectId);
   focusActivePane();
 }

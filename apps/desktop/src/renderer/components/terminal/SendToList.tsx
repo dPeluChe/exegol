@@ -1,8 +1,15 @@
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { type KeyboardEvent, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
+import { useSettings } from "../../hooks/use-trpc";
 import { AgentIcon } from "../common/AgentIcon";
-import type { SendGroup, SendSections, SendTarget } from "./send-targets";
+import {
+  type SendEnterPrefs,
+  type SendGroup,
+  type SendSections,
+  type SendTarget,
+  sendHint,
+} from "./send-targets";
 import { type SelectionSource, sendSelectionTo, useSendSections } from "./use-send-to";
 
 // Per window, in memory only: both the button and the right-click menu open as it was left
@@ -21,9 +28,6 @@ function TargetButton({ target, onPick }: { target: SendTarget; onPick: (t: Send
     <button
       type="button"
       onClick={() => onPick(target)}
-      title={
-        target.cliType === "shell" ? "Pasted at the prompt: press Enter there to run it" : undefined
-      }
       className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-text-secondary outline-none hover:bg-white/10 focus-visible:bg-white/10"
     >
       <AgentIcon provider={target.cliType} size={12} />
@@ -87,29 +91,39 @@ export function SendSelectionMenu({
       </button>
       <SendToList
         sections={sections}
-        onPick={(t) => {
-          onDone();
-          sendSelectionTo(source.getSelection(), t);
-        }}
+        getSelection={source.getSelection}
+        onSent={onDone}
         onEscape={onDone}
       />
     </div>
   );
 }
 
-/** "This project" first, the other projects behind a toggle. Shared by the floating Send to
- *  button and the terminal's right-click menu */
+/** "This project" first, the other projects behind a toggle, what a pick does in the footer.
+ *  Shared by the floating Send to button and the terminal's right-click menu */
 export function SendToList({
   sections,
-  onPick,
+  getSelection,
+  onSent,
   onEscape,
 }: {
   sections: SendSections;
-  onPick: (t: SendTarget) => void;
+  getSelection: () => string;
+  onSent: () => void;
   onEscape: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(othersExpanded);
+  const { data: settings } = useSettings();
+  const prefs: SendEnterPrefs = {
+    sendToRunTerminal: settings?.sendToRunTerminal ?? false,
+    sendToSubmitAgent: settings?.sendToSubmitAgent ?? false,
+  };
+  const onPick = (t: SendTarget) => {
+    const text = getSelection();
+    onSent();
+    void sendSelectionTo(text, t, prefs);
+  };
   const { own, others } = sections;
   // Nothing in this project: the others are the whole list, shown without the extra click
   const showOthers = expanded || !own;
@@ -155,6 +169,20 @@ export function SendToList({
         </button>
       )}
       {showOthers && others.map((g) => <Group key={g.projectId} group={g} onPick={onPick} />)}
+      <div className="mt-1 flex items-center justify-between gap-3 border-t border-border/60 px-2 pt-1 text-[9px] text-text-muted">
+        <span>{sendHint(prefs)}</span>
+        <button
+          type="button"
+          onClick={() => {
+            onEscape();
+            void window.api.settings.open("terminal");
+          }}
+          className="rounded px-1 outline-none hover:text-text-primary focus-visible:bg-white/10"
+          title="Settings > Terminal: press Enter after Send to"
+        >
+          Change
+        </button>
+      </div>
     </div>
   );
 }

@@ -41,7 +41,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const { scrollAtTop, scrollAtBottom, hasNewOutput, handleScrollPosition } =
     useTerminalScrollState();
   const terminalRef = useRef<TerminalInstanceHandle>(null);
-  const { sendSections, showSendTo, setShowSendTo, handleSendTo, onSelectionChange } = useSendTo(
+  const { sendSections, showSendTo, setShowSendTo, onSelectionChange } = useSendTo(
     agentId,
     storeAgent?.projectId ?? activeProjectId ?? undefined,
     terminalRef,
@@ -91,7 +91,6 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       sendSections={sendSections}
       showSendTo={showSendTo}
       setShowSendTo={setShowSendTo}
-      onSendTo={handleSendTo}
     />
   );
 

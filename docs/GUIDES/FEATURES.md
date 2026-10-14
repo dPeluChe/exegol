@@ -86,8 +86,11 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Send to**: select text in one terminal and paste it into another live agent or terminal
   (the floating Send to button, or right-click > Send selection to). Sessions of the pane's own
   project come first; other projects sit behind "Other projects (N)", open when the own project
-  has nothing else. Nothing is submitted: a terminal gets the command at its prompt to review and
-  run, a multi-line text is one bracketed paste. Arrows, Enter and Esc work in the list.
+  has nothing else. By default nothing is submitted: a terminal gets the command at its prompt to
+  review and run, a multi-line text is one bracketed paste. Settings > Terminal > Send to can press
+  Enter after the paste, separately for terminals and agents; an agent asking a question or a
+  permission only gets the paste (a toast says so). The list's footer shows the current behavior.
+  Arrows, Enter and Esc work in the list.
 - **Follow-ups and Steer**: Queue in the terminal toolbar (and on a Watching card) holds prompts
   for an agent's next turn; each is typed when the turn ends, one per turn. Steer (Claude Code,
   Codex) interrupts the turn (Esc), waits up to 20s for the prompt and types right away. The queue lives in memory: it
