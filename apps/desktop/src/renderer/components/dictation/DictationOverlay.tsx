@@ -1,11 +1,15 @@
 import { dictationSettingsOf, formatChord, type KeyChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { ArrowDown, Crosshair, Loader2 } from "lucide-react";
+import { ArrowDown, Crosshair, Loader2, Mic, Pause, Play } from "lucide-react";
 import { type ReactNode, type UIEvent, useLayoutEffect, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
 import { useDictationStatus } from "../../hooks/use-trpc-dictation";
-import { dismissDictation, stopDictation } from "../../lib/dictation/controller";
+import {
+  dismissDictation,
+  stopDictation,
+  togglePauseDictation,
+} from "../../lib/dictation/controller";
 import { OVERLAY_ATTR } from "../../lib/dictation/overlay-keys";
 import {
   dockedPill,
@@ -19,11 +23,16 @@ import {
 import { dictationChord } from "../../lib/dictation/shortcut";
 import { insertHint, TARGET_KINDS, targetName } from "../../lib/dictation/target";
 import { clippedAbove, shouldFollow, unannounced } from "../../lib/dictation/transcript-scroll";
-import { IS_MAC } from "../../lib/keymap";
+import { appKeys, IS_MAC } from "../../lib/keymap";
 import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { type DictationPhase, isRecording, useDictationStore } from "../../stores/dictation";
+import {
+  type DictationPhase,
+  isRecording,
+  recordedMs,
+  useDictationStore,
+} from "../../stores/dictation";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import { Kbd } from "../common/Kbd";
@@ -74,6 +83,7 @@ function Positioned({ paneId }: { paneId: string | null }) {
   const onScreen = useWorkspaceStore(
     (ws) => !!paneId && paneOnScreen({ activeView, workspaceSection, activeProjectId }, ws, paneId),
   );
+  const paused = useDictationStore((s) => s.pausedAt !== null);
   const recording = isRecording(phase) || phase === "transcribing";
   const mode = overlayMode(position, !!paneId, onScreen, recording);
   const width = phase === "no-model" ? CHOOSER_WIDTH : CARD_WIDTH;
@@ -137,7 +147,7 @@ function Positioned({ paneId }: { paneId: string | null }) {
           className={cn(
             "overflow-hidden rounded-2xl border bg-bg-secondary/95 shadow-2xl backdrop-blur transition-[border-color,box-shadow] duration-300",
             failed ? "border-error/40" : "border-accent/40",
-            phase === "listening" && "shadow-[0_8px_40px_-12px_var(--color-accent)]",
+            phase === "listening" && !paused && "shadow-[0_8px_40px_-12px_var(--color-accent)]",
           )}
         >
           <Body onCenter={drag.reset} />
@@ -158,6 +168,7 @@ function Body({ onCenter }: { onCenter?: () => void }) {
 
 function Recorder({ onCenter }: { onCenter?: () => void }) {
   const phase = useDictationStore((s) => s.phase);
+  const paused = useDictationStore((s) => s.pausedAt !== null);
   return (
     // A click on the card is a no-op: recording goes on and the pane keeps the focus
     // biome-ignore lint/a11y/noStaticElementInteractions: swallows focus changes only
@@ -182,12 +193,17 @@ function Recorder({ onCenter }: { onCenter?: () => void }) {
         </span>
       </div>
       <div className="px-3.5 pt-2.5">
-        {phase === "listening" ? <LevelBars /> : <div className="h-10" />}
+        {phase === "listening" ? <LevelBars muted={paused} /> : <div className="h-10" />}
       </div>
       <Transcript phase={phase} />
+      <InputNotice />
       <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-bg-primary/40 px-3.5 py-1.5">
         <CancelButton />
-        {isRecording(phase) && <InsertButton />}
+        <InputName />
+        <span className="flex shrink-0 items-center gap-1.5">
+          {phase === "listening" && <PauseButton paused={paused} />}
+          {isRecording(phase) && <InsertButton />}
+        </span>
       </div>
     </div>
   );
@@ -197,6 +213,7 @@ function Recorder({ onCenter }: { onCenter?: () => void }) {
  *  words show at the end of the row */
 function DockedPill({ phase }: { phase: DictationPhase }) {
   const partial = useDictationStore((s) => s.partial);
+  const paused = useDictationStore((s) => s.pausedAt !== null);
   return (
     // A click on the pill is a no-op: the pane keeps the focus
     <div
@@ -206,11 +223,16 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
       style={{ height: PILL_HEIGHT }}
       className={cn(
         "flex items-center gap-2 rounded-full border border-accent/40 bg-bg-secondary/95 pr-1 pl-2.5 shadow-lg backdrop-blur",
-        phase === "listening" && "shadow-[0_4px_20px_-8px_var(--color-accent)]",
+        phase === "listening" && !paused && "shadow-[0_4px_20px_-8px_var(--color-accent)]",
       )}
     >
       <Announcer />
-      {phase === "listening" ? (
+      {phase === "listening" && paused ? (
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-text-muted">
+          <Pause className="h-3 w-3" />
+          <Timer />
+        </span>
+      ) : phase === "listening" ? (
         <span className="inline-flex shrink-0 items-center gap-1.5 text-[11px] font-medium text-error">
           <span className="relative flex h-2 w-2">
             <span className="absolute inset-0 rounded-full bg-error/60 motion-safe:animate-ping" />
@@ -223,7 +245,9 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
       )}
       {/* End-aligned so the newest words stay in view and the oldest slide out on the left */}
       <span className="flex min-w-0 flex-1 justify-end overflow-hidden whitespace-nowrap text-[11px] text-text-secondary [mask-image:linear-gradient(to_right,transparent,#000_1.5rem)]">
-        <span>{partial || (phase === "transcribing" ? "Finishing" : "Listening")}</span>
+        <span>
+          {partial || (phase === "transcribing" ? "Finishing" : paused ? "Paused" : "Listening")}
+        </span>
       </span>
       <Commands phase={phase} />
     </div>
@@ -232,6 +256,16 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
 
 function StatePill({ phase }: { phase: DictationPhase }) {
   const modelLoading = useDictationStore((s) => s.modelLoading);
+  const paused = useDictationStore((s) => s.pausedAt !== null);
+  if (phase === "listening" && paused) {
+    return (
+      <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-bg-tertiary/80 py-1 pr-2.5 pl-2 text-[11px] font-medium text-text-secondary">
+        <Pause className="h-3 w-3" />
+        <Timer />
+        <span className="font-normal text-text-muted">Paused</span>
+      </span>
+    );
+  }
   if (phase === "listening") {
     return (
       <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-error/10 py-1 pr-2.5 pl-2 text-[11px] font-medium text-error">
@@ -256,19 +290,21 @@ function StatePill({ phase }: { phase: DictationPhase }) {
 
 function Timer() {
   const startedAt = useDictationStore((s) => s.startedAt);
+  const pausedAt = useDictationStore((s) => s.pausedAt);
   const [now, setNow] = useState(Date.now());
-  // Ticks on each whole second of the recording, not on a fixed poll
+  // Ticks on each whole second of the recording, not on a fixed poll; a resume moves startedAt
   useMountEffect(() => {
     let id: ReturnType<typeof setTimeout>;
     const tick = () => {
       const t = Date.now();
       setNow(t);
-      id = setTimeout(tick, 1000 - ((t - startedAt) % 1000) + 5);
+      const ms = recordedMs(useDictationStore.getState(), t);
+      id = setTimeout(tick, 1000 - (ms % 1000) + 5);
     };
     tick();
     return () => clearTimeout(id);
   });
-  const secs = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const secs = Math.floor(recordedMs({ startedAt, pausedAt }, now) / 1000);
   return (
     <span className="font-mono tabular-nums">
       {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")}
@@ -455,6 +491,44 @@ function InsertButton({ compact = false }: { compact?: boolean }) {
       <span>insert</span>
     </OverlayButton>
   );
+}
+
+/** Pause the recording and pick it up again: same session, same text so far */
+function PauseButton({ paused }: { paused: boolean }) {
+  const keys = appKeys("Cmd+P");
+  const word = paused ? "Resume" : "Pause";
+  return (
+    <OverlayButton
+      variant="cancel"
+      label={`${word} (${keys})`}
+      title={`${word}: ${keys}`}
+      onClick={togglePauseDictation}
+    >
+      {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+      <span>{paused ? "resume" : "pause"}</span>
+    </OverlayButton>
+  );
+}
+
+/** The mic this dictation opened */
+function InputName() {
+  const name = useDictationStore((s) => s.inputName);
+  if (!name) return <span className="flex-1" />;
+  return (
+    <span
+      title={`Input: ${name}`}
+      className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 text-[10px] text-text-muted"
+    >
+      <Mic className="h-2.5 w-2.5 shrink-0" />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
+function InputNotice() {
+  const notice = useDictationStore((s) => s.inputNotice);
+  if (!notice) return null;
+  return <p className="truncate px-3.5 pb-1.5 text-[10px] text-warning">{notice}</p>;
 }
 
 const CancelButton = () => (

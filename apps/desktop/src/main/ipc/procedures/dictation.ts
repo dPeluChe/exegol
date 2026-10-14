@@ -1,5 +1,6 @@
 import {
   DICTATION_CANCEL_SOURCES,
+  DICTATION_INPUTS,
   DICTATION_STOP_REASONS,
   DICTATION_TARGET_KINDS,
 } from "@exegol/shared";
@@ -26,6 +27,7 @@ import {
   dictationActive,
   dictationAudio,
   dictationStatus,
+  pauseDictation,
   startDictation,
   stopDictation,
   warmDictation,
@@ -55,7 +57,13 @@ export const dictationRouter = router({
   warm: publicProcedure.mutation(({ ctx }) => warmDictation(ctx.db)),
 
   /** Audio then arrives on `dictation:audio`; partial text on `dictation:partial` */
-  start: publicProcedure.mutation(({ ctx }) => startDictation(ctx.db)),
+  start: publicProcedure
+    .input(z.object({ input: z.enum(DICTATION_INPUTS).default("default") }).optional())
+    .mutation(({ ctx, input }) => startDictation(ctx.db, input?.input)),
+
+  pause: publicProcedure
+    .input(z.object({ sessionId, paused: z.boolean() }))
+    .mutation(({ input }) => pauseDictation(input.sessionId, input.paused)),
 
   stop: publicProcedure
     .input(

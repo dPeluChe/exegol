@@ -50,7 +50,13 @@ const appOrigin = (): string => {
   }
 };
 
-function decide(wc: WebContents | null, permission: string, mediaTypes: string[], url: string) {
+function decide(
+  wc: WebContents | null,
+  permission: string,
+  mediaTypes: string[],
+  url: string,
+  check = false,
+) {
   // One handler per session: browser pane pages' clipboard is decided here too
   const clipboard = pageClipboardDecision(wc, permission, url);
   if (clipboard !== null) return clipboard;
@@ -62,6 +68,8 @@ function decide(wc: WebContents | null, permission: string, mediaTypes: string[]
     isMainWindow: !!wc && !!main && !main.isDestroyed() && wc === main.webContents,
     appOrigin: appOrigin(),
     armed: Date.now() < armedUntil,
+    check,
+    isAppWindow: !!wc && !wc.isDestroyed() && wc.getType() === "window",
   });
 }
 
@@ -76,7 +84,7 @@ function guardSession(ses: Session): void {
   });
   ses.setPermissionCheckHandler((wc, permission, origin, details) => {
     const media = details.mediaType ? [details.mediaType] : [];
-    return decide(wc, permission, media, details.requestingUrl ?? origin);
+    return decide(wc, permission, media, details.requestingUrl ?? origin, true);
   });
 }
 

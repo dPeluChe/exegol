@@ -59,6 +59,20 @@ export const DICTATION_CANCEL_SOURCES = [
 ] as const;
 export type DictationCancelSource = (typeof DICTATION_CANCEL_SOURCES)[number];
 
+/** Which mic a dictation opened, for the log: the selected one fell back when it was missing */
+export const DICTATION_INPUTS = ["default", "selected", "fallback"] as const;
+export type DictationInput = (typeof DICTATION_INPUTS)[number];
+
+/** Pause or resume a running dictation: Cmd+P on macOS, Ctrl+Shift+P elsewhere (the app chord:
+ *  plain Ctrl+P is the terminal's) */
+export function isDictationPauseKey(
+  e: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; code?: string },
+  mac: boolean,
+): boolean {
+  if (e.code !== "KeyP" || e.altKey) return false;
+  return mac ? e.metaKey && !e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;
+}
+
 /** Days a kept recording (audio + its text, Settings > Dictation) stays on disk */
 export const DICTATION_RECORDING_RETENTION_DAYS = [5, 10, 15, 30] as const;
 export type DictationRecordingRetentionDays = (typeof DICTATION_RECORDING_RETENTION_DAYS)[number];
@@ -85,6 +99,10 @@ export interface DictationSettings {
   /** Save each dictation's audio and text under ~/.exegol/dictation-audio, to compare models */
   keepRecordings: boolean;
   recordingsRetentionDays: DictationRecordingRetentionDays;
+  /** The mic to open (a getUserMedia deviceId); null = the system default */
+  inputDeviceId: string | null;
+  /** Its label when it was picked, for the "not found" notice once it is gone */
+  inputDeviceLabel: string | null;
 }
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
@@ -103,6 +121,8 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   overlayPosition: "pane",
   keepRecordings: false,
   recordingsRetentionDays: 10,
+  inputDeviceId: null,
+  inputDeviceLabel: null,
 };
 
 /** The saved settings over the defaults: a row written before a field existed lacks it */

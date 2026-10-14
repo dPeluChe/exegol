@@ -204,6 +204,13 @@ const MAC_SHORTCUTS: Shortcut[] = [
     otherKeys: "Ctrl+Shift+Space",
     category: "terminal",
   },
+  {
+    id: "dictation-pause",
+    label: "Pause dictation",
+    description: "While a dictation records: pause it and resume it (same text, same target)",
+    keys: "Cmd+P",
+    category: "terminal",
+  },
 ];
 
 /** "Cmd+Shift+D" in any modifier order → one comparable form */
@@ -247,6 +254,7 @@ export function shortcutsWith(dictation: Partial<DictationSettings> | undefined)
   const d = dictationSettingsOf(dictation);
   const chord = d.enabled ? parseChord(d.shortcut) : null;
   return SHORTCUTS.flatMap((s) => {
+    if (s.id === "dictation-pause") return chord ? [s] : [];
     if (s.id !== "dictation") return [s];
     return chord ? [{ ...s, keys: formatChord(chord, IS_MAC) }] : [];
   });

@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Pause a dictation and pick it up again: Cmd+P (Ctrl+Shift+P on Linux and Windows) or the Pause button on the card, also from a browser page or the Settings window. While paused nothing is heard or recorded, the timer and the longest-dictation limit stand still, the waveform goes flat and the card says "Paused"; music stays paused. Resume keeps the same text and target, and Insert or Esc work while paused
+- Settings > Dictation > Input: choose the microphone (System default first; names show once the mic was allowed). If the chosen one is unplugged, the dictation uses the system default and the card says so; the card's footer shows which input is in use
 - Settings > Dictation > Recordings: "Keep recordings for model testing" (off by default) saves each dictation that ends with text inserted or copied, its audio and the text, in `~/.exegol/dictation-audio` on this Mac, to compare speech models later on your own speech. Recordings are deleted after 5, 10, 15 or 30 days (10 by default); turning the setting off keeps what was saved. The card shows how many there are and their size per project, with Open folder and Clear recordings; Settings > Storage lists them too. Developers can score every installed model on them with `bun apps/desktop/scripts/dictation-bench.ts` (word and character error rate, speed)
 
 ### Fixed

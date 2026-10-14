@@ -8,6 +8,10 @@ export interface MediaRequest {
   isMainWindow: boolean;
   appOrigin: string;
   armed: boolean;
+  /** A permission check (enumerateDevices labels, permissions.query), not a getUserMedia */
+  check?: boolean;
+  /** Any Exegol window (Settings, floating) on the app origin, never a browser pane's page */
+  isAppWindow?: boolean;
 }
 
 function sameOrigin(url: string, appOrigin: string): boolean {
@@ -22,6 +26,9 @@ function sameOrigin(url: string, appOrigin: string): boolean {
 /** Anything but media keeps Electron's default (allowed) */
 export function allowMediaRequest(r: MediaRequest): boolean {
   if (r.permission !== "media") return true;
+  const audioOnly = r.mediaTypes.length > 0 && r.mediaTypes.every((t) => t === "audio");
+  // Settings > Dictation lists the mics by name; a check opens nothing
+  if (r.check && r.isAppWindow && audioOnly && sameOrigin(r.url, r.appOrigin)) return true;
   return (
     r.isMainWindow &&
     r.armed &&

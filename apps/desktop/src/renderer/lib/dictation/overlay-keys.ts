@@ -1,9 +1,11 @@
+import { isDictationPauseKey } from "@exegol/shared";
 import type { DictationPhase } from "../../stores/dictation";
 
-export type OverlayKeyAction = "insert" | "cancel" | "swallow" | null;
+export type OverlayKeyAction = "insert" | "cancel" | "pause" | "swallow" | null;
 
 interface KeyInput {
   key: string;
+  code?: string;
   isComposing?: boolean;
   keyCode?: number;
   metaKey: boolean;
@@ -17,20 +19,26 @@ interface KeyContext {
   onTarget?: boolean;
   /** Another dialog is open: its Esc closes it first */
   dialogOpen?: boolean;
+  mac?: boolean;
 }
 
 /** What a key does while the overlay is open; null leaves it to the focused pane or control.
  *  Esc cancels wherever the focus is. Enter inserts while recording, so it never reaches the
- *  target below; with another pane focused (the user moved on) Enter is that pane's */
+ *  target below; with another pane focused (the user moved on) Enter is that pane's. The pause
+ *  key toggles wherever the focus is, once listening (a session exists to pause) */
 export function overlayKeyAction(
   e: KeyInput,
   phase: DictationPhase,
-  { onTarget = true, dialogOpen = false }: KeyContext = {},
+  { onTarget = true, dialogOpen = false, mac = true }: KeyContext = {},
 ): OverlayKeyAction {
   if (phase === "idle") return null;
   // 229: an IME is composing; its Enter or Esc ends the composition, not the dictation
   if (e.isComposing || e.keyCode === 229) return null;
   if (e.key === "Escape") return dialogOpen ? null : "cancel";
+  if (isDictationPauseKey(e, mac)) {
+    if (phase === "listening") return "pause";
+    return phase === "starting" || phase === "transcribing" ? "swallow" : null;
+  }
   if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return null;
   if (!onTarget) return null;
   if (phase === "starting" || phase === "listening") return "insert";
