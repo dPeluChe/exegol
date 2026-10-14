@@ -4,6 +4,8 @@ import {
   compactDuration,
   TRAY_AGENTS_PER_PROJECT,
   type TrayAgentRow,
+  trayAgentsIn,
+  trayLimits,
   traySummary,
 } from "./tray-menu";
 
@@ -76,5 +78,47 @@ describe("buildTrayProjects", () => {
   it("summarizes states", () => {
     const projects = build([row({ id: "a", status: "running" }), row({ id: "b" })], ["b"]);
     expect(traySummary(projects)).toBe("2 agents: 1 needs you, 1 working");
+  });
+});
+
+describe("trayAgentsIn", () => {
+  it("lists one state across projects with the project name", () => {
+    const projects = build([
+      row({ id: "a", status: "running" }),
+      row({ id: "b", project_id: "p2", project_name: "Orbital", alias: "sirius", status: "running" }),
+      row({ id: "c" }),
+    ]);
+    expect(trayAgentsIn(projects, "working").map((a) => a.label)).toEqual([
+      "Exegol · argo · Claude Code",
+      "Orbital · sirius · Claude Code",
+    ]);
+  });
+});
+
+describe("trayLimits", () => {
+  it("is null with no reading", () => {
+    expect(trayLimits([], () => "Claude Code", NOW)).toBeNull();
+  });
+
+  it("titles both windows and lists their resets", () => {
+    const limits = trayLimits(
+      [
+        {
+          cliType: "claude-code",
+          session: { usedPercent: 3.4, resetsAt: NOW + 158 * MIN, windowMins: 300 },
+          weekly: { usedPercent: 31, resetsAt: null, windowMins: 10_080 },
+          fetchedAt: NOW - 10 * MIN,
+          stale: true,
+        },
+      ],
+      () => "Claude Code",
+      NOW,
+    );
+    expect(limits?.title).toBe("Plan limits · Claude Code 3% / 31%");
+    expect(limits?.lines).toEqual([
+      "Claude Code 5h: 3% · resets in 2h 38m",
+      "Claude Code week: 31%",
+      "Claude Code: last read 10m ago",
+    ]);
   });
 });

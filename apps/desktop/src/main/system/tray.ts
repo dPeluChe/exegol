@@ -5,12 +5,15 @@ import { getProviderRegistry } from "../agents/registry";
 import { getDb } from "../db/client";
 import { logger } from "../lib/logger";
 import { getMainWindow } from "../windows/main-window-ref";
+import { cachedPlanUsage } from "./plan-usage";
 import {
   buildTrayProjects,
   type TrayAgent,
   type TrayAgentRow,
   type TrayAgentState,
   type TrayProject,
+  trayAgentsIn,
+  trayLimits,
   traySignature,
   traySummary,
 } from "./tray-menu";
@@ -26,13 +29,7 @@ const LIVE_AGENTS_SQL = `SELECT a.id, a.alias, a.cli_type, a.task_description, a
 function getTrayProjects(): TrayProject[] {
   try {
     const rows = getDb().prepare(LIVE_AGENTS_SQL).all() as TrayAgentRow[];
-    const registry = getProviderRegistry();
-    return buildTrayProjects(
-      rows,
-      (cli) => registry.get(cli)?.name ?? cli,
-      isAgentAwaitingApproval,
-      Date.now(),
-    );
+    return buildTrayProjects(rows, cliName, isAgentAwaitingApproval, Date.now());
   } catch {
     return [];
   }
@@ -66,12 +63,41 @@ function agentItem(agent: TrayAgent): Electron.MenuItemConstructorOptions {
     : { label: `${label}  (${agent.detail})`, click: () => openAgent(agent.id) };
 }
 
+function cliName(cliType: string): string {
+  return getProviderRegistry().get(cliType)?.name ?? cliType;
+}
+
+function stateSubmenu(
+  projects: TrayProject[],
+  state: TrayAgentState,
+  title: string,
+): Electron.MenuItemConstructorOptions[] {
+  const agents = trayAgentsIn(projects, state);
+  return agents.length > 0
+    ? [{ label: `${title} (${agents.length})`, submenu: agents.map(agentItem) }]
+    : [];
+}
+
+function limitsItems(): Electron.MenuItemConstructorOptions[] {
+  const limits = trayLimits(cachedPlanUsage(), cliName, Date.now());
+  return limits
+    ? [
+        {
+          label: limits.title,
+          submenu: limits.lines.map((line) => ({ label: line, enabled: false })),
+        },
+      ]
+    : [];
+}
+
 function buildContextMenu(projects: TrayProject[]): Menu {
   const agentItems: Electron.MenuItemConstructorOptions[] =
     projects.length > 0
       ? [
           { type: "separator" },
           { label: traySummary(projects), enabled: false },
+          ...stateSubmenu(projects, "needs-you", "Needs you"),
+          ...stateSubmenu(projects, "working", "Working"),
           ...projects.flatMap((p): Electron.MenuItemConstructorOptions[] => [
             { type: "separator" },
             { label: p.name, enabled: false },
@@ -111,6 +137,7 @@ function buildContextMenu(projects: TrayProject[]): Menu {
     },
     ...agentItems,
     { type: "separator" },
+    ...limitsItems(),
     {
       label: "Settings…",
       // Lazy: windows/ would pull BrowserWindow into every module that imports the tray

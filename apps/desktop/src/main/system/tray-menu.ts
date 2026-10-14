@@ -1,3 +1,5 @@
+import type { PlanUsage, PlanWindow } from "@exegol/shared";
+
 export interface TrayAgentRow {
   id: string;
   alias: string | null;
@@ -128,4 +130,40 @@ export function traySignature(projects: TrayProject[]): string {
       (p) => `${p.name}:${[...p.agents, ...p.hidden].map((a) => `${a.id}=${a.state}`).join(",")}`,
     )
     .join("|");
+}
+
+/** Agents in one state across projects, labelled "Project · alias · task" */
+export function trayAgentsIn(projects: TrayProject[], state: TrayAgentState): TrayAgent[] {
+  return projects.flatMap((p) =>
+    [...p.agents, ...p.hidden]
+      .filter((a) => a.state === state)
+      .map((a) => ({ ...a, label: `${p.name} · ${a.label}` })),
+  );
+}
+
+function windowLine(name: string, label: string, w: PlanWindow, now: number): string {
+  const reset =
+    w.resetsAt && w.resetsAt > now ? ` · resets in ${compactDuration(w.resetsAt - now)}` : "";
+  return `${name} ${label}: ${Math.round(w.usedPercent)}%${reset}`;
+}
+
+/** "Plan limits · Claude Code 3% / 31%" plus one line per window */
+export function trayLimits(
+  usage: PlanUsage[],
+  cliName: (cliType: string) => string,
+  now: number,
+): { title: string; lines: string[] } | null {
+  if (usage.length === 0) return null;
+  const pct = (w: PlanWindow | null) => (w ? `${Math.round(w.usedPercent)}%` : "?");
+  const heads = usage.map((u) => `${cliName(u.cliType)} ${pct(u.session)} / ${pct(u.weekly)}`);
+  const lines = usage.flatMap((u) => {
+    const name = cliName(u.cliType);
+    const stale = u.stale ? [`${name}: last read ${compactDuration(now - u.fetchedAt)} ago`] : [];
+    return [
+      ...(u.session ? [windowLine(name, "5h", u.session, now)] : []),
+      ...(u.weekly ? [windowLine(name, "week", u.weekly, now)] : []),
+      ...stale,
+    ];
+  });
+  return { title: `Plan limits · ${heads.join(" · ")}`, lines };
 }
