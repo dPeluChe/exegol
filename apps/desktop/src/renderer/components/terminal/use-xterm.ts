@@ -1,3 +1,4 @@
+import { gridLabel } from "@exegol/shared";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { Terminal } from "@xterm/xterm";
@@ -13,7 +14,7 @@ import {
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { refitWhenFontLoads } from "./font-ready";
-import { gridLabel, isOnScreen, type MountStats, mountRepaint } from "./live-seq";
+import { mountRepaint } from "./live-seq";
 import { trackMousePress } from "./mouse-release";
 import {
   cancelPtyResize,
@@ -33,6 +34,9 @@ import {
 import { createWebglController, type WebglController } from "./terminal-webgl";
 import { HIDE_DEBOUNCE_MS, useTerminalVisibility } from "./use-terminal-visibility";
 import { trackTerminalView } from "./webgl-budget";
+
+/** Sessions this renderer has mounted an owner view of: the first mount kicks an alt screen */
+const mountedSessions = new Set<string>();
 
 function resolveTerminalTheme(theme: string) {
   const isLight =
@@ -70,6 +74,8 @@ export function useXterm({
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
   const webglRef = useRef<WebglController | null>(null);
   const refitRef = useRef<() => void>(() => {});
+  // A hide dropped a size this view was settling: refit once it is back on screen
+  const resizeDroppedRef = useRef(false);
   // The live session in state, so the visibility effects re-run on every rebuild
   const [session, setSession] = useState<TerminalSession | null>(null);
   // Inactive tabs and the Agents area under the Dashboard are `invisible`, which xterm and an
@@ -126,9 +132,7 @@ export function useXterm({
     const container = containerRef.current;
     if (!container) return;
 
-    // T155.4 SIGWINCH kick, per mount: an alt-screen TUI (opencode/devin/vim) shown again at the
-    // same grid gets the jiggle (main does it without telling mirrors); at a new grid the PTY
-    // resize already makes it redraw. Decided once the snapshot is parsed AND the box measured
+    // Repaint decided once the snapshot is parsed AND the box measured (mountRepaint)
     let applied: SnapshotApplied | null = null;
     let fitted = false;
     let settled = false;
@@ -136,14 +140,18 @@ export function useXterm({
       const t = terminalRef.current;
       if (settled || !applied || !fitted || !t) return;
       settled = true;
+      const owner = !readOnly && !mirror;
       const repaint = mountRepaint({
-        owner: !readOnly && !mirror,
+        owner,
         alternate: t.buffer.active.type === "alternate",
+        firstMount: !mountedSessions.has(agentId),
+        snapshotBytes: applied.bytes,
         snap: applied.grid,
         fit: { cols: t.cols, rows: t.rows },
       });
+      if (owner) mountedSessions.add(agentId);
       if (repaint === "kick") window.api.terminal.redraw(agentId);
-      sendMountLog(agentId, {
+      window.api.terminal.mountLog(agentId, {
         kind: "mount",
         snapshotBytes: applied.bytes,
         snapshotMs: applied.fetchMs,
@@ -182,12 +190,11 @@ export function useXterm({
       mirrorOwnsSize: () => latest.current.cardOwns,
       onSnapshotApplied: (info) => {
         applied = info;
-        // Written at the snapshot's grid: back to the box's (a sizing card re-applies its own)
         if (!mirror || latest.current.cardOwns) refitRef.current();
-        // At startup the snapshot waits for the reattach, so a fixed timer ran before it
         settleMount();
         takeKeyboard();
       },
+      refit: () => refitRef.current(),
       initialContent,
       fontSize,
       fontFamily,
@@ -230,7 +237,7 @@ export function useXterm({
 
     const resizeObserver = observeContainerSize(container, mirror, refit);
     const untrackView = trackTerminalView();
-    setShown(isShown(container.parentElement ?? container));
+    setShown(isShown(container));
     const mousePress = trackMousePress(container);
 
     return () => {
@@ -238,7 +245,7 @@ export function useXterm({
       cancelFontRefit();
       resizeObserver.disconnect();
       cancelPtyResize(agentId, next.terminal);
-      if (settled) sendMountLog(agentId, UNMOUNT_STATS);
+      if (settled) window.api.terminal.mountLog(agentId, { kind: "unmount" });
       untrackView();
       // WebGL context must be freed before the terminal itself is torn down.
       webglRef.current?.dispose();
@@ -292,6 +299,22 @@ export function useXterm({
 
   const isVisible = useTerminalVisibility(containerRef, agentId);
 
+  // Shown again after display: none: the ResizeObserver can fire before the cells are measured
+  const wasShownRef = useRef(shown);
+  useEffect(() => {
+    const back = shown && !wasShownRef.current;
+    wasShownRef.current = shown;
+    if (!back) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => refitRef.current());
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [shown]);
+
   // T115: hidden writes buffer into the dormant ring and replay on un-hide
   useEffect(() => {
     session?.dormantPipe.setVisible(isVisible);
@@ -304,9 +327,13 @@ export function useXterm({
     // Mirrors draw on canvas: several open at once would eat into Chromium's
     // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
     const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
-    const onScreen = isOnScreen(isVisible, shown);
+    const onScreen = isVisible && shown;
     // A size measured just before hiding is not the one it comes back to
-    if (!onScreen) cancelPtyResize(agentId, terminal);
+    if (!onScreen && cancelPtyResize(agentId, terminal)) resizeDroppedRef.current = true;
+    if (onScreen && resizeDroppedRef.current) {
+      resizeDroppedRef.current = false;
+      refitRef.current();
+    }
     if (onScreen && !webglRef.current && !useCanvas) {
       // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
       const controller = createWebglController(terminal, () =>
@@ -400,7 +427,7 @@ export function useXterm({
     const handleRefit = () => {
       const terminal = terminalRef.current;
       const container = containerRef.current;
-      if (container) setShown(isShown(container.parentElement ?? container));
+      if (container) setShown(isShown(container));
       if (!terminal) return;
       try {
         handleResize();
@@ -420,30 +447,10 @@ export function useXterm({
   return { containerRef, terminalRef, fitAddonRef, serializeAddonRef, shown };
 }
 
-const UNMOUNT_STATS: MountStats = {
-  kind: "unmount",
-  snapshotBytes: 0,
-  snapshotMs: 0,
-  paintMs: null,
-  snapGrid: null,
-  fitGrid: null,
-  replayed: 0,
-  dropped: 0,
-  kick: false,
-};
-
-/** Main logs it as `[TermMount]`, at most once a second per session (never content) */
-function sendMountLog(agentId: string, stats: MountStats): void {
-  try {
-    window.api.terminal.mountLog?.(agentId, stats);
-  } catch {
-    /* a window closing */
-  }
-}
-
-/** Checked on the container's parent: the container itself is display: none while hidden.
- *  `visibility: hidden` comes from a hidden tab or the Agents area under the Dashboard */
-function isShown(el: HTMLElement): boolean {
+/** On the container's parent: the container itself is display: none while hidden, and a hidden
+ *  tab or the Agents area under the Dashboard is `visibility: hidden` */
+function isShown(container: HTMLElement): boolean {
+  const el = container.parentElement ?? container;
   return el.checkVisibility?.({ visibilityProperty: true }) ?? true;
 }
 

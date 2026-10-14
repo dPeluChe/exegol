@@ -1,6 +1,7 @@
+import type { LiveSnapshot } from "@exegol/shared";
 import type { Terminal } from "@xterm/xterm";
 import { DormantRing } from "../../lib/dormant-ring";
-import { chunksAfterSnapshot, type LiveChunk, type LiveSnapshot } from "./live-seq";
+import { chunksAfterSnapshot, type LiveChunk, resizeToSnapshot } from "./live-seq";
 
 export interface DormantPipe {
   /** Set whether the pane is currently visible. Toggling true → false starts
@@ -13,7 +14,7 @@ export interface DormantPipe {
   dispose: () => void;
 }
 
-type WritableTerminal = Pick<Terminal, "write" | "reset">;
+type WritableTerminal = Pick<Terminal, "write" | "reset" | "resize" | "cols" | "rows">;
 
 /**
  * Wires a DormantRing into a terminal so writes are buffered while the pane
@@ -23,12 +24,14 @@ type WritableTerminal = Pick<Terminal, "write" | "reset">;
  * A ring that overflowed holds only the tail of the stream: a TUI redraws its screen with
  * relative cursor moves, so that tail drawn on a reset screen overlapped lines until the next
  * resize. With `fetchSnapshot` (main's emulator, which saw every byte) the pane resets to the
- * real screen instead; output that arrives meanwhile waits and follows it
+ * real screen instead (at its grid, like a mount, then `refit`); output that arrives meanwhile
+ * waits and follows it
  */
 export function createDormantPipe(
   terminal: WritableTerminal,
   initiallyVisible: boolean,
   fetchSnapshot?: () => Promise<LiveSnapshot | null>,
+  refit?: () => void,
 ): DormantPipe {
   const ring = new DormantRing();
   let visible = initiallyVisible;
@@ -45,12 +48,14 @@ export function createDormantPipe(
       if (disposed) return;
       if (snapshot?.data != null) {
         terminal.reset();
+        resizeToSnapshot(terminal, snapshot);
         terminal.write(snapshot.data);
+        refit?.();
       } else if (tail) {
         terminal.write(tail);
       }
       // Output that came while it was fetched: the snapshot may hold some of it already
-      const { replay } = chunksAfterSnapshot(queued, snapshot?.seq ?? null);
+      const { replay } = chunksAfterSnapshot(queued, snapshot?.seq);
       for (const chunk of replay) push(chunk.data, chunk.seq);
     };
     fetch().then(flush, () => flush(null));

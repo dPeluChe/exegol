@@ -1,4 +1,4 @@
-import { CLIPBOARD_IMAGE } from "@exegol/shared";
+import { CLIPBOARD_IMAGE, type LiveSnapshot } from "@exegol/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
@@ -7,7 +7,7 @@ import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
 import { persistShellCwd } from "../../lib/shell-cwd";
 import { useAgentStore } from "../../stores/agents";
-import { chunksAfterSnapshot, type LiveChunk, type LiveSnapshot } from "./live-seq";
+import { chunksAfterSnapshot, createLiveBuffer, resizeToSnapshot } from "./live-seq";
 import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
@@ -36,9 +36,10 @@ interface TerminalSessionDeps {
   mirror?: boolean;
   /** Mirror whose card sizes the session (T194 "fit session to card"): read live */
   mirrorOwnsSize?: () => boolean;
-  /** After the snapshot is parsed (and painted on the next frame): a sizing card re-applies its
-   *  own grid, a pane refits and decides its repaint */
+  /** A frame after the snapshot is parsed */
   onSnapshotApplied?: (info: SnapshotApplied) => void;
+  /** Fit the view again after a snapshot was written at its own grid */
+  refit?: () => void;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -51,9 +52,8 @@ interface TerminalSessionDeps {
 
 export interface SnapshotApplied {
   bytes: number;
-  /** Request to reply */
   fetchMs: number;
-  /** Mount to the first frame after the snapshot was parsed */
+  /** From mount */
   paintMs: number;
   grid: { cols: number; rows: number } | null;
   replayed: number;
@@ -147,11 +147,18 @@ export function setupTerminalSession(
     });
   }
 
+  const fetchSnapshot = async (): Promise<LiveSnapshot | null> => {
+    const snapshot = await window.api.terminal.getSnapshot(deps.agentId).catch(() => null);
+    // Main's grid: another window or a card may have moved the PTY since this renderer sent one
+    if (snapshot) ptyResizes.noteSize(deps.agentId, snapshot.cols, snapshot.rows);
+    return snapshot;
+  };
   const live = !deps.readOnly || !!deps.liveFeed;
   const dormantPipe = createDormantPipe(
     terminal,
     true,
-    live ? () => window.api.terminal.getSnapshot(deps.agentId) : undefined,
+    live ? fetchSnapshot : undefined,
+    deps.refit,
   );
   if (deps.initialContent) terminal.write(deps.initialContent);
 
@@ -264,7 +271,7 @@ export function setupTerminalSession(
     const mountedAt = performance.now();
     let snapshotResolved = false;
     let liveDisposed = false;
-    const liveBuffer: LiveChunk[] = [];
+    const liveBuffer = createLiveBuffer();
     unsubData = window.api.terminal.onData(deps.agentId, (data, seq) => {
       if (liveDisposed) return;
       if (!snapshotResolved) {
@@ -300,46 +307,45 @@ export function setupTerminalSession(
     }
 
     let askedAt = mountedAt;
-    sized
-      .then(() => {
-        askedAt = performance.now();
-        return window.api.terminal.getSnapshot(deps.agentId);
-      })
-      .catch((): LiveSnapshot | null => null)
-      .then((snapshot) => {
-        if (liveDisposed) return;
-        const fetchMs = performance.now() - askedAt;
-        const data = snapshot?.data ?? "";
-        // Written at the grid it was drawn at: at xterm's 80x24 a TUI frame wrapped, and the
-        // alt screen is never reflowed back by the fit that follows
-        const grid = snapshot ? { cols: snapshot.cols, rows: snapshot.rows } : null;
-        if (grid && !deps.mirror && (terminal.cols !== grid.cols || terminal.rows !== grid.rows)) {
-          terminal.resize(grid.cols, grid.rows);
-        }
-        // Chunks that raced the snapshot and are already in it would be written twice
-        const { replay, dropped } = chunksAfterSnapshot(liveBuffer, snapshot?.seq ?? null);
-        liveBuffer.length = 0;
-        snapshotResolved = true;
-        terminal.write(data, () => {
-          requestAnimationFrame(() => {
-            if (liveDisposed) return;
-            deps.onSnapshotApplied?.({
-              bytes: data.length,
-              fetchMs,
-              paintMs: performance.now() - mountedAt,
-              grid,
-              replayed: replay.length,
-              dropped,
-            });
+    const askSnapshot = () => {
+      askedAt = performance.now();
+      return fetchSnapshot();
+    };
+    const applySnapshot = (snapshot: LiveSnapshot | null): void => {
+      if (liveDisposed) return;
+      const buffered = liveBuffer.take();
+      // Too much output raced it: a newer snapshot holds all of it
+      if (buffered === null) {
+        void askSnapshot().then(applySnapshot);
+        return;
+      }
+      const fetchMs = performance.now() - askedAt;
+      const data = snapshot?.data ?? "";
+      if (!deps.mirror) resizeToSnapshot(terminal, snapshot);
+      // Chunks that raced the snapshot and are already in it would be written twice
+      const { replay, dropped } = chunksAfterSnapshot(buffered, snapshot?.seq);
+      snapshotResolved = true;
+      terminal.write(data, () => {
+        requestAnimationFrame(() => {
+          if (liveDisposed) return;
+          deps.onSnapshotApplied?.({
+            bytes: data.length,
+            fetchMs,
+            paintMs: performance.now() - mountedAt,
+            grid: snapshot ? { cols: snapshot.cols, rows: snapshot.rows } : null,
+            replayed: replay.length,
+            dropped,
           });
         });
-        for (const chunk of replay) dormantPipe.push(chunk.data, chunk.seq);
       });
+      for (const chunk of replay) dormantPipe.push(chunk.data, chunk.seq);
+    };
+    void sized.then(askSnapshot).then(applySnapshot);
 
     disposables.push({
       dispose: () => {
         liveDisposed = true;
-        liveBuffer.length = 0;
+        liveBuffer.take();
       },
     });
   }
@@ -388,9 +394,11 @@ export function fitAndSyncSize(
 ): boolean {
   try {
     const host = measureHost(terminal);
-    // Unlaid-out or hidden (display: none) box: the addon would fall back to 80x24 and the PTY
-    // would redraw (and rewrap) at 80 columns for a frame
+    // Unlaid-out or hidden (display: none) box, or cells not measured yet: the addon would fall
+    // back to 80x24 and the PTY would redraw (and rewrap) at 80 columns for a frame
     if (!host?.width || !host?.height) return false;
+    const dims = fitAddon.proposeDimensions();
+    if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return false;
     fitAddon.fit();
     const { cols, rows } = terminal;
     onSize(cols, rows);
@@ -407,9 +415,9 @@ const ptyResizes = createResizeStabilizer((agentId, cols, rows) =>
 );
 
 /** A view that unmounts or hides drops the size it was settling: a transient layout size
- *  reached the PTY after the user had already left (project switch logs) */
-export function cancelPtyResize(agentId: string, terminal: Terminal): void {
-  ptyResizes.cancel(agentId, terminal);
+ *  reached the PTY after the user had already left. True when there was one */
+export function cancelPtyResize(agentId: string, terminal: Terminal): boolean {
+  return ptyResizes.cancel(agentId, terminal);
 }
 
 /** Latest fit per terminal: a newer call makes older rAF retry chains exit, so

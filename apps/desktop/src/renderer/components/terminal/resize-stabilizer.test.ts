@@ -1,51 +1,78 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { createResizeStabilizer } from "./resize-stabilizer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createResizeStabilizer, RESIZE_STABLE_MS } from "./resize-stabilizer";
 
 describe("createResizeStabilizer", () => {
+  beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
-  it("sends only the size the box held for the whole wait", () => {
-    vi.useFakeTimers();
+  it("sends only the last size of a burst", () => {
     const send = vi.fn();
-    const s = createResizeStabilizer(send, 150);
+    const s = createResizeStabilizer(send);
     const view = {};
+    s.request("a", view, 100, 30);
+    vi.advanceTimersByTime(40);
     s.request("a", view, 108, 54);
-    vi.advanceTimersByTime(100);
-    s.request("a", view, 102, 54);
-    vi.advanceTimersByTime(100);
-    s.request("a", view, 108, 54);
-    vi.advanceTimersByTime(149);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS - 1);
     expect(send).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
+    expect(send).toHaveBeenCalledExactlyOnceWith("a", 108, 54);
+  });
+
+  it("a flap back to the size already sent sends nothing", () => {
+    const send = vi.fn();
+    const s = createResizeStabilizer(send);
+    const view = {};
+    s.request("a", view, 108, 54);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS);
+    s.request("a", view, 102, 54);
+    s.request("a", view, 108, 54);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS * 2);
     expect(send).toHaveBeenCalledTimes(1);
-    expect(send).toHaveBeenCalledWith("a", 108, 54);
+  });
+
+  it("the same size as the pending one does not restart the wait", () => {
+    const send = vi.fn();
+    const s = createResizeStabilizer(send);
+    s.request("a", {}, 90, 20);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS - 10);
+    s.request("a", {}, 90, 20);
+    vi.advanceTimersByTime(10);
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("a grid noted from main replaces the last sent one", () => {
+    const send = vi.fn();
+    const s = createResizeStabilizer(send);
+    s.request("a", {}, 102, 54);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS);
+    s.noteSize("a", 66, 10);
+    s.request("a", {}, 102, 54);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS);
+    expect(send).toHaveBeenCalledTimes(2);
   });
 
   it("a view leaving cancels its own pending size, never another view's", () => {
-    vi.useFakeTimers();
     const send = vi.fn();
-    const s = createResizeStabilizer(send, 150);
+    const s = createResizeStabilizer(send);
     const pane = {};
     const card = {};
     s.request("a", pane, 66, 10);
-    s.cancel("a", pane);
-    vi.advanceTimersByTime(200);
+    expect(s.cancel("a", pane)).toBe(true);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS * 2);
     expect(send).not.toHaveBeenCalled();
 
     s.request("a", card, 80, 24);
-    s.cancel("a", pane);
-    vi.advanceTimersByTime(150);
+    expect(s.cancel("a", pane)).toBe(false);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS);
     expect(send).toHaveBeenCalledWith("a", 80, 24);
-    expect(s.has("a")).toBe(false);
   });
 
   it("keeps sessions apart", () => {
-    vi.useFakeTimers();
     const send = vi.fn();
-    const s = createResizeStabilizer(send, 150);
+    const s = createResizeStabilizer(send);
     s.request("a", {}, 10, 10);
     s.request("b", {}, 20, 20);
-    vi.advanceTimersByTime(150);
+    vi.advanceTimersByTime(RESIZE_STABLE_MS);
     expect(send).toHaveBeenCalledTimes(2);
   });
 });

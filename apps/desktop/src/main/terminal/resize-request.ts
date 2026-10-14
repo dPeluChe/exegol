@@ -1,11 +1,10 @@
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { broadcast } from "../lib/event-bus";
-import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
+import { suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
+import { resizeLogLimit } from "./mount-log";
 import { getPtyHost } from "./pty-host";
-
-const limiter = createLogLimiter(10_000);
 
 /**
  * A view asks for a PTY grid (a pane's fit, or a Dashboard card that sizes the session).
@@ -31,8 +30,7 @@ export function requestPtyResize(agentId: string, cols: number, rows: number): v
   if (before) broadcast("terminal:resized", agentId, cols, rows);
 }
 
-/** Sizes only. A held size replaced is always logged (startup only), the rest once per 10 s with
- *  the count of lines held back */
+/** Sizes only. A held size replaced is always logged (startup only), the rest once per 10 s */
 function logResize(
   agentId: string,
   before: { cols: number; rows: number } | null,
@@ -40,7 +38,7 @@ function logResize(
   rows: number,
   held: boolean,
 ): void {
-  const suppressed = limiter.take(agentId, Date.now(), held);
+  const suppressed = resizeLogLimit.take(agentId, Date.now(), held);
   if (suppressed === null) return;
   const from = before ? `${before.cols}x${before.rows}` : "none";
   logger.info(

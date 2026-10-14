@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, powerMonitor, screen } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { withTimeout } from "../lib/timeout";
 import {
   createGpuCrashTracker,
   describeGpu,
@@ -19,8 +20,9 @@ let gpuInfo: unknown = null;
 
 /** Vendor, driver and feature status (no device or machine identifiers): logs and bug reports */
 export async function gpuSummary(): Promise<string> {
-  const info = await app.getGPUInfo("basic").catch(() => gpuInfo);
-  return describeGpu(info, gpuFeatures());
+  // A hung GPU process must never hold up the bug report
+  gpuInfo ??= await withTimeout(app.getGPUInfo("basic"), 1_000, "getGPUInfo").catch(() => null);
+  return describeGpu(gpuInfo, gpuFeatures());
 }
 
 function gpuFeatures(): Record<string, string> | null {

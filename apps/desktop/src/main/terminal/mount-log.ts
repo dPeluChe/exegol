@@ -1,59 +1,58 @@
-/** What a terminal view reports when it mounts or unmounts: sizes, counts and times only */
-export interface TermMountStats {
-  kind: "mount" | "unmount";
-  snapshotBytes: number;
-  snapshotMs: number;
-  paintMs: number | null;
-  snapGrid: string | null;
-  fitGrid: string | null;
-  replayed: number;
-  dropped: number;
-  kick: boolean;
+import type { MountStats } from "@exegol/shared";
+import { createLogLimiter } from "../lib/log-limiter";
+
+export const AGENT_ID = /^[\w-]{1,64}$/;
+const GRID = /^\d{1,4}x\d{1,4}$/;
+
+/** Per-session limits for the terminal view lines: `[TermMount]`, `[Visible]`, `[Resize]` */
+export const mountLogLimit = createLogLimiter(1_000);
+export const visibleLogLimit = createLogLimiter(1_000);
+export const resizeLogLimit = createLogLimiter(10_000);
+
+export function forgetTerminalLogs(agentId: string): void {
+  mountLogLimit.forget(agentId);
+  visibleLogLimit.forget(agentId);
+  resizeLogLimit.forget(agentId);
 }
 
-const AGENT_ID = /^[\w-]{1,64}$/;
-const GRID = /^\d{1,4}x\d{1,4}$/;
+export type MountLog = MountStats & { agentId: string };
 
 function count(n: unknown, max = 1e9): n is number {
   return typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= max;
 }
 
-function grid(g: unknown): string | null | undefined {
-  if (g === null) return null;
-  return typeof g === "string" && GRID.test(g) ? g : undefined;
-}
+const isGrid = (g: unknown): g is string => typeof g === "string" && GRID.test(g);
 
 /** The renderer is untrusted: anything that is not a plain count or grid drops the line */
-export function parseMountStats(agentId: unknown, input: unknown): TermMountStats | null {
+export function parseMountStats(agentId: unknown, input: unknown): MountLog | null {
   if (typeof agentId !== "string" || !AGENT_ID.test(agentId)) return null;
   if (!input || typeof input !== "object") return null;
   const r = input as Record<string, unknown>;
-  const snapGrid = grid(r.snapGrid);
-  const fitGrid = grid(r.fitGrid);
-  if (r.kind !== "mount" && r.kind !== "unmount") return null;
-  if (snapGrid === undefined || fitGrid === undefined) return null;
-  if (!count(r.snapshotBytes) || !count(r.snapshotMs, 1e7)) return null;
-  if (!count(r.replayed, 1e7) || !count(r.dropped, 1e7) || typeof r.kick !== "boolean") return null;
-  if (r.paintMs !== null && !count(r.paintMs, 1e7)) return null;
+  if (r.kind === "unmount") return { agentId, kind: "unmount" };
+  if (r.kind !== "mount") return null;
+  const { snapGrid, fitGrid, snapshotBytes, snapshotMs, paintMs, replayed, dropped, kick } = r;
+  if ((snapGrid !== null && !isGrid(snapGrid)) || !isGrid(fitGrid)) return null;
+  if (!count(snapshotBytes) || !count(snapshotMs, 1e7) || !count(paintMs, 1e7)) return null;
+  if (!count(replayed, 1e7) || !count(dropped, 1e7) || typeof kick !== "boolean") return null;
   return {
-    kind: r.kind,
-    snapshotBytes: Math.round(r.snapshotBytes),
-    snapshotMs: Math.round(r.snapshotMs),
-    paintMs: r.paintMs === null ? null : Math.round(r.paintMs as number),
+    agentId,
+    kind: "mount",
+    snapshotBytes: Math.round(snapshotBytes),
+    snapshotMs: Math.round(snapshotMs),
+    paintMs: Math.round(paintMs),
     snapGrid,
     fitGrid,
-    replayed: Math.round(r.replayed),
-    dropped: Math.round(r.dropped),
-    kick: r.kick,
+    replayed: Math.round(replayed),
+    dropped: Math.round(dropped),
+    kick,
   };
 }
 
-export function formatMountLine(agentId: string, s: TermMountStats): string {
-  if (s.kind === "unmount") return `[TermMount] ${agentId} unmount`;
-  const paint = s.paintMs === null ? "" : ` paint ${s.paintMs}ms`;
+export function formatMountLine(m: MountLog): string {
+  if (m.kind === "unmount") return `[TermMount] ${m.agentId} unmount`;
   return (
-    `[TermMount] ${agentId} mount snapshot ${s.snapshotBytes}B ${s.snapshotMs}ms` +
-    ` grid ${s.snapGrid ?? "none"} -> ${s.fitGrid ?? "unmeasured"}` +
-    ` replayed ${s.replayed} dropped ${s.dropped} kick ${s.kick ? "yes" : "no"}${paint}`
+    `[TermMount] ${m.agentId} mount snapshot ${m.snapshotBytes}B ${m.snapshotMs}ms` +
+    ` grid ${m.snapGrid ?? "none"} -> ${m.fitGrid}` +
+    ` replayed ${m.replayed} dropped ${m.dropped} kick ${m.kick ? "yes" : "no"} paint ${m.paintMs}ms`
   );
 }

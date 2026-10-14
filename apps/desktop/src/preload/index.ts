@@ -104,12 +104,9 @@ contextBridge.exposeInMainWorld("api", {
     resize: (id: string, cols: number, rows: number) =>
       safe.send("terminal:resize", id, cols, rows),
     /** The session's screen for a mounting view, with the seq of the last output it holds */
-    getSnapshot: (
-      id: string,
-    ): Promise<{ data: string | null; seq: number | null; cols: number; rows: number } | null> =>
+    getSnapshot: (id: string): Promise<import("@exegol/shared").LiveSnapshot | null> =>
       safe.invoke("terminal:get-snapshot", id),
-    /** Sizes, counts and times of a view's mount, logged by main (never content) */
-    mountLog: (id: string, stats: Record<string, unknown>) =>
+    mountLog: (id: string, stats: import("@exegol/shared").MountStats) =>
       safe.send("terminal:mount-log", id, stats),
     /** Whether the session ever produced output, without serializing it */
     hasContent: (id: string): Promise<boolean> => safe.invoke("terminal:has-content", id),

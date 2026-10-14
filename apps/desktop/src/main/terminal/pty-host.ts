@@ -1,5 +1,5 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
-import type { ScreenDialog } from "@exegol/shared";
+import type { LiveSnapshot, ScreenDialog } from "@exegol/shared";
 import { noteSessionActivity } from "../agents/session-activity";
 import { createLimiter } from "../lib/concurrency";
 import { logger } from "../lib/logger";
@@ -39,15 +39,10 @@ import { trackSidecarCall } from "./sidecar-health-watch";
 import { isFrameGap, isStaleFrame, lostFrames, resyncFromRing } from "./sidecar-resync";
 
 export type { ReattachedSession } from "./pty-host-reattach";
-
-/** What a mounting view replays: the screen, the seq of the last output in it, and its grid */
-export interface LiveSnapshot {
-  data: string | null;
-  seq: number | null;
-  cols: number;
-  rows: number;
-}
 export type { SessionCallbacks } from "./pty-session-types";
+
+/** A snapshot waits at most this long for queued output to parse, then goes without a seq */
+const SNAPSHOT_PARSE_DEADLINE_MS = 1_500;
 
 export class PtyHost {
   private sessions = new Map<string, Session>();
@@ -422,28 +417,24 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
-  /**
-   * A live snapshot that holds exactly the output up to `seq`: taken once the model parsed every
-   * queued write (a snapshot of a half-parsed model lost bytes the view never got), and in the same
-   * turn as `seq` is read, so a view drops the live chunks it already holds by seq
-   */
-  async parsedLiveSnapshot(id: string): Promise<LiveSnapshot | null> {
-    for (;;) {
-      const s = this.sessions.get(id);
-      if (!s) return null;
-      const { emulator } = s;
-      // Re-checked after each wait: a Retry resync swaps the model, a reattach queues more
-      if (emulator.parsing) {
-        await emulator.drained();
-        continue;
-      }
-      const snapshot = emulator.snapshot();
+  /** The screen holding exactly the output up to `seq`, serialized once that output is parsed */
+  parsedLiveSnapshot(id: string): Promise<LiveSnapshot | null> {
+    const s = this.sessions.get(id);
+    if (!s) return Promise.resolve(null);
+    const { emulator } = s;
+    const seq = s.lastSeq;
+    return emulator.afterParsed(SNAPSHOT_PARSE_DEADLINE_MS, (parsed) => {
+      if (this.sessions.get(id) !== s) return null;
+      // A Retry resync may have swapped the model meanwhile: its screen is not the one `seq` names
+      const model = s.emulator;
+      const snapshot = model.snapshot();
       return {
-        data: snapshot ? snapshot + emulator.modeSequence() : null,
-        seq: s.lastSeq ?? null,
-        ...emulator.size,
+        data: snapshot ? snapshot + model.modeSequence() : null,
+        seq: parsed && model === emulator ? seq : undefined,
+        alt: model.alternateScreen,
+        ...model.size,
       };
-    }
+    });
   }
 
   /** The numbered dialog the session's screen shows now, if any */

@@ -45,9 +45,6 @@ export class HeadlessEmulator {
   private _revision = 0;
   private _hasContent = false;
   private parseWaiters = new Set<() => void>();
-  /** Writes queued in xterm and not parsed yet */
-  private pending = 0;
-  private drainWaiters: Array<() => void> = [];
 
   constructor(cols: number, rows: number, scrollback = 5000) {
     this.terminal = new Terminal({ cols, rows, scrollback, allowProposedApi: true });
@@ -76,24 +73,34 @@ export class HeadlessEmulator {
     this._revision++;
     if (data.length > 0) this._hasContent = true;
     this.parseDecModes(data);
-    this.pending++;
-    this.terminal.write(data, () => {
-      onParsed?.();
-      if (--this.pending > 0) return;
-      const waiters = this.drainWaiters;
-      this.drainWaiters = [];
-      for (const resolve of waiters) resolve();
+    this.terminal.write(data, onParsed);
+  }
+
+  /**
+   * Runs `read` once every write queued so far is parsed: an empty write's callback, which xterm
+   * runs in order between chunks, so nothing queued later is in the model yet. `parsed` is false
+   * past `deadlineMs` or on dispose (the model may then be half-parsed)
+   */
+  afterParsed<T>(deadlineMs: number, read: (parsed: boolean) => T): Promise<T> {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (parsed: boolean) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        this.parseWaiters.delete(onDispose);
+        resolve(read(parsed));
+      };
+      const onDispose = () => finish(false);
+      const timer = setTimeout(onDispose, deadlineMs);
+      this.parseWaiters.add(onDispose);
+      try {
+        this.terminal.write("", () => finish(true));
+      } catch {
+        // xterm refuses writes past 50 MB pending
+        finish(false);
+      }
     });
-  }
-
-  get parsing(): boolean {
-    return this.pending > 0;
-  }
-
-  /** Every write queued so far is parsed. Resolves in the microtask after xterm's parse task, so
-   *  no frame can be queued between it and a synchronous snapshot taken right after */
-  async drained(): Promise<void> {
-    while (this.pending > 0) await new Promise<void>((resolve) => this.drainWaiters.push(resolve));
   }
 
   /**
@@ -187,9 +194,6 @@ export class HeadlessEmulator {
   dispose(): void {
     for (const resolve of this.parseWaiters) resolve();
     this.parseWaiters.clear();
-    this.pending = 0;
-    for (const resolve of this.drainWaiters) resolve();
-    this.drainWaiters = [];
     this.terminal.dispose();
   }
 

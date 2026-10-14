@@ -16,7 +16,7 @@ const mount = {
 describe("mount log", () => {
   it("formats sizes, counts and times", () => {
     const stats = parseMountStats("agent-1", mount);
-    expect(stats && formatMountLine("agent-1", stats)).toBe(
+    expect(stats && formatMountLine(stats)).toBe(
       "[TermMount] agent-1 mount snapshot 52431B 12ms grid 108x54 -> 102x54 replayed 3 dropped 2 kick no paint 49ms",
     );
   });
@@ -29,13 +29,13 @@ describe("mount log", () => {
   });
 
   it("an unmount is one short line", () => {
-    const stats = parseMountStats("a", {
-      ...mount,
-      kind: "unmount",
-      snapGrid: null,
-      fitGrid: null,
-      paintMs: null,
-    });
-    expect(stats && formatMountLine("a", stats)).toBe("[TermMount] a unmount");
+    const stats = parseMountStats("a", { kind: "unmount" });
+    expect(stats && formatMountLine(stats)).toBe("[TermMount] a unmount");
+  });
+
+  it("a mount with no snapshot names no grid", () => {
+    const stats = parseMountStats("a", { ...mount, snapGrid: null });
+    expect(stats && formatMountLine(stats)).toContain("grid none -> 102x54");
+    expect(parseMountStats("a", { ...mount, fitGrid: null })).toBeNull();
   });
 });

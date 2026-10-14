@@ -1,10 +1,17 @@
+import type { LiveSnapshot } from "@exegol/shared";
 import { describe, expect, it, vi } from "vitest";
-import type { LiveSnapshot } from "./live-seq";
 import { createDormantPipe } from "./terminal-dormant-wiring";
 
 const fakeTerminal = () => {
   const log: string[] = [];
-  return { log, write: vi.fn((d: string) => log.push(d)), reset: vi.fn(() => log.push("<reset>")) };
+  return {
+    log,
+    cols: 80,
+    rows: 24,
+    write: vi.fn((d: string) => log.push(d)),
+    reset: vi.fn(() => log.push("<reset>")),
+    resize: vi.fn((c: number, r: number) => log.push(`<${c}x${r}>`)),
+  };
 };
 
 describe("createDormantPipe", () => {
@@ -27,7 +34,7 @@ describe("createDormantPipe", () => {
     pipe.setVisible(true);
     pipe.push("live"); // arrives while the snapshot is on its way
     expect(t.log).toEqual([]);
-    resolve({ data: "SCREEN", seq: null, cols: 80, rows: 24 });
+    resolve({ data: "SCREEN", cols: 80, rows: 24 });
     await Promise.resolve();
     await Promise.resolve();
     expect(t.log).toEqual(["<reset>", "SCREEN", "live"]);
@@ -46,6 +53,20 @@ describe("createDormantPipe", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(t.log).toEqual(["<reset>", "SCREEN", "new"]);
+  });
+
+  it("an alt-screen snapshot is written at its own grid, then the view refits", async () => {
+    const t = fakeTerminal();
+    const refit = vi.fn(() => t.log.push("<refit>"));
+    let resolve: (s: LiveSnapshot) => void = () => {};
+    const pipe = createDormantPipe(t, true, () => new Promise((r) => (resolve = r)), refit);
+    pipe.setVisible(false);
+    for (let i = 0; i < 300; i++) pipe.push(`frame${i}`);
+    pipe.setVisible(true);
+    resolve({ data: "TUI", seq: 299, cols: 108, rows: 54, alt: true });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(t.log).toEqual(["<reset>", "<108x54>", "TUI", "<refit>"]);
   });
 
   it("without a snapshot source it falls back to the ring's tail", () => {
