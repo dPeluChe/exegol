@@ -1,6 +1,7 @@
 /** Local voice dictation (T201 phase 2): settings, status, history and the shortcut chord */
 
 import { applySpokenPunctuation } from "./dictation-punctuation";
+import { collapseRepeats } from "./dictation-repeats";
 
 /** Mic audio is resampled to this before it leaves the renderer; every model takes it */
 export const DICTATION_SAMPLE_RATE = 16_000;
@@ -22,16 +23,19 @@ export function sanitizeDictation(text: string): string {
   return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
 }
 
-/** What a dictation inserts: sanitized, then spoken punctuation when it is on */
+/** What a dictation inserts: sanitized, runs of a repeated word collapsed, then spoken
+ *  punctuation when it is on */
 export function cleanDictation(text: string, opts: { spokenPunctuation: boolean }): string {
-  const clean = sanitizeDictation(text);
+  const clean = collapseRepeats(sanitizeDictation(text)).text;
   return opts.spokenPunctuation ? applySpokenPunctuation(clean) : clean;
 }
 
 export const DICTATION_VOCABULARY_MAX = 200;
 export const DICTATION_TERM_MAX = 64;
-/** hotwordsScore in sherpa-onnx: added per matched token while decoding */
-export const DICTATION_VOCABULARY_BOOSTS = [1.5, 3, 5] as const;
+/** hotwordsScore in sherpa-onnx: added per matched token while decoding (Light, Normal, Strong).
+ *  Past 3 short phrases fill with terms even with the engine's guards: docs/TASK_COMPLETED/2610.md */
+export const DICTATION_VOCABULARY_BOOSTS = [1, 2, 3] as const;
+export const DICTATION_VOCABULARY_BOOST_LABELS = ["Light", "Normal", "Strong"] as const;
 
 /** One term per line. Commas, slashes and colons are the engines' separators: they become spaces */
 export function parseVocabulary(text: string | readonly string[]): string[] {
@@ -218,7 +222,7 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   inputDeviceLabel: null,
   vocabulary: [...DEFAULT_DICTATION_VOCABULARY],
   projectVocabulary: {},
-  vocabularyBoost: 3,
+  vocabularyBoost: 2,
   spokenPunctuation: true,
   language: "en",
 };
@@ -227,7 +231,12 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
 export function dictationSettingsOf(
   saved: Partial<DictationSettings> | undefined,
 ): DictationSettings {
-  return { ...DEFAULT_DICTATION_SETTINGS, ...saved };
+  const settings = { ...DEFAULT_DICTATION_SETTINGS, ...saved };
+  // A boost off the scale (the old Light 1.5 and Strong 5): back to the default
+  const boosts: readonly number[] = DICTATION_VOCABULARY_BOOSTS;
+  if (!boosts.includes(settings.vocabularyBoost))
+    settings.vocabularyBoost = DEFAULT_DICTATION_SETTINGS.vocabularyBoost;
+  return settings;
 }
 
 /** Electron's getMediaAccessStatus values, plus "unknown" where the OS does not say */

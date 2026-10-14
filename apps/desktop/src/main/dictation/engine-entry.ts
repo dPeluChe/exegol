@@ -9,6 +9,8 @@ import * as sherpa from "sherpa-onnx-node";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
 import { isInside, type RecognizerSpec, specPaths } from "./model-config";
 import {
+  biasPhrase,
+  degenerateDecode,
   joinPhrases,
   SEGMENTER_START,
   type Segmenter,
@@ -41,6 +43,8 @@ interface Session {
   texts: string[];
   decoding: Promise<void>;
   phraseMs: number;
+  /** Phrases decoded without the vocabulary (little speech, or the biased text repeated itself) */
+  unbiased: number;
   /** A phrase decode threw: finish decodes everything in one pass instead */
   phraseFailed: boolean;
   /** Cancelled or replaced: its queued phrase decodes do not run */
@@ -49,6 +53,8 @@ interface Session {
 
 let loadedKey: string | null = null;
 let loaded: Loaded | null = null;
+/** The loaded model's vocabulary, given per stream */
+let hotwords: string | null = null;
 /** Pauses cut only phrases at least this long (Whisper decodes a 30 s window per phrase) */
 let minPhraseMs = 0;
 let loading: Promise<void> | null = null;
@@ -88,6 +94,7 @@ async function load(modelId: string, key: string, spec: RecognizerSpec): Promise
         ? { kind: "offline", recognizer: await sherpa.OfflineRecognizer.createAsync(spec.config) }
         : { kind: "online", recognizer: new sherpa.OnlineRecognizer(spec.config) };
     loadedKey = key;
+    hotwords = spec.hotwords ?? null;
     minPhraseMs = spec.config.modelConfig.whisper ? WHISPER_MIN_PHRASE_MS : 0;
     reply({ type: "loaded", modelId });
   } catch (err) {
@@ -111,12 +118,22 @@ function pump(s: Session): void {
   }
 }
 
-async function decodeOffline(samples: Float32Array): Promise<string> {
+/** With the vocabulary only for a phrase with enough speech, and again without it when the
+ *  biased text repeats itself */
+async function decodeOffline(s: Session, samples: Float32Array, speechMs: number): Promise<string> {
   await loading;
   if (loaded?.kind !== "offline") throw new Error("the model did not load");
-  const stream = loaded.recognizer.createStream();
-  stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
-  return (await loaded.recognizer.decodeAsync(stream)).text.trim();
+  const { recognizer } = loaded;
+  const run = async (words: string | null): Promise<string> => {
+    const stream = words ? recognizer.createStream(words) : recognizer.createStream();
+    stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
+    return (await recognizer.decodeAsync(stream)).text.trim();
+  };
+  if (!hotwords) return run(null);
+  const text = biasPhrase(speechMs) ? await run(hotwords) : null;
+  if (text !== null && !degenerateDecode(text)) return text;
+  s.unbiased++;
+  return run(null);
 }
 
 /** [from, to) of the current phrase's chunks as one buffer */
@@ -143,7 +160,7 @@ function addOffline(s: Session, samples: Float32Array): void {
       if (s.cancelled) return;
       const started = Date.now();
       try {
-        s.texts[index] = await decodeOffline(audio);
+        s.texts[index] = await decodeOffline(s, audio, cut.speechMs);
       } catch {
         s.phraseFailed = true;
       }
@@ -169,6 +186,7 @@ interface Finished {
   phrases: number;
   phraseMs: number;
   fullPass: boolean;
+  unbiased: number;
 }
 
 async function finish(s: Session): Promise<Finished> {
@@ -178,7 +196,11 @@ async function finish(s: Session): Promise<Finished> {
     for (const samples of s.pending.splice(0)) addOffline(s, samples);
     await s.decoding;
     if (tailHasSpeech(s.seg) && !s.phraseFailed) {
-      const tail = await decodeOffline(phraseAudio(s, s.seg.start, s.seg.end)).catch(() => {
+      const tail = await decodeOffline(
+        s,
+        phraseAudio(s, s.seg.start, s.seg.end),
+        s.seg.speechMs,
+      ).catch(() => {
         s.phraseFailed = true;
         return "";
       });
@@ -187,17 +209,23 @@ async function finish(s: Session): Promise<Finished> {
     const phrases = s.texts.length;
     const joined = joinPhrases(s.texts);
     if (!s.phraseFailed && (joined || s.total === 0))
-      return { text: joined, phrases, phraseMs: s.phraseMs, fullPass: false };
+      return { text: joined, phrases, phraseMs: s.phraseMs, fullPass: false, unbiased: s.unbiased };
     // A phrase failed, or cuts split a short utterance badly: one pass over everything
-    const text = await decodeOffline(concat(s.all, s.total));
-    return { text, phrases, phraseMs: s.phraseMs, fullPass: true };
+    const text = await decodeOffline(s, concat(s.all, s.total), Number.POSITIVE_INFINITY);
+    return { text, phrases, phraseMs: s.phraseMs, fullPass: true, unbiased: s.unbiased };
   }
   // Trailing silence lets the streaming model emit its last words (upstream example: 0.4 s)
   s.pending.push(new Float32Array(SAMPLE_RATE * 0.4));
   pump(s);
   const { recognizer } = loaded;
   const stream = s.online;
-  const streamed = (text: string) => ({ text, phrases: 0, phraseMs: 0, fullPass: false });
+  const streamed = (text: string) => ({
+    text,
+    phrases: 0,
+    phraseMs: 0,
+    fullPass: false,
+    unbiased: 0,
+  });
   if (!stream) return streamed("");
   stream.inputFinished();
   while (recognizer.isReady(stream)) recognizer.decode(stream);
@@ -223,6 +251,7 @@ function handle(msg: EngineRequest): void {
         texts: [],
         decoding: Promise.resolve(),
         phraseMs: 0,
+        unbiased: 0,
         phraseFailed: false,
         cancelled: false,
       };

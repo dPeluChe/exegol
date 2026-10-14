@@ -9,7 +9,7 @@ import {
   vocabularyUse,
 } from "./model-config";
 
-/** Files the engine reads for a vocabulary: outside the models folder, which stays as downloaded */
+/** The file the engine reads for a vocabulary (the bpe vocab): outside the models folder, which stays as downloaded */
 export const VOCAB_DIR = join(EXEGOL_DIR, "dictation-vocab");
 
 /** What a dictation used, for its recording's .json: counts and a hash, never the words */
@@ -41,9 +41,8 @@ export async function prepareVocabulary(
   const hash = vocabularyHash(terms, score);
   const use = vocabularyUse(modelId);
   const info = { terms: terms.length, hash, applied: use !== null };
-  const hotwordsFile = join(VOCAB_DIR, "hotwords.txt");
   const bpeVocab = join(VOCAB_DIR, `${modelId}.bpe.vocab`);
-  const spec = { terms, score, hotwordsFile, bpeVocab };
+  const spec = { terms, score, bpeVocab };
   if (use !== "hotwords") return { spec: use ? spec : null, info };
   await mkdir(VOCAB_DIR, { recursive: true, mode: 0o700 });
   await writeOnce(
@@ -51,6 +50,5 @@ export async function prepareVocabulary(
     async () => bpeVocabFromTokens(await readFile(join(modelDir, "tokens.txt"), "utf8")),
     modelDir,
   );
-  await writeOnce(hotwordsFile, () => `${terms.join("\n")}\n`, hash);
   return { spec, info };
 }

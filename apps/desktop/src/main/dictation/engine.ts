@@ -256,8 +256,7 @@ export async function finishSession(sessionId: string): Promise<Final & { decode
   });
   send({ type: "finish", sessionId });
   try {
-    const { text, phrases, phraseMs, fullPass } = await done;
-    return { text, phrases, phraseMs, fullPass, decodeMs: Date.now() - stoppedAt };
+    return { ...(await done), decodeMs: Date.now() - stoppedAt };
   } finally {
     touch();
   }

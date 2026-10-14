@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutNode } from "../../stores/workspace/types";
 import {
+  anchorRect,
   dockedPill,
   freeSpan,
   NO_OFFSET,
+  offsetAt,
   offsetBox,
   offsetOf,
   overlayMode,
@@ -121,30 +123,68 @@ describe("offsetBox", () => {
 
   it("follows the offset and is kept inside the pane it sits over", () => {
     const pane = { left: 400, top: 100, width: 600, height: 600 };
-    const moved = offsetBox(pane, viewport, card, { dx: -50, dy: 120 });
-    expect(moved).toMatchObject({ left: 470, top: 520 });
-    const far = offsetBox(pane, viewport, card, { dx: 5000, dy: -5000 });
+    const moved = offsetBox(pane, viewport, card, { fx: -50 / 300, fy: 120 / 300 });
+    expect(moved.left).toBeCloseTo(470);
+    expect(moved.top).toBeCloseTo(520);
+    const far = offsetBox(pane, viewport, card, { fx: 1, fy: -1 });
     expect(far).toMatchObject({ left: 1000 - 8 - 360, top: 100 + 8 + 100 });
   });
 
   it("a pane too small for the card clamps that axis to the window instead", () => {
     const pane = { left: 1000, top: 600, width: 200, height: 150 };
-    const box = offsetBox(pane, viewport, card, { dx: 0, dy: 500 });
+    const box = offsetBox(pane, viewport, card, { fx: 0, fy: 1 });
     expect(box.left).toBe(832);
     expect(box.top).toBe(800 - 8 - 100);
   });
 
   it("a part of the pane past the window does not count", () => {
     const pane = { left: -300, top: 0, width: 900, height: 800 };
-    expect(offsetBox(pane, viewport, card, { dx: -1000, dy: 0 }).left).toBe(8);
+    expect(offsetBox(pane, viewport, card, { fx: -1, fy: 0 }).left).toBe(8);
   });
 
   it("offsetOf gives back the offset of a box that was not clamped", () => {
     const pane = { left: 400, top: 100, width: 600, height: 600 };
-    const offset = { dx: -50, dy: 120 };
+    const offset = { fx: -0.25, fy: 0.5 };
     expect(offsetOf(offsetBox(pane, viewport, card, offset), pane)).toEqual(offset);
     const window = { left: 0, top: 0, ...viewport };
-    const clamped = offsetOf(offsetBox(window, viewport, card, { dx: 9000, dy: 0 }), window);
-    expect(clamped).toEqual({ dx: 1200 - 8 - 180 - 600, dy: 0 });
+    const clamped = offsetOf(offsetBox(window, viewport, card, { fx: 1, fy: 0 }), window);
+    expect(clamped).toEqual({ fx: (1200 - 8 - 180 - 600) / 600, fy: 0 });
+  });
+
+  it("offsetAt is a fraction of the anchor, clamped to it", () => {
+    const pane = { left: 400, top: 100, width: 600, height: 600 };
+    expect(offsetAt(850, 400, pane)).toEqual({ fx: 0.5, fy: 0 });
+    expect(offsetAt(5000, -5000, pane)).toEqual({ fx: 1, fy: -1 });
+  });
+});
+
+describe("anchor in a tab split in two panes", () => {
+  // Title bar 40 px, sidebar 0: the left pane (the terminal) and the right one (a launcher)
+  const left = { left: 0, top: 40, width: 600, height: 760 };
+  const right = { left: 600, top: 40, width: 600, height: 760 };
+
+  it("anchors on the target pane's rect, centered over it", () => {
+    const anchor = anchorRect("pane", left, viewport);
+    expect(anchor).toEqual(left);
+    const box = offsetBox(anchor, viewport, card, NO_OFFSET);
+    expect(box.left + box.width / 2).toBe(300);
+    expect(box.top).toBe(40 + 380);
+    const other = offsetBox(anchorRect("pane", right, viewport), viewport, card, NO_OFFSET);
+    expect(other.left + other.width / 2).toBe(900);
+  });
+
+  it("falls back to the window with no pane, a hidden pane, or in window mode", () => {
+    const window = { left: 0, top: 0, ...viewport };
+    expect(anchorRect("pane", null, viewport)).toEqual(window);
+    expect(anchorRect("pane", { left: 0, top: 0, width: 0, height: 0 }, viewport)).toEqual(window);
+    expect(anchorRect("window", left, viewport)).toEqual(window);
+  });
+
+  it("a spot dragged in the full-width pane keeps its relative place in the half one", () => {
+    const full = { left: 0, top: 40, width: 1200, height: 760 };
+    const dragged = offsetAt(600 + 150, 420, full);
+    const box = offsetBox(anchorRect("pane", left, viewport), viewport, card, dragged);
+    expect(box.left + box.width / 2).toBe(300 + 75);
+    expect(box.left + box.width).toBeLessThanOrEqual(600);
   });
 });

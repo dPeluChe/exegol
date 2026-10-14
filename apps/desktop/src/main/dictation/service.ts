@@ -1,5 +1,6 @@
 import {
   cleanDictation,
+  collapseRepeats,
   DEFAULT_SPEECH_MODEL_KEY,
   DICTATION_SAMPLE_RATE,
   type DictationCancelSource,
@@ -12,6 +13,7 @@ import {
   dictationVocabulary,
   parseChord,
   type SpeechModelEntry,
+  sanitizeDictation,
 } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "nanoid";
@@ -233,13 +235,15 @@ export async function stopDictation(
   media?.release();
   const ending = { id: input.sessionId, cancelled: false };
   stopping = ending;
-  const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(
+  const { text, decodeMs, phrases, phraseMs, fullPass, unbiased } = await finishSession(
     input.sessionId,
   ).finally(() => {
     if (stopping === ending) stopping = null;
   });
   const phraseLog =
-    phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
+    phrases > 0
+      ? `${phrases} phrases decoded while recording in ${phraseMs}ms${unbiased > 0 ? ` (${unbiased} without vocabulary)` : ""}, `
+      : "";
   // Lengths and timings only: dictated text never goes to the log (bug reports are public)
   logger.info(
     `[Dictation] stopped by ${input.by}; ${modelId}: ${Math.round(input.durationMs / 100) / 10}s of audio, ${text.length} chars; ${loadSplit(cold)}${phraseLog}decode after stop ${decodeMs}ms${fullPass ? " (full pass)" : ""}`,
@@ -256,6 +260,8 @@ export async function stopDictation(
     pruneDictations(db, { days: settings.retentionDays, max: settings.retentionMax });
     broadcast("dictation:done", {});
     const inserted = cleanDictation(text, settings);
+    const { collapsed } = collapseRepeats(sanitizeDictation(text));
+    if (collapsed > 0) logger.info(`[Dictation] collapsed ${collapsed} repeats`);
     if (audio && inserted) {
       const projectName = saved.projectId ? (getProject(db, saved.projectId)?.name ?? null) : null;
       const at = new Date();
@@ -269,7 +275,7 @@ export async function stopDictation(
           projectName,
           target: input.targetKind,
           modelId,
-          transcribeMs: decodeMs,
+          transcribeMs: phraseMs + decodeMs,
           historyId: saved.id,
           text: inserted,
           rawText: text,

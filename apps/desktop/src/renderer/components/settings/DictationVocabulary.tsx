@@ -1,4 +1,5 @@
 import {
+  DICTATION_VOCABULARY_BOOST_LABELS,
   DICTATION_VOCABULARY_BOOSTS,
   DICTATION_VOCABULARY_MAX,
   type DictationSettings as DictationPrefs,
@@ -60,9 +61,9 @@ export function DictationVocabulary({
         <SelectRow
           label="Boost"
           value={prefs.vocabularyBoost}
-          options={DICTATION_VOCABULARY_BOOSTS.map((b) => [
+          options={DICTATION_VOCABULARY_BOOSTS.map((b, i) => [
             b,
-            b === 1.5 ? "Light" : b === 3 ? "Normal" : "Strong",
+            DICTATION_VOCABULARY_BOOST_LABELS[i] ?? String(b),
           ])}
           onChange={(vocabularyBoost) => set({ vocabularyBoost })}
         />

@@ -82,7 +82,6 @@ describe("vocabulary", () => {
   const vocab = {
     terms: ["worktree", "pull request"],
     score: 3,
-    hotwordsFile: "/home/u/.exegol/dictation-vocab/hotwords.txt",
     bpeVocab: "/home/u/.exegol/dictation-vocab/p.bpe.vocab",
   };
   const spec = (id: string, v: typeof vocab | null = vocab) => {
@@ -91,13 +90,17 @@ describe("vocabulary", () => {
     return recognizerSpec(entry, join(ROOT, id), 2, "en", v)?.config;
   };
 
-  it("Parakeet gets hotwords with modified_beam_search and the bpe vocab", () => {
+  it("Parakeet gets hotwords per stream with modified_beam_search and the bpe vocab", () => {
     expect(spec("parakeet-tdt-0.6b-v3-int8")).toMatchObject({
       decodingMethod: "modified_beam_search",
-      hotwordsFile: vocab.hotwordsFile,
       hotwordsScore: 3,
       modelConfig: { modelingUnit: "bpe", bpeVocab: vocab.bpeVocab },
     });
+    expect(spec("parakeet-tdt-0.6b-v3-int8")?.hotwordsFile).toBeUndefined();
+    const entry = MODEL_CATALOG.find((m) => m.id === "parakeet-tdt-0.6b-v3-int8");
+    if (!entry) throw new Error("parakeet");
+    expect(recognizerSpec(entry, ROOT, 2, "en", vocab)?.hotwords).toBe("worktree/pull request");
+    expect(recognizerSpec(entry, ROOT, 2, "en")?.hotwords).toBeUndefined();
   });
 
   it("without terms Parakeet stays on greedy search", () => {
@@ -118,7 +121,7 @@ describe("vocabulary", () => {
     for (const entry of MODEL_CATALOG.filter((m) => !vocabularyUse(m.id))) {
       const config = recognizerSpec(entry, join(ROOT, entry.id), 2, "en", vocab)?.config;
       expect(JSON.stringify(config), entry.id).not.toContain("worktree");
-      expect(config?.hotwordsFile, entry.id).toBeUndefined();
+      expect(recognizerSpec(entry, ROOT, 2, "en", vocab)?.hotwords, entry.id).toBeUndefined();
     }
   });
 

@@ -10,6 +10,9 @@ import {
  *  (partial text while listening). `config` is sherpa-onnx-node's recognizer config */
 export interface RecognizerSpec {
   kind: "offline" | "online";
+  /** Parakeet's terms, "/"-separated, given per stream: a phrase with little speech decodes
+   *  without them (the recognizer's own hotwords file could not be turned off per phrase) */
+  hotwords?: string;
   config: {
     featConfig: { sampleRate: number; featureDim: number };
     modelConfig: Record<string, unknown>;
@@ -17,13 +20,11 @@ export interface RecognizerSpec {
   };
 }
 
-/** The vocabulary a recognizer is built with. Files live under the vocabulary folder (main
- *  writes them), never in the models folder */
+/** The vocabulary a recognizer is built with. Its file lives under the vocabulary folder (main
+ *  writes it), never in the models folder */
 export interface VocabularySpec {
   terms: string[];
   score: number;
-  /** One term per line, for transducers decoded with modified_beam_search */
-  hotwordsFile: string;
   /** sentencepiece vocab derived from the model's tokens.txt: lets hotwords be plain words */
   bpeVocab: string;
 }
@@ -40,8 +41,10 @@ const offline = (
   numThreads: number,
   extra: Record<string, unknown> = {},
   featureDim = 80,
+  hotwords?: string,
 ): RecognizerSpec => ({
   kind: "offline",
+  ...(hotwords ? { hotwords } : {}),
   config: {
     featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim },
     modelConfig: { ...modelConfig, numThreads, provider: "cpu", debug: 0 },
@@ -82,13 +85,10 @@ const BUILDERS: Record<string, Builder> = {
       },
       numThreads,
       vocab
-        ? {
-            decodingMethod: "modified_beam_search",
-            maxActivePaths: 4,
-            hotwordsFile: vocab.hotwordsFile,
-            hotwordsScore: vocab.score,
-          }
+        ? { decodingMethod: "modified_beam_search", maxActivePaths: 4, hotwordsScore: vocab.score }
         : {},
+      80,
+      vocab?.terms.join("/"),
     ),
   "whisper-large-v3-turbo-int8": (file, numThreads) =>
     offline(

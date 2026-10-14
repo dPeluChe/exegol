@@ -25,5 +25,7 @@ export type EngineReply =
       phraseMs: number;
       /** The phrases came back empty or one failed: everything was decoded again */
       fullPass: boolean;
+      /** Phrases decoded without the vocabulary: too little speech, or the biased text repeated */
+      unbiased: number;
     }
   | { type: "failed"; sessionId: string; error: string };

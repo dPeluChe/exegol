@@ -90,12 +90,12 @@ function Positioned({ paneId }: { paneId: string | null }) {
   const [box, setBox] = useState<OverlayBox | null>(null);
   const [card, setCard] = useState<HTMLDivElement | null>(null);
   const drag = useOverlayDrag({ mode, paneId, width, card, apply: setBox });
-  const { dx, dy, live } = drag;
+  const { fx, fy, live } = drag;
   useLayoutEffect(() => {
     let frame = 0;
     const place = () => {
       frame = 0;
-      const offset = live.current ?? { dx, dy };
+      const offset = live.current ?? { fx, fy };
       const next =
         mode === "dock" ? dockBox() : cardBox(mode, paneId, { width, el: card }, offset).box;
       setBox((prev) => (sameBox(prev, next) ? prev : next));
@@ -122,7 +122,7 @@ function Positioned({ paneId }: { paneId: string | null }) {
       observer.disconnect();
       window.removeEventListener("resize", schedule);
     };
-  }, [mode, paneId, width, dx, dy, card, live]);
+  }, [mode, paneId, width, fx, fy, card, live]);
   if (!box) return null;
   const failed = phase === "error" || phase === "mic-denied";
   return (

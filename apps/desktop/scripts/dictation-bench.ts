@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import {
+  DEFAULT_DICTATION_SETTINGS,
   DICTATION_LANGUAGE_IDS,
   type DictationLanguage,
   parseVocabulary,
@@ -47,7 +48,7 @@ if (!DICTATION_LANGUAGE_IDS.includes(language)) {
 }
 const vocabFile = values("--vocab")[0];
 const vocabTerms = vocabFile ? parseVocabulary(readFileSync(resolve(vocabFile), "utf8")) : [];
-const vocabScore = Number(values("--boost")[0] ?? 3);
+const vocabScore = Number(values("--boost")[0] ?? DEFAULT_DICTATION_SETTINGS.vocabularyBoost);
 
 interface Clip {
   name: string;
@@ -111,16 +112,15 @@ function loadClips(dir: string): Clip[] {
   return clips.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** The --vocab terms as the engine would build them, files in a temp folder */
+/** The --vocab terms as the engine would build them, the bpe vocab in a temp folder. A full pass
+ *  over each clip: the engine's per-phrase choice (no terms on a short phrase) is not applied */
 function vocabularyFor(target: ModelTarget): VocabularySpec | null {
   if (vocabTerms.length === 0 || !vocabularyUse(target.entry.id)) return null;
   const dir = mkdtempSync(join(tmpdir(), "exegol-bench-vocab-"));
-  const hotwordsFile = join(dir, "hotwords.txt");
   const bpeVocab = join(dir, "model.bpe.vocab");
-  writeFileSync(hotwordsFile, `${vocabTerms.join("\n")}\n`);
   const tokens = join(target.dir, "tokens.txt");
   if (existsSync(tokens)) writeFileSync(bpeVocab, bpeVocabFromTokens(readFileSync(tokens, "utf8")));
-  return { terms: vocabTerms, score: vocabScore, hotwordsFile, bpeVocab };
+  return { terms: vocabTerms, score: vocabScore, bpeVocab };
 }
 
 async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => Promise<string>> {
@@ -129,7 +129,7 @@ async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => 
   if (spec.kind === "offline") {
     const recognizer = await sherpa.OfflineRecognizer.createAsync(spec.config);
     return async (samples) => {
-      const stream = recognizer.createStream();
+      const stream = recognizer.createStream(spec.hotwords);
       stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
       return (await recognizer.decodeAsync(stream)).text.trim();
     };
