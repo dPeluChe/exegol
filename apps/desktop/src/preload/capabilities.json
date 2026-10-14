@@ -452,6 +452,7 @@
     "dictation:audio",
     "dictation:mark-browser",
     "dictation:insert-browser",
+    "dictation:test-mic",
     "dictation:partial",
     "dictation:engine",
     "dictation:key",

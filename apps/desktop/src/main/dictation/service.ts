@@ -217,6 +217,7 @@ export async function stopDictation(
   logger.info(
     `[Dictation] stopped by ${input.by}; ${modelId}: ${Math.round(input.durationMs / 100) / 10}s of audio, ${text.length} chars; ${loadSplit(cold)}${phraseLog}decode after stop ${decodeMs}ms${fullPass ? " (full pass)" : ""}`,
   );
+  if (!sanitizeDictation(text)) logger.info("[Dictation] heard nothing (empty)");
   if (text) {
     const settings = dictationSettings(db);
     const saved = addDictation(db, {
@@ -275,7 +276,11 @@ export function cancelDictation(sessionId: string, source: DictationCancelSource
   if (stopping?.id === sessionId) stopping.cancelled = true;
   if (active?.id !== sessionId) return;
   const secs = Math.round((Date.now() - active.startedAt) / 100) / 10;
-  logger.info(`[Dictation] cancelled after ${secs}s (${source})`);
+  logger.info(
+    source === "flat"
+      ? `[Dictation] heard nothing (flat) after ${secs}s`
+      : `[Dictation] cancelled after ${secs}s (${source})`,
+  );
   active.media?.release();
   active = null;
   disarmDictationSession();

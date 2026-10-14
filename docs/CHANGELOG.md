@@ -14,6 +14,13 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Settings > Dictation > Input: choose the microphone (System default first; names show once the mic was allowed). If the chosen one is unplugged, the dictation uses the system default and the card says so; the card's footer shows which input is in use
 - Settings > Dictation > Recordings: "Keep recordings for model testing" (off by default) saves each dictation that ends with text inserted or copied, its audio and the text, in `~/.exegol/dictation-audio` on this Mac, to compare speech models later on your own speech. Recordings are deleted after 5, 10, 15 or 30 days (10 by default); turning the setting off keeps what was saved. The card shows how many there are and their size per project, with Open folder and Clear recordings; Settings > Storage lists them too. Developers can score every installed model on them with `bun apps/desktop/scripts/dictation-bench.ts` (word and character error rate, speed)
 
+- Settings > Dictation > Input: a Test button shows a live level bar for the chosen microphone (up to 15 s; the mic opens only when you press it and closes when the test ends, you leave the tab or the window hides)
+- A dictation that heard nothing (the mic gave no signal, or no words were recognized) now says "Heard nothing from <input>: check the input in Settings > Dictation" with an Open Settings button, instead of a vague notice
+
+### Changed
+- The chosen microphone is found again when the system gives it a new id (replugged, another port): the one input with the same device group or name is used and the setting follows it; with two inputs of that name it counts as not connected. A missing microphone is used again as soon as it is back
+- A microphone unplugged mid-dictation no longer ends it: the system default takes over in the same dictation (pause, text and target kept) and the card says "<name> disconnected, using system default". A new input picked in Settings while recording applies from the next dictation
+
 ### Fixed
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
 

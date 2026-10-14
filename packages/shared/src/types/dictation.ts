@@ -48,12 +48,14 @@ export const DICTATION_STOP_REASONS = [
 ] as const;
 export type DictationStopReason = (typeof DICTATION_STOP_REASONS)[number];
 
-/** `esc-forwarded`: Esc main forwarded from a page or another Exegol window */
+/** `esc-forwarded`: Esc main forwarded from a page or another Exegol window; `flat`: the mic
+ *  gave no signal for the whole dictation (muted, dead or the wrong input) */
 export const DICTATION_CANCEL_SOURCES = [
   "esc",
   "esc-forwarded",
   "button",
   "nothing-heard",
+  "flat",
   "superseded",
   "disabled",
 ] as const;
@@ -103,6 +105,8 @@ export interface DictationSettings {
   inputDeviceId: string | null;
   /** Its label when it was picked, for the "not found" notice once it is gone */
   inputDeviceLabel: string | null;
+  /** Its groupId (the physical device): finds it again when the OS hands it a new deviceId */
+  inputDeviceGroupId: string | null;
 }
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
@@ -123,6 +127,7 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   recordingsRetentionDays: 10,
   inputDeviceId: null,
   inputDeviceLabel: null,
+  inputDeviceGroupId: null,
 };
 
 /** The saved settings over the defaults: a row written before a field existed lacks it */

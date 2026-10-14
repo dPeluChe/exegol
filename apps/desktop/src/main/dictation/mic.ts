@@ -10,6 +10,8 @@ const MAC_MIC_SETTINGS =
 const ARM_MS = 10_000;
 
 let armedUntil = 0;
+/** Settings > Dictation > Input's Test: one getUserMedia from the window that pressed it */
+let testArm: { webContentsId: number; until: number } | null = null;
 
 /** macOS and Windows report the OS permission; Linux has none to ask for */
 export function micStatus(): MicStatus {
@@ -34,6 +36,17 @@ export async function askMic(): Promise<MicStatus> {
 /** The mic is open: no other getUserMedia rides on this start */
 export function disarmMic(): void {
   armedUntil = 0;
+}
+
+/** The Test button: the macOS prompt if not asked yet, then only that window may open the mic,
+ *  once, within a few seconds. Browser pages (webviews) cannot arm it */
+export async function armMicTest(wc: WebContents): Promise<MicStatus> {
+  if (wc.isDestroyed() || wc.getType() !== "window") return micStatus();
+  if (process.platform === "darwin" && micStatus() === "not-determined") {
+    await systemPreferences.askForMediaAccess("microphone");
+  }
+  testArm = { webContentsId: wc.id, until: Date.now() + ARM_MS };
+  return micStatus();
 }
 
 export function openMicSettings(): void {
@@ -61,7 +74,9 @@ function decide(
   const clipboard = pageClipboardDecision(wc, permission, url);
   if (clipboard !== null) return clipboard;
   const main = getMainWindow();
-  return allowMediaRequest({
+  const micTest =
+    !!wc && !!testArm && testArm.webContentsId === wc.id && Date.now() < testArm.until;
+  const allowed = allowMediaRequest({
     permission,
     mediaTypes,
     url,
@@ -70,7 +85,10 @@ function decide(
     armed: Date.now() < armedUntil,
     check,
     isAppWindow: !!wc && !wc.isDestroyed() && wc.getType() === "window",
+    micTest,
   });
+  if (allowed && micTest && !check) testArm = null;
+  return allowed;
 }
 
 const guarded = new WeakSet<Session>();
