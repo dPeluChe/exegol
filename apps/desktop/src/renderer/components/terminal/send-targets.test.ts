@@ -1,0 +1,122 @@
+import type { AgentStatus } from "@exegol/shared";
+import { describe, expect, it } from "vitest";
+import { buildSendSections, hasSendTargets } from "./send-targets";
+
+const session = (
+  id: string,
+  projectId: string,
+  extra: {
+    cliType?: string;
+    status?: AgentStatus;
+    alias?: string | null;
+    launchedInShell?: boolean;
+    archived?: boolean;
+    suspended?: boolean;
+  } = {},
+) => ({
+  id,
+  projectId,
+  cliType: "claude-code",
+  status: "running" as AgentStatus,
+  alias: null,
+  ...extra,
+});
+
+const names = new Map([
+  ["pa", "Alpha"],
+  ["pb", "Beta"],
+  ["pc", "Current"],
+  ["pz", "Zeta"],
+]);
+
+describe("buildSendSections", () => {
+  it("lists this project's live agents first, never the source nor ended ones", () => {
+    const { own, others } = buildSendSections(
+      [
+        session("self", "pc"),
+        session("a", "pc", { alias: "lupus" }),
+        session("done", "pc", { status: "completed" }),
+        session("w", "pc", { cliType: "opencode", status: "waiting_input" }),
+      ],
+      "self",
+      names,
+      "pc",
+    );
+    expect(own).toEqual({
+      projectId: "pc",
+      projectName: "Current",
+      targets: [
+        { id: "a", name: "lupus", cliType: "claude-code", projectId: "pc" },
+        { id: "w", name: "opencode", cliType: "opencode", projectId: "pc" },
+      ],
+    });
+    expect(others).toEqual([]);
+  });
+
+  it("hides this project when it has no other session, keeping the others", () => {
+    const sections = buildSendSections(
+      [session("self", "pc"), session("z", "pz")],
+      "self",
+      names,
+      "pc",
+    );
+    expect(sections.own).toBeNull();
+    expect(sections.others.map((g) => g.projectName)).toEqual(["Zeta"]);
+    expect(hasSendTargets(sections)).toBe(true);
+  });
+
+  it("is empty with nothing to send to", () => {
+    const sections = buildSendSections([session("self", "pc")], "self", names, "pc");
+    expect(sections).toEqual({ own: null, others: [] });
+    expect(hasSendTargets(sections)).toBe(false);
+  });
+
+  it("orders other projects by the sidebar order, then by name", () => {
+    const { others } = buildSendSections(
+      [session("z", "pz"), session("a", "pa"), session("b", "pb"), session("c", "pc")],
+      "self",
+      names,
+      "pc",
+      ["pz", "pb"],
+    );
+    expect(others.map((g) => g.projectName)).toEqual(["Zeta", "Beta", "Alpha"]);
+  });
+
+  it("an agent can send to a plain terminal, shown with its folder", () => {
+    const { own } = buildSendSections(
+      [
+        session("self", "pc"),
+        session("sh", "pc", { cliType: "shell" }),
+        session("gone", "pc", { cliType: "shell", status: "stopped" }),
+        session("zz", "pc", { cliType: "shell", suspended: true }),
+      ],
+      "self",
+      names,
+      "pc",
+      [],
+      new Map([["sh", "/Users/me/code/web/"]]),
+    );
+    expect(own?.targets).toEqual([
+      { id: "sh", name: "Terminal", cliType: "shell", projectId: "pc", folder: "web" },
+    ]);
+  });
+
+  it("a terminal can send to an agent, and a typed CLI back at its prompt is a terminal", () => {
+    const { own } = buildSendSections(
+      [
+        session("shell-self", "pc", { cliType: "shell" }),
+        session("a", "pc"),
+        session("typed", "pc", { cliType: "codex", launchedInShell: true }),
+        session("exited", "pc", { cliType: "codex", launchedInShell: true, status: "idle" }),
+      ],
+      "shell-self",
+      names,
+      "pc",
+    );
+    expect(own?.targets.map((t) => [t.id, t.cliType])).toEqual([
+      ["a", "claude-code"],
+      ["typed", "codex"],
+      ["exited", "shell"],
+    ]);
+  });
+});

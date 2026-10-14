@@ -1,6 +1,7 @@
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  ChevronRight,
   Clipboard,
   ClipboardPaste,
   Columns,
@@ -12,14 +13,18 @@ import {
   PictureInPicture2,
   RefreshCw,
   Rows,
+  Send,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
+import { useState } from "react";
 import { useContextMenu } from "../../hooks/use-context-menu";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { appKeys } from "../../lib/keymap";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
 import type { PaneType } from "../../stores/workspace";
+import { SendSelectionMenu } from "../terminal/SendToList";
+import { selectionSourceFor } from "../terminal/use-send-to";
 
 interface PaneContextMenuProps {
   tabId: string;
@@ -49,6 +54,8 @@ interface MenuItem {
   shortcut?: string;
   action: () => void;
   danger?: boolean;
+  /** Opens a page of the menu instead of closing it */
+  submenu?: boolean;
 }
 
 interface MenuSection {
@@ -61,7 +68,7 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
       type="button"
       onClick={() => {
         item.action();
-        onClose();
+        if (!item.submenu) onClose();
       }}
       className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-[11px] transition-colors ${
         item.danger ? "text-error hover:bg-error/10" : "text-text-secondary hover:bg-white/10"
@@ -72,6 +79,7 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
       {item.shortcut && (
         <span className="text-[10px] text-text-muted">{appKeys(item.shortcut)}</span>
       )}
+      {item.submenu && <ChevronRight className="h-3 w-3 text-text-muted" />}
     </button>
   );
 }
@@ -151,10 +159,15 @@ function splitSection({
   ];
 }
 
-function buildMenuSections(actions: MenuActions): MenuSection[] {
+function buildMenuSections(actions: MenuActions, onSendSelection?: () => void): MenuSection[] {
   const isTerminal = actions.paneType === "terminal";
+  const send: MenuItem[] = onSendSelection
+    ? [{ label: "Send selection to", icon: Send, action: onSendSelection, submenu: true }]
+    : [];
   const candidates = [
-    ...(isTerminal ? [clipboardSection(actions), terminalActionsSection(actions)] : []),
+    ...(isTerminal
+      ? [[...send, ...clipboardSection(actions)], terminalActionsSection(actions)]
+      : []),
     splitSection(actions),
     moveSection(actions),
   ];
@@ -176,12 +189,25 @@ function buildMenuSections(actions: MenuActions): MenuSection[] {
 export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) {
   const { contextMenu: menu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
   const menuStyle = useFittedMenu(menuRef, menu);
+  const [sendOpen, setSendOpen] = useState(false);
+  // Only with text selected in this pane's terminal; the text itself is read at send time
+  const source =
+    menu && actions.paneType === "terminal" ? selectionSourceFor(actions.paneId) : undefined;
+  const canSend = !!source?.getSelection();
   // Built on open only: the move list reads the tabs and sessions of that moment
-  const sections = menu ? buildMenuSections(actions) : [];
+  const sections = menu
+    ? buildMenuSections(actions, canSend ? () => setSendOpen(true) : undefined)
+    : [];
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: context menu wrapper
-    <div onContextMenu={handleContextMenu} className="contents">
+    <div
+      onContextMenu={(e) => {
+        setSendOpen(false);
+        handleContextMenu(e);
+      }}
+      className="contents"
+    >
       {children}
 
       {menu && (
@@ -194,18 +220,28 @@ export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) 
             borderColor: "var(--border)",
           }}
         >
-          {sections.map((section, si) => (
-            <div key={section.items[0]?.id ?? section.items[0]?.label ?? si}>
-              {si > 0 && <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />}
-              {section.items.map((item) => (
-                <MenuItemButton
-                  key={item.id ?? item.label}
-                  item={item}
-                  onClose={closeContextMenu}
-                />
-              ))}
-            </div>
-          ))}
+          {sendOpen && source && (
+            <SendSelectionMenu
+              source={source}
+              onBack={() => setSendOpen(false)}
+              onDone={closeContextMenu}
+            />
+          )}
+          {!sendOpen &&
+            sections.map((section, si) => (
+              <div key={section.items[0]?.id ?? section.items[0]?.label ?? si}>
+                {si > 0 && (
+                  <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />
+                )}
+                {section.items.map((item) => (
+                  <MenuItemButton
+                    key={item.id ?? item.label}
+                    item={item}
+                    onClose={closeContextMenu}
+                  />
+                ))}
+              </div>
+            ))}
         </div>
       )}
     </div>

@@ -9,6 +9,13 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Right-click a terminal with text selected: "Send selection to" opens the same list as the Send to button
+- Send to reaches plain terminals too, both ways: send a command an agent printed to the project's terminal (it lands at the prompt for you to review and run, nothing is pressed) or a shell's output to an agent. Terminals show their folder
+
+### Changed
+- Send to lists the sessions of the pane's own project first; other projects sit behind "Other projects (N)", closed until you open it (remembered while the window is open) and open by itself when your project has nothing else. Arrow keys, Enter and Esc work in the list
+
 ## [0.5.21] — 2026-10-13 — Folder-first launcher, sessions that survive a lost sidecar, idle auto-suspend
 
 ### Added
