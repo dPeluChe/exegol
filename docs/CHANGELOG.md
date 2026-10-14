@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
+
 ## [0.5.21] — 2026-10-13 — Folder-first launcher, sessions that survive a lost sidecar, idle auto-suspend
 
 ### Added
