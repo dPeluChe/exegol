@@ -44,6 +44,9 @@ const moonshine: Builder = (file, numThreads) =>
     numThreads,
   );
 
+// No dictation language setting yet; the same language in and out means no translation
+export const CANARY_LANGUAGE = "es";
+
 // Per catalog id: the sherpa-onnx model family and the file names inside its folder
 const BUILDERS: Record<string, Builder> = {
   "parakeet-tdt-0.6b-v3-int8": (file, numThreads) =>
@@ -92,6 +95,21 @@ const BUILDERS: Record<string, Builder> = {
         tokens: "",
       },
       numThreads,
+    ),
+  "canary-180m-flash-int8": (file, numThreads) =>
+    offline(
+      {
+        canary: {
+          encoder: file("encoder.int8.onnx"),
+          decoder: file("decoder.int8.onnx"),
+          srcLang: CANARY_LANGUAGE,
+          tgtLang: CANARY_LANGUAGE,
+          usePnc: 1,
+        },
+        tokens: file("tokens.txt"),
+      },
+      numThreads,
+      128,
     ),
   "moonshine-v2-tiny-en": moonshine,
   "moonshine-v2-base-es": moonshine,

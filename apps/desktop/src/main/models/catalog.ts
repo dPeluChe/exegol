@@ -1,6 +1,6 @@
 import type { SpeechModelEntry } from "@exegol/shared";
 
-// Hashes and sizes checked against the downloaded assets on 2026-10-07 (see TASK_COMPLETED/2610.md)
+// Hashes and sizes checked against the downloaded assets on 2026-10-07, Canary on 2026-10-14 (see TASK_COMPLETED/2610.md)
 const SHERPA_RELEASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
 const SHERPA_CREDIT = "Converted to ONNX by the sherpa-onnx project (k2-fsa, Apache-2.0).";
 
@@ -10,6 +10,7 @@ const NEMOTRON_ROOT = "sherpa-onnx-nemotron-3.5-asr-streaming-0.6b-560ms-int8-20
 const QWEN_ROOT = "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25";
 const MOONSHINE_EN_ROOT = "sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27";
 const MOONSHINE_ES_ROOT = "sherpa-onnx-moonshine-base-es-quantized-2026-02-27";
+const CANARY_ROOT = "sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8";
 
 const TRANSDUCER_FILES = [
   "encoder.int8.onnx",
@@ -239,6 +240,26 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     rootDir: MOONSHINE_ES_ROOT,
     files: MOONSHINE_FILES,
     notes: "The license text ships inside the archive (LICENSE).",
+  },
+  {
+    id: "canary-180m-flash-int8",
+    name: "Canary 180M flash int8",
+    engine: "sherpa-onnx",
+    engineAvailable: true,
+    kind: "offline",
+    languages: ["de", "en", "es", "fr"],
+    bestFor: "Small and fast, with punctuation; Spanish, English, German and French",
+    sizeBytes: 153_692_328,
+    installedBytes: 207_476_042,
+    license: "CC-BY-4.0",
+    commercialUse: true,
+    attribution: `Canary 180M flash by NVIDIA, licensed CC-BY-4.0 (huggingface.co/nvidia/canary-180m-flash). ${SHERPA_CREDIT}`,
+    sourceUrl: `${SHERPA_RELEASE}/${CANARY_ROOT}.tar.bz2`,
+    sha256: "7a38ed8b13f014ad632b09ff8d22e0c6f1359dd046af9235d281dfae841b9ab9",
+    archive: "tar.bz2",
+    rootDir: CANARY_ROOT,
+    files: ["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"],
+    notes: "Set to Spanish: speech in another language comes out translated to Spanish.",
   },
 ];
 

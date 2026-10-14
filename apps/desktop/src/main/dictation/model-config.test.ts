@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MODEL_CATALOG } from "../models/catalog";
-import { isInside, recognizerSpec, specPaths } from "./model-config";
+import { CANARY_LANGUAGE, isInside, recognizerSpec, specPaths } from "./model-config";
 
 const ROOT = "/home/u/.exegol/models";
 
@@ -24,6 +24,23 @@ describe("recognizer specs", () => {
       const spec = recognizerSpec(entry, join(ROOT, entry.id), 2);
       expect(spec?.kind, entry.id).toBe(entry.kind === "streaming" ? "online" : "offline");
     }
+  });
+
+  it("runs Canary in one language, without translation", () => {
+    const entry = MODEL_CATALOG.find((m) => m.id === "canary-180m-flash-int8");
+    if (!entry) throw new Error("no canary");
+    const dir = join(ROOT, entry.id);
+    const spec = recognizerSpec(entry, dir, 2);
+    expect(spec?.kind).toBe("offline");
+    expect(spec?.config.featConfig.featureDim).toBe(128);
+    expect(spec?.config.modelConfig.canary).toEqual({
+      encoder: join(dir, "encoder.int8.onnx"),
+      decoder: join(dir, "decoder.int8.onnx"),
+      srcLang: CANARY_LANGUAGE,
+      tgtLang: CANARY_LANGUAGE,
+      usePnc: 1,
+    });
+    expect(CANARY_LANGUAGE).toBe("es");
   });
 
   it("keeps paths inside the models folder", () => {

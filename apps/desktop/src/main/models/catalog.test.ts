@@ -106,4 +106,12 @@ describe("speech model catalog", () => {
     );
     expect(MODEL_CATALOG.find((m) => m.id === "moonshine-v2-base-es")?.commercialUse).toBe(false);
   });
+
+  it("lists Canary 180M flash for Spanish, English, German and French, commercial use allowed", () => {
+    const canary = MODEL_CATALOG.find((m) => m.id === "canary-180m-flash-int8");
+    expect(canary?.languages).toEqual(["de", "en", "es", "fr"]);
+    expect(canary?.license).toBe("CC-BY-4.0");
+    expect(canary?.commercialUse).toBe(true);
+    expect(canary?.files).toEqual(["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"]);
+  });
 });
