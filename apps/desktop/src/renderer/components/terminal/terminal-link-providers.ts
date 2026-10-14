@@ -1,4 +1,5 @@
 import type { IBufferRange, IDisposable, ILink, ILinkHandler, Terminal } from "@xterm/xterm";
+import { IS_MAC } from "../../lib/keymap";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { openTerminalFile, openTerminalUrl, sessionCwd } from "./terminal-link-actions";
 import { LinkPathResolver } from "./terminal-link-resolver";
@@ -74,6 +75,22 @@ function viewportCandidates(terminal: Terminal): string[] {
   }
   return out;
 }
+
+/** The 1-based buffer cell under a pointer, from the screen element's box */
+export function cellAt(
+  box: { left: number; top: number; width: number; height: number },
+  cols: number,
+  rows: number,
+  viewportY: number,
+  point: { x: number; y: number },
+): { col: number; y: number } | null {
+  const col = Math.floor(((point.x - box.left) / box.width) * cols);
+  const row = Math.floor(((point.y - box.top) / box.height) * rows);
+  if (col < 0 || col >= cols || row < 0 || row >= rows) return null;
+  return { col, y: viewportY + row + 1 };
+}
+
+const covers = (m: LinkMatch, col: number) => col >= m.index && col < m.index + m.length;
 
 /**
  * URLs and file paths in a terminal open inside Exegol: URLs in the tab's preview pane, files
@@ -153,9 +170,43 @@ export function registerTerminalLinkProviders(terminal: Terminal, agentId: strin
     },
   });
 
+  // A TUI tracking the mouse (Claude) takes the press before xterm's links see a click, so a link
+  // under the pointer is opened here first; Option (Shift off macOS) still selects
+  const onPress = (event: MouseEvent) => {
+    if (event.button !== 0 || terminal.modes.mouseTrackingMode === "none") return;
+    if (IS_MAC ? event.altKey : event.shiftKey) return;
+    const screen = terminal.element?.querySelector(".xterm-screen");
+    if (!screen) return;
+    const cell = cellAt(
+      screen.getBoundingClientRect(),
+      terminal.cols,
+      terminal.rows,
+      terminal.buffer.active.viewportY,
+      { x: event.clientX, y: event.clientY },
+    );
+    const text = cell && rowText(terminal, cell.y);
+    if (!cell || !text) return;
+    const click = linkClick(event);
+    const url = findUrlMatches(text).find((m) => covers(m, cell.col));
+    const file = url ? undefined : findFileMatches(text).find((m) => covers(m, cell.col));
+    if (!url && !file) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (url) return openTerminalUrl(agentId, url.url ?? url.text, click);
+    if (!file) return;
+    void resolver
+      .resolve([file.text], sessionCwd(agentId), () => viewportCandidates(terminal))
+      .then((resolved) => {
+        if (resolved.get(file.text)) openTerminalFile(agentId, file, click);
+      })
+      .catch(() => {});
+  };
+  terminal.element?.addEventListener("mousedown", onPress, true);
+
   return {
     dispose: () => {
       tooltip.hide();
+      terminal.element?.removeEventListener("mousedown", onPress, true);
       urls.dispose();
       files.dispose();
     },
