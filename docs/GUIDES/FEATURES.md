@@ -194,7 +194,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is
-  badged and asks before download or set as default.
+  badged and asks before download or set as default. Grouped into Installed (downloads in
+  progress too) and a collapsible Available to download; above them a ranking for the dictation
+  language by your corrected bench results, else public WER (FLEURS), with speed and source links.
 - **Storage** (Settings > Storage): tabs Overview (disk use by kind as a bar and a list, free
   space, open folder, clear screenshots, clear old logs), Speech models (download, set as default,
   delete), Browser (per-project size, clear cache), Worktrees (size, project, branch, dirty or

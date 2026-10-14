@@ -1,13 +1,15 @@
-import type { ModelListItem, ModelStatus } from "@exegol/shared";
+import type { LocalBenchModel, LocalBenchRun, ModelListItem, ModelStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import {
   chooserOptions,
   etaSeconds,
   formatEta,
+  groupModels,
   initialChoice,
   languagesLabel,
   lowDisk,
   needsAttribution,
+  rankModels,
 } from "./speech-models";
 
 const NOT_DOWNLOADED: ModelStatus = { state: "not_downloaded", partialBytes: 0 };
@@ -96,5 +98,89 @@ describe("model facts", () => {
     expect(etaSeconds({ at: 0, bytes: 50 }, { at: 4000, bytes: 50 }, 100)).toBeNull();
     expect(formatEta(42)).toBe("42s left");
     expect(formatEta(150)).toBe("3 min left");
+  });
+});
+
+describe("groupModels", () => {
+  it("puts the default, then ready, then downloading models in Installed; the rest stay available", () => {
+    const ready: ModelStatus = { state: "ready", diskBytes: 1 };
+    const list = [
+      model("busy", { status: { state: "downloading", receivedBytes: 1, totalBytes: 2 } }),
+      model("ready", { status: ready }),
+      model("free"),
+      model("default", { status: ready, isDefault: true }),
+      model("failed", { status: { state: "failed", error: "x", partialBytes: 0 } }),
+    ];
+    const { installed, available } = groupModels(list);
+    expect(installed.map((m) => m.id)).toEqual(["default", "ready", "busy"]);
+    expect(available.map((m) => m.id)).toEqual(["free", "failed"]);
+  });
+});
+
+describe("rankModels", () => {
+  const local = (modelId: string, extra: Partial<LocalBenchModel> = {}): LocalBenchModel => ({
+    modelId,
+    werPercent: 10,
+    cerPercent: 5,
+    rtf: 0.1,
+    decodeSeconds: 1,
+    clips: 4,
+    correctedClips: 4,
+    selfScoredClips: 0,
+    reference: "corrected",
+    ...extra,
+  });
+  const run = (language: string, models: LocalBenchModel[]): LocalBenchRun => ({
+    runAt: "2026-10-14T00:00:00Z",
+    clips: 4,
+    audioSeconds: 20,
+    language,
+    models,
+  });
+  const pub = (werPercent: number, speedX?: number) => [
+    {
+      language: "es" as const,
+      werPercent,
+      speedX,
+      dataset: "FLEURS",
+      source: "S",
+      url: "https://s",
+    },
+  ];
+  const models = [
+    model("a", { benchmarks: pub(3) }),
+    model("b", { benchmarks: pub(5, 10), isDefault: true }),
+    model("c"),
+    model("en-only", { languages: ["en"], benchmarks: pub(1) }),
+    model("whisper", { languages: [], languageSummary: "99", benchmarks: pub(4) }),
+  ];
+
+  it("ranks by public WER without local runs, keeps only models for the language", () => {
+    const rows = rankModels(models, [], "es");
+    expect(rows.map((r) => r.id)).toEqual(["a", "whisper", "b", "c"]);
+    expect(rows.find((r) => r.id === "b")).toMatchObject({ isDefault: true, speedX: 10 });
+    expect(rows.at(-1)?.basis).toBeNull();
+  });
+
+  it("puts models with corrected local results first, by local WER and speed", () => {
+    const rows = rankModels(
+      models,
+      [run("es", [local("b", { werPercent: 6, rtf: 0.05 }), local("c", { werPercent: 2 })])],
+      "es",
+    );
+    expect(rows.map((r) => `${r.id}:${r.basis}`)).toEqual([
+      "c:local",
+      "b:local",
+      "a:public",
+      "whisper:public",
+    ]);
+    expect(rows[1]?.speedX).toBeCloseTo(20);
+  });
+
+  it("ignores runs in another language and uncorrected results; flags self-scored", () => {
+    const self = local("a", { correctedClips: 0, selfScoredClips: 2, werPercent: 0 });
+    expect(rankModels(models, [run("en", [local("c")])], "es")[0]?.id).toBe("a");
+    const row = rankModels(models, [run("es", [self])], "es")[0];
+    expect(row).toMatchObject({ id: "a", basis: "public", werPercent: 3, selfScored: true });
   });
 });

@@ -3,6 +3,7 @@ import {
   charErrorRate,
   editDistance,
   formatTable,
+  localBenchModel,
   normalizeText,
   summarizeModel,
   wordErrorRate,
@@ -51,6 +52,8 @@ describe("summarizeModel", () => {
       cer: wer / 2,
       reference: "",
       hypothesis: "",
+      corrected: false,
+      dictatedWith: null,
     });
     const row = summarizeModel("m", [clip(0.2, 10, 1), clip(0.4, 30, 3)]);
     expect(row.clips).toBe(2);
@@ -61,5 +64,32 @@ describe("summarizeModel", () => {
     expect(row.rtf).toBeCloseTo(0.1);
     expect(summarizeModel("none", []).rtf).toBe(0);
     expect(formatTable([row]).split("\n")).toHaveLength(3);
+  });
+});
+
+describe("localBenchModel", () => {
+  const clip = (corrected: boolean, dictatedWith: string | null) => ({
+    clip: "c",
+    audioSec: 10,
+    decodeSec: 1,
+    wer: 0.1,
+    cer: 0.05,
+    reference: "",
+    hypothesis: "",
+    corrected,
+    dictatedWith,
+  });
+
+  it("counts corrected and self-scored clips and marks mixed references as saved text", () => {
+    const m = localBenchModel("a", [clip(true, "a"), clip(false, "a"), clip(false, "b")]);
+    expect(m).toMatchObject({ clips: 3, correctedClips: 1, selfScoredClips: 1 });
+    expect(m.reference).toBe("saved-text");
+    expect(m.werPercent).toBe(10);
+    expect(m.rtf).toBe(0.1);
+  });
+
+  it("is corrected only when every clip had a reference", () => {
+    expect(localBenchModel("a", [clip(true, "a"), clip(true, "b")]).reference).toBe("corrected");
+    expect(localBenchModel("a", []).reference).toBe("saved-text");
   });
 });

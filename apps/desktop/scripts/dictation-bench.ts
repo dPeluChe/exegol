@@ -1,14 +1,23 @@
 // Dev only (not shipped): decodes kept dictation recordings with each speech model and scores
 // them against the text saved next to each clip. Usage in docs/GUIDES/DICTATION_BENCH.md.
 //   bun apps/desktop/scripts/dictation-bench.ts [--dir DIR] [--model DIR[=catalogId]]...
-//     [--no-installed] [--threads N] [--language en|es] [--vocab FILE] [--json out.json]
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+//     [--no-installed] [--threads N] [--language en|es] [--vocab FILE] [--json out.json] [--save]
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import {
   DEFAULT_DICTATION_SETTINGS,
   DICTATION_LANGUAGE_IDS,
   type DictationLanguage,
+  type LocalBenchModel,
   parseVocabulary,
   type SpeechModelEntry,
 } from "@exegol/shared";
@@ -18,14 +27,22 @@ import {
   hasRecognizer,
   recognizerSpec,
   type VocabularySpec,
+  vocabularyHash,
   vocabularyUse,
 } from "../src/main/dictation/model-config";
 import { decodeWav } from "../src/main/dictation/recording-files";
+import {
+  BENCH_RESULTS_DIR,
+  BENCH_RESULTS_FILE,
+  mergeBenchRun,
+  parseBenchResults,
+} from "../src/main/models/bench-results";
 import { MODEL_CATALOG } from "../src/main/models/catalog";
 import {
   type ClipResult,
   charErrorRate,
   formatTable,
+  localBenchModel,
   type ModelRow,
   summarizeModel,
   wordErrorRate,
@@ -54,6 +71,8 @@ interface Clip {
   name: string;
   samples: Float32Array;
   reference: string;
+  corrected: boolean;
+  dictatedWith: string | null;
 }
 
 interface ModelTarget {
@@ -98,14 +117,24 @@ function loadClips(dir: string): Clip[] {
       if (!e.isFile() || !e.name.endsWith(".json")) continue;
       const wav = path.replace(/\.json$/, ".wav");
       if (!existsSync(wav)) continue;
-      const meta = JSON.parse(readFileSync(path, "utf8")) as { text?: string; reference?: string };
+      const meta = JSON.parse(readFileSync(path, "utf8")) as {
+        text?: string;
+        reference?: string;
+        modelId?: string;
+      };
       const audio = decodeWav(readFileSync(wav));
       const reference = meta.reference ?? meta.text;
       if (!audio || audio.sampleRate !== SAMPLE_RATE || typeof reference !== "string") {
         console.error(`skipped ${path}: not a 16 kHz recording with text`);
         continue;
       }
-      clips.push({ name: path.slice(dir.length + 1), samples: audio.samples, reference });
+      clips.push({
+        name: path.slice(dir.length + 1),
+        samples: audio.samples,
+        reference,
+        corrected: typeof meta.reference === "string",
+        dictatedWith: meta.modelId ?? null,
+      });
     }
   };
   if (existsSync(dir)) walk(dir);
@@ -161,6 +190,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   const rows: ModelRow[] = [];
+  const saved: LocalBenchModel[] = [];
   const details: Record<string, ClipResult[]> = {};
   for (const target of targets) {
     console.error(`${target.label}: loading`);
@@ -177,9 +207,12 @@ async function main(): Promise<void> {
         cer: charErrorRate(clip.reference, hypothesis),
         reference: clip.reference,
         hypothesis,
+        corrected: clip.corrected,
+        dictatedWith: clip.dictatedWith,
       });
     }
     rows.push(summarizeModel(target.label, results));
+    saved.push(localBenchModel(target.entry.id, results));
     details[target.label] = results;
   }
   console.log(formatTable(rows));
@@ -187,6 +220,29 @@ async function main(): Promise<void> {
     writeFileSync(jsonOut, `${JSON.stringify({ recordingsDir, rows, clips: details }, null, 2)}\n`);
     console.error(`wrote ${jsonOut}`);
   }
+  if (flag("--save")) saveRun(clips, saved);
+}
+
+/** Merges this run into results.json (scores only, never text) for Settings > Models */
+function saveRun(clips: readonly Clip[], models: LocalBenchModel[]): void {
+  mkdirSync(BENCH_RESULTS_DIR, { recursive: true, mode: 0o700 });
+  chmodSync(BENCH_RESULTS_DIR, 0o700);
+  const existing = existsSync(BENCH_RESULTS_FILE) ? readFileSync(BENCH_RESULTS_FILE, "utf8") : null;
+  const file = mergeBenchRun(parseBenchResults(existing), {
+    runAt: new Date().toISOString(),
+    clips: clips.length,
+    audioSeconds: Number(
+      (clips.reduce((n, c) => n + c.samples.length, 0) / SAMPLE_RATE).toFixed(1),
+    ),
+    language,
+    ...(vocabTerms.length > 0 && {
+      vocabulary: { terms: vocabTerms.length, hash: vocabularyHash(vocabTerms, vocabScore) },
+    }),
+    models,
+  });
+  writeFileSync(BENCH_RESULTS_FILE, `${JSON.stringify(file, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(BENCH_RESULTS_FILE, 0o600);
+  console.error(`saved to ${BENCH_RESULTS_FILE} (${file.runs.length} runs kept)`);
 }
 
 main().catch((err) => {

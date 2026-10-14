@@ -1,4 +1,10 @@
-import type { ModelListItem, SpeechModelEntry } from "@exegol/shared";
+import type {
+  LocalBenchModel,
+  LocalBenchRun,
+  ModelListItem,
+  PublicBenchmark,
+  SpeechModelEntry,
+} from "@exegol/shared";
 
 export function languagesLabel(model: Pick<SpeechModelEntry, "languages" | "languageSummary">) {
   if (model.languageSummary) return model.languageSummary;
@@ -48,4 +54,78 @@ export function etaSeconds(first: ProgressSample, now: ProgressSample, total: nu
 export function formatEta(seconds: number): string {
   if (seconds < 60) return `${seconds}s left`;
   return `${Math.round(seconds / 60)} min left`;
+}
+
+/** Settings > Models: what is on disk (or on its way) first, the rest to download. Downloads sit
+ *  with Installed so their progress stays visible while Available is collapsed */
+export function groupModels(models: readonly ModelListItem[]): {
+  installed: ModelListItem[];
+  available: ModelListItem[];
+} {
+  const rank = (m: ModelListItem) => (m.isDefault ? 0 : m.status.state === "ready" ? 1 : 2);
+  const installed = models
+    .filter((m) => m.status.state === "ready" || isBusy(m))
+    .sort((a, b) => rank(a) - rank(b));
+  return { installed, available: models.filter((m) => !installed.includes(m)) };
+}
+
+/** x real time from a real-time factor; null when there is nothing to divide */
+export const speedFromRtf = (rtf: number): number | null => (rtf > 0 ? 1 / rtf : null);
+
+/** The run for the dictation language, else the newest of any language */
+export const benchRunFor = (runs: readonly LocalBenchRun[], language: string) =>
+  runs.find((r) => r.language === language) ?? runs[0] ?? null;
+
+export const localResult = (run: LocalBenchRun | null, modelId: string) =>
+  run?.models.find((m) => m.modelId === modelId) ?? null;
+
+/** Self-scored when any clip was graded against this model's own saved text */
+export const isSelfScored = (m: LocalBenchModel): boolean => m.selfScoredClips > 0;
+
+export interface RankRow {
+  id: string;
+  name: string;
+  isDefault: boolean;
+  werPercent: number | null;
+  speedX: number | null;
+  /** local: your corrected recordings; public: the catalog's first source for the language */
+  basis: "local" | "public" | null;
+  publicSource: PublicBenchmark | null;
+  selfScored: boolean;
+}
+
+/** Models that speak `language`, ranked by your WER where you corrected references, then by the
+ *  public WER, then the ones with no score */
+export function rankModels(
+  models: readonly ModelListItem[],
+  runs: readonly LocalBenchRun[],
+  language: string,
+): RankRow[] {
+  const run = runs.find((r) => r.language === language) ?? null;
+  const order = { local: 0, public: 1, none: 2 };
+  return models
+    .filter(
+      (m) => m.engineAvailable && (m.languages.length === 0 || m.languages.includes(language)),
+    )
+    .map((m): RankRow => {
+      const local = localResult(run, m.id);
+      const pub = m.benchmarks?.find((b) => b.language === language) ?? null;
+      const useLocal = local !== null && local.correctedClips > 0;
+      return {
+        id: m.id,
+        name: m.name,
+        isDefault: m.isDefault,
+        werPercent: useLocal ? local.werPercent : (pub?.werPercent ?? null),
+        speedX: useLocal ? speedFromRtf(local.rtf) : (pub?.speedX ?? null),
+        basis: useLocal ? "local" : pub ? "public" : null,
+        publicSource: pub,
+        selfScored: local !== null && isSelfScored(local),
+      };
+    })
+    .sort(
+      (a, b) =>
+        order[a.basis ?? "none"] - order[b.basis ?? "none"] ||
+        (a.werPercent ?? 0) - (b.werPercent ?? 0) ||
+        a.name.localeCompare(b.name),
+    );
 }

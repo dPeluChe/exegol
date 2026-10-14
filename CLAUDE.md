@@ -234,7 +234,10 @@ apps/desktop/src/
                     license, `commercialUse`), download (HTTP Range resume + sha256, https only, free
                     space check), extract (system `tar -xjf`, then an lstat walk refuses links and
                     special files, forces 0644/0755, temp dir then rename), manager
-                    (~/.exegol/models/<id>, `models:progress` push, default in settings)
+                    (~/.exegol/models/<id>, `models:progress` push, default in settings),
+                    bench-results (`models.benchResults` reads only ~/.exegol/dictation-bench/
+                    results.json, written by the dev bench's `--save`; catalog `benchmarks` are
+                    public FLEURS WER copied from the source, both ranked in Settings > Models)
     dictation/      T201 voice dictation: engine-entry (Electron utilityProcess running
                     sherpa-onnx-node, reads only under ~/.exegol/models), engine (fork on demand,
                     idle unload), model-config (catalog id to recognizer config), service

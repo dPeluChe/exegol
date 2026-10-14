@@ -8,6 +8,16 @@ const relativeFile = z
   .min(1)
   .refine((p) => !p.startsWith("/") && !p.split("/").includes(".."), "must stay inside rootDir");
 
+const benchmarkSchema = z.object({
+  language: z.enum(["es", "en"]),
+  werPercent: z.number().positive().max(100),
+  speedX: z.number().positive().optional(),
+  dataset: z.string().min(1),
+  source: z.string().min(1),
+  url: z.string().url().startsWith("https://"),
+  note: z.string().optional(),
+});
+
 const entrySchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9.-]*$/),
   name: z.string().min(1),
@@ -29,6 +39,7 @@ const entrySchema = z.object({
   commercialUse: z.boolean().optional(),
   notes: z.string().optional(),
   featured: z.number().int().positive().optional(),
+  benchmarks: z.array(benchmarkSchema).optional(),
 });
 
 function validateCatalog(entries: readonly SpeechModelEntry[]): string[] {
@@ -113,5 +124,26 @@ describe("speech model catalog", () => {
     expect(canary?.license).toBe("CC-BY-4.0");
     expect(canary?.commercialUse).toBe(true);
     expect(canary?.files).toEqual(["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"]);
+  });
+
+  it("keeps public benchmarks well formed, one per source and language", () => {
+    for (const entry of MODEL_CATALOG) {
+      const keys = (entry.benchmarks ?? []).map((b) => `${b.source}:${b.language}`);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+    const parakeet = MODEL_CATALOG.find((m) => m.id === DEFAULT_MODEL_ID);
+    expect(parakeet?.benchmarks?.some((b) => b.language === "es" && b.dataset === "FLEURS")).toBe(
+      true,
+    );
+    const base = MODEL_CATALOG[0];
+    if (!base) throw new Error("empty catalog");
+    const bad = {
+      language: "es" as const,
+      werPercent: -1,
+      dataset: "",
+      source: "x",
+      url: "http://x",
+    };
+    expect(validateCatalog([{ ...base, benchmarks: [bad] }]).join()).toContain("benchmarks");
   });
 });

@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Settings > Models ranks the speech models for your dictation language: public word error rate and speed (Handy's FLEURS benchmark, NVIDIA's paper, with links) and, once you run the dev bench with `--save`, your own results with how many clips you corrected (a model scored against its own saved text is marked "self-scored"). Models are grouped into Installed (downloads in progress included) and a collapsible Available to download
 - Dictation vocabulary starts with common dev terms (worktree, pull request, linter, typecheck, sidecar, Claude, Codex...), editable in Settings > Dictation
 
 ### Added
