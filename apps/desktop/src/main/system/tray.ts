@@ -1,46 +1,90 @@
 import { join } from "node:path";
 import { app, Menu, nativeImage, Tray } from "electron";
+import { isAgentAwaitingApproval } from "../agents/agent-messaging";
+import { getProviderRegistry } from "../agents/registry";
 import { getDb } from "../db/client";
 import { logger } from "../lib/logger";
 import { getMainWindow } from "../windows/main-window-ref";
+import {
+  buildTrayProjects,
+  type TrayAgent,
+  type TrayAgentRow,
+  type TrayAgentState,
+  type TrayProject,
+  traySignature,
+  traySummary,
+} from "./tray-menu";
 
 let tray: Tray | null = null;
 
-interface RunningAgent {
-  id: string;
-  cli_type: string;
-  task_description: string | null;
-}
+const LIVE_AGENTS_SQL = `SELECT a.id, a.alias, a.cli_type, a.task_description, a.status, a.started_at,
+       a.status_changed_at, a.project_id, p.name AS project_name
+  FROM agents a JOIN projects p ON p.id = a.project_id
+  WHERE a.status IN ('running', 'spawning', 'waiting_input') AND a.cli_type != 'shell'
+    AND a.archived_at IS NULL`;
 
-function getRunningAgents(): RunningAgent[] {
+function getTrayProjects(): TrayProject[] {
   try {
-    return getDb()
-      .prepare(
-        "SELECT id, cli_type, task_description FROM agents WHERE status IN ('running', 'spawning', 'waiting_input') AND cli_type != 'shell'",
-      )
-      .all() as RunningAgent[];
+    const rows = getDb().prepare(LIVE_AGENTS_SQL).all() as TrayAgentRow[];
+    const registry = getProviderRegistry();
+    return buildTrayProjects(
+      rows,
+      (cli) => registry.get(cli)?.name ?? cli,
+      isAgentAwaitingApproval,
+      Date.now(),
+    );
   } catch {
     return [];
   }
 }
 
-function buildContextMenu(agents: RunningAgent[]): Menu {
+const STATE_MARK: Record<TrayAgentState, string> = {
+  "needs-you": "⚠︎",
+  working: "●",
+  starting: "◐",
+  idle: "○",
+};
+
+function sendToMainWindow(channel: string, payload?: unknown): void {
+  const win = getMainWindow();
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  win.webContents.send(channel, payload);
+}
+
+function openAgent(agentId: string): void {
+  sendToMainWindow("notification:navigate", { agentId });
+}
+
+function agentItem(agent: TrayAgent): Electron.MenuItemConstructorOptions {
+  const label = `${STATE_MARK[agent.state]}  ${agent.label}`;
+  // sublabel renders only on macOS; elsewhere the detail joins the label
+  return process.platform === "darwin"
+    ? { label, sublabel: agent.detail, click: () => openAgent(agent.id) }
+    : { label: `${label}  (${agent.detail})`, click: () => openAgent(agent.id) };
+}
+
+function buildContextMenu(projects: TrayProject[]): Menu {
   const agentItems: Electron.MenuItemConstructorOptions[] =
-    agents.length > 0
+    projects.length > 0
       ? [
           { type: "separator" },
-          { label: "Running Agents", enabled: false },
-          ...agents.map((a) => ({
-            label: `${a.cli_type}${a.task_description ? ` — ${a.task_description.slice(0, 40)}` : ""}`,
-            click: () => {
-              const win = getMainWindow();
-              if (win) {
-                win.show();
-                win.focus();
-                win.webContents.send("notification:navigate", { agentId: a.id });
-              }
-            },
-          })),
+          { label: traySummary(projects), enabled: false },
+          ...projects.flatMap((p): Electron.MenuItemConstructorOptions[] => [
+            { type: "separator" },
+            { label: p.name, enabled: false },
+            ...p.agents.map(agentItem),
+            ...(p.hidden.length > 0
+              ? [
+                  {
+                    label: `${p.hidden.length} more…`,
+                    submenu: p.hidden.map(agentItem),
+                  },
+                ]
+              : []),
+          ]),
         ]
       : [];
 
@@ -61,8 +105,17 @@ function buildContextMenu(agents: RunningAgent[]): Menu {
         }
       },
     },
+    {
+      label: "Open Dashboard",
+      click: () => sendToMainWindow("menu:open-dashboard"),
+    },
     ...agentItems,
     { type: "separator" },
+    {
+      label: "Settings…",
+      // Lazy: windows/ would pull BrowserWindow into every module that imports the tray
+      click: () => void import("../windows/settings").then((m) => m.openSettingsWindow()),
+    },
     {
       label: "Quit",
       click: () => {
@@ -110,7 +163,7 @@ export function initTray(): void {
 
   tray.on("click", () => {
     if (process.platform === "darwin") {
-      tray?.popUpContextMenu(buildContextMenu(getRunningAgents()));
+      tray?.popUpContextMenu(buildContextMenu(getTrayProjects()));
     } else {
       const win = getMainWindow();
       if (win?.isVisible()) {
@@ -122,29 +175,29 @@ export function initTray(): void {
     }
   });
   tray.on("right-click", () => {
-    tray?.popUpContextMenu(buildContextMenu(getRunningAgents()));
+    tray?.popUpContextMenu(buildContextMenu(getTrayProjects()));
   });
 
   logger.info("[Tray] System tray initialized");
 }
 
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-let lastAgentCount = -1;
+let lastSignature = "";
 
-/** Rebuild tray badge + menu. Throttled, and skips menu rebuild if agent count unchanged. */
+/** Rebuild tray badge + menu. Throttled */
 export function refreshTray(): void {
   if (!tray) return;
   if (refreshTimer) return;
   refreshTimer = setTimeout(() => {
     refreshTimer = null;
     if (!tray) return;
-    const agents = getRunningAgents();
-    const count = agents.length;
-    // Always update badge (cheap), only rebuild menu when count changes (avoids macOS warning)
-    updateTrayBadge(count);
-    if (count !== lastAgentCount) {
-      lastAgentCount = count;
-      tray.setContextMenu(buildContextMenu(agents));
+    const projects = getTrayProjects();
+    updateTrayBadge(projects.reduce((n, p) => n + p.agents.length + p.hidden.length, 0));
+    // Rebuild only when agents or states change (avoids the macOS warning); a click builds it fresh
+    const signature = traySignature(projects);
+    if (signature !== lastSignature) {
+      lastSignature = signature;
+      tray.setContextMenu(buildContextMenu(projects));
     }
   }, 200);
 }

@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The menu bar icon's menu groups running agents by project (the ones needing you first), names each by alias and task ("argo · Claude Code") with its state and age ("Working 3m · up 2h" under it on macOS), says how many need you, work or idle, and adds Open Dashboard and Settings
+
 ### Fixed
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
 
