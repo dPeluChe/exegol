@@ -1,5 +1,10 @@
+import { createHash } from "node:crypto";
 import { isAbsolute, join, relative } from "node:path";
-import { DICTATION_SAMPLE_RATE, type SpeechModelEntry } from "@exegol/shared";
+import {
+  DICTATION_SAMPLE_RATE,
+  type DictationLanguage,
+  type SpeechModelEntry,
+} from "@exegol/shared";
 
 /** What the engine process builds: an offline recognizer (decode after stop) or an online one
  *  (partial text while listening). `config` is sherpa-onnx-node's recognizer config */
@@ -26,6 +31,7 @@ export interface VocabularySpec {
 type Builder = (
   file: (name: string) => string,
   numThreads: number,
+  language: DictationLanguage,
   vocab: VocabularySpec | null,
 ) => RecognizerSpec;
 
@@ -33,10 +39,11 @@ const offline = (
   modelConfig: Record<string, unknown>,
   numThreads: number,
   extra: Record<string, unknown> = {},
+  featureDim = 80,
 ): RecognizerSpec => ({
   kind: "offline",
   config: {
-    featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim: 80 },
+    featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim },
     modelConfig: { ...modelConfig, numThreads, provider: "cpu", debug: 0 },
     ...extra,
   },
@@ -60,9 +67,12 @@ const moonshine: Builder = (file, numThreads) =>
     numThreads,
   );
 
+// Models that run in one set language; the others detect it, so their recognizer ignores it
+const NEEDS_LANGUAGE = new Set(["canary-180m-flash-int8"]);
+
 // Per catalog id: the sherpa-onnx model family and the file names inside its folder
 const BUILDERS: Record<string, Builder> = {
-  "parakeet-tdt-0.6b-v3-int8": (file, numThreads, vocab) =>
+  "parakeet-tdt-0.6b-v3-int8": (file, numThreads, _language, vocab) =>
     offline(
       {
         transducer: transducer(file),
@@ -108,7 +118,7 @@ const BUILDERS: Record<string, Builder> = {
       enableEndpoint: 0,
     },
   }),
-  "qwen3-asr-0.6b-int8": (file, numThreads, vocab) =>
+  "qwen3-asr-0.6b-int8": (file, numThreads, _language, vocab) =>
     offline(
       {
         qwen3Asr: {
@@ -121,6 +131,23 @@ const BUILDERS: Record<string, Builder> = {
         tokens: "",
       },
       numThreads,
+    ),
+  // Same language in and out: speech in another one comes out translated into it
+  "canary-180m-flash-int8": (file, numThreads, language) =>
+    offline(
+      {
+        canary: {
+          encoder: file("encoder.int8.onnx"),
+          decoder: file("decoder.int8.onnx"),
+          srcLang: language,
+          tgtLang: language,
+          usePnc: 1,
+        },
+        tokens: file("tokens.txt"),
+      },
+      numThreads,
+      {},
+      128,
     ),
   "moonshine-v2-tiny-en": moonshine,
   "moonshine-v2-base-es": moonshine,
@@ -139,16 +166,36 @@ const VOCABULARY_USE: Record<string, "hotwords" | "prompt"> = {
 export const vocabularyUse = (id: string): "hotwords" | "prompt" | null =>
   VOCABULARY_USE[id] ?? null;
 
+/** The vocabulary a model is built with: none when it is empty or the model takes none */
+const usedVocabulary = <T extends { terms: readonly string[] }>(id: string, vocab: T | null) =>
+  vocab && vocab.terms.length > 0 && vocabularyUse(id) ? vocab : null;
+
+export const vocabularyHash = (terms: readonly string[], score: number): string =>
+  createHash("sha256").update(JSON.stringify({ terms, score })).digest("hex").slice(0, 12);
+
+/** What the loaded recognizer is cached by: the language only for models it shapes, the
+ *  vocabulary only for models that use one, so other changes never reload */
+export function recognizerKey(
+  id: string,
+  language: DictationLanguage,
+  vocab: { terms: readonly string[]; score: number } | null = null,
+): string {
+  const lang = NEEDS_LANGUAGE.has(id) ? `:${language}` : "";
+  const used = usedVocabulary(id, vocab);
+  return `${id}${lang}${used ? `#${vocabularyHash(used.terms, used.score)}` : ""}`;
+}
+
 /** The recognizer for a catalog model installed in `dir`; null for a model the engine lacks */
 export function recognizerSpec(
   entry: SpeechModelEntry,
   dir: string,
   numThreads: number,
+  language: DictationLanguage,
   vocab: VocabularySpec | null = null,
 ): RecognizerSpec | null {
   const build = BUILDERS[entry.id];
-  const used = vocab && vocab.terms.length > 0 && vocabularyUse(entry.id) ? vocab : null;
-  return build ? build((name) => join(dir, name), numThreads, used) : null;
+  const used = usedVocabulary(entry.id, vocab);
+  return build ? build((name) => join(dir, name), numThreads, language, used) : null;
 }
 
 /** tokens.txt ("piece id" per line) as the "piece<TAB>score" vocab sherpa-onnx's sentencepiece

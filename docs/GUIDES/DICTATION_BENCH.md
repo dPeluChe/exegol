@@ -31,6 +31,9 @@ bun apps/desktop/scripts/dictation-bench.ts --dir ./clips --no-installed --model
 | `--model DIR[=id]` | An extra model folder, repeatable. The catalog id picks the sherpa-onnx config; without it the folder name, then the first family whose files are there |
 | `--no-installed` | Skip the models installed in `~/.exegol/models` (used by default) |
 | `--threads N` | Decoder threads (default 4) |
+| `--language en\|es` | Language for models that run in a set one (Canary); default en |
+| `--vocab FILE` | Terms, one per line, applied to models that take a vocabulary (Parakeet, Qwen3-ASR); none by default |
+| `--boost N` | Hotword score with `--vocab` (default 3) |
 | `--json FILE` | Per-model rows plus every clip's reference and hypothesis |
 
 Configs come from `src/main/dictation/model-config.ts`, the same ones the app uses.

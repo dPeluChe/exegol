@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DEFAULT_DICTATION_SETTINGS,
+  DICTATION_LANGUAGE_IDS,
   DICTATION_OVERLAY_POSITIONS,
   DICTATION_RECORDING_RETENTION_DAYS,
   DICTATION_TERM_MAX,
@@ -54,6 +55,7 @@ export const dictationSettingsSchema = z.object({
     .default({}),
   vocabularyBoost: z.number().min(0.5).max(10).default(DEFAULT_DICTATION_SETTINGS.vocabularyBoost),
   spokenPunctuation: z.boolean().default(true),
+  language: z.enum(DICTATION_LANGUAGE_IDS).default("en"),
 });
 
 export const settingsSchema = z.object({

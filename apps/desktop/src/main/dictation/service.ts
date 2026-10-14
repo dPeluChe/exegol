@@ -174,7 +174,7 @@ export async function startDictation(
       id,
       modelId: entry.id,
       startedAt: Date.now(),
-      cold: warmedCold ?? !modelLoaded(entry.id),
+      cold: warmedCold ?? !modelLoaded(entry.id, settings.language, vocabulary.spec),
       media,
       audio: settings.keepRecordings ? new RecordingBuffer(settings.maxSeconds) : null,
       paused: false,
@@ -182,7 +182,7 @@ export async function startDictation(
     };
     warmedCold = null;
     // The model loads while the user speaks: audio waits in the engine until it is ready
-    ensureModel(entry.id, vocabulary.spec).catch(() => {});
+    ensureModel(entry.id, settings.language, vocabulary.spec).catch(() => {});
     beginSession(id, settings.maxSeconds);
     armDictationSession(id, settings.maxSeconds);
   } catch (err) {
@@ -298,8 +298,9 @@ export async function warmDictation(
   if (!settings.enabled || !(await probeEngine()).ok) return { ok: false };
   const { entry, ready } = await pickModel(db);
   if (!ready) return { ok: false };
-  warmedCold = !modelLoaded(entry.id);
-  ensureModel(entry.id, (await vocabularyFor(settings, entry, projectId)).spec).catch(() => {});
+  const { spec } = await vocabularyFor(settings, entry, projectId);
+  warmedCold = !modelLoaded(entry.id, settings.language, spec);
+  ensureModel(entry.id, settings.language, spec).catch(() => {});
   return { ok: true };
 }
 

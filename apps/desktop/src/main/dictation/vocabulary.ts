@@ -1,9 +1,13 @@
-import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
-import { bpeVocabFromTokens, type VocabularySpec, vocabularyUse } from "./model-config";
+import {
+  bpeVocabFromTokens,
+  type VocabularySpec,
+  vocabularyHash,
+  vocabularyUse,
+} from "./model-config";
 
 /** Files the engine reads for a vocabulary: outside the models folder, which stays as downloaded */
 export const VOCAB_DIR = join(EXEGOL_DIR, "dictation-vocab");
@@ -15,9 +19,6 @@ export interface VocabularyInfo {
   /** The model biases toward them; false = saved but this model ignores them */
   applied: boolean;
 }
-
-export const vocabularyHash = (terms: readonly string[], score: number): string =>
-  createHash("sha256").update(JSON.stringify({ terms, score })).digest("hex").slice(0, 12);
 
 /** Written contents per path this run: a start with the same vocabulary writes nothing */
 const written = new Map<string, string>();
