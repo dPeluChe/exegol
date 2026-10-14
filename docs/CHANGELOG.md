@@ -11,6 +11,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Launcher in a workspace with several repos: the repos show as one-click chips under the folder name (the root first, five more, "+N" opens the full list)
+- A new pane's launcher (split, new tab) opens in the folder the pane you came from works in, when that is inside the project: a shell's folder, a Files or Git pane's folder, or where Claude Code is working now (a session started at the root that moved into `nexus-control` opens the launcher there). Cmd+Y also opens its terminal there
 
 ### Fixed
 - The launcher's folder list closes on a click outside it, on Esc wherever the focus is, and with its own close button

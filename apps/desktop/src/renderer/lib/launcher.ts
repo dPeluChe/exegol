@@ -29,15 +29,35 @@ interface Folder {
   rel: string;
 }
 
-/** The pane's remembered folder while it still exists, else the project root (never a pinned
- *  command's folder: a project opens where it is) */
+/** The pane's remembered folder while it still exists, else the nearest listed folder above it
+ *  (a session working in `web/src` picks `web`), else the project root (never a pinned command's
+ *  folder: a project opens where it is) */
 export function launcherFolder<T extends Folder>(
   folders: T[],
   remembered: string | undefined,
 ): T | undefined {
-  return (
-    folders.find((f) => f.rel === remembered) ?? folders.find((f) => f.rel === "") ?? folders[0]
-  );
+  const exact = folders.find((f) => f.rel === remembered);
+  if (exact) return exact;
+  const above = remembered
+    ? folders
+        .filter((f) => f.rel && remembered.startsWith(`${f.rel}/`))
+        .sort((a, b) => b.rel.length - a.rel.length)[0]
+    : undefined;
+  return above ?? folders.find((f) => f.rel === "") ?? folders[0];
+}
+
+/** `folder` relative to the project root for a new launcher; undefined outside the project or at
+ *  its root */
+export function launcherRelFor(
+  folder: string | null | undefined,
+  projectPath: string | null | undefined,
+): string | undefined {
+  if (!folder || !projectPath) return undefined;
+  const root = projectPath.replace(/\/+$/, "");
+  const f = folder.replace(/\/+$/, "");
+  if (!root || !f.startsWith(`${root}/`)) return undefined;
+  const rel = f.slice(root.length + 1);
+  return rel.split("/").some((part) => part === ".." || part === ".") ? undefined : rel;
 }
 
 export const folderRowLabel = (f: Folder) => f.rel || "root";

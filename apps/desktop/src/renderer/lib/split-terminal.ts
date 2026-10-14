@@ -9,6 +9,7 @@ import {
   useWorkspaceStore,
 } from "../stores/workspace";
 import { dispatchRefitTerminals } from "./dispatch-refit";
+import { launcherRelFor } from "./launcher";
 import { dropPaneFocus, focusNewPane } from "./pane-focus";
 import { spawnShellIntoPane } from "./spawn-shell";
 import { trpcInvoke } from "./trpc-client";
@@ -32,7 +33,8 @@ export function terminalCwdFor(
   return undefined;
 }
 
-/** OSC 7 only counts for a shell (an agent CLI's output could print one); else the worktree */
+/** OSC 7 only counts for a shell (an agent CLI's output could print one); else where the CLI's
+ *  hooks last said it works, its start folder or its worktree */
 async function paneFolder(paneId: string): Promise<string | undefined> {
   const pane = getProjectState().panes[paneId];
   const agent = pane?.agentId ? useAgentStore.getState().agents[pane.agentId] : undefined;
@@ -40,12 +42,31 @@ async function paneFolder(paneId: string): Promise<string | undefined> {
   const shellCwd = shellish ? useWorkspaceStore.getState().paneCwd[paneId] : undefined;
   const sessionDir =
     pane?.agentId && !shellCwd
-      ? await trpcInvoke<string | null>("agents.getWorktreePath", { agentId: pane.agentId }).catch(
-          () => null,
-        )
+      ? await trpcInvoke<string | null>("agents.sessionFolder", {
+          agentId: pane.agentId,
+          live: true,
+        }).catch(() => null)
       : null;
   return terminalCwdFor(pane, { shellCwd, sessionDir });
 }
+
+/** A new launcher starts in the folder `sourcePaneId` works in, while that is inside the project
+ *  (async: the pane shows the root for a moment, and a folder picked meanwhile wins) */
+async function preselectLauncherFolder(paneId: string, sourcePaneId: string | null) {
+  const projectId = useWorkspaceStore.getState()._activeProjectId;
+  if (!sourcePaneId || !projectId) return;
+  const [folder, project] = await Promise.all([
+    paneFolder(sourcePaneId),
+    trpcInvoke<{ path: string } | null>("projects.get", { id: projectId }),
+  ]);
+  const rel = launcherRelFor(folder, project?.path);
+  const pane = getProjectState().panes[paneId];
+  if (!rel || pane?.type !== "empty" || pane.launcherFolder !== undefined) return;
+  useWorkspaceStore.getState().updatePane(paneId, { launcherFolder: rel });
+}
+
+const preselectFrom = (paneId: string, sourcePaneId: string | null) =>
+  void preselectLauncherFolder(paneId, sourcePaneId).catch(() => undefined);
 
 /** A shell in `paneId`, in `cwd`; the project root when main refuses that folder (a shell that
  *  cd'd out of the project) */
@@ -70,17 +91,23 @@ export function splitAndFocus(
   type: PaneType = "empty",
 ): void {
   const id = nanoid(8);
+  const source = paneId ?? getActivePaneId();
   useWorkspaceStore.getState().splitPane(tabId, paneId, direction, type, { id });
   dispatchRefitTerminals();
   focusNewPane(id);
+  if (type === "empty") preselectFrom(id, source);
 }
 
 /** A new tab whose empty launcher takes the keyboard (Cmd+T, the tab bar +, the palette) */
 export function addTabAndFocus(label?: string): string {
   const store = useWorkspaceStore.getState();
+  const source = getActivePaneId();
   const tabId = store.addTab(label);
-  const paneId = getProjectState().tabs.find((t) => t.id === tabId)?.layout;
-  if (paneId?.type === "pane") focusNewPane(paneId.paneId);
+  const layout = getProjectState().tabs.find((t) => t.id === tabId)?.layout;
+  if (layout?.type === "pane") {
+    focusNewPane(layout.paneId);
+    preselectFrom(layout.paneId, source);
+  }
   return tabId;
 }
 
