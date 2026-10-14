@@ -12,6 +12,7 @@ import {
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
+import { refitWhenFontLoads } from "./font-ready";
 import { trackMousePress } from "./mouse-release";
 import {
   fitAndSyncSize,
@@ -197,6 +198,7 @@ export function useXterm({
     });
 
     const settleTimer = setTimeout(refit, 150);
+    const cancelFontRefit = refitWhenFontLoads(next.terminal, refit);
 
     const kickTimer = setTimeout(kickAltScreen, 350);
 
@@ -210,6 +212,7 @@ export function useXterm({
 
     return () => {
       clearTimeout(settleTimer);
+      cancelFontRefit();
       clearTimeout(kickTimer);
       resizeObserver.disconnect();
       untrackView();
