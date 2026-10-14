@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { findFileMatches, findUrlMatches, linkAction, linkClick, linkHint } from "./terminal-links";
+import {
+  cellAt,
+  covers,
+  findFileMatches,
+  findUrlMatches,
+  linkAction,
+  linkClick,
+  linkHint,
+} from "./terminal-links";
 
 describe("findFileMatches", () => {
   it("matches a relative path with line number", () => {
@@ -130,5 +138,29 @@ describe("linkHint", () => {
     expect(linkHint("file", "a/b.ts", "a/b.ts:4", false)).toBe(
       "a/b.ts:4\nClick: open in a floating viewer · Ctrl+click: open in the IDE · Ctrl+Shift+click: show in the file manager",
     );
+  });
+});
+
+describe("cellAt", () => {
+  const box = { left: 100, top: 50, width: 800, height: 400 };
+
+  it("maps a point to its 0-based column and 1-based buffer line", () => {
+    expect(cellAt(box, 80, 20, 0, { x: 100, y: 50 })).toEqual({ col: 0, y: 1 });
+    expect(cellAt(box, 80, 20, 30, { x: 115, y: 75 })).toEqual({ col: 1, y: 32 });
+  });
+
+  it("is null outside the screen", () => {
+    expect(cellAt(box, 80, 20, 0, { x: 99, y: 60 })).toBeNull();
+    expect(cellAt(box, 80, 20, 0, { x: 300, y: 450 })).toBeNull();
+  });
+});
+
+describe("covers", () => {
+  it("spans the match including its :line suffix", () => {
+    const m = { text: "a.ts", index: 4, length: 7 };
+    expect(covers(m, 3)).toBe(false);
+    expect(covers(m, 4)).toBe(true);
+    expect(covers(m, 10)).toBe(true);
+    expect(covers(m, 11)).toBe(false);
   });
 });

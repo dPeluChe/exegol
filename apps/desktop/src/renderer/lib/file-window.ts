@@ -56,14 +56,13 @@ export function dragRect(
   return clampRect({ ...start, width, height }, viewport);
 }
 
-/** Cmd+W: an open file window goes first, so it never reaches the close-session confirm */
-export function closeRoute(fileWindowOpen: boolean): "file-window" | "pane" {
-  return fileWindowOpen ? "file-window" : "pane";
+/** Inside `root` (a folder, with or without its trailing slash) */
+export function underRoot(path: string, root: string): boolean {
+  return path.startsWith(root.endsWith("/") ? root : `${root}/`);
 }
 
 /** The header's label: relative to the project when inside it, else the full path */
 export function displayPath(path: string, projectPath?: string): string {
-  if (!projectPath) return path;
-  const root = projectPath.endsWith("/") ? projectPath : `${projectPath}/`;
-  return path.startsWith(root) ? path.slice(root.length) : path;
+  if (!projectPath || !underRoot(path, projectPath)) return path;
+  return path.slice(projectPath.replace(/\/$/, "").length + 1);
 }

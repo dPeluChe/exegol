@@ -4,6 +4,8 @@ import { trpcInvoke } from "../../lib/trpc-client";
 import { openTerminalFile, openTerminalUrl, sessionCwd } from "./terminal-link-actions";
 import { LinkPathResolver } from "./terminal-link-resolver";
 import {
+  cellAt,
+  covers,
   findFileMatches,
   findUrlMatches,
   type LinkMatch,
@@ -76,26 +78,10 @@ function viewportCandidates(terminal: Terminal): string[] {
   return out;
 }
 
-/** The 1-based buffer cell under a pointer, from the screen element's box */
-export function cellAt(
-  box: { left: number; top: number; width: number; height: number },
-  cols: number,
-  rows: number,
-  viewportY: number,
-  point: { x: number; y: number },
-): { col: number; y: number } | null {
-  const col = Math.floor(((point.x - box.left) / box.width) * cols);
-  const row = Math.floor(((point.y - box.top) / box.height) * rows);
-  if (col < 0 || col >= cols || row < 0 || row >= rows) return null;
-  return { col, y: viewportY + row + 1 };
-}
-
-const covers = (m: LinkMatch, col: number) => col >= m.index && col < m.index + m.length;
-
 /**
  * URLs and file paths in a terminal open inside Exegol: URLs in the tab's preview pane, files
- * read-only over the terminal. Cmd+click: URL to the browser, file to the IDE; Cmd+Shift: Finder. Scheme'd,
- * bare and OSC 8 URLs all go through `openTerminalUrl`.
+ * read-only in the floating file window. Cmd+click: URL to the browser, file to the IDE;
+ * Cmd+Shift: Finder. Scheme'd, bare and OSC 8 URLs all go through `openTerminalUrl`.
  */
 export function registerTerminalLinkProviders(terminal: Terminal, agentId: string): IDisposable {
   const tooltip = createTooltip(terminal);
@@ -172,10 +158,11 @@ export function registerTerminalLinkProviders(terminal: Terminal, agentId: strin
 
   // A TUI tracking the mouse (Claude) takes the press before xterm's links see a click, so a link
   // under the pointer is opened here first; Option (Shift off macOS) still selects
+  let screen: Element | null = null;
   const onPress = (event: MouseEvent) => {
     if (event.button !== 0 || terminal.modes.mouseTrackingMode === "none") return;
     if (IS_MAC ? event.altKey : event.shiftKey) return;
-    const screen = terminal.element?.querySelector(".xterm-screen");
+    if (!screen?.isConnected) screen = terminal.element?.querySelector(".xterm-screen") ?? null;
     if (!screen) return;
     const cell = cellAt(
       screen.getBoundingClientRect(),
@@ -185,15 +172,22 @@ export function registerTerminalLinkProviders(terminal: Terminal, agentId: strin
       { x: event.clientX, y: event.clientY },
     );
     const text = cell && rowText(terminal, cell.y);
-    if (!cell || !text) return;
-    const click = linkClick(event);
+    // Every URL and path match holds one of these: skip the regexes on plain rows
+    if (!cell || !text || !/[/.:]/.test(text)) return;
+    const claim = () => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    };
     const url = findUrlMatches(text).find((m) => covers(m, cell.col));
-    const file = url ? undefined : findFileMatches(text).find((m) => covers(m, cell.col));
-    if (!url && !file) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    if (url) return openTerminalUrl(agentId, url.url ?? url.text, click);
+    if (url) {
+      claim();
+      openTerminalUrl(agentId, url.url ?? url.text, linkClick(event));
+      return;
+    }
+    const file = findFileMatches(text).find((m) => covers(m, cell.col));
     if (!file) return;
+    claim();
+    const click = linkClick(event);
     void resolver
       .resolve([file.text], sessionCwd(agentId), () => viewportCandidates(terminal))
       .then((resolved) => {

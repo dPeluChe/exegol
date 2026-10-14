@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   clampRect,
-  closeRoute,
   defaultRect,
   displayPath,
   dragRect,
   FILE_WINDOW_MIN,
+  underRoot,
 } from "./file-window";
 
 const vp = { width: 1200, height: 800 };
@@ -64,18 +64,19 @@ describe("dragRect", () => {
   });
 });
 
-describe("closeRoute", () => {
-  it("closes the file window before any pane", () => {
-    expect(closeRoute(true)).toBe("file-window");
-    expect(closeRoute(false)).toBe("pane");
-  });
-});
-
 describe("displayPath", () => {
   it("is relative inside the project, else the full path", () => {
     expect(displayPath("/p/src/a.ts", "/p")).toBe("src/a.ts");
     expect(displayPath("/p/src/a.ts", "/p/")).toBe("src/a.ts");
     expect(displayPath("/pp/a.ts", "/p")).toBe("/pp/a.ts");
     expect(displayPath("/w/a.ts")).toBe("/w/a.ts");
+  });
+});
+
+describe("underRoot", () => {
+  it("needs a folder boundary", () => {
+    expect(underRoot("/p/a.ts", "/p")).toBe(true);
+    expect(underRoot("/p/a.ts", "/p/")).toBe(true);
+    expect(underRoot("/pp/a.ts", "/p")).toBe(false);
   });
 });

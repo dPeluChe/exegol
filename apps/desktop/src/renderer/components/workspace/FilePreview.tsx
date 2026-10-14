@@ -107,7 +107,8 @@ export function FilePreview({
   path: string;
   file: FileContent | undefined;
   error: unknown;
-  onClose: () => void;
+  /** Absent when the host owns closing and Esc (the floating file window) */
+  onClose?: () => void;
   /** A text search hit: scroll to this line */
   revealLine?: number;
   /** The explorer asks before switching files or closing with unsaved edits */
@@ -135,7 +136,7 @@ export function FilePreview({
     <div
       className="flex min-w-0 flex-1 flex-col"
       onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
+        if (e.key === "Escape") onClose?.();
       }}
     >
       {toolbar && (
@@ -179,7 +180,7 @@ export function FilePreview({
   );
 }
 
-const action =
+export const action =
   "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
 
 function FilePreviewToolbar({
@@ -196,7 +197,7 @@ function FilePreviewToolbar({
   dirty: boolean;
   saving: boolean;
   saveError: string | null;
-  onClose: () => void;
+  onClose?: () => void;
   onSave: () => void;
   onOpenExternal: () => void;
   onReveal: () => void;

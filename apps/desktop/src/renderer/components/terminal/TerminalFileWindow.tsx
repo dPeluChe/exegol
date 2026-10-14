@@ -1,7 +1,7 @@
 import { Code2, ExternalLink, FolderSearch, PanelRight, X } from "lucide-react";
-import { type PointerEvent, useRef, useState, useSyncExternalStore } from "react";
+import { memo, type PointerEvent, useRef, useState, useSyncExternalStore } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
-import { useProjects, useTerminalLinkFile } from "../../hooks/use-trpc";
+import { type FileContent, useProjects, useTerminalLinkFile } from "../../hooks/use-trpc";
 import {
   clampRect,
   defaultRect,
@@ -12,28 +12,28 @@ import {
 import { appKeys, editKeys } from "../../lib/keymap";
 import { useAgentStore } from "../../stores/agents";
 import {
+  closeFileWindow,
   type TerminalLinkPeek,
   useFileWindowStore,
   useTerminalLinkStore,
 } from "../../stores/terminal-links";
-import { FilePreview } from "../workspace/FilePreview";
-import {
-  closeFileWindow,
-  openPeekInFilesPane,
-  openPeekInIde,
-  openPeekWith,
-} from "./terminal-link-actions";
+import { action, FilePreview } from "../workspace/FilePreview";
+import { openPeekInFilesPane, openPeekInIde, openPeekWith } from "./terminal-link-actions";
 
 const onResize = (listener: () => void) => {
   window.addEventListener("resize", listener);
   return () => window.removeEventListener("resize", listener);
 };
 
-function useViewport() {
-  const width = useSyncExternalStore(onResize, () => window.innerWidth);
-  const height = useSyncExternalStore(onResize, () => window.innerHeight);
-  return { width, height };
-}
+let viewport = { width: window.innerWidth, height: window.innerHeight };
+const viewportSnapshot = () => {
+  if (viewport.width !== window.innerWidth || viewport.height !== window.innerHeight) {
+    viewport = { width: window.innerWidth, height: window.innerHeight };
+  }
+  return viewport;
+};
+
+const useViewport = () => useSyncExternalStore(onResize, viewportSnapshot);
 
 /**
  * A file clicked in a terminal, in a floating window over the workspace: no backdrop, so the
@@ -53,9 +53,6 @@ interface Drag {
   start: WindowRect;
 }
 
-const action =
-  "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
-
 function FileWindow({ peek }: { peek: TerminalLinkPeek }) {
   const { data, error } = useTerminalLinkFile({
     agentId: peek.agentId,
@@ -66,6 +63,7 @@ function FileWindow({ peek }: { peek: TerminalLinkPeek }) {
   const { data: projects } = useProjects();
   const projectPath = projects?.find((p) => p.id === projectId)?.path;
   const path = data?.path ?? peek.text;
+  const label = displayPath(path, projectPath);
 
   const viewport = useViewport();
   const stored = useFileWindowStore((s) => s.rect);
@@ -111,7 +109,7 @@ function FileWindow({ peek }: { peek: TerminalLinkPeek }) {
     <section
       ref={rootRef}
       tabIndex={-1}
-      aria-label={`File ${displayPath(path, projectPath)}`}
+      aria-label={`File ${label}`}
       data-file-window
       className="titlebar-no-drag fixed z-40 flex flex-col overflow-hidden rounded-lg border border-border bg-bg-primary shadow-2xl outline-none"
       style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}
@@ -129,7 +127,7 @@ function FileWindow({ peek }: { peek: TerminalLinkPeek }) {
           className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-secondary"
           title={path}
         >
-          {displayPath(path, projectPath)}
+          {label}
           {peek.line ? `:${peek.line}` : ""}
         </span>
         <button
@@ -178,17 +176,7 @@ function FileWindow({ peek }: { peek: TerminalLinkPeek }) {
         </button>
       </header>
       <div className="flex min-h-0 flex-1">
-        <FilePreview
-          path={path}
-          file={data}
-          error={error}
-          revealLine={peek.line}
-          readOnly
-          toolbar={false}
-          onClose={closeFileWindow}
-          onOpenExternal={() => openPeekWith(peek, "external")}
-          onReveal={() => openPeekWith(peek, "reveal")}
-        />
+        <FileWindowBody peek={peek} path={path} file={data} error={error} />
       </div>
       <div
         aria-hidden
@@ -198,3 +186,28 @@ function FileWindow({ peek }: { peek: TerminalLinkPeek }) {
     </section>
   );
 }
+
+// Memo: a drag re-renders the window on every pointermove, the preview needs none of it
+const FileWindowBody = memo(function FileWindowBody({
+  peek,
+  path,
+  file,
+  error,
+}: {
+  peek: TerminalLinkPeek;
+  path: string;
+  file: FileContent | undefined;
+  error: unknown;
+}) {
+  return (
+    <FilePreview
+      path={path}
+      file={file}
+      error={error}
+      revealLine={peek.line}
+      readOnly
+      toolbar={false}
+      onOpenExternal={() => openPeekWith(peek, "external")}
+    />
+  );
+});

@@ -1,8 +1,8 @@
 import type { Agent, AgentAccessMode } from "@exegol/shared";
-import { closeFileWindowFirst } from "../components/terminal/terminal-link-actions";
 import { deleteAgent } from "../hooks/use-delete-agent";
 import { fetchResumableCliTypes, resumeSessionInto } from "../hooks/use-resume-agent";
 import { showProject, useAgentStore } from "../stores/agents";
+import { closeFileWindow } from "../stores/terminal-links";
 import { useToastStore } from "../stores/toasts";
 import {
   type ClosedEntry,
@@ -56,7 +56,7 @@ export async function closeWithConfirm(target: CloseTarget | null): Promise<void
 /** Cmd+W: the file window when one is open, else the active tab's focused pane (the tab when it
  *  is its last) */
 export function closeActivePane(): Promise<void> {
-  if (closeFileWindowFirst()) return Promise.resolve();
+  if (closeFileWindow()) return Promise.resolve();
   const ws = useWorkspaceStore.getState();
   return closeWithConfirm(resolveCloseTarget(getProjectState(), ws.focusedPaneId));
 }

@@ -143,3 +143,19 @@ export function linkHint(
   if (kind === "url") return hint;
   return `${hint} · ${editKeys("Cmd+Shift+click", mac)}: ${say("modShift")}`;
 }
+
+/** The 1-based buffer cell under a pointer, from the screen element's box */
+export function cellAt(
+  box: { left: number; top: number; width: number; height: number },
+  cols: number,
+  rows: number,
+  viewportY: number,
+  point: { x: number; y: number },
+): { col: number; y: number } | null {
+  const col = Math.floor(((point.x - box.left) / box.width) * cols);
+  const row = Math.floor(((point.y - box.top) / box.height) * rows);
+  if (col < 0 || col >= cols || row < 0 || row >= rows) return null;
+  return { col, y: viewportY + row + 1 };
+}
+
+export const covers = (m: LinkMatch, col: number) => col >= m.index && col < m.index + m.length;

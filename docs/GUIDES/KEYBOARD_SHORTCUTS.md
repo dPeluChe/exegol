@@ -74,7 +74,6 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | click | same | A URL in the output opens in the tab's preview pane; a file path opens in a floating file window over the workspace (PDFs and documents in their app); Esc or `Cmd+W` closes that window first |
 | `Cmd+click` | `Ctrl+click` | A URL opens in the system browser; a file path opens in the IDE at its line |
 | `Cmd+Shift+click` | `Ctrl+Shift+click` | Show a file path from the output in Finder |
-| `Esc` | same | Close the Files peek before the CLI sees the key |
 
 Right-click a terminal pane for Clear Terminal, split, float and layout actions. Select text to
 get **Send to**, which pastes it into another live agent without submitting.

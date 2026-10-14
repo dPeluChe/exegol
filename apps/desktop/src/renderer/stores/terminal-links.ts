@@ -1,6 +1,9 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { WindowRect } from "../lib/file-window";
+import { focusActivePane } from "../lib/pane-focus";
+import { findAgentPane, useAgentStore } from "./agents";
+import { useWorkspaceStore } from "./workspace";
 
 /** A file clicked in a terminal, shown read-only in the floating file window (one at a time:
  *  another click replaces it) */
@@ -24,6 +27,19 @@ export function peekTerminalFile(peek: TerminalLinkPeek): void {
 export function closeTerminalPeek(): boolean {
   if (!useTerminalLinkStore.getState().peek) return false;
   useTerminalLinkStore.setState({ peek: null });
+  return true;
+}
+
+/** Closes the file window and gives the keyboard back to its session's terminal; false when none
+ *  was open */
+export function closeFileWindow(): boolean {
+  const agentId = useTerminalLinkStore.getState().peek?.agentId;
+  if (!closeTerminalPeek()) return false;
+  const projectId = agentId ? useAgentStore.getState().agents[agentId]?.projectId : undefined;
+  const where = agentId && projectId ? findAgentPane(agentId, projectId) : null;
+  if (where && projectId === useWorkspaceStore.getState()._activeProjectId) {
+    focusActivePane(where.paneId);
+  }
   return true;
 }
 
