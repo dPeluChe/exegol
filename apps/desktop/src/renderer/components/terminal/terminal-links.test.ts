@@ -128,7 +128,7 @@ describe("linkHint", () => {
       "https://a.com\nClick: open in the preview pane · Cmd+click: open in the system browser",
     );
     expect(linkHint("file", "a/b.ts", "a/b.ts:4", false)).toBe(
-      "a/b.ts:4\nClick: open here · Ctrl+click: open in the IDE · Ctrl+Shift+click: show in the file manager",
+      "a/b.ts:4\nClick: open in a floating viewer · Ctrl+click: open in the IDE · Ctrl+Shift+click: show in the file manager",
     );
   });
 });

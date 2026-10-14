@@ -125,7 +125,7 @@ export function linkAction(kind: "url" | "file", click: LinkClick, path = ""): L
 const ACTION_LABEL: Record<LinkAction, (mac: boolean) => string> = {
   pane: () => "open in the preview pane",
   browser: () => "open in the system browser",
-  peek: () => "open here",
+  peek: () => "open in a floating viewer",
   system: () => "open with the default app",
   ide: () => "open in the IDE",
   reveal: (mac) => (mac ? "reveal in Finder" : "show in the file manager"),

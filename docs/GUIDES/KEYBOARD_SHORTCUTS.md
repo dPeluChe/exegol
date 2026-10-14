@@ -71,7 +71,7 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+←` / `Cmd+→` | `Home` / `End` | Start / end of the line |
 | `Cmd+Backspace`, `Option+Backspace` | `Ctrl+Backspace`, `Alt+Backspace` | Delete the previous word |
 | `Cmd+↓` | `Ctrl+Shift+↓` | Jump to the newest output |
-| click | same | A URL in the output opens in the tab's preview pane; a file path opens over the terminal (PDFs and documents in their app) |
+| click | same | A URL in the output opens in the tab's preview pane; a file path opens in a floating file window over the workspace (PDFs and documents in their app); Esc or `Cmd+W` closes that window first |
 | `Cmd+click` | `Ctrl+click` | A URL opens in the system browser; a file path opens in the IDE at its line |
 | `Cmd+Shift+click` | `Ctrl+Shift+click` | Show a file path from the output in Finder |
 | `Esc` | same | Close the Files peek before the CLI sees the key |

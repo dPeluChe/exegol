@@ -102,6 +102,7 @@ export function FilePreview({
   onReveal = () => reveal(path),
   view,
   onViewChange,
+  toolbar = true,
 }: {
   path: string;
   file: FileContent | undefined;
@@ -119,6 +120,8 @@ export function FilePreview({
   /** A files pane: its saved Code/Preview mode and editor spot */
   view?: FilesView;
   onViewChange?: (patch: Partial<FilesView>) => void;
+  /** False when the host draws its own header (the floating file window) */
+  toolbar?: boolean;
 }) {
   const pdfUrl = usePdfUrl(file);
   const { draft, dirty, edit, save, saveError, saving, conflict, setConflict } = useFileDraft(
@@ -135,17 +138,19 @@ export function FilePreview({
         if (e.key === "Escape") onClose();
       }}
     >
-      <FilePreviewToolbar
-        path={path}
-        dirty={dirty}
-        saving={saving}
-        saveError={saveError}
-        onClose={onClose}
-        // A non-UTF-8 file would be rewritten as UTF-8, even from a draft made before it changed
-        onSave={() => (file?.notUtf8 ? undefined : save())}
-        onOpenExternal={onOpenExternal}
-        onReveal={onReveal}
-      />
+      {toolbar && (
+        <FilePreviewToolbar
+          path={path}
+          dirty={dirty}
+          saving={saving}
+          saveError={saveError}
+          onClose={onClose}
+          // A non-UTF-8 file would be rewritten as UTF-8, even from a draft made before it changed
+          onSave={() => (file?.notUtf8 ? undefined : save())}
+          onOpenExternal={onOpenExternal}
+          onReveal={onReveal}
+        />
+      )}
       <div className="min-h-0 flex-1 overflow-auto">
         <FileBody
           path={path}

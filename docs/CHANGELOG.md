@@ -10,7 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
-- Links and file paths printed by Claude (or any TUI that uses the mouse) open again on click: URLs in the preview pane, folders in Finder, files over the terminal; Cmd+click and Cmd+Shift+click as before
+- Links and file paths printed by Claude (or any TUI that uses the mouse) open again on click: URLs in the preview pane, folders in Finder, files in a floating window over the workspace instead of covering the terminal; Cmd+click and Cmd+Shift+click as before
+- The clicked file's window can be dragged by its header and resized from its corner (it keeps its spot), and the session stays visible and typable behind it. Esc or Cmd+W closes the window, never the session (Cmd+W used to ask to close the session). "Files pane" opens the file in a Files pane beside the terminal, "Editor" in your IDE, at the clicked line
 
 ### Fixed
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in

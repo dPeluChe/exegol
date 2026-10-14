@@ -1,9 +1,18 @@
+import { nanoid } from "nanoid";
 import { isHttpUrl } from "../../lib/browser-viewports";
+import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { closeRoute } from "../../lib/file-window";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { runIdeResult } from "../../lib/open-in-ide";
+import { focusActivePane, focusNewPane } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
 import { findAgentPane, focusPane, useAgentStore } from "../../stores/agents";
-import { peekTerminalFile } from "../../stores/terminal-links";
+import {
+  closeTerminalPeek,
+  peekTerminalFile,
+  type TerminalLinkPeek,
+  useTerminalLinkStore,
+} from "../../stores/terminal-links";
 import { toastError } from "../../stores/toasts";
 import {
   collectPaneIds,
@@ -84,7 +93,7 @@ export function openTerminalFile(agentId: string, match: LinkMatch, click: LinkC
   const action = linkAction("file", click, match.text);
   const target = action === "peek" ? workspaceTarget(agentId) : null;
   if (target) {
-    peekTerminalFile(agentId, { text: match.text, cwd, line: match.line });
+    peekTerminalFile({ agentId, text: match.text, cwd, line: match.line });
     return;
   }
   trpcMutate<{ terminalCommand?: string }>("terminalLinks.open", {
@@ -96,4 +105,59 @@ export function openTerminalFile(agentId: string, match: LinkMatch, click: LinkC
   })
     .then((result) => runIdeResult(useAgentStore.getState().agents[agentId]?.projectId, result))
     .catch(toastError("Could not open the file"));
+}
+
+/** Closes the file window and gives the keyboard back to its session's terminal; false when none
+ *  was open */
+export function closeFileWindow(): boolean {
+  const agentId = useTerminalLinkStore.getState().peek?.agentId;
+  if (!closeTerminalPeek()) return false;
+  const where = agentId ? locateAgentPane(agentId) : null;
+  if (where && where.projectId === useWorkspaceStore.getState()._activeProjectId) {
+    focusActivePane(where.paneId);
+  }
+  return true;
+}
+
+/** Cmd+W: the file window when one is open, else the pane (false) */
+export function closeFileWindowFirst(): boolean {
+  const open = !!useTerminalLinkStore.getState().peek;
+  return closeRoute(open) === "file-window" && closeFileWindow();
+}
+
+const parentDir = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
+
+/** The window's file as a real Files pane beside its terminal; the tree roots at the project, or
+ *  at the file's folder for a worktree file */
+export function openPeekInFilesPane(peek: TerminalLinkPeek, path: string, projectPath?: string) {
+  const where = workspaceTarget(peek.agentId);
+  if (!where) return;
+  const ws = useWorkspaceStore.getState();
+  const id = nanoid(8);
+  ws.splitPane(where.tabId, where.paneId, "horizontal", "files", { id });
+  const inProject = !!projectPath && path.startsWith(`${projectPath.replace(/\/$/, "")}/`);
+  ws.updatePane(id, { filePath: inProject ? undefined : parentDir(path), openFile: path });
+  closeTerminalPeek();
+  dispatchRefitTerminals();
+  focusNewPane(id);
+}
+
+export function openPeekInIde(peek: TerminalLinkPeek): void {
+  const { agentId, cwd, text, line } = peek;
+  trpcMutate<{ terminalCommand?: string }>("terminalLinks.open", {
+    agentId,
+    cwd,
+    text,
+    how: "ide",
+    line,
+  })
+    .then((result) => runIdeResult(useAgentStore.getState().agents[agentId]?.projectId, result))
+    .catch(toastError("Could not open the file"));
+}
+
+export function openPeekWith(peek: TerminalLinkPeek, how: "reveal" | "external"): void {
+  const { agentId, cwd, text } = peek;
+  trpcMutate("terminalLinks.open", { agentId, cwd, text, how }).catch(
+    toastError("Could not open the file"),
+  );
 }
