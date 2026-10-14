@@ -169,6 +169,37 @@ export interface DictationSettings {
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
 
+/** Dev terms Parakeet misspells in Spanish speech ("Work 3", "tipecheck"); editable */
+export const DEFAULT_DICTATION_VOCABULARY: readonly string[] = [
+  "worktree",
+  "pull request",
+  "commit",
+  "merge",
+  "rebase",
+  "branch",
+  "linter",
+  "typecheck",
+  "Biome",
+  "TypeScript",
+  "React",
+  "Electron",
+  "sidecar",
+  "ring buffer",
+  "Claude",
+  "Codex",
+  "Exegol",
+  "endpoint",
+  "deploy",
+  "Docker",
+  "bun",
+  "npm",
+  "frontend",
+  "backend",
+  "refactor",
+  "bug",
+  "PR",
+];
+
 export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   enabled: true,
   shortcut: DEFAULT_DICTATION_SHORTCUT,
@@ -185,7 +216,7 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   recordingsRetentionDays: 10,
   inputDeviceId: null,
   inputDeviceLabel: null,
-  vocabulary: [],
+  vocabulary: [...DEFAULT_DICTATION_VOCABULARY],
   projectVocabulary: {},
   vocabularyBoost: 3,
   spokenPunctuation: true,

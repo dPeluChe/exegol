@@ -45,7 +45,10 @@ export const dictationSettingsSchema = z.object({
     .default(DEFAULT_DICTATION_SETTINGS.recordingsRetentionDays),
   inputDeviceId: z.string().max(256).nullable().default(null),
   inputDeviceLabel: z.string().max(256).nullable().default(null),
-  vocabulary: z.array(z.string().max(DICTATION_TERM_MAX)).max(DICTATION_VOCABULARY_MAX).default([]),
+  vocabulary: z
+    .array(z.string().max(DICTATION_TERM_MAX))
+    .max(DICTATION_VOCABULARY_MAX)
+    .default([...DEFAULT_DICTATION_SETTINGS.vocabulary]),
   projectVocabulary: z
     .record(
       z.string().max(64),
